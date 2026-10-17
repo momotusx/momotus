@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 librqbit = { path = "../../vendor/librqbit", default-features = false, features = ["rust-tls", "disable-upload"] }
 mq-engine-sched = { path = "../mq-engine-sched" }
+mq-relparse = { path = "../mq-relparse" }
 anyhow = "1"
 tokio = { workspace = true, features = ["fs", "io-util"] }
 thiserror.workspace = true

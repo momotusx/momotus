@@ -1,0 +1,672 @@
+//! Per-torrent adapter between librqbit (the fork's `ExtEvent`s and
+//! `ext_request` / `ext_cancel`) and the DWH scheduler, plus readiness for
+//! open ranges in both modes.
+
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use librqbit::{ExtEvent, ManagedTorrent};
+use mq_engine_sched::{
+    Action, BLOCK, Bitfield, BlockIdx, Config, DemandId, Event, Geometry, PeerId, Scheduler, Stats,
+};
+use tokio::sync::{mpsc, watch};
+
+/// `reqq` assumed when a peer sent no BEP 10 handshake (libtorrent's default).
+const DEFAULT_REQQ: u32 = 250;
+const TICK: Duration = Duration::from_millis(100);
+const RATE_EVERY: Duration = Duration::from_secs(1);
+
+/// From open readers to the adapter.
+#[derive(Debug)]
+pub(crate) enum Msg {
+    Open {
+        demand: DemandId,
+        file: usize,
+        start: u64,
+        end: Option<u64>,
+        ready: watch::Sender<bool>,
+    },
+    Advance {
+        demand: DemandId,
+        pos: u64,
+    },
+    Close {
+        demand: DemandId,
+    },
+    /// librqbit stopped the torrent (keep-alive expiry): every peer is gone.
+    Stopped,
+}
+
+/// A REQUEST or CANCEL for the executor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Wire {
+    pub cancel: bool,
+    pub peer: SocketAddr,
+    pub piece: u32,
+    pub begin: u32,
+    pub len: u32,
+}
+
+struct Slot {
+    id: PeerId,
+    have: Bitfield,
+    choked: bool,
+    reqq: u32,
+    /// Payload bytes since the last rate sample.
+    bytes: u64,
+    /// Smallest request-to-arrival time seen (RTT plus one block), 0 if none.
+    rtt_us: u64,
+}
+
+struct Demand {
+    file: usize,
+    start: u64,
+    end: Option<u64>,
+    ready: watch::Sender<bool>,
+}
+
+/// Counters for `Engine::stats`.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Snapshot {
+    /// Microseconds from adapter start to the first ready range.
+    pub ready_us: Option<u64>,
+    pub dwh: Option<Stats>,
+}
+
+/// Pure translation state: librqbit events in, wire actions out. Time comes
+/// only through `tick`, so tests drive it without a runtime.
+pub(crate) struct Translator {
+    sched: Option<Scheduler>,
+    piece_len: u64,
+    files: Vec<(u64, u64)>,
+    num_pieces: u32,
+    blocking_bytes: u64,
+    tail_bytes: u64,
+    peers: HashMap<SocketAddr, Slot>,
+    addrs: HashMap<PeerId, SocketAddr>,
+    reqq: HashMap<SocketAddr, u32>,
+    next_peer: PeerId,
+    sent: HashMap<(PeerId, BlockIdx), u64>,
+    have: Vec<bool>,
+    demands: HashMap<DemandId, Demand>,
+    now_us: u64,
+    ready_us: Option<u64>,
+    actions: Vec<Action>,
+}
+
+impl Translator {
+    /// `drive` hands block choice to DWH; it needs 16 KiB-aligned pieces.
+    pub fn new(piece_len: u32, file_lens: &[u64], cfg: Config, drive: bool) -> Self {
+        let mut offset = 0;
+        let files = file_lens
+            .iter()
+            .map(|&len| {
+                offset += len;
+                (offset - len, len)
+            })
+            .collect();
+        let num_pieces = offset.div_ceil(u64::from(piece_len.max(1))) as u32;
+        let (blocking_bytes, tail_bytes) = (cfg.blocking_bytes, cfg.tail_bytes);
+        let sched = drive
+            .then(|| Geometry::new(piece_len, file_lens))
+            .flatten()
+            .map(|geo| Scheduler::new(geo, cfg));
+        Self {
+            sched,
+            piece_len: u64::from(piece_len.max(1)),
+            files,
+            num_pieces,
+            blocking_bytes,
+            tail_bytes,
+            peers: HashMap::new(),
+            addrs: HashMap::new(),
+            reqq: HashMap::new(),
+            next_peer: 0,
+            sent: HashMap::new(),
+            have: vec![false; num_pieces as usize],
+            demands: HashMap::new(),
+            now_us: 0,
+            ready_us: None,
+            actions: Vec::new(),
+        }
+    }
+
+    pub fn drives(&self) -> bool {
+        self.sched.is_some()
+    }
+
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            ready_us: self.ready_us,
+            dwh: self.sched.as_ref().map(|s| s.stats().clone()),
+        }
+    }
+
+    pub fn tick(&mut self, now_us: u64) -> Vec<Wire> {
+        self.now_us = self.now_us.max(now_us);
+        self.feed(Event::Tick {
+            now_us: self.now_us,
+        })
+    }
+
+    /// Pieces already verified (found on disk at start).
+    pub fn verified_bitfield(&mut self, bytes: &[u8]) -> Vec<Wire> {
+        let mut out = Vec::new();
+        for piece in 0..self.num_pieces {
+            if bit(bytes, piece) {
+                out.extend(self.on_ext(ExtEvent::PieceChecked { piece, ok: true }));
+            }
+        }
+        out
+    }
+
+    pub fn on_ext(&mut self, ev: ExtEvent) -> Vec<Wire> {
+        match ev {
+            ExtEvent::PeerConnected { peer, bitfield } => {
+                let mut have = Bitfield::new(self.num_pieces);
+                (0..self.num_pieces).for_each(|p| have.set(p, bit(&bitfield, p)));
+                let id = match self.peers.get(&peer) {
+                    Some(s) => s.id,
+                    None => {
+                        self.next_peer += 1;
+                        self.next_peer
+                    }
+                };
+                let reqq = self.reqq.get(&peer).copied().unwrap_or(DEFAULT_REQQ);
+                self.addrs.insert(id, peer);
+                self.peers.insert(
+                    peer,
+                    Slot {
+                        id,
+                        have: have.clone(),
+                        choked: true,
+                        reqq,
+                        bytes: 0,
+                        rtt_us: 0,
+                    },
+                );
+                self.feed(Event::PeerConnected {
+                    peer: id,
+                    have,
+                    reqq,
+                })
+            }
+            ExtEvent::PeerReqq { peer, reqq } => {
+                self.reqq.insert(peer, reqq);
+                // Usually the BEP 10 handshake comes before the first unchoke,
+                // so nothing is queued yet and the peer can be re-announced.
+                let idle = self.peers.get(&peer).is_some_and(|s| {
+                    s.reqq != reqq && self.sched.as_ref().is_none_or(|x| x.outstanding(s.id) == 0)
+                });
+                if !idle {
+                    return Vec::new();
+                }
+                let s = self.peers.get_mut(&peer).expect("checked above");
+                s.reqq = reqq;
+                let (id, have, choked) = (s.id, s.have.clone(), s.choked);
+                let mut out = self.feed(Event::PeerConnected {
+                    peer: id,
+                    have,
+                    reqq,
+                });
+                if !choked {
+                    out.extend(self.feed(Event::PeerUnchoked { peer: id }));
+                }
+                out
+            }
+            ExtEvent::PeerHave { peer, piece } => match self.peers.get_mut(&peer) {
+                Some(s) => {
+                    s.have.set(piece, true);
+                    let id = s.id;
+                    self.feed(Event::PeerHave { peer: id, piece })
+                }
+                None => Vec::new(),
+            },
+            ExtEvent::PeerChoked { peer } | ExtEvent::PeerUnchoked { peer } => {
+                let choked = matches!(ev, ExtEvent::PeerChoked { .. });
+                match self.peers.get_mut(&peer) {
+                    Some(s) => {
+                        s.choked = choked;
+                        let id = s.id;
+                        if choked {
+                            self.sent.retain(|k, _| k.0 != id);
+                            self.feed(Event::PeerChoked { peer: id })
+                        } else {
+                            self.feed(Event::PeerUnchoked { peer: id })
+                        }
+                    }
+                    None => Vec::new(),
+                }
+            }
+            ExtEvent::PeerGone { peer } => self.drop_peer(peer),
+            ExtEvent::Block { peer, piece, begin } => {
+                let Some(s) = self.peers.get_mut(&peer) else {
+                    return Vec::new();
+                };
+                let block = ((u64::from(piece) * self.piece_len + u64::from(begin))
+                    / u64::from(BLOCK)) as BlockIdx;
+                let total = self.files.last().map_or(0, |f| f.0 + f.1);
+                s.bytes += total
+                    .saturating_sub(u64::from(block) * u64::from(BLOCK))
+                    .min(u64::from(BLOCK));
+                if let Some(sent) = self.sent.remove(&(s.id, block)) {
+                    let sample = self.now_us.saturating_sub(sent).max(1);
+                    s.rtt_us = if s.rtt_us == 0 {
+                        sample
+                    } else {
+                        s.rtt_us.min(sample)
+                    };
+                }
+                let id = s.id;
+                self.feed(Event::BlockReceived { peer: id, block })
+            }
+            ExtEvent::PieceChecked { piece, ok } => {
+                if let Some(h) = self.have.get_mut(piece as usize) {
+                    *h = ok;
+                }
+                let out = self.feed(if ok {
+                    Event::PieceVerified { piece }
+                } else {
+                    Event::PieceFailed { piece }
+                });
+                self.check_ready_stock();
+                out
+            }
+        }
+    }
+
+    pub fn on_msg(&mut self, msg: Msg) -> Vec<Wire> {
+        match msg {
+            Msg::Open {
+                demand,
+                file,
+                start,
+                end,
+                ready,
+            } => {
+                self.demands.insert(
+                    demand,
+                    Demand {
+                        file,
+                        start,
+                        end,
+                        ready,
+                    },
+                );
+                let out = self.feed(Event::RangeOpened {
+                    demand,
+                    file,
+                    start,
+                    end_hint: end,
+                });
+                self.check_ready_stock();
+                out
+            }
+            Msg::Advance { demand, pos } => self.feed(Event::RangeAdvanced { demand, pos }),
+            Msg::Close { demand } => {
+                self.demands.remove(&demand);
+                self.feed(Event::RangeClosed { demand })
+            }
+            Msg::Stopped => {
+                let peers: Vec<SocketAddr> = self.peers.keys().copied().collect();
+                peers.into_iter().flat_map(|p| self.drop_peer(p)).collect()
+            }
+        }
+    }
+
+    /// A REQUEST could not be sent: the peer is gone even if librqbit has
+    /// not reported it yet. Dropping it (rather than rejecting the block)
+    /// keeps the scheduler from picking the same dead peer again.
+    pub fn send_failed(&mut self, peer: SocketAddr) -> Vec<Wire> {
+        self.drop_peer(peer)
+    }
+
+    /// One payload rate sample per peer (call about once a second).
+    pub fn sample_rates(&mut self, elapsed: Duration) -> Vec<Wire> {
+        let us = (elapsed.as_micros() as u64).max(1);
+        let samples: Vec<(PeerId, u64, u64)> = self
+            .peers
+            .values_mut()
+            .map(|s| {
+                (
+                    s.id,
+                    std::mem::take(&mut s.bytes) * 1_000_000 / us,
+                    s.rtt_us,
+                )
+            })
+            .collect();
+        let mut out = Vec::new();
+        for (peer, bytes_per_s, rtt_us) in samples {
+            out.extend(self.feed(Event::PeerRate {
+                peer,
+                bytes_per_s,
+                rtt_us,
+            }));
+        }
+        out
+    }
+
+    fn drop_peer(&mut self, peer: SocketAddr) -> Vec<Wire> {
+        let Some(s) = self.peers.remove(&peer) else {
+            return Vec::new();
+        };
+        self.addrs.remove(&s.id);
+        self.sent.retain(|k, _| k.0 != s.id);
+        self.feed(Event::PeerDisconnected { peer: s.id })
+    }
+
+    fn feed(&mut self, ev: Event) -> Vec<Wire> {
+        let Some(sched) = self.sched.as_mut() else {
+            return Vec::new();
+        };
+        sched.handle(ev, &mut self.actions);
+        let geo = sched.geometry();
+        let mut out = Vec::new();
+        let mut ready = Vec::new();
+        for a in std::mem::take(&mut self.actions) {
+            match a {
+                Action::Request { peer, block } | Action::Cancel { peer, block } => {
+                    let cancel = matches!(a, Action::Cancel { .. });
+                    let Some(&addr) = self.addrs.get(&peer) else {
+                        continue;
+                    };
+                    if cancel {
+                        self.sent.remove(&(peer, block));
+                    } else {
+                        self.sent.insert((peer, block), self.now_us);
+                    }
+                    let (piece, begin, len) = geo.wire(block);
+                    out.push(Wire {
+                        cancel,
+                        peer: addr,
+                        piece,
+                        begin,
+                        len,
+                    });
+                }
+                Action::Ready { demand } => ready.push(demand),
+            }
+        }
+        for demand in ready {
+            self.mark_ready(demand);
+        }
+        out
+    }
+
+    fn mark_ready(&mut self, demand: DemandId) {
+        if let Some(d) = self.demands.get(&demand) {
+            d.ready.send_replace(true);
+            self.ready_us.get_or_insert(self.now_us);
+        }
+    }
+
+    /// Stock mode: the same readiness rule as DWH (`blocking_bytes` from the
+    /// range start plus the file's tail, all verified), checked here because
+    /// the stock picker emits no `Ready`.
+    fn check_ready_stock(&mut self) {
+        if self.sched.is_some() {
+            return;
+        }
+        let ready: Vec<DemandId> = self
+            .demands
+            .iter()
+            .filter(|(_, d)| !*d.ready.borrow() && self.servable(d))
+            .map(|(&id, _)| id)
+            .collect();
+        for id in ready {
+            self.mark_ready(id);
+        }
+    }
+
+    fn servable(&self, d: &Demand) -> bool {
+        let Some(&(off, len)) = self.files.get(d.file) else {
+            return false;
+        };
+        let start = d.start.min(len);
+        let end = (start + self.blocking_bytes)
+            .min(d.end.unwrap_or(len))
+            .max(start + 1)
+            .min(len);
+        let tail = len.saturating_sub(self.tail_bytes);
+        let all = |a: u64, b: u64| {
+            a >= b || (a / self.piece_len..=(b - 1) / self.piece_len).all(|p| self.have[p as usize])
+        };
+        all(off + start, off + end) && (self.tail_bytes == 0 || all(off + tail, off + len))
+    }
+}
+
+/// BEP 3 bitfield: piece 0 is the high bit of byte 0.
+fn bit(bytes: &[u8], piece: u32) -> bool {
+    bytes
+        .get(piece as usize / 8)
+        .is_some_and(|b| b & (0x80 >> (piece % 8)) != 0)
+}
+
+/// Runs until the engine drops the message sender.
+pub(crate) async fn run(
+    torrent: Arc<ManagedTorrent>,
+    mut tr: Translator,
+    mut ext: mpsc::UnboundedReceiver<ExtEvent>,
+    mut msgs: mpsc::UnboundedReceiver<Msg>,
+    snapshot: Arc<Mutex<Snapshot>>,
+) {
+    let started = Instant::now();
+    let now = || started.elapsed().as_micros() as u64;
+    if let Err(e) = torrent.wait_until_initialized().await {
+        tracing::warn!("torrent failed to initialize: {e:#}");
+    }
+    let mut pending = tr.tick(now());
+    if let Some(bytes) = torrent.ext_have_pieces() {
+        pending.extend(tr.verified_bitfield(&bytes));
+    }
+    let mut tick = tokio::time::interval(TICK);
+    let mut last_rate = Instant::now();
+    loop {
+        execute(&torrent, &mut tr, pending);
+        *snapshot.lock().unwrap_or_else(|p| p.into_inner()) = tr.snapshot();
+        pending = tokio::select! {
+            Some(ev) = ext.recv() => {
+                let mut out = tr.tick(now());
+                out.extend(tr.on_ext(ev));
+                // Drain what is already queued so a burst costs one wakeup.
+                while let Ok(ev) = ext.try_recv() {
+                    out.extend(tr.on_ext(ev));
+                }
+                out
+            }
+            msg = msgs.recv() => match msg {
+                Some(msg) => {
+                    let mut out = tr.tick(now());
+                    out.extend(tr.on_msg(msg));
+                    out
+                }
+                None => return,
+            },
+            _ = tick.tick() => {
+                let mut out = tr.tick(now());
+                if last_rate.elapsed() >= RATE_EVERY {
+                    out.extend(tr.sample_rates(last_rate.elapsed()));
+                    last_rate = Instant::now();
+                }
+                out
+            }
+        };
+    }
+}
+
+/// Puts wire actions on the peers' connections. A failed send drops the peer
+/// from the scheduler, which may produce more actions.
+fn execute(torrent: &ManagedTorrent, tr: &mut Translator, mut wire: Vec<Wire>) {
+    let live = torrent.live();
+    while !wire.is_empty() {
+        let mut failed = Vec::new();
+        for w in wire {
+            match &live {
+                Some(l) if w.cancel => l.ext_cancel(w.peer, w.piece, w.begin, w.len),
+                Some(l) if l.ext_request(w.peer, w.piece, w.begin, w.len) => {}
+                _ if !w.cancel => failed.push(w.peer),
+                _ => {}
+            }
+        }
+        failed.dedup();
+        wire = failed.into_iter().flat_map(|p| tr.send_failed(p)).collect();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KIB: u64 = 1024;
+
+    fn addr(n: u8) -> SocketAddr {
+        SocketAddr::from(([10, 0, 0, n], 6881))
+    }
+
+    /// One 4 MiB file in 256 KiB pieces (16 pieces).
+    fn translator(drive: bool) -> Translator {
+        Translator::new(256 * 1024, &[4096 * KIB], Config::standard(), drive)
+    }
+
+    fn open(
+        tr: &mut Translator,
+        demand: DemandId,
+        start: u64,
+    ) -> (Vec<Wire>, watch::Receiver<bool>) {
+        let (ready, rx) = watch::channel(false);
+        let out = tr.on_msg(Msg::Open {
+            demand,
+            file: 0,
+            start,
+            end: None,
+            ready,
+        });
+        (out, rx)
+    }
+
+    #[test]
+    fn bep3_bit_order() {
+        assert!(bit(&[0x80], 0));
+        assert!(!bit(&[0x80], 1));
+        assert!(bit(&[0x00, 0x01], 15));
+        assert!(!bit(&[], 3));
+    }
+
+    #[test]
+    fn translates_a_peer_into_urgent_block_requests() {
+        let mut tr = translator(true);
+        tr.tick(1_000);
+        let (out, _) = open(&mut tr, 1, 0);
+        assert!(out.is_empty(), "no peers yet");
+        // reqq before the bitfield, as BEP 10 allows.
+        tr.on_ext(ExtEvent::PeerReqq {
+            peer: addr(1),
+            reqq: 64,
+        });
+        let out = tr.on_ext(ExtEvent::PeerConnected {
+            peer: addr(1),
+            bitfield: vec![0xff, 0xff],
+        });
+        assert!(out.is_empty(), "peers start choked");
+        let out = tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(1) });
+        assert!(!out.is_empty());
+        assert!(out.iter().all(|w| !w.cancel && w.peer == addr(1)));
+        // The head piece goes first, in 16 KiB blocks, as deep as the
+        // bandwidth-delay rule allows for a peer with no rate sample yet.
+        assert_eq!((out[0].piece, out[0].begin, out[0].len), (0, 0, 16 * 1024));
+        let depth = tr.sched.as_ref().unwrap().peer_depth(1).unwrap();
+        assert_eq!(out.len(), depth);
+        assert!(depth < 64);
+    }
+
+    #[test]
+    fn block_arrivals_feed_rtt_and_rate_and_choke_forgets_requests() {
+        let mut tr = translator(true);
+        tr.tick(1_000);
+        open(&mut tr, 1, 0);
+        tr.on_ext(ExtEvent::PeerConnected {
+            peer: addr(1),
+            bitfield: vec![0xff, 0xff],
+        });
+        let out = tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(1) });
+        let first = out[0];
+        tr.tick(51_000);
+        tr.on_ext(ExtEvent::Block {
+            peer: addr(1),
+            piece: first.piece,
+            begin: first.begin,
+        });
+        assert_eq!(tr.peers[&addr(1)].rtt_us, 50_000);
+        assert_eq!(tr.peers[&addr(1)].bytes, 16 * KIB);
+        tr.sample_rates(Duration::from_secs(1));
+        assert_eq!(tr.peers[&addr(1)].bytes, 0);
+        tr.on_ext(ExtEvent::PeerChoked { peer: addr(1) });
+        assert!(tr.sent.is_empty());
+        assert_eq!(tr.sched.as_ref().unwrap().outstanding(1), 0);
+    }
+
+    #[test]
+    fn verified_pieces_make_a_range_ready_and_failed_sends_drop_the_peer() {
+        let mut tr = translator(true);
+        tr.tick(1_000);
+        let (_, ready) = open(&mut tr, 7, 0);
+        // Blocking window (1 MiB = pieces 0..4) and tail (2 MiB = pieces 8..16).
+        let mut bits = [0u8; 2];
+        for p in (0..4).chain(8..16) {
+            bits[p / 8] |= 0x80 >> (p % 8);
+        }
+        tr.verified_bitfield(&bits);
+        assert!(*ready.borrow());
+        assert!(tr.snapshot().ready_us.is_some());
+
+        tr.on_ext(ExtEvent::PeerConnected {
+            peer: addr(2),
+            bitfield: vec![0xff, 0xff],
+        });
+        let out = tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(2) });
+        assert!(!out.is_empty(), "critical window still wanted");
+        let out = tr.send_failed(addr(2));
+        assert!(out.is_empty());
+        assert!(tr.peers.is_empty() && tr.sent.is_empty());
+        // librqbit reports the same peer later: ignored.
+        assert!(tr.on_ext(ExtEvent::PeerGone { peer: addr(2) }).is_empty());
+    }
+
+    #[test]
+    fn stock_mode_requests_nothing_but_tracks_readiness() {
+        let mut tr = translator(false);
+        assert!(!tr.drives());
+        let (_, ready) = open(&mut tr, 1, 3 * 1024 * KIB);
+        let out = tr.on_ext(ExtEvent::PeerConnected {
+            peer: addr(1),
+            bitfield: vec![0xff, 0xff],
+        });
+        assert!(out.is_empty());
+        // A range starting at 3 MiB needs pieces 12..16, all inside the tail.
+        for piece in 12..15 {
+            tr.on_ext(ExtEvent::PieceChecked { piece, ok: true });
+        }
+        assert!(!*ready.borrow());
+        tr.on_ext(ExtEvent::PieceChecked {
+            piece: 8,
+            ok: false,
+        });
+        tr.on_ext(ExtEvent::PieceChecked {
+            piece: 15,
+            ok: true,
+        });
+        assert!(!*ready.borrow(), "tail piece 8..12 still missing");
+        for piece in 8..12 {
+            tr.on_ext(ExtEvent::PieceChecked { piece, ok: true });
+        }
+        assert!(*ready.borrow());
+    }
+
+    #[test]
+    fn unaligned_pieces_fall_back_to_stock() {
+        let tr = Translator::new(1000, &[10_000], Config::standard(), true);
+        assert!(!tr.drives());
+    }
+}

@@ -28,6 +28,13 @@ yanked = "deny"
 # Unmaintained crates fail only when we depend on them directly; fxhash and
 # derivative arrive through stremio-core.
 unmaintained = "workspace"
+ignore = [
+    # ringbuf 0.4.8 through librqbit-utp 0.7.0 (torrent engine, full builds):
+    # skip and clear double-drop only when an element's Drop panics, and its
+    # one ring buffer holds u8 (SharedRb<Heap<u8>> in stream_tx.rs). Drop this
+    # once librqbit-utp takes ringbuf 0.5.2 or later.
+    { id = "RUSTSEC-2026-0293", reason = "u8 elements cannot panic in Drop" },
+]
 
 [bans]
 multiple-versions = "allow"

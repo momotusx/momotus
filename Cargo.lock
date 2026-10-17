@@ -2577,18 +2577,22 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "futures-util",
+ "libc",
  "mq-addons",
+ "mq-engine",
  "mq-http",
  "mq-library",
  "mq-media",
  "mq-protocol",
  "mq-runtime",
+ "mq-server",
  "mq-streams",
  "mq-sync",
  "mq-sync-server",
  "serde",
  "serde_json",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -2612,6 +2616,7 @@ dependencies = [
  "anyhow",
  "librqbit",
  "mq-engine-sched",
+ "mq-relparse",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -2724,6 +2729,7 @@ dependencies = [
 name = "mq-runtime"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "eyeball",
  "eyeball-im",
  "futures-util",
@@ -2731,6 +2737,7 @@ dependencies = [
  "imbl",
  "mq-addons",
  "mq-debrid",
+ "mq-engine",
  "mq-http",
  "mq-import",
  "mq-library",
@@ -2761,7 +2768,9 @@ dependencies = [
  "flate2",
  "futures-util",
  "getrandom 0.3.4",
+ "mq-engine",
  "mq-http",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
