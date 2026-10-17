@@ -164,6 +164,7 @@ fn binge_group_and_preferences_apply() {
 fn rank_key_orders_tiers_before_scores() {
     let low_tier_high_score = RankKey {
         tier: 2,
+        language: true,
         binge: true,
         playability: Playability::Native,
         effective_height: 2160,
@@ -171,6 +172,7 @@ fn rank_key_orders_tiers_before_scores() {
     };
     let high_tier_low_score = RankKey {
         tier: 3,
+        language: false,
         binge: false,
         playability: Playability::NeedsTranscode,
         effective_height: 480,
@@ -269,5 +271,72 @@ fn a_browser_is_not_offered_what_it_cannot_decode() {
             .iter()
             .any(|h| h.reason == HideReason::Unplayable),
         "the remux is hidden as unplayable"
+    );
+}
+
+/// A well-seeded release in a language the user does not speak never beats
+/// one in their language (the design audit found a Russian-only file picked
+/// over an English 720p).
+#[test]
+fn a_foreign_language_release_never_wins_on_seeds() {
+    let caps = DeviceCaps::basic_1080p();
+    let prefs = StreamPrefs {
+        languages: vec!["en".into()],
+        ..StreamPrefs::default()
+    };
+    let input = RankInput {
+        caps: &caps,
+        prefs: &prefs,
+        target: &target(),
+        last_binge_group: None,
+    };
+    let all = streams(
+        "torrentio",
+        0,
+        json!({ "streams": [
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.WEB.h264-GROUP.mkv\n👤 900 💾 1.4 GB\n🇷🇺",
+              "infoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fileIdx": 0 },
+            { "name": "Torrentio\n720p", "title": "The.Last.of.Us.S02E03.720p.WEB.h264-GROUP.mkv\n👤 12 💾 900 MB",
+              "infoHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "fileIdx": 0 }
+        ]}),
+    );
+    let ranked = rank(all, &input);
+    let best = ranked.best().unwrap();
+    assert!(
+        best.stream.raw_description.contains("720p"),
+        "{}",
+        best.stream.raw_description
+    );
+}
+
+/// A release that states no resolution ranks below one that does.
+#[test]
+fn an_unstated_resolution_ranks_below_a_stated_one() {
+    let caps = DeviceCaps::basic_1080p();
+    let prefs = StreamPrefs::default();
+    let input = RankInput {
+        caps: &caps,
+        prefs: &prefs,
+        target: &target(),
+        last_binge_group: None,
+    };
+    let all = streams(
+        "torrentio",
+        0,
+        json!({ "streams": [
+            { "name": "Torrentio", "title": "The.Last.of.Us.S02E03.WEB.h264-GROUP.mkv\n👤 900 💾 1.4 GB",
+              "infoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fileIdx": 0 },
+            { "name": "Torrentio\n480p", "title": "The.Last.of.Us.S02E03.480p.WEB.h264-GROUP.mkv\n👤 12 💾 400 MB",
+              "infoHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "fileIdx": 0 }
+        ]}),
+    );
+    let ranked = rank(all, &input);
+    assert!(
+        ranked
+            .best()
+            .unwrap()
+            .stream
+            .raw_description
+            .contains("480p")
     );
 }

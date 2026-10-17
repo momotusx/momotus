@@ -183,6 +183,9 @@ pub enum HideReason {
 #[serde(rename_all = "camelCase")]
 pub struct RankKey {
     pub tier: u8,
+    /// False only when the release names its languages and none is wanted:
+    /// a ready file in a language the user does not speak is no pick.
+    pub language: bool,
     pub binge: bool,
     pub playability: Playability,
     pub effective_height: u32,

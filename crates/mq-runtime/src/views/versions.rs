@@ -29,7 +29,8 @@ use tokio::task::JoinSet;
 #[serde(rename_all = "camelCase")]
 pub struct VersionRow {
     pub key: String,
-    /// "4K", "1080p", "720p", "SD" or "Unknown".
+    /// "4K", "1440p", "1080p", "720p" or "SD"; when the release names no
+    /// resolution, its source ("Blu-ray", "WEB-DL") or "Quality not stated".
     pub quality: String,
     /// Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux".
     pub features: Vec<String>,
@@ -366,7 +367,7 @@ fn row_dto(r: &RankedRow) -> VersionRow {
     let rel = &s.release;
     VersionRow {
         key: s.key.clone(),
-        quality: quality_word(rel.resolution.height()),
+        quality: quality_word(rel.resolution.height(), rel.quality),
         features: features(rel),
         size_bytes: s.size_bytes,
         status: status(s),
@@ -386,13 +387,26 @@ fn row_dto(r: &RankedRow) -> VersionRow {
     }
 }
 
-fn quality_word(height: u32) -> String {
+fn quality_word(height: u32, source: mq_relparse::Quality) -> String {
+    use mq_relparse::Quality as Q;
     match height {
         h if h >= 2160 => "4K",
         h if h >= 1440 => "1440p",
         h if h >= 1080 => "1080p",
         h if h >= 720 => "720p",
-        0 => "Unknown",
+        // A headline never says "unknown": the source is the next best fact.
+        0 => match source {
+            Q::Remux => "Remux",
+            Q::BluRay => "Blu-ray",
+            Q::WebDl => "WEB-DL",
+            Q::WebRip => "WEBRip",
+            Q::Hdtv => "HDTV",
+            Q::Dvd => "DVD",
+            Q::Screener => "Screener",
+            Q::Telesync => "Telesync",
+            Q::Cam => "Cam",
+            Q::Unknown => "Quality not stated",
+        },
         _ => "SD",
     }
     .into()

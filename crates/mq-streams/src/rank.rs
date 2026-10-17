@@ -171,17 +171,18 @@ fn effective_height(s: &ParsedStream, input: &RankInput<'_>) -> u32 {
     if let Some(max) = input.prefs.max_height {
         cap = cap.min(max);
     }
-    let height = s.release.resolution.height();
-    if height == 0 {
-        720.min(cap)
-    } else {
-        height.min(cap)
-    }
+    // An unstated resolution ranks below every stated one: a guess must
+    // not tie with a real 720p.
+    s.release.resolution.height().min(cap)
 }
 
 fn key(s: &ParsedStream, input: &RankInput<'_>) -> RankKey {
+    let langs = &s.release.languages;
     RankKey {
         tier: tier(s),
+        language: input.prefs.languages.is_empty()
+            || langs.is_empty()
+            || input.prefs.languages.iter().any(|l| langs.contains(l)),
         binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
         playability: playability(s, input.caps).unwrap_or(Playability::NeedsTranscode),
         effective_height: effective_height(s, input),
