@@ -187,8 +187,12 @@ impl VersionsView {
     }
 
     /// Keeps the current recommendation from now on (the user moved focus).
+    /// Before there is one, it does nothing: the first answer still picks.
     pub fn freeze(&self) {
         let mut state = lock(&self.state);
+        if state.recommended.is_none() {
+            return;
+        }
         state.frozen = true;
         maybe_prefetch(&self.core, &mut state, self.episode);
         self.snapshot.set(render(&state));

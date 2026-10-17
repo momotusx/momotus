@@ -131,6 +131,25 @@ async fn frozen_pick_survives_late_results() {
     assert!(view.recommended().is_some());
 }
 
+/// Focus can move before any addon answered; that must not freeze an empty
+/// pick for good.
+#[tokio::test]
+async fn freezing_before_any_answer_keeps_the_first_pick_coming() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let torrents = stream_addon("torrents", Duration::from_millis(300), TORRENTS).await;
+    core.library()
+        .set_addons("p", &[torrents], &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    view.freeze();
+    assert!(!view.snapshot().frozen);
+    while !view.snapshot().done {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(view.snapshot().recommended.unwrap().via, "torrents");
+}
+
 #[tokio::test]
 #[ignore = "network"]
 async fn real_torrentio_versions() {
