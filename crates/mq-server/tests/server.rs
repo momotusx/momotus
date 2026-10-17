@@ -35,6 +35,9 @@ struct Behaviour {
     validator_lost: bool,
     /// Answer requests for the start this much later.
     slow_start: Option<Duration>,
+    /// On the first request only, stop sending after this many body bytes
+    /// and keep the connection open, as a stuck origin node does.
+    hang_after: Option<usize>,
 }
 
 /// Bytes that differ with their offset, so a misplaced range shows.
@@ -138,12 +141,17 @@ async fn answer(mut socket: TcpStream, data: Arc<Vec<u8>>, how: Behaviour, seen:
     if socket.write_all(header.as_bytes()).await.is_err() {
         return;
     }
-    let stop = how.cut_after.map_or(end, |n| (start + n).min(end));
+    let first = seen.ranges().len() == 1;
+    let hang = how.hang_after.filter(|_| first);
+    let stop = how.cut_after.or(hang).map_or(end, |n| (start + n).min(end));
     for chunk in data[start..stop].chunks(64 * 1024) {
         if socket.write_all(chunk).await.is_err() {
             return;
         }
         seen.sent.fetch_add(chunk.len() as u64, Ordering::Relaxed);
+    }
+    if hang.is_some() {
+        tokio::time::sleep(Duration::from_secs(300)).await;
     }
 }
 
@@ -668,4 +676,21 @@ async fn open_checks_the_origin_with_the_read_that_serves_the_player() {
         .await
         .unwrap_err();
     assert!(err.starts_with("source did not answer"), "{err}");
+}
+
+/// An origin node that stops feeding an open connection must not hold the
+/// player for the long network timeouts: the stuck read is replaced.
+#[tokio::test]
+async fn a_stuck_upstream_is_replaced_quickly() {
+    let data = file(4 << 20);
+    let how = Behaviour {
+        hang_after: Some(1 << 20),
+        ..Default::default()
+    };
+    let (_server, url, seen, http) = serve(&data, how).await;
+    let started = std::time::Instant::now();
+    assert_eq!(range(&http, &url, 0, 3 << 20).await, data[..3 << 20]);
+    let took = started.elapsed();
+    assert!(took < Duration::from_secs(12), "took {took:?}");
+    assert!(seen.ranges().len() >= 2, "{:?}", seen.ranges());
 }

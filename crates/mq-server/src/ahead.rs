@@ -29,8 +29,10 @@ const ATTACH: u64 = 1 << 20;
 const IDLE: Duration = Duration::from_secs(10);
 /// Longest wait for the origin's answer, its host's request slot included.
 pub(crate) const OPEN: Duration = Duration::from_secs(20);
-/// Longest wait for one block before its cursor counts as failed.
-const STALL: Duration = Duration::from_secs(45);
+/// A running cursor that a reader waits on and that writes nothing for this
+/// long is stuck (a connection the origin stopped feeding): it is replaced
+/// by a fresh read from the reader's position.
+const STALL: Duration = Duration::from_secs(6);
 /// Cursor failures in a row that end a response.
 const RETRIES: u32 = 3;
 
@@ -250,13 +252,9 @@ impl Source {
             }
             let cursor = self.cursor_at(pos).ok_or_else(gone)?;
             cursor.want(pos + want);
-            let mut rx = cursor.progress.subscribe();
-            let wait = rx.wait_for(|p| p.frontier > pos || !p.live());
-            let reached = match tokio::time::timeout(STALL, wait).await {
-                Ok(Ok(p)) => p.frontier > pos,
-                _ => false,
-            };
+            let reached = wait_past(&cursor, pos).await;
             if !reached {
+                tracing::warn!("stream read at {pos} ended or stalled; reading again from there");
                 cursor.close();
                 failures += 1;
                 // A passthrough origin cannot continue a cached answer.
@@ -318,6 +316,30 @@ impl Source {
         *lock(&cursor.task) = Some(task.abort_handle());
         cursors.push(cursor.clone());
         Some(cursor)
+    }
+}
+
+/// Waits until `cursor` has written past `pos`. False when it ended first,
+/// or made no progress for `STALL` while running (`OPEN` and a margin while
+/// opening, which has its own deadline).
+async fn wait_past(cursor: &Cursor, pos: u64) -> bool {
+    let mut rx = cursor.progress.subscribe();
+    loop {
+        let p = *rx.borrow_and_update();
+        if p.frontier > pos {
+            return true;
+        }
+        if !p.live() {
+            return false;
+        }
+        let limit = match p.phase {
+            Phase::Opening => OPEN + Duration::from_secs(2),
+            _ => STALL,
+        };
+        match tokio::time::timeout(limit, rx.changed()).await {
+            Ok(Ok(())) => {}
+            _ => return false,
+        }
     }
 }
 
