@@ -10,7 +10,7 @@ use crate::live::{FRAME, coalesce};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines};
-use mq_debrid::{ResolveRequest, StoreId};
+use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_http::{Priority, RequestOptions};
 use mq_library::{FINISHED_RATIO, LibraryItemRow, ProgressRow};
 use mq_media::{ByteCache, HttpRangeReader};
@@ -460,52 +460,23 @@ async fn open_source(
             stream.filename.clone(),
             stream.size_bytes,
         ),
-        Source::ClientResolve(c) => {
-            let hash = c
-                .info_hash
-                .clone()
-                .ok_or("the addon did not say which torrent to resolve")?;
-            let service = c.service.as_deref().or(stream.service.as_deref());
-            let link = debrid(
-                core,
-                service,
-                ResolveRequest {
-                    store: None,
-                    info_hash: hash,
-                    file_idx: c.file_idx,
-                    filename_hint: c.filename.clone(),
-                    season: c.season.or(target.season),
-                    episode: c.episode.or(target.episode),
-                },
-            )
-            .await?;
-            (link.url, Vec::new(), Some(link.filename), link.size)
-        }
-        Source::Torrent {
-            info_hash,
-            file_idx,
-            ..
-        } => {
-            if core.debrid().is_none() {
+        Source::ClientResolve(_) | Source::Torrent { .. } => {
+            if matches!(stream.source, Source::Torrent { .. }) && core.debrid().is_none() {
                 // ponytail: until the torrent engine lands, torrents play only
                 // through a debrid account.
                 return Err(
                     "torrents need a debrid account until the built-in engine ships".into(),
                 );
             }
-            let link = debrid(
-                core,
-                stream.service.as_deref(),
-                ResolveRequest {
-                    store: None,
-                    info_hash: info_hash.clone(),
-                    file_idx: *file_idx,
-                    filename_hint: stream.filename.clone(),
-                    season: target.season,
-                    episode: target.episode,
-                },
-            )
-            .await?;
+            let (service, request) = debrid_request(stream, target.season, target.episode)
+                .ok_or("the addon did not say which torrent to resolve")?;
+            let resolver = core
+                .debrid()
+                .ok_or("this version needs a debrid account; add one in Settings")?;
+            let link = resolver
+                .resolve(with_store(&resolver, service.as_deref(), request))
+                .await
+                .map_err(|e| e.to_string())?;
             (link.url, Vec::new(), Some(link.filename), link.size)
         }
         other => return Err(format!("{} streams cannot play here", source_word(other))),
@@ -539,20 +510,80 @@ async fn open_source(
     ))
 }
 
+/// What to ask a debrid store for this stream, with the service the addon
+/// named; `None` for sources that need no debrid.
+pub(crate) fn debrid_request(
+    stream: &ParsedStream,
+    season: Option<u32>,
+    episode: Option<u32>,
+) -> Option<(Option<String>, ResolveRequest)> {
+    match &stream.source {
+        Source::ClientResolve(c) => Some((
+            c.service.clone().or_else(|| stream.service.clone()),
+            ResolveRequest {
+                store: None,
+                info_hash: c.info_hash.clone()?,
+                file_idx: c.file_idx,
+                filename_hint: c.filename.clone(),
+                season: c.season.or(season),
+                episode: c.episode.or(episode),
+            },
+        )),
+        Source::Torrent {
+            info_hash,
+            file_idx,
+            ..
+        } => Some((
+            stream.service.clone(),
+            ResolveRequest {
+                store: None,
+                info_hash: info_hash.clone(),
+                file_idx: *file_idx,
+                filename_hint: stream.filename.clone(),
+                season,
+                episode,
+            },
+        )),
+        _ => None,
+    }
+}
+
 /// Uses the store the addon named when that account is configured, else the
 /// default store.
-async fn debrid(
-    core: &Core,
+fn with_store(
+    resolver: &Resolver,
     service: Option<&str>,
     mut request: ResolveRequest,
-) -> Result<mq_debrid::ResolvedLink, String> {
-    let resolver = core
-        .debrid()
-        .ok_or("this version needs a debrid account; add one in Settings")?;
+) -> ResolveRequest {
     request.store = service
         .and_then(StoreId::from_service)
         .filter(|id| resolver.stores().contains(id));
-    resolver.resolve(request).await.map_err(|e| e.to_string())
+    request
+}
+
+/// Warms the debrid link of a version the user is likely to play, so Play
+/// starts from the resolver cache. Only versions the addon reports cached:
+/// asking a store for an uncached torrent adds it to the user's account.
+pub(crate) fn prefetch(
+    core: &Core,
+    stream: &ParsedStream,
+    season: Option<u32>,
+    episode: Option<u32>,
+) {
+    if stream.cached != Some(true) {
+        return;
+    }
+    let (Some(resolver), Some((service, request))) =
+        (core.debrid(), debrid_request(stream, season, episode))
+    else {
+        return;
+    };
+    let request = with_store(&resolver, service.as_deref(), request);
+    tokio::spawn(async move {
+        if let Err(e) = resolver.prefetch(request).await {
+            tracing::debug!("debrid prefetch failed: {e}");
+        }
+    });
 }
 
 fn source_word(source: &Source) -> &'static str {
@@ -728,5 +759,43 @@ fn remember_stream(core: &Core, target: &PlayTarget, stream: &ParsedStream) {
         &core.hlc(),
     ) {
         tracing::warn!("stream memory write failed: {e}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stream(json: &str) -> ParsedStream {
+        let body = format!(r#"{{"streams":[{json}]}}"#);
+        let wire = mq_protocol::decode_streams(body.as_bytes()).unwrap();
+        mq_streams::normalize(&wire.streams[0], "a", "A", 0, 0)
+    }
+
+    #[test]
+    fn debrid_requests_follow_the_stream() {
+        let resolve = stream(
+            r#"{"clientResolve":{"type":"debrid","service":"torbox","infoHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","fileIdx":3,"filename":"Show.S01E02.mkv","episode":2}}"#,
+        );
+        let (service, req) = debrid_request(&resolve, Some(1), Some(9)).unwrap();
+        assert_eq!(service.as_deref(), Some("torbox"));
+        assert_eq!(req.file_idx, Some(3));
+        assert_eq!(req.filename_hint.as_deref(), Some("Show.S01E02.mkv"));
+        // The addon's own episode wins; the season falls back to the target.
+        assert_eq!((req.season, req.episode), (Some(1), Some(2)));
+
+        let torrent = stream(
+            r#"{"infoHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","fileIdx":1,"behaviorHints":{"service":"realdebrid"}}"#,
+        );
+        let (service, req) = debrid_request(&torrent, Some(4), Some(5)).unwrap();
+        assert_eq!(service.as_deref(), Some("realdebrid"));
+        assert_eq!(req.info_hash, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        assert_eq!((req.season, req.episode), (Some(4), Some(5)));
+
+        assert!(
+            debrid_request(&stream(r#"{"url":"https://x.example/a.mkv"}"#), None, None).is_none()
+        );
+        let no_hash = stream(r#"{"clientResolve":{"type":"debrid","service":"torbox"}}"#);
+        assert!(debrid_request(&no_hash, None, None).is_none());
     }
 }

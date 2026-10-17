@@ -98,9 +98,13 @@ struct State {
     slow: Vec<String>,
     failed: Vec<String>,
     done: bool,
+    /// The pick's debrid link was warmed (once per view).
+    prefetched: bool,
 }
 
 pub struct VersionsView {
+    core: Core,
+    episode: (Option<u32>, Option<u32>),
     snapshot: SharedObservable<VersionsSnapshot>,
     state: Arc<Mutex<State>>,
     _tasks: JoinSet<()>,
@@ -125,6 +129,7 @@ impl VersionsView {
                 .ok()
                 .flatten();
         }
+        let episode = (params.target.season, params.target.episode);
         let addons = core.installed_addons().unwrap_or_default();
         let path = ResourcePath {
             resource: "stream".into(),
@@ -142,6 +147,7 @@ impl VersionsView {
             slow: Vec::new(),
             failed: Vec::new(),
             done: eligible.is_empty(),
+            prefetched: false,
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -154,6 +160,8 @@ impl VersionsView {
             snapshot.clone(),
         ));
         Self {
+            core: core.clone(),
+            episode,
             snapshot,
             state,
             _tasks: tasks,
@@ -181,6 +189,7 @@ impl VersionsView {
     pub fn freeze(&self) {
         let mut state = lock(&self.state);
         state.frozen = true;
+        maybe_prefetch(&self.core, &mut state, self.episode);
         self.snapshot.set(render(&state));
     }
 
@@ -289,7 +298,22 @@ async fn collect(
             AddonEvent::Done => s.done = true,
         }
         rerank(&mut s, &params);
+        if s.done {
+            maybe_prefetch(&core, &mut s, (params.target.season, params.target.episode));
+        }
         snapshot.set(render(&s));
+    }
+}
+
+/// Once the pick settles (every addon answered, or the user moved focus),
+/// warm its debrid link so Play starts from the cache.
+fn maybe_prefetch(core: &Core, s: &mut State, (season, episode): (Option<u32>, Option<u32>)) {
+    if s.prefetched {
+        return;
+    }
+    if let Some(best) = &s.recommended {
+        crate::views::playback::prefetch(core, &best.stream, season, episode);
+        s.prefetched = true;
     }
 }
 
