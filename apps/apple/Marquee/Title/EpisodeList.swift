@@ -164,7 +164,7 @@ private struct EpisodeRow: View {
             HStack(alignment: .top, spacing: metrics.wide ? 18 : 12) {
                 still
                 VStack(alignment: .leading, spacing: metrics.wide ? 6 : 4) {
-                    CardTitle(text: episode.title.isEmpty ? "Episode \(episode.episode)" : episode.title, size: metrics.cardName + 2)
+                    CardTitle(text: episode.title.isEmpty ? "Episode \(episode.episode)" : episode.title, size: metrics.cardName + 2, onGlass: true)
                     if !meta.isEmpty {
                         Text(meta)
                             .font(.text(metrics.cardInfo, weight: .medium, relativeTo: .caption))

@@ -166,17 +166,19 @@ private struct CardArt: ViewModifier {
     }
 }
 
-/// A card's name: 700, accent while the card is lit.
+/// A card's name: 700, accent while the card is lit. Accent text sits on
+/// `bg` only, so a name on a glass card (`onGlass`) stays white.
 struct CardTitle: View {
     let text: String
     var size = Theme.type.callout
+    var onGlass = false
     @Environment(\.card) private var card
 
     var body: some View {
         Text(text)
             .font(.text(size, weight: .bold, relativeTo: .callout))
             .tracking(size * Theme.Tracking.label)
-            .foregroundStyle(card.lit ? Theme.Palette.accent : Theme.Palette.text)
+            .foregroundStyle(card.lit && !onGlass ? Theme.Palette.accent : Theme.Palette.text)
             .lineLimit(1)
     }
 }

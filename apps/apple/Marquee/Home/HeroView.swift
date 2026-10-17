@@ -103,9 +103,12 @@ func heroMeta(_ hero: Hero) -> [String] {
     return [hero.tile.releaseInfo, hero.runtime, genres.isEmpty ? nil : genres].compactMap { $0 }
 }
 
-/// An eyebrow: accent, spaced capitals.
+/// An eyebrow over artwork: accent spaced capitals in a chip filled with the
+/// page colour. Accent text holds 4.5:1 on `bg` only; over light art it
+/// falls to 3.7:1 even under the hero's scrim (DECISION.md, Accent).
 struct Eyebrow: View {
     let text: String
+    @Environment(\.metrics) private var metrics
 
     var body: some View {
         Text(text.uppercased())
@@ -113,6 +116,18 @@ struct Eyebrow: View {
             .tracking(Theme.type.caption * 0.14)
             .foregroundStyle(Theme.Palette.accent)
             .lineLimit(2)
+            .padding(.horizontal, padding.width)
+            .padding(.vertical, padding.height)
+            .background(Capsule().fill(Theme.Palette.bg))
+    }
+
+    /// The web's chip: 8 by 14 on the TV canvas, 5 by 10 on a phone.
+    private var padding: CGSize {
+        #if os(tvOS)
+        return CGSize(width: 14, height: 8)
+        #else
+        return metrics.wide ? CGSize(width: 11, height: 6) : CGSize(width: 10, height: 5)
+        #endif
     }
 }
 
