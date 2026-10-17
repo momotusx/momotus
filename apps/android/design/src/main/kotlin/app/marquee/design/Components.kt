@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 
 private enum class ButtonKind { Primary, Secondary }
 
@@ -531,5 +532,70 @@ fun RowHeader(
         MqText(title, role = TextRole.Title3, maxLines = 1)
         if (source != null) MqText(source, role = TextRole.Callout, color = colors.dim, maxLines = 1)
         Box(Modifier.weight(1f).height(1.dp).background(colors.line))
+    }
+}
+
+/**
+ * A short label in accent spaced capitals (design/DECISION.md v2). Accent text keeps 4.66:1 only
+ * on the page color, so over artwork the label sits in a chip filled with it.
+ */
+@Composable
+fun Eyebrow(
+    text: String,
+    modifier: Modifier = Modifier,
+    overArt: Boolean = false,
+) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    MqText(
+        text.uppercase(),
+        modifier =
+            modifier.then(
+                if (overArt) {
+                    Modifier
+                        .clip(RoundedCornerShape(Marquee.radius.pill))
+                        .background(colors.bg)
+                        .padding(horizontal = if (tv) 16.dp else 10.dp, vertical = if (tv) 8.dp else 5.dp)
+                } else {
+                    Modifier
+                },
+            ),
+        role = TextRole.Caption,
+        color = colors.accent,
+        weight = FontWeight.Bold,
+        maxLines = 1,
+        letterSpacing = 0.14.em,
+    )
+}
+
+/**
+ * A star with the IMDb rating, then the facts ("2026 · 145 min · Action, Adventure"): the meta
+ * line of a hero and a title page. Without a rating it is the facts alone.
+ */
+@Composable
+fun RatingLine(
+    rating: String?,
+    facts: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (rating != null) {
+            MqIcon(StarFilled, tint = colors.star, size = if (tv) 26.dp else 15.dp)
+            MqText(
+                rating,
+                modifier = Modifier.semantics { contentDescription = "IMDb $rating" },
+                role = TextRole.Callout,
+                weight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            MqText("·", modifier = Modifier.clearAndSetSemantics { }, role = TextRole.Callout, color = colors.dim)
+        }
+        MqText(facts, role = TextRole.Callout, color = colors.muted, weight = FontWeight.SemiBold, maxLines = 1)
     }
 }

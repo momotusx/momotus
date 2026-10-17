@@ -3,6 +3,7 @@
 package app.marquee.ui.tv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +30,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
@@ -46,12 +49,16 @@ import app.marquee.core.model.tileKeys
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Backdrop
+import app.marquee.design.Eyebrow
 import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.RatingLine
+import app.marquee.design.RoundButton
+import app.marquee.design.RowHeader
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -171,41 +178,64 @@ private fun TvHero(
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
 ) {
-    // Artwork is dark and busy in either theme: the hero always uses the dark scrim and light text.
-    val scrim = Tokens.dark.bg
+    val colors = Marquee.colors
+    val scrim = colors.bg
     val tile = hero.tile
+    val shape = RoundedCornerShape(Marquee.radius.hero)
     val playRequester = state.focus.requesterFor(HERO_PLAY)
     val detailsRequester = state.focus.requesterFor(HERO_DETAILS)
-    Box(Modifier.fillMaxWidth().height(HERO_HEIGHT)) {
+    // An inset card (design/DECISION.md v2, Home hero): the backdrop with scrims from the left and
+    // the bottom, so the words read on any artwork.
+    Box(
+        Modifier
+            .padding(horizontal = Marquee.safe.side)
+            .fillMaxWidth()
+            .height(HERO_HEIGHT)
+            .clip(shape)
+            .border(1.dp, colors.edge, shape),
+    ) {
         Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
-        // Scrims keep the title readable on any artwork and melt the picture into the rows below.
         Box(
             Modifier
                 .matchParentSize()
                 .background(
                     Brush.horizontalGradient(
-                        0f to scrim,
-                        0.55f to scrim.copy(alpha = 0.88f),
-                        0.9f to scrim.copy(alpha = 0f),
+                        0f to scrim.copy(alpha = 0.94f),
+                        0.28f to scrim.copy(alpha = 0.72f),
+                        0.58f to scrim.copy(alpha = 0.18f),
+                        0.72f to scrim.copy(alpha = 0f),
                     ),
                 ),
         )
         Box(
             Modifier
                 .matchParentSize()
-                .background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Marquee.colors.bg)),
+                .background(
+                    Brush.verticalGradient(
+                        0.42f to Color.Transparent,
+                        0.66f to scrim.copy(alpha = 0.3f),
+                        1f to scrim.copy(alpha = 0.9f),
+                    ),
+                ),
         )
         Column(
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = Marquee.safe.side, bottom = Marquee.space.l)
-                .widthIn(max = 820.dp),
+                .padding(start = 56.dp, bottom = 48.dp)
+                .widthIn(max = 860.dp),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
-            Logo(tile.logo, tile.name, height = 150.dp, maxWidth = 560.dp, color = Tokens.dark.text)
-            MqText(hero.reason, role = TextRole.Title3, color = Tokens.dark.text, maxLines = 2)
-            MqText(TileCopy.heroMeta(tile), role = TextRole.Callout, color = Tokens.dark.muted)
-            Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+            Eyebrow(hero.reason, overArt = true)
+            Logo(tile.logo, tile.name, height = 120.dp, maxWidth = 520.dp, color = colors.text)
+            RatingLine(tile.rating, TileCopy.heroMeta(hero))
+            hero.description?.let {
+                MqText(it, role = TextRole.Callout, color = colors.muted, maxLines = 3)
+            }
+            Row(
+                Modifier.padding(top = Marquee.space.xs),
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
+                verticalAlignment = Alignment.Top,
+            ) {
                 if (tile.playable()) {
                     PrimaryButton(
                         label = "Play",
@@ -216,11 +246,11 @@ private fun TvHero(
                         onFocusChange = state.focus.watch(HERO_ROW, HERO_PLAY),
                     )
                 }
-                SecondaryButton(
-                    label = "Details",
+                RoundButton(
                     icon = Icons.Info,
+                    label = "Details",
                     onClick = { onOpen(tile) },
-                    modifier = Modifier.describe("Details of ${tile.name}"),
+                    showLabel = true,
                     focusRequester = detailsRequester,
                     onFocusChange = state.focus.watch(HERO_ROW, HERO_DETAILS),
                 )
@@ -246,20 +276,7 @@ private fun TvRow(
 ) {
     val inset = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        Row(
-            Modifier.padding(start = inset),
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            MqText(row.title, role = TextRole.Title3, maxLines = 1)
-            MqText(
-                TileCopy.source(row.rowId, row.source),
-                role = TextRole.Callout,
-                color = Marquee.colors.muted,
-                modifier = Modifier.padding(bottom = 4.dp),
-                maxLines = 1,
-            )
-        }
+        RowHeader(row.title, TileCopy.source(row.rowId, row.source), Modifier.padding(horizontal = inset))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))

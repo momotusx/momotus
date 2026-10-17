@@ -149,7 +149,7 @@ private fun RatingChip(
         horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MqIcon(Icons.Star, tint = colors.star, size = if (tv) 20.dp else 12.dp)
+        MqIcon(StarFilled, tint = colors.star, size = if (tv) 20.dp else 12.dp)
         MqText(rating, role = TextRole.Caption, weight = FontWeight.Bold, color = colors.text, maxLines = 1)
     }
 }

@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.Hero
 import app.marquee.core.model.Tile
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -53,8 +54,10 @@ class TileCopyTest {
     }
 
     @Test
-    fun `a hero says the kind and the year`() {
-        assertEquals("Movie · 2026", TileCopy.heroMeta(tile(releaseInfo = "2026")))
-        assertEquals("Series", TileCopy.heroMeta(tile(kind = "series")))
+    fun `a hero says the year, runtime and genres, or the kind`() {
+        val full = Hero(tile(releaseInfo = "2026"), "r", runtime = "145 min", genres = listOf("Action", "Adventure"))
+        assertEquals("2026 · 145 min · Action, Adventure", TileCopy.heroMeta(full))
+        assertEquals("2026", TileCopy.heroMeta(Hero(tile(releaseInfo = "2026"), "r")))
+        assertEquals("Series", TileCopy.heroMeta(Hero(tile(kind = "series"), "r")))
     }
 }

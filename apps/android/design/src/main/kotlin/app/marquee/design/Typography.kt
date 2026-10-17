@@ -71,6 +71,8 @@ fun MqText(
     textAlign: TextAlign? = null,
     /** Told after layout whether [maxLines] cut the text, so a screen can offer "More". */
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
+    /** Overrides the role's tracking (spaced capitals of an eyebrow). */
+    letterSpacing: TextUnit = TextUnit.Unspecified,
 ) {
     val size = Marquee.type.size(role)
     BasicText(
@@ -83,7 +85,14 @@ fun MqText(
                 fontSize = size,
                 fontFamily = if (role.display) MarqueeFonts.display else MarqueeFonts.text,
                 fontWeight = weight ?: if (role.display) FontWeight(Tokens.weight.display) else FontWeight.Normal,
-                letterSpacing = role.tracking?.em ?: TextUnit.Unspecified,
+                letterSpacing =
+                    if (letterSpacing !=
+                        TextUnit.Unspecified
+                    ) {
+                        letterSpacing
+                    } else {
+                        role.tracking?.em ?: TextUnit.Unspecified
+                    },
                 lineHeight = size * (if (role.display) 1.1f else 1.4f),
                 textAlign = textAlign ?: TextAlign.Unspecified,
             ),

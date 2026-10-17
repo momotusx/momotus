@@ -1,6 +1,7 @@
 package app.marquee.ui.phone
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,12 +47,16 @@ import app.marquee.core.model.tileKeys
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Backdrop
+import app.marquee.design.Eyebrow
 import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.RatingLine
+import app.marquee.design.RoundButton
+import app.marquee.design.RowHeader
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -125,17 +130,18 @@ private fun PhoneHero(
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
 ) {
-    // Artwork is dark and busy in either theme: the card always uses the dark scrim and light text.
-    // The scrim is already 80% from a third of the way down, which is where the text block begins,
-    // so the reason line over the brightest bokeh still reads at better than 8:1.
-    val scrim = Tokens.dark.bg
+    // An inset card (design/DECISION.md v2, Home hero). The scrim is 80% from a third of the way
+    // down, where the text block begins, so white text reads at better than 8:1 on any artwork;
+    // the accent eyebrow sits in its own chip.
+    val scrim = Marquee.colors.bg
     val tile = hero.tile
     Box(
         Modifier
             .padding(horizontal = Marquee.safe.side)
             .fillMaxWidth()
             .aspectRatio(HERO_RATIO)
-            .clip(RoundedCornerShape(Marquee.radius.l))
+            .clip(RoundedCornerShape(Marquee.radius.hero))
+            .border(1.dp, Marquee.colors.edge, RoundedCornerShape(Marquee.radius.hero))
             .semantics {
                 // The buttons on the card are hidden from screen readers, so Play is an action of the card.
                 if (tile.playable()) {
@@ -159,24 +165,28 @@ private fun PhoneHero(
             Modifier.align(Alignment.BottomStart).padding(Marquee.space.m),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
+            Eyebrow(hero.reason, overArt = true)
             Logo(
                 tile.logo,
                 tile.name,
                 height = 64.dp,
                 maxWidth = 240.dp,
                 role = TextRole.Title1,
-                color = Tokens.dark.text,
+                color = Marquee.colors.text,
             )
-            MqText(hero.reason, role = TextRole.Title3, color = Tokens.dark.text, maxLines = 2)
-            MqText(TileCopy.heroMeta(tile), role = TextRole.Caption, color = Tokens.dark.muted)
+            RatingLine(tile.rating, TileCopy.heroMeta(hero))
+            hero.description?.let {
+                MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 3)
+            }
             // The card is the control for screen readers (it opens the details); the buttons
             // repeat it for sighted touch.
             Row(
                 Modifier.padding(top = Marquee.space.xs).clearAndSetSemantics { },
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                verticalAlignment = Alignment.Top,
             ) {
                 if (tile.playable()) PrimaryButton(label = "Play", icon = Icons.Play, onClick = { onPlay(tile) })
-                SecondaryButton(label = "Details", icon = Icons.Info, onClick = { onOpen(tile) })
+                RoundButton(Icons.Info, "Details", { onOpen(tile) }, showLabel = true)
             }
         }
     }
@@ -200,20 +210,7 @@ private fun PhoneRow(
 ) {
     val side = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        Row(
-            Modifier.padding(horizontal = side),
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            MqText(row.title, role = TextRole.Title3, modifier = Modifier.weight(1f, fill = false), maxLines = 1)
-            MqText(
-                TileCopy.source(row.rowId, row.source),
-                role = TextRole.Caption,
-                color = Marquee.colors.muted,
-                modifier = Modifier.padding(bottom = 2.dp),
-                maxLines = 1,
-            )
-        }
+        RowHeader(row.title, TileCopy.source(row.rowId, row.source), Modifier.padding(horizontal = side))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))

@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.Hero
 import app.marquee.core.model.Tile
 
 /** The words under a tile and in a hero, the same as the web family's `lib/words.ts`. */
@@ -32,6 +33,12 @@ object TileCopy {
             else -> kind.replaceFirstChar { it.uppercase() }
         }
 
-    /** "Movie · 2026": the line under a hero's reason. */
-    fun heroMeta(tile: Tile): String = listOfNotNull(kind(tile.kind), tile.releaseInfo).joinToString(" · ")
+    /**
+     * The facts after a hero's star rating: "2026 · 145 min · Action, Adventure". The kind
+     * stands in when the addon gave no year, runtime or genre ("Series").
+     */
+    fun heroMeta(hero: Hero): String {
+        val facts = listOfNotNull(hero.tile.releaseInfo, hero.runtime, hero.genres.joinToString(", ").ifEmpty { null })
+        return facts.ifEmpty { listOf(kind(hero.tile.kind)) }.joinToString(" · ")
+    }
 }
