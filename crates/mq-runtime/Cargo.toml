@@ -1,0 +1,24 @@
+[package]
+name = "mq-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mq-http = { path = "../mq-http" }
+mq-protocol = { path = "../mq-protocol" }
+mq-addons = { path = "../mq-addons" }
+mq-library = { path = "../mq-library" }
+stremio-core.workspace = true
+eyeball = "0.8"
+eyeball-im = "0.9"
+imbl = "7"
+futures-util = "0.3"
+tokio = { workspace = true }
+tokio-util = "0.7"
+url.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
