@@ -60,8 +60,11 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
       when={props.src && !broken() && trimmed() !== null}
       fallback={props.level === 2 ? <h2 class={`logo-text ${props.class ?? ""}`}>{props.name}</h2> : <h1 class={`logo-text ${props.class ?? ""}`}>{props.name}</h1>}
     >
+      {/* While the cut runs the box holds its place, hidden: an image with no
+          source would show its alt text and a broken-image mark. */}
       <img
         class={`logo ${props.class ?? ""}`}
+        classList={{ pending: trimmed() === undefined }}
         src={trimmed() ?? undefined}
         alt={props.name}
         decoding="async"
