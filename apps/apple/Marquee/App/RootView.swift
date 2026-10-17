@@ -175,18 +175,23 @@ struct Wordmark: View {
 private struct TabBar: View {
     let selection: AppTab
     let select: (AppTab) -> Void
+    @Environment(\.dynamicTypeSize) private var type
+    @State private var width = CGFloat.infinity
 
     var body: some View {
+        let iconsOnly = tabBarIconsOnly(width: width, type: type)
         HStack(spacing: 0) {
             ForEach(AppTab.allCases, id: \.self) { item in
                 let on = item == selection
                 Button { select(item) } label: {
                     VStack(spacing: 4) {
                         Glyph(item.symbol, size: 22, relativeTo: .caption2)
-                        Text(item.title)
-                            .font(.text(10.5, weight: .semibold, relativeTo: .caption2))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                        if !iconsOnly {
+                            Text(item.title)
+                                .font(.text(10.5, weight: .semibold, relativeTo: .caption2))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
                     }
                     .foregroundStyle(on ? Theme.Palette.text : Theme.Palette.dim)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -196,14 +201,21 @@ private struct TabBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // The spoken name, with or without the word on screen.
+                .accessibilityLabel(item.title)
                 .accessibilityAddTraits(on ? .isSelected : [])
+                // A long press at the accessibility sizes shows the name large, as the system bar does.
+                .accessibilityShowsLargeContentViewer { Label(item.title, glyph: item.symbol) }
             }
         }
         .padding(6)
         .frame(maxWidth: 560)
         .frame(height: 64)
+        // The icons grow with the text up to the size that still fits the bar.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .glass(RoundedRectangle(cornerRadius: 24, style: .continuous), shadow: true)
         .padding(.horizontal, 12)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .padding(.bottom, 2)
     }
 }
