@@ -32,7 +32,7 @@
   transition: box-shadow var(--motion-focus) var(--ease), outline-color var(--motion-focus) var(--ease); }
 .search .field svg { width: 36px; height: 36px; color: var(--muted); }
 .search .field input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-title3) / 1 var(--font-text); outline: none; }
-.search .field input::placeholder { color: var(--muted); }
+.search .field input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
 .search .field input::-webkit-search-cancel-button { display: none; }
 .search .field input:focus { outline: none; box-shadow: none; }
 .search .field:focus-within { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);

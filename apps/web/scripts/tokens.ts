@@ -74,6 +74,13 @@ export function generate(t: Tokens): string {
       .split("\n")
       .map((l) => (l ? `  ${l}` : l))
       .join("\n")}}\n`,
+    // Surfaces that stay dark in either theme (the player over video).
+    block('[data-scheme="dark"]', [
+      "color-scheme: dark;",
+      ...colors(t.color.dark),
+      `--focus-halo: ${t.focus.halo.dark}px;`,
+      "--focus-shadow: 0 0 0 var(--focus-ring) var(--bg), 0 0 var(--focus-halo) calc(var(--focus-ring) * 2) var(--halo);",
+    ]),
     "@media (prefers-reduced-motion: reduce) {\n  :root {\n    --motion-focus: 0ms;\n    --motion-panel: 0ms;\n  }\n}\n",
   ].join("\n");
 }

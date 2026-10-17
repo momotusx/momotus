@@ -42,7 +42,7 @@ svg { flex: none; }
 .btn { display: inline-flex; align-items: center; gap: 14px; height: 72px; padding: 0 30px; border-radius: 36px;
   font: 600 var(--type-body) / 1 var(--font-text); white-space: nowrap; color: var(--text);
   background: color-mix(in srgb, var(--text) 12%, transparent);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 22%, transparent); transform-origin: left center; }
+  box-shadow: inset 0 0 0 2px var(--control); transform-origin: left center; }
 .btn svg { width: 30px; height: 30px; }
 .btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: none; }
 .btn.primary svg.fill { fill: currentColor; }
