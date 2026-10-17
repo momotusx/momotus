@@ -3,10 +3,12 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
+use crate::views::addons_changed;
 use crate::views::home::{Tile, tile_from_preview, type_label};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
+use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse};
 use serde::Serialize;
 use std::collections::HashSet;
@@ -14,6 +16,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use stremio_core::types::addon::ExtraValue;
+use tokio::sync::broadcast::Receiver;
 use tokio::task::JoinHandle;
 
 const TIMEOUT: Duration = Duration::from_secs(12);
@@ -91,34 +94,46 @@ struct State {
 }
 
 pub struct DiscoverView {
+    inner: Arc<Inner>,
+    watch: JoinHandle<()>,
+}
+
+struct Inner {
     core: Core,
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<DiscoverSnapshot>,
     task: Mutex<Option<JoinHandle<()>>>,
 }
 
-impl DiscoverView {
-    /// Opens on the first catalog of the first type.
-    pub fn open(core: &Core) -> Self {
-        let catalogs = browsable(&core.installed_addons().unwrap_or_default());
-        let mut kinds: Vec<(String, String)> = Vec::new();
-        for c in &catalogs {
-            if !kinds.iter().any(|(k, _)| *k == c.kind) {
-                kinds.push((c.kind.clone(), type_label(&c.kind).to_owned()));
-            }
+fn empty_snapshot(catalogs: &[Catalog]) -> DiscoverSnapshot {
+    let mut kinds: Vec<(String, String)> = Vec::new();
+    for c in catalogs {
+        if !kinds.iter().any(|(k, _)| *k == c.kind) {
+            kinds.push((c.kind.clone(), type_label(&c.kind).to_owned()));
         }
-        let snapshot = DiscoverSnapshot {
-            kinds,
-            kind: None,
-            catalogs: Vec::new(),
-            catalog: None,
-            genres: Vec::new(),
-            genre: None,
-            genre_required: false,
-            items: Vec::new(),
-            state: DiscoverState::End,
-        };
-        let view = Self {
+    }
+    DiscoverSnapshot {
+        kinds,
+        kind: None,
+        catalogs: Vec::new(),
+        catalog: None,
+        genres: Vec::new(),
+        genre: None,
+        genre_required: false,
+        items: Vec::new(),
+        state: DiscoverState::End,
+    }
+}
+
+impl DiscoverView {
+    /// Opens on the first catalog of the first type, and follows the
+    /// installed addons from then on.
+    pub fn open(core: &Core) -> Self {
+        // Subscribed before reading, so no addon change falls in between.
+        let changes = core.library().subscribe();
+        let catalogs = browsable(&core.installed_addons().unwrap_or_default());
+        let snapshot = empty_snapshot(&catalogs);
+        let inner = Arc::new(Inner {
             core: core.clone(),
             state: Arc::new(Mutex::new(State {
                 catalogs,
@@ -127,19 +142,14 @@ impl DiscoverView {
             })),
             snapshot: SharedObservable::new(snapshot),
             task: Mutex::new(None),
-        };
-        let first = lock(&view.state)
-            .catalogs
-            .first()
-            .map(|c| c.choice.id.clone());
-        if let Some(first) = first {
-            view.select(None, Some(&first), None);
-        }
-        view
+        });
+        inner.select_first();
+        let watch = tokio::spawn(watch_addons(inner.clone(), changes));
+        Self { inner, watch }
     }
 
     pub fn snapshot(&self) -> DiscoverSnapshot {
-        self.snapshot.get()
+        self.inner.snapshot.get()
     }
 
     pub fn subscribe(
@@ -148,9 +158,9 @@ impl DiscoverView {
         DiscoverSnapshot,
         Pin<Box<dyn Stream<Item = Vec<DiscoverSnapshot>> + Send>>,
     ) {
-        let updates = self.snapshot.subscribe().map(|s| vec![s]);
+        let updates = self.inner.snapshot.subscribe().map(|s| vec![s]);
         (
-            self.snapshot.get(),
+            self.inner.snapshot.get(),
             Box::pin(coalesce(Box::pin(updates), FRAME)),
         )
     }
@@ -158,6 +168,73 @@ impl DiscoverView {
     /// Changes the type, the catalog or the genre; whatever is not given is
     /// kept when it still fits. Starts again from the first page.
     pub fn select(&self, kind: Option<&str>, catalog: Option<&str>, genre: Option<Option<&str>>) {
+        self.inner.select(kind, catalog, genre);
+    }
+
+    /// Loads the next page when the catalog has more and none is loading.
+    pub fn load_more(&self) {
+        self.inner.load_more();
+    }
+}
+
+/// Follows the installed addons: the catalog on screen stays when it is
+/// still there (no reload); otherwise Discover starts again on the first.
+async fn watch_addons(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
+    while addons_changed(&mut changes).await {
+        let catalogs = browsable(&inner.core.installed_addons().unwrap_or_default());
+        let kept = {
+            let mut s = lock(&inner.state);
+            let ids = |c: &[Catalog]| c.iter().map(|c| c.choice.id.clone()).collect::<Vec<_>>();
+            if ids(&catalogs) == ids(&s.catalogs) {
+                continue;
+            }
+            s.snapshot.kinds = empty_snapshot(&catalogs).kinds;
+            s.catalogs = catalogs;
+            let current = s.snapshot.catalog.clone();
+            let kept = s
+                .catalogs
+                .iter()
+                .any(|c| current.as_deref() == Some(&c.choice.id));
+            if kept {
+                let kind = s.snapshot.kind.clone();
+                s.snapshot.catalogs = s
+                    .catalogs
+                    .iter()
+                    .filter(|c| kind.as_deref() == Some(&c.kind))
+                    .map(|c| c.choice.clone())
+                    .collect();
+                inner.snapshot.set(s.snapshot.clone());
+            }
+            kept
+        };
+        if !kept {
+            inner.select_first();
+        }
+    }
+}
+
+impl Inner {
+    /// The first catalog, or an empty screen when no addon has one.
+    fn select_first(&self) {
+        let first = lock(&self.state)
+            .catalogs
+            .first()
+            .map(|c| c.choice.id.clone());
+        match first {
+            Some(first) => self.select(None, Some(&first), None),
+            None => {
+                if let Some(task) = lock(&self.task).take() {
+                    task.abort();
+                }
+                let mut s = lock(&self.state);
+                s.snapshot = empty_snapshot(&s.catalogs);
+                s.seen.clear();
+                self.snapshot.set(s.snapshot.clone());
+            }
+        }
+    }
+
+    fn select(&self, kind: Option<&str>, catalog: Option<&str>, genre: Option<Option<&str>>) {
         {
             let mut s = lock(&self.state);
             let current = s.snapshot.catalog.clone();
@@ -212,8 +289,7 @@ impl DiscoverView {
         self.spawn_page();
     }
 
-    /// Loads the next page when the catalog has more and none is loading.
-    pub fn load_more(&self) {
+    fn load_more(&self) {
         {
             let mut s = lock(&self.state);
             if s.snapshot.state != DiscoverState::Ready {
@@ -239,7 +315,8 @@ impl DiscoverView {
 
 impl Drop for DiscoverView {
     fn drop(&mut self) {
-        if let Some(task) = lock(&self.task).take() {
+        self.watch.abort();
+        if let Some(task) = lock(&self.inner.task).take() {
             task.abort();
         }
     }

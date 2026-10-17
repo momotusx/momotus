@@ -351,3 +351,58 @@ async fn real_cinemeta_next_up() {
     }
     panic!("no Next Up tile");
 }
+
+/// Installing or removing an addon reshapes an open Home: rows that stay keep
+/// their tiles (no flash back to loading), new catalogs load, removed ones go.
+#[tokio::test]
+async fn home_follows_addon_changes_without_reopening() {
+    let core = Core::temporary("p").unwrap();
+    let first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let second = catalog_addon("second", Duration::ZERO, 200, METAS).await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&first), &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    let (snapshot, mut updates) = view.subscribe();
+    let mut mirror = snapshot.rows.clone();
+    let settle = |mirror: &Vec<HomeRow>, n: usize| {
+        mirror.len() == n && mirror.iter().all(|r| r.state == RowState::Ready)
+    };
+    async fn until(
+        updates: &mut (impl futures_util::Stream<Item = Vec<HomeUpdate>> + Unpin),
+        mirror: &mut Vec<HomeRow>,
+        done: impl Fn(&Vec<HomeRow>) -> bool,
+        mut each: impl FnMut(&Vec<HomeRow>),
+    ) {
+        while !done(mirror) {
+            let batch = tokio::time::timeout(Duration::from_secs(4), updates.next())
+                .await
+                .expect("an update")
+                .expect("open");
+            apply(mirror, batch);
+            each(mirror);
+        }
+    }
+    until(&mut updates, &mut mirror, |m| settle(m, 1), |_| {}).await;
+
+    let first_id = mirror[0].row_id.clone();
+    core.library()
+        .set_addons("p", &[first.clone(), second], &core.hlc())
+        .unwrap();
+    until(
+        &mut updates,
+        &mut mirror,
+        |m| settle(m, 2),
+        |m| {
+            let kept = m.iter().find(|r| r.row_id == first_id).expect("kept");
+            assert_eq!(kept.state, RowState::Ready, "the kept row never reloads");
+        },
+    )
+    .await;
+    assert_eq!(mirror[0].row_id, first_id, "addon order");
+
+    core.library().set_addons("p", &[], &core.hlc()).unwrap();
+    until(&mut updates, &mut mirror, |m| m.is_empty(), |_| {}).await;
+    assert_eq!(mirror, view.snapshot().rows);
+    assert!(view.snapshot().header.hero.is_none(), "no catalog, no hero");
+}

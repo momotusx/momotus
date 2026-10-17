@@ -4,6 +4,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
+use crate::views::addons_changed;
 use crate::views::playback::{NextEpisode, next_after};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
@@ -137,17 +138,14 @@ pub struct HomeSnapshot {
 
 impl HomeView {
     pub fn open(core: &Core) -> Self {
+        // Subscribed before reading, so no addon change falls in between.
+        let changes = core.library().subscribe();
         let addons = core.installed_addons().unwrap_or_default();
         let slots = catalog_slots(&addons);
+        let ids = slots.iter().map(|s| s.row_id.clone()).collect();
         let mut initial = ObservableVector::new();
         for slot in &slots {
-            initial.push_back(HomeRow {
-                row_id: slot.row_id.clone(),
-                title: row_title(slot),
-                source: slot.addon.manifest.name.clone(),
-                state: RowState::Loading,
-                tiles: Vec::new(),
-            });
+            initial.push_back(loading_row(slot));
         }
         let rows = Arc::new(Mutex::new(initial));
         let header = SharedObservable::new(HomeHeader::default());
@@ -156,6 +154,13 @@ impl HomeView {
         tasks.spawn(load_catalogs(
             core.clone(),
             slots,
+            rows.clone(),
+            header.clone(),
+        ));
+        tasks.spawn(watch_addons(
+            core.clone(),
+            changes,
+            ids,
             rows.clone(),
             header.clone(),
         ));
@@ -229,6 +234,73 @@ fn catalog_slots(addons: &[InstalledAddon]) -> Vec<CatalogSlot> {
         }
     }
     slots
+}
+
+fn loading_row(slot: &CatalogSlot) -> HomeRow {
+    HomeRow {
+        row_id: slot.row_id.clone(),
+        title: row_title(slot),
+        source: slot.addon.manifest.name.clone(),
+        state: RowState::Loading,
+        tiles: Vec::new(),
+    }
+}
+
+/// Follows the installed addons: rows of catalogs that stay keep their tiles
+/// (so nothing flashes), new catalogs load, removed ones go, and the order
+/// follows the addon order. The swap is one batch of diffs.
+async fn watch_addons(
+    core: Core,
+    mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
+    mut ids: Vec<String>,
+    rows: Arc<Mutex<ObservableVector<HomeRow>>>,
+    header: SharedObservable<HomeHeader>,
+) {
+    let mut loads = JoinSet::new();
+    while addons_changed(&mut changes).await {
+        let slots = catalog_slots(&core.installed_addons().unwrap_or_default());
+        let next: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
+        if next == ids {
+            continue;
+        }
+        ids = next;
+        let mut fresh = Vec::new();
+        {
+            let mut rows = lock(&rows);
+            let mut swapped: Vec<HomeRow> = find_row(&rows, CONTINUE_ROW_ID)
+                .map(|i| rows[i].clone())
+                .into_iter()
+                .collect();
+            for slot in slots {
+                match find_row(&rows, &slot.row_id) {
+                    Some(i) => swapped.push(rows[i].clone()),
+                    None => {
+                        swapped.push(loading_row(&slot));
+                        fresh.push(slot);
+                    }
+                }
+            }
+            rows.clear();
+            rows.append(swapped.into_iter().collect());
+        }
+        // A hero from a catalog that went away goes with it.
+        let hero = header.get().hero.map(|h| h.tile.id);
+        let shown = hero.is_some_and(|id| {
+            lock(&rows)
+                .iter()
+                .any(|r| r.tiles.iter().any(|t| t.id == id))
+        });
+        if !shown {
+            header.set(HomeHeader { hero: None });
+        }
+        maybe_pick_hero(&rows, &header);
+        loads.spawn(load_catalogs(
+            core.clone(),
+            fresh,
+            rows.clone(),
+            header.clone(),
+        ));
+    }
 }
 
 fn row_title(slot: &CatalogSlot) -> String {

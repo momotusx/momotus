@@ -6,17 +6,20 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
+use crate::views::addons_changed;
 use crate::views::home::{HomeRow, RowState, Tile, tile_from_preview, type_label};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
+use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::pin::Pin;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use stremio_core::types::addon::ExtraValue;
+use tokio::sync::broadcast::Receiver;
 use tokio::task::{JoinHandle, JoinSet};
 
 const DEBOUNCE: Duration = Duration::from_millis(250);
@@ -42,7 +45,8 @@ pub struct SearchSnapshot {
 pub struct SearchView {
     core: Core,
     snapshot: SharedObservable<SearchSnapshot>,
-    task: Mutex<Option<JoinHandle<()>>>,
+    task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    watch: JoinHandle<()>,
 }
 
 #[derive(Clone)]
@@ -55,14 +59,24 @@ struct Slot {
 
 impl SearchView {
     pub fn open(core: &Core) -> Self {
+        let snapshot = SharedObservable::new(SearchSnapshot {
+            query: String::new(),
+            rows: Vec::new(),
+            recent: recent(core),
+        });
+        let task = Arc::default();
+        let changes = core.library().subscribe();
+        let watch = tokio::spawn(watch_addons(
+            core.clone(),
+            snapshot.clone(),
+            Arc::clone(&task),
+            changes,
+        ));
         Self {
             core: core.clone(),
-            snapshot: SharedObservable::new(SearchSnapshot {
-                query: String::new(),
-                rows: Vec::new(),
-                recent: recent(core),
-            }),
-            task: Mutex::new(None),
+            snapshot,
+            task,
+            watch,
         }
     }
 
@@ -116,8 +130,29 @@ impl SearchView {
 
 impl Drop for SearchView {
     fn drop(&mut self) {
+        self.watch.abort();
         if let Some(task) = lock(&self.task).take() {
             task.abort();
+        }
+    }
+}
+
+/// Runs the query on screen again when the installed addons change, so a
+/// newly installed search catalog shows up without retyping.
+async fn watch_addons(
+    core: Core,
+    snapshot: SharedObservable<SearchSnapshot>,
+    task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    mut changes: Receiver<Vec<Table>>,
+) {
+    while addons_changed(&mut changes).await {
+        let query = snapshot.get().query;
+        if query.is_empty() {
+            continue;
+        }
+        let again = tokio::spawn(run(core.clone(), query, snapshot.clone()));
+        if let Some(old) = lock(&task).replace(again) {
+            old.abort();
         }
     }
 }

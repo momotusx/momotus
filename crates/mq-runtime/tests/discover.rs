@@ -168,3 +168,62 @@ async fn real_cinemeta_discover() {
     assert_eq!(s.kind.as_deref(), Some("series"));
     assert!(!s.items.is_empty());
 }
+
+async fn until(view: &DiscoverView, done: impl Fn(&mq_runtime::DiscoverSnapshot) -> bool) {
+    for _ in 0..400 {
+        let snapshot = view.snapshot();
+        if done(&snapshot) && snapshot.state != DiscoverState::Loading {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("discover never got there: {:?}", view.snapshot());
+}
+
+/// Discover follows the installed addons: what is on screen stays when its
+/// catalog stays, and it starts again on the first catalog when it goes.
+#[tokio::test]
+async fn discover_follows_addon_changes() {
+    let core = Core::temporary("p").unwrap();
+    let (cat, _) = addon().await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&cat), &core.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let before = view.snapshot();
+    assert_eq!(ids(&view), ["tt0", "tt1", "tt2"]);
+
+    let mut other = cat.clone();
+    other.transport_url = other
+        .transport_url
+        .replace("/manifest.json", "/other/manifest.json");
+    other.manifest_json = other
+        .manifest_json
+        .replace("\"cat\"", "\"other\"")
+        .replace("\"Cat\"", "\"Other\"");
+    core.library()
+        .set_addons("p", &[cat.clone(), other.clone()], &core.hlc())
+        .unwrap();
+    until(&view, |s| s.catalogs.len() == before.catalogs.len() * 2).await;
+    let after = view.snapshot();
+    assert_eq!(after.catalog, before.catalog, "the catalog on screen stays");
+    assert_eq!(after.items, before.items, "and is not loaded again");
+
+    core.library()
+        .set_addons("p", std::slice::from_ref(&other), &core.hlc())
+        .unwrap();
+    until(&view, |s| {
+        s.catalog != before.catalog && !s.items.is_empty()
+    })
+    .await;
+    assert!(view.snapshot().catalog.unwrap().contains("other"));
+
+    core.library().set_addons("p", &[], &core.hlc()).unwrap();
+    until(&view, |s| s.catalog.is_none()).await;
+    let empty = view.snapshot();
+    assert!(
+        empty.kinds.is_empty() && empty.items.is_empty(),
+        "{empty:?}"
+    );
+}

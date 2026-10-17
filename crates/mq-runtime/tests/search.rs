@@ -106,3 +106,41 @@ async fn debounces_dedupes_and_drops_empty_rows() {
     }
     assert_eq!(first.as_deref(), Some("tt2"));
 }
+
+/// An open search runs again when a search addon is installed, so its row
+/// appears without retyping.
+#[tokio::test]
+async fn an_open_search_picks_up_a_new_addon() {
+    let core = Core::temporary("p").unwrap();
+    let (a, _) = search_addon("a", &["tt1"]).await;
+    let (b, _) = search_addon("b", &["tt2"]).await;
+    core.library()
+        .set_addons(core.profile(), std::slice::from_ref(&a), &core.hlc())
+        .unwrap();
+    let view = SearchView::open(&core);
+    view.set_query("sintel");
+    let rows = |n: usize| {
+        let s = view.snapshot();
+        s.rows.len() == n && s.rows.iter().all(|r| r.state == RowState::Ready)
+    };
+    for _ in 0..300 {
+        if rows(1) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(rows(1), "{:?}", view.snapshot());
+    let mut b = b;
+    b.position = 1;
+    core.library()
+        .set_addons(core.profile(), &[a, b], &core.hlc())
+        .unwrap();
+    for _ in 0..300 {
+        if rows(2) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(rows(2), "{:?}", view.snapshot());
+    assert_eq!(view.snapshot().query, "sintel");
+}
