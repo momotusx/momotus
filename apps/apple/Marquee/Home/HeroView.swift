@@ -10,7 +10,7 @@ struct HeroView: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            ArtImage(url: hero?.tile.background ?? hero?.tile.poster)
+            ArtImage(url: hero?.tile.background ?? hero?.tile.poster, maxPixels: ArtSize.backdrop)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
                 .clipped()
@@ -103,19 +103,34 @@ struct TitleLogo: View {
     let maxWidth: CGFloat
     let height: CGFloat
 
+    /// nil while loading; then the art, or none when there is no logo.
+    @State private var loaded: DecodedArt??
+
     var body: some View {
-        AsyncImage(url: logo.flatMap(URL.init(string:))) { phase in
-            if let image = phase.image {
-                image.resizable().scaledToFit()
-            } else if phase.error != nil || logo == nil {
+        ZStack(alignment: .bottomLeading) {
+            switch loaded {
+            case .some(.some(let art)):
+                Image(decorative: art.image, scale: 1)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .transition(.opacity)
+            case .some(.none):
                 Text(name)
                     .font(.display(Theme.type.hero))
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)
-            } else {
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            case .none:
                 Color.clear
             }
+        }
+        .task(id: logo) {
+            if logo != nil { loaded = nil }
+            let start = ContinuousClock.now
+            let art = await ArtLoader.shared.image(logo, maxPixels: ArtSize.logo)
+            withAnimation(reveal(since: start)) { loaded = .some(art) }
         }
         .frame(maxWidth: maxWidth, maxHeight: height, alignment: .bottomLeading)
         .frame(height: height, alignment: .bottomLeading)

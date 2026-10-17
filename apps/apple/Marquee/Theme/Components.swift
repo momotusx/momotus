@@ -1,36 +1,75 @@
 import SwiftUI
 
-/// Remote artwork with a calm placeholder and a short fade in.
+/// Remote artwork with a calm placeholder; it fades in unless it was cached.
 struct ArtImage: View {
     let url: String?
     var mode: ContentMode = .fill
+    var maxPixels = ArtSize.poster
+    @State private var art: DecodedArt?
 
     var body: some View {
-        AsyncImage(url: url.flatMap(URL.init(string:)), transaction: Transaction(animation: .easeOut(duration: 0.25))) { phase in
-            if let image = phase.image {
-                image.resizable().aspectRatio(contentMode: mode)
-            } else {
-                Theme.Palette.surface
+        // The art is an overlay so its natural size never reaches layout: a
+        // filled image is wider than its frame, and letting that through made
+        // the title page grow without end.
+        Theme.Palette.surface
+            .overlay {
+                if let art {
+                    Image(decorative: art.image, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: mode)
+                        .transition(.opacity)
+                }
             }
-        }
+            .clipped()
+            .task(id: url) {
+                let start = ContinuousClock.now
+                let loaded = await ArtLoader.shared.image(url, maxPixels: maxPixels)
+                withAnimation(reveal(since: start)) { art = loaded }
+            }
     }
 }
 
+extension ArtLoader {
+    /// Art for a core URL string, or nil for a missing or bad URL.
+    func image(_ url: String?, maxPixels: Int) async -> DecodedArt? {
+        guard let url = url.flatMap(URL.init(string:)) else { return nil }
+        return await image(url, maxPixels: maxPixels)
+    }
+}
+
+/// A short fade for art that had to load; none for memory hits.
+func reveal(since start: ContinuousClock.Instant) -> Animation? {
+    ContinuousClock.now - start > .milliseconds(50) ? .easeOut(duration: 0.25) : nil
+}
+
 /// Accent ring with a dark halo, the focus mark from the design system. It
-/// keeps 3:1 contrast on any artwork and never relies on color alone.
+/// keeps 3:1 contrast on any artwork and never relies on color alone. The
+/// halo is soft on the dark theme and a crisp outer line on the light one.
 struct FocusRing<S: InsettableShape>: ViewModifier {
     let shape: S
     let active: Bool
+    @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
         content.overlay {
             if active {
-                shape.inset(by: -(Theme.Focus.ring + 3))
-                    .strokeBorder(Theme.Palette.accent, lineWidth: Theme.Focus.ring)
-                    .shadow(color: Theme.Palette.halo, radius: Theme.Focus.halo / 2)
-                    .allowsHitTesting(false)
+                let gap: CGFloat = 3
+                ZStack {
+                    if scheme == .dark {
+                        ring(gap).shadow(color: Theme.Palette.halo, radius: Theme.Focus.haloDark / 2)
+                    } else {
+                        shape.inset(by: -(gap + Theme.Focus.ring + Theme.Focus.haloLight))
+                            .strokeBorder(Theme.Palette.halo, lineWidth: Theme.Focus.haloLight)
+                        ring(gap)
+                    }
+                }
+                .allowsHitTesting(false)
             }
         }
+    }
+
+    private func ring(_ gap: CGFloat) -> some View {
+        shape.inset(by: -(gap + Theme.Focus.ring)).strokeBorder(Theme.Palette.accent, lineWidth: Theme.Focus.ring)
     }
 }
 

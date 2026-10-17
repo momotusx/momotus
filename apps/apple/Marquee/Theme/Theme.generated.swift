@@ -12,7 +12,7 @@ enum Theme {
         static let muted = Color(light: RGBA(0.3725, 0.3255, 0.2706, 1), dark: RGBA(0.7216, 0.6706, 0.6078, 1))
         static let accent = Color(light: RGBA(0.6118, 0.3451, 0.0000, 1), dark: RGBA(1.0000, 0.7098, 0.2784, 1))
         static let onAccent = Color(light: RGBA(1.0000, 0.9725, 0.9333, 1), dark: RGBA(0.1020, 0.0706, 0.0235, 1))
-        static let halo = Color(light: RGBA(0.1098, 0.0863, 0.0667, 0.34), dark: RGBA(0.0471, 0.0353, 0.0235, 0.62))
+        static let halo = Color(light: RGBA(0.1098, 0.0863, 0.0667, 0.82), dark: RGBA(0.0471, 0.0353, 0.0235, 0.62))
         static let ok = Color(light: RGBA(0.1804, 0.4902, 0.2706, 1), dark: RGBA(0.4824, 0.8471, 0.5608, 1))
         static let warn = Color(light: RGBA(0.6118, 0.3451, 0.0000, 1), dark: RGBA(1.0000, 0.7098, 0.2784, 1))
         static let bad = Color(light: RGBA(0.7020, 0.1490, 0.1176, 1), dark: RGBA(1.0000, 0.4784, 0.4196, 1))
@@ -68,7 +68,9 @@ enum Theme {
 
     enum Focus {
         static let ring: CGFloat = 4
-        static let halo: CGFloat = 14
+        /// Dark theme: a soft halo this wide. Light theme: a crisp outer line this wide.
+        static let haloDark: CGFloat = 14
+        static let haloLight: CGFloat = 3
         static let scaleCard: CGFloat = 1.05
         static let scaleTile: CGFloat = 1.025
     }

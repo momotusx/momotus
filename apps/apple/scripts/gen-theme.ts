@@ -81,7 +81,9 @@ ${radius}
 
     enum Focus {
         static let ring: CGFloat = ${tokens.focus.ring}
-        static let halo: CGFloat = ${tokens.focus.halo}
+        /// Dark theme: a soft halo this wide. Light theme: a crisp outer line this wide.
+        static let haloDark: CGFloat = ${tokens.focus.halo.dark}
+        static let haloLight: CGFloat = ${tokens.focus.halo.light}
         static let scaleCard: CGFloat = ${tokens.focus.scaleCard}
         static let scaleTile: CGFloat = ${tokens.focus.scaleTile}
     }

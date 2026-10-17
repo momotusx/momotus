@@ -54,6 +54,7 @@ struct RowView: View {
                         PosterTile(tile: tile)
                     }
                     .buttonStyle(CardButtonStyle())
+                    .accessibilityLabel(tile.name)
                 }
             }
             .padding(.horizontal, metrics.gutter)
@@ -154,7 +155,11 @@ struct TitleRoute: Hashable {
     let id: String
     let name: String
 
+    init(kind: String, id: String, name: String) {
+        (self.kind, self.id, self.name) = (kind, id, name)
+    }
+
     init(_ tile: Tile) {
-        (kind, id, name) = (tile.kind, tile.id, tile.name)
+        self.init(kind: tile.kind, id: tile.id, name: tile.name)
     }
 }

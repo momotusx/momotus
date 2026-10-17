@@ -16,11 +16,9 @@ struct HomeScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
-        #if !os(macOS)
-        .ignoresSafeArea(edges: .top)
-        #endif
+        .fullBleedTop()
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .task(id: model.generation) { await model.run() }
+        .task(id: model.taskId) { await model.run() }
     }
 
     @ViewBuilder private var content: some View {

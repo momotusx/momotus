@@ -30,6 +30,9 @@ final class HomeModel {
         generation += 1
     }
 
+    /// Restart key for the view's task: a retry or a reopened core.
+    var taskId: [Int] { [generation, core.generation] }
+
     /// Opens the Home view and applies its batches until the task is cancelled.
     func run() async {
         do {
@@ -38,7 +41,6 @@ final class HomeModel {
                 apply(event)
                 if case .snapshot = event, needsStarterAddon {
                     await installStarterAddon()
-                    return
                 }
             }
         } catch is CancellationError {
@@ -56,15 +58,15 @@ final class HomeModel {
     private func installStarterAddon() async {
         phase = .settingUp
         do {
-            try await core.installAddon(url: Self.starterAddon)
+            try await core.perform("installAddon", ["url": Self.starterAddon])
         } catch let error as CoreError where error.message.contains("already installed") {
         } catch {
             phase = .failed("Could not install Cinemeta: \(error.localizedDescription)")
             return
         }
         UserDefaults.standard.set(true, forKey: Self.starterKey)
-        // Rows are fixed when a Home view opens, so reopen to get the new ones.
-        reload()
+        // Home follows installed addons on its own: the new rows arrive as updates.
+        phase = .ready
     }
 
     /// Applies one core batch with a single assignment per property.
@@ -85,6 +87,19 @@ final class HomeModel {
             }
             if nextHeader != header { header = nextHeader }
             if nextRows != rows { rows = nextRows }
+        }
+        logLaunchMetrics()
+    }
+
+    @ObservationIgnored private var logged: Set<String> = []
+
+    /// Cold start numbers, from process start: Home's first snapshot and first art.
+    private func logLaunchMetrics() {
+        if logged.insert("home_snapshot").inserted {
+            coreLog.notice("metric home_snapshot_s=\(Launch.elapsed(), format: .fixed(precision: 3), privacy: .public)")
+        }
+        if rows.contains(where: { !$0.tiles.isEmpty }), logged.insert("home_first_tiles").inserted {
+            coreLog.notice("metric home_first_tiles_s=\(Launch.elapsed(), format: .fixed(precision: 3), privacy: .public)")
         }
     }
 }

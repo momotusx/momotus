@@ -1,0 +1,83 @@
+# Generate with: xcodegen generate --spec apps/apple/project.yml
+# The core must be built first: apps/apple/scripts/build-core.sh [--tvos]
+name: Marquee
+options:
+  bundleIdPrefix: app.marquee
+  deploymentTarget:
+    macOS: "15.0"
+    iOS: "18.0"
+    tvOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_CFBundleDisplayName: Marquee
+    # Local and simulator runs only: ad hoc signing, no team.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    DEAD_CODE_STRIPPING: YES
+targetTemplates:
+  App:
+    type: application
+    sources:
+      - path: Marquee
+        excludes: ["Resources/**"]
+      - path: Marquee/Resources/Fonts
+        type: folder
+        buildPhase: resources
+      - path: Core/marquee_core.swift
+    dependencies:
+      - framework: Core/MarqueeCore.xcframework
+        embed: false
+      - sdk: Security.framework
+      - sdk: SystemConfiguration.framework
+    settings:
+      base:
+        PRODUCT_NAME: Marquee
+        PRODUCT_MODULE_NAME: Marquee
+        PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev
+targets:
+  Marquee-macOS:
+    templates: [App]
+    platform: macOS
+    settings:
+      base:
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
+        ENABLE_HARDENED_RUNTIME: NO
+    scheme:
+      testTargets: [MarqueeTests]
+  Marquee-iOS:
+    templates: [App]
+    platform: iOS
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+    scheme: {}
+  Marquee-tvOS:
+    templates: [App]
+    platform: tvOS
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "3"
+    scheme: {}
+  # Pure model tests: decoding of recorded core JSON and applyDiffs. No host app.
+  MarqueeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+        excludes: ["Fixtures/**"]
+      - path: Marquee/Core/Models.swift
+      - path: Marquee/Core/ListDiff.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests
+        GENERATE_INFOPLIST_FILE: YES

@@ -11,10 +11,11 @@ set -euo pipefail
 
 apple="$(cd "$(dirname "$0")/.." && pwd)"
 root="$(cd "$apple/../.." && pwd)"
-target_dir="${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee}"
+# One target dir per checkout (see the repository rules).
+target_dir="${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-apple}"
 out="$apple/Core"
 
-targets=(aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim)
+targets=(aarch64-apple-ios aarch64-apple-ios-sim)
 if [[ "${1:-}" == "--tvos" ]]; then
   targets+=(aarch64-apple-tvos)
 fi
@@ -23,29 +24,45 @@ fi
 export MACOSX_DEPLOYMENT_TARGET=15.0 IPHONEOS_DEPLOYMENT_TARGET=18.0 TVOS_DEPLOYMENT_TARGET=18.0
 
 cd "$root"
+# The macOS slice is built with the bindgen tool in the same pass, so the
+# tool's dependencies share this build. The extra code is never linked into the
+# app: nothing in the library references it and the linker strips it.
+echo "building mq-ffi and uniffi-bindgen for aarch64-apple-darwin"
+CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 \
+  cargo build -p mq-ffi --release --target aarch64-apple-darwin -j 4 \
+  --features bindgen --lib --bin uniffi-bindgen
 for target in "${targets[@]}"; do
   echo "building mq-ffi for $target"
   CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 \
-    cargo build -p mq-ffi --lib --release --target "$target" -j 6
+    cargo build -p mq-ffi --lib --release --target "$target" -j 4
 done
 
 gen="$(mktemp -d)"
 trap 'rm -rf "$gen"' EXIT
-CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 \
-  cargo run -q -p mq-ffi --features bindgen --bin uniffi-bindgen -- \
-  generate --library "$target_dir/aarch64-apple-darwin/release/libmarquee_core.dylib" \
-  --language swift --out-dir "$gen"
+mac="$target_dir/aarch64-apple-darwin/release"
+"$mac/uniffi-bindgen" generate --library "$mac/libmarquee_core.dylib" --language swift --out-dir "$gen"
 
 mkdir -p "$gen/include"
 cp "$gen/marquee_coreFFI.h" "$gen/include/"
 cp "$gen/marquee_coreFFI.modulemap" "$gen/include/module.modulemap"
 
-args=()
+args=(-library "$mac/libmarquee_core.a" -headers "$gen/include")
 for target in "${targets[@]}"; do
   args+=(-library "$target_dir/$target/release/libmarquee_core.a" -headers "$gen/include")
 done
 rm -rf "$out/MarqueeCore.xcframework"
 mkdir -p "$out"
 xcodebuild -create-xcframework "${args[@]}" -output "$out/MarqueeCore.xcframework" >/dev/null
+# The libraries are 140 MB or more each: hard-link them instead of keeping copies.
+for lib in "$out"/MarqueeCore.xcframework/*/libmarquee_core.a; do
+  case "$(basename "$(dirname "$lib")")" in
+    macos-arm64) src="$mac/libmarquee_core.a" ;;
+    ios-arm64) src="$target_dir/aarch64-apple-ios/release/libmarquee_core.a" ;;
+    ios-arm64-simulator) src="$target_dir/aarch64-apple-ios-sim/release/libmarquee_core.a" ;;
+    tvos-arm64) src="$target_dir/aarch64-apple-tvos/release/libmarquee_core.a" ;;
+    *) continue ;;
+  esac
+  cmp -s "$src" "$lib" && ln -f "$src" "$lib"
+done
 cp "$gen/marquee_core.swift" "$out/marquee_core.swift"
 echo "wrote $out/MarqueeCore.xcframework and $out/marquee_core.swift"
