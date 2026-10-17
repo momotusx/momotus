@@ -152,6 +152,16 @@ enum Request {
         id: u64,
         patch: Value,
     },
+    /// Answers at once from the request loop: the core is alive.
+    Ping {
+        id: u64,
+    },
+    /// The app's life as the OS reports it: `foreground`, `background`,
+    /// `memoryPressure` (frees caches) or `networkChanged`.
+    Lifecycle {
+        id: u64,
+        event: String,
+    },
 }
 
 /// Holding a view keeps its background work alive; dropping it cancels.
@@ -347,6 +357,20 @@ impl Session {
                     answer(mq_sync::use_server_roster(library, http, &record, clock, drop).await)
                 });
             }
+            Request::Ping { id } => self.reply(json!(id), Ok(json!({}))),
+            Request::Lifecycle { id, event } => {
+                let result = match event.as_str() {
+                    "memoryPressure" => {
+                        self.core.on_memory_pressure();
+                        Ok(json!({}))
+                    }
+                    // ponytail: accepted and ignored until the core has work
+                    // for them (iOS listener reopen, network re-probes).
+                    "foreground" | "background" | "networkChanged" => Ok(json!({})),
+                    other => Err(format!("unknown lifecycle event: {other}")),
+                };
+                self.reply(json!(id), result);
+            }
             Request::SetPrefs { id, patch } => {
                 let result = self
                     .core
@@ -392,7 +416,12 @@ impl Session {
     fn spawn(&self, id: u64, work: impl Future<Output = Result<Value, String>> + Send + 'static) {
         let out = self.out.clone();
         tokio::spawn(async move {
-            let _ = out.send(message(json!(id), work.await));
+            // A request that panics still gets an answer, so the app never
+            // waits for it forever.
+            let result = tokio::spawn(work)
+                .await
+                .unwrap_or_else(|e| Err(format!("internal error: {e}")));
+            let _ = out.send(message(json!(id), result));
         });
     }
 
@@ -731,5 +760,64 @@ mod tests {
             .err()
             .expect("refused");
         assert!(err.starts_with("bad decoders"), "{err}");
+    }
+}
+
+#[cfg(test)]
+mod liveness {
+    use super::*;
+
+    #[tokio::test]
+    async fn ping_answers_and_a_panicking_request_still_gets_a_reply() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+        session
+            .handle_text(&json!({"id": 1, "op": "ping"}).to_string())
+            .await;
+        assert_eq!(
+            rx.recv().await.unwrap(),
+            json!({"id": 1, "ok": true, "result": {}})
+        );
+
+        session.spawn(2, async { panic!("boom") });
+        let reply = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .expect("a reply")
+            .unwrap();
+        assert_eq!(reply["id"], 2);
+        assert_eq!(reply["ok"], false);
+        assert!(
+            reply["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("internal error"),
+            "{reply}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod lifecycle {
+    use super::*;
+
+    #[tokio::test]
+    async fn lifecycle_events_are_accepted_and_unknown_ones_refused() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+        for event in [
+            "foreground",
+            "background",
+            "memoryPressure",
+            "networkChanged",
+        ] {
+            session
+                .handle_text(&json!({"id": 1, "op": "lifecycle", "event": event}).to_string())
+                .await;
+            assert_eq!(rx.recv().await.unwrap()["ok"], true, "{event}");
+        }
+        session
+            .handle_text(&json!({"id": 2, "op": "lifecycle", "event": "sleep"}).to_string())
+            .await;
+        assert_eq!(rx.recv().await.unwrap()["ok"], false);
     }
 }

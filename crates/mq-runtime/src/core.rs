@@ -149,6 +149,12 @@ impl Core {
         self.inner.sync_gate.clone().lock_owned().await
     }
 
+    /// The OS is short of memory: drop what can be read again (the addon
+    /// responses in memory; their disk copies stay).
+    pub fn on_memory_pressure(&self) {
+        self.addons().forget_memory();
+    }
+
     /// The clock that stamps this device's writes (sync and roster calls
     /// take it).
     pub fn clock(&self) -> &HlcClock {

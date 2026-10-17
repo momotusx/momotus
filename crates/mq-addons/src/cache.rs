@@ -148,6 +148,15 @@ impl ResponseCache {
         })
     }
 
+    /// Drops the in-memory copies (under memory pressure); the store keeps
+    /// them, so the next read loads from disk instead of the network.
+    pub fn forget_memory(&self) {
+        self.entries
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
+    }
+
     pub fn put(&self, key: String, body: Bytes, control: CacheControl) {
         if !control.cacheable() {
             return;
@@ -255,5 +264,23 @@ mod tests {
         assert!(cache.get("d").is_none());
         assert!(cache.get_on_error("d").is_some());
         assert_eq!(cache.entries.lock().unwrap().len(), 2, "capacity enforced");
+    }
+}
+
+#[cfg(test)]
+mod memory {
+    use super::*;
+
+    #[test]
+    fn forgetting_memory_keeps_nothing_in_ram() {
+        let cache = ResponseCache::new(8);
+        let control = CacheControl {
+            max_age: Duration::from_secs(60),
+            ..Default::default()
+        };
+        cache.put("k".into(), Bytes::from_static(b"v"), control);
+        assert!(cache.get("k").is_some());
+        cache.forget_memory();
+        assert!(cache.get("k").is_none(), "no store, so nothing left");
     }
 }

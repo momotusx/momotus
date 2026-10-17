@@ -62,6 +62,11 @@ impl AddonClient {
         &self.health
     }
 
+    /// Frees the in-memory response cache (the disk store stays).
+    pub fn forget_memory(&self) {
+        self.cache.forget_memory();
+    }
+
     pub async fn fetch_manifest(&self, transport_url: &str) -> Result<InstalledAddon, AddonError> {
         let url = transport::normalize_transport_url(transport_url)?;
         let allow_private = url.host_str().is_some_and(mq_http::is_private_host);

@@ -72,10 +72,20 @@ impl MarqueeCore {
                 listener.on_message(message.to_string());
             }
         });
-        runtime.spawn(async move {
+        let died = out_tx.clone();
+        let session = runtime.spawn(async move {
             let mut session = Session::new(core, out_tx);
             while let Some(text) = in_rx.recv().await {
                 session.handle_text(&text).await;
+            }
+        });
+        // A panic ends the request loop; say so instead of going silent, so
+        // the app can show it and open the core again.
+        runtime.spawn(async move {
+            if let Err(e) = session.await
+                && e.is_panic()
+            {
+                let _ = died.send(serde_json::json!({ "core": "died", "reason": e.to_string() }));
             }
         });
         Ok(Arc::new(Self {
