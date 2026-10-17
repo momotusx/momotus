@@ -112,11 +112,8 @@ class DebridStore(
                 if (failure != null) synchronized(lock) { unfinished[tombstone.generation] = tombstone }
             }
         }
-        for (record in records) {
-            if (synchronized(lock) { record.generation in gone }) continue
-            // A failed write is not acknowledged; the next push carries it again.
-            enqueue(record.service, record.generation, write = true) { save(record) }
-        }
+        // A failed write is not acknowledged; the next push carries it again.
+        for (record in records) enqueue(record.service, record.generation, write = true) { save(record) }
     }
 
     /**
@@ -193,6 +190,12 @@ class DebridStore(
         val task = Task(generation, write, run)
         val pump =
             synchronized(lock) {
+                // Checked with the insert, under one lock: a write of a generation
+                // that a disconnect marked gone is never queued behind its cleanup.
+                if (write && generation in gone) {
+                    task.done.complete(Unit)
+                    return task.done
+                }
                 queues.getOrPut(service) { ArrayDeque() }.addLast(task)
                 if (service in pumps) {
                     null
@@ -220,7 +223,15 @@ class DebridStore(
                 task.run()
                 task.done.complete(Unit)
             } catch (e: CancellationException) {
+                // The scope is going: settle everything queued and unregister, so
+                // `idle` returns and a later task starts a new pump.
                 task.done.completeExceptionally(e)
+                val left =
+                    synchronized(lock) {
+                        pumps.remove(service)
+                        queues.remove(service)?.toList().orEmpty()
+                    }
+                left.forEach { it.done.completeExceptionally(e) }
                 throw e
             } catch (e: Exception) {
                 task.done.completeExceptionally(e)

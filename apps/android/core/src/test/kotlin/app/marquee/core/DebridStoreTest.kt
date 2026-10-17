@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.DebridCredential
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridTombstone
 import app.marquee.core.model.RestoreAnswer
@@ -7,10 +8,17 @@ import app.marquee.core.secrets.DebridCore
 import app.marquee.core.secrets.DebridKeystore
 import app.marquee.core.secrets.DebridStore
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -19,6 +27,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
@@ -213,6 +222,107 @@ class DebridStoreTest {
             }
         }
     }
+
+    /** A thread-safe keystore and core for the multithreaded cases. */
+    private class Shared :
+        DebridKeystore,
+        DebridCore {
+        val stored = java.util.concurrent.ConcurrentHashMap<String, DebridRecord>()
+        val stones = java.util.concurrent.CopyOnWriteArrayList<DebridTombstone>()
+
+        @Volatile var cancelWrites = false
+
+        override suspend fun records() = stored.values.toList()
+
+        override suspend fun tombstones() = stones.toList()
+
+        override suspend fun writeRecord(record: DebridRecord) {
+            if (cancelWrites) throw CancellationException("scope going")
+            stored[record.service] = record
+        }
+
+        override suspend fun deleteRecord(
+            service: String,
+            generation: String,
+        ) {
+            stored.computeIfPresent(service) { _, r -> r.takeIf { it.generation != generation } }
+        }
+
+        override suspend fun writeTombstone(tombstone: DebridTombstone) {
+            stones += tombstone
+        }
+
+        override suspend fun deleteTombstone(tombstone: DebridTombstone) {
+            stones.removeIf { it.generation == tombstone.generation }
+        }
+
+        override suspend fun restore(
+            records: List<DebridRecord>,
+            tombstones: List<DebridTombstone>,
+        ) = RestoreAnswer(emptyList(), emptyList())
+
+        override suspend fun ack(
+            service: String,
+            generation: String,
+            revision: Long,
+        ) = Unit
+
+        override suspend fun disconnect(
+            service: String,
+            generation: String,
+        ) = Unit
+    }
+
+    private fun record(
+        generation: String,
+        revision: Long,
+    ) = DebridRecord("torbox", generation, revision, DebridCredential.Key("k$revision"))
+
+    @Test
+    fun aPushRacingADisconnectNeverOutlivesIt() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            repeat(300) { round ->
+                val generation = "g$round"
+                val shared = Shared()
+                shared.stored["torbox"] = record(generation, 1)
+                val store = DebridStore(shared, shared, scope)
+                val go = CompletableDeferred<Unit>()
+                val push =
+                    scope.launch {
+                        go.await()
+                        store.pending(listOf(record(generation, 2)))
+                    }
+                val drop =
+                    scope.launch {
+                        go.await()
+                        store.disconnect("torbox", generation).await()
+                    }
+                go.complete(Unit)
+                push.join()
+                drop.join()
+                store.idle()
+                assertEquals(null, shared.stored["torbox"], "round $round")
+                assertEquals(emptyList(), shared.stones.toList(), "round $round")
+            }
+            scope.cancel()
+        }
+
+    @Test
+    fun aCancelledWriteLeavesTheQueueUsable() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val shared = Shared()
+            val store = DebridStore(shared, shared, scope)
+            shared.cancelWrites = true
+            store.pending(listOf(record("g1", 1)))
+            withTimeout(5_000) { store.idle() }
+            shared.cancelWrites = false
+            store.pending(listOf(record("g1", 2)))
+            withTimeout(5_000) { store.idle() }
+            assertEquals(2L, shared.stored["torbox"]?.revision)
+            scope.cancel()
+        }
 
     private companion object {
         fun id(r: DebridRecord) = "${r.service} ${r.generation} ${r.revision}"
