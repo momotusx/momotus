@@ -27,6 +27,8 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -70,6 +72,10 @@ class DebridHolder(
     var saved by mutableStateOf(savedNow())
         private set
 
+    /** Services whose key the keystore kept in memory only: their badge says so. */
+    var sessionOnly by mutableStateOf(emptySet<String>())
+        private set
+
     // What the last change ended with, shown in the card of the service it changed.
     var said: DebridSaid? by mutableStateOf(null)
         private set
@@ -95,23 +101,27 @@ class DebridHolder(
                 }.debridKeys
         drafts.remove(service)
         saved = savedNow()
-        val memoryOnly = session.secrets.health == SecretStore.Health.MemoryOnly
+        val stored = session.secrets.health != SecretStore.Health.MemoryOnly
+        sessionOnly = if (stored || key == null) sessionOnly - service else sessionOnly + service
         viewModelScope.launch {
-            val (text, tone) =
+            said =
                 try {
-                    val words = DebridCopy.inUse(session.ops.setDebridKeys(keys))
-                    if (memoryOnly) {
-                        "$words Kept for this session only: this device could not store it." to Status.Warn
-                    } else {
-                        words to if (keys.isEmpty()) Status.Idle else Status.Ok
-                    }
+                    val count = session.ops.setDebridKeys(keys)
+                    val tone =
+                        if (!stored) {
+                            Status.Warn
+                        } else if (count == 0) {
+                            Status.Idle
+                        } else {
+                            Status.Ok
+                        }
+                    DebridSaid(service, DebridCopy.outcome(stored, count), tone)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    "Saved, but the core did not take it: ${(e as? CoreError)?.message ?: CoreLog.describe(e)}" to
-                        Status.Bad
+                    val why = (e as? CoreError)?.message ?: CoreLog.describe(e)
+                    DebridSaid(service, DebridCopy.outcome(stored, null, why), Status.Bad)
                 }
-            said = DebridSaid(service, text, tone)
         }
     }
 }
@@ -190,12 +200,20 @@ private fun Service(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            MqIcon(Icons.KeyRound, tint = colors.ok, size = if (tv) 24.dp else 18.dp)
-                            MqText("Key saved", role = TextRole.Caption, color = colors.ok, maxLines = 1)
+                            // A key the keystore kept in memory only is gone after a restart: the badge says so.
+                            val brief = service.id in holder.sessionOnly
+                            val tint = if (brief) colors.warn else colors.ok
+                            MqIcon(Icons.KeyRound, tint = tint, size = if (tv) 24.dp else 18.dp)
+                            MqText(
+                                if (brief) "Kept for this session" else "Key saved",
+                                role = TextRole.Caption,
+                                color = tint,
+                                maxLines = 1,
+                            )
                         }
                     }
                 }
-                if (!tv) KeyPage { openLink(context, service.keyPage) }
+                if (!tv) KeyPage("Get a ${service.name} key") { openLink(context, service.keyPage) }
             }
             // A TV has no browser to sign in with: it names the page for a phone or computer.
             if (tv) {
@@ -219,8 +237,22 @@ private fun Service(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             ) {
-                PrimaryButton("Save", save, icon = Icons.Check, enabled = draft.isNotBlank())
-                if (saved) SecondaryButton("Remove", { holder.apply(service.id, null) }, icon = Icons.Trash)
+                // Spoken with the service, so a screen reader's list of controls says whose key it is.
+                PrimaryButton(
+                    "Save",
+                    save,
+                    Modifier.semantics { contentDescription = "Save ${service.name} key" },
+                    icon = Icons.Check,
+                    enabled = draft.isNotBlank(),
+                )
+                if (saved) {
+                    SecondaryButton(
+                        "Remove",
+                        { holder.apply(service.id, null) },
+                        Modifier.semantics { contentDescription = "Remove ${service.name} key" },
+                        icon = Icons.Trash,
+                    )
+                }
             }
             holder.said?.takeIf { it.service == service.id }?.let { StatusWord(it.text, it.tone) }
         }
@@ -229,13 +261,17 @@ private fun Service(
 
 /** "Get a key" as a quiet link in the card's corner: the key page opens in the browser. */
 @Composable
-private fun KeyPage(onClick: () -> Unit) {
+private fun KeyPage(
+    spoken: String,
+    onClick: () -> Unit,
+) {
     val colors = Marquee.colors
     Row(
         Modifier
             .heightIn(min = 48.dp)
             .marqueeFocus(Marquee.radius.pill)
             .clip(RoundedCornerShape(Marquee.radius.pill))
+            .semantics(mergeDescendants = true) { contentDescription = spoken }
             .focusClickable(onClick, Role.Button)
             .padding(horizontal = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),

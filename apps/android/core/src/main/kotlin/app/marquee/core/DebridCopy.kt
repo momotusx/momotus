@@ -40,6 +40,20 @@ object DebridCopy {
             else -> "$count debrid services in use."
         }
 
+    /**
+     * How a change ended, storing and handing over said apart: [inUse] is the core's count, or null
+     * when the core refused with [refused]; [stored] is false when the keystore kept it in memory only.
+     */
+    fun outcome(
+        stored: Boolean,
+        inUse: Int?,
+        refused: String? = null,
+    ): String =
+        listOfNotNull(
+            inUse?.let(::inUse) ?: "The core did not take it: $refused.",
+            if (stored) null else "Kept for this session only: this device could not store it.",
+        ).joinToString(" ")
+
     /** "real-debrid.com/apitoken": where to get a key, to type on another device. */
     fun page(service: Service) = service.keyPage.removePrefix("https://").removePrefix("www.")
 }

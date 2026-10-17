@@ -53,6 +53,43 @@ object SyncCopy {
         }
     }
 
+    /** The keystore kept a new record in memory only: nothing is sent until it is stored. */
+    const val STORAGE =
+        "This device could not store the sync account's key, so sync is paused. Free some storage, " +
+            "then sync again."
+
+    /** A join whose record the keystore kept in memory only. */
+    const val JOINED_SESSION_ONLY =
+        "This device could not store the sync account's key: the join lasts until the app closes, " +
+            "and sync is paused."
+
+    /**
+     * Why pairing stopped, in words. The core's own pairing reasons are fixed sentences and are kept;
+     * a connection or address error is replaced, since its text can name the server's address.
+     */
+    fun pairingProblem(reason: String): String =
+        when {
+            reason.startsWith("pairing: ") -> {
+                reason.removePrefix("pairing: ").replaceFirstChar { it.uppercase() } + "."
+            }
+
+            reason.startsWith("the relay must use https") -> {
+                problem("insecure", reason)
+            }
+
+            reason.startsWith("invalid url") -> {
+                "That is not a sync server address. It looks like https://sync.example.org."
+            }
+
+            reason.startsWith("blocked private address") -> {
+                "This device does not connect to that address."
+            }
+
+            else -> {
+                "The sync server did not answer. Check the address and try again."
+            }
+        }
+
     /** Things worth telling the user after a round, in words. */
     fun notes(report: SyncReport): List<String> =
         buildList {

@@ -17,6 +17,27 @@ class SyncCopyTest {
         assertEquals("something else", SyncCopy.problem(null, "something else"))
     }
 
+    @Test
+    fun `pairing keeps the core's own reasons and never shows an address`() {
+        assertEquals(
+            "The code is for another sync server.",
+            SyncCopy.pairingProblem("pairing: the code is for another sync server"),
+        )
+        assertEquals(
+            "The sync server address must start with https.",
+            SyncCopy.pairingProblem("the relay must use https unless it is on this network"),
+        )
+        for (raw in listOf(
+            "network: error sending request (https://user:secret@relay.example/<redacted>)",
+            "invalid url: https://user:secret@relay.example",
+            "http status 502",
+            "timed out after 10s",
+        )) {
+            val words = SyncCopy.pairingProblem(raw)
+            assertTrue("relay.example" !in words && "secret" !in words, words)
+        }
+    }
+
     private fun report(
         clockGapMs: Long = 0,
         waiting: Int = 0,

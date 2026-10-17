@@ -24,4 +24,21 @@ class DebridCopyTest {
         assertEquals("2 debrid services in use.", DebridCopy.inUse(2))
         assertEquals("premiumize.me/account", DebridCopy.page(DebridCopy.services[3]))
     }
+
+    @Test
+    fun `storing and handing over are told apart`() {
+        assertEquals("1 debrid service in use.", DebridCopy.outcome(stored = true, inUse = 1))
+        assertEquals(
+            "1 debrid service in use. Kept for this session only: this device could not store it.",
+            DebridCopy.outcome(stored = false, inUse = 1),
+        )
+        assertEquals(
+            "The core did not take it: closed. Kept for this session only: this device could not store it.",
+            DebridCopy.outcome(stored = false, inUse = null, refused = "closed"),
+        )
+        assertEquals(
+            "The core did not take it: closed.",
+            DebridCopy.outcome(stored = true, inUse = null, refused = "closed"),
+        )
+    }
 }

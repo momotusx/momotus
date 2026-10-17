@@ -75,7 +75,12 @@ class HomeRowsHolder(
         edit { ops.homeCatalogs() }
     }
 
-    fun toggle(row: HomeCatalog) = edit { ops.setHomeRow(row.rowId, !row.hidden) }
+    /** Flips the row as the last reply has it, so two quick presses flip it twice. */
+    fun toggle(row: HomeCatalog) =
+        edit {
+            val hidden = rows?.firstOrNull { it.rowId == row.rowId }?.hidden ?: row.hidden
+            ops.setHomeRow(row.rowId, !hidden)
+        }
 
     fun move(
         row: HomeCatalog,
