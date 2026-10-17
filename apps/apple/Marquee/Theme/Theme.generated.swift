@@ -26,6 +26,14 @@ enum Theme {
         static let warn = Color(RGBA(0.9608, 0.7725, 0.0941, 1))
         static let bad = Color(RGBA(1.0000, 0.4196, 0.3686, 1))
         static let scrim = Color(RGBA(0.0235, 0.0353, 0.0549, 0.72))
+        static let avatarEmber = Color(RGBA(0.7843, 0.2157, 0.1765, 1))
+        static let avatarAmber = Color(RGBA(0.6588, 0.3725, 0.0549, 1))
+        static let avatarMoss = Color(RGBA(0.2471, 0.4902, 0.2275, 1))
+        static let avatarTeal = Color(RGBA(0.1216, 0.4784, 0.4549, 1))
+        static let avatarSky = Color(RGBA(0.1843, 0.4275, 0.7098, 1))
+        static let avatarPlum = Color(RGBA(0.4784, 0.2941, 0.6275, 1))
+        static let avatarRose = Color(RGBA(0.7059, 0.2745, 0.4314, 1))
+        static let avatarGraphite = Color(RGBA(0.3686, 0.4078, 0.4510, 1))
     }
 
     struct TypeScale: Sendable {

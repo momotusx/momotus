@@ -34,6 +34,14 @@ data class Palette(
     val warn: Color,
     val bad: Color,
     val scrim: Color,
+    val avatarEmber: Color,
+    val avatarAmber: Color,
+    val avatarMoss: Color,
+    val avatarTeal: Color,
+    val avatarSky: Color,
+    val avatarPlum: Color,
+    val avatarRose: Color,
+    val avatarGraphite: Color,
 )
 
 /** Text sizes: TV points on the 1920x1080 canvas, or phone sp. */
@@ -140,6 +148,14 @@ object Tokens {
             warn = Color(0xFFF5C518),
             bad = Color(0xFFFF6B5E),
             scrim = Color(0xB806090E),
+            avatarEmber = Color(0xFFC8372D),
+            avatarAmber = Color(0xFFA85F0E),
+            avatarMoss = Color(0xFF3F7D3A),
+            avatarTeal = Color(0xFF1F7A74),
+            avatarSky = Color(0xFF2F6DB5),
+            avatarPlum = Color(0xFF7A4BA0),
+            avatarRose = Color(0xFFB4466E),
+            avatarGraphite = Color(0xFF5E6873),
         )
 
     val light = Palette(
@@ -165,6 +181,14 @@ object Tokens {
             warn = Color(0xFFF5C518),
             bad = Color(0xFFFF6B5E),
             scrim = Color(0xB806090E),
+            avatarEmber = Color(0xFFC8372D),
+            avatarAmber = Color(0xFFA85F0E),
+            avatarMoss = Color(0xFF3F7D3A),
+            avatarTeal = Color(0xFF1F7A74),
+            avatarSky = Color(0xFF2F6DB5),
+            avatarPlum = Color(0xFF7A4BA0),
+            avatarRose = Color(0xFFB4466E),
+            avatarGraphite = Color(0xFF5E6873),
         )
 
     val tvType = TypeScale(
