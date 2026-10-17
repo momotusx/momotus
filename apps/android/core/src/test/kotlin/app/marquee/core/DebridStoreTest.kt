@@ -442,6 +442,33 @@ class DebridStoreTest {
             scope.cancel()
         }
 
+    @Test
+    fun aRepeatDroppedAfterTheCleanupKeepsTheGenerationGone() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val shared = Shared()
+            shared.stored["torbox"] = record("g1", 1)
+            shared.failDisconnects = 1
+            val store = DebridStore(shared, shared, scope)
+            runCatching { store.disconnect("torbox", "g1").await() }
+            withTimeout(5_000) { store.idle() }
+            val gate = CompletableDeferred<Unit>()
+            shared.writeGate = gate
+            // The retry runs and cleans up first, then a g2 write is held with a repeat behind it.
+            store.pending(listOf(record("g2", 1)))
+            withTimeout(5_000) { while (!shared.writeWaiting) delay(5) }
+            assertEquals(emptyList(), shared.stones.toList(), "the cleanup finished")
+            val repeat = store.disconnect("torbox", "g1")
+            shared.writeGate = null
+            gate.complete(Unit)
+            withTimeout(5_000) { store.idle() }
+            assertTrue(repeat.isCancelled)
+            store.pending(listOf(record("g1", 2)))
+            withTimeout(5_000) { store.idle() }
+            assertEquals(null, shared.stored["torbox"], "g1 is never written again")
+            scope.cancel()
+        }
+
     private companion object {
         fun id(r: DebridRecord) = "${r.service} ${r.generation} ${r.revision}"
 
