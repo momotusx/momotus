@@ -15,7 +15,7 @@ export default function Discover() {
 
   return (
     <main class="browse page" data-vscroll>
-      <h1>Discover</h1>
+      <h1 data-eyebrow="Browse">Discover</h1>
       <Switch>
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">

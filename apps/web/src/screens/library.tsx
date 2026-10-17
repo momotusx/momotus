@@ -20,7 +20,7 @@ export default function Library() {
 
   return (
     <main class="browse page" data-vscroll>
-      <h1>Library</h1>
+      <h1 data-eyebrow="Yours">Library</h1>
       <Switch fallback={<SkeletonGrid />}>
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">
