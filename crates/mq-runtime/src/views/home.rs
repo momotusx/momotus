@@ -306,7 +306,9 @@ impl Core {
         let Some(from) = ids.iter().position(|id| id == row_id) else {
             return Err(CoreError::BadPrefs(format!("no Home row {row_id}")));
         };
-        let to = (from as i64 + by).clamp(0, ids.len() as i64 - 1) as usize;
+        let to = (from as i64)
+            .saturating_add(by)
+            .clamp(0, ids.len() as i64 - 1) as usize;
         let moved = ids.remove(from);
         ids.insert(to, moved);
         let gone = self

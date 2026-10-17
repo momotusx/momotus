@@ -334,8 +334,11 @@ impl Library {
                     poster_shape: None,
                     added_ms: play.watched_ms,
                 };
-                // Only fills a gap: the zero stamp never replaces a row.
-                sql::upsert_item(c, profile, &item, false, &zero)?;
+                // Only fills a gap (the zero stamp never replaces a row), and
+                // syncs, so other devices know the title's kind and name.
+                local(c, coll::ITEMS, &[profile, &play.item_id], &zero, |h| {
+                    sql::upsert_item(c, profile, &item, false, h)
+                })?;
                 let hlc = stamp(play.watched_ms);
                 let before = watched_now(c, profile, &play.video_id)?;
                 local(c, coll::WATCHED, &[profile, &play.video_id], &hlc, |h| {
@@ -345,13 +348,17 @@ impl Library {
                     report.applied += 1;
                 }
                 if play.kind == "series" {
-                    match latest.iter_mut().find(|l| l.item_id == play.item_id) {
-                        Some(l) if (play.watched_ms, &play.video_id) > (l.watched_ms, &l.video_id) => *l = play,
-                        Some(_) => {}
-                        None => latest.push(play),
-                    }
+                    latest.push(play);
                 }
             }
+            // Per series, the latest play whose mark ended up set: a play a
+            // newer local unmark beat must not take the anchor from the rest.
+            latest.retain(|p| watched_now(c, profile, &p.video_id).unwrap_or(false));
+            latest.sort_by(|a, b| {
+                (&a.item_id, std::cmp::Reverse((a.watched_ms, &a.video_id)))
+                    .cmp(&(&b.item_id, std::cmp::Reverse((b.watched_ms, &b.video_id))))
+            });
+            latest.dedup_by(|a, b| a.item_id == b.item_id);
             for play in latest {
                 anchor(c, profile, play)?;
             }

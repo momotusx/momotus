@@ -632,9 +632,16 @@ async fn home_rows_hide_and_move_live() {
     wait(vec![rb.clone(), ra.clone()]).await;
     // The moved row kept its tiles: it never went back to loading.
     assert!(!view.snapshot().rows[0].tiles.is_empty());
+    // Extreme moves clamp instead of overflowing.
+    core.move_home_row(&ra, i64::MIN).unwrap();
+    wait(vec![ra.clone(), rb.clone()]).await;
+    // The second row moved by the largest step stays last.
+    core.move_home_row(&rb, i64::MAX).unwrap();
+    wait(vec![ra.clone(), rb.clone()]).await;
+    // The id of the catalog that is gone survived every move.
     assert_eq!(
         core.prefs().home_rows.order,
-        [rb.clone(), ra.clone(), "gone@00000000:movie:top".into()]
+        [ra.clone(), rb.clone(), "gone@00000000:movie:top".into()]
     );
 }
 

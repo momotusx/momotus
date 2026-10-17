@@ -239,8 +239,11 @@ impl Auth {
                 s.acked = true;
                 true
             }
+            // A record from an older connection (a late acknowledgement after
+            // a sign-out or a new sign-in) never comes back.
+            (Some(r), _) if r.generation < s.generation => false,
             (Some(r), _) => {
-                s.generation = s.generation.max(r.generation);
+                s.generation = r.generation;
                 s.record = Some(r);
                 s.acked = true;
                 s.dead = None;

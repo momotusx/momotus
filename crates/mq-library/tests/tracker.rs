@@ -252,3 +252,45 @@ fn another_account_starts_clean() {
         Some(("b".into(), 2))
     );
 }
+
+#[test]
+fn imported_titles_sync_with_their_kind() {
+    let lib = Library::temporary().unwrap();
+    lib.import_plays("p", &[play("tt1:1:1", "series", 1_000)], NOW, &[])
+        .unwrap();
+    let items: Vec<_> = lib
+        .outbox(100)
+        .unwrap()
+        .records
+        .into_iter()
+        .map(|(_, r)| r)
+        .filter(|r| r.coll == mq_library::coll::ITEMS)
+        .collect();
+    assert_eq!(
+        items.len(),
+        1,
+        "the title row is queued for the other devices"
+    );
+    assert_eq!(items[0].value["kind"], "series");
+}
+
+#[test]
+fn an_unmarked_latest_episode_leaves_the_anchor_to_the_one_before() {
+    let lib = Library::temporary().unwrap();
+    // The user unmarked episode 2 here after Trakt recorded it.
+    lib.set_watched("p", "tt1", "tt1:1:2", false, &hlc(9_000, 5))
+        .unwrap();
+    lib.import_plays(
+        "p",
+        &[
+            play("tt1:1:1", "series", 1_000),
+            play("tt1:1:2", "series", 2_000),
+        ],
+        NOW,
+        &[],
+    )
+    .unwrap();
+    let done = lib.finished_series("p", 10).unwrap();
+    assert_eq!(done.len(), 1, "the show stays in Next Up");
+    assert_eq!(done[0].video_id, "tt1:1:1");
+}

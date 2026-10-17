@@ -423,3 +423,14 @@ async fn live_unknown_app_is_refused_not_transient() {
     println!("settings with an unknown app: {settings:?}");
     assert!(!matches!(settings, Answer::Ok { .. }));
 }
+
+#[tokio::test]
+async fn a_late_acknowledgement_never_signs_back_in() {
+    let auth = Auth::new("https://example.org/trakt");
+    let record = aging_record();
+    assert!(auth.set(Some(record.clone())).await);
+    assert!(auth.set(None).await);
+    // The app's acknowledgement of the old record arrives after sign-out.
+    assert!(!auth.set(Some(record)).await);
+    assert_eq!(auth.status().await, Err(AuthError::Off));
+}
