@@ -5,7 +5,8 @@ import type { VersionStatus } from "./VersionStatus";
 
 export type VersionRow = { key: string, 
 /**
- * "4K", "1080p", "720p", "SD" or "Unknown".
+ * "4K", "1440p", "1080p", "720p" or "SD"; when the release names no
+ * resolution, its source ("Blu-ray", "WEB-DL") or "Quality not stated".
  */
 quality: string, 
 /**

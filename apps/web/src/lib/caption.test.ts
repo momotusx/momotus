@@ -13,6 +13,7 @@ const tile = (t: Partial<Tile>): Tile => ({
   releaseInfo: null,
   progress: null,
   videoId: null,
+  rating: null,
   ...t,
 });
 

@@ -8,4 +8,8 @@ progress: number | null,
 /**
  * Video to resume for Continue Watching tiles.
  */
-videoId: string | null, };
+videoId: string | null, 
+/**
+ * The IMDb rating the addon gave, as written ("8.4").
+ */
+rating: string | null, };

@@ -43,6 +43,20 @@ pub struct Tile {
     pub progress: Option<f32>,
     /// Video to resume for Continue Watching tiles.
     pub video_id: Option<String>,
+    /// The IMDb rating the addon gave, as written ("8.4").
+    pub rating: Option<String>,
+    /// What the hero shows beyond the tile; kept off the wire for rows.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub(crate) blurb: Option<Blurb>,
+}
+
+/// A catalog item's synopsis, genres and runtime, for when it becomes the hero.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct Blurb {
+    pub description: Option<String>,
+    pub genres: Vec<String>,
+    pub runtime: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -97,6 +111,10 @@ pub struct Hero {
     pub tile: Tile,
     /// One line telling the user why this title is here.
     pub reason: String,
+    pub description: Option<String>,
+    /// At most three, in the addon's order.
+    pub genres: Vec<String>,
+    pub runtime: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -567,6 +585,19 @@ fn apply_catalog(
 }
 
 pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
+    let links = |category: &str| -> Vec<String> {
+        m.links
+            .iter()
+            .filter(|l| l.category.eq_ignore_ascii_case(category))
+            .map(|l| l.name.clone())
+            .collect()
+    };
+    let rating = links("imdb").into_iter().next();
+    let blurb = Blurb {
+        description: m.description.clone(),
+        genres: links("Genres").into_iter().take(3).collect(),
+        runtime: m.runtime.clone(),
+    };
     Tile {
         id: m.id,
         kind: m.r#type,
@@ -581,6 +612,8 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
         release_info: m.release_info,
         progress: None,
         video_id: None,
+        rating,
+        blurb: Some(blurb),
     }
 }
 
@@ -601,9 +634,13 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         .filter(|row| row.row_id != CONTINUE_ROW_ID)
         .find_map(|row| {
             let tile = row.tiles.iter().find(|t| t.background.is_some())?;
+            let blurb = tile.blurb.clone().unwrap_or_default();
             Some(Hero {
                 tile: tile.clone(),
                 reason: format!("#1 in {} on {}", row.title, row.source),
+                description: blurb.description,
+                genres: blurb.genres,
+                runtime: blurb.runtime,
             })
         });
     let current = header.get().hero;
@@ -723,6 +760,8 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode) -> Tile {
         release_info: Some(format!("Next: S{}:E{}", next.season, next.episode)),
         progress: None,
         video_id: Some(next.video_id),
+        rating: imdb_rating(p),
+        blurb: None,
     }
 }
 
@@ -776,5 +815,14 @@ fn tile_from_continue(item: ContinueItem, meta: Option<&mq_protocol::MetaItem>) 
         release_info: Some(caption),
         progress,
         video_id: Some(item.video_id),
+        rating: preview.and_then(imdb_rating),
+        blurb: None,
     }
+}
+
+fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
+    p.links
+        .iter()
+        .find(|l| l.category.eq_ignore_ascii_case("imdb"))
+        .map(|l| l.name.clone())
 }

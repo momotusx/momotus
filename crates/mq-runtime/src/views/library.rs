@@ -208,6 +208,8 @@ fn tile(e: &LibraryEntry) -> Tile {
         progress: (e.duration_ms > 0)
             .then(|| (e.position_ms as f32 / e.duration_ms as f32).clamp(0.0, 1.0)),
         video_id: None,
+        rating: None,
+        blurb: None,
     }
 }
 

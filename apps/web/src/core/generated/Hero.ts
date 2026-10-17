@@ -5,4 +5,8 @@ export type Hero = { tile: Tile,
 /**
  * One line telling the user why this title is here.
  */
-reason: string, };
+reason: string, description: string | null, 
+/**
+ * At most three, in the addon's order.
+ */
+genres: Array<string>, runtime: string | null, };

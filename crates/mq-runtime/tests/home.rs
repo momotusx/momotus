@@ -46,7 +46,7 @@ async fn catalog_addon(id: &str, delay: Duration, status: u16, body: &'static st
 }
 
 const METAS: &str = r#"{"metas":[
-  {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","poster":"https://images.metahub.space/poster/medium/tt0111161/img","background":"https://images.metahub.space/background/medium/tt0111161/img","releaseInfo":"1994"},
+  {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","poster":"https://images.metahub.space/poster/medium/tt0111161/img","background":"https://images.metahub.space/background/medium/tt0111161/img","releaseInfo":"1994","runtime":"142 min","description":"A banker convicted of uxoricide forms a friendship over a quarter century with a hardened convict.","links":[{"name":"9.3","category":"imdb","url":"https://imdb.com/title/tt0111161"},{"name":"Drama","category":"Genres","url":"stremio:///discover"},{"name":"Crime","category":"Genres","url":"stremio:///discover"},{"name":"Prison","category":"Genres","url":"stremio:///discover"},{"name":"Classic","category":"Genres","url":"stremio:///discover"},{"name":"Tim Robbins","category":"Cast","url":"stremio:///search"}]},
   {"id":"tt0068646","type":"movie","name":"The Godfather","poster":"https://images.metahub.space/poster/medium/tt0068646/img"}
 ]}"#;
 
@@ -109,6 +109,17 @@ async fn rows_fill_in_place_and_mirror_matches_view() {
         .hero
         .expect("hero picked from artwork");
     assert_eq!(hero.tile.id, "tt0111161");
+    // The hero carries what a featured title shows; rows carry only the rating.
+    assert_eq!(hero.tile.rating.as_deref(), Some("9.3"));
+    assert_eq!(hero.genres, ["Drama", "Crime", "Prison"]);
+    assert_eq!(hero.runtime.as_deref(), Some("142 min"));
+    assert!(hero.description.as_deref().unwrap().starts_with("A banker"));
+    let row_json = serde_json::to_value(&mirror[0]).unwrap();
+    assert_eq!(row_json["tiles"][0]["rating"], "9.3");
+    assert!(
+        row_json["tiles"][0].get("blurb").is_none()
+            && row_json["tiles"][0].get("description").is_none()
+    );
 }
 
 #[tokio::test]
