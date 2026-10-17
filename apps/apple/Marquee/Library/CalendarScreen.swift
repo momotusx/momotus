@@ -1,9 +1,6 @@
 import Combine
 import SwiftUI
 
-/// Pushes the calendar onto a stack.
-struct CalendarRoute: Hashable {}
-
 /// New and upcoming episodes of the series in the library, from a week back
 /// to a month ahead, by date. It opens on today; an episode leads to its
 /// series on that season (a date never promises a stream).
@@ -90,7 +87,7 @@ private struct DaySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             Text(label)
-                .font(.display(Theme.type.title2))
+                .display(Theme.type.title2)
                 .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             ForEach(day.items, id: \.videoId) { item in
@@ -143,9 +140,8 @@ private struct CalendarRow: View {
                 .accessibilityHidden(true)
         }
         .padding(Theme.Space.xs)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous)
-                .fill(Theme.Palette.surface.opacity(hovered ? 1 : 0.6)))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .brightness(hovered ? 0.04 : 0)
         .contentShape(Rectangle())
         #if !os(tvOS)
         .onHover { hovered = $0 }

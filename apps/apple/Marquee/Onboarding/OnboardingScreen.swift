@@ -62,7 +62,7 @@ struct OnboardingScreen: View {
     private var doorsStep: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Marquee").font(.display(Theme.type.title2)).foregroundStyle(Theme.Palette.muted)
+                Wordmark(size: 22)
                 Spacer()
                 if let close {
                     Button("Browse first", action: close)
@@ -72,7 +72,7 @@ struct OnboardingScreen: View {
                 }
             }
             Text("How would you like to begin?")
-                .font(.display(metrics.wide ? 44 : Theme.type.title1 + 4))
+                .display(metrics.wide ? 44 : Theme.type.title1 + 4)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             Text("No account needed. Everything stays on this device until you turn on sync.")
@@ -148,7 +148,7 @@ struct OnboardingScreen: View {
             }
             .padding(Theme.Space.s + 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface))
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             if let close {
                 HStack {
                     Button("Back") { step = .source }.buttonStyle(PillButtonStyle())
@@ -163,7 +163,7 @@ struct OnboardingScreen: View {
     private func stepHeading(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.display(metrics.wide ? 44 : Theme.type.title1 + 4))
+                .display(metrics.wide ? 44 : Theme.type.title1 + 4)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             Text(text)
@@ -254,7 +254,7 @@ private struct Door: View {
         HStack(spacing: Theme.Space.s) {
             Glyph(symbol, size: 26).frame(width: 36)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.display(Theme.type.title3))
+                Text(title).display(Theme.type.title3)
                 Text(text)
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
@@ -266,8 +266,8 @@ private struct Door: View {
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s + 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface.opacity(hovered ? 1 : 0.85)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).strokeBorder(Theme.Palette.line.opacity(0.7)))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .brightness(hovered ? 0.04 : 0)
         .contentShape(Rectangle())
         #if !os(tvOS)
         .onHover { hovered = $0 }

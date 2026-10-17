@@ -15,16 +15,7 @@ struct LibraryScreen: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                HStack(alignment: .firstTextBaseline) {
-                    ScreenTitle(text: "Library")
-                    Spacer()
-                    // A value, like the titles pushed from it: a destination link
-                    // under a value push is popped when Library redraws.
-                    NavigationLink(value: CalendarRoute()) {
-                        Label("Calendar", glyph: "calendar")
-                    }
-                    .buttonStyle(PillButtonStyle())
-                }
+                ScreenTitle(text: "Library")
                 if let s = library.snapshot {
                     let total = s.kinds.reduce(0) { $0 + $1.count }
                     VStack(alignment: .leading, spacing: 12) {
@@ -56,7 +47,6 @@ struct LibraryScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
-        .navigationDestination(for: CalendarRoute.self) { _ in CalendarScreen(core: core) }
         .task(id: library.taskId) { library.start() }
     }
 

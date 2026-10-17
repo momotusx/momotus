@@ -1,82 +1,108 @@
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Hashable {
-    case search, home, discover, library, settings
+    case home, discover, library, calendar, search, settings
 
     var title: String { rawValue.capitalized }
 
     var symbol: String {
         switch self {
-        case .search: "search"
         case .home: "house"
         case .discover: "compass"
         case .library: "library-big"
+        case .calendar: "calendar"
+        case .search: "search"
         case .settings: "settings"
         }
     }
+
+    /// Search and Settings sit after the divider in the top navigation.
+    var isTool: Bool { self == .search || self == .settings }
 }
 
-/// Labeled navigation: a sidebar on macOS and iPad, a tab bar on iPhone, the
-/// top tab bar on tvOS.
+/// The floating glass navigation: a bar at the bottom on iPhone and iPad, a
+/// pill at the top on the Mac (in the window toolbar) and on TV.
 struct RootView: View {
     let home: HomeModel
     @Environment(CoreClient.self) private var core
     @State private var tab = AppTab.home
     @State private var homePath: [TitleRoute] = []
-    @State private var columns = NavigationSplitViewVisibility.all
     @State private var immersion = Immersion()
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// Tabs opened so far, kept alive so each keeps its place as a tab bar does.
+    @State private var opened: Set<AppTab> = [.home]
+    @State private var typing = false
     #endif
 
     var body: some View {
-        Group {
-            if metrics.wide && !isTV {
-                NavigationSplitView(columnVisibility: Binding(
-                    get: { immersion.active ? .detailOnly : columns }, set: { columns = $0 }
-                )) {
-                    Sidebar(selection: $tab)
-                        .navigationSplitViewColumnWidth(220)
-                } detail: {
-                    screen(tab)
+        content
+            .preferredColorScheme(.dark)
+            .environment(\.metrics, metrics)
+            .environment(immersion)
+            // Accent marks focus and the one primary action; everything else takes the text colour.
+            .tint(Theme.Palette.text)
+            // Home stays subscribed for the app's life, so Back lands on the same rows.
+            .task(id: home.taskId) { await home.run() }
+            .overlay {
+                if let failure = core.failure {
+                    CoreStopped(message: failure, reopen: core.restart)
                 }
-            } else {
-                TabView(selection: $tab) {
-                    ForEach(AppTab.allCases, id: \.self) { item in
-                        Tab(item.title, image: item.symbol, value: item) { screen(item) }
+            }
+            #if DEBUG
+            .onAppear {
+                if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }
+                if let start = DebugHooks.tab { select(start) }
+            }
+            .task {
+                for url in DebugHooks.installAddons {
+                    do {
+                        try await core.perform("installAddon", ["url": url])
+                    } catch {
+                        coreLog.notice("debug install \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     }
                 }
             }
-        }
-        #if os(tvOS)
-        .preferredColorScheme(.dark)
-        #endif
-        .environment(\.metrics, metrics)
-        .environment(immersion)
-        // Accent marks focus and the one primary action; everything else, the tab bar too, takes the text colour.
-        .tint(Theme.Palette.text)
-        // Home stays subscribed for the app's life, so Back lands on the same rows.
-        .task(id: home.taskId) { await home.run() }
-        .overlay {
-            if let failure = core.failure {
-                CoreStopped(message: failure, reopen: core.restart)
+            #endif
+    }
+
+    @ViewBuilder private var content: some View {
+        #if os(iOS)
+        ZStack {
+            ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
+                screen(item)
+                    .opacity(item == tab ? 1 : 0)
+                    .allowsHitTesting(item == tab)
+                    .accessibilityHidden(item != tab)
             }
         }
-        #if DEBUG
-        .onAppear {
-            if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }
-            if let start = DebugHooks.tab { tab = start }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            // Off while the keyboard is up, as a tab bar sits behind it.
+            if !immersion.active && !typing {
+                TabBar(selection: tab, select: select)
+            }
         }
-        .task {
-            for url in DebugHooks.installAddons {
-                do {
-                    try await core.perform("installAddon", ["url": url])
-                } catch {
-                    coreLog.notice("debug install \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in typing = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in typing = false }
+        #elseif os(macOS)
+        screen(tab)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.Palette.bg)
+            .toolbar { NavToolbar(selection: tab, select: select) }
+        #else
+        screen(tab).safeAreaInset(edge: .top, spacing: 0) {
+            if !immersion.active {
+                TopNav(selection: tab, select: select).padding(.bottom, Theme.Space.m)
             }
         }
         #endif
+    }
+
+    private func select(_ item: AppTab) {
+        #if os(iOS)
+        opened.insert(item)
+        #endif
+        tab = item
     }
 
     @ViewBuilder private func screen(_ tab: AppTab) -> some View {
@@ -95,17 +121,11 @@ struct RootView: View {
             NavigationStack { DiscoverScreen(core: core).withTitleRoutes(core: core) }
         case .library:
             NavigationStack { LibraryScreen(core: core).withTitleRoutes(core: core) }
+        case .calendar:
+            NavigationStack { CalendarScreen(core: core).withTitleRoutes(core: core) }
         case .settings:
             NavigationStack { SettingsScreen(core: core) }
         }
-    }
-
-    private var isTV: Bool {
-        #if os(tvOS)
-        true
-        #else
-        false
-        #endif
     }
 
     private var metrics: Metrics {
@@ -119,76 +139,174 @@ struct RootView: View {
     }
 }
 
-/// The wordmark and the five destinations, each an icon with its word.
-private struct Sidebar: View {
-    @Binding var selection: AppTab
+/// "● Marquee": the accent dot and the name in display type.
+struct Wordmark: View {
+    var size: CGFloat = Theme.type.title3
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Marquee")
-                .font(.display(Theme.type.title1))
-                .foregroundStyle(Theme.Palette.text)
-                .padding(.leading, 18)
-                .padding(.bottom, Theme.Space.m)
-                .accessibilityAddTraits(.isHeader)
-            ForEach(AppTab.allCases, id: \.self) { tab in
-                Button {
-                    selection = tab
-                } label: {
-                    Label(tab.title, glyph: tab.symbol)
-                }
-                .buttonStyle(SidebarItemStyle(selected: tab == selection))
-                .accessibilityAddTraits(tab == selection ? .isSelected : [])
-            }
-            Spacer()
+        HStack(spacing: size * 0.38) {
+            Circle().fill(Theme.Palette.accent).frame(width: size * 0.38, height: size * 0.38)
+            Text("Marquee").display(size)
         }
-        .padding(.top, Theme.Space.l)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.Palette.bg)
-        #if os(macOS)
-        .toolbar(removing: .sidebarToggle)
-        #endif
+        .foregroundStyle(Theme.Palette.text)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Marquee")
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
-private struct SidebarItemStyle: ButtonStyle {
-    let selected: Bool
+#if os(iOS)
+/// A floating glass bar at the bottom: icons over their words, the current
+/// place on a lighter rounded square.
+private struct TabBar: View {
+    let selection: AppTab
+    let select: (AppTab) -> Void
 
-    func makeBody(configuration: Configuration) -> some View {
-        Item(configuration: configuration, selected: selected)
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(AppTab.allCases, id: \.self) { item in
+                let on = item == selection
+                Button { select(item) } label: {
+                    VStack(spacing: 4) {
+                        Glyph(item.symbol, size: 22, relativeTo: .caption2)
+                        Text(item.title)
+                            .font(.text(10.5, weight: .semibold, relativeTo: .caption2))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(on ? Theme.Palette.text : Theme.Palette.dim)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background {
+                        if on { RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(0.12)) }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: 560)
+        .frame(height: 64)
+        .glass(RoundedRectangle(cornerRadius: 24, style: .continuous), shadow: true)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 2)
+    }
+}
+#endif
+
+#if os(macOS)
+/// The navigation pill in the middle of the window toolbar, on its own glass.
+private struct NavToolbar: ToolbarContent {
+    let selection: AppTab
+    let select: (AppTab) -> Void
+
+    var body: some ToolbarContent {
+        if #available(macOS 26, *) {
+            ToolbarItem(placement: .principal) { TopNav(selection: selection, select: select) }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .principal) { TopNav(selection: selection, select: select) }
+        }
+    }
+}
+#endif
+
+#if !os(iOS)
+/// A floating glass pill: the wordmark, the four places, a divider, then
+/// Search and Settings with their icons. The current place sits in a
+/// lighter inner pill.
+private struct TopNav: View {
+    let selection: AppTab
+    let select: (AppTab) -> Void
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Wordmark(size: Self.mark)
+                .padding(.leading, Self.mark * 0.6)
+                .padding(.trailing, Self.mark * 0.4)
+            ForEach(AppTab.allCases.filter { !$0.isTool }, id: \.self) { link($0) }
+            Capsule().fill(Theme.Palette.lineStrong).frame(width: 1.5, height: Self.mark).padding(.horizontal, 8)
+            ForEach(AppTab.allCases.filter(\.isTool), id: \.self) { link($0) }
+        }
+        .padding(Self.inset)
+        .fixedSize()
+        .glass(Capsule(), shadow: true)
+        #if os(tvOS)
+        .focusSection()
+        #endif
     }
 
-    private struct Item: View {
+    private func link(_ item: AppTab) -> some View {
+        Button { select(item) } label: {
+            if item.isTool { Label(item.title, glyph: item.symbol) } else { Text(item.title) }
+        }
+        .buttonStyle(NavLinkStyle(on: item == selection))
+        .accessibilityAddTraits(item == selection ? .isSelected : [])
+    }
+
+    #if os(tvOS)
+    private static let mark: CGFloat = 32
+    private static let inset: CGFloat = 9
+    #else
+    private static let mark: CGFloat = 18
+    private static let inset: CGFloat = 4
+    #endif
+}
+
+private struct NavLinkStyle: ButtonStyle {
+    let on: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Link(configuration: configuration, on: on)
+    }
+
+    private struct Link: View {
         let configuration: ButtonStyleConfiguration
-        let selected: Bool
-        @State private var hovered = false
+        let on: Bool
         @Environment(\.isFocused) private var focused
+        @State private var hovered = false
 
         var body: some View {
             configuration.label
-                .font(.text(Theme.type.headline, weight: selected ? .semibold : .regular, relativeTo: .headline))
-                .foregroundStyle(selected ? Theme.Palette.text : Theme.Palette.muted)
-                .padding(.vertical, 9)
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)
-                        .fill(Theme.Palette.surface.opacity(configuration.isPressed ? 1 : hovered ? 0.7 : 0)))
-                .overlay(alignment: .leading) {
-                    if selected {
-                        Capsule().fill(Theme.Palette.text).frame(width: 3, height: 18).offset(x: -6)
+                .labelStyle(NavLabelStyle())
+                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                .foregroundStyle(on || focused || hovered ? Theme.Palette.text : Theme.Palette.dim)
+                .padding(.horizontal, Self.horizontal)
+                .frame(height: Self.height)
+                .background {
+                    if on {
+                        Capsule().fill(.white.opacity(0.12)).overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
                     }
                 }
-                .contentShape(Rectangle())
-                .modifier(FocusRing(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous), active: focused))
-                .animation(Theme.Motion.focus, value: hovered)
+                .contentShape(Capsule())
+                .modifier(FocusRing(shape: Capsule(), active: focused))
+                .scaleEffect(focused ? Theme.Focus.scaleCard : configuration.isPressed ? 0.97 : 1)
+                .animation(Theme.Motion.focus, value: focused)
                 #if !os(tvOS)
                 .onHover { hovered = $0 }
                 #endif
         }
+
+        #if os(tvOS)
+        private static let horizontal: CGFloat = 24
+        private static let height: CGFloat = 54
+        #else
+        private static let horizontal: CGFloat = 14
+        private static let height: CGFloat = 32
+        #endif
     }
 }
+
+private struct NavLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 7) {
+            configuration.icon
+            configuration.title
+        }
+    }
+}
+#endif
 
 extension View {
     func withTitleRoutes(core: CoreClient) -> some View {
@@ -198,9 +316,9 @@ extension View {
     }
 
     /// A page-coloured scrim behind the status bar and the floating back
-    /// button (iOS), as the tab bar has its material at the bottom: invisible
-    /// on an unscrolled page, it hides content that scrolls under them.
-    /// Pages whose art runs under the bar pass `visible` once content scrolls there.
+    /// button (iOS): invisible on an unscrolled page, it hides content that
+    /// scrolls under them. Pages whose art runs under the bar pass `visible`
+    /// once content scrolls there.
     func topScrim(_ visible: Bool = true) -> some View {
         #if os(iOS)
         return overlay(alignment: .top) {
@@ -229,14 +347,14 @@ extension View {
     }
 
     /// Lets art run under the window toolbar (macOS) or the status bar (iOS),
-    /// as the hero needs. On iOS a scrim keeps the status bar readable once
-    /// content scrolls under it.
+    /// as the title page's backdrop and the Mac's home card need. On iOS a
+    /// scrim keeps the status bar readable once content scrolls under it.
     func fullBleedTop() -> some View {
         #if os(macOS)
         return self.ignoresSafeArea(edges: .top).toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         #elseif os(iOS)
-        // No scrim of its own: each hero puts one between its art and its words,
-        // and `topScrim` takes over once content scrolls under the bar.
+        // No scrim of its own: each backdrop puts one between its art and its
+        // words, and `topScrim` takes over once content scrolls under the bar.
         return self.ignoresSafeArea(edges: .top)
         #else
         return self
@@ -245,7 +363,7 @@ extension View {
 }
 
 /// Presents a flow over everything: full screen on iOS and tvOS (no tab bar,
-/// no nav rail), a sheet on macOS.
+/// no navigation pill), a sheet on macOS.
 struct FullScreen<Flow: View>: ViewModifier {
     @Binding var isPresented: Bool
     @ViewBuilder let flow: () -> Flow
@@ -267,7 +385,7 @@ private struct CoreStopped: View {
     var body: some View {
         VStack(spacing: Theme.Space.m) {
             Text("Marquee stopped")
-                .font(.display(Theme.type.title1))
+                .display(Theme.type.title1)
             Text(message)
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
