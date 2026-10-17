@@ -604,6 +604,14 @@ impl Session {
     }
 }
 
+/// An optional typed param: absent is `None`, a wrong shape is an error.
+fn field<T: serde::de::DeserializeOwned>(params: &Value, key: &str) -> Result<Option<T>, String> {
+    params
+        .get(key)
+        .map(|v| serde_json::from_value(v.clone()).map_err(|e| format!("bad {key}: {e}")))
+        .transpose()
+}
+
 fn message(id: Value, result: Result<Value, String>) -> Value {
     match result {
         Ok(value) => json!({ "id": id, "ok": true, "result": value }),
@@ -649,17 +657,31 @@ where
 }
 
 /// Versions params: `kind`, `videoId`, `title` (for wrong-content checks),
-/// optional `season`, `episode`, `displayHeight`, `hdr` (array of
-/// "dolby_vision", "hdr10", "hdr10_plus", "hlg"), `bingeGroup`.
+/// optional `season`, `episode`, `bingeGroup`, and what the device can do:
+/// `displayHeight`, `hdr` ("dolby_vision", "hdr10", "hdr10_plus", "hlg"),
+/// `decoders` ("h264", "h265", "av1", "vp9", ...), `tenBitHevc`,
+/// `passthrough` ("ac3", "eac3", "dts", "true_hd", "atmos", ...) and
+/// `hasFallbackEngine`. What is left out keeps a 1080p SDR stick's default.
 fn versions_params(params: &Value, prefs: StreamPrefs) -> Result<VersionsParams, String> {
     let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
     let mut caps = DeviceCaps::basic_1080p();
     if let Some(height) = num("displayHeight") {
         caps.display_height = height;
     }
-    if let Some(hdr) = params.get("hdr") {
-        caps.display_hdr =
-            serde_json::from_value(hdr.clone()).map_err(|e| format!("bad hdr: {e}"))?;
+    if let Some(hdr) = field(params, "hdr")? {
+        caps.display_hdr = hdr;
+    }
+    if let Some(decoders) = field(params, "decoders")? {
+        caps.decoders = decoders;
+    }
+    if let Some(ten_bit) = field(params, "tenBitHevc")? {
+        caps.ten_bit_hevc = ten_bit;
+    }
+    if let Some(passthrough) = field(params, "passthrough")? {
+        caps.passthrough = passthrough;
+    }
+    if let Some(fallback) = field(params, "hasFallbackEngine")? {
+        caps.has_fallback_engine = fallback;
     }
     Ok(VersionsParams {
         kind: param(params, "kind")?,
@@ -677,4 +699,37 @@ fn versions_params(params: &Value, prefs: StreamPrefs) -> Result<VersionsParams,
             .and_then(Value::as_str)
             .map(str::to_owned),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn versions_params_carry_what_the_device_can_do() {
+        let params = json!({
+            "kind": "movie", "videoId": "tt1", "displayHeight": 2160,
+            "decoders": ["h264", "h265", "av1"], "tenBitHevc": false,
+            "passthrough": ["eac3", "atmos"], "hasFallbackEngine": false
+        });
+        let caps = versions_params(&params, StreamPrefs::default())
+            .unwrap()
+            .caps;
+        assert_eq!(caps.display_height, 2160);
+        assert_eq!(json!(caps.decoders), json!(["h264", "h265", "av1"]));
+        assert!(!caps.ten_bit_hevc && !caps.has_fallback_engine);
+        assert_eq!(json!(caps.passthrough), json!(["eac3", "atmos"]));
+
+        let defaults = json!({"kind": "movie", "videoId": "tt1"});
+        let caps = versions_params(&defaults, StreamPrefs::default())
+            .unwrap()
+            .caps;
+        assert_eq!(caps, DeviceCaps::basic_1080p());
+
+        let wrong = json!({"kind": "movie", "videoId": "tt1", "decoders": ["betamax"]});
+        let err = versions_params(&wrong, StreamPrefs::default())
+            .err()
+            .expect("refused");
+        assert!(err.starts_with("bad decoders"), "{err}");
+    }
 }
