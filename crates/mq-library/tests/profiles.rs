@@ -426,3 +426,54 @@ fn profile_registers_take_part_in_every_sync_path() {
     assert_eq!(other.profile("x").unwrap().unwrap().pin_hash(), Some("h"));
     assert!(other.is_gone("y").unwrap());
 }
+
+#[test]
+fn a_lock_record_without_its_pin_hash_changes_no_access() {
+    let lib = Library::temporary().unwrap();
+    lib.create_profile("x", "x", "", &hlc(10, 1)).unwrap();
+    lib.set_pin_hash("x", Some("h"), &hlc(11, 1)).unwrap();
+    let lock = |profile: &str, value: serde_json::Value, wall| SyncRecord {
+        coll: coll::PROFILE_LOCK,
+        key: profile.into(),
+        value,
+        hlc: hlc(wall, 2),
+    };
+    // Newer, but forged without the field: neither clears the PIN nor
+    // makes an arriving profile usable.
+    let forged = [
+        lock("x", serde_json::json!({"profile": "x"}), 20),
+        lock("y", serde_json::json!({"profile": "y"}), 20),
+    ];
+    assert_eq!(lib.apply(&forged).unwrap(), 0);
+    assert_eq!(lib.profile("x").unwrap().unwrap().pin_hash(), Some("h"));
+    let y = SyncRecord {
+        coll: coll::PROFILES,
+        key: "y".into(),
+        value: serde_json::json!({"profile": "y", "name": "y"}),
+        hlc: hlc(20, 2),
+    };
+    lib.apply(&[y]).unwrap();
+    assert_eq!(
+        lib.profile("y").unwrap().unwrap().lock,
+        None,
+        "still syncing"
+    );
+    // An explicit null is a real clear.
+    let cleared = lock(
+        "x",
+        serde_json::json!({"profile": "x", "pinHash": null}),
+        21,
+    );
+    assert_eq!(lib.apply(&[cleared]).unwrap(), 1);
+    assert_eq!(lib.profile("x").unwrap().unwrap().lock, Some(None));
+}
+
+#[test]
+fn a_pin_attempt_never_brings_back_a_purged_count() {
+    let lib = Library::temporary().unwrap();
+    lib.create_profile("x", "x", "", &hlc(1, 1)).unwrap();
+    lib.set_pin_failures("x", 2).unwrap();
+    lib.delete_profile("x", &hlc(2, 1)).unwrap();
+    gone_error(lib.set_pin_failures("x", 3));
+    assert_eq!(lib.pin_failures("x").unwrap(), 0);
+}

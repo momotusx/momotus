@@ -4,7 +4,7 @@
 //! attempts, the active profile).
 
 use crate::store::{AddonRow, Library, LibraryError};
-use crate::sync::{OWNER, coll, gone, local, queue, sql};
+use crate::sync::{OWNER, coll, gone, local, queue, refuse_gone, sql};
 use rusqlite::{OptionalExtension, params};
 
 /// One profile as stored.
@@ -169,8 +169,11 @@ impl Library {
         })
     }
 
+    /// Refused for a gone profile, so an attempt that ends after the purge
+    /// cannot bring its row back.
     pub fn set_pin_failures(&self, id: &str, failures: u32) -> Result<(), LibraryError> {
         self.write(|c| {
+            refuse_gone(c, id)?;
             c.execute(
                 "INSERT INTO pin_attempts (profile_id, failures) VALUES (?1, ?2)
                  ON CONFLICT(profile_id) DO UPDATE SET failures = excluded.failures",

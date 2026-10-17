@@ -155,6 +155,9 @@ struct ProfileValue {
 #[serde(rename_all = "camelCase")]
 struct LockValue {
     profile: String,
+    /// Required, as a string or an explicit null: serde would read a
+    /// missing field as `None`, and a record without it would clear a PIN.
+    #[serde(deserialize_with = "Option::deserialize")]
     pin_hash: Option<String>,
 }
 
