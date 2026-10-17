@@ -14,9 +14,9 @@
 
 use futures_util::StreamExt;
 use mq_runtime::{
-    AddonsView, Core, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView, PairingView,
-    PlayTarget, PlaybackView, SearchView, SettingsView, StoreId, StremioEndpoints, TitleView,
-    VersionsParams, VersionsView,
+    AddonsView, CalendarView, Core, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
+    PairingView, PlayTarget, PlaybackView, SearchView, SettingsView, StoreId, StremioEndpoints,
+    TitleView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -191,6 +191,7 @@ enum View {
     Playback(PlaybackView),
     Search(SearchView),
     Library(LibraryView),
+    Calendar(CalendarView),
     Discover(DiscoverView),
     Pairing(PairingView),
     Settings { _view: SettingsView },
@@ -537,6 +538,17 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (View::Discover(discover), to_value(&snapshot)?, forward)
             }
+            "calendar" => {
+                let today = params
+                    .get("today")
+                    .and_then(Value::as_str)
+                    .and_then(mq_runtime::views::calendar::parse_day)
+                    .ok_or("today must be YYYY-MM-DD")?;
+                let calendar = CalendarView::open(&self.core, today);
+                let (snapshot, updates) = calendar.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (View::Calendar(calendar), to_value(&snapshot)?, forward)
+            }
             "library" => {
                 let library = LibraryView::open(&self.core);
                 let (snapshot, updates) = library.subscribe();
@@ -605,6 +617,14 @@ impl Session {
             (View::Discover(discover), "loadMore") => discover.load_more(),
             (View::Pairing(pairing), "confirm") => pairing.confirm(),
             (View::Pairing(pairing), "reject") => pairing.reject(),
+            (View::Calendar(calendar), "setToday") => {
+                let today = command
+                    .get("today")
+                    .and_then(Value::as_str)
+                    .and_then(mq_runtime::views::calendar::parse_day)
+                    .ok_or("today must be YYYY-MM-DD")?;
+                calendar.set_today(today);
+            }
             (View::Library(library), "setFilter") => {
                 library.set_filter(
                     command

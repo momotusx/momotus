@@ -1,4 +1,5 @@
 pub mod addons;
+pub mod calendar;
 pub mod discover;
 pub mod home;
 pub mod import;

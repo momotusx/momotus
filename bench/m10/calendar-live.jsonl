@@ -1,0 +1,1 @@
+{"date":"2026-10-17","check":"live calendar: Cinemeta top 8 series in the library, today 2026-10-17, window -7 to +30 days","days":12,"items":12,"failed":0,"noSchedule":0,"ms":128,"note":"first run found that the first snapshot said pending 0 before fetches started; fixed by reading membership in open()"}

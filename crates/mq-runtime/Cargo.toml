@@ -26,6 +26,7 @@ mq-media = { path = "../mq-media" }
 mq-sync = { path = "../mq-sync" }
 mq-engine = { path = "../mq-engine", optional = true }
 bytes = "1"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 getrandom = "0.3"
 stremio-core.workspace = true
 eyeball = "0.8"
