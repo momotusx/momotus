@@ -23,6 +23,6 @@ The accent sits near Plex's amber (`#E5A00D`). Distinctiveness comes from the wa
 
 - One token source: `design/tokens.json`, generated to CSS variables (web), Compose and SwiftUI.
 - TV canvas 1920x1080 points; body 29 pt, floor 23 pt; safe area 60 pt top and bottom, 80 pt sides.
-- Focus: scale 1.05 on cards (1.025 on large tiles) plus a 4 px accent ring with a 14 px dark halo; never color alone.
+- Focus: scale 1.05 on cards (1.025 on large tiles) plus a 4 px accent ring with a dark halo: 14 px soft on the dark theme, where it melts into the background, and a crisp 3 px outer line on the light theme, where a wide halo reads as a gray block (seen on Android P2); never color alone.
 - Motion: 180 ms focus, 320 ms panels, interruptible; reduced motion honored.
 - Every navigation icon has a visible label; no emoji anywhere; one outline icon set (Lucide).
