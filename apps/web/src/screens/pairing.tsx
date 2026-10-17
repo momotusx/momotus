@@ -4,11 +4,14 @@ import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Settings2 from "lucide-solid/icons/settings-2";
 import X from "lucide-solid/icons/x";
-import { createSignal, Match, Show, Switch } from "solid-js";
+import { createEffect, createSignal, Match, on, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
+import { A } from "@solidjs/router";
 import { liveView } from "../core/client";
+import { autoFocus } from "../focus/dom";
 import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapshot";
 import { form } from "../form";
+import { pairingProblem, plainAddress, serverHost } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 
@@ -21,24 +24,32 @@ const read = (k: string) => {
   }
 };
 
-function Session(props: { server: string; name: string; onDone: () => void }) {
+function Session(props: { server: string; name: string; onDone: () => void; onJoined: () => void }) {
   const view = liveView<Pairing>("pairing", { server: props.server, name: props.name });
   const p = () => view.state.data;
   // When the code stops working, as a time of day ("1:54 PM").
   const until = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  // Each step that asks something takes focus to its answer: on a TV the remote is never left
+  // on the form below while "Yes, they match" waits.
+  createEffect(
+    on(
+      () => p()?.phase ?? view.state.status.state,
+      () => queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>("main :is(.confirm, .summary, .problem) [data-autofocus]"))),
+    ),
+  );
   return (
     <Switch
       fallback={
         <p class="st warn live big-state">
           <LoaderCircle aria-hidden class="spin" />
-          Contacting {props.server}
+          Contacting {serverHost(props.server)}
         </p>
       }
     >
       <Match when={view.state.status.state === "failed"}>
         <section class="problem">
           <h2>Pairing could not start</h2>
-          <p>{(view.state.status as { reason: string }).reason}</p>
+          <p>{pairingProblem((view.state.status as { reason: string }).reason)}</p>
         </section>
       </Match>
       <Match when={p()?.phase === "waiting" && (p() as Extract<Pairing, { phase: "waiting" }>)}>
@@ -78,20 +89,30 @@ function Session(props: { server: string; name: string; onDone: () => void }) {
         )}
       </Match>
       <Match when={p()?.phase === "joined"}>
-        <section class="summary">
-          <h2>
-            <Check aria-hidden />
-            This device joined the account
-          </h2>
-          <p class="note small">
-            The sync record stays in memory for this session only: a browser has no system keystore. The desktop and TV apps keep it in the keystore.
-          </p>
-        </section>
+        {(() => {
+          props.onJoined();
+          return (
+            <section class="summary">
+              <h2>
+                <Check aria-hidden />
+                This device joined the account
+              </h2>
+              <p class="note small">
+                The sync record stays in memory for this session only: a browser has no system keystore. The desktop and TV apps keep it in the keystore.
+              </p>
+              <div class="acts">
+                <A class="btn primary" href="/" data-f="pair:done" data-autofocus>
+                  Done
+                </A>
+              </div>
+            </section>
+          );
+        })()}
       </Match>
       <Match when={p()?.phase === "expired" || p()?.phase === "failed"}>
         <section class="problem">
           <h2>{p()?.phase === "expired" ? "The code expired" : "Pairing stopped"}</h2>
-          <p>{p()?.phase === "failed" ? (p() as { reason: string }).reason : "Start again for a new code."}</p>
+          <p>{p()?.phase === "failed" ? pairingProblem((p() as { reason: string }).reason) : "Start again for a new code."}</p>
           <button class="btn primary" data-f="pair:again" data-autofocus onClick={props.onDone}>
             <RefreshCw aria-hidden />
             Start again
@@ -111,10 +132,15 @@ export default function PairingScreen() {
   const [name, setName] = createSignal(`Marquee ${form() === "tv" ? "TV" : form() === "phone" ? "phone" : "desktop"}`);
   const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known ? { server: known, name: name(), n: 1 } : null);
   const [advanced, setAdvanced] = createSignal(!known);
+  // Once joined, the page is the result and Done: no second pairing starts from it.
+  const [joined, setJoined] = createSignal(false);
+  const [bad, setBad] = createSignal(false);
   const start = (e: Event) => {
     e.preventDefault();
     const s = server().trim();
-    if (!s) return;
+    // An address with a user name or password is never kept or sent.
+    setBad(s !== "" && !plainAddress(s));
+    if (!s || bad()) return;
     try {
       localStorage.setItem(SERVER_KEY, s);
     } catch {
@@ -127,8 +153,9 @@ export default function PairingScreen() {
       <h1>Pair this device</h1>
       <p class="lede">Joins your sync account so library, progress and addons follow you. Nothing is kept until both screens show the same code.</p>
       <Show when={run()} keyed>
-        {(r) => <Session server={r.server} name={r.name} onDone={() => setRun({ ...r, n: r.n + 1 })} />}
+        {(r) => <Session server={r.server} name={r.name} onDone={() => setRun({ ...r, n: r.n + 1 })} onJoined={() => setJoined(true)} />}
       </Show>
+      <Show when={!joined()}>
       <Show when={!known}>
         <p class="note small">Enter your sync server once; this device remembers it.</p>
       </Show>
@@ -146,11 +173,18 @@ export default function PairingScreen() {
             <span class="kicker">This device</span>
             <input type="text" value={name()} onInput={(e) => setName(e.currentTarget.value)} data-f="pair:name" autocomplete="off" />
           </label>
+          <Show when={bad()}>
+            <p class="st bad" role="status">
+              <i class="dot" />
+              Enter the address without a user name or password.
+            </p>
+          </Show>
           <button class="btn primary" type="submit" data-f="pair:start">
             <QrCode aria-hidden />
             Show a code
           </button>
         </form>
+      </Show>
       </Show>
     </main>
   );

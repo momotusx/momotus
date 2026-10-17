@@ -113,3 +113,38 @@ export function providesText(p: string): string {
   };
   return labels[p] ?? p;
 }
+
+/**
+ * Why pairing stopped, in words. The core's own pairing reasons are fixed
+ * sentences and are kept; a connection or address error is replaced, since its
+ * text can name the server's address (Android's `SyncCopy.pairingProblem`).
+ */
+export function pairingProblem(reason: string): string {
+  if (reason.startsWith("pairing: ")) {
+    const why = reason.slice("pairing: ".length);
+    return `${why.charAt(0).toUpperCase()}${why.slice(1)}.`;
+  }
+  if (reason.startsWith("the relay must use https")) return "The sync server address must start with https.";
+  if (reason.startsWith("invalid url")) return "That is not a sync server address. It looks like https://sync.example.org.";
+  if (reason.startsWith("blocked private address")) return "This device does not connect to that address.";
+  return "The sync server did not answer. Check the address and try again.";
+}
+
+/** The server's host name only: never a path, a query or a user name. */
+export function serverHost(url: string): string {
+  try {
+    return new URL(url).hostname || "the sync server";
+  } catch {
+    return "the sync server";
+  }
+}
+
+/** An address with a host and no user name or password in it. */
+export function plainAddress(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.hostname !== "" && u.username === "" && u.password === "";
+  } catch {
+    return false;
+  }
+}

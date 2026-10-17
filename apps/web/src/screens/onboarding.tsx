@@ -7,6 +7,7 @@ import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
 import Plus from "lucide-solid/icons/plus";
+import QrCode from "lucide-solid/icons/qr-code";
 import Sparkle from "lucide-solid/icons/sparkle";
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { displayCaps, link, liveView, op, ping, reasonOf } from "../core/client";
@@ -88,6 +89,14 @@ export default function Onboarding() {
                 </span>
                 <ChevronRight aria-hidden class="chev" />
               </button>
+              <A class="door" href="/pair" data-f="welcome:pair">
+                <QrCode aria-hidden />
+                <span>
+                  <b>I already use Marquee</b>
+                  <small>Join your other device's sync account with a code. Library and addons follow.</small>
+                </span>
+                <ChevronRight aria-hidden class="chev" />
+              </A>
             </div>
             <p class="aside">A source is an addon that finds a playable stream for a title. Marquee does not include any.</p>
           </section>
