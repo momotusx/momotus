@@ -235,3 +235,18 @@ async fn maps_provider_errors() {
         assert!(check(&err), "{status} {body} -> {err:?}");
     }
 }
+
+#[tokio::test]
+async fn a_magnet_error_never_carries_the_key() {
+    let server = Server::start(vec![route(
+        "POST",
+        "/v4/magnet/upload",
+        200,
+        &format!(
+            r#"{{"status":"success","data":{{"magnets":[{{"magnet":"m","error":{{"code":"MAGNET_INVALID_URI","message":"bad uri for {KEY}"}}}}]}}}}"#
+        ),
+    )])
+    .await;
+    let err = store(&server).add_magnet(HASH).await.unwrap_err();
+    assert!(!format!("{err} {err:?}").contains(KEY), "{err:?}");
+}

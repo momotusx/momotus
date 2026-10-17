@@ -263,7 +263,9 @@ impl Resolver {
                         Priority::Prefetch => slot.prefetch.clone(),
                         _ => slot.resolve.clone(),
                     };
-                    let this = self.clone();
+                    // No stores: an abandoned flight keeps only its own store alive,
+                    // never another account's.
+                    let this = self.sharing();
                     let flight_key = key.clone();
                     let gone = slot.gone.clone();
                     let flight: Flight = async move {

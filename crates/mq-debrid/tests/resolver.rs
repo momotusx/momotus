@@ -530,3 +530,28 @@ async fn prune_drops_an_abandoned_flight() {
     // Nothing holds the store any more: not the flight, not the resolver.
     assert_eq!(Arc::strong_count(&slow), 1);
 }
+
+#[tokio::test]
+async fn an_abandoned_flight_keeps_no_other_account_alive() {
+    use futures_util::FutureExt;
+    use tokio_util::sync::CancellationToken;
+    let mut slow = State::new();
+    slow.add_delay = Duration::from_secs(30);
+    let slow = Arc::new(slow);
+    let mut other = State::new();
+    other.id = StoreId::TorBox;
+    let other = Arc::new(other);
+    let other_gone = CancellationToken::new();
+    let resolver = Resolver::new(config())
+        .add_connection("A", CancellationToken::new(), mock(&slow))
+        .add_connection("B", other_gone.clone(), mock(&other));
+    // A flight of the first account, started and abandoned.
+    let mut abandoned = Box::pin(resolver.resolve(req()));
+    assert!((&mut abandoned).now_or_never().is_none());
+    drop(abandoned);
+    // The other account goes; nothing may keep its store.
+    other_gone.cancel();
+    resolver.prune();
+    drop(resolver);
+    assert_eq!(Arc::strong_count(&other), 1);
+}

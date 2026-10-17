@@ -64,6 +64,12 @@ impl AllDebrid {
         self
     }
 
+    /// An error inside a successful answer (one magnet of an upload), with the
+    /// key the request sent kept out of its text.
+    fn nested(&self, code: &str, message: String) -> DebridError {
+        map_code(code, message).without(&[&self.auth.token()])
+    }
+
     /// Sends and unwraps `{status, data | error}`. Errors arrive with HTTP 200.
     async fn call<T: DeserializeOwned>(
         &self,
@@ -274,7 +280,7 @@ impl Store for AllDebrid {
             .next()
             .ok_or_else(|| DebridError::provider("empty", "no magnet in response"))?;
         if let Some(error) = magnet.error {
-            return Err(map_code(&error.code, error.message));
+            return Err(self.nested(&error.code, error.message));
         }
         let id = magnet
             .id
@@ -309,7 +315,7 @@ impl Store for AllDebrid {
                 .await?;
             if let Some(entry) = data.magnets.into_iter().next() {
                 if let Some(error) = entry.error {
-                    return Err(map_code(&error.code, error.message));
+                    return Err(self.nested(&error.code, error.message));
                 }
                 flatten(entry.files.unwrap_or_default(), "", &mut files);
             }
