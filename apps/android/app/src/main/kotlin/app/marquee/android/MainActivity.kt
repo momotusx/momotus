@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.toArgb
+import app.marquee.core.route.Route
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.Tokens
@@ -43,10 +44,20 @@ class MainActivity : ComponentActivity() {
         val dark = forcedDark ?: resources.isNight()
         window.setBackgroundDrawable(ColorDrawable((if (dark) Tokens.dark else Tokens.light).bg.toArgb()))
 
+        DebugEntry.launched(this)
         if (DebugEntry.show(this, form, dark)) return
         val session = (application as MarqueeApp).session
+        // Debug: `title=movie:tt1727587` starts on that title page, with Home under it.
+        val debugStack =
+            if (debuggable) {
+                intent.getStringExtra("title")?.split(":", limit = 2)?.takeIf { it.size == 2 }?.let {
+                    listOf(Route.Home, Route.Title(it[0], it[1]))
+                }
+            } else {
+                null
+            }
         setContent {
-            MarqueeTheme(form, forcedDark ?: isSystemInDarkTheme()) { MarqueeRoot(session, form) }
+            MarqueeTheme(form, forcedDark ?: isSystemInDarkTheme()) { MarqueeRoot(session, form, debugStack) }
         }
     }
 

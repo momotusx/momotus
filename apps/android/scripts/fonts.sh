@@ -4,6 +4,7 @@
 # Android only supports them from API 26 and our floor is 24.
 #
 #   Inter 400, 500, 600 (text, opsz 14)     Fraunces 600 (display titles, opsz 72)
+#   Fraunces Italic 500 (the reason line of a hero, opsz 72)
 #
 # Both are SIL OFL 1.1; the license texts go into design/licenses. Needs uv and network.
 # Usage: scripts/fonts.sh   (writes design/src/main/res/font and design/licenses)
@@ -20,6 +21,7 @@ RAW=https://raw.githubusercontent.com/google/fonts
 mkdir -p "$OUT" "$LIC" "$WORK"
 curl -fsSL -o "$WORK/inter.ttf" "$RAW/$INTER/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"
 curl -fsSL -o "$WORK/fraunces.ttf" "$RAW/$FRAUNCES/ofl/fraunces/Fraunces%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
+curl -fsSL -o "$WORK/fraunces-italic.ttf" "$RAW/$FRAUNCES/ofl/fraunces/Fraunces-Italic%5BSOFT%2CWONK%2Copsz%2Cwght%5D.ttf"
 curl -fsSL -o "$LIC/Inter-OFL.txt" "$RAW/$INTER/ofl/inter/OFL.txt"
 curl -fsSL -o "$LIC/Fraunces-OFL.txt" "$RAW/$FRAUNCES/ofl/fraunces/OFL.txt"
 
@@ -39,5 +41,6 @@ cut "$WORK/inter.ttf" wght=400 opsz=14 -- "$OUT/inter_regular.ttf"
 cut "$WORK/inter.ttf" wght=500 opsz=14 -- "$OUT/inter_medium.ttf"
 cut "$WORK/inter.ttf" wght=600 opsz=14 -- "$OUT/inter_semibold.ttf"
 cut "$WORK/fraunces.ttf" wght=600 opsz=72 SOFT=0 WONK=0 -- "$OUT/fraunces_semibold.ttf"
+cut "$WORK/fraunces-italic.ttf" wght=500 opsz=72 SOFT=0 WONK=0 -- "$OUT/fraunces_italic_medium.ttf"
 rm -rf "$WORK"
 ls -l "$OUT"

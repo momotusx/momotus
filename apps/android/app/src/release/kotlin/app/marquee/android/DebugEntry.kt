@@ -12,5 +12,7 @@ object DebugEntry {
         dark: Boolean,
     ): Boolean = false
 
+    fun launched(activity: ComponentActivity) = Unit
+
     fun destroy() = Unit
 }

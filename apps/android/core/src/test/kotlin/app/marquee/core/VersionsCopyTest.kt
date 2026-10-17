@@ -68,7 +68,7 @@ class VersionsCopyTest {
     fun `hidden releases are counted by reason`() {
         assertNull(VersionsCopy.hidden(HiddenSummary(0, emptyList())))
         assertEquals(
-            "5 hidden: wrong title 3, too large 2",
+            "5 hidden: 3 wrong title, 2 too large",
             VersionsCopy.hidden(
                 HiddenSummary(5, listOf(Tuple2(HideReason.WrongTitle, 3), Tuple2(HideReason.TooLarge, 2))),
             ),

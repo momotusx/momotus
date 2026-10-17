@@ -40,6 +40,8 @@ sealed interface Route : NavKey {
         val kind: String,
         val id: String,
         val videoId: String,
+        /** The movie or series name, which the ranking needs (never an episode title). */
+        val title: String,
     ) : Route
 
     /** Playing the version [key] of a video. Not restorable after the process dies: it pops to the title. */

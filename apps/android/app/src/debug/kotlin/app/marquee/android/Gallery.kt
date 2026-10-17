@@ -49,6 +49,7 @@ import app.marquee.design.Status
 import app.marquee.design.StatusLine
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.UpNextArt
 import app.marquee.design.heightOf
 
 /** Debug-only screen that shows every design component in every state. `intent extras: form, theme`. */
@@ -144,6 +145,27 @@ private fun Gallery() {
                         progress = if (index == 3) 0.4f else null,
                         caption = if (index == 3) "S1:E2, 40% watched" else null,
                         forceFocus = index == 2,
+                    )
+                }
+            }
+        }
+
+        Section("Continue Watching card (a real title with sample progress)") {
+            tiles.firstOrNull { it.background != null }?.let { tile ->
+                Row(
+                    Modifier.height(
+                        Marquee.tiles.heightOf(TileShape.Landscape) + Marquee.tiles.pad * 2 + Marquee.tiles.caption,
+                    ),
+                ) {
+                    PosterTile(
+                        title = tile.name,
+                        imageUrl = tile.background,
+                        onClick = {},
+                        modifier = Modifier.padding(top = Marquee.tiles.pad),
+                        shape = TileShape.Landscape,
+                        progress = 0.4f,
+                        caption = "S1:E2, 40% watched",
+                        upNext = UpNextArt(tile.logo),
                     )
                 }
             }

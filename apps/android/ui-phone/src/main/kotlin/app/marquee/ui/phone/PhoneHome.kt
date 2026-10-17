@@ -32,26 +32,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
-import app.marquee.core.Format
+import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.RowNotice
 import app.marquee.core.model.Tile
 import app.marquee.core.model.notice
+import app.marquee.core.model.playable
 import app.marquee.core.model.tileKeys
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Backdrop
 import app.marquee.design.Icons
+import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
+import app.marquee.design.UpNextArt
 import app.marquee.design.heightOf
 
 /** Home on a phone: a hero card, then one swipeable lane per catalog. */
@@ -59,6 +63,7 @@ import app.marquee.design.heightOf
 fun PhoneHome(
     home: HomeView,
     onOpen: (Tile) -> Unit,
+    onPlay: (Tile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -77,7 +82,7 @@ fun PhoneHome(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         val hero = home.hero
-        if (hero != null) item(key = "hero") { PhoneHero(hero, onOpen) }
+        if (hero != null) item(key = "hero") { PhoneHero(hero, onOpen, onPlay) }
         if (home.rows.isEmpty()) item(key = "state") { HomeState(home) }
         itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row -> PhoneRow(row, onOpen) }
     }
@@ -116,8 +121,11 @@ private fun HomeState(home: HomeView) {
 private fun PhoneHero(
     hero: Hero,
     onOpen: (Tile) -> Unit,
+    onPlay: (Tile) -> Unit,
 ) {
     // Artwork is dark and busy in either theme: the card always uses the dark scrim and light text.
+    // The scrim is already 80% from a third of the way down, which is where the text block begins,
+    // so the reason line over the brightest bokeh still reads at better than 8:1.
     val scrim = Tokens.dark.bg
     val tile = hero.tile
     Box(
@@ -126,17 +134,16 @@ private fun PhoneHero(
             .fillMaxWidth()
             .aspectRatio(HERO_RATIO)
             .clip(RoundedCornerShape(Marquee.radius.l))
-            .clickable(role = Role.Button, onClickLabel = "Open ${tile.name}", onClick = { onOpen(tile) }),
+            .clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}", onClick = { onOpen(tile) }),
     ) {
         Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
-        // Keeps the title readable on any artwork.
         Box(
             Modifier
                 .matchParentSize()
                 .background(
                     Brush.verticalGradient(
-                        0.15f to Color.Transparent,
-                        0.65f to scrim.copy(alpha = 0.78f),
+                        0f to Color.Transparent,
+                        0.3f to scrim.copy(alpha = 0.8f),
                         1f to scrim.copy(alpha = 0.96f),
                     ),
                 ),
@@ -145,28 +152,38 @@ private fun PhoneHero(
             Modifier.align(Alignment.BottomStart).padding(Marquee.space.m),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
-            MqText(hero.reason, role = TextRole.Caption, color = Tokens.dark.text, maxLines = 2)
-            MqText(tile.name, role = TextRole.Title1, color = Tokens.dark.text, maxLines = 2)
-            // The card is the control for screen readers; the button repeats it for sighted touch.
-            PrimaryButton(label = "Open", onClick = { onOpen(tile) }, modifier = Modifier.clearAndSetSemantics { })
+            Logo(
+                tile.logo,
+                tile.name,
+                height = 64.dp,
+                maxWidth = 240.dp,
+                role = TextRole.Title1,
+                color = Tokens.dark.text,
+            )
+            MqText(hero.reason, role = TextRole.Title3, color = Tokens.dark.text, maxLines = 2, italic = true)
+            MqText(TileCopy.heroMeta(tile), role = TextRole.Caption, color = Tokens.dark.muted)
+            // The card is the control for screen readers (it opens the details); the buttons
+            // repeat it for sighted touch.
+            Row(
+                Modifier.padding(top = Marquee.space.xs).clearAndSetSemantics { },
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                if (tile.playable()) PrimaryButton(label = "Play", icon = Icons.Play, onClick = { onPlay(tile) })
+                SecondaryButton(label = "Details", icon = Icons.Info, onClick = { onOpen(tile) })
+            }
         }
     }
 }
 
-private const val HERO_RATIO = 1.5f
+private const val HERO_RATIO = 0.95f
 
+/** Continue Watching is a lane of 16:9 stills; catalogs keep the shape their first tile has. */
 private fun shapeOf(row: HomeRow): TileShape =
-    when (row.tiles.firstOrNull()?.posterShape) {
-        "landscape" -> TileShape.Landscape
-        "square" -> TileShape.Square
+    when {
+        row.rowId == TileCopy.CONTINUE_ROW -> TileShape.Landscape
+        row.tiles.firstOrNull()?.posterShape == "landscape" -> TileShape.Landscape
+        row.tiles.firstOrNull()?.posterShape == "square" -> TileShape.Square
         else -> TileShape.Poster
-    }
-
-private fun captionOf(tile: Tile): String? =
-    if (tile.progress == null) {
-        null
-    } else {
-        tile.videoId?.let(Format::parseVideo)?.let { Format.episodeLabel(it.season, it.episode) }
     }
 
 @Composable
@@ -176,7 +193,20 @@ private fun PhoneRow(
 ) {
     val side = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        MqText(row.title, role = TextRole.Title3, modifier = Modifier.padding(horizontal = side), maxLines = 1)
+        Row(
+            Modifier.padding(horizontal = side),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            MqText(row.title, role = TextRole.Title3, modifier = Modifier.weight(1f, fill = false), maxLines = 1)
+            MqText(
+                TileCopy.source(row.rowId, row.source),
+                role = TextRole.Caption,
+                color = Marquee.colors.muted,
+                modifier = Modifier.padding(bottom = 2.dp),
+                maxLines = 1,
+            )
+        }
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))
@@ -245,7 +275,8 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    val captioned = remember(row.tiles) { row.tiles.any { captionOf(it) != null } }
+    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(it) != null } }
+    val wide = row.rowId == TileCopy.CONTINUE_ROW
     LazyRow(
         modifier = Modifier.height(laneHeight(shape, captioned)),
         contentPadding = PaddingValues(horizontal = Marquee.safe.side),
@@ -259,7 +290,8 @@ private fun TileLane(
                 modifier = Modifier.padding(top = metrics.pad),
                 shape = shape,
                 progress = tile.progress,
-                caption = captionOf(tile),
+                caption = TileCopy.caption(tile),
+                upNext = if (wide) UpNextArt(tile.logo) else null,
             )
         }
     }

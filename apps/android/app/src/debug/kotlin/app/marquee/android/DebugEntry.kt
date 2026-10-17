@@ -14,8 +14,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.marquee.core.client.CoreLog
 import app.marquee.design.Form
 import app.marquee.design.Tokens
+import kotlinx.coroutines.launch
 
 /**
  * Debug builds only: launch extras open the design gallery (`screen=gallery`) or the diagnostics
@@ -48,6 +50,20 @@ object DebugEntry {
             }
         }
         return true
+    }
+
+    /**
+     * `install_addon=<manifest url>` installs an add-on at launch: the local test add-on
+     * (scripts/sintel-addon.ts over `adb reverse`) before there is a screen to do it from.
+     */
+    fun launched(activity: ComponentActivity) {
+        val url = activity.intent.getStringExtra("install_addon") ?: return
+        val session = (activity.application as MarqueeApp).session
+        session.scope.launch {
+            runCatching { session.ops.installAddon(url) }
+                .onSuccess { CoreLog.d("debug: installed add-on ${it.name}") }
+                .onFailure { CoreLog.w("debug: add-on install failed: ${it.message}") }
+        }
     }
 
     fun destroy() {

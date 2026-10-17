@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -18,7 +19,11 @@ import androidx.compose.ui.unit.TextUnit
  * system font.
  */
 object MarqueeFonts {
-    val display = FontFamily(Font(R.font.fraunces_semibold, FontWeight.SemiBold))
+    val display =
+        FontFamily(
+            Font(R.font.fraunces_semibold, FontWeight.SemiBold),
+            Font(R.font.fraunces_italic_medium, FontWeight.Medium, FontStyle.Italic),
+        )
     val text =
         FontFamily(
             Font(R.font.inter_regular, FontWeight.Normal),
@@ -63,6 +68,8 @@ fun MqText(
     weight: FontWeight? = null,
     maxLines: Int = Int.MAX_VALUE,
     textAlign: TextAlign? = null,
+    /** The display serif in its italic, for a hero's reason line. */
+    italic: Boolean = false,
 ) {
     val size = Marquee.type.size(role)
     BasicText(
@@ -72,8 +79,14 @@ fun MqText(
             TextStyle(
                 color = color,
                 fontSize = size,
-                fontFamily = if (role.display) MarqueeFonts.display else MarqueeFonts.text,
-                fontWeight = weight ?: if (role.display) FontWeight.SemiBold else FontWeight.Normal,
+                fontFamily = if (role.display || italic) MarqueeFonts.display else MarqueeFonts.text,
+                fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
+                fontWeight =
+                    weight ?: when {
+                        italic -> FontWeight.Medium
+                        role.display -> FontWeight.SemiBold
+                        else -> FontWeight.Normal
+                    },
                 lineHeight = size * (if (role.display) 1.1f else 1.4f),
                 textAlign = textAlign ?: TextAlign.Unspecified,
             ),

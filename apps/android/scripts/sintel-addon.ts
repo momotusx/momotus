@@ -3,7 +3,7 @@
  * core's own live tests use, plus one dead URL to exercise failover.
  *
  * Run: bun scripts/sintel-addon.ts [port]   (default 7780, listens on all interfaces)
- * Install in the emulator: http://10.0.2.2:7780/manifest.json
+ * Install in the emulator: `adb reverse tcp:7780 tcp:7780`, then http://127.0.0.1:7780/manifest.json
  * Install on the host bridge: http://127.0.0.1:7780/manifest.json */
 
 const port = Number(process.argv[2] ?? 7780);
@@ -33,6 +33,18 @@ const streams = [
     title: "Sintel.2010.1080p.mp4\nH.264 and AAC, 14.6 MB (the trailer)",
     url: `${BLENDER}/trailer/sintel_trailer-1080p.mp4`,
     behaviorHints: { filename: "Sintel.2010.1080p.mp4" },
+  },
+  {
+    name: "Local Test",
+    title: "Sintel.2010.720p.mp4\nH.264 and AAC (the 720p trailer)",
+    url: `${BLENDER}/trailer/sintel_trailer-720p.mp4`,
+    behaviorHints: { filename: "Sintel.2010.720p.mp4" },
+  },
+  {
+    name: "Local Test",
+    title: "Sintel.2010.480p.mp4\nH.264 and AAC (the 480p trailer)",
+    url: `${BLENDER}/trailer/sintel_trailer-480p.mp4`,
+    behaviorHints: { filename: "Sintel.2010.480p.mp4" },
   },
   {
     name: "Local Test",

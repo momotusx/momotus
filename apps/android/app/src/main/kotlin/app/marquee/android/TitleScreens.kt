@@ -1,0 +1,104 @@
+package app.marquee.android
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.Format
+import app.marquee.core.model.Episode
+import app.marquee.core.model.VersionRow
+import app.marquee.core.route.Route
+import app.marquee.core.session.CoreSession
+import app.marquee.core.views.TitleView
+import app.marquee.design.Form
+import app.marquee.ui.phone.PhoneTitle
+import app.marquee.ui.phone.PhoneVersions
+import app.marquee.ui.tv.FocusMemory
+import app.marquee.ui.tv.TvTitle
+import app.marquee.ui.tv.TvVersions
+
+/** A title's core view and its TV focus memory; both live as long as the page is on the back stack. */
+class TitleHolder(
+    session: CoreSession,
+    kind: String,
+    id: String,
+) : ViewModel() {
+    val view: TitleView = session.title(kind, id)
+    val focus = FocusMemory()
+
+    override fun onCleared() = view.close()
+}
+
+/** The Versions screen's TV focus memory. */
+class VersionsFocus : ViewModel() {
+    val focus = FocusMemory()
+}
+
+private fun keyFor(
+    kind: String,
+    videoId: String,
+    title: String,
+): VersionsKey {
+    val ref = Format.parseVideo(videoId)
+    return VersionsKey(kind, videoId, title, season = ref?.season, episode = ref?.episode)
+}
+
+@Composable
+fun TitleScreen(
+    route: Route.Title,
+    session: CoreSession,
+    app: AppState,
+    form: Form,
+    onPlay: (key: String, videoId: String) -> Unit,
+    onVersions: (videoId: String, title: String) -> Unit,
+) {
+    val holder =
+        viewModel<TitleHolder>(
+            key = "title:${route.kind}:${route.id}",
+            factory = viewModelFactory { initializer { TitleHolder(session, route.kind, route.id) } },
+        )
+    val header = holder.view.header
+    val name = header?.details?.name
+    val videoId = header?.playTarget?.videoId
+    // The line under Play is the recommended version of what Play starts, so open it early.
+    LaunchedEffect(videoId, name) {
+        if (videoId != null && name != null) app.versions.use(keyFor(route.kind, videoId, name))
+    }
+    val snapshot = if (app.versions.key?.videoId == videoId) app.versions.view?.snapshot else null
+    val title = name.orEmpty()
+    val episode: (Episode) -> Unit = { onVersions(it.videoId, title) }
+    if (form == Form.Tv) {
+        TvTitle(
+            holder.view,
+            snapshot,
+            holder.focus,
+            onPlay,
+            onVersions = { onVersions(it, title) },
+            onEpisode = episode,
+        )
+    } else {
+        PhoneTitle(holder.view, snapshot, onPlay, onVersions = { onVersions(it, title) }, onEpisode = episode)
+    }
+}
+
+@Composable
+fun VersionsScreen(
+    route: Route.Versions,
+    app: AppState,
+    form: Form,
+    onPlay: (VersionRow) -> Unit,
+) {
+    val key = keyFor(route.kind, route.videoId, route.title)
+    LaunchedEffect(key) { app.versions.use(key) }
+    val view = if (app.versions.key == key) app.versions.view else null
+    val heading =
+        key.episode?.let { "${route.title}, ${Format.episodeLabel(key.season ?: 0, it)}" } ?: route.title
+    if (form == Form.Tv) {
+        val focus = viewModel<VersionsFocus>(key = "versions:${route.videoId}").focus
+        TvVersions(heading, view, focus, onPlay)
+    } else {
+        PhoneVersions(heading, view, onPlay)
+    }
+}

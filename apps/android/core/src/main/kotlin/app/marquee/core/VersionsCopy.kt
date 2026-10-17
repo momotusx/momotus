@@ -54,6 +54,19 @@ object VersionsCopy {
             else -> "Looking for sources"
         }
 
+    /** The heading of the card shown while there is no recommendation. */
+    fun waitingTitle(snapshot: VersionsSnapshot): String =
+        if (snapshot.done) "No playable source" else "Looking for sources"
+
+    /** What the card says while there is no recommendation: who is slow or failed, else a plain line. */
+    fun waitingBody(snapshot: VersionsSnapshot): String =
+        addons(snapshot)
+            ?: if (snapshot.done) {
+                "None of your add-ons gave a source this device can play."
+            } else {
+                "Your add-ons are answering."
+            }
+
     fun hiddenReason(reason: HideReason): String =
         when (reason) {
             HideReason.WrongTitle -> "wrong title"
@@ -64,10 +77,10 @@ object VersionsCopy {
             HideReason.UnsupportedSource -> "unsupported source"
         }
 
-    /** "5 hidden: wrong title 3, too large 2", or null when nothing is hidden. */
+    /** "5 hidden: 3 wrong title, 2 too large", or null when nothing is hidden. */
     fun hidden(summary: HiddenSummary): String? {
         if (summary.count == 0) return null
-        val parts = summary.byReason.joinToString(", ") { "${hiddenReason(it.first)} ${it.second}" }
+        val parts = summary.byReason.joinToString(", ") { "${it.second} ${hiddenReason(it.first)}" }
         return "${summary.count} hidden: $parts"
     }
 

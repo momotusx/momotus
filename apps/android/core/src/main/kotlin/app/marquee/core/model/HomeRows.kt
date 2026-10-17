@@ -16,6 +16,12 @@ sealed interface RowNotice {
     ) : RowNotice
 }
 
+/** Whether a Play on this tile can start at once: a known video, or the movie itself (a series has no single video). */
+fun Tile.playable(): Boolean = videoId != null || kind == "movie"
+
+/** The video a Play on this tile starts. */
+fun Tile.playVideoId(): String = videoId ?: id
+
 /**
  * Stable keys for a row's tiles, `tile:<rowId>:<tileId>`, with `#2`, `#3` for an id the row
  * repeats (a list rejects duplicate keys). Focus memory and lists both use them, never positions.

@@ -33,7 +33,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import app.marquee.core.Format
+import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
@@ -41,39 +41,55 @@ import app.marquee.core.model.RowNotice
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
 import app.marquee.core.model.notice
+import app.marquee.core.model.playable
 import app.marquee.core.model.tileKeys
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Backdrop
 import app.marquee.design.Icons
+import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
+import app.marquee.design.UpNextArt
 import app.marquee.design.describe
 import app.marquee.design.heightOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 
-private const val HERO_KEY = "hero:open"
-private val HERO_HEIGHT = 500.dp
-private const val FOCUS_WAIT_MS = 6_000L
+private const val HERO_PLAY = "hero:play"
+private const val HERO_DETAILS = "hero:details"
+private val HERO_HEIGHT = 560.dp
+private const val FOCUS_WAIT_MS = 15_000L
+
+private fun Hero?.focusKey(): String? =
+    when {
+        this == null -> null
+        tile.playable() -> HERO_PLAY
+        else -> HERO_DETAILS
+    }
 
 /**
- * Home on TV: a hero, then one lane per catalog. Focus starts on the first tile of the first lane
- * (Continue Watching when there is one), comes back to the exact tile after a title page, and
- * enters each lane on the tile that lane last had focused.
+ * Home on TV: a hero, then one lane per catalog. Focus starts on the first tile of Continue
+ * Watching when there is one, else on the hero's Play, comes back to the exact tile after a title
+ * page, and enters each lane on the tile that lane last had focused.
+ *
+ * @param onOpen a tile or Details was chosen: the title page.
+ * @param onPlay the hero's Play was chosen.
  */
 @Composable
 fun TvHome(
     home: HomeView,
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
+    onPlay: (Tile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safe = Marquee.safe
@@ -109,7 +125,7 @@ fun TvHome(
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
             val hero = home.hero
-            if (hero != null) item(key = "hero") { TvHero(hero, state, onOpen) }
+            if (hero != null) item(key = "hero") { TvHero(hero, state, onOpen, onPlay) }
             if (home.rows.isEmpty()) item(key = "state") { HomeState(home) }
             itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row ->
                 TvRow(row, state, onOpen)
@@ -154,15 +170,13 @@ private fun TvHero(
     hero: Hero,
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
+    onPlay: (Tile) -> Unit,
 ) {
     // Artwork is dark and busy in either theme: the hero always uses the dark scrim and light text.
     val scrim = Tokens.dark.bg
     val tile = hero.tile
-    val requester = remember { FocusRequester() }
-    DisposableEffect(requester) {
-        state.focus.attach(HERO_KEY, requester)
-        onDispose { state.focus.detach(HERO_KEY, requester) }
-    }
+    val playRequester = state.focus.requesterFor(HERO_PLAY)
+    val detailsRequester = state.focus.requesterFor(HERO_DETAILS)
     Box(Modifier.fillMaxWidth().height(HERO_HEIGHT)) {
         Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
         // Scrims keep the title readable on any artwork and melt the picture into the rows below.
@@ -189,31 +203,40 @@ private fun TvHero(
                 .widthIn(max = 820.dp),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
-            MqText(hero.reason, role = TextRole.Callout, color = Tokens.dark.text, maxLines = 2)
-            MqText(tile.name, role = TextRole.Hero, color = Tokens.dark.text, maxLines = 2)
-            PrimaryButton(
-                label = "Open",
-                onClick = { onOpen(tile) },
-                modifier = Modifier.describe("Open ${tile.name}"),
-                focusRequester = requester,
-                onFocusChange = { if (it) state.focus.arrived(null, HERO_KEY) else state.focus.lost(HERO_KEY) },
-            )
+            Logo(tile.logo, tile.name, height = 150.dp, maxWidth = 560.dp, color = Tokens.dark.text)
+            MqText(hero.reason, role = TextRole.Title3, color = Tokens.dark.text, maxLines = 2, italic = true)
+            MqText(TileCopy.heroMeta(tile), role = TextRole.Callout, color = Tokens.dark.muted)
+            Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                if (tile.playable()) {
+                    PrimaryButton(
+                        label = "Play",
+                        icon = Icons.Play,
+                        onClick = { onPlay(tile) },
+                        modifier = Modifier.describe("Play ${tile.name}"),
+                        focusRequester = playRequester,
+                        onFocusChange = state.focus.watch(null, HERO_PLAY),
+                    )
+                }
+                SecondaryButton(
+                    label = "Details",
+                    icon = Icons.Info,
+                    onClick = { onOpen(tile) },
+                    modifier = Modifier.describe("Details of ${tile.name}"),
+                    focusRequester = detailsRequester,
+                    onFocusChange = state.focus.watch(null, HERO_DETAILS),
+                )
+            }
         }
     }
 }
 
+/** Continue Watching is a lane of 16:9 stills; catalogs keep the shape their first tile has. */
 private fun shapeOf(row: HomeRow): TileShape =
-    when (row.tiles.firstOrNull()?.posterShape) {
-        "landscape" -> TileShape.Landscape
-        "square" -> TileShape.Square
+    when {
+        row.rowId == TileCopy.CONTINUE_ROW -> TileShape.Landscape
+        row.tiles.firstOrNull()?.posterShape == "landscape" -> TileShape.Landscape
+        row.tiles.firstOrNull()?.posterShape == "square" -> TileShape.Square
         else -> TileShape.Poster
-    }
-
-private fun captionOf(tile: Tile): String? =
-    if (tile.progress == null) {
-        null
-    } else {
-        tile.videoId?.let(Format::parseVideo)?.let { Format.episodeLabel(it.season, it.episode) }
     }
 
 @Composable
@@ -224,7 +247,20 @@ private fun TvRow(
 ) {
     val inset = Marquee.tiles.inset
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        MqText(row.title, role = TextRole.Title3, modifier = Modifier.padding(start = inset), maxLines = 1)
+        Row(
+            Modifier.padding(start = inset),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            MqText(row.title, role = TextRole.Title3, maxLines = 1)
+            MqText(
+                TileCopy.source(row.rowId, row.source),
+                role = TextRole.Callout,
+                color = Marquee.colors.muted,
+                modifier = Modifier.padding(bottom = 4.dp),
+                maxLines = 1,
+            )
+        }
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))
@@ -294,7 +330,7 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    val captioned = remember(row.tiles) { row.tiles.any { captionOf(it) != null } }
+    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(it) != null } }
     LazyRow(
         state = state.rowState(row.rowId),
         modifier =
@@ -325,6 +361,7 @@ private fun TvTile(
         state.focus.attach(key, requester)
         onDispose { state.focus.detach(key, requester) }
     }
+    val wide = rowId == TileCopy.CONTINUE_ROW
     PosterTile(
         title = tile.name,
         imageUrl = if (shape == TileShape.Landscape) tile.background ?: tile.poster else tile.poster,
@@ -332,9 +369,10 @@ private fun TvTile(
         modifier = Modifier.padding(top = Marquee.tiles.pad),
         shape = shape,
         progress = tile.progress,
-        caption = captionOf(tile),
+        caption = TileCopy.caption(tile),
         focusRequester = requester,
         onFocusChange = { if (it) state.focus.arrived(rowId, key) else state.focus.lost(key) },
+        upNext = if (wide) UpNextArt(tile.logo) else null,
     )
 }
 
@@ -364,7 +402,7 @@ internal suspend fun restoreFocus(
         // A wanted tile that is gone for good (a finished Continue Watching item) gives way to
         // the first tile once the lanes have answered.
         val gone = wanted != null && settled && !exists(rows, hasHero, wanted)
-        val key = if (wanted == null || gone) firstTarget(rows, patient = elapsed < PATIENCE_MS) else wanted
+        val key = if (wanted == null || gone) firstTarget(rows, home.hero, patient = elapsed < PATIENCE_MS) else wanted
         if (key == null || !reveal(rows, hasHero, state, key)) continue
         val requester = focus.requester(key) ?: continue
         try {
@@ -386,17 +424,21 @@ private fun exists(
     rows: List<HomeRow>,
     hasHero: Boolean,
     key: String,
-): Boolean = if (key == HERO_KEY) hasHero else rows.any { key in it.tileKeys() }
+): Boolean = if (key.startsWith("hero:")) hasHero else rows.any { key in it.tileKeys() }
 
 /**
- * The tile that gets focus on first entry: the first tile of the first lane. While that lane is
- * still loading and [patient], there is no target yet, so focus never lands on a lower lane just
- * because it answered first; lanes that came back empty or failed are skipped.
+ * What gets focus on first entry: the first tile of Continue Watching when that lane leads, else
+ * the hero's Play when there is a hero (the web and Apple do the same), else the first tile of
+ * the first lane. While the first lane is still loading and [patient], there is no target yet, so
+ * focus never lands on a lower lane just because it answered first; lanes that came back empty or
+ * failed are skipped.
  */
 fun firstTarget(
     rows: List<HomeRow>,
+    hero: Hero?,
     patient: Boolean,
 ): String? {
+    if (rows.firstOrNull()?.rowId != TileCopy.CONTINUE_ROW) hero.focusKey()?.let { return it }
     for (row in rows) {
         row.tileKeys().firstOrNull()?.let { return it }
         if (patient && (row.state == RowState.Loading || row.state == RowState.Slow)) return null
@@ -413,7 +455,7 @@ private suspend fun reveal(
     state: TvHomeState,
     key: String,
 ): Boolean {
-    if (key == HERO_KEY) {
+    if (key.startsWith("hero:")) {
         if (state.page.firstVisibleItemIndex != 0) state.page.scrollToItem(0)
         return true
     }
@@ -439,6 +481,6 @@ suspend fun focusFirstRow(
     home: HomeView,
     state: TvHomeState,
 ) {
-    val key = firstTarget(home.rows.toList(), patient = false) ?: return
+    val key = firstTarget(home.rows.toList(), hero = null, patient = false) ?: return
     restoreFocus(home, state, key, waitMs = 1_500)
 }

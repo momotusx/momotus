@@ -22,6 +22,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.marquee.core.model.Tile
+import app.marquee.core.model.playVideoId
 import app.marquee.core.route.Route
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.switchedTo
@@ -42,14 +43,16 @@ import kotlinx.coroutines.launch
 fun MarqueeRoot(
     session: CoreSession,
     form: Form,
+    /** A debug launch can start with a deeper stack (a title on Home); null starts on Home. */
+    debugStack: List<Route>? = null,
 ) {
     val caps = (LocalContext.current.applicationContext as MarqueeApp).deviceCaps
     val app = viewModel<AppState>(factory = viewModelFactory { initializer { AppState(session, caps) } })
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         when (app.start) {
             Start.Loading -> Unit
-            Start.Onboarding -> AppNav(session, form, app, Route.Onboarding)
-            Start.Home -> AppNav(session, form, app, Route.Home)
+            Start.Onboarding -> AppNav(session, form, app, listOf(Route.Onboarding))
+            Start.Home -> AppNav(session, form, app, debugStack ?: listOf(Route.Home))
         }
         CoreStoppedOverlay(session)
     }
@@ -68,7 +71,7 @@ private fun HomeBackHandler(
     if (!active) return
     val scope = rememberCoroutineScope()
     val running = remember { arrayOfNulls<Job>(1) }
-    val reachable = firstTarget(app.home.rows.toList(), patient = false) != null
+    val reachable = firstTarget(app.home.rows.toList(), hero = null, patient = false) != null
     BackHandler(enabled = reachable && !app.tvHome.focus.onFirstRow.value) {
         // A held Back repeats: one move of focus at a time, then the next press leaves.
         if (running[0]?.isActive != true) running[0] = scope.launch { focusFirstRow(app.home, app.tvHome) }
@@ -80,15 +83,20 @@ private fun AppNav(
     session: CoreSession,
     form: Form,
     app: AppState,
-    initial: Route,
+    initial: List<Route>,
 ) {
-    val backStack = rememberNavBackStack(initial)
+    val backStack = rememberNavBackStack(*initial.toTypedArray())
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
 
     fun open(tile: Tile) {
         backStack.add(Route.Title(tile.kind, tile.id))
+    }
+
+    // The hero's Play: the ranked versions of what it starts, until playback resolves them itself.
+    fun playTile(tile: Tile) {
+        backStack.add(Route.Versions(tile.kind, tile.id, tile.playVideoId(), tile.name))
     }
 
     fun choose(place: Route) {
@@ -133,13 +141,44 @@ private fun AppNav(
                 entryProvider {
                     entry<Route.Onboarding> { OnboardingScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
-                        if (tv) TvHome(app.home, app.tvHome, onOpen = ::open) else PhoneHome(app.home, onOpen = ::open)
+                        if (tv) {
+                            TvHome(app.home, app.tvHome, onOpen = ::open, onPlay = ::playTile)
+                        } else {
+                            PhoneHome(app.home, onOpen = ::open, onPlay = ::playTile)
+                        }
                     }
                     entry<Route.Search> { ComingSoonScreen("Search") }
                     entry<Route.Discover> { ComingSoonScreen("Discover") }
                     entry<Route.Library> { ComingSoonScreen("Library") }
                     entry<Route.Settings> { ComingSoonScreen("Settings") }
-                    entry<Route.Title> { TitlePlaceholder(it) }
+                    entry<Route.Title> { route ->
+                        TitleScreen(
+                            route,
+                            session,
+                            app,
+                            form,
+                            onPlay = {
+                                key,
+                                videoId,
+                                ->
+                                backStack.add(Route.Player(route.kind, route.id, videoId, key))
+                            },
+                            onVersions = { videoId, name ->
+                                backStack.add(Route.Versions(route.kind, route.id, videoId, name))
+                            },
+                        )
+                    }
+                    entry<Route.Versions> { route ->
+                        VersionsScreen(
+                            route,
+                            app,
+                            form,
+                            onPlay = { row ->
+                                backStack.add(Route.Player(route.kind, route.id, route.videoId, row.key))
+                            },
+                        )
+                    }
+                    entry<Route.Player> { ComingSoonScreen("Player") }
                 },
         )
     }
