@@ -4,13 +4,14 @@
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
 //! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
+//! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" |
 //! "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" | "setPin" |
 //! "switchProfile" | "unlockProfile" | "lockSession",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, import,
-//! settings, pairing, profiles.
+//! settings, pairing, profiles, debrid, debridLogin.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 //!
 //! A session runs as one profile (plans/m11-profiles.md section 5): it opens
@@ -22,9 +23,10 @@
 use futures_util::StreamExt;
 use mq_library::Table;
 use mq_runtime::{
-    AddonsView, CalendarView, Core, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
-    PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView, SearchView, SessionState,
-    SettingsView, StoreId, StremioEndpoints, TitleView, VersionsParams, VersionsView,
+    AddonsView, CalendarView, Core, DebridLoginView, DebridRecord, DebridTombstone, DebridView,
+    DiscoverView, HomeView, ImportView, LibrarySort, LibraryView, PairingView, PlayTarget,
+    PlaybackView, ProfileError, ProfilesView, SearchView, SessionState, SettingsView, StoreId,
+    StremioEndpoints, TitleView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -78,6 +80,35 @@ enum Request {
     SetDebridKeys {
         id: u64,
         keys: Vec<(String, String)>,
+    },
+    /// At start, before any view: the keystore's debrid records and
+    /// tombstones. Replies `{refused, tombstones}`.
+    RestoreDebrid {
+        id: u64,
+        #[serde(default)]
+        records: Vec<DebridRecord>,
+        #[serde(default)]
+        tombstones: Vec<DebridTombstone>,
+    },
+    /// The app stored this pending record.
+    AckDebrid {
+        id: u64,
+        service: String,
+        generation: String,
+        revision: u64,
+    },
+    /// A typed or handed-off key: a new connection. Replies `{generation}`;
+    /// the record arrives as pending in the `debrid` view.
+    SetDebridKey {
+        id: u64,
+        service: String,
+        key: String,
+    },
+    /// Sent after the app wrote the tombstone for this generation.
+    DisconnectDebrid {
+        id: u64,
+        service: String,
+        generation: String,
     },
     /// Creates a relay account with this device as its first member. The
     /// reply is the keystore record (`SyncConfig`).
@@ -243,14 +274,20 @@ impl Request {
     /// liveness and closing views.
     fn allowed_while_locked(&self) -> bool {
         match self {
-            Request::Subscribe { view, .. } => view == "profiles",
+            // The debrid view carries rotated records the keystore must get
+            // even while locked.
+            Request::Subscribe { view, .. } => view == "profiles" || view == "debrid",
             Request::Unsubscribe { .. }
             | Request::UnlockProfile { .. }
             | Request::SwitchProfile { .. }
             | Request::SyncNow { .. }
-            // Debrid keys are the device's: an app hands them over at
+            // Debrid accounts are the device's: an app hands them over at
             // start, locked or not.
             | Request::SetDebridKeys { .. }
+            | Request::RestoreDebrid { .. }
+            | Request::AckDebrid { .. }
+            | Request::SetDebridKey { .. }
+            | Request::DisconnectDebrid { .. }
             | Request::Ping { .. }
             | Request::Lifecycle { .. } => true,
             _ => false,
@@ -273,6 +310,8 @@ enum View {
     Addons { _view: AddonsView },
     Import { _view: ImportView },
     Profiles { _view: ProfilesView },
+    Debrid { _view: DebridView },
+    DebridLogin { _view: DebridLoginView },
 }
 
 impl View {
@@ -291,6 +330,8 @@ impl View {
             View::Addons { .. } => "addons",
             View::Import { .. } => "import",
             View::Profiles { .. } => "profiles",
+            View::Debrid { .. } => "debrid",
+            View::DebridLogin { .. } => "debridLogin",
         }
     }
 }
@@ -593,16 +634,45 @@ impl Session {
             Request::SetDebridKeys { id, keys } => {
                 let result = keys
                     .into_iter()
-                    .map(|(service, key)| {
-                        StoreId::from_service(&service)
-                            .map(|id| (id, key))
-                            .ok_or(format!("unknown debrid service: {service}"))
-                    })
+                    .map(|(service, key)| debrid_service(&service).map(|id| (id, key)))
                     .collect::<Result<Vec<_>, _>>()
-                    .map(|keys| {
-                        core.set_debrid_keys(&keys);
-                        json!({ "stores": keys.len() })
-                    });
+                    .map(|keys| json!({ "stores": core.set_debrid_keys(&keys) }));
+                self.reply(json!(id), result);
+            }
+            Request::RestoreDebrid {
+                id,
+                records,
+                tombstones,
+            } => {
+                let result = core
+                    .restore_debrid(records, tombstones)
+                    .map_err(|e| e.to_string())
+                    .and_then(|answer| to_value(&answer));
+                self.reply(json!(id), result);
+            }
+            Request::AckDebrid {
+                id,
+                service,
+                generation,
+                revision,
+            } => {
+                core.ack_debrid(&service, &generation, revision);
+                self.reply(json!(id), Ok(json!({})));
+            }
+            Request::SetDebridKey { id, service, key } => {
+                let result = debrid_service(&service)
+                    .map(|s| json!({ "generation": core.set_debrid_key(s, &key).generation }));
+                self.reply(json!(id), result);
+            }
+            Request::DisconnectDebrid {
+                id,
+                service,
+                generation,
+            } => {
+                let result = debrid_service(&service).map(|s| {
+                    core.disconnect_debrid(s, &generation);
+                    json!({})
+                });
                 self.reply(json!(id), result);
             }
             Request::InstallAddon { id, url } => {
@@ -791,6 +861,28 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out, None));
                 (
                     View::Profiles { _view: profiles },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
+            // Device-wide: no profile fence.
+            "debrid" => {
+                let debrid = DebridView::open(&core);
+                let (snapshot, updates) = debrid.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, None));
+                (
+                    View::Debrid { _view: debrid },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
+            "debridLogin" => {
+                let service = debrid_service(&param(params, "service")?)?;
+                let login = DebridLoginView::open(&core, service);
+                let (snapshot, updates) = login.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, None));
+                (
+                    View::DebridLogin { _view: login },
                     to_value(&snapshot)?,
                     forward,
                 )
@@ -1121,6 +1213,10 @@ async fn run<E: Into<Failure> + Send + 'static>(
 
 fn done(result: Result<(), mq_runtime::CoreError>) -> Result<Value, String> {
     result.map(|()| json!({})).map_err(|e| e.to_string())
+}
+
+fn debrid_service(name: &str) -> Result<StoreId, String> {
+    StoreId::from_service(name).ok_or(format!("unknown debrid service: {name}"))
 }
 
 fn param(params: &Value, key: &str) -> Result<String, String> {

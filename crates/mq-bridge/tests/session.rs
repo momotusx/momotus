@@ -352,3 +352,88 @@ async fn a_hanging_sync_does_not_block_other_requests() {
     assert_eq!(reply["id"], 3, "{reply}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Sends `request` and returns the result of its successful reply.
+async fn ok(
+    session: &mut Session,
+    rx: &mut mpsc::UnboundedReceiver<Value>,
+    request: Value,
+) -> Value {
+    session.handle_text(&request.to_string()).await;
+    let reply = next(rx).await;
+    assert_eq!(reply["ok"], true, "{reply}");
+    reply["result"].clone()
+}
+
+#[tokio::test]
+async fn debrid_records_round_trip_through_the_bridge() {
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let mut session = Session::new(core, tx);
+    let (s, rx) = (&mut session, &mut rx);
+    // Debrid is the device's: every call works on a locked session.
+    ok(s, rx, json!({"id": 1, "op": "lockSession"})).await;
+    // As a JavaScript number this would lose its low bits.
+    let generation = "fffffffffffffffffffffffffffffff1";
+    let answer = ok(
+        s,
+        rx,
+        json!({"id": 2, "op": "restoreDebrid", "records": [{
+        "service": "premiumize", "generation": generation, "revision": 1,
+        "credential": {"kind": "key", "key": "pm"}
+    }], "tombstones": []}),
+    )
+    .await;
+    assert_eq!(answer, json!({"refused": [], "tombstones": []}));
+    let reply = ok(s, rx, json!({"id": 3, "op": "subscribe", "view": "debrid"})).await;
+    let sub = reply["sub"].as_u64().unwrap();
+    assert_eq!(
+        reply["snapshot"]["accounts"],
+        json!([{"service": "premiumize", "generation": generation, "state": "ok"}])
+    );
+    let reply = ok(
+        s,
+        rx,
+        json!({"id": 4, "op": "setDebridKey", "service": "torbox", "key": "tb"}),
+    )
+    .await;
+    let torbox = reply["generation"].as_str().unwrap().to_owned();
+    assert_eq!(torbox.len(), 32);
+    let pushed = push_until(rx, sub, |v| {
+        v["pending"].as_array().is_some_and(|p| !p.is_empty())
+    })
+    .await;
+    assert_eq!(
+        pushed["pending"],
+        json!([{"service": "torbox", "generation": torbox, "revision": 1,
+                "credential": {"kind": "key", "key": "tb"}}])
+    );
+    ok(
+        s,
+        rx,
+        json!({"id": 5, "op": "ackDebrid", "service": "torbox",
+        "generation": torbox, "revision": 1}),
+    )
+    .await;
+    push_until(rx, sub, |v| v["pending"] == json!([])).await;
+    ok(
+        s,
+        rx,
+        json!({"id": 6, "op": "disconnectDebrid", "service": "premiumize",
+        "generation": generation}),
+    )
+    .await;
+    let pushed = push_until(rx, sub, |v| {
+        v["accounts"].as_array().is_some_and(|a| a.len() == 1)
+    })
+    .await;
+    assert_eq!(pushed["accounts"][0]["service"], "torbox");
+    // A sign-in is a screen: not while locked.
+    s.handle_text(
+        &json!({"id": 7, "op": "subscribe", "view": "debridLogin",
+        "params": {"service": "torbox"}})
+        .to_string(),
+    )
+    .await;
+    assert_eq!(next(rx).await["ok"], false);
+}

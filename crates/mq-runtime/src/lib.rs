@@ -4,12 +4,17 @@
 //! lists as index-based diffs coalesced to one batch per frame.
 
 mod core;
+mod debrid;
 pub mod live;
 mod profiles;
 pub mod segments;
 pub mod views;
 
 pub use crate::core::{Core, CoreConfig, CoreError};
+pub use crate::debrid::{
+    AccountState, DebridAccount, DebridCredential, DebridLoginSnapshot, DebridLoginView,
+    DebridRecord, DebridSnapshot, DebridTombstone, DebridView, RestoreAnswer,
+};
 pub use crate::profiles::{MAX_PROFILES, ProfileError};
 pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;

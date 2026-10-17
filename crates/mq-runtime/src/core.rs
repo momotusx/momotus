@@ -1,13 +1,12 @@
 use mq_addons::{
     AddonClient, CacheControl, CacheStore, InstalledAddon, ResponseCache, StoredResponse,
 };
-use mq_debrid::{AllDebrid, Premiumize, RealDebrid, Resolver, ResolverConfig, StoreId, TorBox};
 use mq_http::{ClientConfig, HttpClient};
 use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard};
 
@@ -33,6 +32,8 @@ pub enum CoreError {
     BadManifest(String),
     #[error("torrent engine: {0}")]
     Torrent(String),
+    #[error("debrid: {0}")]
+    Debrid(String),
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +72,7 @@ struct Inner {
     torrent_dir: PathBuf,
     #[cfg(feature = "torrent")]
     engine: OnceCell<mq_engine::Engine>,
-    debrid: RwLock<Option<Resolver>>,
+    debrid: Arc<crate::debrid::Accounts>,
     /// Skip segment lookups and their session cache.
     segments: crate::segments::Finder,
 }
@@ -175,7 +176,7 @@ impl Core {
                 torrent_dir,
                 #[cfg(feature = "torrent")]
                 engine: OnceCell::new(),
-                debrid: RwLock::new(None),
+                debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
             }),
             profile: profile.into(),
@@ -279,38 +280,8 @@ impl Core {
         Ok(engine.clone())
     }
 
-    /// Replaces the debrid accounts. Keys come from the platform keystore and
-    /// live only in memory here; the first entry is the default store.
-    pub fn set_debrid_keys(&self, keys: &[(StoreId, String)]) {
-        let resolver = (!keys.is_empty()).then(|| {
-            keys.iter()
-                .fold(Resolver::new(ResolverConfig::default()), |r, (id, key)| {
-                    let (http, key) = (self.http().clone(), key.clone());
-                    match id {
-                        StoreId::RealDebrid => r.add_store(move |p| {
-                            RealDebrid::new(http.clone(), key.clone()).with_priority(p)
-                        }),
-                        StoreId::TorBox => r.add_store(move |p| {
-                            TorBox::new(http.clone(), key.clone()).with_priority(p)
-                        }),
-                        StoreId::AllDebrid => r.add_store(move |p| {
-                            AllDebrid::new(http.clone(), key.clone()).with_priority(p)
-                        }),
-                        StoreId::Premiumize => r.add_store(move |p| {
-                            Premiumize::new(http.clone(), key.clone()).with_priority(p)
-                        }),
-                    }
-                })
-        });
-        *self.inner.debrid.write().unwrap_or_else(|p| p.into_inner()) = resolver;
-    }
-
-    pub fn debrid(&self) -> Option<Resolver> {
-        self.inner
-            .debrid
-            .read()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone()
+    pub(crate) fn accounts(&self) -> &crate::debrid::Accounts {
+        &self.inner.debrid
     }
 
     /// Installed addons in the user's order. Rows whose manifest no longer
