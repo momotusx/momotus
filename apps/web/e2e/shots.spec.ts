@@ -126,7 +126,16 @@ const SCREENS: Screen[] = [
   },
   { name: "library", path: "/library", ready: visible(".grid .tile img.in") },
   { name: "addons", path: "/addons", ready: visible(".addon") },
-  { name: "settings", path: "/settings", ready: visible(".chips-row") },
+  {
+    // Playback (prefs) and the addons line come from live views; "This
+    // device" renders at once, so it cannot stand for the whole screen.
+    name: "settings",
+    path: "/settings",
+    ready: async (page) => {
+      await visible('[data-fgroup="pref-quality"]')(page);
+      await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/\d+ installed/);
+    },
+  },
   { name: "welcome", path: "/welcome", ready: visible(".check li") },
   { name: "import", path: "/import", ready: visible(".code span, .problem") },
   { name: "pairing", path: "/pair", ready: visible(".install") },
