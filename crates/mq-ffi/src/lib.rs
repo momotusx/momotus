@@ -6,6 +6,9 @@
 //! code. Messages are batched per frame by the core, so the per-call cost of
 //! the binding is paid once per batch, not per item.
 
+#[cfg(target_os = "android")]
+mod logcat;
+
 use mq_bridge::Session;
 use mq_runtime::{Core, CoreConfig};
 use std::path::PathBuf;
@@ -45,6 +48,8 @@ impl MarqueeCore {
         device_id: u64,
         listener: Arc<dyn CoreListener>,
     ) -> Result<Arc<Self>, FfiError> {
+        #[cfg(target_os = "android")]
+        logcat::init();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("marquee-core")
