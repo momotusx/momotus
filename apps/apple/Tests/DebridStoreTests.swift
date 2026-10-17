@@ -185,6 +185,112 @@ final class DebridStoreTests: XCTestCase {
         }
     }
 
+    /// A keystore and core that callers on any thread share (the racing cases).
+    private actor Shared: DebridKeystore, DebridCore {
+        var stored: [String: DebridRecord] = [:]
+        var stones: [DebridTombstone] = []
+        var cancelWrites = false
+
+        init(_ record: DebridRecord?) {
+            if let record { stored[record.service] = record }
+        }
+
+        func setCancelWrites(_ on: Bool) { cancelWrites = on }
+        func records() -> [DebridRecord] { Array(stored.values) }
+        func tombstones() -> [DebridTombstone] { stones }
+
+        func writeRecord(_ record: DebridRecord) throws {
+            if cancelWrites { throw CancellationError() }
+            stored[record.service] = record
+        }
+
+        func deleteRecord(service: String, generation: String) {
+            if stored[service]?.generation == generation { stored[service] = nil }
+        }
+
+        func writeTombstone(_ tombstone: DebridTombstone) { stones.append(tombstone) }
+        func deleteTombstone(_ tombstone: DebridTombstone) { stones.removeAll { $0.generation == tombstone.generation } }
+        func restore(records: [DebridRecord], tombstones: [DebridTombstone]) -> RestoreAnswer { RestoreAnswer(refused: [], tombstones: []) }
+        func ack(service: String, generation: String, revision: UInt64) {}
+        func disconnect(service: String, generation: String) {}
+    }
+
+    /// Holds callers until it opens, so two tasks start their calls together.
+    private actor Gate {
+        private var opened = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func wait() async {
+            if opened { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+
+        func open() {
+            opened = true
+            for waiter in waiters { waiter.resume() }
+            waiters.removeAll()
+        }
+    }
+
+    nonisolated private static func record(_ generation: String, _ revision: UInt64) -> DebridRecord {
+        DebridRecord(service: "torbox", generation: generation, revision: revision, credential: .key("k\(revision)"))
+    }
+
+    /// Waits up to five seconds for every queue to go idle without spinning on a stuck pump.
+    private func settled(_ store: DebridStore) async -> Bool {
+        for _ in 0..<5_000 {
+            if !store.busy { return true }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return false
+    }
+
+    func testAPushRacingADisconnectNeverOutlivesIt() async {
+        for round in 0..<300 {
+            let generation = "g\(round)"
+            let shared = Shared(Self.record(generation, 1))
+            let store = DebridStore(keystore: shared, core: shared)
+            let gate = Gate()
+            // Two tasks off the main actor, released together: either may reach the store first.
+            let push = Task.detached {
+                await gate.wait()
+                await store.pending([Self.record(generation, 2)])
+            }
+            let drop = Task.detached {
+                await gate.wait()
+                try? await store.disconnect(service: "torbox", generation: generation).value
+            }
+            await gate.open()
+            await push.value
+            await drop.value
+            let idle = await settled(store)
+            XCTAssertTrue(idle, "round \(round): queues idle")
+            let left = await shared.stored["torbox"]
+            let stones = await shared.stones
+            XCTAssertNil(left, "round \(round): the record outlived its disconnect")
+            XCTAssertEqual(stones, [], "round \(round): tombstones")
+            if left != nil || !idle { return }
+        }
+    }
+
+    func testACancelledWriteLeavesTheQueueUsable() async {
+        let shared = Shared(nil)
+        let store = DebridStore(keystore: shared, core: shared)
+        await shared.setCancelWrites(true)
+        // Two writes queued: the first is cancelled, the one behind it is settled too.
+        store.pending([Self.record("g1", 1)])
+        store.pending([Self.record("g1", 1)])
+        let stopped = await settled(store)
+        XCTAssertTrue(stopped, "the cancelled pump unregisters, so idle returns")
+        await shared.setCancelWrites(false)
+        store.pending([Self.record("g1", 2)])
+        let written = await settled(store)
+        XCTAssertTrue(written, "later work starts a new pump")
+        let revision = await shared.stored["torbox"]?.revision
+        XCTAssertEqual(revision, 2)
+        if stopped && written { await store.idle() }
+    }
+
     func testCredentialsNeverPrint() throws {
         let secrets = ["KEY-9f3a", "CLIENT-ID-77", "CLIENT-SECRET-55", "REFRESH-TOKEN-13", "ACCESS-TOKEN-21"]
         let key = DebridRecord(service: "torbox", generation: "g1", revision: 1, credential: .key(secrets[0]))

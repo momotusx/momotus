@@ -73,8 +73,8 @@ final class DebridStore {
                 do { try await job.value() } catch { remember(tombstone) }
             }
         }
-        for record in records where !gone.contains(record.generation) {
-            // A failed write is not acknowledged; the next push carries it again.
+        // A failed write is not acknowledged; the next push carries it again.
+        for record in records {
             enqueue(record.service, record.generation, write: true) { [self] in try await save(record) }
         }
     }
@@ -146,6 +146,12 @@ final class DebridStore {
     @discardableResult
     private func enqueue(_ service: String, _ generation: String, write: Bool, _ run: @escaping @MainActor () async throws -> Void) -> Job {
         let job = Job(generation: generation, write: write, run: run)
+        // Checked with the insert, in one actor step: a write of a generation a
+        // disconnect marked gone is never queued behind its cleanup.
+        if write && gone.contains(generation) {
+            job.settle(.success(()))
+            return job
+        }
         queues[service, default: []].append(job)
         if pumps[service] == nil {
             // Registered before it runs, so its own exit can remove it.
@@ -170,6 +176,15 @@ final class DebridStore {
             do {
                 try await job.run()
                 job.settle(.success(()))
+            } catch is CancellationError {
+                // The work is being cancelled: the pump stops, and first settles
+                // everything queued and unregisters, so `idle` returns and later
+                // work starts a new pump.
+                job.settle(.failure(CancellationError()))
+                let left = queues.removeValue(forKey: service) ?? []
+                pumps[service] = nil
+                for queued in left { queued.settle(.failure(CancellationError())) }
+                return
             } catch {
                 job.settle(.failure(error))
             }
