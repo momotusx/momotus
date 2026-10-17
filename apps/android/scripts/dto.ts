@@ -40,6 +40,7 @@ const INT = new Set([
   "max",
   "epoch",
   "pending",
+  "series",
   "pushed",
   "stale",
   "refused",

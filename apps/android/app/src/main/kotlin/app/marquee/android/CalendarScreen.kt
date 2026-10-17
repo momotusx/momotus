@@ -147,7 +147,7 @@ private fun Head(
                 if (snapshot.failed.isNotEmpty()) Note(CalendarCopy.failed(snapshot.failed), failed = true)
                 if (snapshot.noSchedule.isNotEmpty()) Note(CalendarCopy.noSchedule(snapshot.noSchedule))
                 if (snapshot.days.isEmpty() && snapshot.pending == 0) {
-                    Note("Nothing airs in these weeks for the series in your library.")
+                    Note(CalendarCopy.empty(snapshot.series))
                     SecondaryButton(
                         "Find series to follow",
                         onDiscover,

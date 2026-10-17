@@ -73,7 +73,7 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 @Test func theCalendarOpensOnTheFirstDayOnOrAfterToday() throws {
     func calendar(_ today: String, _ dates: [String]) throws -> CalendarSnapshot {
         let days = dates.map { #"{"date":"\#($0)","items":[]}"# }.joined(separator: ",")
-        let json = #"{"today":"\#(today)","days":[\#(days)],"pending":0,"failed":[],"noSchedule":[]}"#
+        let json = #"{"today":"\#(today)","days":[\#(days)],"pending":0,"failed":[],"noSchedule":[],"series":1}"#
         return try JSONDecoder().decode(CalendarSnapshot.self, from: Data(json.utf8))
     }
     #expect(try calendar("2026-10-17", ["2026-10-12", "2026-10-17", "2026-10-20"]).startDay == "2026-10-17")

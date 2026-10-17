@@ -87,6 +87,9 @@ pub struct CalendarSnapshot {
     pub failed: Vec<CalendarSeries>,
     /// Series whose details have no dated episode.
     pub no_schedule: Vec<CalendarSeries>,
+    /// Library series the calendar follows: 0 means none to follow, so an
+    /// empty window says "no series" rather than "nothing airs".
+    pub series: u32,
 }
 
 /// An episode kept from a meta: only what the calendar shows.
@@ -135,6 +138,7 @@ impl CalendarView {
             pending: 0,
             failed: Vec::new(),
             no_schedule: Vec::new(),
+            series: 0,
         });
         let (commands, rx) = mpsc::unbounded_channel();
         let mut owner = Owner {
@@ -422,5 +426,6 @@ fn render(core: &Core, today: NaiveDate, series: &HashMap<String, Series>) -> Ca
         pending,
         failed,
         no_schedule,
+        series: u32::try_from(series.len()).unwrap_or(u32::MAX),
     }
 }

@@ -88,6 +88,8 @@ data class CalendarSnapshot(
     val failed: List<CalendarSeries> = emptyList(),
     /** Series whose details have no dated episode. */
     val noSchedule: List<CalendarSeries> = emptyList(),
+    /** Library series the calendar follows: 0 means none to follow, so an empty window says "no series" rather than "nothing airs". */
+    val series: Int,
 )
 
 @Serializable

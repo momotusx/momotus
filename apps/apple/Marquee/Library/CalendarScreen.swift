@@ -64,7 +64,11 @@ struct CalendarScreen: View {
             StateLine(symbol: "calendar-x", text: "No dated episodes yet: " + s.noSchedule.map(\.name).joined(separator: ", "))
         }
         if s.days.isEmpty, s.pending == 0 {
-            StateLine(symbol: "calendar", text: "Nothing airs from a week ago to a month ahead. Series you add to your Library show their episodes here.")
+            StateLine(
+                symbol: "calendar",
+                text: s.series == 0
+                    ? "No series in your library yet. Series you add show their episodes here."
+                    : "Nothing airs from a week ago to a month ahead for the series in your library.")
         }
     }
 

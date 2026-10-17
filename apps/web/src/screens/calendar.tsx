@@ -134,7 +134,8 @@ export default function CalendarScreen() {
 
       <Show when={empty()}>
         <p class="note">
-          Nothing airs in these weeks for the series in your library. <A href="/discover">Find series to follow</A>.
+          {s()?.series ? "Nothing airs in these weeks for the series in your library." : "No series in your library yet. Series you add show their episodes here."}{" "}
+          <A href="/discover">Find series to follow</A>.
         </p>
       </Show>
 

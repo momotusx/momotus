@@ -77,5 +77,7 @@ class CalendarCopyTest {
         val series = listOf(CalendarSeries("a", "Andor", "timed out"), CalendarSeries("b", "Severance"))
         assertEquals("Could not load Andor (timed out), Severance.", CalendarCopy.failed(series))
         assertEquals("No air dates known for Andor, Severance.", CalendarCopy.noSchedule(series))
+        assertEquals("No series in your library yet. Series you add show their episodes here.", CalendarCopy.empty(0))
+        assertEquals("Nothing airs in these weeks for the series in your library.", CalendarCopy.empty(2))
     }
 }

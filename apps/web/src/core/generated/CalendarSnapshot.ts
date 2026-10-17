@@ -14,4 +14,9 @@ failed: Array<CalendarSeries>,
 /**
  * Series whose details have no dated episode.
  */
-noSchedule: Array<CalendarSeries>, };
+noSchedule: Array<CalendarSeries>, 
+/**
+ * Library series the calendar follows: 0 means none to follow, so an
+ * empty window says "no series" rather than "nothing airs".
+ */
+series: number, };

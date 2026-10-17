@@ -165,10 +165,18 @@ async fn the_calendar_follows_marks_the_library_and_the_day() {
         ]
     );
 
+    // A window with nothing in it still follows the series: "nothing airs".
+    view.set_today(parse_day("2027-06-01").unwrap());
+    let s = settled(&view, |s| s.today == "2027-06-01").await;
+    assert!(s.days.is_empty(), "{s:?}");
+    assert_eq!(s.series, 1);
+
+    // With the series gone there is nothing to follow: "no series".
     core.library()
         .upsert_item("p", &series("tt1", "Show"), false, &core.hlc())
         .unwrap();
-    settled(&view, |s| s.days.is_empty()).await;
+    let s = settled(&view, |s| s.series == 0).await;
+    assert!(s.days.is_empty(), "{s:?}");
 }
 
 #[tokio::test]
@@ -219,6 +227,7 @@ async fn failed_and_unscheduled_series_are_told_apart() {
         ["tt3"]
     );
     assert!(s.failed[0].reason.is_some());
+    assert_eq!(s.series, 3, "loaded, undated and failed series all count");
 }
 
 /// Live: Cinemeta's popular series in the library, today's calendar.

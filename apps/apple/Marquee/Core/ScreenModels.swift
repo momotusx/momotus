@@ -135,6 +135,8 @@ struct CalendarSnapshot: Decodable, Sendable {
     let failed: [CalendarSeries]
     /// Series without a dated episode.
     let noSchedule: [CalendarSeries]
+    /// Library series the calendar follows; 0 means there are none to follow.
+    let series: Int
 }
 
 extension CalendarSnapshot {

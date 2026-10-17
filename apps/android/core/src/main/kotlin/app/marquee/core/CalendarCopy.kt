@@ -64,6 +64,14 @@ object CalendarCopy {
     fun noSchedule(series: List<CalendarSeries>): String =
         "No air dates known for ${series.joinToString(", ") { it.name }}."
 
+    /** An empty window: no series to follow at all, or none of them airs in these weeks. */
+    fun empty(series: Int): String =
+        if (series == 0) {
+            "No series in your library yet. Series you add show their episodes here."
+        } else {
+            "Nothing airs in these weeks for the series in your library."
+        }
+
     private fun parse(day: String): Calendar {
         val (y, m, d) = day.split("-").map { it.toIntOrNull() ?: 1 } + listOf(1, 1, 1)
         return Calendar.getInstance().apply {
