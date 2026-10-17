@@ -58,7 +58,6 @@ import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
-import app.marquee.design.UpNextArt
 import app.marquee.design.describe
 import app.marquee.design.laneHeight
 import kotlinx.coroutines.flow.collectLatest
@@ -292,13 +291,6 @@ private fun TvRow(
     }
 }
 
-/** The lane's height depends only on its tile shape and on whether tiles carry captions, never on focus. */
-@Composable
-private fun laneHeight(
-    shape: TileShape,
-    captioned: Boolean,
-) = Marquee.tiles.laneHeight(shape, captioned)
-
 @Composable
 private fun SkeletonLane(shape: TileShape) {
     val metrics = Marquee.tiles
@@ -313,7 +305,7 @@ private fun SkeletonLane(shape: TileShape) {
             metrics.square
         }
     Row(
-        Modifier.height(laneHeight(shape, false)).padding(start = metrics.inset, top = metrics.pad),
+        Modifier.height(Marquee.tiles.laneHeight(shape)).padding(start = metrics.inset, top = metrics.pad),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
         repeat(SKELETON_TILES) { Skeleton(Modifier.size(size.width, size.height)) }
@@ -331,12 +323,11 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(row.rowId, it) != null } }
     LazyRow(
         state = state.rowState(row.rowId),
         modifier =
             Modifier
-                .height(laneHeight(shape, captioned))
+                .height(Marquee.tiles.laneHeight(shape))
                 .focusProperties { enter = { state.focus.rowEntry(row.rowId) ?: FocusRequester.Default } }
                 .focusGroup(),
         contentPadding = PaddingValues(horizontal = metrics.inset),
@@ -362,7 +353,6 @@ private fun TvTile(
         state.focus.attach(key, requester)
         onDispose { state.focus.detach(key, requester) }
     }
-    val wide = rowId == TileCopy.CONTINUE_ROW
     PosterTile(
         title = tile.name,
         imageUrl = if (shape == TileShape.Landscape) tile.background ?: tile.poster else tile.poster,
@@ -370,10 +360,10 @@ private fun TvTile(
         modifier = Modifier.padding(top = Marquee.tiles.pad),
         shape = shape,
         progress = tile.progress,
-        caption = TileCopy.caption(rowId, tile),
+        caption = TileCopy.caption(rowId, tile) ?: tile.releaseInfo,
+        rating = tile.rating.takeIf { shape == TileShape.Poster },
         focusRequester = requester,
         onFocusChange = { if (it) state.focus.arrived(rowId, key) else state.focus.lost(key) },
-        upNext = if (wide) UpNextArt(tile.logo) else null,
     )
 }
 

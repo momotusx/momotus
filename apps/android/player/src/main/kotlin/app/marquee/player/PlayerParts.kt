@@ -369,51 +369,6 @@ fun SkipButton(
 }
 
 /**
- * A round transport button. [label] is what a screen reader says (the icon alone carries no words).
- *
- * @param main the larger, filled one (play and pause).
- */
-@Composable
-fun RoundButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    main: Boolean = false,
-    focusRequester: FocusRequester? = null,
-    /** A short text in the middle of the icon: the seconds a skip button jumps ("10"). */
-    badge: String? = null,
-) {
-    val colors = Marquee.colors
-    val tv = Marquee.form == Form.Tv
-    val size = if (tv) (if (main) 104.dp else 84.dp) else (if (main) 60.dp else 48.dp)
-    val glyph = if (tv) (if (main) 44.dp else 36.dp) else (if (main) 26.dp else 22.dp)
-    Box(
-        modifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .size(size)
-            .marqueeFocus(size / 2)
-            .clip(CircleShape)
-            .background(if (main) colors.text else colors.text.copy(alpha = 0.14f))
-            .semantics { contentDescription = label }
-            .focusClickable(onClick, Role.Button),
-        contentAlignment = Alignment.Center,
-    ) {
-        MqIcon(icon, tint = if (main) colors.bg else colors.text, size = glyph)
-        if (badge != null) {
-            // The button's label already says the seconds; the badge is only for the eye.
-            MqText(
-                badge,
-                modifier = Modifier.clearAndSetSemantics { },
-                role = TextRole.Caption,
-                weight = FontWeight.Bold,
-                color = colors.text,
-            )
-        }
-    }
-}
-
-/**
  * What the player says when it reached the end: over the last frame, the way on. A series offers
  * the next episode first, then "Play again" and "Back to <title>"; a movie puts "Back to <title>"
  * first. The scrim is full-bleed, so the picture is still there behind the words.

@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -33,6 +37,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -40,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -68,14 +74,15 @@ private fun ButtonShell(
     val gap = if (tv) 14.dp else 8.dp
     val corner = height / 2
     val shape = RoundedCornerShape(corner)
-    // A selected toggle (Watched, In Library) is the raised fill; the ring stays for focus alone.
+    // The one primary action is the white pill (design/DECISION.md v2). A secondary is raised with
+    // the control edge; a selected toggle (Watched, In Library) is lighter. The ring is for focus alone.
     val background =
         when {
-            kind == ButtonKind.Primary -> colors.accent
-            selected -> colors.raised
-            else -> colors.text.copy(alpha = 0.12f)
+            kind == ButtonKind.Primary -> colors.primary
+            selected -> colors.text.copy(alpha = 0.22f).compositeOver(colors.raised)
+            else -> colors.raised
         }
-    val content = if (kind == ButtonKind.Primary) colors.onAccent else colors.text
+    val content = if (kind == ButtonKind.Primary) colors.onPrimary else colors.text
     Row(
         modifier =
             modifier
@@ -103,7 +110,7 @@ private fun ButtonShell(
     }
 }
 
-/** The one filled, accent-colored action of a screen. */
+/** The one primary action of a screen: the white pill. */
 @Composable
 fun PrimaryButton(
     label: String,
@@ -141,7 +148,7 @@ fun SecondaryButton(
     onFocusChange,
 )
 
-/** A pill for filters and choices. Selected is shown by fill and weight, not by the accent color. */
+/** A pill for filters and choices. Selected is the white pill with a check, never color alone. */
 @Composable
 fun Chip(
     label: String,
@@ -174,20 +181,26 @@ fun Chip(
                 .heightIn(min = pill)
                 .clip(shape)
                 // Opaque when not selected, so the focus halo of a neighbour does not show through.
-                .background(if (selected) colors.raised else colors.bg)
-                // Selected is the raised fill and the heavier label; the ring is for focus alone. The edge is
-                // the control token (3:1 against the page), so an unselected pill does not vanish.
-                .border(2.dp, colors.control, shape)
+                .background(if (selected) colors.primary else colors.raised)
+                // The edge is the control token (3:1 against the page), so an unselected pill does not
+                // vanish; the ring is for focus alone.
+                .then(if (selected) Modifier else Modifier.border(2.dp, colors.control, shape))
                 .padding(horizontal = if (tv) 24.dp else 14.dp),
             contentAlignment = Alignment.Center,
         ) {
-            MqText(
-                label,
-                role = TextRole.Callout,
-                color = if (selected) colors.text else colors.muted,
-                weight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selected) MqIcon(Icons.Check, tint = colors.onPrimary, size = if (tv) 24.dp else 16.dp)
+                MqText(
+                    label,
+                    role = TextRole.Callout,
+                    color = if (selected) colors.onPrimary else colors.muted,
+                    weight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -205,7 +218,7 @@ fun ProgressBar(
             Modifier
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .height(height)
-                .background(colors.text),
+                .background(colors.accent),
         )
     }
 }
@@ -403,5 +416,120 @@ fun StatusNote(
     ) {
         if (busy) Spinner(size = if (tv) 24.dp else 16.dp) else StatusDot(tone)
         MqText(text, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 2)
+    }
+}
+
+/**
+ * A round control. With [showLabel] its label shows under the ring (Details, Trailer, Library);
+ * without it the label is only spoken (the player's transport). [main] is the white one (play and
+ * pause); [selected] is a held toggle, drawn white as well and reported to screen readers.
+ */
+@Composable
+fun RoundButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    main: Boolean = false,
+    selected: Boolean = false,
+    showLabel: Boolean = false,
+    enabled: Boolean = true,
+    focusRequester: FocusRequester? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    longClickLabel: String? = null,
+    /** A short text in the middle of the icon: the seconds a skip button jumps ("10"). */
+    badge: String? = null,
+) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    val size =
+        when {
+            main -> if (tv) 104.dp else 60.dp
+            showLabel -> if (tv) 72.dp else 48.dp
+            else -> if (tv) 84.dp else 48.dp
+        }
+    val glyph =
+        when {
+            main -> if (tv) 44.dp else 26.dp
+            showLabel -> if (tv) 30.dp else 20.dp
+            else -> if (tv) 36.dp else 22.dp
+        }
+    val lit = main || selected
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        modifier.alpha(if (enabled) 1f else 0.55f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 6.dp),
+    ) {
+        Box(
+            Modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .size(size)
+                .marqueeFocus(size / 2)
+                .onFocusChanged {
+                    focused = it.isFocused
+                    onFocusChange?.invoke(it.isFocused)
+                }.clip(CircleShape)
+                .background(if (lit) colors.primary else colors.raised)
+                .then(if (lit) Modifier else Modifier.border(2.dp, colors.control, CircleShape))
+                .semantics {
+                    contentDescription = label
+                    if (selected) stateDescription = "On"
+                }.focusClickable(onClick, Role.Button, enabled, onLongClick, longClickLabel),
+            contentAlignment = Alignment.Center,
+        ) {
+            MqIcon(icon, tint = if (lit) colors.onPrimary else colors.text, size = glyph)
+            if (badge != null) {
+                // The label already says the seconds; the badge is only for the eye.
+                MqText(
+                    badge,
+                    modifier = Modifier.clearAndSetSemantics { },
+                    role = TextRole.Caption,
+                    weight = FontWeight.Bold,
+                    color = if (lit) colors.onPrimary else colors.text,
+                )
+            }
+        }
+        if (showLabel) {
+            MqText(
+                label,
+                // Spoken once, as the ring's name.
+                modifier = Modifier.clearAndSetSemantics { },
+                role = TextRole.Caption,
+                color = if (focused) colors.text else colors.muted,
+                weight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * A row's header: a short accent bar, the title, the source in `dim` and a hairline to the end
+ * (design/DECISION.md v2, Section headers).
+ */
+@Composable
+fun RowHeader(
+    title: String,
+    source: String?,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading() },
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(width = if (tv) 5.dp else 3.dp, height = if (tv) 34.dp else 20.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(colors.accent),
+        )
+        MqText(title, role = TextRole.Title3, maxLines = 1)
+        if (source != null) MqText(source, role = TextRole.Callout, color = colors.dim, maxLines = 1)
+        Box(Modifier.weight(1f).height(1.dp).background(colors.line))
     }
 }

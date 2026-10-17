@@ -58,7 +58,6 @@ import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
-import app.marquee.design.UpNextArt
 import app.marquee.design.laneHeight
 
 /** Home on a phone: a hero card, then one swipeable lane per catalog. */
@@ -245,13 +244,6 @@ private fun PhoneRow(
     }
 }
 
-/** A lane's height depends only on its tile shape and on captions, so it never shifts under the thumb. */
-@Composable
-private fun laneHeight(
-    shape: TileShape,
-    captioned: Boolean,
-) = Marquee.tiles.laneHeight(shape, captioned)
-
 @Composable
 private fun SkeletonLane(shape: TileShape) {
     val metrics = Marquee.tiles
@@ -266,7 +258,7 @@ private fun SkeletonLane(shape: TileShape) {
             metrics.square
         }
     Row(
-        Modifier.height(laneHeight(shape, false)).padding(start = Marquee.safe.side, top = metrics.pad),
+        Modifier.height(Marquee.tiles.laneHeight(shape)).padding(start = Marquee.safe.side, top = metrics.pad),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
         repeat(SKELETON_TILES) { Skeleton(Modifier.size(size.width, size.height)) }
@@ -283,10 +275,8 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(row.rowId, it) != null } }
-    val wide = row.rowId == TileCopy.CONTINUE_ROW
     LazyRow(
-        modifier = Modifier.height(laneHeight(shape, captioned)),
+        modifier = Modifier.height(Marquee.tiles.laneHeight(shape)),
         contentPadding = PaddingValues(horizontal = Marquee.safe.side),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
@@ -298,8 +288,8 @@ private fun TileLane(
                 modifier = Modifier.padding(top = metrics.pad),
                 shape = shape,
                 progress = tile.progress,
-                caption = TileCopy.caption(row.rowId, tile),
-                upNext = if (wide) UpNextArt(tile.logo) else null,
+                caption = TileCopy.caption(row.rowId, tile) ?: tile.releaseInfo,
+                rating = tile.rating.takeIf { shape == TileShape.Poster },
             )
         }
     }

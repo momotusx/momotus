@@ -1,12 +1,11 @@
 package app.marquee.design
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,8 +18,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -30,44 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
-
-/**
- * What a Continue Watching still shows on top of the picture: the title's logo (its name as text
- * when there is none) bottom left over a dark strip, and the watched bar on the bottom edge.
- */
-data class UpNextArt(
-    val logoUrl: String?,
-)
-
-@Composable
-private fun BoxScope.UpNextOverlay(
-    art: UpNextArt,
-    name: String,
-    progress: Float?,
-) {
-    val tv = Marquee.form == Form.Tv
-    // The artwork is any photo: the strip is the dark theme color in both themes, with light text.
-    val strip = Tokens.dark.bg
-    val bar = if (tv) 6.dp else 4.dp
-    Box(
-        Modifier
-            .align(Alignment.BottomStart)
-            .fillMaxWidth()
-            .fillMaxHeight(0.55f)
-            .background(Brush.verticalGradient(0f to Color.Transparent, 1f to strip.copy(alpha = 0.88f))),
-    )
-    Logo(
-        url = art.logoUrl,
-        name = name,
-        height = if (tv) 56.dp else 32.dp,
-        maxWidth = if (tv) 240.dp else 130.dp,
-        modifier = Modifier.align(Alignment.BottomStart).padding(start = 14.dp, bottom = bar + 12.dp),
-        role = if (tv) TextRole.Headline else TextRole.Callout,
-        color = Tokens.dark.text,
-        decorative = true,
-    )
-    if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
-}
 
 /** The tile shapes of `design/tokens.json` (poster, landscape, square). */
 enum class TileShape { Poster, Landscape, Square }
@@ -83,18 +44,28 @@ fun TileMetrics.sizeOf(shape: TileShape): TileSize =
 fun TileMetrics.heightOf(shape: TileShape): Dp = sizeOf(shape).height
 
 /**
- * The height of a row of [shape] tiles: room for the focus scale above and below the cards, and
- * when [captioned] the gap and the lines of a caption under them.
+ * The two lines under every tile, the name (`Callout`) and the secondary line (`Caption`), at the
+ * current font scale. Tiles and their skeletons both use it, so a row never changes height.
  */
-fun TileMetrics.laneHeight(
-    shape: TileShape,
-    captioned: Boolean = true,
-): Dp = pad * 2 + heightOf(shape) + if (captioned) Marquee.space.s + caption else 0.dp
+@Composable
+fun captionHeight(): Dp {
+    val type = Marquee.type
+    return with(LocalDensity.current) { type.callout.toDp() * LINE + type.caption.toDp() * LINE } + 2.dp
+}
+
+/** The height of a row of [shape] tiles: room for the focus scale above and below, then the caption. */
+@Composable
+fun TileMetrics.laneHeight(shape: TileShape): Dp = pad * 2 + heightOf(shape) + Marquee.space.s + captionHeight()
+
+/** `MqText`'s line height for text roles. */
+private const val LINE = 1.4f
 
 /**
- * A title in a row or grid: the picture with the focus look, a watched bar for items in
- * progress, and an optional caption such as "S1:E2, 40% watched". Everything is a plain value,
- * so the design module knows nothing of the core.
+ * A title in a row or grid (design/DECISION.md v2, Cards): the picture with a rating chip, then
+ * the name and a secondary line under it, never over it. [caption] is that line: the core's own
+ * words (Continue Watching, Library) or the year. Focus lifts the card, adds the ring and a white
+ * edge, and turns the name accent. Everything is a plain value, so the design module knows nothing
+ * of the core.
  */
 @Composable
 fun PosterTile(
@@ -105,17 +76,20 @@ fun PosterTile(
     shape: TileShape = TileShape.Poster,
     progress: Float? = null,
     caption: String? = null,
+    /** The addon's IMDb rating as written ("8.4"); shown in a chip on the art. */
+    rating: String? = null,
     focusRequester: FocusRequester? = null,
     forceFocus: Boolean = false,
     onFocusChange: ((Boolean) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     longClickLabel: String? = null,
-    upNext: UpNextArt? = null,
 ) {
     val metrics = Marquee.tiles
+    val colors = Marquee.colors
     val size = metrics.sizeOf(shape)
     val corner = Marquee.radius.m
     val lift = remember { mutableStateOf(forceFocus) }
+    val focused = lift.value
     // What a screen reader says after the title: the caption, or the watched share.
     val state = caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }
     Column(
@@ -131,29 +105,51 @@ fun PosterTile(
                 .then(
                     if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
                 ).clip(RoundedCornerShape(corner))
+                .border(1.dp, if (focused) colors.text else Color.Transparent, RoundedCornerShape(corner))
                 .semantics {
                     contentDescription = title
                     if (state != null) stateDescription = state
                 }.focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
         ) {
             RemoteImage(imageUrl, size.width, size.height, fallbackText = title) {
-                if (upNext != null) {
-                    UpNextOverlay(upNext, title, progress)
-                } else if (progress != null) {
-                    ProgressBar(progress, Modifier.align(Alignment.BottomStart))
-                }
+                if (rating != null) RatingChip(rating, Modifier.align(Alignment.TopEnd))
+                if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
             }
         }
-        if (caption != null) {
+        // Read as part of the tile above.
+        Column(Modifier.clearAndSetSemantics { }) {
             MqText(
-                caption,
-                // Read as part of the tile above.
-                modifier = Modifier.clearAndSetSemantics { },
+                title,
                 role = TextRole.Callout,
-                color = Marquee.colors.muted,
-                weight = FontWeight.Medium,
-                maxLines = 2,
+                color = if (focused) colors.accent else colors.text,
+                weight = FontWeight.Bold,
+                maxLines = 1,
             )
+            if (caption != null) {
+                MqText(caption, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
+            }
         }
+    }
+}
+
+/** A star and the rating on strong glass, at the top right of a poster. */
+@Composable
+private fun RatingChip(
+    rating: String,
+    modifier: Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    val colors = Marquee.colors
+    Row(
+        modifier
+            .padding(if (tv) 10.dp else 6.dp)
+            .clip(RoundedCornerShape(Marquee.radius.pill))
+            .background(colors.glassStrong)
+            .padding(horizontal = if (tv) 10.dp else 6.dp, vertical = if (tv) 4.dp else 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(Icons.Star, tint = colors.star, size = if (tv) 20.dp else 12.dp)
+        MqText(rating, role = TextRole.Caption, weight = FontWeight.Bold, color = colors.text, maxLines = 1)
     }
 }

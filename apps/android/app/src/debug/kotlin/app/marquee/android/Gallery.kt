@@ -45,6 +45,8 @@ import app.marquee.design.MqText
 import app.marquee.design.Palette
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.RoundButton
+import app.marquee.design.RowHeader
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -53,7 +55,6 @@ import app.marquee.design.StatusLine
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
-import app.marquee.design.UpNextArt
 import app.marquee.design.laneHeight
 import app.marquee.player.SkipButton
 
@@ -110,6 +111,9 @@ private fun Gallery() {
                 SecondaryButton("Mark as watched", {}, icon = Icons.Check)
                 SecondaryButton("Watched", {}, icon = Icons.Check, selected = true)
                 SecondaryButton("Unavailable", {}, enabled = false)
+                RoundButton(Icons.Info, "Details", {}, showLabel = true)
+                RoundButton(Icons.Film, "Trailer", {}, showLabel = true)
+                RoundButton(Icons.BookmarkCheck, "In Library", {}, showLabel = true, selected = true)
             }
         }
 
@@ -165,6 +169,7 @@ private fun Gallery() {
         }
 
         Section("Tiles (the third is focused, the fourth is in progress, the last has no picture)") {
+            RowHeader("Popular Movies", "Cinemeta")
             Row(
                 Modifier.height(Marquee.tiles.laneHeight(TileShape.Poster)),
                 horizontalArrangement = Arrangement.spacedBy(Marquee.tiles.gap),
@@ -176,7 +181,8 @@ private fun Gallery() {
                         onClick = {},
                         modifier = Modifier.padding(top = Marquee.tiles.pad),
                         progress = if (index == 3) 0.4f else null,
-                        caption = if (index == 3) "S1:E2, 40% watched" else null,
+                        caption = if (index == 3) "S1:E2 · 36 min left" else tile.releaseInfo,
+                        rating = tile.rating,
                         forceFocus = index == 2,
                     )
                 }
@@ -193,8 +199,7 @@ private fun Gallery() {
                         modifier = Modifier.padding(top = Marquee.tiles.pad),
                         shape = TileShape.Landscape,
                         progress = 0.4f,
-                        caption = "S1:E2, 40% watched",
-                        upNext = UpNextArt(tile.logo),
+                        caption = "S1:E2 · 36 min left",
                     )
                 }
             }
