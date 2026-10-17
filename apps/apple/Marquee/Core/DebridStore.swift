@@ -37,6 +37,8 @@ final class DebridStore {
     private var pumps: [String: Task<Void, Never>] = [:]
     /// Generations with a tombstone written or queued: never written again.
     private var gone: Set<String> = []
+    /// Generations whose tombstone is stored: a repeated disconnect never undoes it.
+    private var durable: Set<String> = []
     /// Tombstones whose record delete failed; retried with the next push.
     private var unfinished: [DebridTombstone] = []
     private var disconnecting: [String: Task<Void, any Error>] = [:]
@@ -53,13 +55,14 @@ final class DebridStore {
     func start() async throws {
         for tombstone in try await keystore.tombstones() {
             gone.insert(tombstone.generation)
+            durable.insert(tombstone.generation)
             do { try await finish(tombstone) } catch { remember(tombstone) }
         }
         // Records with a tombstone go too: the core refuses them, and a tombstone
         // whose record is still stored is never handed back as deletable.
         let answer = try await core.restore(records: try await keystore.records(), tombstones: try await keystore.tombstones())
         for tombstone in answer.tombstones {
-            try? await keystore.deleteTombstone(tombstone)
+            if (try? await keystore.deleteTombstone(tombstone)) != nil { durable.remove(tombstone.generation) }
         }
     }
 
@@ -109,13 +112,22 @@ final class DebridStore {
             job.dropped = true
         }
         let tombstone = DebridTombstone(service: service, generation: generation)
-        // Settled without running (cancellation), it leaves the generation writable again.
-        return enqueue(service, generation, write: false, discard: { [self] in gone.remove(generation) }) { [self] in
-            do {
-                try await keystore.writeTombstone(tombstone)
-            } catch {
-                gone.remove(generation)
-                throw error
+        // Settled without running (cancellation), or failing to write its
+        // tombstone, it leaves the generation writable again, unless an earlier
+        // disconnect stored a tombstone for it: that generation stays gone.
+        let reopen = { @MainActor [self] in
+            if !durable.contains(generation) { gone.remove(generation) }
+        }
+        return enqueue(service, generation, write: false, discard: reopen) { [self] in
+            // An earlier disconnect whose core call failed left its tombstone: go on from there.
+            if !durable.contains(generation) {
+                do {
+                    try await keystore.writeTombstone(tombstone)
+                } catch {
+                    reopen()
+                    throw error
+                }
+                durable.insert(generation)
             }
             // The tombstone is durable now: from here any failure, cancellation
             // included, is remembered and the rest (core, then record and
@@ -128,6 +140,7 @@ final class DebridStore {
             }
             do {
                 try await finish(tombstone)
+                unfinished.removeAll { $0.generation == generation }
             } catch {
                 remember(tombstone)
                 if error is CancellationError { throw error }
@@ -156,6 +169,7 @@ final class DebridStore {
         }
         if left { throw DebridStoreError.recordStillStored }
         try await keystore.deleteTombstone(tombstone)
+        durable.remove(tombstone.generation)
     }
 
     private func remember(_ tombstone: DebridTombstone) {

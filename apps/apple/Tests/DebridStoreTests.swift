@@ -186,7 +186,7 @@ final class DebridStoreTests: XCTestCase {
             .standardizedFileURL
         let file = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         let cases = file?["cases"] as? [[String: Any]] ?? []
-        XCTAssertEqual(cases.count, 11, "cases in \(url.path)")
+        XCTAssertEqual(cases.count, 12, "cases in \(url.path)")
         for testCase in cases {
             try await replay(testCase)
         }
@@ -246,7 +246,17 @@ final class DebridStoreTests: XCTestCase {
         func deleteTombstone(_ tombstone: DebridTombstone) { stones.removeAll { $0.generation == tombstone.generation } }
         func restore(records: [DebridRecord], tombstones: [DebridTombstone]) -> RestoreAnswer { RestoreAnswer(refused: [], tombstones: []) }
         func ack(service: String, generation: String, revision: UInt64) {}
-        func disconnect(service: String, generation: String) {}
+        /// The next this many core disconnects fail.
+        private var failDisconnects = 0
+
+        func failNextDisconnects(_ times: Int) { failDisconnects = times }
+
+        func disconnect(service: String, generation: String) throws {
+            if failDisconnects > 0 {
+                failDisconnects -= 1
+                throw Failure()
+            }
+        }
     }
 
     /// Holds callers until it opens, so two tasks start their calls together.
@@ -402,6 +412,42 @@ final class DebridStoreTests: XCTestCase {
         let left = await shared.stored["torbox"]
         let stones = await shared.stones
         XCTAssertNil(left)
+        XCTAssertEqual(stones, [])
+    }
+
+    func testADroppedRepeatDisconnectKeepsAStoredTombstonesGenerationGone() async {
+        let shared = Shared(Self.record("g1", 1))
+        // The disconnect and its retry both fail at the core: the tombstone stays stored.
+        await shared.failNextDisconnects(2)
+        let store = DebridStore(keystore: shared, core: shared)
+        _ = try? await store.disconnect(service: "torbox", generation: "g1").value
+        let first = await settled(store)
+        XCTAssertTrue(first)
+        await shared.holdNextWrite()
+        store.pending([Self.record("g2", 1)])
+        var held = false
+        for _ in 0..<5_000 {
+            if await shared.writeWaiting { held = true; break }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(held, "the write is held")
+        // Queued behind the held write, then thrown away when that write is cancelled.
+        let repeated = store.disconnect(service: "torbox", generation: "g1")
+        await shared.releaseHeldWrite()
+        let stopped = await settled(store)
+        XCTAssertTrue(stopped)
+        do {
+            try await repeated.value
+            XCTFail("a repeat that never ran succeeded")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
+        store.pending([Self.record("g1", 2)])
+        let done = await settled(store)
+        XCTAssertTrue(done)
+        let left = await shared.stored["torbox"]
+        let stones = await shared.stones
+        XCTAssertNil(left, "g1 is never written again")
         XCTAssertEqual(stones, [])
     }
 
