@@ -1,0 +1,18 @@
+[package]
+name = "mq-media"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mq-http = { path = "../mq-http" }
+bytes = "1"
+futures-util = "0.3"
+tokio = { workspace = true }
+tokio-util = "0.7"
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest = "1"
+tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
