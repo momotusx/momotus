@@ -46,12 +46,19 @@ pub struct CoreConfig {
     pub device_id: u64,
 }
 
-/// The shared core. Cheap to clone; every view holds one.
+/// A handle on the device's runtime for one profile. Cheap to clone; every
+/// view holds one. Handles for other profiles (`for_profile`) share the
+/// whole runtime.
 #[derive(Clone)]
 pub struct Core {
     inner: Arc<Inner>,
+    /// The profile this handle reads and writes.
+    profile: Arc<str>,
 }
 
+/// Everything device-wide: one library, clock, sync gate, stream server,
+/// torrent engine, addon cache, skip cache and debrid resolver, whichever
+/// profile is in use.
 struct Inner {
     http: HttpClient,
     addons: AddonClient,
@@ -64,7 +71,6 @@ struct Inner {
     debrid: RwLock<Option<Resolver>>,
     library: Arc<Library>,
     clock: HlcClock,
-    profile: String,
     /// One sync or roster operation at a time, across every session.
     sync_gate: Arc<Mutex<()>>,
     /// Skip segment lookups and their session cache.
@@ -76,18 +82,18 @@ impl Core {
         std::fs::create_dir_all(&config.data_dir)?;
         let library = Library::open(config.data_dir.join("library.sqlite"))?;
         let torrents = config.data_dir.join("torrents");
-        Self::with_library(library, config.profile_id, config.device_id, torrents)
+        Self::with_library(library, &config.profile_id, config.device_id, torrents)
     }
 
     /// A core over a throwaway database, for tests and the CLI.
     pub fn temporary(profile: &str) -> Result<Self, CoreError> {
         let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
-        Self::with_library(Library::temporary()?, profile.to_owned(), 1, torrents)
+        Self::with_library(Library::temporary()?, profile, 1, torrents)
     }
 
     fn with_library(
         library: Library,
-        profile: String,
+        profile: &str,
         device_id: u64,
         torrent_dir: PathBuf,
     ) -> Result<Self, CoreError> {
@@ -109,7 +115,7 @@ impl Core {
         let store = Arc::new(LibraryCache(library.clone()));
         let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
         // The lowest hlc: a profile synced from another device keeps its name.
-        library.ensure_profile(&profile, &profile, &Hlc::zero(device_id).encode())?;
+        library.ensure_profile(profile, profile, &Hlc::zero(device_id).encode())?;
         Ok(Self {
             inner: Arc::new(Inner {
                 http: http.clone(),
@@ -121,11 +127,19 @@ impl Core {
                 debrid: RwLock::new(None),
                 library,
                 clock,
-                profile,
                 sync_gate: Arc::default(),
                 segments: crate::segments::Finder::new(http.clone()),
             }),
+            profile: profile.into(),
         })
+    }
+
+    /// A handle for another profile over the same runtime.
+    pub fn for_profile(&self, profile: &str) -> Core {
+        Core {
+            inner: self.inner.clone(),
+            profile: profile.into(),
+        }
     }
 
     pub fn http(&self) -> &HttpClient {
@@ -145,7 +159,7 @@ impl Core {
     }
 
     pub fn profile(&self) -> &str {
-        &self.inner.profile
+        &self.profile
     }
 
     pub fn hlc(&self) -> String {
