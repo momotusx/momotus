@@ -186,7 +186,7 @@ final class DebridStoreTests: XCTestCase {
             .standardizedFileURL
         let file = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         let cases = file?["cases"] as? [[String: Any]] ?? []
-        XCTAssertEqual(cases.count, 12, "cases in \(url.path)")
+        XCTAssertEqual(cases.count, 13, "cases in \(url.path)")
         for testCase in cases {
             try await replay(testCase)
         }
@@ -449,6 +449,41 @@ final class DebridStoreTests: XCTestCase {
         let stones = await shared.stones
         XCTAssertNil(left, "g1 is never written again")
         XCTAssertEqual(stones, [])
+    }
+
+    func testARepeatDroppedAfterTheCleanupKeepsTheGenerationGone() async {
+        let shared = Shared(Self.record("g1", 1))
+        await shared.failNextDisconnects(1)
+        let store = DebridStore(keystore: shared, core: shared)
+        _ = try? await store.disconnect(service: "torbox", generation: "g1").value
+        let first = await settled(store)
+        XCTAssertTrue(first)
+        await shared.holdNextWrite()
+        // The retry runs and cleans up first, then a g2 write is held with a repeat behind it.
+        store.pending([Self.record("g2", 1)])
+        var held = false
+        for _ in 0..<5_000 {
+            if await shared.writeWaiting { held = true; break }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(held, "the write is held")
+        let cleaned = await shared.stones
+        XCTAssertEqual(cleaned, [], "the cleanup finished")
+        let repeated = store.disconnect(service: "torbox", generation: "g1")
+        await shared.releaseHeldWrite()
+        let stopped = await settled(store)
+        XCTAssertTrue(stopped)
+        do {
+            try await repeated.value
+            XCTFail("a repeat that never ran succeeded")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
+        store.pending([Self.record("g1", 2)])
+        let done = await settled(store)
+        XCTAssertTrue(done)
+        let left = await shared.stored["torbox"]
+        XCTAssertNil(left, "g1 is never written again")
     }
 
     func testCredentialsNeverPrint() throws {
