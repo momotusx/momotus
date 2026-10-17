@@ -406,3 +406,73 @@ async fn home_follows_addon_changes_without_reopening() {
     assert_eq!(mirror, view.snapshot().rows);
     assert!(view.snapshot().header.hero.is_none(), "no catalog, no hero");
 }
+
+const SERIES_WITH_STILLS: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show",
+  "background":"https://images.example/tt9-bg.jpg","logo":"https://images.example/tt9-logo.png","videos":[
+  {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z","thumbnail":"https://images.example/tt9-1-1.jpg"},
+  {"id":"tt9:1:2","title":"Second","season":1,"episode":2,"released":"2020-01-08T00:00:00Z"}]}}"#;
+
+/// An unfinished episode in Continue Watching shows its own still (and the
+/// title's logo), not only the poster.
+#[tokio::test]
+async fn continue_watching_tiles_carry_the_episode_still() {
+    let core = Core::temporary("p").unwrap();
+    let mut meta = catalog_addon("meta", Duration::ZERO, 200, SERIES_WITH_STILLS).await;
+    meta.manifest_json = serde_json::json!({
+        "id": "meta", "version": "1.0.0", "name": "Meta",
+        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    })
+    .to_string();
+    core.library()
+        .set_addons("p", &[meta], &core.hlc())
+        .unwrap();
+    let show = LibraryItemRow {
+        item_id: "tt9".into(),
+        kind: "series".into(),
+        name: "Show".into(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    core.library()
+        .upsert_item("p", &show, true, &core.hlc())
+        .unwrap();
+    core.library()
+        .set_progress(
+            "p",
+            ProgressRow {
+                video_id: "tt9:1:1",
+                item_id: "tt9",
+                position_ms: 400,
+                duration_ms: 1000,
+                updated_ms: 5,
+            },
+            &core.hlc(),
+        )
+        .unwrap();
+    let view = HomeView::open(&core);
+    let mut tile = None;
+    for _ in 0..200 {
+        tile = view
+            .snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == CONTINUE_ROW_ID)
+            .and_then(|r| r.tiles.into_iter().next());
+        if tile.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let tile = tile.expect("Continue Watching tile");
+    assert_eq!(tile.video_id.as_deref(), Some("tt9:1:1"));
+    assert_eq!(
+        tile.background.as_deref(),
+        Some("https://images.example/tt9-1-1.jpg")
+    );
+    assert_eq!(
+        tile.logo.as_deref(),
+        Some("https://images.example/tt9-logo.png")
+    );
+    assert_eq!(tile.progress, Some(0.4));
+}

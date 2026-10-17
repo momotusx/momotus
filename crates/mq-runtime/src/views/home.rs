@@ -497,16 +497,23 @@ async fn watch_continue(
 // LIMIT 20 read, move to spawn_blocking if traces show it on the hot path.
 async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
     let library = core.library();
-    let mut items: Vec<(i64, Tile)> = library
+    let unfinished = library
         .continue_watching(core.profile(), ROW_TILES)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|item| (item.updated_ms, tile_from_continue(item)))
-        .collect();
+        .unwrap_or_default();
     let finished = library
         .finished_series(core.profile(), ROW_TILES)
         .unwrap_or_default();
-    // Metas come from the addon cache after the first look.
+    // Metas come from the addon cache after the first look; they give the
+    // tiles their artwork (the episode's still, else the backdrop).
+    let mut items: Vec<(i64, Tile)> =
+        futures_util::future::join_all(unfinished.into_iter().map(|item| async move {
+            let meta = core.fetch_meta(&item.kind, &item.item_id).await.ok();
+            (
+                item.updated_ms,
+                tile_from_continue(item, meta.as_ref().map(|m| &m.0)),
+            )
+        }))
+        .await;
     let next_up = futures_util::future::join_all(finished.into_iter().map(|done| async move {
         let (meta, _) = core.fetch_meta("series", &done.item_id).await.ok()?;
         let next = next_after(&meta, &done.video_id)?;
@@ -559,16 +566,28 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode) -> Tile {
     }
 }
 
-fn tile_from_continue(item: ContinueItem) -> Tile {
+fn tile_from_continue(item: ContinueItem, meta: Option<&mq_protocol::MetaItem>) -> Tile {
     let progress = (item.duration_ms > 0)
         .then(|| (item.position_ms as f32 / item.duration_ms as f32).clamp(0.0, 1.0));
+    let still = meta
+        .and_then(|m| m.videos.iter().find(|v| v.id == item.video_id))
+        .and_then(|v| v.thumbnail.clone());
+    let preview = meta.map(|m| &m.preview);
     Tile {
         id: item.item_id,
         kind: item.kind,
         name: item.name,
-        poster: item.poster,
-        background: None,
-        logo: None,
+        poster: item.poster.or_else(|| {
+            preview
+                .and_then(|p| p.poster.as_ref())
+                .map(|u| u.to_string())
+        }),
+        background: still.or_else(|| {
+            preview
+                .and_then(|p| p.background.as_ref())
+                .map(|u| u.to_string())
+        }),
+        logo: preview.and_then(|p| p.logo.as_ref()).map(|u| u.to_string()),
         poster_shape: "poster".into(),
         release_info: None,
         progress,

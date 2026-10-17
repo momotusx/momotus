@@ -28,7 +28,7 @@ async fn meta_addon(body: &'static str) -> AddonRow {
     });
     let manifest = serde_json::json!({
         "id": "meta.test", "version": "1.0.0", "name": "Meta Test",
-        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+        "types": ["series", "movie"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
     });
     AddonRow {
         transport_url: format!("http://{addr}/manifest.json"),
@@ -165,4 +165,34 @@ async fn real_cinemeta_title() {
     );
     assert_eq!(snap.header.state, TitleState::Ready);
     assert!(snap.episodes.len() >= 10);
+}
+
+const MOVIE: &str = r#"{"meta":{"id":"tt1727587","type":"movie","name":"Sintel",
+  "trailerStreams":[{"title":"Official trailer","ytId":"eRsGyueVLvQ"}]}}"#;
+
+/// A movie page can offer its trailer and Mark watched.
+#[tokio::test]
+async fn a_movie_offers_its_trailer_and_a_watched_flag() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(MOVIE).await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "movie", "tt1727587");
+    let snap = settle(&view).await;
+    let details = snap.header.details.expect("details");
+    assert_eq!(details.trailers.len(), 1, "{:?}", details.trailers);
+    let trailer = &details.trailers[0];
+    assert_eq!(trailer.youtube_id, "eRsGyueVLvQ");
+    assert_eq!(trailer.url, "https://www.youtube.com/watch?v=eRsGyueVLvQ");
+    assert_eq!(trailer.title, "Official trailer");
+    assert!(!snap.header.watched);
+
+    view.set_watched("tt1727587", true).unwrap();
+    for _ in 0..100 {
+        if view.snapshot().header.watched {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the watched flag never came back");
 }

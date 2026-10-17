@@ -13,6 +13,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use stremio_core::types::resource::StreamSource;
 use tokio::task::JoinSet;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -37,6 +38,23 @@ pub struct TitleDetails {
     pub directors: Vec<String>,
     pub rating: Option<String>,
     pub source: String,
+    /// Trailers the metadata names (YouTube), first is the main one.
+    pub trailers: Vec<Trailer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct Trailer {
+    pub title: String,
+    pub youtube_id: String,
+    /// The watch page, for apps that hand trailers to a browser or the
+    /// YouTube app.
+    pub url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -67,6 +85,9 @@ pub struct TitleHeader {
     pub selected_season: Option<u32>,
     /// Episode (or the movie itself) the primary button resumes or starts.
     pub play_target: Option<PlayTarget>,
+    /// A movie the user watched (episodes carry their own flag); toggled
+    /// with `setWatched` on the movie's id.
+    pub watched: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -151,6 +172,7 @@ impl TitleView {
             seasons: Vec::new(),
             selected_season: None,
             play_target: None,
+            watched: false,
         });
         let mut view = Self {
             core: core.clone(),
@@ -363,6 +385,7 @@ impl Ctx {
             seasons,
             selected_season: season,
             play_target,
+            watched: self.kind == "movie" && watched.contains(&self.id),
         };
         if self.header.get() != header {
             self.header.set(header);
@@ -451,5 +474,21 @@ fn details(meta: &MetaItem, source: &str) -> TitleDetails {
         directors: links("Directors"),
         rating: links("imdb").into_iter().next(),
         source: source.to_owned(),
+        trailers: p
+            .trailer_streams
+            .iter()
+            .filter_map(|s| match &s.source {
+                StreamSource::YouTube { yt_id } => Some(Trailer {
+                    title: s
+                        .description
+                        .clone()
+                        .or_else(|| s.name.clone())
+                        .unwrap_or_else(|| "Trailer".into()),
+                    youtube_id: yt_id.clone(),
+                    url: format!("https://www.youtube.com/watch?v={yt_id}"),
+                }),
+                _ => None,
+            })
+            .collect(),
     }
 }

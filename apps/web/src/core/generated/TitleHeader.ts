@@ -7,4 +7,9 @@ export type TitleHeader = { state: TitleState, details: TitleDetails | null, inL
 /**
  * Episode (or the movie itself) the primary button resumes or starts.
  */
-playTarget: PlayTarget | null, };
+playTarget: PlayTarget | null, 
+/**
+ * A movie the user watched (episodes carry their own flag); toggled
+ * with `setWatched` on the movie's id.
+ */
+watched: boolean, };
