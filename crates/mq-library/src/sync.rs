@@ -16,6 +16,7 @@ pub mod coll {
     pub const PROGRESS: u8 = 3;
     pub const WATCHED: u8 = 4;
     pub const SETTINGS: u8 = 5;
+    pub const STREAM_MEMORY: u8 = 6;
 }
 
 /// Separates the parts of a register key; ids never contain it.
@@ -106,6 +107,15 @@ struct WatchedValue {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct MemoryValue {
+    profile: String,
+    item_id: String,
+    binge_group: Option<String>,
+    stream_json: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SettingValue {
     profile: String,
     key: String,
@@ -141,6 +151,7 @@ impl Library {
                 coll::PROGRESS,
                 coll::WATCHED,
                 coll::SETTINGS,
+                coll::STREAM_MEMORY,
             ] {
                 out.extend(export(c, coll, after, limit)?);
             }
@@ -178,7 +189,8 @@ impl Library {
                 "SELECT MAX(h) FROM (
                    SELECT MAX(hlc) AS h FROM profiles UNION ALL SELECT MAX(hlc) FROM addon_list
                    UNION ALL SELECT MAX(hlc) FROM library_items UNION ALL SELECT MAX(hlc) FROM progress
-                   UNION ALL SELECT MAX(hlc) FROM watched UNION ALL SELECT MAX(hlc) FROM settings)",
+                   UNION ALL SELECT MAX(hlc) FROM watched UNION ALL SELECT MAX(hlc) FROM settings
+                   UNION ALL SELECT MAX(hlc) FROM stream_memory)",
                 [],
                 |r| r.get(0),
             )
@@ -235,6 +247,10 @@ fn export(
         coll::SETTINGS => (
             "SELECT profile_id, key, value_json, hlc FROM settings",
             "profile_id || ?5 || key",
+        ),
+        coll::STREAM_MEMORY => (
+            "SELECT profile_id, item_id, binge_group, stream_json, hlc FROM stream_memory",
+            "profile_id || ?5 || item_id",
         ),
         _ => return Ok(Vec::new()),
     };
@@ -321,6 +337,18 @@ fn export(
                     watched: r.get(3)?,
                 };
                 let k = key(&[&value.profile, &value.video_id]);
+                Ok(record(coll, k, &value, r.get(4)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        coll::STREAM_MEMORY => stmt
+            .query_map(args, |r| {
+                let value = MemoryValue {
+                    profile: r.get(0)?,
+                    item_id: r.get(1)?,
+                    binge_group: r.get(2)?,
+                    stream_json: r.get(3)?,
+                };
+                let k = key(&[&value.profile, &value.item_id]);
                 Ok(record(coll, k, &value, r.get(4)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
@@ -415,6 +443,17 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         coll::SETTINGS => {
             let v: SettingValue = serde_json::from_value(value)?;
             sql::set_setting(c, &v.profile, &v.key, &v.value_json, hlc)?
+        }
+        coll::STREAM_MEMORY => {
+            let v: MemoryValue = serde_json::from_value(value)?;
+            sql::set_stream_memory(
+                c,
+                &v.profile,
+                &v.item_id,
+                v.binge_group.as_deref(),
+                &v.stream_json,
+                hlc,
+            )?
         }
         // A collection from a newer app version.
         _ => 0,
@@ -528,6 +567,23 @@ pub(crate) mod sql {
                item_id = excluded.item_id, watched = excluded.watched, hlc = excluded.hlc
              WHERE excluded.hlc > watched.hlc",
             params![profile, video_id, item_id, watched, hlc],
+        )
+    }
+
+    pub fn set_stream_memory(
+        c: &Connection,
+        profile: &str,
+        item_id: &str,
+        binge_group: Option<&str>,
+        stream_json: &str,
+        hlc: &str,
+    ) -> rusqlite::Result<usize> {
+        c.execute(
+            "INSERT INTO stream_memory (profile_id, item_id, binge_group, stream_json, hlc) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(profile_id, item_id) DO UPDATE SET
+               binge_group = excluded.binge_group, stream_json = excluded.stream_json, hlc = excluded.hlc
+             WHERE excluded.hlc > stream_memory.hlc",
+            params![profile, item_id, binge_group, stream_json, hlc],
         )
     }
 

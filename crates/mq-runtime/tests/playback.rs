@@ -408,6 +408,14 @@ async fn offers_the_next_released_episode_and_the_binge_group() {
     let s = next.expect("next episode found");
     assert_eq!(s.next.unwrap().video_id, "tt9:1:2");
     assert_eq!(s.binge_group.as_deref(), Some("show|1080p|NTb"));
+    assert_eq!(
+        core.library()
+            .last_binge_group("p", "tt9")
+            .unwrap()
+            .as_deref(),
+        Some("show|1080p|NTb"),
+        "the played release line is remembered for the title"
+    );
 
     // Episode 3 is not out yet, so the last aired episode offers nothing.
     let view = PlaybackView::open(&core, candidates, play(2));

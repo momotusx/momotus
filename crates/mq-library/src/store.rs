@@ -500,6 +500,38 @@ impl Library {
         })
     }
 
+    /// Remembers the stream played for a title, so its next episode can
+    /// prefer the same release line.
+    pub fn set_stream_memory(
+        &self,
+        profile: &str,
+        item_id: &str,
+        binge_group: Option<&str>,
+        stream_json: &str,
+        hlc: &str,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            sql::set_stream_memory(c, profile, item_id, binge_group, stream_json, hlc).map(drop)
+        })
+    }
+
+    /// The binge group of the stream last played for a title.
+    pub fn last_binge_group(
+        &self,
+        profile: &str,
+        item_id: &str,
+    ) -> Result<Option<String>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT binge_group FROM stream_memory WHERE profile_id = ?1 AND item_id = ?2",
+                params![profile, item_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map(Option::flatten)
+        })
+    }
+
     /// Every setting of the profile as (key, JSON value).
     pub fn settings(&self, profile: &str) -> Result<Vec<(String, String)>, LibraryError> {
         self.read(|c| {

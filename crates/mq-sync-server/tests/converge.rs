@@ -42,6 +42,11 @@ enum Op {
         device: usize,
         order: Vec<usize>,
     },
+    Memory {
+        device: usize,
+        item: u8,
+        group: u8,
+    },
     Sync {
         device: usize,
     },
@@ -81,6 +86,11 @@ fn op() -> impl Strategy<Value = Op> {
             proptest::sample::subsequence(vec![0usize, 1, 2], 0..=3).prop_shuffle()
         )
             .prop_map(|(device, order)| Op::Addons { device, order }),
+        (device.clone(), 0..2u8, 0..3u8).prop_map(|(device, item, group)| Op::Memory {
+            device,
+            item,
+            group
+        }),
         device.clone().prop_map(|device| Op::Sync { device }),
         device.clone().prop_map(|device| Op::Push { device }),
         device.prop_map(|device| Op::Pull { device }),
@@ -157,6 +167,13 @@ impl Device {
                     .collect();
                 lib.set_addons(PROFILE, &rows, &hlc).unwrap();
                 ((coll::ADDONS, key(&[PROFILE])), hlc)
+            }
+            Op::Memory { item, group, .. } => {
+                let item_id = format!("tt{item}");
+                let binge = format!("g{group}");
+                lib.set_stream_memory(PROFILE, &item_id, Some(&binge), "{}", &hlc)
+                    .unwrap();
+                ((coll::STREAM_MEMORY, key(&[PROFILE, &item_id])), hlc)
             }
             Op::Sync { .. } | Op::Push { .. } | Op::Pull { .. } => {
                 unreachable!("handled by the runner")
@@ -259,7 +276,8 @@ async fn run(ops: Vec<Op>) {
             | Op::Watched { device, .. }
             | Op::InLibrary { device, .. }
             | Op::Setting { device, .. }
-            | Op::Addons { device, .. } => {
+            | Op::Addons { device, .. }
+            | Op::Memory { device, .. } => {
                 let (register, hlc) = devices[*device].apply(op);
                 let slot = newest.entry(register).or_default();
                 if hlc > *slot {

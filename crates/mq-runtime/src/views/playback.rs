@@ -412,6 +412,7 @@ async fn resolve_next(
                     s.snapshot.binge_group = stream.binge_group.clone();
                     snapshot.set(s.snapshot.clone());
                 }
+                remember_stream(&core, &target, &stream);
                 let subtitles = find_subtitles(
                     &core,
                     &target,
@@ -703,4 +704,23 @@ async fn next_episode(core: &Core, target: &PlayTarget) -> Option<NextEpisode> {
             episode: s.episode,
             thumbnail: v.thumbnail.clone(),
         })
+}
+
+/// Keeps the stream that started playing for this title, so Versions for its
+/// next episode prefers the same release line.
+fn remember_stream(core: &Core, target: &PlayTarget, stream: &ParsedStream) {
+    let memory = serde_json::json!({
+        "key": stream.key,
+        "addonId": stream.addon_id,
+        "release": stream.filename.as_deref().unwrap_or(&stream.raw_name),
+    });
+    if let Err(e) = core.library().set_stream_memory(
+        core.profile(),
+        &target.item_id,
+        stream.binge_group.as_deref(),
+        &memory.to_string(),
+        &core.hlc(),
+    ) {
+        tracing::warn!("stream memory write failed: {e}");
+    }
 }

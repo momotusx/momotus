@@ -163,3 +163,43 @@ async fn real_torrentio_versions() {
     }
     assert!(snap.rows.len() > 5);
 }
+
+const TWO_GROUPS: &str = r#"{"streams":[
+ {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-FLUX\n👤 900 💾 3.0 GB","infoHash":"cccccccccccccccccccccccccccccccccccccccc","fileIdx":0,"behaviorHints":{"bingeGroup":"torrentio|1080p|FLUX"}},
+ {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-NTb\n👤 40 💾 3.1 GB","infoHash":"dddddddddddddddddddddddddddddddddddddddd","fileIdx":0,"behaviorHints":{"bingeGroup":"torrentio|1080p|NTb"}}
+]}"#;
+
+#[tokio::test]
+async fn remembers_the_release_line_played_last_for_the_title() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let addon = stream_addon("torrents", Duration::ZERO, TWO_GROUPS).await;
+    core.library()
+        .set_addons("p", &[addon], &core.hlc())
+        .unwrap();
+    let pick = |core: &Core| {
+        let core = core.clone();
+        async move {
+            let view = VersionsView::open(&core, params());
+            while !view.snapshot().done {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            view.snapshot().recommended.unwrap()
+        }
+    };
+    // With no memory the better seeded release wins.
+    assert!(pick(&core).await.release_name.contains("FLUX"));
+    // After an episode played from the NTb line, that line is preferred.
+    core.library()
+        .set_stream_memory(
+            "p",
+            "tt0944947",
+            Some("torrentio|1080p|NTb"),
+            "{}",
+            &core.hlc(),
+        )
+        .unwrap();
+    let best = pick(&core).await;
+    assert!(best.release_name.contains("NTb"), "{best:?}");
+    assert!(best.reasons.contains(&Reason::SameReleaseAsLast));
+}

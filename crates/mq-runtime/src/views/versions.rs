@@ -116,7 +116,15 @@ pub struct VersionsParams {
 }
 
 impl VersionsView {
-    pub fn open(core: &Core, params: VersionsParams) -> Self {
+    pub fn open(core: &Core, mut params: VersionsParams) -> Self {
+        if params.last_binge_group.is_none() {
+            let item_id = params.video_id.split(':').next().unwrap_or_default();
+            params.last_binge_group = core
+                .library()
+                .last_binge_group(core.profile(), item_id)
+                .ok()
+                .flatten();
+        }
         let addons = core.installed_addons().unwrap_or_default();
         let path = ResourcePath {
             resource: "stream".into(),
