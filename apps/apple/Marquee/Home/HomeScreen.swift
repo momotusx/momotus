@@ -45,7 +45,8 @@ struct HomeScreen: View {
     @ViewBuilder private var content: some View {
         switch model.phase {
         case .opening:
-            EmptyView()
+            // The core may still be opening: the shell shows at once, rows to come.
+            ForEach(0..<3, id: \.self) { _ in SkeletonRow() }
         case .failed(let message):
             StateLine(symbol: "triangle-alert", text: message, action: ("Try again", model.reload))
                 .padding(.horizontal, metrics.gutter)

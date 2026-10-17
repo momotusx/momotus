@@ -18,7 +18,6 @@ struct MarqueeApp: App {
         #if DEBUG && os(macOS)
         DebugHooks.listenForSnapshots()
         #endif
-        coreLog.notice("metric core_open_s=\(Launch.elapsed(), format: .fixed(precision: 3), privacy: .public)")
     }
 
     var body: some Scene {

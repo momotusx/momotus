@@ -135,6 +135,27 @@ func episodeLabel(_ videoId: String?) -> String? {
     return "S\(parts[1]):E\(parts[2])"
 }
 
+/// A row before Home has any: the header's bar and a blank title block over
+/// placeholder posters. No words, so it never stands in for real content.
+struct SkeletonRow: View {
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: metrics.wide ? 16 : 12) {
+            HStack(spacing: metrics.wide ? 14 : 8) {
+                Capsule().fill(Theme.Palette.lineStrong).frame(width: metrics.wide ? 4 : 3, height: metrics.wide ? 25 : 20)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Theme.Palette.surface)
+                    .frame(width: metrics.wide ? 220 : 150, height: metrics.wide ? 20 : 16)
+            }
+            .padding(.horizontal, metrics.gutter)
+            SkeletonStrip()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
+    }
+}
+
 /// Placeholder posters while a catalog loads, breathing slowly.
 private struct SkeletonStrip: View {
     @Environment(\.metrics) private var metrics

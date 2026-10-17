@@ -34,6 +34,8 @@ final class CoreClient {
 
     @ObservationIgnored private var router = CoreRouter()
     @ObservationIgnored private var core: MarqueeCore?
+    /// Messages sent while the core opens, in order; they go out once it is open.
+    @ObservationIgnored private var queued: [String] = []
 
     init() {
         openCore()
@@ -43,28 +45,61 @@ final class CoreClient {
 
     /// Opens the core again after it stopped; open views resubscribe.
     func restart() {
-        core = nil
         openCore()
         generation += 1
     }
 
+    /// Opens the core off the main thread, so the first frame never waits for
+    /// it: until it is open, requests and messages queue in order behind it.
     private func openCore() {
         let router = CoreRouter()
         router.onDied { [weak self] reason in
             Task { @MainActor in self?.failure = "The core stopped (\(reason))." }
         }
-        do {
-            let dir = Self.dataDirectory()
-            core = try MarqueeCore.open(
-                dataDir: dir.path(percentEncoded: false),
-                profile: "default",
-                deviceId: DeviceId.current(fallbackDirectory: dir),
-                listener: router
-            )
-            self.router = router
-            failure = nil
-        } catch {
-            failure = "The core could not open: \(error)"
+        (self.router, core, queued, failure) = (router, nil, [], nil)
+        let dir = Self.dataDirectory()
+        // Started here, not from a main-actor task, so it runs while the first
+        // frame is built rather than after it.
+        let opening = Task.detached(priority: .userInitiated) {
+            let start = ContinuousClock.now
+            let opened = Result {
+                try MarqueeCore.open(
+                    dataDir: dir.path(percentEncoded: false),
+                    profile: "default",
+                    deviceId: DeviceId.current(fallbackDirectory: dir),
+                    listener: router
+                )
+            }
+            return (opened, (ContinuousClock.now - start) / .milliseconds(1))
+        }
+        Task {
+            let (opened, took) = await opening.value
+            // A newer open took over (a restart): this one is dropped.
+            guard self.router === router else { return }
+            switch opened {
+            case .success(let core):
+                coreLog.notice("""
+                    metric core_open_s=\(Launch.elapsed(), format: .fixed(precision: 3), privacy: .public) \
+                    core_open_ms=\(took, format: .fixed(precision: 1), privacy: .public)
+                    """)
+                self.core = core
+                for text in queued { core.send(json: text) }
+                queued = []
+            case .failure(let error):
+                let reason = "The core could not open: \(error)"
+                failure = reason
+                queued = []
+                router.fail(CoreError(reason))
+            }
+        }
+    }
+
+    /// Hands a message to the core, or queues it while the core opens.
+    private func deliver(_ text: String) {
+        if let core {
+            core.send(json: text)
+        } else if failure == nil {
+            queued.append(text)
         }
     }
 
@@ -135,7 +170,7 @@ final class CoreClient {
     func request<R: Sendable>(
         _ op: String, _ fields: [String: any Sendable], decode: @escaping @Sendable (Data) throws -> R
     ) async throws -> R {
-        guard let core else { throw CoreError(failure ?? "The core is not open.") }
+        if core == nil, let failure { throw CoreError(failure) }
         let router = router
         let id = router.nextId()
         let text = try Self.encode(op: op, id: id, fields: fields)
@@ -146,14 +181,14 @@ final class CoreClient {
                 case .failure(let error): continuation.resume(throwing: error)
                 }
             }
-            core.send(json: text)
+            deliver(text)
         }
     }
 
     /// Fire and forget: the reply is dropped by the router.
     private func send(_ op: String, _ fields: [String: any Sendable]) {
-        guard let core, let text = try? Self.encode(op: op, id: router.nextId(), fields: fields) else { return }
-        core.send(json: text)
+        guard let text = try? Self.encode(op: op, id: router.nextId(), fields: fields) else { return }
+        deliver(text)
     }
 
     static func encode(op: String, id: UInt64, fields: [String: any Sendable]) throws -> String {

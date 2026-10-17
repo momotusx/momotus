@@ -76,6 +76,15 @@ final class CoreRouter: CoreListener {
         state.withLock { $0.onDied = handler }
     }
 
+    /// Answers every waiting request with `error` (the core never opened).
+    func fail(_ error: CoreError) {
+        let waiters = state.withLock { state in
+            defer { state.waiters.removeAll() }
+            return Array(state.waiters.values)
+        }
+        waiters.forEach { $0(.failure(error)) }
+    }
+
     func onMessage(json: String) {
         let data = Data(json.utf8)
         guard let head = try? JSONDecoder().decode(Head.self, from: data) else {
