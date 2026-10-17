@@ -13,7 +13,9 @@ function shell() {
     transport,
     nonce,
     ready: (token: string, generation = 1, n = nonce()) => host.__mq?.ready({ nonce: n, generation, token, platform: "linux" }),
-    recv: (...messages: unknown[]) => host.__mq?.recv(messages.map((m) => JSON.stringify(m))),
+    recv: (...messages: unknown[]) => host.__mq?.recv(nonce(), messages.map((m) => JSON.stringify(m))),
+    /** A batch the shell bound to another document's nonce. */
+    recvFor: (n: string, ...messages: unknown[]) => host.__mq?.recv(n, messages.map((m) => JSON.stringify(m))),
   };
 }
 
@@ -41,19 +43,44 @@ describe("ipcTransport", () => {
     const bridge = new Bridge(s.transport);
     void bridge.request("ping");
     // A ready the shell sent the previous document, executed in this one.
-    s.ready("stale", 1, "nonce-of-the-previous-document");
+    expect(s.ready("stale", 1, "nonce-of-the-previous-document")).toBe(false);
     expect(s.posted).toEqual([{ op: "hello", nonce: s.nonce() }]);
-    s.ready("t2", 2);
+    expect(s.ready("t2", 2)).toBe(true);
     expect(s.posted.at(-1)).toEqual({ token: "t2", id: 1, op: "ping" });
   });
 
   test("a second ready for the same document changes nothing", () => {
     const s = shell();
     const bridge = new Bridge(s.transport);
-    s.ready("t1");
-    s.ready("t2");
+    expect(s.ready("t1")).toBe(true);
+    expect(s.ready("t2")).toBe(false);
     void bridge.request("ping");
     expect(s.posted.at(-1)).toEqual({ token: "t1", id: 1, op: "ping" });
+  });
+
+  test("a batch made for the previous document is dropped whole, before and after this one's ready", async () => {
+    // The shell submitted it for the old document; a navigation committed
+    // before it ran. Its ids collide with this document's: both start at 1.
+    const old = shell();
+    const s = shell();
+    const bridge = new Bridge(s.transport);
+    const seen: unknown[] = [];
+    let opened = false;
+    const opening = bridge.subscribe("home", {}, { snapshot: (x) => seen.push({ snapshot: x }), updates: (u) => seen.push(u) });
+    void opening.then(() => (opened = true));
+    const stale = [{ sub: 1, updates: ["old push"] }, { id: 1, ok: true, result: { sub: 1, snapshot: "old" } }, { sub: 1, updates: ["old after"] }];
+    s.recvFor(old.nonce(), ...stale);
+    s.ready("t2");
+    s.recvFor(old.nonce(), ...stale);
+    await Promise.resolve();
+    expect(opened).toBe(false);
+    expect(seen).toEqual([]);
+    s.recv({ sub: 1, updates: ["b1"] }, { id: 1, ok: true, result: { sub: 1, snapshot: "new" } });
+    await opening;
+    // A push of the old document for the same id after the view is open.
+    s.recvFor(old.nonce(), { sub: 1, updates: ["old push"] });
+    s.recv({ sub: 1, updates: ["b2"] });
+    expect(seen).toEqual([{ snapshot: "new" }, ["b1"], ["b2"]]);
   });
 
   test("a batch keeps its order, pushes included", async () => {

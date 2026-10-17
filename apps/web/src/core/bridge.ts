@@ -150,9 +150,11 @@ export interface ShellReady {
   caps?: unknown;
 }
 
-/** Where the shell reaches the page. */
+/** Where the shell reaches the page. `ready` returns whether this document
+ * took it; the shell binds every later batch to the nonce of the `ready` that
+ * returned true, and `recv` drops a batch bound to any other. */
 export interface ShellHost {
-  __mq?: { recv(batch: string[]): void; ready(r: ShellReady): void };
+  __mq?: { recv(nonce: string, batch: string[]): void; ready(r: ShellReady): boolean };
 }
 
 declare global {
@@ -168,8 +170,8 @@ const PRE_READY_LIMIT = 256;
 
 /** Desktop shells (plans/m3-desktop.md sections 2.2 and 3): requests go out
  * through the shell's message handler carrying the document's token; the
- * shell calls `__mq.recv` with batches. Until `ready`, only `hello` goes out
- * and requests wait in order. */
+ * shell calls `__mq.recv` with batches bound to this document's nonce. Until
+ * `ready`, only `hello` goes out and requests wait in order. */
 export function ipcTransport(post: (text: string) => void, onReady?: (r: ShellReady) => void, host: ShellHost = window): Transport {
   // Made by this document, so only an answer to this document's hello counts.
   const nonce = crypto.randomUUID();
@@ -187,16 +189,21 @@ export function ipcTransport(post: (text: string) => void, onReady?: (r: ShellRe
   // Every request is a JSON object: the token goes in as its first field.
   const withToken = (text: string) => `{"token":${JSON.stringify(token)}${text.length > 2 ? `,${text.slice(1)}` : "}"}`;
   host.__mq = {
-    recv: (batch) => {
+    recv: (n, batch) => {
+      // A batch the shell made for the previous document can run in this one
+      // after a navigation, and request ids restart at 1 in every document:
+      // it would answer this document's requests. Nothing of it is read.
+      if (n !== nonce) return;
       for (const text of batch) receive(text);
     },
     ready: (r) => {
       // Only the answer to this document's hello, and only once: a repeat
       // (after a repeated hello) changes nothing.
-      if (r.nonce !== nonce || token !== null || closed) return;
+      if (r.nonce !== nonce || token !== null || closed) return false;
       token = r.token;
       onReady?.(r);
       for (const text of waiting.splice(0)) post(withToken(text));
+      return true;
     },
   };
   post(JSON.stringify({ op: "hello", nonce }));
