@@ -8,7 +8,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use futures_util::{SinkExt, StreamExt};
 use mq_bridge::Session;
-use mq_runtime::{Core, CoreConfig};
+use mq_runtime::{Core, CoreConfig, StoreId};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
@@ -28,6 +28,7 @@ async fn main() {
         device_id: 1,
     })
     .expect("open core");
+    core.set_debrid_keys(&StoreId::keys_from_env());
     let mut app = Router::new().route("/ws", get(ws)).with_state(core);
     if let Ok(dir) = std::env::var("MQ_STATIC") {
         app = app.fallback_service(tower_http::services::ServeDir::new(dir));

@@ -1,0 +1,9 @@
+{"event":"setup","date":"2026-10-17","addons":["Cinemeta","Torrentio","local test addon (dead mirror + live download.blender.org Sintel 1080p)"],"build":"debug","note":"run 1 cold, run 2 resumes from saved progress"}
+{"event":"title","ms":14,"name":"Sintel"}
+{"event":"versions","hidden":0,"ms":1311,"pick":{"failover":1,"quality":"1080p","reasons":["playsDirectly","matchesScreen"],"release":"Sintel.2010.1080p.mkv","via":"Local Test"},"rows":6}
+{"attempts":[{"error":"source did not answer: http status 404","key":"url:https://download.blender.org/durian/movies/Sintel.2010.1080p.missing.mkv","via":"Local Test"}],"event":"resolved","ms":1595,"phase":"ready","resume_ms":null}
+{"event":"done","played":{"event":"played","file_loaded_ms":514,"first_frame_ms":521,"probe_ms":179,"total_ms":4709},"total_ms":6305}
+{"event":"title","ms":13,"name":"Sintel"}
+{"event":"versions","hidden":0,"ms":1291,"pick":{"failover":1,"quality":"1080p","reasons":["playsDirectly","matchesScreen"],"release":"Sintel.2010.1080p.mkv","via":"Local Test"},"rows":6}
+{"attempts":[{"error":"source did not answer: http status 404","key":"url:https://download.blender.org/durian/movies/Sintel.2010.1080p.missing.mkv","via":"Local Test"}],"event":"resolved","ms":1499,"phase":"ready","resume_ms":4000}
+{"event":"done","played":{"event":"played","file_loaded_ms":205,"first_frame_ms":891,"probe_ms":163,"total_ms":4090},"total_ms":5590}

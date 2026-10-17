@@ -36,6 +36,32 @@ pub enum StoreId {
 }
 
 impl StoreId {
+    pub const ALL: [StoreId; 4] = [
+        Self::RealDebrid,
+        Self::TorBox,
+        Self::AllDebrid,
+        Self::Premiumize,
+    ];
+
+    /// Environment variable the dev tools (CLI, bridge) read the key from.
+    /// Apps pass keys from the platform keystore instead.
+    pub fn env_var(self) -> &'static str {
+        match self {
+            Self::RealDebrid => "MQ_RD_TOKEN",
+            Self::TorBox => "MQ_TORBOX_KEY",
+            Self::AllDebrid => "MQ_ALLDEBRID_KEY",
+            Self::Premiumize => "MQ_PREMIUMIZE_KEY",
+        }
+    }
+
+    /// Keys found in the environment, for the dev tools only.
+    pub fn keys_from_env() -> Vec<(StoreId, String)> {
+        Self::ALL
+            .into_iter()
+            .filter_map(|id| Some((id, std::env::var(id.env_var()).ok()?)))
+            .collect()
+    }
+
     /// Maps the service names addons use (`ClientResolve.service`).
     pub fn from_service(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().as_str() {

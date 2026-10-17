@@ -12,6 +12,6 @@ mod store;
 pub use hlc::{Hlc, HlcClock};
 
 pub use store::{
-    AddonRow, CachedResponse, ContinueItem, Library, LibraryError, LibraryItemRow, ProgressRow,
-    Table,
+    AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryError, LibraryItemRow,
+    ProgressRow, Table,
 };

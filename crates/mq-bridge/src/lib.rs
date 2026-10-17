@@ -2,11 +2,14 @@
 //! a WebSocket (dev server, browser, Playwright) and over the desktop shells'
 //! IPC channel.
 //!
-//! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon", ...}`.
+//! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
+//! "setDebridKeys", ...}`. Views: home, title, versions, playback.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
-use mq_runtime::{Core, HomeView, TitleView, VersionsParams, VersionsView};
+use mq_runtime::{
+    Core, HomeView, PlayTarget, PlaybackView, StoreId, TitleView, VersionsParams, VersionsView,
+};
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -36,6 +39,12 @@ enum Request {
         id: u64,
         url: String,
     },
+    /// Debrid accounts from the platform keystore, by service name
+    /// ("realdebrid", "torbox", "alldebrid", "premiumize"). Replaces the set.
+    SetDebridKeys {
+        id: u64,
+        keys: Vec<(String, String)>,
+    },
 }
 
 /// Holding a view keeps its background work alive; dropping it cancels.
@@ -43,6 +52,7 @@ enum View {
     Home { _view: HomeView },
     Title(TitleView),
     Versions(VersionsView),
+    Playback(PlaybackView),
 }
 
 struct Subscription {
@@ -105,6 +115,21 @@ impl Session {
                 let result = self.command(sub, &command);
                 self.reply(json!(id), result);
             }
+            Request::SetDebridKeys { id, keys } => {
+                let result = keys
+                    .into_iter()
+                    .map(|(service, key)| {
+                        StoreId::from_service(&service)
+                            .map(|id| (id, key))
+                            .ok_or(format!("unknown debrid service: {service}"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|keys| {
+                        self.core.set_debrid_keys(&keys);
+                        json!({ "stores": keys.len() })
+                    });
+                self.reply(json!(id), result);
+            }
             Request::InstallAddon { id, url } => {
                 let result = self
                     .core
@@ -150,6 +175,12 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (View::Versions(versions), to_value(&snapshot)?, forward)
             }
+            "playback" => {
+                let playback = self.playback(params)?;
+                let (snapshot, updates) = playback.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (View::Playback(playback), to_value(&snapshot)?, forward)
+            }
             other => return Err(format!("unknown view: {other}")),
         };
         self.subs.insert(sub, Subscription { view, forward });
@@ -191,9 +222,56 @@ impl Session {
                     .map_err(|e| e.to_string())?;
             }
             (View::Versions(versions), "freeze") => versions.freeze(),
+            (View::Playback(playback), "progress") => {
+                let ms = |key: &str| {
+                    command
+                        .get(key)
+                        .and_then(Value::as_u64)
+                        .ok_or(format!("{key} missing"))
+                };
+                playback.report_progress(ms("positionMs")?, ms("durationMs")?);
+            }
+            (View::Playback(playback), "failOver") => {
+                playback
+                    .fail_over(&param(command, "error").unwrap_or_else(|_| "player error".into()));
+            }
             (_, other) => return Err(format!("unknown command: {other}")),
         }
         Ok(json!({}))
+    }
+}
+
+impl Session {
+    /// Playback params: `versionsSub` (the open Versions view), `key` (its
+    /// row), `kind`, `itemId`, `videoId`, optional `name`, `poster`, `season`,
+    /// `episode`.
+    fn playback(&self, params: &Value) -> Result<PlaybackView, String> {
+        let versions_sub = params
+            .get("versionsSub")
+            .and_then(Value::as_u64)
+            .ok_or("missing parameter: versionsSub")?;
+        let Some(Subscription {
+            view: View::Versions(versions),
+            ..
+        }) = self.subs.get(&versions_sub)
+        else {
+            return Err(format!("no versions subscription {versions_sub}"));
+        };
+        let candidates = versions.candidates(&param(params, "key")?);
+        if candidates.is_empty() {
+            return Err("that version is no longer listed".into());
+        }
+        let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
+        let target = PlayTarget {
+            kind: param(params, "kind")?,
+            item_id: param(params, "itemId")?,
+            video_id: param(params, "videoId")?,
+            name: param(params, "name").ok(),
+            poster: param(params, "poster").ok(),
+            season: num("season"),
+            episode: num("episode"),
+        };
+        Ok(PlaybackView::open(&self.core, candidates, target))
     }
 }
 

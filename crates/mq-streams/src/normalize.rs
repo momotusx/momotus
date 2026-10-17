@@ -48,6 +48,15 @@ pub fn normalize(
         source_site: hints.indexer.clone().or(facts.source_site.clone()),
         binge_group: hints.binge_group.clone(),
         filename,
+        headers: hints
+            .proxy_headers
+            .as_ref()
+            .map(|p| {
+                let mut h: Vec<_> = p.request.clone().into_iter().collect();
+                h.sort();
+                h
+            })
+            .unwrap_or_default(),
         release: facts.release,
         raw_name: name,
         raw_description: description,

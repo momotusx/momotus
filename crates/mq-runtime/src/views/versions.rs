@@ -176,15 +176,21 @@ impl VersionsView {
         self.snapshot.set(render(&state));
     }
 
-    /// The ranked row for `key`, with its failover chain, for playback.
-    pub fn row(&self, key: &str) -> Option<RankedRow> {
+    /// The stream for row `key` followed by its failover chain, for playback.
+    pub fn candidates(&self, key: &str) -> Vec<ParsedStream> {
         let state = lock(&self.state);
         state
             .ranked
             .rows
             .iter()
             .find(|r| r.stream.key == key)
-            .cloned()
+            .map(|r| {
+                std::iter::once(&r.stream)
+                    .chain(&r.failover)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn recommended(&self) -> Option<RankedRow> {

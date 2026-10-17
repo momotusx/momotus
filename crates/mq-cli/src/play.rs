@@ -14,12 +14,15 @@ use tokio::process::Command;
 pub struct PlayOptions {
     pub headless: bool,
     pub seconds: u64,
+    /// Resume position.
+    pub start_ms: Option<u64>,
 }
 
 pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> {
     let started = Instant::now();
     let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
-    let reader = HttpRangeReader::new(http, url, vec![], Arc::new(ByteCache::new(8 * 1024 * 1024)));
+    let reader = HttpRangeReader::new(http, url, vec![], Arc::new(ByteCache::new(8 * 1024 * 1024)))
+        .allow_private(url.starts_with("http://127.0.0.1:"));
     let probe = mq_media::probe(&reader, ProbeBudget::default(), &CancellationToken::new()).await;
     let probe_ms = started.elapsed().as_millis() as u64;
     let video = probe.video.as_ref().map(|v| format!("{v:?}"));
@@ -44,6 +47,9 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
         "--really-quiet".into(),
         format!("--length={}", options.seconds),
     ];
+    if let Some(ms) = options.start_ms {
+        args.push(format!("--start={:.3}", ms as f64 / 1000.0));
+    }
     if options.headless {
         args.extend(["--vo=null".into(), "--ao=null".into()]);
     }

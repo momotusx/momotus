@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 mq-runtime = { path = "../mq-runtime" }
+mq-streams = { path = "../mq-streams" }
 mq-addons = { path = "../mq-addons" }
 mq-protocol = { path = "../mq-protocol" }
 mq-http = { path = "../mq-http" }

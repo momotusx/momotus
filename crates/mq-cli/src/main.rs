@@ -5,7 +5,11 @@ use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use mq_addons::{AddonEvent, Deadlines};
 use mq_protocol::{ResourcePath, decode_streams};
-use mq_runtime::{Core, CoreConfig, HomeView, RowState};
+use mq_runtime::{
+    Core, CoreConfig, HomeView, PlayTarget, PlaybackPhase, PlaybackView, RowState, StoreId,
+    TitleView, VersionsParams, VersionsView,
+};
+use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde_json::json;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -38,6 +42,17 @@ enum Command {
     },
     /// Query every stream addon for a title, e.g. `movie tt0111161` or `series tt0944947:1:1`.
     Streams { kind: String, id: String },
+    /// Pick the recommended version of a title and play it in mpv, e.g.
+    /// `movie tt1727587` or `series tt0944947:1:1`. Debrid keys come from
+    /// MQ_RD_TOKEN, MQ_TORBOX_KEY, MQ_ALLDEBRID_KEY or MQ_PREMIUMIZE_KEY.
+    Play {
+        kind: String,
+        id: String,
+        #[arg(long)]
+        headless: bool,
+        #[arg(long, default_value_t = 5)]
+        seconds: u64,
+    },
     /// Probe an http(s) stream, play it in mpv and report time to first frame.
     PlayUrl {
         url: String,
@@ -64,13 +79,26 @@ async fn main() {
         Command::Addons => addons(&core),
         Command::Home { timeout_secs } => home(&core, Duration::from_secs(timeout_secs)).await,
         Command::Streams { kind, id } => streams(&core, kind, id).await,
+        Command::Play {
+            kind,
+            id,
+            headless,
+            seconds,
+        } => play(&core, kind, id, headless, seconds).await,
         Command::PlayUrl {
             url,
             headless,
             seconds,
-        } => play::play_url(&url, play::PlayOptions { headless, seconds })
-            .await
-            .map(emit),
+        } => play::play_url(
+            &url,
+            play::PlayOptions {
+                headless,
+                seconds,
+                start_ms: None,
+            },
+        )
+        .await
+        .map(emit),
     };
     if let Err(e) = result {
         fail(&e);
@@ -206,4 +234,113 @@ fn source_kinds(streams: &[mq_protocol::WireStream]) -> serde_json::Value {
         *counts.entry(kind).or_default() += 1;
     }
     json!(counts)
+}
+
+/// Title, Versions and Playback views in sequence, as the apps drive them,
+/// then mpv on the loopback URL. Every step reports its time since start.
+async fn play(
+    core: &Core,
+    kind: String,
+    id: String,
+    headless: bool,
+    seconds: u64,
+) -> Result<(), String> {
+    let started = Instant::now();
+    core.set_debrid_keys(&StoreId::keys_from_env());
+    let mut parts = id.split(':');
+    let item_id = parts.next().unwrap_or_default().to_owned();
+    let season = parts.next().and_then(|s| s.parse().ok());
+    let episode = parts.next().and_then(|s| s.parse().ok());
+
+    let title = TitleView::open(core, &kind, &item_id);
+    let header = until(Duration::from_secs(10), || {
+        let header = title.snapshot().header;
+        header.details.is_some().then_some(header)
+    })
+    .await;
+    let details = header.and_then(|h| h.details);
+    emit(
+        json!({ "event": "title", "name": details.as_ref().map(|d| &d.name), "ms": ms(started.elapsed()) }),
+    );
+
+    let versions = VersionsView::open(
+        core,
+        VersionsParams {
+            kind: kind.clone(),
+            video_id: id.clone(),
+            target: Target {
+                title: details.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
+                year: None,
+                season,
+                episode,
+            },
+            caps: DeviceCaps::basic_1080p(),
+            prefs: StreamPrefs::default(),
+            last_binge_group: None,
+        },
+    );
+    let snapshot = until(Duration::from_secs(15), || {
+        let s = versions.snapshot();
+        s.done.then_some(s)
+    })
+    .await
+    .unwrap_or_else(|| versions.snapshot());
+    let pick = snapshot.recommended.ok_or("no playable version")?;
+    emit(json!({
+        "event": "versions", "rows": snapshot.rows.len() + 1, "hidden": snapshot.hidden.count,
+        "pick": { "quality": pick.quality, "via": pick.via, "release": pick.release_name,
+                  "reasons": pick.reasons, "failover": pick.failover_count },
+        "ms": ms(started.elapsed()),
+    }));
+
+    let playback = PlaybackView::open(
+        core,
+        versions.candidates(&pick.key),
+        PlayTarget {
+            kind,
+            item_id,
+            video_id: id,
+            name: details.as_ref().map(|d| d.name.clone()),
+            poster: details.and_then(|d| d.poster),
+            season,
+            episode,
+        },
+    );
+    let ready = until(Duration::from_secs(60), || {
+        let s = playback.snapshot();
+        (s.phase != PlaybackPhase::Resolving).then_some(s)
+    })
+    .await
+    .ok_or("playback did not resolve in 60 s")?;
+    emit(json!({
+        "event": "resolved", "phase": ready.phase, "attempts": ready.attempts,
+        "resume_ms": ready.resume_ms, "ms": ms(started.elapsed()),
+    }));
+    let url = ready.url.ok_or("no source could be opened")?;
+    let played = play::play_url(
+        &url,
+        play::PlayOptions {
+            headless,
+            seconds,
+            start_ms: ready.resume_ms,
+        },
+    )
+    .await?;
+    playback.report_progress(ready.resume_ms.unwrap_or(0) + seconds * 1000, 0);
+    emit(json!({ "event": "done", "played": played, "total_ms": ms(started.elapsed()) }));
+    Ok(())
+}
+
+/// Polls `f` every 10 ms until it returns a value or `within` passes.
+async fn until<T>(within: Duration, f: impl Fn() -> Option<T>) -> Option<T> {
+    let deadline = Instant::now() + within;
+    loop {
+        if let Some(value) = f() {
+            return Some(value);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }

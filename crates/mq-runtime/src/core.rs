@@ -1,12 +1,15 @@
 use mq_addons::{
     AddonClient, CacheControl, CacheStore, InstalledAddon, ResponseCache, StoredResponse,
 };
+use mq_debrid::{AllDebrid, Premiumize, RealDebrid, Resolver, ResolverConfig, StoreId, TorBox};
 use mq_http::{ClientConfig, HttpClient};
 use mq_library::hlc::now_ms;
 use mq_library::{AddonRow, HlcClock, Library};
 use mq_protocol::Manifest;
+use mq_server::StreamServer;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use tokio::sync::OnceCell;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -38,7 +41,10 @@ pub struct Core {
 }
 
 struct Inner {
+    http: HttpClient,
     addons: AddonClient,
+    server: OnceCell<Arc<StreamServer>>,
+    debrid: RwLock<Option<Resolver>>,
     library: Arc<Library>,
     clock: HlcClock,
     profile: String,
@@ -64,16 +70,23 @@ impl Core {
         let clock = HlcClock::new(device_id);
         let library = Arc::new(library);
         let store = Arc::new(LibraryCache(library.clone()));
-        let addons = AddonClient::with_cache(http, ResponseCache::with_store(512, store));
+        let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
         library.ensure_profile(&profile, &profile, &clock.tick(now_ms()).encode())?;
         Ok(Self {
             inner: Arc::new(Inner {
+                http,
                 addons,
+                server: OnceCell::new(),
+                debrid: RwLock::new(None),
                 library,
                 clock,
                 profile,
             }),
         })
+    }
+
+    pub fn http(&self) -> &HttpClient {
+        &self.inner.http
     }
 
     pub fn addons(&self) -> &AddonClient {
@@ -90,6 +103,52 @@ impl Core {
 
     pub fn hlc(&self) -> String {
         self.inner.clock.tick(now_ms()).encode()
+    }
+
+    /// The loopback stream server, started on first use.
+    pub async fn stream_server(&self) -> Result<Arc<StreamServer>, CoreError> {
+        let server = self
+            .inner
+            .server
+            .get_or_try_init(|| async {
+                StreamServer::start(self.http().clone()).await.map(Arc::new)
+            })
+            .await?;
+        Ok(server.clone())
+    }
+
+    /// Replaces the debrid accounts. Keys come from the platform keystore and
+    /// live only in memory here; the first entry is the default store.
+    pub fn set_debrid_keys(&self, keys: &[(StoreId, String)]) {
+        let resolver = (!keys.is_empty()).then(|| {
+            keys.iter()
+                .fold(Resolver::new(ResolverConfig::default()), |r, (id, key)| {
+                    let (http, key) = (self.http().clone(), key.clone());
+                    match id {
+                        StoreId::RealDebrid => r.add_store(move |p| {
+                            RealDebrid::new(http.clone(), key.clone()).with_priority(p)
+                        }),
+                        StoreId::TorBox => r.add_store(move |p| {
+                            TorBox::new(http.clone(), key.clone()).with_priority(p)
+                        }),
+                        StoreId::AllDebrid => r.add_store(move |p| {
+                            AllDebrid::new(http.clone(), key.clone()).with_priority(p)
+                        }),
+                        StoreId::Premiumize => r.add_store(move |p| {
+                            Premiumize::new(http.clone(), key.clone()).with_priority(p)
+                        }),
+                    }
+                })
+        });
+        *self.inner.debrid.write().unwrap_or_else(|p| p.into_inner()) = resolver;
+    }
+
+    pub fn debrid(&self) -> Option<Resolver> {
+        self.inner
+            .debrid
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     /// Installed addons in the user's order. Rows whose manifest no longer

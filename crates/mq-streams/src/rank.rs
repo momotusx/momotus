@@ -277,9 +277,7 @@ fn dedupe(scored: Vec<(RankKey, ParsedStream)>, input: &RankInput<'_>) -> Vec<Ra
     for (key, stream) in scored {
         let identity = release_identity(&stream);
         if let Some(&at) = by_key.get(&stream.key).or_else(|| by_key.get(&identity)) {
-            let row = &mut rows[at];
-            row.failover.push(stream.key.clone());
-            row.duplicates += 1;
+            rows[at].failover.push(stream);
             continue;
         }
         by_key.insert(stream.key.clone(), rows.len());
@@ -288,7 +286,6 @@ fn dedupe(scored: Vec<(RankKey, ParsedStream)>, input: &RankInput<'_>) -> Vec<Ra
             group: Group::Best,
             reasons: Vec::new(),
             failover: Vec::new(),
-            duplicates: 0,
             key,
             stream,
         });

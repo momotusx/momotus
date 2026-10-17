@@ -46,6 +46,19 @@ async fn subscribe_command_unsubscribe_and_errors() {
     let reply = next(&mut rx).await;
     assert_eq!(reply["id"], 5);
     assert_eq!(reply["ok"], false);
+
+    // Ordered pairs: the first store is the default.
+    session
+        .handle_text(
+            &json!({"id": 6, "op": "setDebridKeys", "keys": [["realdebrid", "k1"], ["tb", "k2"]]})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(next(&mut rx).await["result"]["stores"], 2);
+    session
+        .handle_text(&json!({"id": 7, "op": "setDebridKeys", "keys": [["nope", "k"]]}).to_string())
+        .await;
+    assert_eq!(next(&mut rx).await["error"], "unknown debrid service: nope");
 }
 
 #[tokio::test]
@@ -62,4 +75,117 @@ async fn live_home_and_title_over_the_protocol() {
     let push = next(&mut rx).await;
     assert_eq!(push["sub"].as_u64(), Some(sub));
     assert!(push["updates"].is_array());
+}
+
+/// One local server that is both a stream addon and the media origin.
+async fn local_addon() -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let origin = base.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let origin = origin.clone();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let body = if head.starts_with("GET /manifest.json") {
+                    json!({"id": "local", "version": "1.0.0", "name": "Local", "types": ["movie"],
+                           "resources": ["stream"], "catalogs": []})
+                    .to_string()
+                } else if head.starts_with("GET /stream/") {
+                    json!({"streams": [{"name": "1080p", "url": format!("{origin}/video.mkv"),
+                           "behaviorHints": {"filename": "Sintel.2010.1080p.mkv"}}]})
+                    .to_string()
+                } else {
+                    "M".into()
+                };
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    base
+}
+
+/// Waits for a push on `sub` whose last update satisfies `done`.
+async fn push_until(
+    rx: &mut mpsc::UnboundedReceiver<Value>,
+    sub: u64,
+    done: impl Fn(&Value) -> bool,
+) -> Value {
+    loop {
+        let message = next(rx).await;
+        if message["sub"].as_u64() == Some(sub)
+            && let Some(last) = message["updates"].as_array().and_then(|u| u.last())
+            && done(last)
+        {
+            return last.clone();
+        }
+    }
+}
+
+#[tokio::test]
+async fn versions_then_playback_then_progress() {
+    let base = local_addon().await;
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let mut session = Session::new(core.clone(), tx);
+    let request = |v: Value| v.to_string();
+
+    session
+        .handle_text(&request(
+            json!({"id": 1, "op": "installAddon", "url": format!("{base}/manifest.json")}),
+        ))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+
+    session
+        .handle_text(&request(
+            json!({"id": 2, "op": "subscribe", "view": "versions",
+            "params": {"kind": "movie", "videoId": "tt1727587", "title": "Sintel"}}),
+        ))
+        .await;
+    let versions = next(&mut rx).await["result"]["sub"].as_u64().unwrap();
+    let snapshot = push_until(&mut rx, versions, |s| s["done"] == true).await;
+    let key = snapshot["recommended"]["key"].as_str().unwrap().to_owned();
+
+    session
+        .handle_text(&request(
+            json!({"id": 3, "op": "subscribe", "view": "playback",
+            "params": {"versionsSub": versions, "key": key, "kind": "movie",
+                       "itemId": "tt1727587", "videoId": "tt1727587", "name": "Sintel"}}),
+        ))
+        .await;
+    let reply = next(&mut rx).await;
+    assert_eq!(reply["result"]["snapshot"]["phase"], "resolving", "{reply}");
+    let playback = reply["result"]["sub"].as_u64().unwrap();
+    let ready = push_until(&mut rx, playback, |s| s["phase"] != "resolving").await;
+    assert_eq!(ready["phase"], "ready", "{ready}");
+    assert!(
+        ready["url"]
+            .as_str()
+            .unwrap()
+            .ends_with("/Sintel.2010.1080p.mkv")
+    );
+
+    session
+        .handle_text(&request(json!({"id": 4, "op": "command", "sub": playback,
+            "command": {"type": "progress", "positionMs": 30000, "durationMs": 888000}})))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    session
+        .handle_text(&request(
+            json!({"id": 5, "op": "unsubscribe", "sub": playback}),
+        ))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    assert_eq!(
+        core.library().progress("p", "tt1727587").unwrap(),
+        Some((30000, 888000))
+    );
 }

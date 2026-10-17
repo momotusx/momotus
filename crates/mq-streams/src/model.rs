@@ -84,6 +84,9 @@ pub struct ParsedStream {
     pub source_site: Option<String>,
     pub binge_group: Option<String>,
     pub filename: Option<String>,
+    /// Request headers the origin needs (`proxyHeaders.request`).
+    #[serde(skip)]
+    pub headers: Vec<(String, String)>,
     pub raw_name: String,
     pub raw_description: String,
 }
@@ -162,8 +165,8 @@ pub struct RankedRow {
     pub reasons: Vec<Reason>,
     pub group: Group,
     /// Same release from other addons or services, tried in order on failure.
-    pub failover: Vec<String>,
-    pub duplicates: u16,
+    /// Whole streams, since two addons can return the same torrent key.
+    pub failover: Vec<ParsedStream>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -72,10 +72,11 @@ fn cached_debrid_wins_and_duplicates_become_failover() {
     assert!(best.reasons.contains(&Reason::ReadyNow));
     assert!(best.reasons.len() <= 3);
     // The Torrentio copy of the same hash collapses into the debrid row.
-    assert_eq!(best.duplicates, 1);
+    assert_eq!(best.failover.len(), 1);
+    assert_eq!(best.failover[0].addon_id, "torrentio");
     assert_eq!(
-        best.failover,
-        vec!["bt:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0".to_string()]
+        best.failover[0].key,
+        "bt:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
     );
 
     let hidden: Vec<_> = ranked.hidden.iter().map(|h| h.reason).collect();

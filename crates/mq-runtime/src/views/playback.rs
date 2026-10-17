@@ -1,0 +1,485 @@
+//! Playback: turns one picked version into a loopback URL the player opens,
+//! falls over to the same release from another source when one fails, and
+//! saves watch progress.
+//!
+//! The candidates are the picked Versions row followed by its failover chain
+//! (the same release from other addons or services).
+
+use crate::Core;
+use crate::live::{FRAME, coalesce};
+use eyeball::SharedObservable;
+use futures_util::{Stream, StreamExt};
+use mq_debrid::{ResolveRequest, StoreId};
+use mq_http::{Priority, RequestOptions};
+use mq_library::{FINISHED_RATIO, LibraryItemRow, ProgressRow};
+use mq_protocol::Source;
+use mq_server::{StreamServer, Upstream};
+use mq_streams::ParsedStream;
+use serde::Serialize;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tokio::task::JoinHandle;
+
+/// Progress is written at most this often while playing.
+const SAVE_EVERY: Duration = Duration::from_secs(5);
+/// A source must answer its first byte within this to count as alive.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackSnapshot {
+    pub phase: PlaybackPhase,
+    /// Loopback URL for the player, once `ready`.
+    pub url: Option<String>,
+    /// The version that is playing: the picked key or one of its failovers.
+    pub key: Option<String>,
+    pub filename: Option<String>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub size_bytes: Option<u64>,
+    /// Where to start, from saved progress.
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub resume_ms: Option<u64>,
+    /// Sources that failed, in order, each with a plain reason.
+    pub attempts: Vec<Attempt>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackPhase {
+    Resolving,
+    Ready,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct Attempt {
+    pub key: String,
+    pub via: String,
+    pub error: String,
+}
+
+/// What is being watched, for progress and Continue Watching.
+#[derive(Debug, Clone, Default)]
+pub struct PlayTarget {
+    pub kind: String,
+    pub item_id: String,
+    pub video_id: String,
+    pub name: Option<String>,
+    pub poster: Option<String>,
+    pub season: Option<u32>,
+    pub episode: Option<u32>,
+}
+
+struct State {
+    snapshot: PlaybackSnapshot,
+    candidates: Vec<ParsedStream>,
+    next: usize,
+    server: Option<Arc<StreamServer>>,
+    last: Option<(u64, u64)>,
+    saved_at: Option<Instant>,
+    dirty: bool,
+}
+
+pub struct PlaybackView {
+    core: Core,
+    target: Arc<PlayTarget>,
+    snapshot: SharedObservable<PlaybackSnapshot>,
+    state: Arc<Mutex<State>>,
+    task: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl PlaybackView {
+    pub fn open(core: &Core, candidates: Vec<ParsedStream>, target: PlayTarget) -> Self {
+        let resume_ms = core
+            .library()
+            .progress(core.profile(), &target.video_id)
+            .ok()
+            .flatten()
+            .filter(|&(pos, dur)| {
+                pos > 0 && (dur == 0 || (pos as f64) < dur as f64 * FINISHED_RATIO)
+            })
+            .map(|(pos, _)| pos as u64);
+        let snapshot = PlaybackSnapshot {
+            phase: PlaybackPhase::Resolving,
+            url: None,
+            key: None,
+            filename: None,
+            size_bytes: None,
+            resume_ms,
+            attempts: Vec::new(),
+        };
+        let view = Self {
+            core: core.clone(),
+            target: Arc::new(target),
+            snapshot: SharedObservable::new(snapshot.clone()),
+            state: Arc::new(Mutex::new(State {
+                snapshot,
+                candidates,
+                next: 0,
+                server: None,
+                last: None,
+                saved_at: None,
+                dirty: false,
+            })),
+            task: Mutex::new(None),
+        };
+        view.spawn_resolve();
+        view
+    }
+
+    pub fn snapshot(&self) -> PlaybackSnapshot {
+        self.snapshot.get()
+    }
+
+    pub fn subscribe(
+        &self,
+    ) -> (
+        PlaybackSnapshot,
+        Pin<Box<dyn Stream<Item = Vec<PlaybackSnapshot>> + Send>>,
+    ) {
+        let updates = self.snapshot.subscribe().map(|s| vec![s]);
+        (
+            self.snapshot.get(),
+            Box::pin(coalesce(Box::pin(updates), FRAME)),
+        )
+    }
+
+    /// The player could not open or keep playing the current source: drop it
+    /// and move to the next candidate.
+    pub fn fail_over(&self, error: &str) {
+        {
+            let mut s = lock(&self.state);
+            if s.snapshot.phase != PlaybackPhase::Ready {
+                return;
+            }
+            if let (Some(url), Some(server)) = (s.snapshot.url.take(), &s.server) {
+                server.release(&url);
+            }
+            if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
+                let attempt = attempt(stream, error);
+                s.snapshot.attempts.push(attempt);
+            }
+            s.snapshot.phase = PlaybackPhase::Resolving;
+            s.snapshot.key = None;
+            self.snapshot.set(s.snapshot.clone());
+        }
+        self.spawn_resolve();
+    }
+
+    /// Player position report. Saved at most every few seconds; the last
+    /// report is always saved when the view closes.
+    pub fn report_progress(&self, position_ms: u64, duration_ms: u64) {
+        let due = {
+            let mut s = lock(&self.state);
+            s.last = Some((position_ms, duration_ms));
+            s.dirty = true;
+            s.saved_at.is_none_or(|t| t.elapsed() >= SAVE_EVERY)
+        };
+        if due {
+            self.save();
+        }
+    }
+
+    fn save(&self) {
+        let (position_ms, duration_ms, first) = {
+            let mut s = lock(&self.state);
+            let Some((pos, dur)) = s.last.filter(|_| s.dirty) else {
+                return;
+            };
+            let first = s.saved_at.is_none();
+            s.dirty = false;
+            s.saved_at = Some(Instant::now());
+            (pos, dur, first)
+        };
+        if let Err(e) = save_progress(&self.core, &self.target, position_ms, duration_ms, first) {
+            tracing::warn!("progress save failed: {e}");
+        }
+    }
+
+    fn spawn_resolve(&self) {
+        let task = tokio::spawn(resolve_next(
+            self.core.clone(),
+            self.target.clone(),
+            self.state.clone(),
+            self.snapshot.clone(),
+        ));
+        if let Some(old) = lock(&self.task).replace(task) {
+            old.abort();
+        }
+    }
+}
+
+impl Drop for PlaybackView {
+    fn drop(&mut self) {
+        if let Some(task) = lock(&self.task).take() {
+            task.abort();
+        }
+        self.save();
+        let s = lock(&self.state);
+        if let (Some(url), Some(server)) = (&s.snapshot.url, &s.server) {
+            server.release(url);
+        }
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+fn attempt(stream: &ParsedStream, error: &str) -> Attempt {
+    Attempt {
+        key: stream.key.clone(),
+        via: stream
+            .service
+            .clone()
+            .unwrap_or_else(|| stream.addon_name.clone()),
+        error: error.to_owned(),
+    }
+}
+
+fn save_progress(
+    core: &Core,
+    target: &PlayTarget,
+    position_ms: u64,
+    duration_ms: u64,
+    first: bool,
+) -> Result<(), crate::CoreError> {
+    let (library, profile) = (core.library(), core.profile());
+    // Continue Watching needs a name and poster for titles outside the library.
+    if first
+        && let Some(name) = &target.name
+        && !library.is_in_library(profile, &target.item_id)?
+    {
+        let row = LibraryItemRow {
+            item_id: target.item_id.clone(),
+            kind: target.kind.clone(),
+            name: name.clone(),
+            poster: target.poster.clone(),
+            poster_shape: None,
+            added_ms: mq_library::hlc::now_ms() as i64,
+        };
+        library.upsert_item(profile, &row, false, &core.hlc())?;
+    }
+    library.set_progress(
+        profile,
+        ProgressRow {
+            video_id: &target.video_id,
+            item_id: &target.item_id,
+            position_ms: position_ms as i64,
+            duration_ms: duration_ms as i64,
+            updated_ms: mq_library::hlc::now_ms() as i64,
+        },
+        &core.hlc(),
+    )?;
+    if duration_ms > 0 && position_ms as f64 >= duration_ms as f64 * FINISHED_RATIO {
+        library.set_watched(
+            profile,
+            &target.item_id,
+            &target.video_id,
+            true,
+            &core.hlc(),
+        )?;
+    }
+    Ok(())
+}
+
+/// Tries candidates from `state.next` until one answers, then publishes its
+/// loopback URL; publishes `Failed` when none is left.
+async fn resolve_next(
+    core: Core,
+    target: Arc<PlayTarget>,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<PlaybackSnapshot>,
+) {
+    let server = match core.stream_server().await {
+        Ok(server) => server,
+        Err(e) => {
+            let mut s = lock(&state);
+            s.snapshot.phase = PlaybackPhase::Failed;
+            s.snapshot.attempts.push(Attempt {
+                key: String::new(),
+                via: "Marquee".into(),
+                error: format!("local stream server did not start: {e}"),
+            });
+            snapshot.set(s.snapshot.clone());
+            return;
+        }
+    };
+    loop {
+        let stream = {
+            let mut s = lock(&state);
+            s.server = Some(server.clone());
+            let Some(stream) = s.candidates.get(s.next).cloned() else {
+                s.snapshot.phase = PlaybackPhase::Failed;
+                snapshot.set(s.snapshot.clone());
+                return;
+            };
+            s.next += 1;
+            stream
+        };
+        match open_source(&core, &stream, &target).await {
+            Ok((upstream, filename, size)) => {
+                let name = filename
+                    .clone()
+                    .unwrap_or_else(|| format!("{}.mkv", target.video_id));
+                let url = server.register(upstream, &name);
+                let mut s = lock(&state);
+                s.snapshot.phase = PlaybackPhase::Ready;
+                s.snapshot.url = Some(url);
+                s.snapshot.key = Some(stream.key.clone());
+                s.snapshot.filename = filename;
+                s.snapshot.size_bytes = size.or(stream.size_bytes);
+                snapshot.set(s.snapshot.clone());
+                return;
+            }
+            Err(error) => {
+                let mut s = lock(&state);
+                s.snapshot.attempts.push(attempt(&stream, &error));
+                snapshot.set(s.snapshot.clone());
+            }
+        }
+    }
+}
+
+type Opened = (Upstream, Option<String>, Option<u64>);
+
+/// Resolves one stream to an upstream and checks that it answers.
+async fn open_source(
+    core: &Core,
+    stream: &ParsedStream,
+    target: &PlayTarget,
+) -> Result<Opened, String> {
+    let allow_private = core
+        .installed_addons()
+        .unwrap_or_default()
+        .iter()
+        .any(|a| a.id() == stream.addon_id && a.allow_private);
+    let (url, headers, filename, size) = match &stream.source {
+        Source::Http { url } => (
+            url.to_string(),
+            stream.headers.clone(),
+            stream.filename.clone(),
+            stream.size_bytes,
+        ),
+        Source::ClientResolve(c) => {
+            let hash = c
+                .info_hash
+                .clone()
+                .ok_or("the addon did not say which torrent to resolve")?;
+            let service = c.service.as_deref().or(stream.service.as_deref());
+            let link = debrid(
+                core,
+                service,
+                ResolveRequest {
+                    store: None,
+                    info_hash: hash,
+                    file_idx: c.file_idx,
+                    filename_hint: c.filename.clone(),
+                    season: c.season.or(target.season),
+                    episode: c.episode.or(target.episode),
+                },
+            )
+            .await?;
+            (link.url, Vec::new(), Some(link.filename), link.size)
+        }
+        Source::Torrent {
+            info_hash,
+            file_idx,
+            ..
+        } => {
+            if core.debrid().is_none() {
+                // ponytail: until the torrent engine lands, torrents play only
+                // through a debrid account.
+                return Err(
+                    "torrents need a debrid account until the built-in engine ships".into(),
+                );
+            }
+            let link = debrid(
+                core,
+                stream.service.as_deref(),
+                ResolveRequest {
+                    store: None,
+                    info_hash: info_hash.clone(),
+                    file_idx: *file_idx,
+                    filename_hint: stream.filename.clone(),
+                    season: target.season,
+                    episode: target.episode,
+                },
+            )
+            .await?;
+            (link.url, Vec::new(), Some(link.filename), link.size)
+        }
+        other => return Err(format!("{} streams cannot play here", source_word(other))),
+    };
+    let options = RequestOptions {
+        priority: Priority::Playback,
+        timeout: PROBE_TIMEOUT,
+        allow_private,
+        headers: headers.clone(),
+        ..RequestOptions::default()
+    };
+    // Only the status line is read: origins that ignore Range answer 200
+    // with the whole file, and that still counts as alive.
+    let probe = core.http().stream(&url, Some("bytes=0-0".into()), &options);
+    let status = tokio::time::timeout(PROBE_TIMEOUT, probe)
+        .await
+        .map_err(|_| "source did not answer in time".to_owned())?
+        .map_err(|e| format!("source did not answer: {e}"))?
+        .status;
+    if !(200..300).contains(&status) {
+        return Err(format!("source did not answer: http status {status}"));
+    }
+    Ok((
+        Upstream::Http {
+            url,
+            headers,
+            allow_private,
+        },
+        filename,
+        size,
+    ))
+}
+
+/// Uses the store the addon named when that account is configured, else the
+/// default store.
+async fn debrid(
+    core: &Core,
+    service: Option<&str>,
+    mut request: ResolveRequest,
+) -> Result<mq_debrid::ResolvedLink, String> {
+    let resolver = core
+        .debrid()
+        .ok_or("this version needs a debrid account; add one in Settings")?;
+    request.store = service
+        .and_then(StoreId::from_service)
+        .filter(|id| resolver.stores().contains(id));
+    resolver.resolve(request).await.map_err(|e| e.to_string())
+}
+
+fn source_word(source: &Source) -> &'static str {
+    match source {
+        Source::YouTube { .. } => "YouTube",
+        Source::PlayerFrame { .. } => "Embedded player",
+        Source::External { .. } => "External",
+        Source::Usenet { .. } => "Usenet",
+        Source::Archive { .. } => "Archive",
+        _ => "These",
+    }
+}

@@ -86,7 +86,8 @@ pub struct ContinueItem {
 }
 
 /// Position past which a video counts as finished for Continue Watching.
-const FINISHED_RATIO: f64 = 0.92;
+/// Past this share of the runtime a video counts as finished.
+pub const FINISHED_RATIO: f64 = 0.92;
 
 pub struct Library {
     writer: Mutex<Connection>,

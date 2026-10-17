@@ -168,6 +168,11 @@ impl Resolver {
         self
     }
 
+    /// The configured stores, default first.
+    pub fn stores(&self) -> Vec<StoreId> {
+        self.slots.iter().map(|s| s.id).collect()
+    }
+
     pub async fn resolve(&self, req: ResolveRequest) -> Result<ResolvedLink, DebridError> {
         self.run(req, Priority::Resolve).await
     }
