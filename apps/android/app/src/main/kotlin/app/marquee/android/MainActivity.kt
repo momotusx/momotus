@@ -1,66 +1,59 @@
 package app.marquee.android
 
+import android.content.pm.ApplicationInfo
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.marquee.design.Form
+import app.marquee.design.MarqueeTheme
+import app.marquee.design.Tokens
 
 /**
- * Stand-in shell until P3. Debug extras: `screen=gallery form=tv|phone theme=dark|light` shows the
- * design gallery; without them the diagnostics screen shows what the core module sees.
+ * The one activity. It decides the UI tree once (TV or phone, `FormFactor`), applies the theme
+ * (TV is dark; a phone follows the system), and hands over to `MarqueeRoot`. Debug builds can
+ * launch with extras that pick the tree and theme or open a debug screen (`DebugEntry`).
  */
 class MainActivity : ComponentActivity() {
-    private var diagnostics: Diagnostics? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The bars are transparent; the icon colour follows the theme.
-        val dark = intent.getStringExtra("theme") != "light"
-        val bars = Color.Transparent.toArgb()
-        val barStyle = if (dark) SystemBarStyle.dark(bars) else SystemBarStyle.light(bars, bars)
-        enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
-        if (intent.getStringExtra("screen") == "gallery") {
-            val form = if (intent.getStringExtra("form") == "tv") Form.Tv else Form.Phone
-            setContent { GalleryHost(form, dark) }
-            return
+        val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        val form = FormFactor.detect(this, if (debuggable) intent.getStringExtra("form") else null)
+        val themeExtra = if (debuggable) intent.getStringExtra("theme") else null
+        val forcedDark =
+            when {
+                form == Form.Tv -> true
+                themeExtra == "light" -> false
+                themeExtra == "dark" -> true
+                else -> null
+            }
+
+        // Transparent bars; the icon color follows the theme the screen is drawn in.
+        val bars = Color.TRANSPARENT
+        val style = SystemBarStyle.auto(bars, bars, detectDarkMode = { forcedDark ?: it.isNight() })
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+        // The first frame shows this color, so a light phone never flashes dark.
+        val dark = forcedDark ?: resources.isNight()
+        window.setBackgroundDrawable(ColorDrawable((if (dark) Tokens.dark else Tokens.light).bg.toArgb()))
+
+        if (DebugEntry.show(this, form, dark)) return
+        val session = (application as MarqueeApp).session
+        setContent {
+            MarqueeTheme(form, forcedDark ?: isSystemInDarkTheme()) { MarqueeRoot(session, form) }
         }
-        val app = application as MarqueeApp
-        val diag = Diagnostics(app, app.session).also { it.start() }
-        diagnostics = diag
-        setContent { DiagnosticsScreen(diag) }
     }
 
     override fun onDestroy() {
-        diagnostics?.stop()
+        DebugEntry.destroy()
         super.onDestroy()
     }
 }
 
-@Composable
-private fun DiagnosticsScreen(diagnostics: Diagnostics) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-    ) {
-        for (line in diagnostics.lines()) {
-            BasicText(line, style = TextStyle(color = Color(0xFFF6EFE6), fontSize = 13.sp))
-        }
-    }
-}
+private fun android.content.res.Resources.isNight() =
+    configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES

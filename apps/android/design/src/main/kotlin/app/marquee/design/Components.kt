@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -44,6 +45,7 @@ private fun ButtonShell(
     big: Boolean,
     enabled: Boolean,
     focusRequester: FocusRequester?,
+    onFocus: (() -> Unit)?,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -60,7 +62,9 @@ private fun ButtonShell(
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .alpha(if (enabled) 1f else 0.55f)
                 .marqueeFocus(corner)
-                .heightIn(min = height) // grows with a large system font instead of cutting the label
+                .then(
+                    if (onFocus != null) Modifier.onFocusChanged { if (it.isFocused) onFocus() } else Modifier,
+                ).heightIn(min = height) // grows with a large system font instead of cutting the label
                 .clip(shape)
                 .background(background)
                 .then(
@@ -89,7 +93,8 @@ fun PrimaryButton(
     big: Boolean = false,
     enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
-) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, focusRequester)
+    onFocus: (() -> Unit)? = null,
+) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, focusRequester, onFocus)
 
 @Composable
 fun SecondaryButton(
@@ -100,7 +105,8 @@ fun SecondaryButton(
     big: Boolean = false,
     enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
-) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Secondary, big, enabled, focusRequester)
+    onFocus: (() -> Unit)? = null,
+) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Secondary, big, enabled, focusRequester, onFocus)
 
 /** A pill for filters and choices. Selected is shown by fill and weight, not by the accent color. */
 @Composable

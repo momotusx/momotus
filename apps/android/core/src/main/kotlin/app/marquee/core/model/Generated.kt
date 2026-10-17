@@ -402,6 +402,8 @@ data class TitleDetails(
     val directors: List<String>,
     val rating: String? = null,
     val source: String,
+    /** Trailers the metadata names (YouTube), first is the main one. */
+    val trailers: List<Trailer>,
 )
 
 @Serializable
@@ -413,6 +415,8 @@ data class TitleHeader(
     val selectedSeason: Int? = null,
     /** Episode (or the movie itself) the primary button resumes or starts. */
     val playTarget: PlayTarget? = null,
+    /** A movie the user watched (episodes carry their own flag); toggled with `setWatched` on the movie's id. */
+    val watched: Boolean,
 )
 
 @Serializable
@@ -454,6 +458,14 @@ sealed interface TitleUpdate {
         val diffs: List<ListDiff<Episode>>,
     ) : TitleUpdate
 }
+
+@Serializable
+data class Trailer(
+    val title: String,
+    val youtubeId: String,
+    /** The watch page, for apps that hand trailers to a browser or the YouTube app. */
+    val url: String,
+)
 
 @Serializable
 data class VersionRow(

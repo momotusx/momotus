@@ -144,6 +144,27 @@ fun RemoteImage(
     }
 }
 
+/**
+ * A wide picture that fills its bounds, for hero artwork. Coil takes the request size from the
+ * layout, so one image of known place needs no size here.
+ */
+@Composable
+fun Backdrop(
+    url: String?,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.background(Marquee.colors.surface)) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+    }
+}
+
 /** The memory cache key of a sized picture: a prefetch must use the same key the tile asks with. */
 fun imageKey(
     url: String,

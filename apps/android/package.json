@@ -10,6 +10,7 @@
     "tokens": "bun scripts/tokens.ts",
     "icons": "bun scripts/icons.ts",
     "capture": "bun scripts/capture-trace.ts",
+    "focus": "bun scripts/focus-restore.ts",
     "test": "bun test scripts"
   },
   "devDependencies": {

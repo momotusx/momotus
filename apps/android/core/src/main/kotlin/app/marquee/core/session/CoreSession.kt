@@ -46,6 +46,9 @@ sealed interface CoreHealth {
 
     data object Running : CoreHealth
 
+    /** The core stopped and the session is opening a new one. */
+    data object Restarting : CoreHealth
+
     /** [reason] is for the log and diagnostics; it can quote a panic message. */
     data class Stopped(
         val reason: String,
@@ -95,7 +98,10 @@ class CoreSession(
     }
 
     /** Opens the core again after it stopped. Does nothing while a boot is already running. */
-    fun restart() = boot()
+    fun restart() {
+        health = CoreHealth.Restarting
+        boot()
+    }
 
     private fun boot() {
         if (!booting.compareAndSet(false, true)) return
@@ -139,8 +145,11 @@ class CoreSession(
 
     /** The core's request loop ended by a panic: say so, and open it again unless it keeps dying. */
     private fun onCoreDied(reason: String) {
-        health = CoreHealth.Stopped(reason)
-        if (!mayRestart()) return
+        if (!mayRestart()) {
+            health = CoreHealth.Stopped(reason)
+            return
+        }
+        health = CoreHealth.Restarting
         scope.launch {
             delay(500)
             restart()
