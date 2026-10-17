@@ -16,3 +16,5 @@
 *.local
 /.playwright-mcp/
 /.mq-data/
+/apps/web/test-results/
+/apps/web/playwright-report/
