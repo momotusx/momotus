@@ -218,7 +218,7 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
 test("onboarding: one decision per step, Back walks the steps", async ({ page }) => {
   await page.goto("/welcome?form=tv");
   await expect.poll(() => focused(page)).toBe("welcome:stremio");
-  await expect(page.locator(".door")).toHaveCount(2);
+  await expect(page.locator(".door")).toHaveCount(3);
   await expect(page.locator(".check")).toHaveCount(0);
   await expect(page.locator('[data-f="welcome:skip"]')).toHaveText("Browse first");
   await page.keyboard.press("ArrowRight");

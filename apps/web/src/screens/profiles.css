@@ -1,0 +1,66 @@
+/* Profiles (plans/m11-profiles.md, P1 apps C to F). The picker centers on the
+ * screen; tiles take the white focus edge and the card scale as tiles do. */
+
+.profiles { display: grid; place-items: center; min-height: 100vh; padding: 80px var(--safe-side, 80px); }
+.picker { display: grid; justify-items: center; gap: 28px; text-align: center; }
+.picker h1 { font: var(--weight-display) var(--type-title1) / 1.05 var(--font-display); letter-spacing: var(--tracking-display); }
+.picker .lede { color: var(--muted); font: 400 var(--type-body) / 1.4 var(--font-text); max-width: 900px; }
+.pgrid { display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; max-width: 1400px; margin: 24px 0 12px; }
+.ptile { display: grid; justify-items: center; gap: 16px; width: 200px; padding: 16px 0; border-radius: var(--radius-l); color: var(--text); transform-origin: center top; }
+.ptile .avatar { transition: box-shadow var(--motion-focus) var(--ease, ease), transform var(--motion-focus) var(--ease, ease); }
+.ptile:focus-visible .avatar, [data-form="tv"] .ptile:focus .avatar { box-shadow: 0 0 0 4px var(--text), 0 12px 40px rgba(0, 0, 0, 0.45); transform: scale(var(--focus-scale-card)); }
+.ptile:focus-visible .pname, [data-form="tv"] .ptile:focus .pname { color: var(--accent); }
+@media (hover: hover) { [data-form="desktop"] .ptile:hover .avatar { box-shadow: 0 0 0 4px var(--text); } }
+.pname { display: inline-flex; align-items: center; gap: 10px; font: 700 var(--type-headline) / 1.2 var(--font-text); color: var(--muted); }
+.plock { width: 22px; height: 22px; color: var(--dim); }
+.ptile small { font: 500 var(--type-callout) var(--font-text); color: var(--dim); }
+.ptile.syncing { opacity: 0.55; }
+.add-art { background: var(--raised); box-shadow: inset 0 0 0 2px var(--control); color: var(--muted); }
+.add-art > svg { width: 40%; height: 40%; }
+
+/* The keypad: four dots, a 3 x 4 grid, a way out. */
+.keypad { display: grid; justify-items: center; gap: 22px; text-align: center; }
+.keypad h2 { font: var(--weight-heading) var(--type-title2) / 1.15 var(--font-display); letter-spacing: var(--tracking-heading); }
+.pin-dots { display: flex; gap: 22px; padding: 6px; }
+.pin-dots i { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--control); }
+.pin-dots i.on { background: var(--text); box-shadow: none; }
+.pin-dots.shake { animation: pin-shake 200ms ease; }
+@keyframes pin-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+@media (prefers-reduced-motion: reduce) { .pin-dots.shake { animation: none; } }
+.pin-said { min-height: 1.4em; font: 500 var(--type-callout) var(--font-text); color: var(--bad); }
+.pin-wait { font: 500 var(--type-callout) var(--font-text); color: var(--muted); }
+.pin-grid { display: grid; grid-template-columns: repeat(3, 104px); gap: 18px; }
+.pin-key { display: grid; place-items: center; width: 104px; height: 104px; border-radius: 50%; background: var(--raised); box-shadow: inset 0 0 0 2px var(--control);
+  font: 600 40px / 1 var(--font-text); color: var(--text); transition: transform var(--motion-focus) ease; }
+.pin-key svg { width: 36px; height: 36px; }
+.pin-key:focus-visible, [data-form="tv"] .pin-key:focus { background: var(--primary); color: var(--on-primary); box-shadow: none; transform: scale(var(--focus-scale-card)); }
+.pin-key[aria-disabled="true"] { opacity: 0.4; }
+.keypad .note.small { max-width: 720px; color: var(--muted); }
+
+/* Manage and edit. */
+.prows { display: grid; gap: 12px; max-width: 960px; }
+.prow .avatar { margin-right: 6px; }
+.pedit { display: grid; gap: 28px; max-width: 1100px; }
+.pedit-preview { margin-bottom: 4px; }
+.glyphs, .colors { display: flex; flex-wrap: wrap; gap: 14px; }
+.glyph-pick { border-radius: 14px; padding: 4px; box-shadow: inset 0 0 0 2px transparent; }
+.glyph-pick .avatar-s { width: 64px; height: 64px; border-radius: 16px; font-size: 26px; }
+.glyph-pick.on { box-shadow: inset 0 0 0 3px var(--text); }
+.glyph-pick:focus-visible, [data-form="tv"] .glyph-pick:focus { transform: scale(var(--focus-scale-card)); box-shadow: inset 0 0 0 3px var(--text), var(--focus-shadow); }
+.color-pick { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.12); }
+.color-pick svg { width: 28px; height: 28px; }
+.color-pick.on { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--text); }
+.color-pick:focus-visible, [data-form="tv"] .color-pick:focus { transform: scale(var(--focus-scale-card)); box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--accent); }
+.pedit-pin, .pedit-danger { display: grid; gap: 18px; margin-top: 48px; max-width: 1100px; }
+.pedit-danger .confirm p { font: 400 var(--type-body) / 1.4 var(--font-text); max-width: 900px; margin-bottom: 20px; }
+
+[data-form="phone"] .profiles { padding: 48px 16px; align-items: start; }
+[data-form="phone"] .picker h1 { font-size: 32px; }
+[data-form="phone"] .pgrid { display: grid; grid-template-columns: repeat(2, 140px); gap: 20px 24px; }
+[data-form="phone"] .ptile { width: 140px; }
+[data-form="phone"] .pname { font-size: 17px; }
+[data-form="phone"] .pin-grid { grid-template-columns: repeat(3, 72px); gap: 16px; }
+[data-form="phone"] .pin-key { width: 72px; height: 72px; font-size: 28px; }
+[data-form="phone"] .keypad h2 { font-size: 24px; }
+[data-form="phone"] .glyph-pick .avatar-s { width: 48px; height: 48px; font-size: 20px; }
+[data-form="phone"] .color-pick { width: 48px; height: 48px; }

@@ -123,6 +123,14 @@ export function move(dir: Direction): boolean {
   return true;
 }
 
+/** A profile switch: where focus was belongs to the old profile's screens. */
+export function forgetFocus() {
+  cancelRestore();
+  memory.clear();
+  screens.clear();
+  content.clear();
+}
+
 /** Makes `key` the member a group restores to (for example the selected tab). */
 export function remember(group: string, key: string) {
   memory.set(group, key);

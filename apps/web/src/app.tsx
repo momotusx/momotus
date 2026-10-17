@@ -7,9 +7,12 @@ import LibraryBig from "lucide-solid/icons/library-big";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, For, on, Show } from "solid-js";
+import { AvatarArt } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
+import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
+import { historyBase, historyDepth } from "./history";
 import Addons from "./screens/addons";
 import CalendarScreen from "./screens/calendar";
 import Discover from "./screens/discover";
@@ -19,6 +22,7 @@ import Import from "./screens/import";
 import Library from "./screens/library";
 import Onboarding from "./screens/onboarding";
 import Pairing from "./screens/pairing";
+import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/profiles";
 import Player from "./screens/player";
 import Search from "./screens/search";
 import SettingsScreen from "./screens/settings";
@@ -37,7 +41,8 @@ const destinations: Destination[] = [
 ];
 // Settings sub-pages keep the rail and light up Settings.
 const settingsPages = ["/settings", "/addons", "/import", "/pair", "/home-rows"];
-const section = (path: string) => (settingsPages.includes(path) ? "/settings" : path);
+const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/");
+const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
 
 /** Where Back goes when there is no in-app history (a deep link or reload). */
@@ -45,15 +50,11 @@ export function parentOf(path: string): string | null {
   const parts = path.split("/").filter(Boolean);
   if (parts[0] === "title" && parts[3] === "versions") return `/${parts.slice(0, 3).join("/")}`;
   if (parts[0] === "play" && parts[2]) return `/title/${parts[1]}/${parts[2]}`;
-  if (settingsPages.includes(path) && path !== "/settings") return "/settings";
+  if (path.startsWith("/profiles/edit/") || path === "/profiles/new") return "/profiles/manage";
+  if (isSettingsPage(path) && path !== "/settings") return "/settings";
   return path === "/" ? null : "/";
 }
 
-// The router stamps every entry with `_depth` (history.length - 1 at first
-// load), which counts pages from before the app. Only entries above the one
-// the app started on are ours to go back through.
-const historyDepth = () => (history.state as { _depth?: number } | null)?._depth ?? 0;
-const startDepth = historyDepth();
 
 let wentBack = false;
 export const markBack = () => {
@@ -78,7 +79,22 @@ function TopNav() {
       <For each={destinations.filter((d) => !d.tool)}>{link}</For>
       <span class="sep" aria-hidden="true" />
       <For each={destinations.filter((d) => d.tool)}>{link}</For>
+      <ProfileButton />
     </nav>
+  );
+}
+
+/** The active profile's avatar at the pill's end: it opens the picker. */
+function ProfileButton() {
+  const me = () => profiles()?.profiles.find((p) => p.id === profiles()?.active);
+  return (
+    <Show when={me()}>
+      {(p) => (
+        <A href="/profiles" class="nav pavatar" data-f="nav:/profiles" aria-label={`Profile: ${p().name}, switch profile`}>
+          <AvatarArt avatar={p().avatar} name={p().name} size="s" />
+        </A>
+      )}
+    </Show>
   );
 }
 
@@ -104,7 +120,7 @@ function Shell(props: RouteSectionProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const back = () => {
-    if (historyDepth() > startDepth) {
+    if (historyDepth() > historyBase()) {
       markBack();
       history.back();
       return;
@@ -130,14 +146,20 @@ function Shell(props: RouteSectionProps) {
     ),
   );
   const nav = () => hasNav(location.pathname);
+  // Nothing of a profile shows before the core says which one runs and
+  // whether it is locked (plans/m11-profiles.md, P1 apps v2 5).
   return (
     <div class="app">
-      <Show when={nav() && form() !== "phone"}>
-        <TopNav />
-      </Show>
-      <div class="screen">{props.children}</div>
-      <Show when={nav() && form() === "phone"}>
-        <Tabs />
+      <Show when={profiles()} fallback={<Show when={profilesFailed()}>{(r) => <p class="banner bad">{r()}</p>}</Show>}>
+        <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
+          <Show when={nav() && form() !== "phone"}>
+            <TopNav />
+          </Show>
+          <div class="screen">{props.children}</div>
+          <Show when={nav() && form() === "phone"}>
+            <Tabs />
+          </Show>
+        </Show>
       </Show>
       <Show when={link() === "closed"}>
         <p class="banner bad" role="status">
@@ -166,6 +188,10 @@ export function App() {
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />
       <Route path="/home-rows" component={HomeRows} />
+      <Route path="/profiles" component={ProfilesScreen} />
+      <Route path="/profiles/manage" component={ManageProfiles} />
+      <Route path="/profiles/new" component={EditProfile} />
+      <Route path="/profiles/edit/:id" component={EditProfile} />
       <Route path="*" component={() => <Stub title="Not found" text="This page does not exist in Marquee." />} />
     </Router>
   );

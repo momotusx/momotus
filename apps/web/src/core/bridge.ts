@@ -10,7 +10,9 @@ export interface Transport {
 
 /** `code` names an error the app acts on (sync, keystore); `error` is the
  * plain text to show. */
-type Reply = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string; code?: string };
+type Reply =
+  | { id: number; ok: true; result: unknown }
+  | { id: number; ok: false; error: string; code?: string; retryAfterMs?: number; views?: string[] };
 type Push = { sub: number; updates: unknown[] };
 
 export class BridgeError extends Error {
@@ -18,6 +20,10 @@ export class BridgeError extends Error {
     message: string,
     /** The reply's structured `code`, unchanged, when it had one. */
     readonly code?: string,
+    /** With `locked`: how long until the next PIN try is allowed. */
+    readonly retryAfterMs?: number,
+    /** With `viewsOpen`: the views still open. */
+    readonly views?: string[],
   ) {
     super(message);
   }
@@ -82,7 +88,7 @@ export class Bridge {
     if (message.ok) {
       waiter.onResult?.(message.result);
       waiter.resolve(message.result);
-    } else waiter.reject(new BridgeError(message.error, message.code));
+    } else waiter.reject(new BridgeError(message.error, message.code, message.retryAfterMs, message.views));
     // The last open settled: what still waits has no view to go to.
     if (waiter.opens && --this.opening === 0) this.early.clear();
   }

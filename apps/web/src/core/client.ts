@@ -4,7 +4,7 @@
 
 import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { Bridge, ipcTransport, shellPost, webSocketTransport } from "./bridge";
+import { Bridge, BridgeError, ipcTransport, shellPost, webSocketTransport } from "./bridge";
 import { applyDiffs } from "./diff";
 import type { Episode } from "./generated/Episode";
 import type { Hero } from "./generated/Hero";
@@ -48,9 +48,16 @@ export const reasonOf = (e: unknown) =>
 
 /** Runs a one-shot op such as `installAddon` or `setPrefs`. */
 export async function op<T = unknown>(name: string, fields: Record<string, unknown> = {}): Promise<T> {
-  const result = await bridge.request<T>(name, fields);
-  setLink("open");
-  return result;
+  try {
+    const result = await bridge.request<T>(name, fields);
+    setLink("open");
+    return result;
+  } catch (e) {
+    // Work from before a profile switch or a lock: its screen is gone, so it
+    // settles never rather than showing an error on the next profile's screen.
+    if (e instanceof BridgeError && e.code === "switched") return new Promise<T>(() => undefined);
+    throw e;
+  }
 }
 
 export interface Live<S> {
@@ -109,6 +116,7 @@ export interface HomeState {
 }
 
 let home: HomeState | undefined;
+let homeClose: (() => Promise<void>) | undefined;
 
 /** Home stays subscribed for the app's lifetime so Back lands on the same
  * rows, scroll offsets and focus without a reload. */
@@ -127,7 +135,12 @@ export function homeView(): HomeState {
           }
         }),
     })
-    .then(() => setLink("open"))
+    .then((s) => {
+      setLink("open");
+      // Closed before the reply came: close what just opened.
+      if (home === state) homeClose = s.close;
+      else void s.close();
+    })
     .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
   return state;
 }
@@ -288,6 +301,19 @@ export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
 }
 
 let prefs: LiveView<Prefs> | undefined;
+
+/** Before a profile switch or after a lock: the views this module keeps for
+ * the app's life belong to the old profile, so they close and reopen fresh. */
+export async function closeProfileViews() {
+  const closing = homeClose;
+  home = undefined;
+  homeClose = undefined;
+  versions?.view.close();
+  versions = null;
+  prefs?.close();
+  prefs = undefined;
+  await closing?.();
+}
 
 /** The profile's preferences, kept open for the app's lifetime. */
 export function prefsView(): LiveView<Prefs> {

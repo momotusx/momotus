@@ -1,0 +1,12 @@
+/* Profile avatars: white glyph or letter on a solid avatar token, no gradients. */
+.avatar { display: inline-grid; place-items: center; flex: none; color: #fff; border-radius: var(--radius-l); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.avatar > svg { width: 46%; height: 46%; stroke-width: 1.75; }
+.avatar-letter { font: 800 1em / 1 var(--font-display); letter-spacing: var(--tracking-display); }
+.avatar-s { width: 36px; height: 36px; border-radius: 10px; font-size: 16px; }
+.avatar-m { width: 112px; height: 112px; font-size: 48px; }
+.avatar-l { width: 168px; height: 168px; font-size: 72px; }
+[data-form="phone"] .avatar-l { width: 112px; height: 112px; font-size: 48px; }
+/* The pill's profile button: the avatar alone, ringed when focused. */
+.nav.pavatar { padding: 0 9px; margin-left: 6px; }
+.nav.pavatar .avatar-s { width: 40px; height: 40px; border-radius: 12px; font-size: 18px; }
+.nav.pavatar .avatar > svg { width: 52%; height: 52%; }

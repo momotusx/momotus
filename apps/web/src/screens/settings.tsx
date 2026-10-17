@@ -15,6 +15,10 @@ import { chooseForm, type Form, form } from "../form";
 import { languageName } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
+import UserPen from "lucide-solid/icons/user-pen";
+import Users from "lucide-solid/icons/users";
+import { AvatarArt } from "../components/avatar";
+import { profiles } from "../core/profiles";
 
 // ISO 639-1 for audio (stream prefs) and 639-2 for subtitles, as the core expects.
 const LANGS: [iso1: string, iso2: string][] = [
@@ -89,6 +93,7 @@ export default function SettingsScreen() {
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const count = () => addons.state.data?.addons.length ?? 0;
   const sources = () => addons.state.data?.addons.filter((a) => a.enabled && a.provides.includes("stream")).map((a) => a.name) ?? [];
+  const me = () => profiles()?.profiles.find((x) => x.id === profiles()?.active);
 
   return (
     <main class="browse page settings-page" data-vscroll>
@@ -98,6 +103,27 @@ export default function SettingsScreen() {
           <i class="dot" />
           {error()}
         </p>
+      </Show>
+
+      <Show when={me()}>
+        {(m) => (
+          <section class="set">
+            <h2>Profiles</h2>
+            <div class="links">
+              <LinkRow
+                href="/profiles"
+                fkey="settings:profiles"
+                icon={<AvatarArt avatar={m().avatar} name={m().name} size="s" />}
+                title={m().name}
+                text={(profiles()?.profiles.length ?? 1) > 1 ? "Switch profile" : "Add a profile for someone else, or switch"}
+              />
+              <LinkRow href={`/profiles/edit/${m().id}`} fkey="settings:profile-edit" icon={<UserPen aria-hidden />} title="Edit profile" text="Name, picture and PIN." />
+              <Show when={m().isOwner}>
+                <LinkRow href="/profiles/manage" fkey="settings:profiles-manage" icon={<Users aria-hidden />} title="Manage profiles" text="Add, edit and remove profiles on this account." />
+              </Show>
+            </div>
+          </section>
+        )}
       </Show>
 
       <section class="set">

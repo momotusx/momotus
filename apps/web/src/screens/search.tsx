@@ -5,9 +5,14 @@ import { Row } from "../components/row";
 import { liveView } from "../core/client";
 import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
 import "./browse.css";
+import { onProfileReset } from "../core/profiles";
 
 // The last query survives leaving the screen, so Back lands on the results.
 let lastQuery = "";
+// Recent searches belong to the profile that typed them.
+onProfileReset(() => {
+  lastQuery = "";
+});
 
 export default function Search() {
   const view = liveView<SearchSnapshot>("search");
