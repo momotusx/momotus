@@ -276,6 +276,16 @@ struct Relay {
     offset: Arc<AtomicI64>,
 }
 
+/// The relay's directory goes with it (the server task may still hold its
+/// files open; they are unlinked, not closed).
+impl Drop for Relay {
+    fn drop(&mut self) {
+        if let Some(dir) = self.db.parent() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
 impl Relay {
     async fn start(db: PathBuf, offset: Arc<AtomicI64>, new_generation: bool) -> Self {
         let app = mq_sync_server::router(
@@ -544,8 +554,13 @@ async fn run(ops: Vec<Op>, slow: bool) {
             }
             Op::Snapshot => snapshot = Some(relay.snapshot()),
             Op::Restore => {
-                if let Some(snapshot) = &snapshot {
-                    relay = relay.restored(snapshot).await;
+                if let Some(path) = &snapshot {
+                    let next = relay.restored(path).await;
+                    // The backup moves along: the old relay's directory goes.
+                    let kept = next.db.with_file_name("snapshot.sqlite");
+                    std::fs::copy(path, &kept).unwrap();
+                    snapshot = Some(kept);
+                    relay = next;
                     for config in &mut configs {
                         config.server = relay.url.clone();
                     }

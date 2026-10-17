@@ -41,6 +41,16 @@ struct Relay {
     offset: Arc<AtomicI64>,
 }
 
+/// The relay's directory goes with it (the server task may still hold its
+/// files open; they are unlinked, not closed).
+impl Drop for Relay {
+    fn drop(&mut self) {
+        if let Some(dir) = self.db.parent() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
 impl Relay {
     async fn start(db: PathBuf, offset: Arc<AtomicI64>, new_generation: bool) -> Self {
         let config = Config {
