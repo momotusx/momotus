@@ -16,6 +16,9 @@ use std::time::{Duration, Instant};
 /// sync to one more; all are shown).
 pub const MAX_PROFILES: usize = 6;
 const NAME_CHARS: usize = 30;
+/// Avatars are an app's own ids (a bundled image and a colour token): short
+/// ASCII, never text from elsewhere, since they sync to every device.
+const AVATAR_CHARS: usize = 64;
 
 /// OWASP's minimum Argon2id setting: 19 MiB, two passes, one lane.
 const M_KIB: u32 = 19_456;
@@ -33,6 +36,8 @@ pub enum ProfileError {
     TooMany,
     #[error("a profile name has 1 to {NAME_CHARS} characters")]
     BadName,
+    #[error("an avatar is up to {AVATAR_CHARS} letters, digits, ':', '-' or '_'")]
+    BadAvatar,
     #[error("the owner profile cannot be removed")]
     OwnerProfile,
     #[error("a PIN is four digits that are not easy to guess")]
@@ -60,6 +65,7 @@ impl ProfileError {
             Self::NotOwner => "notOwner",
             Self::TooMany => "tooMany",
             Self::BadName => "badName",
+            Self::BadAvatar => "badAvatar",
             Self::OwnerProfile => "ownerProfile",
             Self::WeakPin => "weakPin",
             Self::WrongPin => "wrongPin",
@@ -67,7 +73,8 @@ impl ProfileError {
             Self::Unknown | Self::Syncing => "unknownProfile",
             // Removed while the request ran.
             Self::Library(LibraryError::ProfileGone(_)) => "unknownProfile",
-            Self::Unreadable | Self::Library(_) | Self::Internal(_) => return None,
+            Self::Unreadable => "pinUnreadable",
+            Self::Library(_) | Self::Internal(_) => return None,
         })
     }
 }
@@ -95,7 +102,9 @@ impl Core {
     /// Whether this handle's profile asks for a PIN (an unreadable hash
     /// counts: it fails closed).
     pub fn has_pin(&self) -> bool {
-        matches!(self.library().profile(self.profile()), Ok(Some(p)) if p.pin_hash().is_some())
+        // Open only when the profile is known to have none: a read error, an
+        // unknown profile or a missing lock register all count as a PIN.
+        !matches!(self.library().profile(self.profile()), Ok(Some(p)) if p.lock == Some(None))
     }
 
     /// Every profile, with this handle's as the active one.
@@ -130,6 +139,7 @@ impl Core {
             return Err(ProfileError::NotOwner);
         }
         let name = valid_name(name)?;
+        valid_avatar(avatar)?;
         if self.library().profiles()?.len() >= MAX_PROFILES {
             return Err(ProfileError::TooMany);
         }
@@ -155,6 +165,7 @@ impl Core {
         }
         let row = self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
         let name = name.map(valid_name).transpose()?.unwrap_or(&row.name);
+        avatar.map(valid_avatar).transpose()?;
         self.library().update_profile(
             id,
             name,
@@ -175,6 +186,8 @@ impl Core {
         }
         self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
         self.library().delete_profile(id, &self.hlc())?;
+        // Answers cached in memory were fetched with its addon URLs.
+        self.addons().forget_memory();
         Ok(())
     }
 
@@ -194,7 +207,7 @@ impl Core {
                 return Err(ProfileError::NotOwner);
             }
             self.library().set_pin_hash(id, None, &self.hlc())?;
-            return Ok(());
+            return self.forgive(id);
         }
         if pin.is_some_and(weak) {
             return Err(ProfileError::WeakPin);
@@ -218,7 +231,15 @@ impl Core {
         };
         self.library()
             .set_pin_hash(id, hash.as_deref(), &self.hlc())?;
-        Ok(())
+        self.forgive(id)
+    }
+
+    /// A PIN set, changed or cleared by someone allowed to: earlier wrong
+    /// tries were against another PIN, so their count and wait go.
+    fn forgive(&self, id: &str) -> Result<(), ProfileError> {
+        let mut throttle = self.pins().lock().unwrap_or_else(|p| p.into_inner());
+        throttle.until.remove(id);
+        Ok(self.library().set_pin_failures(id, 0)?)
     }
 
     /// One PIN attempt for `profile` under the device's throttle. A profile
@@ -248,6 +269,15 @@ async fn blocking<T: Send + 'static>(
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|e| ProfileError::Internal(e.to_string()))
+}
+
+fn valid_avatar(avatar: &str) -> Result<(), ProfileError> {
+    let allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, ':' | '-' | '_');
+    if avatar.len() <= AVATAR_CHARS && avatar.chars().all(allowed) {
+        Ok(())
+    } else {
+        Err(ProfileError::BadAvatar)
+    }
 }
 
 fn valid_name(name: &str) -> Result<&str, ProfileError> {
@@ -379,6 +409,9 @@ fn attempt(
         Some(None) => return Ok(()),
         Some(Some(stored)) => stored,
     };
+    // No PIN can match a hash this build cannot check: say so, and spend no
+    // try on it (it would only lengthen the waits).
+    parse(&stored).map_err(|_| ProfileError::Unreadable)?;
     let failures = library.pin_failures(profile)?;
     if let Some(wait) = throttle.wait(profile, failures, now) {
         return Err(ProfileError::Throttled {
@@ -456,7 +489,7 @@ mod tests {
             .encode()
         };
         lib.create_profile("x", "x", "", &hlc(1)).unwrap();
-        lib.set_pin_hash("x", Some("stored"), &hlc(2)).unwrap();
+        lib.set_pin_hash("x", Some(&hash(PIN)), &hlc(2)).unwrap();
         lib
     }
 
@@ -587,8 +620,20 @@ mod tests {
         lib.apply(&[synced]).unwrap();
         let syncing = attempt(&lib, &throttle, "new", Some(PIN), || t0, never);
         assert!(matches!(syncing, Err(ProfileError::Syncing)));
-        // An unreadable hash takes no PIN at all.
-        wrong(attempt(&lib, &throttle, "x", Some(PIN), || t0, verify));
+        // An unreadable hash takes no PIN at all, says so and costs no try.
+        let later = Hlc {
+            wall_ms: 10,
+            counter: 0,
+            device: 1,
+        };
+        lib.set_pin_hash("x", Some("$argon2id$garbage"), &later.encode())
+            .unwrap();
+        for _ in 0..6 {
+            let unreadable = attempt(&lib, &throttle, "x", Some(PIN), || t0, never);
+            let code = unreadable.unwrap_err().code();
+            assert_eq!(code, Some("pinUnreadable"));
+        }
+        assert_eq!(lib.pin_failures("x").unwrap(), 0);
     }
 
     #[test]
@@ -603,7 +648,7 @@ mod tests {
             .encode()
         };
         lib.create_profile("y", "y", "", &hlc(3)).unwrap();
-        lib.set_pin_hash("y", Some("stored"), &hlc(4)).unwrap();
+        lib.set_pin_hash("y", Some(&hash(PIN)), &hlc(4)).unwrap();
         let t0 = Instant::now();
         let throttle = Mutex::new(Throttle::new(t0));
         wrong(try_at(&lib, &throttle, t0, "0000"));

@@ -228,7 +228,7 @@ async fn every_permission_row_is_enforced_in_the_core() {
         .set_pin_hash(&kid, Some("$argon2id$garbage"), &core.hlc())
         .unwrap();
     let switch_kid = json!({"op": "switchProfile", "profile": kid, "pin": "1357"});
-    assert_eq!(o.code(switch_kid).await, "wrongPin");
+    assert_eq!(o.code(switch_kid).await, "pinUnreadable");
     core.library()
         .set_pin_hash(&kid, None, &core.hlc())
         .unwrap();
@@ -236,7 +236,10 @@ async fn every_permission_row_is_enforced_in_the_core() {
     core.library()
         .set_pin_hash(&kid, Some("$argon2id$garbage"), &core.hlc())
         .unwrap();
-    assert_eq!(o.set_pin(&kid, Some("1357"), Some("1357")).await, "none");
+    assert_eq!(
+        o.set_pin(&kid, Some("1357"), Some("1357")).await,
+        "pinUnreadable"
+    );
     assert_eq!(o.set_pin(&kid, None, None).await, "ok");
 }
 
