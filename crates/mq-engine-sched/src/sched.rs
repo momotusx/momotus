@@ -392,8 +392,14 @@ impl Scheduler {
         self.stats.payload_bytes += len;
         self.payload_log.push_back((self.now, len));
         self.payload_in_window += len;
+        // Only a block we are waiting on from this peer shows it serves us.
+        // Real peers often ignore CANCEL for requests already queued and keep
+        // sending stale blocks for seconds; counting those kept a peer that
+        // held an urgent block behind them from looking stalled.
         let mut prev_payload = self.now;
-        if let Some(p) = self.peers.get_mut(&peer) {
+        if let Some(p) = self.peers.get_mut(&peer)
+            && p.queue.iter().any(|r| r.block == b)
+        {
             prev_payload = p.last_payload;
             p.last_payload = self.now;
             p.snubbed = false;

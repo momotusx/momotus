@@ -537,6 +537,45 @@ fn late_urgent_block_is_hedged_and_loser_cancelled() {
     }));
 }
 
+/// Seen on real swarms: a peer ignores CANCEL and keeps sending blocks we
+/// no longer hold with it. That is not service; the urgent block queued
+/// behind them must still move to another peer.
+#[test]
+fn stale_blocks_do_not_keep_an_urgent_holder_alive() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.peer(1, MIB);
+    h.send(Event::RangeOpened {
+        demand: 1,
+        file: 0,
+        start: 0,
+        end_hint: None,
+    });
+    let held: Vec<BlockIdx> = h.out.iter().filter(|e| e.1 == 1).map(|e| e.0).collect();
+    assert!(!held.is_empty());
+    h.peer(2, MIB);
+    let stale = h.geo.num_blocks() / 2;
+    let mut rescued = false;
+    for _ in 0..15 {
+        let mut acts = h.tick(200);
+        acts.extend(h.send(Event::BlockReceived {
+            peer: 1,
+            block: stale,
+        }));
+        let mine: Vec<BlockIdx> = h.out.iter().filter(|e| e.1 == 2).map(|e| e.0).collect();
+        for b in mine {
+            acts.extend(h.deliver(2, b));
+        }
+        rescued |= requests(&acts)
+            .iter()
+            .any(|&(p, b)| p == 2 && held.contains(&b));
+    }
+    assert!(
+        rescued,
+        "urgent blocks behind stale traffic moved to peer 2"
+    );
+}
+
 #[test]
 fn silent_peer_is_snubbed_not_dropped() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();

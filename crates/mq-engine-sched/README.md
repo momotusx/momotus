@@ -53,6 +53,7 @@ for a in out.drain(..) {
 | hedge when ETA > `max(750 ms, p90 block RTT)` | also requires the block to miss its deadline; p90 is of per-block service time (arrival minus the later of send and the previous arrival from that peer) | request latency includes our own deliberate 1 s queue, so the threshold tracked our queue depth rather than slow peers (in traces, the last blocks of a seek piece waited on a 129 KB/s peer unhedged); without the deadline test, steady playback would spend the budget on critical blocks needed seconds later |
 | duplicate bytes capped at 5% of last-10 s payload | `max(5%, 256 KiB)` | at a cold start there is no payload yet, so 5% of it forbids hedging exactly when the head needs it |
 | (not in spec) | stall release once the hedge budget is spent | nuvio's 1 s stall budget. In the simulator, a block stuck on a stalled peer after the budget was spent held healthy 256 KiB starts for up to 13 s. Paired A/B over 40 seeds per cell: healthy 256 KiB start mean -0.82 s, p90 7.6 s to 4.3 s; every other cell's mean start and seek time within +0.03 s to -0.11 s. Releasing stalled holders always (before hedging) made 4 MiB seeks worse (mean +0.38 s), so hedging stays first |
+| (not in spec) | only a block the peer holds for us refreshes its last-payload time (stall and snub detection); stale blocks it sends anyway do not | measured on real swarms through `mq-engine`: peers often ignore CANCEL and keep sending cancelled readahead blocks for seconds. Counting those kept a peer that held an urgent block behind them from ever looking stalled, so neither the hedge nor the stall release moved the block (in one traced Big Buck Bunny run a seek waited 10.2 s on a single block; in the next run with the fix, single runs on a live swarm, the first seek's first byte came after 1.4 s instead of 7.8 s). Simulator, 200 seeds: unchanged within noise, healthy 256 KiB playable p99 6.67 to 5.50 s and seek p99 2.69 to 2.55 s |
 | (not in spec) | a rate sample taken while the peer had nothing to send may raise the estimate, never lower it | libtorrent's peak-rate rule; otherwise an idle period after the readahead window fills collapses depth and ETAs right before the next seek |
 | cancel non-urgent requests on the 8 fastest peers on a seek | on all peers; a cancelled block may be requested again behind the new urgent work | simpler, and a slow peer's stale queue is where an urgent block would wait longest |
 | deadline order | (focused blocking, tail, other blocking, critical by offset); deadlines are materialized only for hedging | only the focused reader has a critical window, so offset order is deadline order |
@@ -109,16 +110,16 @@ Seconds, 200 seeded runs per row (3,600 runs), 5 seeks per run. "playable" is ti
 
 | swarm | piece | scheduler | playable p50 | p90 | p99 | seek p50 | p90 | p99 | capped start / seeks | rebuffer | dup bytes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy | 256 KiB | dwh | 3.35 | 4.33 | 6.67 | 0.69 | 2.11 | 2.69 | 0 / 0 | 0.9% | 0.18% |
+| healthy | 256 KiB | dwh | 3.35 | 4.33 | 5.50 | 0.69 | 2.08 | 2.55 | 0 / 0 | 0.8% | 0.18% |
 | healthy | 256 KiB | rqbit-like | 20.15 | 39.86 | 49.82 | 20.06 | 36.79 | 49.99 | 0 / 2 | 36.9% | 0.18% |
 | healthy | 256 KiB | stremio-like | 6.70 | 13.54 | 26.75 | 1.51 | 4.64 | 5.42 | 0 / 0 | 9.4% | 0.03% |
-| healthy | 4 MiB | dwh | 4.64 | 5.72 | 6.95 | 2.23 | 3.05 | 5.50 | 0 / 0 | 0.4% | 0.38% |
+| healthy | 4 MiB | dwh | 4.63 | 5.72 | 6.95 | 2.23 | 3.06 | 5.13 | 0 / 0 | 0.4% | 0.38% |
 | healthy | 4 MiB | rqbit-like | 64.47 | 101.98 | cap 120 | 32.71 | 58.76 | cap 60 | 10 / 89 | 17.4% | 0.01% |
 | healthy | 4 MiB | stremio-like | 11.76 | 19.61 | 29.57 | 2.48 | 5.43 | 6.53 | 0 / 0 | 5.6% | 0.03% |
-| healthy | 16 MiB | dwh | 8.27 | 9.30 | 11.39 | 4.14 | 6.29 | 8.32 | 0 / 0 | 2.1% | 0.57% |
+| healthy | 16 MiB | dwh | 8.27 | 9.25 | 10.99 | 4.14 | 6.26 | 8.32 | 0 / 0 | 2.0% | 0.57% |
 | healthy | 16 MiB | rqbit-like | cap 120 | cap 120 | cap 120 | cap 60 | cap 60 | cap 60 | 177 / 63 | 9.2% | 0.01% |
 | healthy | 16 MiB | stremio-like | 15.43 | 24.59 | 45.70 | 5.50 | 7.89 | 10.40 | 0 / 0 | 4.1% | 0.04% |
-| sparse | 256 KiB | dwh | 10.96 | 16.03 | 26.57 | 2.56 | 5.93 | 11.86 | 0 / 2 | 22.6% | 0.32% |
+| sparse | 256 KiB | dwh | 10.96 | 16.03 | 26.57 | 2.56 | 5.88 | 11.86 | 0 / 2 | 22.7% | 0.33% |
 | sparse | 256 KiB | rqbit-like | 31.93 | 65.47 | 104.53 | 23.43 | 47.25 | cap 60 | 0 / 33 | 40.3% | 0.21% |
 | sparse | 256 KiB | stremio-like | 16.77 | 29.17 | 45.37 | 7.79 | 14.05 | 33.70 | 0 / 4 | 35.2% | 0.04% |
 | sparse | 4 MiB | dwh | 15.85 | 30.07 | 54.07 | 7.25 | 17.63 | 42.10 | 0 / 5 | 27.9% | 0.43% |
@@ -130,7 +131,7 @@ Seconds, 200 seeded runs per row (3,600 runs), 5 seeks per run. "playable" is ti
 
 Reading it:
 
-- DWH is fastest in every cell and percentile, or tied where every scheduler hit the cap (sparse 16 MiB p99). Healthy swarm against the Stremio-like baseline: playable p90 is 68% lower at 256 KiB (4.33 vs 13.54 s), 71% at 4 MiB and 62% at 16 MiB; seek p90 is 55%, 44% and 20% lower. That clears the research/10 6.3 bar of "at least 30% better p90" everywhere except 16 MiB seeks.
+- DWH is fastest in every cell and percentile, or tied where every scheduler hit the cap (sparse 16 MiB p99). Healthy swarm against the Stremio-like baseline: playable p90 is 68% lower at 256 KiB (4.33 vs 13.54 s), 71% at 4 MiB and 62% at 16 MiB; seek p90 is 55%, 44% and 21% lower. That clears the research/10 6.3 bar of "at least 30% better p90" everywhere except 16 MiB seeks.
 - 16 MiB pieces are where block-level fan-out matters most: whole-piece ownership (rqbit-like) never became playable in 177 of 200 healthy runs, while DWH's head piece arrives at close to link speed (p50 8.3 s for 32 MiB of head plus tail, peer ramp-up included).
 - DWH's duplicate bytes stay at 0.2% to 0.6% of payload, far under the 5% budget.
 - The sparse profile is capacity-bound (aggregate peer upload is close to the 9.5 Mbit/s bitrate, and few peers hold each piece), so every scheduler rebuffers there; DWH still starts and seeks fastest.
