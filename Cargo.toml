@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# Vendored forks build as path dependencies, outside our lint and fmt gates.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
