@@ -56,9 +56,10 @@ const SCREENS: Screen[] = [
     ready: async (page) => {
       const watched = page.locator('[data-f="title:watched"]');
       await expect(watched).toBeVisible({ timeout: 30_000 });
-      if ((await watched.getAttribute("aria-pressed")) !== "true") await watched.click();
-      await expect(watched).toHaveAttribute("aria-pressed", "true");
+      // By keyboard, as a remote would, so the focused toggle shows its word.
       await watched.focus();
+      if ((await watched.getAttribute("aria-pressed")) !== "true") await page.keyboard.press("Enter");
+      await expect(watched).toHaveAttribute("aria-pressed", "true");
     },
     // Watched movies leave Continue Watching; later shots need it back.
     after: async (page) => {
@@ -67,6 +68,8 @@ const SCREENS: Screen[] = [
       await expect(watched).toHaveAttribute("aria-pressed", "false");
     },
   },
+  // A movie whose metadata lists no trailer: no Trailer action at all.
+  { name: "title-no-trailer", path: "/title/movie/tt43718175", ready: visible('[data-f="title:watched"]') },
   {
     name: "versions",
     path: `/title/series/${GOT.id}/versions/${GOT.resume}`,
@@ -103,14 +106,14 @@ const SCREENS: Screen[] = [
   { name: "pairing", path: "/pair", ready: visible(".install") },
 ];
 
-const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "versions", "discover", "settings"]);
-const TV_LIGHT = new Set(["home", "title-trailer", "title-watched"]);
+const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer", "versions", "discover", "settings"]);
+const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer"]);
 
 // Each shot opens a fresh context, so artwork is fetched once here and
 // served to every context after that, instead of asking the image CDN for
 // the same posters dozens of times a minute.
 const art = new Map<string, { status: number; headers: Record<string, string>; body: Buffer }>();
-const ART = /^https:\/\/(images|episodes)\.metahub\.space\//;
+const ART = /^https:\/\/(images|episodes|live)\.metahub\.space\//;
 async function cacheArt(context: BrowserContext) {
   await context.route(ART, async (route) => {
     const url = route.request().url();

@@ -132,3 +132,41 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   await expect(watched).toHaveAttribute("aria-pressed", "false");
   await expect(watched).toHaveText("Mark watched");
 });
+
+const FORMS = { tv: [1920, 1080, 1], desktop: [1440, 900, 1], phone: [390, 844, 2] } as const;
+
+for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
+  test(`layout rhythm on ${form}: hero gap and one row of title actions`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, isMobile: form === "phone", hasTouch: form === "phone" });
+    const page = await context.newPage();
+
+    // The hero's buttons sit at least as far above "Continue Watching" as a
+    // row's content sits above the next row's heading.
+    await page.goto(`/?form=${form}`);
+    // Continue Watching can land after the catalogs (its tiles wait on metas).
+    await expect(page.locator(".row").first()).toHaveAttribute("aria-label", "Continue Watching", { timeout: 30_000 });
+    await expect(page.locator(".hero .acts .btn").first()).toBeVisible();
+    await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible({ timeout: 30_000 });
+    const gaps = await page.evaluate(() => {
+      const bottom = (els: Element[]) => Math.max(...els.map((e) => e.getBoundingClientRect().bottom));
+      const rows = [...document.querySelectorAll(".row")];
+      const heading = (i: number) => rows[i]?.querySelector(".row-head h2")?.getBoundingClientRect().top ?? 0;
+      const hero = bottom([...document.querySelectorAll(".hero .acts .btn")]);
+      const firstRow = bottom([...(rows[0]?.querySelectorAll(".tile") ?? [])]);
+      return { hero: heading(0) - hero, row: heading(1) - firstRow };
+    });
+    expect(gaps.hero).toBeGreaterThanOrEqual(gaps.row - 1);
+
+    // Title actions never leave one button alone on a second row: a movie
+    // with a trailer has the most secondary actions.
+    await page.goto(`/title/movie/${BBB_ID}?form=${form}`);
+    await expect(page.locator('[data-f="title:trailer"]')).toBeVisible({ timeout: 30_000 });
+    const tops = await page.locator(".info .acts .btn").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    expect(new Set(tops).size).toBe(1);
+    // Watched is the round toggle beside Play, not a secondary action.
+    const play = await page.locator('[data-f="title:play"]').boundingBox();
+    const toggle = await page.locator('[data-f="title:watched"]').boundingBox();
+    expect(Math.abs((toggle?.y ?? 0) + (toggle?.height ?? 0) / 2 - ((play?.y ?? 0) + (play?.height ?? 0) / 2))).toBeLessThan(2);
+    await context.close();
+  });
+}
