@@ -11,6 +11,7 @@ pub use crate::core::{Core, CoreConfig, CoreError};
 pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;
 pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
+pub use views::discover::{CatalogChoice, DiscoverSnapshot, DiscoverState, DiscoverView};
 pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
 pub use views::library::{KindCount, LibrarySnapshot, LibrarySort, LibraryView};

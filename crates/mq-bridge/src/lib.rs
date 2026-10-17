@@ -5,13 +5,15 @@
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
 //! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
 //! "createSyncAccount" | "syncNow", ...}`.
-//! Views: home, search, library, title, versions, playback, addons, import, settings.
+//! Views: home, search, discover, library, title, versions, playback, addons, import,
+//! settings.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
 use mq_runtime::{
-    AddonsView, Core, HomeView, ImportView, LibrarySort, LibraryView, PlayTarget, PlaybackView,
-    SearchView, SettingsView, StoreId, StremioEndpoints, TitleView, VersionsParams, VersionsView,
+    AddonsView, Core, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView, PlayTarget,
+    PlaybackView, SearchView, SettingsView, StoreId, StremioEndpoints, TitleView, VersionsParams,
+    VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
@@ -93,6 +95,7 @@ enum View {
     Playback(PlaybackView),
     Search(SearchView),
     Library(LibraryView),
+    Discover(DiscoverView),
     Settings { _view: SettingsView },
     Addons { _view: AddonsView },
     Import { _view: ImportView },
@@ -303,6 +306,12 @@ impl Session {
                     forward,
                 )
             }
+            "discover" => {
+                let discover = DiscoverView::open(&self.core);
+                let (snapshot, updates) = discover.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (View::Discover(discover), to_value(&snapshot)?, forward)
+            }
             "library" => {
                 let library = LibraryView::open(&self.core);
                 let (snapshot, updates) = library.subscribe();
@@ -362,6 +371,13 @@ impl Session {
                     .map_err(|e| e.to_string())?;
             }
             (View::Versions(versions), "freeze") => versions.freeze(),
+            (View::Discover(discover), "select") => {
+                let text = |key: &str| command.get(key).and_then(Value::as_str);
+                // An absent genre keeps the current one; null clears it.
+                let genre = command.get("genre").map(Value::as_str);
+                discover.select(text("kind"), text("catalog"), genre);
+            }
+            (View::Discover(discover), "loadMore") => discover.load_more(),
             (View::Library(library), "setFilter") => {
                 library.set_filter(
                     command
