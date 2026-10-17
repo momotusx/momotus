@@ -6,6 +6,7 @@ pub mod import;
 pub mod library;
 pub mod pairing;
 pub mod playback;
+pub mod profiles;
 pub mod search;
 pub mod settings;
 pub mod title;

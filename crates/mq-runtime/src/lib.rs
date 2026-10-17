@@ -5,10 +5,12 @@
 
 mod core;
 pub mod live;
+mod profiles;
 pub mod segments;
 pub mod views;
 
 pub use crate::core::{Core, CoreConfig, CoreError};
+pub use crate::profiles::{MAX_PROFILES, ProfileError};
 pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;
 pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
@@ -23,6 +25,7 @@ pub use views::pairing::{PairingSnapshot, PairingView};
 pub use views::playback::{
     Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
 };
+pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionState};
 pub use views::search::{SearchSnapshot, SearchView};
 pub use views::settings::{HomeRows, Prefs, SettingsView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};

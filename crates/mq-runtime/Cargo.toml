@@ -28,6 +28,8 @@ mq-engine = { path = "../mq-engine", optional = true }
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 getrandom = "0.3"
+# PIN hashing (plans/m11-profiles.md section 3); the salt comes from getrandom.
+argon2 = { version = "=0.6.0", default-features = false, features = ["alloc", "password-hash"] }
 stremio-core.workspace = true
 eyeball = "0.8"
 eyeball-im = "0.9"

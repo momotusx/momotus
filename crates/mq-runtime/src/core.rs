@@ -3,7 +3,7 @@ use mq_addons::{
 };
 use mq_debrid::{AllDebrid, Premiumize, RealDebrid, Resolver, ResolverConfig, StoreId, TorBox};
 use mq_http::{ClientConfig, HttpClient};
-use mq_library::{AddonRow, Hlc, HlcClock, Library};
+use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::path::PathBuf;
@@ -38,6 +38,8 @@ pub enum CoreError {
 #[derive(Debug, Clone)]
 pub struct CoreConfig {
     pub data_dir: PathBuf,
+    /// The profile to open on first run, when this device has never switched
+    /// and the profile exists; otherwise the owner. Never created.
     pub profile_id: String,
     /// Sync needs every device to have its own id. Apps pass one kept in the
     /// keystore with this-device-only access, so a restored backup on a new
@@ -75,6 +77,8 @@ struct Inner {
     sync_gate: Arc<Mutex<()>>,
     /// Skip segment lookups and their session cache.
     segments: crate::segments::Finder,
+    /// PIN attempts, one throttle for every session and profile.
+    pins: std::sync::Mutex<crate::profiles::Throttle>,
 }
 
 impl Core {
@@ -82,13 +86,18 @@ impl Core {
         std::fs::create_dir_all(&config.data_dir)?;
         let library = Library::open(config.data_dir.join("library.sqlite"))?;
         let torrents = config.data_dir.join("torrents");
-        Self::with_library(library, &config.profile_id, config.device_id, torrents)
+        Ok(Self::with_library(library, &config.profile_id, config.device_id, torrents)?.active())
     }
 
-    /// A core over a throwaway database, for tests and the CLI.
+    /// A core over a throwaway database, for tests and the CLI. `profile` is
+    /// created (with no PIN) and made the active one.
     pub fn temporary(profile: &str) -> Result<Self, CoreError> {
         let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
-        Self::with_library(Library::temporary()?, profile, 1, torrents)
+        let core = Self::with_library(Library::temporary()?, profile, 1, torrents)?;
+        core.library()
+            .ensure_profile(profile, profile, &core.zero_hlc())?;
+        core.library().set_active_profile(profile)?;
+        Ok(core)
     }
 
     fn with_library(
@@ -114,8 +123,8 @@ impl Core {
         let library = Arc::new(library);
         let store = Arc::new(LibraryCache(library.clone()));
         let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
-        // The lowest hlc: a profile synced from another device keeps its name.
-        library.ensure_profile(profile, profile, &Hlc::zero(device_id).encode())?;
+        // The owner, with the lowest hlc: what another device synced wins.
+        library.ensure_profile(OWNER, OWNER, &Hlc::zero(device_id).encode())?;
         Ok(Self {
             inner: Arc::new(Inner {
                 http: http.clone(),
@@ -129,6 +138,9 @@ impl Core {
                 clock,
                 sync_gate: Arc::default(),
                 segments: crate::segments::Finder::new(http.clone()),
+                pins: std::sync::Mutex::new(crate::profiles::Throttle::new(
+                    std::time::Instant::now(),
+                )),
             }),
             profile: profile.into(),
         })
@@ -160,6 +172,10 @@ impl Core {
 
     pub fn profile(&self) -> &str {
         &self.profile
+    }
+
+    pub(crate) fn pins(&self) -> &std::sync::Mutex<crate::profiles::Throttle> {
+        &self.inner.pins
     }
 
     pub fn hlc(&self) -> String {
