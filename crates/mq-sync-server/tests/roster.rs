@@ -6,13 +6,14 @@ use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::hlc::{HlcClock, now_ms};
 use mq_library::{Library, ProgressRow};
 use mq_sync::pair::{approve_pairing, make_kit, start_pairing};
-use mq_sync::roster::{Entry, Hex, Roster, Sponsor};
-use mq_sync::wire::{AppendRequest, PushRequest, ReplayRequest};
+use mq_sync::roster::{Entry, Hex, MemberSecret, Roster, Sponsor, TokenRequest};
+use mq_sync::wire::{AppendRequest, PushRequest, ReplayRequest, TokenGrant};
 use mq_sync::{SyncConfig, SyncError, SyncReport, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex};
+use tokio::sync::Notify;
 
 fn http() -> HttpClient {
     HttpClient::new(ClientConfig::default()).unwrap()
@@ -56,6 +57,7 @@ impl Relay {
         let config = Config {
             clock_offset_ms: offset.clone(),
             new_generation,
+            public_host: Some("127.0.0.1".into()),
             ..Config::default()
         };
         let app = router(&db, config).unwrap();
@@ -231,6 +233,73 @@ impl Device {
     }
 }
 
+/// What a proxy does to the first request it matches.
+enum Fault {
+    /// Answers 503 without passing it on.
+    Refuse,
+    /// Passes it on, then answers 502: the relay acted, the device cannot
+    /// tell.
+    LoseAnswer,
+    /// Says it is `reached`, waits for `release`, then passes it on.
+    Hold(Arc<Notify>, Arc<Notify>),
+}
+
+/// The URL of a proxy in front of `relay` that does `fault` to the first
+/// request whose method is `method` and whose path starts with `path`, and
+/// passes everything else on unchanged.
+async fn proxy(relay: &Relay, method: &'static str, path: &'static str, fault: Fault) -> String {
+    use axum::extract::Request;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    let rule = Arc::new(Mutex::new(Some(fault)));
+    let target = relay.url.clone();
+    let app = axum::Router::new().fallback(move |request: Request| {
+        let (rule, target) = (rule.clone(), target.clone());
+        async move {
+            let (parts, body) = request.into_parts();
+            let body = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+            let hit = parts.method.as_str() == method && parts.uri.path().starts_with(path);
+            let fault = hit.then(|| rule.lock().unwrap().take()).flatten();
+            if let Some(Fault::Hold(reached, release)) = &fault {
+                reached.notify_one();
+                release.notified().await;
+            }
+            if matches!(fault, Some(Fault::Refuse)) {
+                return (StatusCode::SERVICE_UNAVAILABLE, "refused").into_response();
+            }
+            let headers = parts
+                .headers
+                .iter()
+                .filter(|(name, _)| *name == "authorization" || *name == "x-invite")
+                .map(|(name, value)| (name.to_string(), value.to_str().unwrap().to_owned()))
+                .collect();
+            let options = RequestOptions {
+                allow_private: true,
+                headers,
+                ..Default::default()
+            };
+            let json = (!body.is_empty())
+                .then(|| mq_http::Body::Json(serde_json::from_slice(&body).unwrap()));
+            let verb = mq_http::Method::from_bytes(parts.method.as_str().as_bytes()).unwrap();
+            let url = format!("{target}{}", parts.uri);
+            let answer = http().request(verb, &url, json, &options).await;
+            if matches!(fault, Some(Fault::LoseAnswer)) {
+                return (StatusCode::BAD_GATEWAY, "lost").into_response();
+            }
+            let (status, body) = match answer {
+                Ok(r) => (r.status, r.body),
+                Err(HttpError::Status { status, body, .. }) => (status, body),
+                Err(e) => (502, e.to_string().into()),
+            };
+            (StatusCode::from_u16(status).unwrap(), body).into_response()
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    url
+}
+
 /// Builds an entry on the relay's roster up to (and without) `seq`.
 fn prefix(relay: &Relay, seq: usize) -> Roster {
     let mut roster = Roster::default();
@@ -398,29 +467,41 @@ async fn a_kit_cannot_sign_for_a_token() {
         .expand(b"marquee/recovery/member/v1", &mut seed)
         .unwrap();
     let kit = mq_sync::roster::MemberSecret::from_seed(seed);
+    let grant = signed(&relay, phone.record.keys.account, &kit).await;
+    let asked = ask(&relay, &grant).await;
+    assert!(
+        matches!(asked, Err(HttpError::Status { status: 403, .. })),
+        "{asked:?}"
+    );
+}
+
+/// A token request signed by `member` for this relay, at its host, now.
+async fn signed(relay: &Relay, account: Hex<16>, member: &MemberSecret) -> TokenGrant {
     let info: mq_sync::wire::RelayInfo = http()
         .get(&format!("{}/v1/relay", relay.url), &token(""))
         .await
         .unwrap()
         .json()
         .unwrap();
-    let request = mq_sync::roster::TokenRequest::new(
+    let request = TokenRequest::new(
         info.relay_id,
-        phone.record.keys.account,
-        kit.id(),
+        account,
+        member.id(),
         info.server_ms,
+        "127.0.0.1",
     );
-    let grant = mq_sync::wire::TokenGrant {
-        sig: kit.sign_token(&request),
+    TokenGrant {
+        sig: member.sign_token(&request),
         request,
-    };
-    let asked = http()
-        .post_json(&format!("{}/v1/tokens", relay.url), &grant, &token(""))
-        .await;
-    assert!(
-        matches!(asked, Err(HttpError::Status { status: 403, .. })),
-        "{asked:?}"
-    );
+    }
+}
+
+async fn ask(relay: &Relay, grant: &TokenGrant) -> Result<String, HttpError> {
+    http()
+        .post_json(&format!("{}/v1/tokens", relay.url), grant, &token(""))
+        .await?
+        .json::<mq_sync::wire::AccountResponse>()
+        .map(|granted| granted.device_token)
 }
 
 async fn redeem(relay: &Relay, kit: &str) -> String {
@@ -514,6 +595,7 @@ async fn a_relay_claiming_a_pending_rotation_makes_no_device_rotate() {
         .unwrap();
     let report = phone.sync().await;
     assert_eq!(report.pushed, 0, "{report:?}");
+    assert_eq!(report.blocked, Some(mq_sync::Blocked::RelayDisagrees));
     assert_eq!(relay.rows(), rows, "no rotation");
     assert_eq!(phone.record.keys.epoch, 0);
     assert!(phone.library.outbox(10).unwrap().last_id.is_some(), "kept");
@@ -665,34 +747,10 @@ async fn a_database_restored_alone_keeps_the_roster() {
     assert!(matches!(err, SyncError::Dropped), "{err:?}");
     // Signing for a fresh token gets it a token that reads up to its
     // removal and cannot pull or push.
-    let info: mq_sync::wire::RelayInfo = http()
-        .get(&format!("{}/v1/relay", restored.url), &token(""))
-        .await
-        .unwrap()
-        .json()
-        .unwrap();
-    let member = tv.record.secret();
-    let request = mq_sync::roster::TokenRequest::new(
-        info.relay_id,
-        tv.record.keys.account,
-        member.id(),
-        info.server_ms,
-    );
-    let grant = mq_sync::wire::TokenGrant {
-        sig: member.sign_token(&request),
-        request,
-    };
-    let fresh: mq_sync::wire::AccountResponse = http()
-        .post_json(&format!("{}/v1/tokens", restored.url), &grant, &token(""))
-        .await
-        .unwrap()
-        .json()
-        .unwrap();
+    let grant = signed(&restored, tv.record.keys.account, &tv.record.secret()).await;
+    let fresh = ask(&restored, &grant).await.unwrap();
     let pull = http()
-        .get(
-            &format!("{}/v1/pull", restored.url),
-            &token(&fresh.device_token),
-        )
+        .get(&format!("{}/v1/pull", restored.url), &token(&fresh))
         .await;
     assert!(
         matches!(pull, Err(HttpError::Status { status: 401, .. })),
@@ -910,4 +968,336 @@ async fn a_journal_missing_lines_is_completed_at_startup() {
     );
     let restored = restarted.restored(&before, true).await;
     assert_eq!(restored.rows(), relay.rows());
+}
+
+/// After a restore, a rotation a member's leaving made due waits out the
+/// grace period, and pushes wait with it: the report says why.
+#[tokio::test]
+async fn pushes_wait_for_a_rotation_held_back_by_the_grace_period() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let restored = relay.restored(&relay.snapshot(), true).await;
+    phone.record.server = restored.url.clone();
+    let mut tv = phone.pair(&restored, "TV").await;
+    tv.sync().await;
+    mq_sync::sign_out(&tv.library, &http(), &tv.record, &tv.clock, false)
+        .await
+        .unwrap();
+    phone.watch("v1", 5);
+    let report = phone.sync().await;
+    assert_eq!(report.pushed, 0, "{report:?}");
+    assert_eq!(report.blocked, Some(mq_sync::Blocked::RotationPending));
+    assert!(report.rotation_wait_ms > 0, "{report:?}");
+}
+
+/// The genesis is no secret, so sending it again makes no token, also after
+/// its device was removed. A device whose answer was lost signs for its
+/// token instead.
+#[tokio::test]
+async fn an_account_is_created_once() {
+    let relay = Relay::new().await;
+    let lossy = proxy(&relay, "POST", "/v1/accounts", Fault::LoseAnswer).await;
+    let record = mq_sync::create_account(&http(), &lossy, None, "Phone")
+        .await
+        .unwrap();
+    let mut phone = Device::with(SyncConfig {
+        server: relay.url.clone(),
+        ..record
+    });
+    phone.watch("v1", 10);
+    assert_eq!(phone.sync().await.pushed, 1);
+    let genesis = relay.entries()[0].clone();
+    let again = || {
+        let entry = genesis.clone();
+        let url = format!("{}/v1/accounts", relay.url);
+        async move {
+            http()
+                .post_json(&url, &mq_sync::wire::AccountRequest { entry }, &token(""))
+                .await
+        }
+    };
+    let twice = again().await;
+    assert!(
+        matches!(twice, Err(HttpError::Status { status: 409, .. })),
+        "{twice:?}"
+    );
+    let mut tv = phone.pair(&relay, "TV").await;
+    tv.remove(vec![phone.id()]).await;
+    let removed = again().await;
+    assert!(
+        matches!(removed, Err(HttpError::Status { status: 409, .. })),
+        "{removed:?}"
+    );
+}
+
+/// A device the lost one vouches for while the report is on its way goes
+/// too: the drop set is worked out again on the roster each try is built on.
+#[tokio::test]
+async fn a_device_the_lost_one_adds_during_the_report_goes_too() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    tv.sync().await;
+    phone.sync().await;
+    let (reached, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let hold = Fault::Hold(reached.clone(), release.clone());
+    let held = proxy(&relay, "POST", "/v1/roster", hold).await;
+    let reporting = SyncConfig {
+        server: held,
+        ..phone.record.clone()
+    };
+    let (lost, client) = (tv.id(), http());
+    let (record, mut thief) = tokio::join!(
+        mq_sync::report_lost(
+            &phone.library,
+            &client,
+            &reporting,
+            &phone.clock,
+            lost,
+            vec![]
+        ),
+        async {
+            reached.notified().await;
+            // The thief vouches for a device of their own first.
+            let thief = tv.pair(&relay, "Thief").await;
+            release.notify_one();
+            thief
+        }
+    );
+    phone.record = SyncConfig {
+        server: relay.url.clone(),
+        ..record.unwrap()
+    };
+    let err = thief.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Dropped), "{err:?}");
+    let members = mq_sync::devices(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap()
+        .members;
+    assert_eq!(members.len(), 1, "{members:?}");
+}
+
+/// Settling a fork that fails half way (the relay refuses the revoke) keeps
+/// this device's own branch and the fork, so the next try still drops what
+/// that branch dropped. The record the app passes may lag behind the
+/// device's roster (here by a rotation both branches share).
+#[tokio::test]
+async fn a_fork_settled_half_way_keeps_its_drops() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    let mut laptop = phone.pair(&relay, "Laptop").await;
+    for device in [&mut tv, &mut laptop, &mut phone] {
+        device.sync().await;
+    }
+    let lagging = phone.record.clone();
+    phone.remove(vec![]).await;
+    for device in [&mut tv, &mut laptop, &mut phone] {
+        device.sync().await;
+    }
+    let before = relay.snapshot();
+    phone.remove(vec![laptop.id()]).await;
+    let restored = relay.restored(&before, false).await;
+    for device in [&mut phone, &mut tv, &mut laptop] {
+        device.record.server = restored.url.clone();
+    }
+    // The TV rotates on the restored relay, at the seq of the lost removal.
+    tv.remove(vec![]).await;
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+    let refusing = proxy(&restored, "POST", "/v1/roster", Fault::Refuse).await;
+    let through = SyncConfig {
+        server: refusing,
+        ..lagging.clone()
+    };
+    let failed =
+        mq_sync::use_server_roster(&phone.library, &http(), &through, &phone.clock, vec![]).await;
+    assert!(failed.is_err(), "{failed:?}");
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "still forked: {err:?}");
+    let lagging = SyncConfig {
+        server: restored.url.clone(),
+        ..lagging
+    };
+    phone.record =
+        mq_sync::use_server_roster(&phone.library, &http(), &lagging, &phone.clock, vec![])
+            .await
+            .unwrap();
+    let err = laptop.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Dropped), "{err:?}");
+    phone.sync().await;
+    tv.sync().await;
+    assert_eq!(tv.record.keys, phone.record.keys);
+}
+
+/// The approval is kept before the payload goes out: an answer lost on the
+/// way back, and a second try the relay refuses because the first one
+/// filled the slot, still end in a cancellation.
+#[tokio::test]
+async fn an_approval_whose_answer_was_lost_is_still_cancelled() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let lossy = proxy(&relay, "PUT", "/v1/pairings/", Fault::LoseAnswer).await;
+    let joining = start_pairing(&http(), &lossy).await.unwrap();
+    let through = SyncConfig {
+        server: lossy,
+        ..phone.record.clone()
+    };
+    for _ in 0..2 {
+        let approved =
+            approve_pairing(&phone.library, &http(), &through, &phone.clock, &joining.qr).await;
+        assert!(approved.is_err(), "{approved:?}");
+    }
+    // The new device collected the payload but never joined.
+    joining.poll(&http()).await.unwrap().expect("delivered");
+    phone.sync().await;
+    assert_eq!(phone.record.keys.epoch, 0, "not timed out yet");
+    relay.offset.store(11 * 60 * 1000, Ordering::Relaxed);
+    phone.sync().await;
+    assert_eq!(phone.record.keys.epoch, 1, "cancelled by a rotation");
+}
+
+/// A relay whose clock runs slow cannot hold a cancellation back: the
+/// approving device's own clock counts too.
+#[tokio::test]
+async fn an_approval_times_out_by_the_devices_clock_too() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let joining = start_pairing(&http(), &relay.url).await.unwrap();
+    let (_, record) = approve_pairing(
+        &phone.library,
+        &http(),
+        &phone.record,
+        &phone.clock,
+        &joining.qr,
+    )
+    .await
+    .unwrap();
+    phone.record = record;
+    joining.poll(&http()).await.unwrap().expect("approved");
+    phone.clock.set_offset_ms(11 * 60 * 1000);
+    phone.sync().await;
+    assert_eq!(phone.record.keys.epoch, 1, "cancelled by a rotation");
+}
+
+/// A round that fails right after a parked record's key arrived still
+/// reads that record later.
+#[tokio::test]
+async fn a_parked_record_survives_a_failed_round() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    tv.sync().await;
+    phone.sync().await;
+    tv.remove(vec![]).await;
+    tv.sync().await;
+    tv.watch("v1", 900);
+    tv.sync().await;
+    // The relay withholds the rotation from the phone, then shows it again.
+    let rotation = relay.entries().last().unwrap().clone();
+    let seq = rotation.parse().unwrap().seq as i64;
+    let sql = relay.sql();
+    sql.execute("DELETE FROM roster WHERE seq = ?1", [seq])
+        .unwrap();
+    sql.execute("UPDATE account SET epoch = 0", []).unwrap();
+    assert_eq!(phone.round().await.unwrap().parked, 1);
+    relay.force(&rotation);
+    sql.execute("UPDATE account SET epoch = 1", []).unwrap();
+    // The first read after taking the key fails.
+    let refusing = proxy(&relay, "GET", "/v1/pull", Fault::Refuse).await;
+    let through = SyncConfig {
+        server: refusing,
+        ..phone.record.clone()
+    };
+    assert!(
+        sync_once(&phone.library, &http(), &through, &phone.clock)
+            .await
+            .is_err()
+    );
+    phone.sync().await;
+    assert_eq!(phone.position("v1"), Some(900));
+}
+
+/// A new token for the same account keeps the device's cursors: nothing is
+/// sent or read again.
+#[tokio::test]
+async fn a_fresh_token_keeps_the_cursors() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    phone.watch("v1", 10);
+    phone.sync().await;
+    let grant = signed(&relay, phone.record.keys.account, &phone.record.secret()).await;
+    phone.record.device_token = ask(&relay, &grant).await.unwrap();
+    let report = phone.round().await.unwrap();
+    assert_eq!(
+        (report.pushed, report.stale, report.pulled),
+        (0, 0, 0),
+        "{report:?}"
+    );
+}
+
+/// Tokens a member gave up (it asked for more than three) read nothing past
+/// its removal either.
+#[tokio::test]
+async fn a_capped_token_reads_nothing_past_its_members_removal() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    tv.sync().await;
+    let mut tokens = Vec::new();
+    for _ in 0..4 {
+        let grant = signed(&relay, tv.record.keys.account, &tv.record.secret()).await;
+        tokens.push(ask(&relay, &grant).await.unwrap());
+    }
+    phone.remove(vec![tv.id()]).await;
+    let through_removal = relay.rows() as usize;
+    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    phone.record = record;
+    assert_eq!(relay.rows() as usize, through_removal + 1);
+    let (oldest, _) = fetch(&relay, &tokens[0]).await;
+    assert!(oldest < through_removal, "read {oldest} entries");
+    let (newest, _) = fetch(&relay, &tokens[3]).await;
+    assert_eq!(newest, through_removal);
+}
+
+/// A journal that lost a line in the middle (a failed write the relay went
+/// on past) is written whole again at startup, so a database-only restore
+/// still keeps every entry.
+#[tokio::test]
+async fn a_journal_missing_a_middle_line_is_rewritten_at_startup() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let before = relay.snapshot();
+    for _ in 0..2 {
+        let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+            .await
+            .unwrap();
+        phone.record = record;
+    }
+    let journal = relay.db.with_extension("roster.jsonl");
+    let text = std::fs::read_to_string(&journal).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    std::fs::write(&journal, format!("{}\n{}\n", lines[0], lines[2])).unwrap();
+    let restarted = Relay::start(relay.db.clone(), relay.offset.clone(), false).await;
+    let rewritten = std::fs::read_to_string(&journal).unwrap();
+    assert_eq!(rewritten, text);
+    let restored = restarted.restored(&before, true).await;
+    assert_eq!(restored.rows(), relay.rows());
+}
+
+/// A signed token request is good once, also across a relay restart.
+#[tokio::test]
+async fn a_token_request_is_good_once_across_a_restart() {
+    let relay = Relay::new().await;
+    let phone = Device::first(&relay).await;
+    let grant = signed(&relay, phone.record.keys.account, &phone.record.secret()).await;
+    ask(&relay, &grant).await.unwrap();
+    let restarted = Relay::start(relay.db.clone(), relay.offset.clone(), false).await;
+    let again = ask(&restarted, &grant).await;
+    assert!(
+        matches!(again, Err(HttpError::Status { status: 403, .. })),
+        "{again:?}"
+    );
 }

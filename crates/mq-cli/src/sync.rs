@@ -1,10 +1,11 @@
 //! Development sync flow. The keystore record lives in a 0600 file in the
-//! data dir; apps keep it in the OS keystore instead.
+//! data dir; apps keep it in the OS keystore instead. It never goes to the
+//! output: it holds the device's keys and token.
 
 use mq_http::{ClientConfig, HttpClient};
 use mq_runtime::Core;
-use mq_sync::SyncConfig;
 use mq_sync::roster::Id;
+use mq_sync::{SyncConfig, SyncError};
 use serde_json::json;
 use std::path::Path;
 use std::time::Instant;
@@ -19,6 +20,20 @@ fn id(text: &str) -> Result<Id, String> {
     serde_json::from_value(json!(text)).map_err(|_| format!("not a member id: {text}"))
 }
 
+/// A sync error as printed; a device the account dropped also forgets its
+/// record (the library stays, as an app's would).
+fn failed(data: &Path) -> impl Fn(SyncError) -> String + '_ {
+    move |e| {
+        if matches!(e, SyncError::Dropped) {
+            let _ = std::fs::remove_file(data.join(KEY_FILE));
+        }
+        match e.code() {
+            Some(code) => format!("{e} ({code})"),
+            None => e.to_string(),
+        }
+    }
+}
+
 pub async fn init(
     data: &Path,
     server: &str,
@@ -27,7 +42,7 @@ pub async fn init(
 ) -> Result<(), String> {
     let record = mq_sync::create_account(&http()?, server, invite, name)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "sync_account", "account": record.keys.account }));
     Ok(())
@@ -39,11 +54,15 @@ pub async fn now(core: &Core, data: &Path) -> Result<(), String> {
     let mut record = read(data)?;
     for _ in 0..3 {
         let started = Instant::now();
-        let report = core.sync(&record).await.map_err(|e| e.to_string())?;
-        super::emit(
-            json!({ "event": "synced", "report": report, "ms": started.elapsed().as_millis() as u64 }),
-        );
-        let Some(next) = report.record else {
+        let mut report = core.sync(&record).await.map_err(failed(data))?;
+        let next = report.record.take();
+        super::emit(json!({
+            "event": "synced",
+            "report": report,
+            "recordChanged": next.is_some(),
+            "ms": started.elapsed().as_millis() as u64,
+        }));
+        let Some(next) = next else {
             return Ok(());
         };
         save(data, &next)?;
@@ -90,14 +109,14 @@ pub async fn pair(data: &Path, server: &str, name: &str) -> Result<(), String> {
     let http = http()?;
     let request = mq_sync::pair::start_pairing(&http, server)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(failed(data))?;
     super::emit(json!({ "event": "pairing", "qr": request.qr, "expiresMs": request.expires_ms }));
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         if mq_library::hlc::now_ms() >= request.expires_ms {
             return Err("the pairing code expired".into());
         }
-        if let Some(offer) = request.poll(&http).await.map_err(|e| e.to_string())? {
+        if let Some(offer) = request.poll(&http).await.map_err(failed(data))? {
             // Nothing is kept until the user confirms the other device shows
             // the same code.
             super::emit(json!({ "event": "confirm", "code": offer.code }));
@@ -111,7 +130,7 @@ pub async fn pair(data: &Path, server: &str, name: &str) -> Result<(), String> {
             let record = request
                 .claim(&http, offer, name)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(failed(data))?;
             save(data, &record)?;
             super::emit(json!({ "event": "paired" }));
             return Ok(());
@@ -125,7 +144,7 @@ pub async fn approve(core: &Core, data: &Path, qr: &str) -> Result<(), String> {
     let (code, record) =
         mq_sync::pair::approve_pairing(core.library(), core.http(), &record, core.clock(), qr)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "approved", "code": code }));
     Ok(())
@@ -136,7 +155,7 @@ pub async fn kit(core: &Core, data: &Path) -> Result<(), String> {
     let record = read(data)?;
     let (kit, record) = mq_sync::pair::make_kit(core.library(), core.http(), &record, core.clock())
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "recovery_kit", "kit": kit }));
     Ok(())
@@ -146,7 +165,7 @@ pub async fn kit(core: &Core, data: &Path) -> Result<(), String> {
 pub async fn recover(data: &Path, server: &str, kit: &str, name: &str) -> Result<(), String> {
     let record = mq_sync::pair::recover(&http()?, server, kit, name)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "recovered" }));
     Ok(())
@@ -154,11 +173,11 @@ pub async fn recover(data: &Path, server: &str, kit: &str, name: &str) -> Result
 
 pub async fn devices(core: &Core, data: &Path) -> Result<(), String> {
     let record = read(data)?;
-    let devices = mq_sync::devices(core.library(), core.http(), &record, core.clock())
+    let mut devices = mq_sync::devices(core.library(), core.http(), &record, core.clock())
         .await
-        .map_err(|e| e.to_string())?;
-    if let Some(record) = &devices.record {
-        save(data, record)?;
+        .map_err(failed(data))?;
+    if let Some(record) = devices.record.take() {
+        save(data, &record)?;
     }
     super::emit(json!({ "event": "devices", "devices": devices }));
     Ok(())
@@ -174,7 +193,7 @@ pub async fn remove(core: &Core, data: &Path, member: &str) -> Result<(), String
         vec![id(member)?],
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "removed", "epoch": record.keys.epoch }));
     Ok(())
@@ -186,7 +205,7 @@ pub async fn lost(core: &Core, data: &Path, member: &str, keep: &[String]) -> Re
     let keep = keep.iter().map(|k| id(k)).collect::<Result<Vec<_>, _>>()?;
     let preview = mq_sync::lost_preview(core.library(), core.http(), &record, core.clock(), lost)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(failed(data))?;
     let record = mq_sync::report_lost(
         core.library(),
         core.http(),
@@ -196,7 +215,7 @@ pub async fn lost(core: &Core, data: &Path, member: &str, keep: &[String]) -> Re
         keep,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "lost", "listed": preview, "epoch": record.keys.epoch }));
     Ok(())
@@ -206,7 +225,7 @@ pub async fn sign_out(core: &Core, data: &Path, force: bool) -> Result<(), Strin
     let record = read(data)?;
     mq_sync::sign_out(core.library(), core.http(), &record, core.clock(), force)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(failed(data))?;
     std::fs::remove_file(data.join(KEY_FILE)).map_err(|e| e.to_string())?;
     super::emit(json!({ "event": "signed_out" }));
     Ok(())
@@ -218,7 +237,7 @@ pub async fn use_server_roster(core: &Core, data: &Path, drop: &[String]) -> Res
     let record =
         mq_sync::use_server_roster(core.library(), core.http(), &record, core.clock(), drop)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "adopted", "epoch": record.keys.epoch }));
     Ok(())

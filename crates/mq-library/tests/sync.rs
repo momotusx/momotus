@@ -204,3 +204,46 @@ fn cache_and_import_writes_never_override_a_real_edit() {
         .unwrap();
     assert!(!lib.is_in_library("p", "tt1").unwrap());
 }
+
+/// The roster store takes the same entry twice but never a second entry at
+/// a taken seq: a conflicting history must not slip by unnoticed.
+#[test]
+fn a_roster_entry_at_a_taken_seq_is_refused_unless_it_is_the_same() {
+    let lib = Library::temporary().unwrap();
+    lib.add_roster_entry("g", 0, b"one", b"sig").unwrap();
+    lib.add_roster_entry("g", 0, b"one", b"sig").unwrap();
+    assert!(lib.add_roster_entry("g", 0, b"two", b"sig").is_err());
+    assert_eq!(
+        lib.roster_entries("g").unwrap(),
+        vec![(b"one".to_vec(), b"sig".to_vec())]
+    );
+}
+
+/// A dropped device forgets its queue, cursors and roster, but keeps its own
+/// id and the hosts relay ids were pinned to.
+#[test]
+fn forgetting_sync_keeps_the_device_id_and_relay_pins() {
+    let lib = Library::temporary().unwrap();
+    for key in ["device_id", "relay:07", "pull_seq", "approval:01"] {
+        lib.set_sync_state(key, "x").unwrap();
+    }
+    lib.add_roster_entry("g", 0, b"one", b"sig").unwrap();
+    lib.forget_sync().unwrap();
+    let kept: Vec<String> = ["device_id", "relay:07", "pull_seq", "approval:01"]
+        .into_iter()
+        .filter(|key| lib.sync_state(key).unwrap().is_some())
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(kept, ["device_id", "relay:07"]);
+    assert!(lib.roster_entries("g").unwrap().is_empty());
+}
+
+#[test]
+fn moving_a_sync_state_replaces_it_in_one_step() {
+    let lib = Library::temporary().unwrap();
+    lib.set_sync_state("approval:01", "5:6").unwrap();
+    lib.move_sync_state("approval:01", "cancel:01", "1")
+        .unwrap();
+    assert_eq!(lib.sync_state("approval:01").unwrap(), None);
+    assert_eq!(lib.sync_state("cancel:01").unwrap().as_deref(), Some("1"));
+}

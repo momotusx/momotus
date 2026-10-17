@@ -275,7 +275,6 @@ impl Session {
                     mq_sync::pair::approve_pairing(library, http, &record, clock, &qr)
                         .await
                         .map(|(code, record)| json!({ "code": code, "record": record }))
-                        .map_err(|e| e.to_string())
                 });
             }
             Request::CreateRecoveryKit { id, record } => {
@@ -286,7 +285,6 @@ impl Session {
                     mq_sync::pair::make_kit(library, http, &record, clock)
                         .await
                         .map(|(kit, record)| json!({ "kit": kit, "record": record }))
-                        .map_err(|e| e.to_string())
                 });
             }
             Request::Recover {
@@ -346,7 +344,6 @@ impl Session {
                     mq_sync::sign_out(library, http, &record, clock, force)
                         .await
                         .map(|()| json!({}))
-                        .map_err(|e| e.to_string())
                 });
             }
             Request::UseServerRoster { id, record, drop } => {
@@ -407,20 +404,25 @@ impl Session {
     }
 
     fn reply(&self, id: Value, result: Result<Value, String>) {
-        let _ = self.out.send(message(id, result));
+        let _ = self.out.send(message(id, result.map_err(Failure::from)));
     }
 
     /// Runs a request that waits on the network off the request loop, so a
     /// sync or an addon fetch never holds up playback commands. Replies
     /// carry the request id, so they may arrive in any order.
-    fn spawn(&self, id: u64, work: impl Future<Output = Result<Value, String>> + Send + 'static) {
+    fn spawn<E: Into<Failure> + Send + 'static>(
+        &self,
+        id: u64,
+        work: impl Future<Output = Result<Value, E>> + Send + 'static,
+    ) {
         let out = self.out.clone();
         tokio::spawn(async move {
             // A request that panics still gets an answer, so the app never
             // waits for it forever.
-            let result = tokio::spawn(work)
-                .await
-                .unwrap_or_else(|e| Err(format!("internal error: {e}")));
+            let result = match tokio::spawn(work).await {
+                Ok(result) => result.map_err(Into::into),
+                Err(e) => Err(Failure::from(format!("internal error: {e}"))),
+            };
             let _ = out.send(message(json!(id), result));
         });
     }
@@ -641,10 +643,36 @@ fn field<T: serde::de::DeserializeOwned>(params: &Value, key: &str) -> Result<Op
         .transpose()
 }
 
-fn message(id: Value, result: Result<Value, String>) -> Value {
+/// A failed request: the message to show and, for the sync errors an app
+/// acts on (a dropped device, a fork), a stable `code`.
+struct Failure {
+    error: String,
+    code: Option<&'static str>,
+}
+
+impl From<String> for Failure {
+    fn from(error: String) -> Self {
+        Self { error, code: None }
+    }
+}
+
+impl From<mq_sync::SyncError> for Failure {
+    fn from(e: mq_sync::SyncError) -> Self {
+        Self {
+            code: e.code(),
+            error: e.to_string(),
+        }
+    }
+}
+
+fn message(id: Value, result: Result<Value, Failure>) -> Value {
     match result {
         Ok(value) => json!({ "id": id, "ok": true, "result": value }),
-        Err(error) => json!({ "id": id, "ok": false, "error": error }),
+        Err(Failure { error, code: None }) => json!({ "id": id, "ok": false, "error": error }),
+        Err(Failure {
+            error,
+            code: Some(code),
+        }) => json!({ "id": id, "ok": false, "error": error, "code": code }),
     }
 }
 
@@ -664,10 +692,8 @@ fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|e| e.to_string())
 }
 
-fn answer<T: serde::Serialize>(result: Result<T, mq_sync::SyncError>) -> Result<Value, String> {
-    result
-        .map_err(|e| e.to_string())
-        .and_then(|value| to_value(&value))
+fn answer<T: serde::Serialize>(result: Result<T, mq_sync::SyncError>) -> Result<Value, Failure> {
+    to_value(&result?).map_err(Failure::from)
 }
 
 async fn forward<S, U>(sub: u64, mut updates: S, out: mpsc::UnboundedSender<Value>)
@@ -779,7 +805,11 @@ mod liveness {
             json!({"id": 1, "ok": true, "result": {}})
         );
 
-        session.spawn(2, async { panic!("boom") });
+        session.spawn(2, async {
+            panic!("boom");
+            #[allow(unreachable_code)]
+            Ok::<Value, String>(json!({}))
+        });
         let reply = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
             .await
             .expect("a reply")

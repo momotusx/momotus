@@ -22,26 +22,29 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions};
 use mq_library::hlc::{Hlc, HlcClock, MAX_WALL_MS};
-use mq_library::{Library, LibraryError, SyncRecord};
+use mq_library::{Library, LibraryError, SignedEntry, SyncRecord};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 const PULL_SEQ: &str = "pull_seq";
 const READER_SEEN: &str = "pull_reader";
-const QUEUED_ALL: &str = "queued_all";
 const TARGET: &str = "sync_target";
 const GENERATION: &str = "relay_generation";
 /// `<seq>:<epoch>`: the cursor to return to (just before the first record
 /// whose key was missing) once a key for that epoch arrives.
 const EPOCH_PARK: &str = "epoch_park";
-/// `approval:<member id>` → when the pairing it approved times out.
-const APPROVAL: &str = "approval:";
+/// `approval:<member id>` → `<relay ms>:<device ms>`: when the pairing it
+/// approved times out, by the relay's clock and by this device's.
+pub(crate) const APPROVAL: &str = "approval:";
 /// `cancel:<member id>`: an approval that timed out; resolved by a rotation.
 const CANCEL: &str = "cancel:";
-/// `relay:<relay id>` → the server URL that relay id was first seen at.
+/// `relay:<relay id>` → the host that relay id was first seen at.
 const RELAY_PIN: &str = "relay:";
+/// Set when the relay showed a roster that conflicts with this device's;
+/// every call fails with `Fork` until `use_server_roster` settles it. The
+/// relay's history as read then is kept under `fork:<genesis>`.
+const FORK: &str = "fork";
 
 /// Shape version of register values this build writes; newer ones are
 /// skipped until the app updates.
@@ -127,12 +130,28 @@ pub struct SyncReport {
     /// A rotation is due but waits this long after a relay restore; pushes
     /// wait with it.
     pub rotation_wait_ms: u64,
+    /// Why queued changes were not sent this round, when the app should say
+    /// so (none when only the record changed: then `again` is set).
+    pub blocked: Option<Blocked>,
     /// The roster fingerprint, for people to compare between devices.
     pub fingerprint: String,
     /// A changed keystore record: store it, then sync again at once.
     pub record: Option<SyncConfig>,
     /// Sync again right away (the record changed, nothing was published).
     pub again: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Blocked {
+    /// A member left: pushes wait for the key rotation (which itself waits
+    /// out the grace period after a relay restore).
+    RotationPending,
+    /// The relay takes no pushes from this device's token yet.
+    NotActive,
+    /// The relay kept answering for another roster or key than this
+    /// device's.
+    RelayDisagrees,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -157,6 +176,24 @@ pub enum SyncError {
     WrongRelay,
     #[error("the relay is behind this device; it needs a device that still holds the account")]
     RelayBehind,
+    #[error("some changes are not sent yet; sync again or sign out anyway")]
+    Unsent,
+}
+
+impl SyncError {
+    /// A stable name for the errors an app acts on (rather than only shows).
+    pub fn code(&self) -> Option<&'static str> {
+        Some(match self {
+            SyncError::Insecure => "insecure",
+            SyncError::Fork => "fork",
+            SyncError::Dropped => "dropped",
+            SyncError::NotJoined => "notJoined",
+            SyncError::WrongRelay => "wrongRelay",
+            SyncError::RelayBehind => "relayBehind",
+            SyncError::Unsent => "unsent",
+            _ => return None,
+        })
+    }
 }
 
 fn roster_error(e: RosterError) -> SyncError {
@@ -237,19 +274,39 @@ pub async fn create_account(
     options.headers = invite
         .map(|i| vec![("x-invite".to_owned(), i.to_owned())])
         .unwrap_or_default();
-    let account: AccountResponse = http
-        .post_json(
-            &format!("{server}/v1/accounts"),
-            &AccountRequest {
-                entry: entry.clone(),
-            },
-            &options,
-        )
-        .await?
-        .json()?;
+    let request = AccountRequest {
+        entry: entry.clone(),
+    };
+    let send = || async {
+        http.post_json(&format!("{server}/v1/accounts"), &request, &options)
+            .await?
+            .json::<AccountResponse>()
+    };
+    // No answer (or a failure after the relay stored it) may still have
+    // made the account: send it once more; "exists" then means this one.
+    let created = match send().await {
+        Err(e) if !matches!(e, HttpError::Status { status: ..500, .. }) => send().await,
+        first => first,
+    };
+    let device_token = match created {
+        Ok(account) => account.device_token,
+        Err(HttpError::Status { status: 409, .. }) => {
+            let account = keys.account;
+            signed_token(
+                http,
+                server,
+                info.relay_id,
+                account,
+                &member,
+                info.server_ms,
+            )
+            .await?
+        }
+        Err(e) => return Err(e.into()),
+    };
     Ok(SyncConfig {
         server: server.to_owned(),
-        device_token: account.device_token,
+        device_token,
         member: Hex(member.seed()),
         keys,
         checkpoint: RosterHead {
@@ -266,6 +323,38 @@ pub(crate) async fn relay_info(http: &HttpClient, server: &str) -> Result<RelayI
         .get(&format!("{server}/v1/relay"), &options(server, ""))
         .await?
         .json()?)
+}
+
+/// The relay's host, as relay pins and token requests name it (its port may
+/// change when a relay is moved or restored).
+fn host(server: &str) -> String {
+    url::Url::parse(server)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// A fresh token for a device member, signed with its key: how a device
+/// whose token the relay lost (or never sent back) gets back in.
+async fn signed_token(
+    http: &HttpClient,
+    server: &str,
+    relay_id: Id,
+    account: Id,
+    member: &MemberSecret,
+    at_ms: u64,
+) -> Result<String, SyncError> {
+    let request = TokenRequest::new(relay_id, account, member.id(), at_ms, &host(server));
+    let sig = member.sign_token(&request);
+    let granted: AccountResponse = http
+        .post_json(
+            &format!("{server}/v1/tokens"),
+            &TokenGrant { request, sig },
+            &options(server, ""),
+        )
+        .await?
+        .json()?;
+    Ok(granted.device_token)
 }
 
 pub(crate) fn random<const N: usize>() -> [u8; N] {
@@ -294,23 +383,31 @@ pub(crate) fn require_secure(server: &str) -> Result<(), SyncError> {
     }
 }
 
-/// Cursors belong to one relay and one device token: syncing somewhere else
-/// starts over, queueing everything and pulling from the start. The roster
-/// store stays (it belongs to the account, not the relay).
-fn prepare(library: &Library, config: &SyncConfig) -> Result<(), SyncError> {
-    require_secure(&config.server)?;
-    let token = hex::encode(&Sha256::digest(config.device_token.as_bytes())[..8]);
-    let target = format!("{}|{token}", config.server);
+/// Cursors belong to one relay and one account: syncing somewhere else
+/// starts over, queueing everything and pulling from the start. A new token
+/// for the same account keeps them. The roster store stays (it belongs to
+/// the account, not the relay).
+fn prepare(library: &Library, info: &RelayInfo, account: &Id) -> Result<(), SyncError> {
+    let target = format!(
+        "{}|{}",
+        hex::encode(info.relay_id.0),
+        hex::encode(account.0)
+    );
     if library.sync_state(TARGET)?.as_deref() != Some(target.as_str()) {
-        for key in [PULL_SEQ, QUEUED_ALL, READER_SEEN, GENERATION, EPOCH_PARK] {
+        for key in [PULL_SEQ, READER_SEEN, GENERATION, EPOCH_PARK] {
             library.set_sync_state(key, "")?;
         }
         library.set_sync_state(TARGET, &target)?;
     }
-    if library.sync_state(QUEUED_ALL)?.as_deref() != Some("1") {
-        // Registers written before this device synced here are not queued.
+    // First contact (registers written before are not queued), or a relay
+    // restored from a backup (a new generation) that lost what came after
+    // it: send and read everything, starting with this round's push.
+    if library.sync_state(GENERATION)?.as_deref() != Some(info.generation.as_str()) {
         library.queue_all()?;
-        library.set_sync_state(QUEUED_ALL, "1")?;
+        for key in [PULL_SEQ, EPOCH_PARK] {
+            library.set_sync_state(key, "")?;
+        }
+        library.set_sync_state(GENERATION, &info.generation)?;
     }
     Ok(())
 }
@@ -353,9 +450,11 @@ pub(crate) async fn fetch_roster(
             )
             .await?
             .json()?;
+        // A relay that says "more" without serving any is not followed.
+        let stalled = page.entries.is_empty();
         from += page.entries.len() as u64;
         entries.extend(page.entries);
-        if !page.more {
+        if !page.more || stalled {
             return Ok((entries, page.head));
         }
     }
@@ -368,6 +467,24 @@ pub(crate) fn rebuild(entries: &[Entry]) -> Result<Roster, RosterError> {
         roster.apply(entry)?;
     }
     Ok(roster)
+}
+
+fn stored_entries(library: &Library, genesis: &str) -> Result<Vec<Entry>, SyncError> {
+    Ok(library
+        .roster_entries(genesis)?
+        .into_iter()
+        .map(|(body, sig)| Entry {
+            body,
+            sig: Hex(sig.try_into().unwrap_or([0; 64])),
+        })
+        .collect())
+}
+
+fn signed(entries: &[Entry]) -> Vec<SignedEntry> {
+    entries
+        .iter()
+        .map(|e| (e.body.clone(), e.sig.0.to_vec()))
+        .collect()
 }
 
 /// One device's view of its account during a call: its keystore record,
@@ -387,6 +504,9 @@ pub(crate) struct Session<'a> {
     pub(crate) info: RelayInfo,
     /// The roster moved during the call, so a key may have arrived.
     caught_up: bool,
+    /// Entries this session verifies go to the library's roster store (not
+    /// while settling a fork, until the settling revoke landed).
+    persist: bool,
 }
 
 impl<'a> Session<'a> {
@@ -398,38 +518,12 @@ impl<'a> Session<'a> {
         config: &SyncConfig,
         clock: &'a HlcClock,
     ) -> Result<Session<'a>, SyncError> {
-        prepare(library, config)?;
-        let info = relay_info(http, &config.server).await?;
-        let mut record = config.clone();
-        if record.relay_id == Id::default() {
-            record.relay_id = info.relay_id;
-        }
-        if record.relay_id != info.relay_id {
-            return Err(SyncError::WrongRelay);
-        }
-        // One relay id, one host: a relay answering with another relay's id
-        // cannot borrow what this device signs for that one. (The port may
-        // change when a relay is moved or restored.)
-        let pin = format!("{RELAY_PIN}{}", hex::encode(info.relay_id.0));
-        let host = url::Url::parse(&config.server)
-            .ok()
-            .and_then(|u| u.host_str().map(str::to_owned))
-            .unwrap_or_default();
-        match library.sync_state(&pin)? {
-            Some(pinned) if !pinned.is_empty() && pinned != host => {
-                return Err(SyncError::WrongRelay);
-            }
-            _ => library.set_sync_state(&pin, &host)?,
+        require_secure(&config.server)?;
+        if library.sync_state(FORK)?.is_some_and(|f| !f.is_empty()) {
+            return Err(SyncError::Fork);
         }
         let genesis = genesis_key(&config.keys);
-        let stored: Vec<Entry> = library
-            .roster_entries(&genesis)?
-            .into_iter()
-            .map(|(body, sig)| Entry {
-                body,
-                sig: Hex(sig.try_into().unwrap_or([0; 64])),
-            })
-            .collect();
+        let stored = stored_entries(library, &genesis)?;
         let (entries, roster) = match rebuild(&stored) {
             Ok(roster) => (stored, roster),
             // A damaged local store: start over from the relay, guarded by
@@ -439,7 +533,44 @@ impl<'a> Session<'a> {
                 (Vec::new(), Roster::default())
             }
         };
-        let mut session = Session {
+        let mut session = Session::connect(library, http, config, clock, entries, roster).await?;
+        session.catch_up().await?;
+        session.joined()?;
+        session.adopt()?;
+        Ok(session)
+    }
+
+    /// Checks the relay is the one `config` joined and makes a session on
+    /// `entries` (verified as `roster`).
+    async fn connect(
+        library: &'a Library,
+        http: &'a HttpClient,
+        config: &SyncConfig,
+        clock: &'a HlcClock,
+        entries: Vec<Entry>,
+        roster: Roster,
+    ) -> Result<Session<'a>, SyncError> {
+        require_secure(&config.server)?;
+        let info = relay_info(http, &config.server).await?;
+        let mut record = config.clone();
+        if record.relay_id == Id::default() {
+            record.relay_id = info.relay_id;
+        }
+        if record.relay_id != info.relay_id {
+            return Err(SyncError::WrongRelay);
+        }
+        // One relay id, one host: a relay answering with another relay's id
+        // cannot borrow what this device signs for that one.
+        let pin = format!("{RELAY_PIN}{}", hex::encode(info.relay_id.0));
+        let host = host(&config.server);
+        match library.sync_state(&pin)? {
+            Some(pinned) if !pinned.is_empty() && pinned != host => {
+                return Err(SyncError::WrongRelay);
+            }
+            _ => library.set_sync_state(&pin, &host)?,
+        }
+        prepare(library, &info, &config.keys.account)?;
+        Ok(Session {
             library,
             http,
             clock,
@@ -450,11 +581,8 @@ impl<'a> Session<'a> {
             entries,
             info,
             caught_up: false,
-        };
-        session.catch_up().await?;
-        session.joined()?;
-        session.adopt()?;
-        Ok(session)
+            persist: true,
+        })
     }
 
     fn head(&self) -> RosterHead {
@@ -471,21 +599,51 @@ impl<'a> Session<'a> {
     }
 
     fn keep(&mut self, entry: Entry) -> Result<(), SyncError> {
-        let seq = self.roster.head().map_or(0, |(seq, _)| seq);
-        self.library.add_roster_entry(
-            &genesis_key(&self.record.keys),
-            seq,
-            &entry.body,
-            &entry.sig.0,
-        )?;
+        if self.persist {
+            let seq = self.roster.head().map_or(0, |(seq, _)| seq);
+            self.library.add_roster_entry(
+                &genesis_key(&self.record.keys),
+                seq,
+                &entry.body,
+                &entry.sig.0,
+            )?;
+        }
         self.entries.push(entry);
         Ok(())
+    }
+
+    /// Whether the relay's head conflicts with the entry this device holds
+    /// at that seq.
+    fn diverged(&self, relay: &RosterHead) -> bool {
+        self.entries
+            .get(relay.seq as usize)
+            .is_some_and(|held| held.hash() != relay.hash)
+    }
+
+    /// Records a fork so it outlives this call: the relay's history as it
+    /// reads now goes next to this device's, and every call fails until the
+    /// user settles it. Returns the error to fail with.
+    async fn forked(&self) -> SyncError {
+        let theirs = fetch_roster(self.http, self.server(), self.token(), 0)
+            .await
+            .map(|(entries, _)| entries)
+            .unwrap_or_default();
+        let key = format!("{FORK}:{}", genesis_key(&self.record.keys));
+        let kept = self
+            .library
+            .replace_roster(&key, &signed(&theirs))
+            .and_then(|()| self.library.set_sync_state(FORK, "1"));
+        match kept {
+            Ok(()) => SyncError::Fork,
+            Err(e) => e.into(),
+        }
     }
 
     /// Reads the roster entries after this device's head from the relay,
     /// checks each, and sends the relay any it lost.
     pub(crate) async fn catch_up(&mut self) -> Result<(), SyncError> {
         let mut refreshed = false;
+        let mut replays = 0;
         let before = self.roster.head();
         loop {
             let from = self.roster.head().map_or(0, |(seq, _)| seq + 1);
@@ -503,17 +661,20 @@ impl<'a> Session<'a> {
                 }
                 fetched => fetched?,
             };
+            let served = !entries.is_empty();
             for entry in entries {
-                self.roster.apply(&entry).map_err(|e| match e {
+                match self.roster.apply(&entry) {
+                    Ok(()) => self.keep(entry)?,
                     // Not built on this device's head: another history.
-                    RosterError::NotNext => SyncError::Fork,
-                    e => SyncError::Roster(format!(
-                        "the relay served an entry that does not check: {e}"
-                    )),
-                })?;
-                self.keep(entry)?;
+                    Err(RosterError::NotNext) => return Err(self.forked().await),
+                    Err(e) => {
+                        return Err(SyncError::Roster(format!(
+                            "the relay served an entry that does not check: {e}"
+                        )));
+                    }
+                }
             }
-            let Some((seq, hash)) = self.roster.head() else {
+            let Some((seq, _)) = self.roster.head() else {
                 return Err(SyncError::Roster(
                     "the relay has no roster for this account".into(),
                 ));
@@ -521,26 +682,30 @@ impl<'a> Session<'a> {
             match relay {
                 // A revoked token reads up to its removal and no head.
                 None => break,
-                Some(relay) if relay.seq == seq && relay.hash != hash => {
-                    return Err(SyncError::Fork);
-                }
+                Some(relay) if self.diverged(&relay) => return Err(self.forked().await),
+                // Restored from a backup that lacked these: send them back.
+                // A relay that keeps not taking them is behind for good.
                 Some(relay) if relay.seq < seq => {
-                    let held = self.entries[relay.seq as usize].hash();
-                    if held != relay.hash {
-                        return Err(SyncError::Fork);
+                    if replays == TRIES {
+                        return Err(SyncError::RelayBehind);
                     }
-                    // Restored from a backup that lacked these: send them back.
+                    replays += 1;
                     self.replay(relay.seq + 1).await?;
-                    continue;
                 }
-                // Appended meanwhile: read again.
-                Some(relay) if relay.seq > seq => continue,
+                // Appended meanwhile: read again. A head the relay does not
+                // serve entries towards is not followed.
+                Some(relay) if relay.seq > seq && !served => {
+                    return Err(SyncError::Roster(
+                        "the relay names roster entries it does not serve".into(),
+                    ));
+                }
+                Some(relay) if relay.seq > seq => {}
                 Some(_) => break,
             }
         }
         let checkpoint = self.record.checkpoint;
         match self.entries.get(checkpoint.seq as usize) {
-            Some(entry) if entry.hash() != checkpoint.hash => return Err(SyncError::Fork),
+            Some(entry) if entry.hash() != checkpoint.hash => return Err(self.forked().await),
             Some(_) => {}
             None => return Err(SyncError::RelayBehind),
         }
@@ -573,23 +738,15 @@ impl<'a> Session<'a> {
     /// A fresh token, signed with this device's key (the relay lost the old
     /// one, for example after a restore).
     async fn fresh_token(&mut self) -> Result<(), SyncError> {
-        let request = TokenRequest::new(
+        self.record.device_token = signed_token(
+            self.http,
+            self.server(),
             self.record.relay_id,
             self.record.keys.account,
-            self.member.id(),
+            &self.member,
             self.info.server_ms,
-        );
-        let sig = self.member.sign_token(&request);
-        let granted: AccountResponse = self
-            .http
-            .post_json(
-                &format!("{}/v1/tokens", self.server()),
-                &TokenGrant { request, sig },
-                &options(self.server(), ""),
-            )
-            .await?
-            .json()?;
-        self.record.device_token = granted.device_token;
+        )
+        .await?;
         Ok(())
     }
 
@@ -633,6 +790,9 @@ impl<'a> Session<'a> {
 
     pub(crate) fn finish(&self, mut report: SyncReport) -> SyncReport {
         report.fingerprint = self.roster.fingerprint();
+        if self.roster.rotation_pending() {
+            report.blocked.get_or_insert(Blocked::RotationPending);
+        }
         if let Some(record) = self.changed() {
             report.record = Some(record);
             report.again = true;
@@ -691,15 +851,18 @@ impl<'a> Session<'a> {
         ))
     }
 
-    /// Starts a new epoch dropping `dropped` (and the kits that must go with
-    /// them).
-    pub(crate) async fn rotate(&mut self, dropped: Vec<Id>) -> Result<(), SyncError> {
+    /// Starts a new epoch dropping what `dropped` names on the roster the
+    /// entry is built on (and the kits that must go with them). Asked again
+    /// on every try, so members added meanwhile are judged too.
+    pub(crate) async fn rotate(
+        &mut self,
+        dropped: impl Fn(&Roster) -> Vec<Id>,
+    ) -> Result<(), SyncError> {
         let at_ms = self.clock.tick(self.clock.wall_now()).wall_ms;
         self.propose(|s| {
-            let mut drop: Vec<Id> = dropped
-                .iter()
+            let mut drop: Vec<Id> = dropped(&s.roster)
+                .into_iter()
                 .filter(|id| s.roster.members().contains_key(id))
-                .copied()
                 .collect();
             for kit in s.roster.kits_of(&drop) {
                 if !drop.contains(&kit) {
@@ -719,16 +882,21 @@ impl<'a> Session<'a> {
     /// when a member left. Waits through the grace period after a restore.
     pub(crate) async fn upkeep(&mut self, report: &mut SyncReport) -> Result<(), SyncError> {
         let now = self.info.server_ms;
-        for (key, deadline) in self.library.sync_states(APPROVAL)? {
-            let joined = id_of(&key[APPROVAL.len()..])
-                .is_some_and(|id| self.roster.members().contains_key(&id));
-            let late = deadline.parse::<u64>().is_ok_and(|d| d <= now);
-            if joined || late {
+        let own = self.clock.wall_now();
+        for (key, deadlines) in self.library.sync_states(APPROVAL)? {
+            let member = &key[APPROVAL.len()..];
+            let joined = id_of(member).is_some_and(|id| self.roster.members().contains_key(&id));
+            // Late by either clock, so neither a relay nor a device whose
+            // clock runs slow holds a cancellation back.
+            let late = deadlines
+                .split(':')
+                .zip([now, own])
+                .any(|(deadline, now)| deadline.parse::<u64>().is_ok_and(|d| d <= now));
+            if joined {
                 self.library.delete_sync_state(&key)?;
-            }
-            if late && !joined {
-                let cancel = format!("{CANCEL}{}", &key[APPROVAL.len()..]);
-                self.library.set_sync_state(&cancel, "1")?;
+            } else if late {
+                let cancel = format!("{CANCEL}{member}");
+                self.library.move_sync_state(&key, &cancel, "1")?;
             }
         }
         let cancels: Vec<(String, Id)> = self
@@ -750,8 +918,8 @@ impl<'a> Session<'a> {
         }
         // An approval that timed out always rotates: the sealed payload,
         // with the current key, may have been collected without a join.
-        self.rotate(cancels.iter().map(|(_, id)| *id).collect())
-            .await?;
+        let ids: Vec<Id> = cancels.iter().map(|(_, id)| *id).collect();
+        self.rotate(|_| ids.clone()).await?;
         for (key, _) in cancels {
             self.library.delete_sync_state(&key)?;
         }
@@ -797,22 +965,40 @@ impl<'a> Session<'a> {
                     &options(self.server(), self.token()),
                 )
                 .await;
-            let response: PushResponse = match pushed {
-                Ok(response) => response.json()?,
-                // The roster or key moved: catch up and, if this device's
-                // record did not change, try again. The outbox is untouched.
-                Err(HttpError::Status { status: 409, .. }) => {
+            let answered = match pushed {
+                Ok(response) => Some(response.json::<PushResponse>()?),
+                Err(HttpError::Status { status: 409, .. }) => None,
+                // Not a member here (yet): nothing is dropped.
+                Err(HttpError::Status { status: 403, .. }) => {
+                    report.blocked = Some(Blocked::NotActive);
+                    return Ok(());
+                }
+                Err(e) => return Err(e.into()),
+            };
+            let pin = self.head();
+            let epoch = self.record.keys.epoch;
+            let response = match answered {
+                Some(r) if r.roster == Some(pin) && r.epoch == epoch => r,
+                // Taken under a roster that conflicts with this device's.
+                Some(r) if r.roster.is_some_and(|relay| self.diverged(&relay)) => {
+                    return Err(self.forked().await);
+                }
+                // The roster or key moved (or the relay answers for another):
+                // catch up and, if this device's record did not change, try
+                // again. Nothing counts as sent.
+                _ => {
                     behind += 1;
                     self.catch_up().await?;
                     self.adopt()?;
-                    if behind >= TRIES || !self.may_publish() {
+                    if behind >= TRIES {
+                        report.blocked = Some(Blocked::RelayDisagrees);
+                        return Ok(());
+                    }
+                    if !self.may_publish() {
                         return Ok(());
                     }
                     continue;
                 }
-                // Not a member here (yet): nothing is dropped.
-                Err(HttpError::Status { status: 403, .. }) => return Ok(()),
-                Err(e) => return Err(e.into()),
             };
             observe_server(self.clock, response.server_ms);
             report.clock_gap_ms = self.clock.wall_now() as i64 - response.server_ms as i64;
@@ -915,10 +1101,13 @@ impl<'a> Session<'a> {
                 .unwrap_or(0),
             _ => 0,
         };
-        // Records parked for a key this device now holds are read again.
+        // Records parked for a key this device now holds are read again: the
+        // cursor goes back first, so a round that fails right after still
+        // reads them next time.
         if let Some((seq, epoch)) = parked(self.library)?
             && epoch <= self.record.keys.epoch
         {
+            lower_cursor(self.library, seq)?;
             after = after.min(seq);
             self.library.set_sync_state(EPOCH_PARK, "")?;
         }
@@ -950,14 +1139,11 @@ impl<'a> Session<'a> {
                 continue;
             }
             self.library.set_sync_state(GENERATION, &page.generation)?;
-            // The relay's roster at this seq is not this device's: a fork.
-            let pin = self.head();
-            if let Some(relay) = page.roster
-                && relay.seq == pin.seq
-                && relay.hash != pin.hash
-            {
-                return Err(SyncError::Fork);
+            // The relay's roster conflicts with this device's: a fork.
+            if page.roster.is_some_and(|relay| self.diverged(&relay)) {
+                return Err(self.forked().await);
             }
+            let pin = self.head();
             let moved = page.roster.is_some_and(|relay| relay != pin);
             let mut records = Vec::with_capacity(page.records.len());
             for wire in &page.records {
@@ -1222,7 +1408,7 @@ pub async fn remove_devices(
     if ids.contains(&session.member.id()) {
         return Err(SyncError::Roster("sign out to remove this device".into()));
     }
-    session.rotate(ids).await?;
+    session.rotate(|_| ids.clone()).await?;
     Ok(session.changed().unwrap_or_else(|| session.record.clone()))
 }
 
@@ -1241,14 +1427,19 @@ pub async fn report_lost(
     if lost == me {
         return Err(SyncError::Roster("this device cannot report itself".into()));
     }
-    let mut drop: Vec<Id> = session
-        .roster
-        .descendants(&lost, &me)
-        .into_iter()
-        .filter(|id| !keep.contains(id))
-        .collect();
-    drop.push(lost);
-    session.rotate(drop).await?;
+    // On the roster each try is built on: a device the lost one vouched for
+    // while this ran goes too.
+    session
+        .rotate(|roster| {
+            let mut drop: Vec<Id> = roster
+                .descendants(&lost, &me)
+                .into_iter()
+                .filter(|id| !keep.contains(id))
+                .collect();
+            drop.push(lost);
+            drop
+        })
+        .await?;
     Ok(session.changed().unwrap_or_else(|| session.record.clone()))
 }
 
@@ -1272,9 +1463,7 @@ pub async fn sign_out(
         }
     }
     if !force && library.outbox(1)?.last_id.is_some() {
-        return Err(SyncError::Roster(
-            "some changes are not sent yet; sync again or sign out anyway".into(),
-        ));
+        return Err(SyncError::Unsent);
     }
     let mut session = Session::open(library, http, &config, clock).await?;
     let at_ms = clock.tick(clock.wall_now()).wall_ms;
@@ -1289,6 +1478,10 @@ pub async fn sign_out(
 /// again what this device's branch had dropped (plus `also_drop`, ticked by
 /// the user, and every kit only the relay's branch has), and starts a new
 /// key epoch so nothing sealed under the abandoned branch's key survives.
+///
+/// This device's own branch stays in its store (and the fork flag stays
+/// set) until that revoke has landed, so a call that fails anywhere before
+/// can simply be made again.
 pub async fn use_server_roster(
     library: &Library,
     http: &HttpClient,
@@ -1298,19 +1491,33 @@ pub async fn use_server_roster(
 ) -> Result<SyncConfig, SyncError> {
     require_secure(&config.server)?;
     let genesis = genesis_key(&config.keys);
-    let mine: Vec<Entry> = library
-        .roster_entries(&genesis)?
-        .into_iter()
-        .map(|(body, sig)| Entry {
-            body,
-            sig: Hex(sig.try_into().unwrap_or([0; 64])),
-        })
-        .collect();
+    let mine = stored_entries(library, &genesis)?;
     let local = rebuild(&mine).map_err(roster_error)?;
-    let (theirs, _) = fetch_roster(http, &config.server, &config.device_token, 0).await?;
-    let server = rebuild(&theirs).map_err(roster_error)?;
     let member = config.secret();
-    if !server.members().contains_key(&member.id()) {
+    let me = member.id();
+    // The newest key this device holds on its own branch (the record may
+    // lag behind its roster store).
+    let held = local.adopt(&member, &config.keys).map_err(roster_error)?;
+    // The relay's roster, read and checked in memory only.
+    let detached = SyncConfig {
+        checkpoint: RosterHead {
+            seq: 0,
+            hash: config.keys.genesis,
+        },
+        ..config.clone()
+    };
+    let mut session = Session::connect(
+        library,
+        http,
+        &detached,
+        clock,
+        Vec::new(),
+        Roster::default(),
+    )
+    .await?;
+    session.persist = false;
+    session.catch_up().await?;
+    if !session.roster.members().contains_key(&me) {
         return Err(SyncError::Pairing(
             "this device is not on the server's roster; pair it again".into(),
         ));
@@ -1319,49 +1526,45 @@ pub async fn use_server_roster(
     // on the server's branch.
     let common = mine
         .iter()
-        .zip(&theirs)
+        .zip(&session.entries)
         .take_while(|(a, b)| a.hash() == b.hash())
         .count();
     let shared = rebuild(&mine[..common]).map_err(roster_error)?;
     let base = Bundle {
         epoch: shared.epoch(),
-        ak: local
-            .key_at(&config.keys, shared.epoch())
-            .map_err(roster_error)?,
-        ..config.keys.clone()
+        ak: local.key_at(&held, shared.epoch()).map_err(roster_error)?,
+        ..held.clone()
     };
-    let keys = server.adopt(&member, &base).map_err(roster_error)?;
-    let mut drop: Vec<Id> = local
-        .gone()
-        .into_iter()
-        .chain(also_drop)
-        .chain(
-            server
+    session.record.keys = session.roster.adopt(&member, &base).map_err(roster_error)?;
+    session.record.checkpoint = session.head();
+    session
+        .rotate(|server| {
+            let kits = server
                 .members()
                 .iter()
                 .filter(|(id, m)| m.role == Role::Kit && !local.admitted(id))
-                .map(|(id, _)| *id),
-        )
-        .filter(|id| server.members().contains_key(id) && *id != member.id())
-        .collect();
-    drop.sort();
-    drop.dedup();
-    library.clear_roster(&genesis)?;
-    for (seq, entry) in theirs.iter().enumerate() {
-        library.add_roster_entry(&genesis, seq as u64, &entry.body, &entry.sig.0)?;
-    }
+                .map(|(id, _)| *id);
+            let mut drop: Vec<Id> = local
+                .gone()
+                .into_iter()
+                .chain(also_drop.iter().copied())
+                .chain(kits)
+                .filter(|id| *id != me)
+                .collect();
+            drop.sort();
+            drop.dedup();
+            drop
+        })
+        .await?;
+    // Landed: the store takes the relay's branch, then everything is sent
+    // and read again under the new key. The fork flag goes last.
+    library.replace_roster(&genesis, &signed(&session.entries))?;
     for key in [PULL_SEQ, EPOCH_PARK] {
         library.set_sync_state(key, "")?;
     }
     library.queue_all()?;
-    let (seq, hash) = server.head().unwrap_or_default();
-    let adopted = SyncConfig {
-        keys,
-        checkpoint: RosterHead { seq, hash },
-        ..config.clone()
-    };
-    let mut session = Session::open(library, http, &adopted, clock).await?;
-    session.rotate(drop).await?;
+    library.clear_roster(&format!("{FORK}:{genesis}"))?;
+    library.delete_sync_state(FORK)?;
     let mut record = session.record.clone();
     record.revision = config.revision + 1;
     Ok(record)

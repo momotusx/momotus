@@ -1872,6 +1872,7 @@ dependencies = [
  "mq-runtime",
  "mq-streams",
  "mq-sync",
+ "mq-sync-server",
  "serde",
  "serde_json",
  "tokio",

@@ -9,3 +9,6 @@ cc 445213bdd687396a0396e9cf0a8ad2172f8db1970b672e016fd4ccafe15ed134 # shrinks to
 cc 76e1c2dd23e260f842021758b0f69dae348584b1514fc76683609f2c743cd567 # shrinks to ops = [Addons { device: 1, order: [] }, Addons { device: 2, order: [] }, Sync { device: 1 }, Pull { device: 2 }]
 cc 779473f620cef7c58de2ed52275701329eb2c323a50ad477072cd5c76ba5f90e # shrinks to ops = [Progress { device: 0, video: 0, position: 0 }, Progress { device: 2, video: 0, position: 0 }, Sync { device: 0 }, Pull { device: 2 }]
 cc de7f8558a3c0a9278d6f2d764d4333f0963dfffebd31daa2afecb21e98ff33ab # shrinks to ops = [Import { device: 1, video: 0, position: 0, age_s: 0 }, Push { device: 1 }], slow = true
+cc 8ffcfde287a776caf116ec802a9bcaf5549f69d90e593c5900a1b24be158b359 # shrinks to ops = [Snapshot, DropRecord { device: 2 }, Restore], slow = false
+cc 6502e9da3b6c713fe0f0132c66b78699810cddc9065fe2dd894d7f7060f29997
+cc 35ca18b9d38ba9f8557bcf054e23acfe1168390dd5225f73d222be881a91e7c0 # shrinks to ops = [Snapshot, Sync { device: 2 }, Restore], slow = false

@@ -285,11 +285,18 @@ async fn sync_account_then_two_devices_share_preferences() {
     assert_eq!(next(&mut rx_b).await["ok"], true);
     assert_eq!(core_b.prefs().subtitle_languages, ["tur"]);
 
-    let mut bad = sync;
+    let mut bad = sync.clone();
     bad["id"] = json!(5);
     bad["record"]["keys"]["ak"] = json!("zz");
     b.handle_text(&bad.to_string()).await;
     assert_eq!(next(&mut rx_b).await["ok"], false);
+    // Errors an app acts on carry a code next to the message.
+    let mut far = sync;
+    far["id"] = json!(6);
+    far["record"]["server"] = json!("http://sync.example.com");
+    b.handle_text(&far.to_string()).await;
+    let failed = next(&mut rx_b).await;
+    assert_eq!(failed["code"], "insecure", "{failed}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

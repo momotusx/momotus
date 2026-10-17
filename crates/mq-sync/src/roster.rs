@@ -219,19 +219,24 @@ pub struct TokenRequest {
     pub member: Id,
     pub at_ms: u64,
     pub nonce: Hex<16>,
+    /// The host the device sent the request to; the relay takes only its
+    /// own public host.
+    pub host: String,
 }
 
 impl TokenRequest {
-    pub fn new(relay_id: Id, account: Id, member: Id, at_ms: u64) -> Self {
+    pub fn new(relay_id: Id, account: Id, member: Id, at_ms: u64, host: &str) -> Self {
         Self {
             relay_id,
             account,
             member,
             at_ms,
             nonce: Hex(random()),
+            host: host.to_owned(),
         }
     }
 
+    /// Fixed-size fields first, so the one of variable length is unambiguous.
     fn message(&self) -> Vec<u8> {
         [
             &self.relay_id.0[..],
@@ -239,6 +244,7 @@ impl TokenRequest {
             &self.member.0,
             &self.at_ms.to_be_bytes(),
             &self.nonce.0,
+            self.host.as_bytes(),
         ]
         .concat()
     }

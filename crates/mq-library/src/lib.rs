@@ -16,4 +16,4 @@ pub use store::{
     AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryEntry, LibraryError,
     LibraryItemRow, ProgressRow, Table,
 };
-pub use sync::{OutboxPage, SyncCursor, SyncRecord, coll};
+pub use sync::{OutboxPage, SignedEntry, SyncCursor, SyncRecord, coll};

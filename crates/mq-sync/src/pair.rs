@@ -17,8 +17,8 @@
 //! for by the kit.
 
 use crate::engine::{
-    PAIRING_MS, Session, SyncConfig, SyncError, fetch_roster, options, rebuild, relay_info,
-    require_secure,
+    APPROVAL, PAIRING_MS, Session, SyncConfig, SyncError, fetch_roster, options, rebuild,
+    relay_info, require_secure,
 };
 use crate::roster::{Bundle, Hex, Id, MemberKeys, MemberSecret, NewKit, Sponsor, seal_name};
 use crate::wire::{AccountResponse, AppendRequest, Redeemed, RosterHead};
@@ -353,6 +353,24 @@ pub async fn approve_pairing(
     };
     let plain = serde_json::to_vec(&payload).expect("plain struct");
     let blob = seal_to(&public, PAIR_INFO, pairing.as_bytes(), &plain)?;
+    // Kept before the payload goes out (and after a failure that may have
+    // delivered it): if the device does not join in time, by the relay's
+    // clock or this device's, the next sync cancels the approval with a
+    // rotation.
+    let approval = format!("{APPROVAL}{}", hex::encode(keys.id().0));
+    let earlier = library.sync_state(&approval)?;
+    let deadlines = format!(
+        "{}:{}",
+        session.info.server_ms + PAIRING_MS,
+        clock.wall_now() + PAIRING_MS
+    );
+    library.set_sync_state(&approval, &deadlines)?;
+    // Refused for sure: this payload never reached the slot, so only an
+    // earlier attempt's approval stands.
+    let undo = || match &earlier {
+        Some(value) => library.set_sync_state(&approval, value),
+        None => library.delete_sync_state(&approval),
+    };
     let filled = http
         .request(
             mq_http::Method::PUT,
@@ -366,23 +384,19 @@ pub async fn approve_pairing(
     match filled {
         Ok(_) => {}
         Err(mq_http::HttpError::Status { status: 409, .. }) => {
+            undo()?;
             return Err(bad(
                 "someone else already answered this code; reject it on the new device",
             ));
         }
         Err(mq_http::HttpError::Status { status: 410, .. }) => {
+            undo()?;
             return Err(bad(
                 "this pairing code expired; start again on the new device",
             ));
         }
         Err(e) => return Err(e.into()),
     }
-    // Until the device joins, the approval stands; past this, it is
-    // cancelled by a rotation (kept across restarts).
-    library.set_sync_state(
-        &format!("approval:{}", hex::encode(keys.id().0)),
-        &(session.info.server_ms + PAIRING_MS).to_string(),
-    )?;
     let record = session.changed().unwrap_or_else(|| session.record.clone());
     Ok((code, record))
 }

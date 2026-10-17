@@ -1,12 +1,13 @@
-//! Three devices make random edits, rotate keys, lose stored records and
-//! sync in random order through a real relay that may be restored from a
-//! snapshot; after two full rounds every device holds the same registers.
+//! Three devices make random edits, rotate keys, lose stored records, drop
+//! and sign out a device (which pairs again), and sync in random order
+//! through a real relay that may be restored from a snapshot; after two full
+//! rounds every device holds the same registers.
 
 use mq_http::{ClientConfig, HttpClient};
 use mq_library::hlc::{HlcClock, now_ms};
 use mq_library::{AddonRow, Library, LibraryItemRow, ProgressRow, SyncCursor, coll};
 use mq_sync::wire::MAX_CLOCK_AHEAD_MS;
-use mq_sync::{SyncConfig, SyncReport, pull_changes, push_changes, sync_once};
+use mq_sync::{SyncConfig, SyncError, SyncReport, pull_changes, push_changes, sync_once};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -88,6 +89,16 @@ enum Op {
     Rotate {
         device: usize,
     },
+    /// Device `by` removes device 2, which learns it at its next call and
+    /// keeps its library; the user then pairs it again from `by`.
+    Revoke {
+        by: usize,
+    },
+    /// Device 2 signs out (what it could not send stays in its library) and
+    /// is paired again from `by`.
+    SignOut {
+        by: usize,
+    },
     /// A sync round whose changed record the app never stores.
     DropRecord {
         device: usize,
@@ -158,6 +169,8 @@ fn op() -> impl Strategy<Value = Op> {
         device.clone().prop_map(|device| Op::Push { device }),
         device.clone().prop_map(|device| Op::Pull { device }),
         device.clone().prop_map(|device| Op::Rotate { device }),
+        (0..2usize).prop_map(|by| Op::Revoke { by }),
+        (0..2usize).prop_map(|by| Op::SignOut { by }),
         device.clone().prop_map(|device| Op::DropRecord { device }),
         device.prop_map(|device| Op::CatchUp { device }),
         Just(Op::Snapshot),
@@ -368,6 +381,18 @@ fn registers(lib: &Library) -> Vec<mq_library::SyncRecord> {
         .unwrap()
 }
 
+/// A new member joins by QR, approved by `by`; returns its record.
+async fn pair(http: &HttpClient, server: &str, by: &Device, config: &mut SyncConfig) -> SyncConfig {
+    let joining = mq_sync::pair::start_pairing(http, server).await.unwrap();
+    let (_, record) =
+        mq_sync::pair::approve_pairing(&by.library, http, config, &by.clock, &joining.qr)
+            .await
+            .unwrap();
+    *config = record;
+    let offer = joining.poll(http).await.unwrap().expect("approved");
+    joining.claim(http, offer, "next").await.unwrap()
+}
+
 /// `slow`: the relay's clock is 30 minutes behind every device until the
 /// final rounds.
 async fn run(ops: Vec<Op>, slow: bool) {
@@ -393,22 +418,7 @@ async fn run(ops: Vec<Op>, slow: bool) {
                 .await
                 .unwrap()
         } else {
-            let first: &Device = &devices[0];
-            let joining = mq_sync::pair::start_pairing(&http, &relay.url)
-                .await
-                .unwrap();
-            let (_, record) = mq_sync::pair::approve_pairing(
-                &first.library,
-                &http,
-                &configs[0],
-                &first.clock,
-                &joining.qr,
-            )
-            .await
-            .unwrap();
-            configs[0] = record;
-            let offer = joining.poll(&http).await.unwrap().expect("approved");
-            joining.claim(&http, offer, "next").await.unwrap()
+            pair(&http, &relay.url, &devices[0], &mut configs[0]).await
         };
         configs.push(record);
         devices.push(Device {
@@ -542,6 +552,28 @@ async fn run(ops: Vec<Op>, slow: bool) {
                         .await
                         .unwrap();
             }
+            Op::Revoke { by } => {
+                let d = &devices[*by];
+                let gone = vec![configs[2].secret().id()];
+                configs[*by] =
+                    mq_sync::remove_devices(&d.library, &http, &configs[*by], &d.clock, gone)
+                        .await
+                        .unwrap();
+                // The dropped device learns it at its next call.
+                let dropped = &devices[2];
+                let err = sync_once(&dropped.library, &http, &configs[2], &dropped.clock)
+                    .await
+                    .unwrap_err();
+                assert!(matches!(err, SyncError::Dropped), "{err:?} after {ops:?}");
+                configs[2] = pair(&http, &relay.url, &devices[*by], &mut configs[*by]).await;
+            }
+            Op::SignOut { by } => {
+                let d = &devices[2];
+                mq_sync::sign_out(&d.library, &http, &configs[2], &d.clock, true)
+                    .await
+                    .unwrap();
+                configs[2] = pair(&http, &relay.url, &devices[*by], &mut configs[*by]).await;
+            }
             Op::CatchUp { device } => {
                 let d = &devices[*device];
                 let seen = mq_sync::devices(&d.library, &http, &configs[*device], &d.clock)
@@ -592,8 +624,11 @@ async fn run(ops: Vec<Op>, slow: bool) {
             }
         }
     }
-    // The operator fixes the relay's clock, so what waited goes through.
-    offset.store(0, Ordering::Relaxed);
+    // The operator fixes the relay's clock, so what waited goes through, and
+    // an hour passes: a rotation that a sign-out made due after a restore
+    // is past its grace period and happens.
+    const LATER_MS: i64 = 61 * 60 * 1000;
+    offset.store(LATER_MS, Ordering::Relaxed);
     for _ in 0..2 {
         for (d, config) in devices.iter().zip(configs.iter_mut()) {
             // A round that changed the record publishes nothing: store it
@@ -655,7 +690,7 @@ async fn run(ops: Vec<Op>, slow: bool) {
         );
     }
     // Syncing never drags a device's clock past the relay's 10 minutes.
-    let ceiling = now_ms() + MAX_CLOCK_AHEAD_MS + 1000;
+    let ceiling = now_ms() + LATER_MS as u64 + MAX_CLOCK_AHEAD_MS + 1000;
     for d in devices.iter().filter(|d| d.skew_ms <= 0) {
         let wall = d.clock.tick(d.clock.wall_now()).wall_ms;
         assert!(wall <= ceiling, "clock {wall} past {ceiling} after {ops:?}");

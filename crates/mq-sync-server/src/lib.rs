@@ -41,7 +41,7 @@ use std::collections::HashMap;
 use std::io::Write as _;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 const MAX_REQUEST: usize = 8 * 1024 * 1024;
@@ -76,6 +76,10 @@ pub struct Config {
     /// Take the client address from the last `X-Forwarded-For` hop, the one
     /// a trusted reverse proxy appends.
     pub trust_proxy: bool,
+    /// The host devices reach this relay at (as in their server URL, without
+    /// the port). Signed token requests must name it, so a request signed
+    /// for another relay's host is refused. `None` takes any host.
+    pub public_host: Option<String>,
 }
 
 impl Default for Config {
@@ -86,6 +90,7 @@ impl Default for Config {
             new_generation: false,
             clock_offset_ms: Arc::default(),
             trust_proxy: false,
+            public_host: None,
         }
     }
 }
@@ -96,6 +101,9 @@ struct AppState {
     /// Lines of every accepted roster entry; written after the database
     /// commits, under the database lock, so its order is the table's.
     journal: Arc<Mutex<std::fs::File>>,
+    /// A journal write failed: no roster write is taken until a restart
+    /// writes the journal again from the table, so it never has a gap.
+    journal_failed: Arc<AtomicBool>,
     config: Arc<Config>,
     generation: Arc<String>,
     generation_since_ms: u64,
@@ -115,6 +123,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         journal: Arc::new(Mutex::new(journal)),
+        journal_failed: Arc::default(),
         config: Arc::new(config),
         generation: Arc::new(generation),
         generation_since_ms,
@@ -262,38 +271,31 @@ struct JournalLine {
     entry: Entry,
 }
 
-/// Opens the roster journal and makes it and the table agree: a torn last
-/// line is cut, entries the database lost are appended to it again, and
-/// entries the journal lacks (a crash between commit and journal write) are
-/// written to it. Anything that does not fit either way stops the relay.
+/// Opens the roster journal and makes it and the table agree: entries the
+/// database lost are taken from the journal, then the journal is written
+/// again from the table, whole and in order. So a torn last line, and lines
+/// a crash or a failed write skipped (at the end or in the middle), are back
+/// before the relay takes a write. A line that conflicts with the table, or
+/// does not continue it, stops the relay.
+// ponytail: rewrites every account's roster at each start; append only the
+// missing lines when journals grow large.
 fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String> {
+    let fail = |e: std::io::Error| format!("roster journal: {e}");
     let text = match std::fs::read(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-        Err(e) => return Err(format!("roster journal: {e}")),
+        Err(e) => return Err(fail(e)),
     };
     let mut lines = Vec::new();
-    let mut good = 0;
     for (n, line) in text.split_inclusive(|&b| b == b'\n').enumerate() {
         let parsed = serde_json::from_slice::<JournalLine>(line);
         match (line.ends_with(b"\n"), parsed) {
-            (true, Ok(parsed)) => {
-                lines.push(parsed);
-                good += line.len();
-            }
+            (true, Ok(parsed)) => lines.push(parsed),
             // Torn while being written: the entry was never acknowledged.
             (false, _) => break,
             (true, Err(_)) => return Err(format!("roster journal line {} is damaged", n + 1)),
         }
     }
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(|e| format!("roster journal: {e}"))?;
-    file.set_len(good as u64)
-        .map_err(|e| format!("roster journal: {e}"))?;
-    let mut last: HashMap<Id, u64> = HashMap::new();
     for line in &lines {
         let body = line.entry.parse().map_err(|e| e.to_string())?;
         let stored: Option<Vec<u8>> = conn
@@ -323,36 +325,26 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
                 tx.commit().map_err(|e| e.to_string())?;
             }
         }
-        last.insert(line.account, body.seq);
     }
-    let missing = (|| -> rusqlite::Result<Vec<(Id, Entry)>> {
+    let all = (|| -> rusqlite::Result<Vec<(String, Entry)>> {
         let mut stmt =
-            conn.prepare("SELECT account, seq, body, sig FROM roster ORDER BY account, seq")?;
-        let rows = stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)? as u64,
-                r.get::<_, Vec<u8>>(2)?,
-                r.get::<_, Vec<u8>>(3)?,
-            ))
-        })?;
-        let mut missing = Vec::new();
-        for row in rows {
-            let (account, seq, body, sig) = row?;
-            let account = account_id(&account).expect("stored account ids are hex");
-            if last.get(&account).is_none_or(|&l| seq > l) {
-                missing.push((account, stored_entry(body, sig)));
-            }
-        }
-        Ok(missing)
+            conn.prepare("SELECT account, body, sig FROM roster ORDER BY account, seq")?;
+        stmt.query_map([], |r| Ok((r.get(0)?, stored_entry(r.get(1)?, r.get(2)?))))?
+            .collect()
     })()
     .map_err(|e| e.to_string())?;
-    for (account, entry) in missing {
-        write_line(&mut file, &account, &entry).map_err(|e| format!("roster journal: {e}"))?;
+    let temp = path.with_extension("jsonl.tmp");
+    let mut file = std::fs::File::create(&temp).map_err(fail)?;
+    for (account, entry) in &all {
+        let account = account_id(account).expect("stored account ids are hex");
+        write_line(&mut file, &account, entry).map_err(fail)?;
     }
-    file.sync_data()
-        .map_err(|e| format!("roster journal: {e}"))?;
-    Ok(file)
+    file.sync_all().map_err(fail)?;
+    std::fs::rename(&temp, path).map_err(fail)?;
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(path)
+        .map_err(fail)
 }
 
 fn write_line(file: &mut std::fs::File, account: &Id, entry: &Entry) -> std::io::Result<()> {
@@ -366,16 +358,31 @@ fn write_line(file: &mut std::fs::File, account: &Id, entry: &Entry) -> std::io:
 }
 
 /// Writes accepted entries to the journal, durably, before anyone is told
-/// they were accepted. Runs under the database lock, after the commit.
+/// they were accepted. Runs under the database lock, after the commit; a
+/// failure stops roster writes until a restart repairs the journal.
 fn journal(state: &AppState, account: &Id, entries: &[Entry]) -> std::io::Result<()> {
     if entries.is_empty() {
         return Ok(());
     }
     let mut file = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-    for entry in entries {
-        write_line(&mut file, account, entry)?;
+    let written = entries
+        .iter()
+        .try_for_each(|entry| write_line(&mut file, account, entry))
+        .and_then(|()| file.sync_data());
+    if written.is_err() {
+        state.journal_failed.store(true, Ordering::Relaxed);
     }
-    file.sync_data()
+    written
+}
+
+/// The refusal for a roster write while the journal is broken.
+fn journal_stopped(state: &AppState) -> Option<Response> {
+    state.journal_failed.load(Ordering::Relaxed).then(|| {
+        error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "the relay cannot record roster changes; its operator must restart it",
+        )
+    })
 }
 
 fn stored_entry(body: Vec<u8>, sig: Vec<u8>) -> Entry {
@@ -464,7 +471,9 @@ fn invited(state: &AppState, headers: &HeaderMap) -> bool {
 }
 
 /// A new account from its genesis entry; the token returned is bound to the
-/// device the genesis lists.
+/// device the genesis lists. Once only: the genesis is no secret (anyone
+/// who saw the roster holds it), so a device that lost the answer signs
+/// for a token like any member.
 async fn create_account(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -484,8 +493,17 @@ async fn create_account(
         );
     };
     let mut db = lock(&state);
+    if let Some(stopped) = journal_stopped(&state) {
+        return stopped;
+    }
     let created = (|| -> rusqlite::Result<Result<String, Response>> {
         let tx = db.transaction()?;
+        if account_epoch(&tx, &body.account).optional()?.is_some() {
+            return Ok(Err(error(
+                StatusCode::CONFLICT,
+                "this account already exists",
+            )));
+        }
         if let Err(refused) = append_entries(
             &tx,
             &body.account,
@@ -691,10 +709,13 @@ fn append_entries(
                 entry.sig.0.to_vec()
             ],
         )?;
+        // Every token of the member, also one revoked before (by the cap on
+        // fresh tokens), reads nothing past its removal.
         let revoke = |member: &Id| {
             tx.execute(
-                "UPDATE device SET state = 'revoked', revoked_seq = ?3
-                 WHERE account = ?1 AND member_id = ?2 AND state != 'revoked'",
+                "UPDATE device SET state = 'revoked',
+                   revoked_seq = MIN(COALESCE(revoked_seq, ?3), ?3)
+                 WHERE account = ?1 AND member_id = ?2",
                 params![account_hex, member.0.to_vec(), body.seq as i64],
             )
         };
@@ -848,6 +869,9 @@ async fn append_roster(
     if matches!(kind, Ok(Kind::Genesis(_))) {
         return error(StatusCode::BAD_REQUEST, "an account has one genesis");
     }
+    if let Some(stopped) = journal_stopped(&state) {
+        return stopped;
+    }
     let appended = (|| {
         let tx = db.transaction()?;
         let stored = append_entries(&tx, &auth.account, &[request.entry], pending.as_deref())?;
@@ -893,6 +917,9 @@ async fn replay_roster(
         return error(StatusCode::TOO_MANY_REQUESTS, "too many replays");
     }
     let mut db = lock(&state);
+    if let Some(stopped) = journal_stopped(&state) {
+        return stopped;
+    }
     let exists: rusqlite::Result<Option<i64>> = db
         .query_row(
             "SELECT 1 FROM account WHERE id = ?1",
@@ -934,7 +961,11 @@ async fn fresh_token(
     let now = state.now_ms();
     let request = &grant.request;
     let refused = || error(StatusCode::FORBIDDEN, "token request refused");
-    if request.relay_id != state.relay_id || request.at_ms.abs_diff(now) > TOKEN_SKEW_MS {
+    let host = state.config.public_host.as_ref();
+    if request.relay_id != state.relay_id
+        || request.at_ms.abs_diff(now) > TOKEN_SKEW_MS
+        || host.is_some_and(|host| *host != request.host)
+    {
         return refused();
     }
     let mut db = lock(&state);
@@ -980,16 +1011,18 @@ async fn fresh_token(
             )?;
         }
         // At most a few such tokens per device: a loop that keeps asking
-        // does not pile them up.
+        // does not pile them up. One revoked here reads the roster up to
+        // today's head, never what comes later.
         tx.execute(
-            "UPDATE device SET state = 'revoked' WHERE token_hash IN (
+            "UPDATE device SET state = 'revoked', revoked_seq = ?4 WHERE token_hash IN (
                  SELECT token_hash FROM device
                  WHERE account = ?1 AND member_id = ?2 AND fresh = 1 AND state = 'active'
                  ORDER BY created_ms DESC, rowid DESC LIMIT -1 OFFSET ?3)",
             params![
                 hex::encode(request.account.0),
                 request.member.0.to_vec(),
-                FRESH_TOKENS
+                FRESH_TOKENS,
+                entries.len() as i64 - 1
             ],
         )?;
         tx.commit()?;
@@ -1110,6 +1143,8 @@ async fn push(
             stale_at: Vec::new(),
             rejected: Vec::new(),
             server_ms,
+            epoch,
+            roster: head,
         };
         for record in &request.records {
             let r = match check(record, server_ms) {
@@ -1129,9 +1164,15 @@ async fn push(
                     };
                     // A register's own history bounds it too, so a version just
                     // above the stored one lands even when that one is ahead of
-                    // the relay (written while the relay's clock ran fast).
+                    // the relay (written while the relay's clock ran fast). Not
+                    // past the stored wall time: pushes cannot walk a register
+                    // further ahead.
                     let stored_wall = current.as_deref().and_then(Hlc::decode).map(|h| h.wall_ms);
-                    match stored_wall.map(|wall| check(record, wall.max(server_ms))) {
+                    let wall = Hlc::decode(&record.hlc).map(|h| h.wall_ms);
+                    match stored_wall
+                        .filter(|&stored| wall.is_some_and(|wall| wall <= stored))
+                        .map(|stored| check(record, stored))
+                    {
                         Some(Ok(r)) => r,
                         _ => {
                             response.rejected.push(Rejected {
@@ -1627,6 +1668,49 @@ async fn redeem_kit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Once a journal write failed, no roster write is stored until a
+    /// restart has written the journal again: a gap could never be filled.
+    #[tokio::test]
+    async fn after_a_failed_journal_write_no_roster_write_is_taken() {
+        use mq_sync::roster::MemberSecret;
+        let dir = std::env::temp_dir().join(format!("mq-journal-{}", random_hex(8)));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.roster.jsonl");
+        std::fs::write(&path, "").unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        let (conn, generation, since, relay_id) = open_database(conn, &Config::default()).unwrap();
+        let state = AppState {
+            db: Arc::new(Mutex::new(conn)),
+            // Open for reading only: every journal write fails.
+            journal: Arc::new(Mutex::new(std::fs::File::open(&path).unwrap())),
+            journal_failed: Arc::default(),
+            config: Arc::new(Config::default()),
+            generation: Arc::new(generation),
+            generation_since_ms: since,
+            relay_id,
+            limits: Arc::default(),
+            clock: Arc::default(),
+        };
+        let create = || {
+            let (entry, _) =
+                Roster::genesis_entry(&MemberSecret::generate(), Hex(random()), "a", now_ms());
+            create_account(
+                State(state.clone()),
+                HeaderMap::new(),
+                Json(AccountRequest { entry }),
+            )
+        };
+        let first = create().await.status();
+        assert_eq!(first, StatusCode::INTERNAL_SERVER_ERROR);
+        let second = create().await.status();
+        assert_eq!(second, StatusCode::SERVICE_UNAVAILABLE);
+        let accounts: i64 = lock(&state)
+            .query_row("SELECT COUNT(*) FROM account", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(accounts, 1, "the second was never stored");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn several_devices_ahead_warn_once_per_window() {

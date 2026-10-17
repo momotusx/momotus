@@ -126,6 +126,10 @@ pub struct PushResponse {
     pub stale_at: Vec<u64>,
     pub rejected: Vec<Rejected>,
     pub server_ms: u64,
+    /// The key epoch and roster head the push was taken under; a device
+    /// checks them before it counts its records as sent.
+    pub epoch: u32,
+    pub roster: Option<RosterHead>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -341,6 +341,20 @@ impl Library {
         })
     }
 
+    /// Replaces the state at `from` with `value` at `to`, in one transaction,
+    /// so a crash keeps one or the other.
+    pub fn move_sync_state(&self, from: &str, to: &str, value: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute("DELETE FROM sync_state WHERE key = ?1", params![from])?;
+            c.execute(
+                "INSERT INTO sync_state (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![to, value],
+            )
+            .map(drop)
+        })
+    }
+
     /// The account's roster entries this device verified, in order.
     pub fn roster_entries(&self, genesis: &str) -> Result<Vec<SignedEntry>, LibraryError> {
         self.read(|c| {
@@ -351,6 +365,9 @@ impl Library {
         })
     }
 
+    /// Stores an entry at `seq`. The same entry again changes nothing;
+    /// another entry at a taken seq fails (a second history is never
+    /// dropped silently).
     pub fn add_roster_entry(
         &self,
         genesis: &str,
@@ -358,32 +375,40 @@ impl Library {
         body: &[u8],
         sig: &[u8],
     ) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute(
-                "INSERT INTO sync_roster (genesis, seq, body, sig) VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(genesis, seq) DO NOTHING",
-                params![genesis, seq as i64, body, sig],
-            )
-            .map(drop)
-        })
+        self.write(|c| insert_roster_entry(c, genesis, seq, body, sig))
     }
 
-    pub fn clear_roster(&self, genesis: &str) -> Result<(), LibraryError> {
+    /// Replaces the entries stored under `genesis`, in one transaction.
+    pub fn replace_roster(
+        &self,
+        genesis: &str,
+        entries: &[SignedEntry],
+    ) -> Result<(), LibraryError> {
         self.write(|c| {
             c.execute(
                 "DELETE FROM sync_roster WHERE genesis = ?1",
                 params![genesis],
-            )
-            .map(drop)
+            )?;
+            for (seq, (body, sig)) in entries.iter().enumerate() {
+                insert_roster_entry(c, genesis, seq as u64, body, sig)?;
+            }
+            Ok(())
         })
     }
 
+    pub fn clear_roster(&self, genesis: &str) -> Result<(), LibraryError> {
+        self.replace_roster(genesis, &[])
+    }
+
     /// Forgets everything sync knew (this device was dropped from the
-    /// account): queue, cursors and roster. The library itself stays.
+    /// account): queue, cursors and roster. The library itself stays, and
+    /// so do this device's id and the hosts relay ids were pinned to.
     pub fn forget_sync(&self) -> Result<(), LibraryError> {
         self.write(|c| {
             c.execute_batch(
-                "DELETE FROM sync_outbox; DELETE FROM sync_state; DELETE FROM sync_roster;",
+                "DELETE FROM sync_outbox;
+                 DELETE FROM sync_state WHERE key != 'device_id' AND substr(key, 1, 6) != 'relay:';
+                 DELETE FROM sync_roster;",
             )
         })
     }
@@ -391,6 +416,24 @@ impl Library {
 
 /// A roster entry as stored: body and signature.
 pub type SignedEntry = (Vec<u8>, Vec<u8>);
+
+/// Inserts unless the same entry is there; another one at `seq` breaks the
+/// table's key and fails.
+fn insert_roster_entry(
+    c: &Connection,
+    genesis: &str,
+    seq: u64,
+    body: &[u8],
+    sig: &[u8],
+) -> rusqlite::Result<()> {
+    c.execute(
+        "INSERT INTO sync_roster (genesis, seq, body, sig) SELECT ?1, ?2, ?3, ?4
+         WHERE NOT EXISTS (SELECT 1 FROM sync_roster
+                           WHERE genesis = ?1 AND seq = ?2 AND body = ?3 AND sig = ?4)",
+        params![genesis, seq as i64, body, sig],
+    )
+    .map(drop)
+}
 
 /// One table's registers after the cursor. The key expression and the
 /// ordering match `SyncCursor`, so pages are exact.

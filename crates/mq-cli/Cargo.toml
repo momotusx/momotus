@@ -23,3 +23,6 @@ tokio = { workspace = true, features = ["process", "net", "io-util"] }
 futures-util = "0.3"
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+mq-sync-server = { path = "../mq-sync-server" }

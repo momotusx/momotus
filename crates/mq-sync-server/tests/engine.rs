@@ -231,8 +231,10 @@ async fn lying_relay(genesis: Entry) -> String {
         )
         .route(
             "/v1/push",
-            post(|Json(request): Json<PushRequest>| async move {
+            post(move |Json(request): Json<PushRequest>| async move {
                 Json(PushResponse {
+                    epoch: 0,
+                    roster: Some(head),
                     accepted: 0,
                     stale: 0,
                     stale_at: vec![],
@@ -592,4 +594,202 @@ async fn a_pull_naming_another_roster_at_the_head_is_a_fork() {
         .await
         .unwrap_err();
     assert!(matches!(err, SyncError::Fork), "{err:?}");
+}
+
+/// Serves `app` as a relay with id 7s, answering `/v1/relay` itself.
+async fn fake(app: axum::Router) -> String {
+    use axum::Json;
+    use axum::routing::get;
+    let app = app.route(
+        "/v1/relay",
+        get(|| async {
+            Json(mq_sync::wire::RelayInfo {
+                relay_id: Hex([7; 16]),
+                generation: "g".into(),
+                generation_since_ms: 0,
+                server_ms: now_ms(),
+            })
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    base
+}
+
+/// A push answer naming another roster at this device's head is a fork:
+/// nothing counts as sent, and every later call fails the same way (also
+/// after a restart) until the user settles it, whatever the relay says.
+#[tokio::test]
+async fn a_push_answered_for_another_roster_is_a_lasting_fork() {
+    use axum::Json;
+    use axum::routing::{get, post};
+    use mq_sync::wire::{PushResponse, RosterPage};
+    let (config, genesis) = offline("http://127.0.0.1");
+    let head = RosterHead {
+        seq: 0,
+        hash: genesis.hash(),
+    };
+    let app = axum::Router::new()
+        .route(
+            "/v1/roster",
+            get(move || {
+                let entries = vec![genesis.clone()];
+                async move {
+                    Json(RosterPage {
+                        from: 0,
+                        entries,
+                        head: Some(head),
+                        more: false,
+                    })
+                }
+            }),
+        )
+        .route(
+            "/v1/push",
+            post(|| async {
+                Json(PushResponse {
+                    accepted: 1,
+                    stale: 0,
+                    stale_at: vec![],
+                    rejected: vec![],
+                    server_ms: now_ms(),
+                    epoch: 0,
+                    roster: Some(RosterHead {
+                        seq: 0,
+                        hash: Hex([3; 32]),
+                    }),
+                })
+            }),
+        );
+    let config = SyncConfig {
+        server: fake(app).await,
+        ..config
+    };
+    let dir = dir();
+    let path = dir.0.join("library.sqlite");
+    let lib = Library::open(&path).unwrap();
+    let clock = HlcClock::new(1);
+    progress(&lib, "v1", &clock.tick(now_ms()).encode());
+    let err = mq_sync::push_changes(&lib, &http(), &config, &clock)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+    assert!(lib.outbox(10).unwrap().last_id.is_some(), "not sent");
+    // The relay's history is kept next to the device's own.
+    let theirs = format!("fork:{}", hex::encode(config.keys.genesis.0));
+    assert_eq!(lib.roster_entries(&theirs).unwrap().len(), 1);
+    drop(lib);
+    let lib = Library::open(&path).unwrap();
+    let err = mq_sync::pull_changes(&lib, &http(), &config, &clock)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+}
+
+/// A relay that says "more" without serving entries, and names a head it
+/// never serves, is not followed for ever.
+#[tokio::test]
+async fn a_relay_naming_entries_it_never_serves_is_not_followed() {
+    use axum::Json;
+    use axum::extract::Query;
+    use axum::routing::get;
+    use mq_sync::wire::RosterPage;
+    use std::collections::HashMap;
+    let (config, genesis) = offline("http://127.0.0.1");
+    let app = axum::Router::new().route(
+        "/v1/roster",
+        get(move |Query(query): Query<HashMap<String, u64>>| {
+            let from = query.get("from").copied().unwrap_or(0);
+            let entries = if from == 0 {
+                vec![genesis.clone()]
+            } else {
+                vec![]
+            };
+            async move {
+                Json(RosterPage {
+                    from,
+                    entries,
+                    head: Some(RosterHead {
+                        seq: 5,
+                        hash: Hex([9; 32]),
+                    }),
+                    more: true,
+                })
+            }
+        }),
+    );
+    let config = SyncConfig {
+        server: fake(app).await,
+        ..config
+    };
+    let lib = Library::temporary().unwrap();
+    let done = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        mq_sync::pull_changes(&lib, &http(), &config, &HlcClock::new(1)),
+    )
+    .await
+    .expect("gave up");
+    assert!(matches!(done, Err(SyncError::Roster(_))), "{done:?}");
+}
+
+/// A relay that never takes the entries it lost is behind for good, after a
+/// few tries.
+#[tokio::test]
+async fn a_relay_that_keeps_refusing_lost_entries_is_behind() {
+    use axum::Json;
+    use axum::routing::{get, post};
+    use mq_sync::wire::RosterPage;
+    use std::sync::atomic::AtomicUsize;
+    let (config, genesis) = offline("http://127.0.0.1");
+    let head = RosterHead {
+        seq: 0,
+        hash: genesis.hash(),
+    };
+    // The device holds a second entry the relay lost.
+    let member = config.secret();
+    let mut roster = Roster::default();
+    roster.apply(&genesis).unwrap();
+    let (second, _) = roster
+        .revoke(&member, &config.keys, vec![], now_ms())
+        .unwrap();
+    let lib = Library::temporary().unwrap();
+    let key = hex::encode(config.keys.genesis.0);
+    for (seq, entry) in [&genesis, &second].into_iter().enumerate() {
+        lib.add_roster_entry(&key, seq as u64, &entry.body, &entry.sig.0)
+            .unwrap();
+    }
+    let replays = Arc::new(AtomicUsize::new(0));
+    let counted = replays.clone();
+    let app = axum::Router::new()
+        .route(
+            "/v1/roster",
+            get(move || async move {
+                Json(RosterPage {
+                    from: 0,
+                    entries: vec![],
+                    head: Some(head),
+                    more: false,
+                })
+            }),
+        )
+        .route(
+            "/v1/roster/replay",
+            post(move || {
+                counted.fetch_add(1, Ordering::Relaxed);
+                async { Json(serde_json::json!({})) }
+            }),
+        );
+    let config = SyncConfig {
+        server: fake(app).await,
+        ..config
+    };
+    let done = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        mq_sync::pull_changes(&lib, &http(), &config, &HlcClock::new(1)),
+    )
+    .await
+    .expect("gave up");
+    assert!(matches!(done, Err(SyncError::RelayBehind)), "{done:?}");
+    assert_eq!(replays.load(Ordering::Relaxed), 3);
 }

@@ -287,10 +287,17 @@ async fn head_epochs_canonical_clocks_and_device_tokens() {
     assert_eq!(page.roster.unwrap().hash, a.checkpoint.hash);
 }
 
-/// A device member gets a fresh token by signing for this relay, now, once.
+const HOST: &str = "127.0.0.1";
+
+/// A device member gets a fresh token by signing for this relay, at its
+/// host, now, once.
 #[tokio::test]
 async fn a_member_signs_for_a_fresh_token_once() {
-    let relay = relay(Config::default()).await;
+    let relay = relay(Config {
+        public_host: Some(HOST.into()),
+        ..Config::default()
+    })
+    .await;
     let a = relay.account().await;
     let info: RelayInfo = relay
         .http
@@ -313,7 +320,13 @@ async fn a_member_signs_for_a_fresh_token_once() {
                 .and_then(|r| r.json::<AccountResponse>())
         }
     };
-    let request = TokenRequest::new(info.relay_id, a.keys.account, member.id(), info.server_ms);
+    let request = TokenRequest::new(
+        info.relay_id,
+        a.keys.account,
+        member.id(),
+        info.server_ms,
+        HOST,
+    );
     let fresh = ask(grant(request.clone())).await.unwrap();
     assert_ne!(fresh.device_token, a.device_token);
     assert!(
@@ -324,26 +337,43 @@ async fn a_member_signs_for_a_fresh_token_once() {
             .is_empty()
     );
     // The same request again (a replayed nonce), one signed for another
-    // relay, one from the past, and one signed by someone else: refused.
+    // relay or another host, one from the past, and one signed by someone
+    // else: refused.
     assert!(ask(grant(request.clone())).await.is_err());
     let other_relay = TokenRequest::new(
         mq_sync::roster::Hex([9; 16]),
         a.keys.account,
         member.id(),
         info.server_ms,
+        HOST,
     );
     assert!(ask(grant(other_relay)).await.is_err());
+    let other_host = TokenRequest::new(
+        info.relay_id,
+        a.keys.account,
+        member.id(),
+        info.server_ms,
+        "sync.example.com",
+    );
+    assert!(ask(grant(other_host)).await.is_err());
     let stale = TokenRequest::new(
         info.relay_id,
         a.keys.account,
         member.id(),
         info.server_ms - 6 * 60 * 1000,
+        HOST,
     );
     assert!(ask(grant(stale)).await.is_err());
     // A member holds at most three such tokens; more revoke the oldest.
     let mut tokens = vec![fresh.device_token.clone()];
     for _ in 0..3 {
-        let request = TokenRequest::new(info.relay_id, a.keys.account, member.id(), info.server_ms);
+        let request = TokenRequest::new(
+            info.relay_id,
+            a.keys.account,
+            member.id(),
+            info.server_ms,
+            HOST,
+        );
         tokens.push(ask(grant(request)).await.unwrap().device_token);
     }
     let pulls = |t: String| {
@@ -356,10 +386,47 @@ async fn a_member_signs_for_a_fresh_token_once() {
         assert!(pulls(t.clone()).await);
     }
     let stranger = mq_sync::roster::MemberSecret::generate();
-    let forged = TokenRequest::new(info.relay_id, a.keys.account, member.id(), info.server_ms);
+    let forged = TokenRequest::new(
+        info.relay_id,
+        a.keys.account,
+        member.id(),
+        info.server_ms,
+        HOST,
+    );
     let forged = TokenGrant {
         sig: stranger.sign_token(&forged),
         request: forged,
     };
     assert!(ask(forged).await.is_err());
+}
+
+/// A register stamped ahead while the relay ran fast takes versions up to
+/// its own stamp once the relay's clock is fixed, never further ahead: no
+/// push walks it forward.
+#[tokio::test]
+async fn a_register_ahead_of_the_relay_is_not_walked_further_ahead() {
+    use std::sync::atomic::{AtomicI64, Ordering};
+    let offset = std::sync::Arc::new(AtomicI64::new(3 * 3_600_000));
+    let relay = relay(Config {
+        clock_offset_ms: offset.clone(),
+        ..Config::default()
+    })
+    .await;
+    let a = relay.account().await;
+    let ahead = now_ms() + 3 * 3_600_000;
+    let r = relay.push(&a, vec![record(1, hlc(ahead, 1), "a")]).await;
+    assert_eq!(r.unwrap().accepted, 1);
+    offset.store(0, Ordering::Relaxed);
+    let further = relay
+        .push(&a, vec![record(1, hlc(ahead + 60_000, 1), "b")])
+        .await
+        .unwrap();
+    assert_eq!((further.accepted, further.rejected.len()), (0, 1));
+    let above = Hlc {
+        wall_ms: ahead,
+        counter: 1,
+        device: 1,
+    };
+    let r = relay.push(&a, vec![record(1, above.encode(), "c")]).await;
+    assert_eq!(r.unwrap().accepted, 1, "just above the stored version");
 }
