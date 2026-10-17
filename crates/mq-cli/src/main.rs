@@ -338,6 +338,21 @@ async fn play(
     )
     .await?;
     playback.report_progress(ready.resume_ms.unwrap_or(0) + seconds * 1000, 0);
+    let subs = until(Duration::from_secs(10), || {
+        let s = playback.snapshot();
+        (!s.subtitles_pending).then_some(s.subtitles)
+    })
+    .await
+    .unwrap_or_default();
+    let mut langs: Vec<&str> = Vec::new();
+    for t in &subs {
+        if !langs.contains(&t.lang.as_str()) {
+            langs.push(&t.lang);
+        }
+    }
+    emit(
+        json!({ "event": "subtitles", "count": subs.len(), "languages": langs.len(), "first": langs.iter().take(8).collect::<Vec<_>>() }),
+    );
     emit(json!({ "event": "done", "played": played, "total_ms": ms(started.elapsed()) }));
     Ok(())
 }

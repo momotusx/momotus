@@ -57,6 +57,7 @@ pub fn normalize(
                 h
             })
             .unwrap_or_default(),
+        subtitles: wire.subtitles.clone(),
         release: facts.release,
         raw_name: name,
         raw_description: description,

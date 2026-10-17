@@ -9,22 +9,27 @@ use crate::Core;
 use crate::live::{FRAME, coalesce};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
+use mq_addons::{AddonEvent, Deadlines};
 use mq_debrid::{ResolveRequest, StoreId};
 use mq_http::{Priority, RequestOptions};
 use mq_library::{FINISHED_RATIO, LibraryItemRow, ProgressRow};
-use mq_protocol::Source;
+use mq_media::{ByteCache, HttpRangeReader};
+use mq_protocol::{ResourcePath, Source, decode_subtitles};
 use mq_server::{StreamServer, Upstream};
 use mq_streams::ParsedStream;
 use serde::Serialize;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use stremio_core::types::addon::ExtraValue;
 use tokio::task::JoinHandle;
 
 /// Progress is written at most this often while playing.
 const SAVE_EVERY: Duration = Duration::from_secs(5);
 /// A source must answer its first byte within this to count as alive.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
+/// The subtitle hash reads two 64 KiB ranges; past this, ask without it.
+const HASH_TIMEOUT: Duration = Duration::from_secs(4);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -47,6 +52,29 @@ pub struct PlaybackSnapshot {
     pub resume_ms: Option<u64>,
     /// Sources that failed, in order, each with a plain reason.
     pub attempts: Vec<Attempt>,
+    /// External subtitles: the stream's own, then each subtitles addon's, as
+    /// they arrive.
+    pub subtitles: Vec<SubtitleTrack>,
+    /// Subtitles addons are still being asked.
+    pub subtitles_pending: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleTrack {
+    pub url: String,
+    /// As the addon gives it, usually ISO 639-2 ("eng").
+    pub lang: String,
+    pub label: Option<String>,
+    /// Addon name.
+    pub source: String,
+    pub forced: bool,
+    pub hearing_impaired: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -124,6 +152,8 @@ impl PlaybackView {
             size_bytes: None,
             resume_ms,
             attempts: Vec::new(),
+            subtitles: Vec::new(),
+            subtitles_pending: false,
         };
         let view = Self {
             core: core.clone(),
@@ -178,6 +208,8 @@ impl PlaybackView {
             }
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
+            s.snapshot.subtitles.clear();
+            s.snapshot.subtitles_pending = false;
             self.snapshot.set(s.snapshot.clone());
         }
         self.spawn_resolve();
@@ -339,14 +371,31 @@ async fn resolve_next(
                 let name = filename
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
-                let url = server.register(upstream, &name);
-                let mut s = lock(&state);
-                s.snapshot.phase = PlaybackPhase::Ready;
-                s.snapshot.url = Some(url);
-                s.snapshot.key = Some(stream.key.clone());
-                s.snapshot.filename = filename;
-                s.snapshot.size_bytes = size.or(stream.size_bytes);
-                snapshot.set(s.snapshot.clone());
+                let url = server.register(upstream.clone(), &name);
+                {
+                    let mut s = lock(&state);
+                    s.snapshot.phase = PlaybackPhase::Ready;
+                    s.snapshot.url = Some(url);
+                    s.snapshot.key = Some(stream.key.clone());
+                    s.snapshot.filename = filename.clone();
+                    s.snapshot.size_bytes = size.or(stream.size_bytes);
+                    s.snapshot.subtitles = stream
+                        .subtitles
+                        .iter()
+                        .map(|w| track(w, &stream.addon_name))
+                        .collect();
+                    s.snapshot.subtitles_pending = true;
+                    snapshot.set(s.snapshot.clone());
+                }
+                find_subtitles(
+                    &core,
+                    &target,
+                    &upstream,
+                    filename.as_deref(),
+                    &state,
+                    &snapshot,
+                )
+                .await;
                 return;
             }
             Err(error) => {
@@ -481,5 +530,99 @@ fn source_word(source: &Source) -> &'static str {
         Source::Usenet { .. } => "Usenet",
         Source::Archive { .. } => "Archive",
         _ => "These",
+    }
+}
+
+fn track(w: &mq_protocol::WireSubtitle, source: &str) -> SubtitleTrack {
+    SubtitleTrack {
+        url: w.url.to_string(),
+        lang: w.lang.clone(),
+        label: w.label.clone(),
+        source: source.to_owned(),
+        forced: w.forced,
+        hearing_impaired: w.hearing_impaired,
+    }
+}
+
+/// Asks every subtitles addon for this video with the OpenSubtitles hash, size
+/// and filename when they can be had (hash: first and last 64 KiB), and adds
+/// tracks to the snapshot as each addon answers.
+async fn find_subtitles(
+    core: &Core,
+    target: &PlayTarget,
+    upstream: &Upstream,
+    filename: Option<&str>,
+    state: &Mutex<State>,
+    snapshot: &SharedObservable<PlaybackSnapshot>,
+) {
+    let Upstream::Http {
+        url,
+        headers,
+        allow_private,
+    } = upstream;
+    let reader = HttpRangeReader::new(
+        core.http().clone(),
+        url,
+        headers.clone(),
+        Arc::new(ByteCache::new(512 * 1024)),
+    )
+    .allow_private(*allow_private);
+    let mut extra = Vec::new();
+    // Origins that ignore Range give no hash; filename and id still match.
+    if let Ok(Ok((hash, size))) =
+        tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(&reader)).await
+    {
+        extra.push(extra_value("videoHash", hash));
+        extra.push(extra_value("videoSize", size.to_string()));
+    }
+    if let Some(name) = filename {
+        extra.push(extra_value("filename", name.to_owned()));
+    }
+    let path = ResourcePath {
+        resource: "subtitles".into(),
+        r#type: target.kind.clone(),
+        id: target.video_id.clone(),
+        extra,
+    };
+    let addons: Vec<_> = core
+        .installed_addons()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|a| a.supports(&path))
+        .collect();
+    let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
+    while let Some(event) = fanout.next().await {
+        let mut s = lock(state);
+        match event {
+            AddonEvent::Arrived { addon_id, body, .. } => {
+                let source = addons
+                    .iter()
+                    .find(|a| a.id() == addon_id)
+                    .map_or(addon_id.clone(), |a| a.manifest.name.clone());
+                let found = decode_subtitles(&body)
+                    .map(|r| r.subtitles)
+                    .unwrap_or_default();
+                for w in &found {
+                    if !s.snapshot.subtitles.iter().any(|t| t.url == w.url.as_str()) {
+                        s.snapshot.subtitles.push(track(w, &source));
+                    }
+                }
+            }
+            AddonEvent::Done => s.snapshot.subtitles_pending = false,
+            _ => continue,
+        }
+        snapshot.set(s.snapshot.clone());
+    }
+    let mut s = lock(state);
+    if s.snapshot.subtitles_pending {
+        s.snapshot.subtitles_pending = false;
+        snapshot.set(s.snapshot.clone());
+    }
+}
+
+fn extra_value(name: &str, value: String) -> ExtraValue {
+    ExtraValue {
+        name: name.into(),
+        value,
     }
 }

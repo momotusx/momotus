@@ -13,7 +13,9 @@ pub use mq_import::Endpoints as StremioEndpoints;
 pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
 pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
-pub use views::playback::{Attempt, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView};
+pub use views::playback::{
+    Attempt, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
+};
 pub use views::search::{SearchSnapshot, SearchView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{VersionRow, VersionsParams, VersionsSnapshot, VersionsView};

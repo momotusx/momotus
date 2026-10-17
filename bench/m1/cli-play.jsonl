@@ -7,3 +7,9 @@
 {"event":"versions","hidden":0,"ms":1291,"pick":{"failover":1,"quality":"1080p","reasons":["playsDirectly","matchesScreen"],"release":"Sintel.2010.1080p.mkv","via":"Local Test"},"rows":6}
 {"attempts":[{"error":"source did not answer: http status 404","key":"url:https://download.blender.org/durian/movies/Sintel.2010.1080p.missing.mkv","via":"Local Test"}],"event":"resolved","ms":1499,"phase":"ready","resume_ms":4000}
 {"event":"done","played":{"event":"played","file_loaded_ms":205,"first_frame_ms":891,"probe_ms":163,"total_ms":4090},"total_ms":5590}
+{"event":"setup","date":"2026-10-17","note":"run 3 adds OpenSubtitles v3; download.blender.org ignores Range, so no hash and the subtitle query uses filename only"}
+{"event":"title","ms":14,"name":"Sintel"}
+{"event":"versions","hidden":0,"ms":1306,"pick":{"failover":1,"quality":"1080p","reasons":["playsDirectly","matchesScreen"],"release":"Sintel.2010.1080p.mkv","via":"Local Test"},"rows":6}
+{"attempts":[{"error":"source did not answer: http status 404","key":"url:https://download.blender.org/durian/movies/Sintel.2010.1080p.missing.mkv","via":"Local Test"}],"event":"resolved","ms":1579,"phase":"ready","resume_ms":9000}
+{"count":84,"event":"subtitles","first":["eng","ell","nld","fre","spa","ger","pol","por"],"languages":36}
+{"event":"done","played":{"event":"played","file_loaded_ms":237,"first_frame_ms":1932,"probe_ms":197,"total_ms":4159},"total_ms":5739}

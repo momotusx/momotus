@@ -87,6 +87,9 @@ pub struct ParsedStream {
     /// Request headers the origin needs (`proxyHeaders.request`).
     #[serde(skip)]
     pub headers: Vec<(String, String)>,
+    /// Subtitles the stream itself carries (`subtitles` on the stream object).
+    #[serde(skip)]
+    pub subtitles: Vec<mq_protocol::WireSubtitle>,
     pub raw_name: String,
     pub raw_description: String,
 }

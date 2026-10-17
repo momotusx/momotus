@@ -3,6 +3,7 @@ use mq_library::AddonRow;
 use mq_protocol::decode_streams;
 use mq_runtime::{Core, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView};
 use mq_streams::{ParsedStream, normalize};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -176,4 +177,143 @@ async fn origins_that_ignore_range_still_count_as_alive() {
     let view = PlaybackView::open(&core, setup(&core, &streams), target());
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+}
+
+/// A 200 KiB file with Range support plus a subtitles addon that records the
+/// path it was asked for.
+async fn file_and_subtitles() -> (String, Arc<Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let log = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let log = log.clone();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let path = head
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned();
+                let reply = if path.starts_with("/subtitles/") {
+                    log.lock().unwrap().push(path);
+                    let body = r#"{"subtitles":[{"id":"1","lang":"eng","url":"https://subs.example/1.srt"},{"id":"2","lang":"tur","url":"https://subs.example/2.srt"}]}"#;
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .into_bytes()
+                } else {
+                    let file = video();
+                    let range = head.lines().find_map(|l| {
+                        l.to_ascii_lowercase()
+                            .strip_prefix("range: bytes=")
+                            .map(str::to_owned)
+                    });
+                    let (start, end) = range
+                        .and_then(|r| {
+                            let (a, b) = r.trim().split_once('-')?;
+                            let a: usize = a.parse().ok()?;
+                            let b: usize = b.parse().unwrap_or(file.len() - 1).min(file.len() - 1);
+                            Some((a, b))
+                        })
+                        .unwrap_or((0, file.len() - 1));
+                    let mut r = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{end}/{}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        file.len(),
+                        end - start + 1
+                    )
+                    .into_bytes();
+                    r.extend_from_slice(&file[start..=end]);
+                    r
+                };
+                let _ = socket.write_all(&reply).await;
+            });
+        }
+    });
+    (base, asked)
+}
+
+fn video() -> Vec<u8> {
+    (0..200 * 1024u32)
+        .map(|i| (i.wrapping_mul(2654435761) >> 13) as u8)
+        .collect()
+}
+
+/// The OpenSubtitles hash, written out independently of the core's version.
+fn expected_hash(file: &[u8]) -> String {
+    let words = |part: &[u8]| -> u64 {
+        part.chunks(8)
+            .map(|w| u64::from_le_bytes(w.try_into().unwrap()))
+            .fold(0u64, u64::wrapping_add)
+    };
+    let n = file.len();
+    let sum = (n as u64)
+        .wrapping_add(words(&file[..65536]))
+        .wrapping_add(words(&file[n - 65536..]));
+    format!("{sum:016x}")
+}
+
+#[tokio::test]
+async fn finds_subtitles_by_hash_size_and_filename() {
+    let (base, asked) = file_and_subtitles().await;
+    let core = Core::temporary("p").unwrap();
+    let manifest = serde_json::json!({
+        "id": "subs", "version": "1.0.0", "name": "Subs",
+        "types": ["movie"], "resources": ["stream", "subtitles"], "catalogs": []
+    });
+    core.library()
+        .set_addons(
+            core.profile(),
+            &[AddonRow {
+                transport_url: format!("{base}/manifest.json"),
+                manifest_json: manifest.to_string(),
+                position: 0,
+                enabled: true,
+                allow_private: true,
+            }],
+            &core.hlc(),
+        )
+        .unwrap();
+    let streams = format!(
+        r#"{{"streams":[{{"url":"{base}/video.mkv","behaviorHints":{{"filename":"Sintel.2010.mkv"}},
+             "subtitles":[{{"id":"own","lang":"eng","url":"https://own.example/en.srt"}}]}}]}}"#
+    );
+    let candidates: Vec<ParsedStream> = decode_streams(streams.as_bytes())
+        .unwrap()
+        .streams
+        .iter()
+        .map(|w| normalize(w, "subs", "Subs", 0, 0))
+        .collect();
+    let view = PlaybackView::open(&core, candidates, target());
+    let mut done = None;
+    for _ in 0..500 {
+        let s = view.snapshot();
+        if s.phase == PlaybackPhase::Ready && !s.subtitles_pending {
+            done = Some(s);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let s = done.expect("subtitles settled");
+    let urls: Vec<_> = s.subtitles.iter().map(|t| t.url.as_str()).collect();
+    assert_eq!(
+        urls,
+        [
+            "https://own.example/en.srt",
+            "https://subs.example/1.srt",
+            "https://subs.example/2.srt"
+        ]
+    );
+    let path = asked.lock().unwrap()[0].clone();
+    let hash = expected_hash(&video());
+    assert_eq!(
+        path,
+        format!(
+            "/subtitles/movie/tt1727587/videoHash={hash}&videoSize=204800&filename=Sintel.2010.mkv.json"
+        )
+    );
 }
