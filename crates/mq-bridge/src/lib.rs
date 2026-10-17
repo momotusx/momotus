@@ -364,11 +364,20 @@ impl Session {
     /// owner), locked when that profile has a PIN: a cold start or a
     /// reconnect never resumes a protected profile.
     pub fn new(core: Core, out: mpsc::UnboundedSender<Value>) -> Self {
-        let core = core.active();
-        let locked = core.has_pin();
-        // Subscribe before reading what is gone, so no removal slips by.
+        // Subscribed before the profile is chosen: a removal after this
+        // reaches the watcher, one before it is in the list `start` reads.
         let changes = core.library().subscribe();
+        Self::start(core.active(), changes, out)
+    }
+
+    fn start(
+        core: Core,
+        changes: broadcast::Receiver<Vec<Table>>,
+        out: mpsc::UnboundedSender<Value>,
+    ) -> Self {
         let gone = core.library().gone_profiles().unwrap_or_default();
+        // A profile removed after it was chosen starts locked.
+        let locked = gone.iter().any(|id| id == core.profile()) || core.has_pin();
         // Removals made while the app was closed: it may still hold their
         // keystore entries.
         for id in &gone {
@@ -1189,17 +1198,11 @@ async fn watch_gone(
             let core = shared.core.clone();
             closed = shared.transition(core, true);
         }
-        let new: Vec<&String> = gone.iter().filter(|id| !known.contains(*id)).collect();
-        for id in &new {
+        for id in gone.iter().filter(|id| !known.contains(*id)) {
             let _ = out.send(json!({ "profile": "gone", "id": id }));
         }
         drop(shared);
         drop(closed);
-        if !new.is_empty() {
-            // Answers cached in memory were fetched with the removed
-            // profile's addon URLs (the disk copies went with the purge).
-            core.addons().forget_memory();
-        }
         known = gone.into_iter().collect();
     }
 }
@@ -1463,5 +1466,25 @@ mod closing {
         assert_eq!(names, ["addons", "home"]);
         let left: Vec<&str> = shared.subs.values().map(|s| s.view.name()).collect();
         assert_eq!(left, ["profiles"]);
+    }
+}
+
+#[cfg(test)]
+mod startup {
+    use super::*;
+
+    /// A profile removed between being chosen and the session reading the
+    /// removals (another open handle, or sync) starts the session locked.
+    #[tokio::test]
+    async fn a_profile_removed_while_the_session_starts_starts_it_locked() {
+        let core = Core::temporary("default").unwrap();
+        let kid = core.create_profile("Kid", "fox").unwrap();
+        let changes = core.library().subscribe();
+        let chosen = core.for_profile(&kid);
+        core.delete_profile(&kid).unwrap();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let session = Session::start(chosen, changes, tx);
+        let shared = lock(&session.shared);
+        assert_eq!((shared.core.profile(), shared.locked), (kid.as_str(), true));
     }
 }
