@@ -62,3 +62,4 @@
 [data-form="phone"] .check .st { font-size: 13px; }
 [data-form="phone"] .fix { height: 32px; padding: 0 10px; font-size: 12px; }
 [data-form="phone"] .skip { position: static; margin-top: 16px; height: 40px; padding: 0; font-size: 15px; }
+[data-form="phone"] .welcome-head .brand { font-size: 24px; }

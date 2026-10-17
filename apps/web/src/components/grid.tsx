@@ -17,7 +17,28 @@ export function Grid(props: {
   footer?: JSX.Element;
 }) {
   let sentinel!: HTMLDivElement;
+  let grid!: HTMLDivElement;
   const size = () => metrics().poster;
+  // Native lazy loading ignores posters clipped by the page scroller until
+  // they show; start them a screen ahead instead.
+  onMount(() => {
+    const root = form() === "phone" ? null : grid.closest("[data-vscroll]");
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          (e.target as HTMLImageElement).loading = "eager";
+          io.unobserve(e.target);
+        }
+      },
+      { root, rootMargin: "100% 0px" },
+    );
+    createEffect(() => {
+      void props.items.length;
+      queueMicrotask(() => grid.querySelectorAll<HTMLImageElement>('img[loading="lazy"]').forEach((img) => io.observe(img)));
+    });
+    onCleanup(() => io.disconnect());
+  });
   onMount(() => {
     if (!props.onNearEnd) return;
     // The page scroller clips the sentinel, so it must be the root (phones scroll the document).
@@ -29,6 +50,7 @@ export function Grid(props: {
   return (
     <div class="grid-wrap">
       <div
+        ref={grid}
         class="grid"
         data-fgroup={`grid:${props.scope}`}
         style={{ "grid-template-columns": `repeat(auto-fill, ${size()[0]}px)` }}

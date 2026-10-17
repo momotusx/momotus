@@ -102,3 +102,6 @@
 [data-form="phone"] .vgroup h3 { padding: 8px 10px; margin: 14px 0 4px; }
 [data-form="phone"] .fold { height: 40px; padding: 0 8px; }
 [data-form="phone"] .hidden-row { flex-wrap: wrap; gap: 8px; padding: 12px; }
+
+.alist { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); }
+[data-form="phone"] .alist { -webkit-mask-image: none; mask-image: none; }

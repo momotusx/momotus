@@ -156,7 +156,7 @@ export default function SettingsScreen() {
                 onPick={(v) => patch({ subtitleLanguages: toggle(x().subtitleLanguages, v) })}
               />
               <Choice<boolean>
-                label="Next episode"
+                label="Up next"
                 group="pref-next"
                 items={[
                   { value: true, label: "Starts on its own" },

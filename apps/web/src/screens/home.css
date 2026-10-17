@@ -54,7 +54,7 @@
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; transform: scale(var(--focus-scale-card)); }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
   outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
-  box-shadow: 0 0 0 calc(var(--focus-ring) * 2 + var(--focus-halo)) var(--halo); overflow: hidden; }
+  box-shadow: var(--focus-shadow); overflow: hidden; }
 .tile:focus-visible .cap, [data-form="tv"] .tile:focus .cap { color: var(--text); }
 @media (hover: hover) {
   [data-form="desktop"] .tile:hover { transform: scale(1.03); }
@@ -96,7 +96,7 @@
 [data-form="phone"] .track { scroll-snap-type: x proximity; scroll-padding-left: 16px; }
 [data-form="phone"] .tile { scroll-snap-align: start; border-radius: 10px; }
 [data-form="phone"] .tile .pic { border-radius: 10px; }
-[data-form="phone"] .tile .cap { margin-top: 6px; font-size: 12px; }
+[data-form="phone"] .tile .cap { margin-top: 6px; font-size: 12px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 [data-form="phone"] .pic-name { padding: 10px; font-size: 15px; }
 [data-form="phone"] .bar { left: 6px; right: 6px; bottom: 6px; height: 4px; }
 [data-form="phone"] .row-msg { left: 16px; right: 16px; top: 8px; bottom: 8px; gap: 12px; padding: 0 16px; flex-wrap: wrap; align-content: center; }

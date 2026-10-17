@@ -14,6 +14,10 @@ svg { flex: none; }
 .num { font-variant-numeric: tabular-nums; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
+/* The halo behind every focus ring: dark at the ring, fading over the halo
+ * width, so the ring holds contrast on artwork without a hard grey band. */
+:root { --focus-shadow: 0 0 var(--focus-halo) calc(var(--focus-ring) * 2) var(--halo); }
+
 /* Canvas: fixed 1920x1080 on TV, fluid and scaled on desktop, native on phone. */
 .app { position: fixed; left: var(--ox, 0); top: var(--oy, 0); width: var(--cw, 100vw); height: var(--ch, 100vh);
   transform: scale(var(--k, 1)); transform-origin: 0 0; overflow: clip; background: var(--bg); }
@@ -34,7 +38,7 @@ svg { flex: none; }
     outline-color var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
 [data-f]:focus-visible, [data-form="tv"] [data-f]:focus {
   outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
-  box-shadow: 0 0 0 calc(var(--focus-ring) * 2 + var(--focus-halo)) var(--halo); z-index: 3; }
+  box-shadow: var(--focus-shadow); z-index: 3; }
 [data-f]:focus:not(:focus-visible) { outline: none; }
 [data-form="tv"] [data-f]:focus { outline: var(--focus-ring) solid var(--accent); }
 

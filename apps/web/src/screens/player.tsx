@@ -244,6 +244,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       }
     }),
   );
+  // Opening the panel moves focus into it (the press asked for it); closing
+  // returns to the Subtitles button.
+  createEffect(
+    on(panel, (p, was) => {
+      const target = p ? (document.querySelector<HTMLElement>(".panel .opt.on") ?? document.querySelector<HTMLElement>(".panel .opt")) : was ? document.querySelector<HTMLElement>('[data-f="player:subs"]') : null;
+      if (target) queueMicrotask(() => focusEl(target));
+    }),
+  );
+
   const onEnded = () => {
     report();
     const href = nextHref();
@@ -269,7 +278,18 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
 
   return (
-    <div class="player-scr" classList={{ idle: !osd() && !!url() }} onPointerMove={wake}>
+    <div
+      class="player-scr"
+      classList={{ idle: !osd() && !!url() }}
+      onPointerMove={wake}
+      onPointerDown={(e) => {
+        // While the controls are hidden, a click only brings them back.
+        if (!osd()) {
+          e.preventDefault();
+          wake();
+        }
+      }}
+    >
       <Backdrop src={ctx.details()?.background} class="player-bd" dim />
       <video
         ref={video}
@@ -352,7 +372,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       </Show>
 
       <Show when={url()}>
-        <section class="osd" aria-label="Playback controls">
+        <section class="osd" aria-label="Playback controls" inert={panel() !== null || undefined}>
           <div class="tl">
             <span class="num">{clock(time())}</span>
             <div

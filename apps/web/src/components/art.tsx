@@ -34,7 +34,7 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
 }
 
 /** A poster image with a name card while it loads or when it is missing. */
-export function Poster(props: { src: string | null; name: string; w: number; h: number }) {
+export function Poster(props: { src: string | null; name: string; w: number; h: number; eager?: boolean }) {
   const [broken, setBroken] = createSignal(false);
   return (
     <Show when={props.src && !broken()} fallback={<span class="pic-name">{props.name}</span>}>
@@ -43,7 +43,7 @@ export function Poster(props: { src: string | null; name: string; w: number; h: 
         width={props.w}
         height={props.h}
         alt=""
-        loading="lazy"
+        loading={props.eager ? "eager" : "lazy"}
         decoding="async"
         class="fade"
         onLoad={(e) => e.currentTarget.classList.add("in")}

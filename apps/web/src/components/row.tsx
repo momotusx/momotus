@@ -10,7 +10,8 @@ import { Poster } from "./art";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { form } from "../form";
-import { episodeLabel, parseVideo, pct, titlePath } from "../lib/format";
+import { pct, titlePath } from "../lib/format";
+import { caption } from "../lib/words";
 import { visibleRange } from "../lib/range";
 
 export const CONTINUE_ROW = "continue-watching";
@@ -29,7 +30,7 @@ interface Metrics {
 }
 
 const TV: Metrics = { poster: [240, 360], landscape: [384, 216], square: [300, 300], gap: 32, pad: 34, inset: 34, peek: 140, caption: 52 };
-const PHONE: Metrics = { poster: [112, 168], landscape: [200, 112], square: [140, 140], gap: 12, pad: 8, inset: 16, peek: 40, caption: 22 };
+const PHONE: Metrics = { poster: [112, 168], landscape: [200, 112], square: [140, 140], gap: 12, pad: 8, inset: 16, peek: 40, caption: 40 };
 export const metrics = () => (form() === "phone" ? PHONE : TV);
 
 const sizeOf = (m: Metrics, shape: string | undefined) =>
@@ -37,16 +38,6 @@ const sizeOf = (m: Metrics, shape: string | undefined) =>
 
 // Survives the Home screen unmounting, so Back lands on the same offsets.
 const offsets = new Map<string, number>();
-
-/** Continue Watching says where you are: "Next: S1 E2" for Up Next, else the
- * episode and how much is watched. */
-export function caption(tile: TileData): string | null {
-  if (tile.releaseInfo?.startsWith("Next:")) return tile.releaseInfo;
-  if (tile.progress === null) return null;
-  const ref = tile.videoId ? parseVideo(tile.videoId) : null;
-  const where = ref ? episodeLabel(ref.season, ref.episode) : "Movie";
-  return `${where}, ${Math.round(tile.progress * 100)}% watched`;
-}
 
 export function TileCard(props: {
   tile: TileData;
@@ -58,6 +49,9 @@ export function TileCard(props: {
   style?: Record<string, string>;
   captions?: boolean;
   onOpen?: () => void;
+  // Rows mount only tiles near the viewport, so those load at once; native
+  // lazy loading would wait until a nested scroller shows them.
+  eager?: boolean;
 }) {
   const cap = () => (props.captions === false ? null : caption(props.tile));
   return (
@@ -72,7 +66,7 @@ export function TileCard(props: {
       onClick={() => props.onOpen?.()}
     >
       <div class="pic" style={{ height: `${props.h}px` }}>
-        <Poster src={props.tile.poster} name={props.tile.name} w={props.w} h={props.h} />
+        <Poster src={props.tile.poster} name={props.tile.name} w={props.w} h={props.h} eager={props.eager} />
         <Show when={props.tile.progress !== null}>
           <div class="bar">
             <i style={{ width: pct(props.tile.progress ?? 0) }} />
@@ -203,6 +197,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                           h={size()[1]}
                           autofocus={props.autofocus && i === 0}
                           onOpen={props.onOpen}
+                          eager
                         />
                       )}
                     </Show>

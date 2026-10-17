@@ -44,6 +44,12 @@ export function parentOf(path: string): string | null {
   return path === "/" ? null : "/";
 }
 
+// The router stamps every entry with `_depth` (history.length - 1 at first
+// load), which counts pages from before the app. Only entries above the one
+// the app started on are ours to go back through.
+const historyDepth = () => (history.state as { _depth?: number } | null)?._depth ?? 0;
+const startDepth = historyDepth();
+
 let wentBack = false;
 export const markBack = () => {
   wentBack = true;
@@ -92,8 +98,7 @@ function Shell(props: RouteSectionProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const back = () => {
-    const depth = (history.state as { _depth?: number } | null)?._depth ?? 0;
-    if (depth > 0) {
+    if (historyDepth() > startDepth) {
       markBack();
       history.back();
       return;

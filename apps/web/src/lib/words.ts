@@ -5,7 +5,9 @@ import type { Group } from "../core/generated/Group";
 import type { HiddenSummary } from "../core/generated/HiddenSummary";
 import type { HideReason } from "../core/generated/HideReason";
 import type { Reason } from "../core/generated/Reason";
+import type { Tile } from "../core/generated/Tile";
 import type { VersionStatus } from "../core/generated/VersionStatus";
+import { episodeLabel, parseVideo } from "./format";
 
 export function reasonText(r: Reason, status: VersionStatus): string {
   switch (r) {
@@ -82,6 +84,17 @@ export function languageName(code: string): string {
     // Not a language code: fall through.
   }
   return code.toUpperCase();
+}
+
+/** Continue Watching says where you are: "Next: S1 E2" for Up Next, else the
+ * episode (or "Movie") and how much is watched. */
+export function caption(tile: Tile): string | null {
+  if (tile.releaseInfo?.startsWith("Next:")) return tile.releaseInfo;
+  if (tile.progress === null) return null;
+  const ref = tile.videoId ? parseVideo(tile.videoId) : null;
+  const where = ref ? episodeLabel(ref.season, ref.episode) : tile.kind === "movie" ? "Movie" : null;
+  const pct = `${Math.round(tile.progress * 100)}% watched`;
+  return where ? `${where}, ${pct}` : pct;
 }
 
 /** The parser could not read a resolution: say so, never as a tier. */
