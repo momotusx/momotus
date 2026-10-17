@@ -27,7 +27,13 @@ const [link, setLink] = createSignal<Link>("connecting");
 export { link };
 transport.onClose(() => setLink("closed"));
 
-export type ViewStatus = { state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
+// The core pauses background work while the app is hidden and retries
+// network work when the connection returns.
+const lifecycle = (event: string) => void bridge.request("lifecycle", { event }).catch(() => undefined);
+document.addEventListener("visibilitychange", () => lifecycle(document.hidden ? "background" : "foreground"));
+window.addEventListener("online", () => lifecycle("networkChanged"));
+
+export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
 
 export const reasonOf = (e: unknown) =>
   e instanceof Error && e.message === "connection closed"

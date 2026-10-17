@@ -33,22 +33,27 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
   );
 }
 
-/** A poster image with a name card while it loads or when it is missing. */
+/** A poster over a name card: the title's name sits centered in the surface
+ * until the picture has decoded, and stays when there is none, so a tile is
+ * never a blank box. */
 export function Poster(props: { src: string | null; name: string; w: number; h: number; eager?: boolean }) {
   const [broken, setBroken] = createSignal(false);
   return (
-    <Show when={props.src && !broken()} fallback={<span class="pic-name">{props.name}</span>}>
-      <img
-        src={props.src as string}
-        width={props.w}
-        height={props.h}
-        alt=""
-        loading={props.eager ? "eager" : "lazy"}
-        decoding="async"
-        class="fade"
-        onLoad={(e) => e.currentTarget.classList.add("in")}
-        onError={() => setBroken(true)}
-      />
-    </Show>
+    <>
+      <span class="pic-name">{props.name}</span>
+      <Show when={props.src && !broken()}>
+        <img
+          src={props.src as string}
+          width={props.w}
+          height={props.h}
+          alt=""
+          loading={props.eager ? "eager" : "lazy"}
+          decoding="async"
+          class="fade"
+          onLoad={(e) => e.currentTarget.classList.add("in")}
+          onError={() => setBroken(true)}
+        />
+      </Show>
+    </>
   );
 }

@@ -1,4 +1,5 @@
 import { A } from "@solidjs/router";
+import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
 import Plus from "lucide-solid/icons/plus";
@@ -76,7 +77,7 @@ export default function Onboarding() {
       {
         label: "Core",
         tone: pingMs() !== null ? "ok" : link() === "closed" ? "bad" : "warn",
-        text: pingMs() !== null ? `Connected, answers in ${pingMs()} ms` : link() === "closed" ? "Not reachable" : "Connecting",
+        text: pingMs() !== null ? `Connected, ${pingMs()} ms` : link() === "closed" ? "Not reachable" : "Connecting",
       },
       { label: "Network", tone: online() ? "ok" : "bad", text: online() ? "Online" : "Offline" },
       { label: "Display", tone: "ok", text: `${lines >= 2000 ? "4K" : lines >= 1000 ? "1080p" : "720p"}${hdr ? ", HDR" : ""}` },
@@ -134,11 +135,20 @@ export default function Onboarding() {
           <div class="suggest" data-fgroup="suggest">
             <For each={SUGGESTED}>
               {(s) => (
-                <button class="sugg" data-f={`welcome:add:${s.name}`} disabled={installed(s.url) || busy() === s.url} onClick={() => void add(s.url, s.name)}>
-                  <Plus aria-hidden />
+                <button
+                  class="sugg"
+                  classList={{ done: installed(s.url) }}
+                  data-f={`welcome:add:${s.name}`}
+                  disabled={installed(s.url) || busy() === s.url}
+                  inert={installed(s.url) || undefined}
+                  onClick={() => void add(s.url, s.name)}
+                >
+                  <Show when={installed(s.url)} fallback={<Plus aria-hidden />}>
+                    <Check aria-hidden />
+                  </Show>
                   <span>
                     <b>{s.name}</b>
-                    <small>{installed(s.url) ? "Installed" : busy() === s.url ? "Installing" : s.what}</small>
+                    <small>{installed(s.url) ? `Installed, ${s.what.toLowerCase()}` : busy() === s.url ? "Installing" : s.what}</small>
                   </span>
                 </button>
               )}

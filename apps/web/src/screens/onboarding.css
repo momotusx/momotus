@@ -25,7 +25,10 @@
 .sugg svg { width: 28px; height: 28px; flex: none; }
 .sugg b { display: block; font: 600 var(--type-callout) / 1.2 var(--font-text); }
 .sugg small { display: block; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); margin-top: 2px; }
-.sugg:disabled { opacity: .55; cursor: default; }
+.sugg:disabled { cursor: default; }
+.sugg.done { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
+.sugg.done svg { color: var(--ok); }
+.sugg:disabled:not(.done) { opacity: .7; }
 .panel-card .install { margin: 0; }
 .panel-card .field-line { min-width: 0; flex-basis: 100%; }
 
