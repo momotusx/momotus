@@ -1,0 +1,17 @@
+# third-party reference clones and closed artifacts: never committed
+/ref/
+# worker scratch
+/.oc/
+# build output
+/target/
+**/node_modules/
+**/dist/
+**/.gradle/
+**/build/
+**/DerivedData/
+*.xcuserstate
+.DS_Store
+# local secrets
+.env
+*.local
+/.playwright-mcp/
