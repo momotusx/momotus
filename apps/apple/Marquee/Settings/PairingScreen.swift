@@ -24,7 +24,7 @@ struct PairingScreen: View {
                 if let pairing {
                     phase(pairing)
                     if let failure = pairing.failure {
-                        StateLine(symbol: "exclamationmark.triangle", text: failure, action: ("Try again", { self.pairing = nil }))
+                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { self.pairing = nil }))
                     }
                 } else {
                     form
@@ -50,7 +50,7 @@ struct PairingScreen: View {
                 UserDefaults.standard.set(trimmed, forKey: "syncServer")
                 pairing = LiveRecord("pairing", params: ["server": trimmed, "name": name], core: core)
             } label: {
-                Label("Show pairing code", systemImage: "qrcode")
+                Label("Show pairing code", glyph: "qr-code")
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .disabled(URL(string: server)?.host() == nil || name.isEmpty)
@@ -80,7 +80,7 @@ struct PairingScreen: View {
     @ViewBuilder private func phase(_ pairing: LiveRecord<PairingSnapshot>) -> some View {
         switch pairing.snapshot {
         case nil, .starting?:
-            Label("Asking the sync server for a code", systemImage: "clock")
+            Label("Asking the sync server for a code", glyph: "clock")
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
         case .waiting(let qr, let expiresMs)?:
@@ -104,18 +104,18 @@ struct PairingScreen: View {
                     .tracking(8)
                     .foregroundStyle(Theme.Palette.text)
                 HStack(spacing: 12) {
-                    Button { pairing.command(["type": "confirm"]) } label: { Label("They match", systemImage: "checkmark") }
+                    Button { pairing.command(["type": "confirm"]) } label: { Label("They match", glyph: "check") }
                         .buttonStyle(PillButtonStyle(prominent: true))
-                    Button { pairing.command(["type": "reject"]) } label: { Label("They differ", systemImage: "xmark") }
+                    Button { pairing.command(["type": "reject"]) } label: { Label("They differ", glyph: "x") }
                         .buttonStyle(PillButtonStyle())
                 }
             }
         case .joined(let record)?:
             Group {
                 switch stored {
-                case true?: Label("This device joined your sync account.", systemImage: "checkmark.circle")
-                case false?: Label("Joined, but the Keychain refused the account, so it was not kept. Pair again from a signed build.", systemImage: "exclamationmark.triangle")
-                case nil: Label("Saving the account to this device", systemImage: "clock")
+                case true?: Label("This device joined your sync account.", glyph: "circle-check")
+                case false?: Label("Joined, but the Keychain refused the account, so it was not kept. Pair again from a signed build.", glyph: "triangle-alert")
+                case nil: Label("Saving the account to this device", glyph: "clock")
                 }
             }
             .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
@@ -125,9 +125,9 @@ struct PairingScreen: View {
                 if stored == true { await sync.didJoin() }
             }
         case .expired?:
-            StateLine(symbol: "clock.badge.xmark", text: "The code expired before it was scanned.", action: ("New code", { self.pairing = nil }))
+            StateLine(symbol: "clock-alert", text: "The code expired before it was scanned.", action: ("New code", { self.pairing = nil }))
         case .failed(let reason)?:
-            StateLine(symbol: "exclamationmark.triangle", text: reason, action: ("Try again", { self.pairing = nil }))
+            StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", { self.pairing = nil }))
         }
     }
 }

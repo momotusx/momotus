@@ -177,6 +177,29 @@ struct PillButtonStyle: ButtonStyle {
     #endif
 }
 
+/// A destructive action as words in the error token: no fill, never the
+/// accent, so it cannot pass for the primary. Same height as a pill.
+struct DestructiveTextStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        Interactive(
+            configuration: configuration,
+            shape: Capsule(),
+            focusScale: Theme.Focus.scaleTile,
+            content: AnyView(
+                configuration.label
+                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .labelStyle(PillLabelStyle())
+                    .foregroundStyle(enabled ? Theme.Palette.bad : Theme.Palette.muted)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .contentShape(Capsule())
+            )
+        )
+    }
+}
+
 private struct PillLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 8) {
@@ -254,7 +277,7 @@ struct StateLine: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.s) {
-            Label(text, systemImage: symbol)
+            Label(text, glyph: symbol)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)

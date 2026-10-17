@@ -27,11 +27,11 @@ struct HomeRowsScreen: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                 if let failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure)
                 }
                 if let rows {
                     if rows.isEmpty {
-                        StateLine(symbol: "rectangle.stack", text: "No addon gives Home a catalog yet.")
+                        StateLine(symbol: "list-video", text: "No addon gives Home a catalog yet.")
                     }
                     ForEach(Array(rows.enumerated()), id: \.element.rowId) { index, row in
                         HomeRowLine(
@@ -113,12 +113,12 @@ private struct HomeRowLine: View {
             #else
             HStack(spacing: 8) {
                 label
-                Button(action: toggle) { Image(systemName: row.hidden ? "eye.slash" : "eye") }
+                Button(action: toggle) { Glyph(row.hidden ? "eye-off" : "eye") }
                     .accessibilityLabel(row.hidden ? "Show \(row.title) on Home" : "Hide \(row.title) from Home")
-                Button { move(-1) } label: { Image(systemName: "arrow.up") }
+                Button { move(-1) } label: { Glyph("arrow-up") }
                     .accessibilityLabel("Move \(row.title) up")
                     .disabled(first)
-                Button { move(1) } label: { Image(systemName: "arrow.down") }
+                Button { move(1) } label: { Glyph("arrow-down") }
                     .accessibilityLabel("Move \(row.title) down")
                     .disabled(last)
             }
@@ -135,7 +135,7 @@ private struct HomeRowLine: View {
     #if os(tvOS)
     private var shown: some View {
         Button(action: toggle) {
-            Label(row.hidden ? "Hidden" : "Shown", systemImage: row.hidden ? "eye.slash" : "eye")
+            Label(row.hidden ? "Hidden" : "Shown", glyph: row.hidden ? "eye-off" : "eye")
         }
         .accessibilityLabel(row.hidden ? "Show \(row.title) on Home" : "Hide \(row.title) from Home")
         .disabled(picked)

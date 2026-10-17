@@ -44,8 +44,7 @@ struct PlayerControls: View {
     private var top: some View {
         HStack(alignment: .top, spacing: Theme.Space.s) {
             Button(action: back) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
+                Glyph("chevron-left", size: 22)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(.black.opacity(0.35)))
             }
@@ -114,22 +113,17 @@ struct PlayerControls: View {
 
     private var transport: some View {
         HStack(spacing: metrics.wide ? 28 : 20) {
-            Button { model.skip(-10) } label: {
-                Image(systemName: "gobackward.10").font(.system(size: 24))
-            }
+            Button { model.skip(-10) } label: { SkipGlyph(name: "rotate-ccw") }
             .accessibilityLabel("Back 10 seconds")
             Button(action: model.togglePlay) {
-                Image(systemName: model.playing ? "pause.fill" : "play.fill")
-                    .font(.system(size: 28, weight: .semibold))
+                Glyph(model.playing ? "pause-fill" : "play-fill", size: 26)
                     .foregroundStyle(Theme.Palette.onAccent)
                     .frame(width: 68, height: 68)
                     .background(Circle().fill(Color(white: 0.96)))
                     .overlay(Circle().strokeBorder(Theme.Palette.accent, lineWidth: 3).padding(-5))
             }
             .accessibilityLabel(model.playing ? "Pause" : "Play")
-            Button { model.skip(10) } label: {
-                Image(systemName: "goforward.10").font(.system(size: 24))
-            }
+            Button { model.skip(10) } label: { SkipGlyph(name: "rotate-cw") }
             .accessibilityLabel("Forward 10 seconds")
         }
         .buttonStyle(.plain)
@@ -138,7 +132,7 @@ struct PlayerControls: View {
     /// Audio, Subtitles, Versions, Speed: each a word with its current value.
     private var actions: some View {
         HStack(spacing: metrics.wide ? 26 : 16) {
-            menu("Audio", "speaker.wave.2", audioValue) {
+            menu("Audio", "volume-2", audioValue) {
                 if model.audioTracks.isEmpty {
                     Choice(text: "As the file has it", selected: true)
                 }
@@ -148,7 +142,7 @@ struct PlayerControls: View {
                     }
                 }
             }
-            menu("Subtitles", "captions.bubble", subtitleValue) {
+            menu("Subtitles", "captions", subtitleValue) {
                 Button { model.selectSubtitle(nil) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil)
                 }
@@ -159,7 +153,7 @@ struct PlayerControls: View {
                 }
             }
             if let versions, let snapshot = versions.snapshot {
-                menu("Versions", "square.stack.3d.up", currentQuality(snapshot)) {
+                menu("Versions", "layers", currentQuality(snapshot)) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
                         Button { model.switchVersion(row.key) } label: {
                             Choice(text: "\(VersionWords.line(row)), \(row.via)", selected: row.key == playingKey)
@@ -167,7 +161,7 @@ struct PlayerControls: View {
                     }
                 }
             }
-            menu("Speed", "speedometer", speedText(model.rate)) {
+            menu("Speed", "gauge", speedText(model.rate)) {
                 ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
                     Button { model.rate = speed } label: {
                         Choice(text: speedText(speed), selected: model.rate == speed)
@@ -194,7 +188,7 @@ struct PlayerControls: View {
 
     private func action(_ title: String, _ symbol: String, _ value: String) -> some View {
         VStack(spacing: 3) {
-            Image(systemName: symbol).font(.system(size: 18))
+            Glyph(symbol, size: 18)
             Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
             Text(value).font(.text(Theme.type.caption, relativeTo: .caption)).foregroundStyle(.white.opacity(0.75))
         }
@@ -235,12 +229,24 @@ struct PlayerControls: View {
     }
 }
 
+/// The skip arrow with its interval inside, as the audit asks ("10").
+private struct SkipGlyph: View {
+    let name: String
+
+    var body: some View {
+        Glyph(name, size: 30)
+            .overlay {
+                Text("10").font(.text(10, weight: .bold)).monospacedDigit().offset(y: 1)
+            }
+    }
+}
+
 /// A menu entry that shows a checkmark when it is the current choice.
 private struct Choice: View {
     let text: String
     let selected: Bool
 
     var body: some View {
-        if selected { Label(text, systemImage: "checkmark") } else { Text(text) }
+        if selected { Label(text, image: "check") } else { Text(text) }
     }
 }

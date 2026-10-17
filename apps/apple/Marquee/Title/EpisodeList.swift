@@ -42,14 +42,14 @@ struct EpisodeList: View {
                         play(episode)
                     }
                     .contextMenu {
-                        Button("Choose a version", systemImage: "square.stack.3d.up") { chooseVersion(episode) }
+                        Button("Choose a version", glyph: "layers") { chooseVersion(episode) }
                         if episode.overview?.isEmpty == false, episode.videoId != current {
-                            Button(expanded ? "Hide synopsis" : "Show synopsis", systemImage: "text.alignleft") {
+                            Button(expanded ? "Hide synopsis" : "Show synopsis", glyph: "text-align-start") {
                                 opened.formSymmetricDifference([episode.videoId])
                             }
                         }
                         Button(episode.watched ? "Mark as unwatched" : "Mark as watched",
-                               systemImage: episode.watched ? "eye.slash" : "checkmark") {
+                               glyph: episode.watched ? "eye-off" : "check") {
                             setWatched(episode.videoId, !episode.watched)
                         }
                     }
@@ -61,9 +61,9 @@ struct EpisodeList: View {
                     if let failure, failure.videoId == episode.videoId {
                         Group {
                             if failure.noVersion {
-                                Button(action: addSource) { Label("Add a source", systemImage: "plus") }
+                                Button(action: addSource) { Label("Add a source", glyph: "plus") }
                             } else {
-                                Button { chooseVersion(episode) } label: { Label("Choose a version", systemImage: "square.stack.3d.up") }
+                                Button { chooseVersion(episode) } label: { Label("Choose a version", glyph: "layers") }
                             }
                         }
                         .buttonStyle(PillButtonStyle(prominent: true))
@@ -191,7 +191,7 @@ private struct EpisodeRow: View {
                         ProgressLine(value: progress)
                     }
                     if let status {
-                        Label(status, systemImage: status == "Finding a version" ? "clock" : "exclamationmark.circle")
+                        Label(status, glyph: status == "Finding a version" ? "clock" : "circle-alert")
                             .font(.text(Theme.type.callout, relativeTo: .callout))
                             .foregroundStyle(Theme.Palette.muted)
                             .multilineTextAlignment(.leading)
@@ -212,7 +212,7 @@ private struct EpisodeRow: View {
     @ViewBuilder private var trailing: some View {
         HStack(spacing: 6) {
             if episode.watched {
-                Image(systemName: "checkmark").accessibilityHidden(true)
+                Glyph("check").accessibilityHidden(true)
             }
             Text(trailingText)
         }

@@ -19,7 +19,7 @@ struct DiscoverScreen: View {
                     filters(s)
                     content(s)
                 } else if let failure = discover.failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure)
                 }
             }
             .padding(.horizontal, metrics.gutter)
@@ -54,9 +54,9 @@ struct DiscoverScreen: View {
 
     @ViewBuilder private func content(_ s: DiscoverSnapshot) -> some View {
         if s.kinds.isEmpty {
-            StateLine(symbol: "square.stack", text: "No addon with catalogs is installed yet. Add one in Settings, then Addons.")
+            StateLine(symbol: "layers", text: "No addon with catalogs is installed yet. Add one in Settings, then Addons.")
         } else if s.genreRequired && s.genre == nil {
-            StateLine(symbol: "line.3.horizontal.decrease", text: "This catalog lists titles by genre. Pick one above.")
+            StateLine(symbol: "list-filter", text: "This catalog lists titles by genre. Pick one above.")
         }
         PosterGrid(tiles: s.items, onEnd: {
             if s.state == .ready { discover.command(["type": "loadMore"]) }
@@ -65,11 +65,11 @@ struct DiscoverScreen: View {
         case .loading:
             ProgressView().controlSize(.large).frame(maxWidth: .infinity).padding(Theme.Space.l)
         case .failed(let reason):
-            StateLine(symbol: "exclamationmark.triangle", text: "This catalog did not answer: \(reason)", action: ("Try again", {
+            StateLine(symbol: "triangle-alert", text: "This catalog did not answer: \(reason)", action: ("Try again", {
                 discover.command(["type": "loadMore"])
             }))
         case .end where s.items.isEmpty && !s.kinds.isEmpty:
-            StateLine(symbol: "tray", text: "Nothing in this catalog.")
+            StateLine(symbol: "inbox", text: "Nothing in this catalog.")
         case .ready, .end:
             EmptyView()
         }

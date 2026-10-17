@@ -19,6 +19,10 @@ import Testing
         #expect(!words.contains(code), "\(code) leaks into the words")
     }
     #expect(SyncProblem(code: nil, message: "the relay said no").words == "the relay said no")
+    // A transport error never shows its raw text and URL.
+    let offline = SyncProblem(code: nil, message: "network: error sending request (http://127.0.0.1:8787/v1/relay)").words
+    #expect(!offline.contains("http"))
+    #expect(offline.hasPrefix("The sync server did not answer"))
 }
 
 /// A report with every count at zero, then `changes` on top.

@@ -9,11 +9,14 @@ struct SyncProblem: Equatable {
         switch code {
         case "dropped": "This device was removed from your sync account. Your library stays here as local data."
         case "fork": "The sync server lists different devices than this device knows. Use the server's list to keep syncing."
-        case "wrongRelay": "This is not the sync server this device joined. Check the server address."
+        case "wrongRelay": "This is not the sync server this device joined. Try again, or forget the account here and pair again."
         case "relayBehind": "The sync server lost device entries it cannot get back. Pair this device again from one that still syncs."
         case "notJoined": "This device has not joined a sync account yet."
         case "unsent": "Some changes have not been sent yet. Sync again first, or leave anyway and they stay only here."
         case "insecure": "The sync server address must start with https."
+        // The core's transport errors read "network: ..." with a URL; nobody needs that.
+        case nil where message.hasPrefix("network"):
+            "The sync server did not answer. Your changes wait here and go out on the next sync."
         default: message
         }
     }

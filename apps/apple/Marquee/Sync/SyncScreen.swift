@@ -16,7 +16,7 @@ struct SyncScreen: View {
                 if let problem = sync.problem { problemView(problem) }
                 if let notes = sync.lastReport?.notes, !notes.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(notes, id: \.self) { Label($0, systemImage: "info.circle") }
+                        ForEach(notes, id: \.self) { Label($0, glyph: "info") }
                     }
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
@@ -46,12 +46,12 @@ struct SyncScreen: View {
     private var status: some View {
         VStack(alignment: .leading, spacing: 6) {
             if sync.syncing {
-                Label("Syncing", systemImage: "arrow.triangle.2.circlepath")
+                Label("Syncing", glyph: "refresh-cw")
             } else if let at = sync.lastSynced, let report = sync.lastReport {
                 Label("Synced \(at.formatted(date: .omitted, time: .shortened)): \(report.pushed) sent, \(report.applied) changes received",
-                      systemImage: "checkmark.circle")
+                      glyph: "circle-check")
             } else {
-                Label(sync.joined ? "Not synced yet in this session" : "This device is not in a sync account", systemImage: "circle.dashed")
+                Label(sync.joined ? "Not synced yet in this session" : "This device is not in a sync account", glyph: "circle-dashed")
             }
             if let fingerprint = sync.lastReport?.fingerprint ?? sync.devices?.fingerprint {
                 Text("Fingerprint \(grouped(fingerprint)). It is the same on every device of the account.")
@@ -65,21 +65,26 @@ struct SyncScreen: View {
 
     @ViewBuilder private func problemView(_ problem: SyncProblem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(problem.words, systemImage: "exclamationmark.triangle")
+            Label(problem.words, glyph: "triangle-alert")
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.text)
             switch problem.code {
             case "fork":
                 Button("Use the server's list") { Task { await sync.useServerRoster() } }.buttonStyle(PillButtonStyle(prominent: true))
             case "wrongRelay", "relayBehind", "notJoined":
-                Button("Forget it on this device") { sync.forgetHere() }.buttonStyle(PillButtonStyle(prominent: true))
-                Text("Your library stays. Pair again to join an account.")
+                // Trying again is the safe first step; forgetting is destructive, so it
+                // reads as such and never wears the accent.
+                HStack(spacing: 12) {
+                    Button("Try again") { Task { await sync.syncNow() } }.buttonStyle(PillButtonStyle(prominent: true))
+                    Button("Forget it on this device") { sync.forgetHere() }.buttonStyle(DestructiveTextStyle())
+                }
+                Text("Forgetting keeps your library. Pair again to join an account.")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
             case "unsent":
                 HStack(spacing: 12) {
                     Button("Sync now") { Task { await sync.syncNow() } }.buttonStyle(PillButtonStyle(prominent: true))
-                    Button("Leave anyway") { Task { await sync.signOut(force: true) } }.buttonStyle(PillButtonStyle())
+                    Button("Leave anyway") { Task { await sync.signOut(force: true) } }.buttonStyle(DestructiveTextStyle())
                 }
             default:
                 EmptyView()
@@ -96,7 +101,7 @@ struct SyncScreen: View {
                 Text("Devices").font(.display(Theme.type.title2)).foregroundStyle(Theme.Palette.text)
                 ForEach(list.members) { member in
                     HStack(spacing: Theme.Space.s) {
-                        Image(systemName: member.kit ? "key" : "laptopcomputer.and.iphone")
+                        Glyph(member.kit ? "key-round" : "monitor-smartphone")
                             .frame(width: 24)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(memberName(member) + (member.thisDevice ? " (this device)" : ""))
@@ -109,7 +114,7 @@ struct SyncScreen: View {
                     .foregroundStyle(Theme.Palette.text)
                 }
                 if list.rotationPending {
-                    Label("A key change is waiting to finish.", systemImage: "clock")
+                    Label("A key change is waiting to finish.", glyph: "clock")
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
                 }
@@ -119,16 +124,17 @@ struct SyncScreen: View {
 
     private var actions: some View {
         FlowRow(spacing: 12) {
-            Button { Task { await sync.syncNow() } } label: { Label("Sync now", systemImage: "arrow.triangle.2.circlepath") }
+            Button { Task { await sync.syncNow() } } label: { Label("Sync now", glyph: "refresh-cw") }
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .disabled(sync.syncing || !sync.joined)
             #if !os(tvOS)
-            Button { Task { kit = await sync.createRecoveryKit() } } label: { Label("Create a recovery kit", systemImage: "key") }
+            Button { Task { kit = await sync.createRecoveryKit() } } label: { Label("Create a recovery kit", glyph: "key-round") }
                 .buttonStyle(PillButtonStyle())
                 .disabled(!sync.joined)
             #endif
-            Button { confirmLeave = true } label: { Label("Leave sync", systemImage: "rectangle.portrait.and.arrow.right") }
-                .buttonStyle(PillButtonStyle())
+            // Last, in the error colour, and it asks first.
+            Button { confirmLeave = true } label: { Label("Leave sync", glyph: "log-out") }
+                .buttonStyle(DestructiveTextStyle())
                 .disabled(!sync.joined)
         }
     }

@@ -26,7 +26,7 @@ struct ImportScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
                 phase
                 if let failure = importer.failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure)
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -43,7 +43,7 @@ struct ImportScreen: View {
     @ViewBuilder private var phase: some View {
         switch importer.snapshot {
         case nil, .starting?:
-            Label("Asking Stremio for a sign-in code", systemImage: "clock")
+            Label("Asking Stremio for a sign-in code", glyph: "clock")
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
         case .waitingForLink(let code, let link, _)?:
@@ -58,24 +58,24 @@ struct ImportScreen: View {
                         .foregroundStyle(Theme.Palette.text)
                         .selectableText()
                     if let url = URL(string: link) {
-                        Button { openURL(url) } label: { Label(url.host() ?? link, systemImage: "arrow.up.right.square") }
+                        Button { openURL(url) } label: { Label(url.host() ?? link, glyph: "external-link") }
                             .buttonStyle(PillButtonStyle(prominent: true))
                     }
-                    Label("Waiting for the link. This page moves on by itself.", systemImage: "clock")
+                    Label("Waiting for the link. This page moves on by itself.", glyph: "clock")
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
                 }
                 if metrics.wide { QRCode(text: link).frame(width: 180, height: 180) }
             }
         case .importing(let step)?:
-            Label(step, systemImage: "arrow.down.circle")
+            Label(step, glyph: "download")
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.text)
         case .done(let summary)?:
             VStack(alignment: .leading, spacing: 8) {
-                Label("Imported", systemImage: "checkmark.circle").font(.display(Theme.type.title2))
+                Label("Imported", glyph: "circle-check").font(.display(Theme.type.title2))
                 Text("\(summary.addonsImported) addons, \(summary.titles) titles, \(summary.inProgress) in progress, \(summary.watched) watched.")
-                ForEach(summary.addonsSkipped, id: \.self) { Label($0, systemImage: "minus.circle") }
+                ForEach(summary.addonsSkipped, id: \.self) { Label($0, glyph: "circle-minus") }
                 if summary.seriesUnmatched > 0 {
                     Text("Watched marks for \(summary.seriesUnmatched) series could not be matched to episodes.")
                 }
@@ -83,9 +83,9 @@ struct ImportScreen: View {
             .font(.text(Theme.type.body))
             .foregroundStyle(Theme.Palette.text)
         case .expired?:
-            StateLine(symbol: "clock.badge.xmark", text: "The code expired before it was linked.", action: ("New code", restart))
+            StateLine(symbol: "clock-alert", text: "The code expired before it was linked.", action: ("New code", restart))
         case .failed(let reason)?:
-            StateLine(symbol: "exclamationmark.triangle", text: reason, action: ("Try again", restart))
+            StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", restart))
         }
     }
 

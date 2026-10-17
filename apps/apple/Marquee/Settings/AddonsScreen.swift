@@ -28,7 +28,7 @@ struct AddonsScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
                 InstallField(addons: addons, focusRequest: focusLink ? 1 : 0)
                 if let failure = addons.failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure)
                 }
                 let all = addons.snapshot?.addons ?? []
                 ChipRow(
@@ -40,7 +40,7 @@ struct AddonsScreen: View {
                 // Moves use the index in the full list, which is the order the core keeps.
                 let shown = all.enumerated().filter { !sourcesOnly || $0.element.isSource }
                 if sourcesOnly, shown.isEmpty, addons.snapshot != nil {
-                    StateLine(symbol: "play.slash", text: "No source yet. Paste a source addon's link above.")
+                    StateLine(symbol: "circle-slash", text: "No source yet. Paste a source addon's link above.")
                 }
                 ForEach(shown, id: \.element.id) { index, addon in
                     AddonCard(
@@ -130,7 +130,7 @@ struct InstallField: View {
                     .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
                     .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
                 Button(action: installLink) {
-                    Label(installing ? "Installing" : "Install", systemImage: "plus")
+                    Label(installing ? "Installing" : "Install", glyph: "plus")
                 }
                 // The primary only once there is a link to install.
                 .buttonStyle(PillButtonStyle(prominent: !link.trimmingCharacters(in: .whitespaces).isEmpty))
@@ -150,7 +150,9 @@ struct InstallField: View {
     }
 }
 
-/// One addon: logo, name and version, host, description, what it provides, actions.
+/// One addon: logo, name and version, host, description, what it provides,
+/// and whether it is on. The whole card is one target (one focus stop on TV)
+/// that opens its actions; Remove comes last and asks first.
 private struct AddonCard: View {
     let addon: AddonInfo
     let first: Bool
@@ -159,8 +161,36 @@ private struct AddonCard: View {
     let move: (Int) -> Void
     let remove: () -> Void
     @Environment(\.metrics) private var metrics
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
+        Menu {
+            if addon.configurable, let url = configureURL {
+                Button("Configure", glyph: "settings") { openURL(url) }
+            }
+            Button("Move up", glyph: "arrow-up") { move(-1) }.disabled(first)
+            Button("Move down", glyph: "arrow-down") { move(1) }.disabled(last)
+            Button(addon.enabled ? "Turn off" : "Turn on", glyph: "power", action: toggle)
+            Divider()
+            Button("Remove", glyph: "trash", role: .destructive, action: remove)
+        } label: {
+            card
+        }
+        .menuStyle(.button)
+        .buttonStyle(CardButtonStyle(radius: Theme.Radius.m))
+        #if os(macOS)
+        .menuIndicator(.hidden)
+        #endif
+        .accessibilityHint("Opens its actions: move, turn off, remove")
+    }
+
+    /// Stremio's convention: the configure page sits beside the manifest.
+    private var configureURL: URL? {
+        guard addon.url.hasSuffix("manifest.json") else { return nil }
+        return URL(string: String(addon.url.dropLast("manifest.json".count)) + "configure")
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: Theme.Space.s) {
                 logo
@@ -182,19 +212,10 @@ private struct AddonCard: View {
                 }
                 .opacity(addon.enabled ? 1 : 0.55)
                 Spacer(minLength: 0)
+                SwitchMark(on: addon.enabled)
             }
-            FlowRow(spacing: 8) {
-                Button(action: toggle) {
-                    Label(addon.enabled ? "On" : "Off", systemImage: "power")
-                }
-                .accessibilityLabel(addon.enabled ? "Turn \(addon.name) off" : "Turn \(addon.name) on")
-                Button { move(-1) } label: { Label("Up", systemImage: "arrow.up") }.disabled(first)
-                Button { move(1) } label: { Label("Down", systemImage: "arrow.down") }.disabled(last)
-                Button(action: remove) { Label("Remove", systemImage: "trash") }
-            }
-            .buttonStyle(PillButtonStyle())
-            .controlSize(.small)
         }
+        .multilineTextAlignment(.leading)
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -214,6 +235,28 @@ private struct AddonCard: View {
             .frame(width: 48, height: 48)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
             .accessibilityHidden(true)
+    }
+
+    /// On or off as a labelled switch: a state, not a button (the card is the button).
+    private struct SwitchMark: View {
+        let on: Bool
+
+        var body: some View {
+            HStack(spacing: 8) {
+                Text(on ? "On" : "Off")
+                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .foregroundStyle(on ? Theme.Palette.text : Theme.Palette.muted)
+                Capsule()
+                    .fill(on ? Theme.Palette.ok : Theme.Palette.raised)
+                    .overlay(Capsule().strokeBorder(Theme.Palette.control))
+                    .frame(width: 36, height: 22)
+                    .overlay(alignment: on ? .trailing : .leading) {
+                        Circle().fill(.white).padding(3)
+                    }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(on ? "On" : "Off")
+        }
     }
 
     /// "Catalogs, Details for movie, series"

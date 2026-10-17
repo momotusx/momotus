@@ -21,7 +21,7 @@ struct LibraryScreen: View {
                     // A value, like the titles pushed from it: a destination link
                     // under a value push is popped when Library redraws.
                     NavigationLink(value: CalendarRoute()) {
-                        Label("Calendar", systemImage: "calendar")
+                        Label("Calendar", glyph: "calendar")
                     }
                     .buttonStyle(PillButtonStyle())
                 }
@@ -41,13 +41,13 @@ struct LibraryScreen: View {
                             select: { library.command(["type": "setSort", "sort": $0]) })
                     }
                     if s.items.isEmpty {
-                        StateLine(symbol: "books.vertical", text: total == 0
+                        StateLine(symbol: "library-big", text: total == 0
                             ? "Titles you add with \u{201C}Add to Library\u{201D} show up here."
                             : "Nothing of this type in your library.")
                     }
                     PosterGrid(tiles: s.items, caption: caption)
                 } else if let failure = library.failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure)
                 }
             }
             .padding(.horizontal, metrics.gutter)

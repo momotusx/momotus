@@ -43,7 +43,7 @@ struct HomeScreen: View {
         case .opening:
             EmptyView()
         case .failed(let message):
-            StateLine(symbol: "exclamationmark.triangle", text: message, action: ("Try again", model.reload))
+            StateLine(symbol: "triangle-alert", text: message, action: ("Try again", model.reload))
                 .padding(.horizontal, metrics.gutter)
         case .ready:
             ForEach(model.rows, id: \.rowId) { row in
@@ -67,9 +67,9 @@ struct HomeScreen: View {
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
             FlowRow(spacing: 12) {
-                Button { onboarding = true } label: { Label("Set up Marquee", systemImage: "wrench.and.screwdriver") }
+                Button { onboarding = true } label: { Label("Set up Marquee", glyph: "wrench") }
                     .buttonStyle(PillButtonStyle(prominent: true))
-                NavigationLink { AddonsPage(core: core) } label: { Label("Addons", systemImage: "puzzlepiece.extension") }
+                NavigationLink { AddonsPage(core: core) } label: { Label("Addons", glyph: "puzzle") }
                     .buttonStyle(PillButtonStyle())
             }
         }

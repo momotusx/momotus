@@ -24,46 +24,46 @@ struct SettingsScreen: View {
                 NavigationLink {
                     AddonsScreen(addons: addons)
                 } label: {
-                    SettingsRow(symbol: "puzzlepiece.extension", title: "Addons", detail: addonsSummary)
+                    SettingsRow(symbol: "puzzle", title: "Addons", detail: addonsSummary)
                 }
                 .buttonStyle(.plain)
                 NavigationLink {
                     ImportScreen(core: core)
                 } label: {
-                    SettingsRow(symbol: "square.and.arrow.down", title: "Import from Stremio", detail: "Addons, library and progress, with a code. No password typed here.")
+                    SettingsRow(symbol: "download", title: "Import from Stremio", detail: "Addons, library and progress, with a code. No password typed here.")
                 }
                 .buttonStyle(.plain)
                 NavigationLink {
                     DebridScreen(core: core)
                 } label: {
-                    SettingsRow(symbol: "bolt.horizontal", title: "Debrid services", detail: "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.")
+                    SettingsRow(symbol: "zap", title: "Debrid services", detail: "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.")
                 }
                 .buttonStyle(.plain)
                 NavigationLink {
                     HomeRowsScreen(core: core)
                 } label: {
-                    SettingsRow(symbol: "rectangle.grid.1x2", title: "Home rows", detail: "Which catalogs Home shows, and in what order.")
+                    SettingsRow(symbol: "list-video", title: "Home rows", detail: "Which catalogs Home shows, and in what order.")
                 }
                 .buttonStyle(.plain)
                 NavigationLink {
                     OnboardingScreen(core: core, start: .check)
                 } label: {
-                    SettingsRow(symbol: "checklist", title: "Setup check", detail: "Network, display, catalogs, sources and subtitles at a glance.")
+                    SettingsRow(symbol: "monitor-check", title: "Setup check", detail: "Network, display, catalogs, sources and subtitles at a glance.")
                 }
                 .buttonStyle(.plain)
-                section("Sync").padding(.top, Theme.Space.s)
+                section("Devices and sync").padding(.top, Theme.Space.s)
                 if sync.joined {
                     NavigationLink {
                         SyncScreen()
                     } label: {
-                        SettingsRow(symbol: "arrow.triangle.2.circlepath", title: "Sync", detail: syncSummary)
+                        SettingsRow(symbol: "refresh-cw", title: "Sync", detail: syncSummary)
                     }
                     .buttonStyle(.plain)
                 } else {
                     NavigationLink {
                         PairingScreen(core: core)
                     } label: {
-                        SettingsRow(symbol: "qrcode", title: "Pair this device", detail: "Join your sync account by scanning a code on a device that already syncs.")
+                        SettingsRow(symbol: "qr-code", title: "Pair this device", detail: "Join your sync account by scanning a code on a device that already syncs.")
                     }
                     .buttonStyle(.plain)
                 }
@@ -72,12 +72,17 @@ struct SettingsScreen: View {
                     playback(p)
                 }
                 if let failure = prefs.failure ?? addons.failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure)
                 }
                 section("About").padding(.top, Theme.Space.s)
                 Text("Marquee \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""), core \(core.version)")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
+                // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
+                Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Fraunces, Inter and IBM Plex Mono, SIL Open Font License 1.1.")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: 880, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -197,8 +202,7 @@ struct SettingsRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.s) {
-            Image(systemName: symbol)
-                .font(.system(size: 20))
+            Glyph(symbol, size: 22)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
@@ -207,7 +211,7 @@ struct SettingsRow: View {
                     .foregroundStyle(Theme.Palette.muted)
             }
             Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(Theme.Palette.muted)
+            Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
         }
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s)

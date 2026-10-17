@@ -9,6 +9,8 @@ struct PlayerScreen: View {
     @State private var controls = true
     @State private var lastTouch = ContinuousClock.now
     @State private var showNextVersions = false
+    /// This title's Versions, after every source of the pick failed.
+    @State private var showVersions = false
     /// An OSD menu is open: the controls stay up.
     @State private var menuOpen = false
     let core: CoreClient
@@ -45,7 +47,7 @@ struct PlayerScreen: View {
                 .allowsHitTesting(false)
                 .animation(Theme.Motion.panel, value: controls)
             }
-            StatusOverlay(model: model, back: close)
+            StatusOverlay(model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true })
             if controls, model.playback?.phase != "failed", !model.showEndCard {
                 PlayerControls(model: model, versions: model.versions, back: close) { open in
                     menuOpen = open
@@ -80,6 +82,11 @@ struct PlayerScreen: View {
         .animation(Theme.Motion.panel, value: model.showNext)
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
+        .navigationDestination(isPresented: $showVersions) {
+            if let versions = model.versions {
+                VersionsScreen(model: versions, heading: model.route.target.title, core: core)
+            }
+        }
         .navigationDestination(isPresented: $showNextVersions) {
             if let versions = model.nextVersions, let next = model.next {
                 VersionsScreen(model: versions, heading: "S\(next.season):E\(next.episode) \(next.title)", core: core)
@@ -152,7 +159,7 @@ private struct SkipButton: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 10) {
-            Button(action: skip) { Label(segment.label, systemImage: "forward.end.fill") }
+            Button(action: skip) { Label(segment.label, glyph: "skip-forward") }
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .focused($focused)
             Text("Skip data: \(segment.source)")
@@ -186,6 +193,18 @@ private struct SubtitleLine: View {
 private struct StatusOverlay: View {
     let model: PlayerModel
     let back: () -> Void
+    /// Opens this title's Versions: failover only tries the same release from
+    /// other sources, so another version is the way on.
+    let chooseVersion: (() -> Void)?
+
+    @ViewBuilder private var actions: some View {
+        if let chooseVersion {
+            Button("Choose another version", action: chooseVersion).buttonStyle(PillButtonStyle(prominent: true)).fixedSize()
+            Button("Back", action: back).buttonStyle(PillButtonStyle()).fixedSize()
+        } else {
+            Button("Back", action: back).buttonStyle(PillButtonStyle(prominent: true))
+        }
+    }
 
     var body: some View {
         if model.playback?.phase == "failed" {
@@ -193,16 +212,22 @@ private struct StatusOverlay: View {
                 Text("This could not play")
                     .font(.display(Theme.type.title1))
                 ForEach(Array((model.playback?.attempts ?? []).enumerated()), id: \.offset) { _, attempt in
-                    Label("\(attempt.via): \(attempt.error)", systemImage: "xmark.circle")
+                    Label("\(attempt.via): \(attempt.error)", glyph: "circle-x")
                         .font(.text(Theme.type.body))
                         .foregroundStyle(Theme.Palette.muted)
                 }
-                Button("Back", action: back).buttonStyle(PillButtonStyle(prominent: true)).padding(.top, 8)
+                // Side by side when they fit, else stacked with the way on first.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Space.s) { actions }
+                    VStack(alignment: .leading, spacing: 10) { actions }
+                }
+                .padding(.top, 8)
             }
             .foregroundStyle(Theme.Palette.text)
             .padding(Theme.Space.l)
             .frame(maxWidth: 640, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Theme.Radius.m).fill(Theme.Palette.surface))
+            .padding(.horizontal, Theme.Space.m)
         } else if model.firstFrameMs == nil || model.waiting {
             VStack(spacing: 14) {
                 ProgressView().controlSize(.large).tint(.white)

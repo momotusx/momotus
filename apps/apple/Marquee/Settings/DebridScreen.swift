@@ -64,7 +64,7 @@ struct DebridScreen: View {
                     row(service)
                 }
                 if let status {
-                    Label(status, systemImage: "checkmark.circle")
+                    Label(status, glyph: "circle-check")
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
                 }
@@ -87,7 +87,7 @@ struct DebridScreen: View {
             HStack {
                 Text(service.name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                 if saved[service.id] == true {
-                    Label("Key saved", systemImage: "lock").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.ok)
+                    Label("Key saved", glyph: "lock").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.ok)
                 }
                 Spacer()
                 if let url = URL(string: service.keyPage) {

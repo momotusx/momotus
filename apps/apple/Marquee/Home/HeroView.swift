@@ -70,11 +70,11 @@ struct HeroView: View {
             }
             HStack(spacing: 12) {
                 NavigationLink(value: TitleRoute(tile)) {
-                    Label("Play", systemImage: "play.fill")
+                    Label("Play", glyph: "play-fill")
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
                 NavigationLink(value: TitleRoute(tile)) {
-                    Label("Details", systemImage: "info.circle")
+                    Label("Details", glyph: "info")
                 }
                 .buttonStyle(PillButtonStyle())
             }

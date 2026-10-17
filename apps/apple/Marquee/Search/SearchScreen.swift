@@ -17,12 +17,12 @@ struct SearchScreen: View {
             VStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 field.padding(.horizontal, metrics.gutter)
                 if let failure = search.failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure).padding(.horizontal, metrics.gutter)
+                    StateLine(symbol: "triangle-alert", text: failure).padding(.horizontal, metrics.gutter)
                 }
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     recent.padding(.horizontal, metrics.gutter)
                 } else if let snapshot = search.snapshot, snapshot.rows.isEmpty, snapshot.query == query {
-                    StateLine(symbol: "magnifyingglass", text: "Nothing in your catalogs matches \u{201C}\(query)\u{201D}.")
+                    StateLine(symbol: "search", text: "Nothing in your catalogs matches \u{201C}\(query)\u{201D}.")
                         .padding(.horizontal, metrics.gutter)
                 }
                 ForEach(search.snapshot?.rows ?? [], id: \.rowId) { row in
@@ -48,7 +48,7 @@ struct SearchScreen: View {
 
     private var field: some View {
         HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass").foregroundStyle(Theme.Palette.muted)
+            Glyph("search").foregroundStyle(Theme.Palette.muted)
             TextField("Movies, series, people", text: $query)
                 .textFieldStyle(.plain)
                 .font(.text(Theme.type.headline + 2, relativeTo: .title3))
@@ -61,7 +61,7 @@ struct SearchScreen: View {
                 #endif
             if !query.isEmpty {
                 Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.Palette.muted)
+                    Glyph("circle-x").foregroundStyle(Theme.Palette.muted)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -78,7 +78,7 @@ struct SearchScreen: View {
     @ViewBuilder private var recent: some View {
         let recent = search.snapshot?.recent ?? []
         if recent.isEmpty {
-            StateLine(symbol: "sparkle.magnifyingglass", text: "Search finds titles in every catalog your addons offer.")
+            StateLine(symbol: "search", text: "Search finds titles in every catalog your addons offer.")
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 Text("RECENT")
@@ -87,7 +87,7 @@ struct SearchScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
                 FlowRow(spacing: 10) {
                     ForEach(recent, id: \.self) { text in
-                        Button { query = text } label: { Label(text, systemImage: "clock.arrow.circlepath") }
+                        Button { query = text } label: { Label(text, glyph: "history") }
                             .buttonStyle(ChipStyle(selected: false))
                     }
                 }

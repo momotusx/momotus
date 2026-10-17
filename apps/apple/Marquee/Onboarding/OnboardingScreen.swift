@@ -80,7 +80,7 @@ struct OnboardingScreen: View {
                 .foregroundStyle(Theme.Palette.muted)
             let doors = Group {
                 Button { showImport = true } label: {
-                    Door(symbol: "door.left.hand.open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
+                    Door(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
                 }
                 Button { step = .source } label: {
                     Door(symbol: "sparkle", title: "Start fresh", text: "Browse catalogs right away. Add a source when you want to play.")
@@ -105,7 +105,7 @@ struct OnboardingScreen: View {
             let sources = (addons.snapshot?.addons ?? []).filter(\.isSource)
             ForEach(sources) { addon in
                 HStack(spacing: 10) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.Palette.ok).accessibilityHidden(true)
+                    Glyph("circle-check").foregroundStyle(Theme.Palette.ok).accessibilityHidden(true)
                     Text(addon.name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                     Text("Installed").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
                 }
@@ -252,7 +252,7 @@ private struct Door: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.s) {
-            Image(systemName: symbol).font(.system(size: 26)).frame(width: 36)
+            Glyph(symbol, size: 26).frame(width: 36)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.display(Theme.type.title3))
                 Text(text)
@@ -261,7 +261,7 @@ private struct Door: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right").foregroundStyle(Theme.Palette.muted)
+            Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
         }
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s + 4)

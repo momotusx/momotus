@@ -24,7 +24,7 @@ struct UpNextCard: View {
                             .foregroundStyle(.white)
                             .lineLimit(2)
                         if model.startingNext {
-                            Label("Finding a version", systemImage: "clock")
+                            Label("Finding a version", glyph: "clock")
                                 .font(.text(Theme.type.callout, relativeTo: .callout))
                                 .foregroundStyle(.white.opacity(0.8))
                         } else if model.autoplayNext {
@@ -36,7 +36,7 @@ struct UpNextCard: View {
                     }
                 }
                 HStack(spacing: 10) {
-                    Button { Task { await model.playNext() } } label: { Label("Play now", systemImage: "forward.end.fill") }
+                    Button { Task { await model.playNext() } } label: { Label("Play now", glyph: "skip-forward") }
                         .buttonStyle(PillButtonStyle(prominent: true))
                     Button("Cancel", action: model.cancelNext)
                         .buttonStyle(PillButtonStyle())
@@ -81,7 +81,7 @@ struct EndCard: View {
 
     @ViewBuilder private var content: some View {
         if let next = model.next, let failure = model.nextFailure {
-            Image(systemName: "exclamationmark.circle").font(.system(size: 34)).accessibilityHidden(true)
+            Glyph("circle-alert", size: 34).accessibilityHidden(true)
             heading("S\(next.season):E\(next.episode) \(next.title)")
             Text(failure)
                 .font(.text(Theme.type.body))
@@ -100,10 +100,10 @@ struct EndCard: View {
             kicker("Next episode")
             heading("S\(next.season):E\(next.episode) \(next.title)")
             actions {
-                Button { Task { await model.playNext() } } label: { Label("Next episode", systemImage: "forward.end.fill") }
+                Button { Task { await model.playNext() } } label: { Label("Next episode", glyph: "skip-forward") }
                     .buttonStyle(PillButtonStyle(prominent: true))
                     .focused($focused)
-                Button { model.playAgain() } label: { Label("Play again", systemImage: "arrow.counterclockwise") }
+                Button { model.playAgain() } label: { Label("Play again", glyph: "rotate-ccw") }
                     .buttonStyle(PillButtonStyle())
                 Button("Back to \(title)", action: back).buttonStyle(PillButtonStyle())
             }
@@ -112,7 +112,7 @@ struct EndCard: View {
             heading(title)
             actions {
                 Button("Back to \(title)", action: back).buttonStyle(PillButtonStyle(prominent: true)).focused($focused)
-                Button { model.playAgain() } label: { Label("Play again", systemImage: "arrow.counterclockwise") }
+                Button { model.playAgain() } label: { Label("Play again", glyph: "rotate-ccw") }
                     .buttonStyle(PillButtonStyle())
             }
         }

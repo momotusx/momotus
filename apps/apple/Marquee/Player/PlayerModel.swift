@@ -101,7 +101,12 @@ final class PlayerModel {
             guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
                   let self, generation == self.generation else { return }
             audioGroup = group
-            audioTracks = group.options.map(\.displayName)
+            // A track tagged "und" (undetermined) or not at all would read "Unknown language".
+            audioTracks = group.options.enumerated().map { index, option in
+                let tag = option.extendedLanguageTag ?? option.locale?.identifier ?? ""
+                if !tag.isEmpty, !tag.hasPrefix("und") { return option.displayName }
+                return group.options.count == 1 ? "Default" : "Track \(index + 1)"
+            }
             audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
         }
     }

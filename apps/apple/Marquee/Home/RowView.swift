@@ -15,10 +15,10 @@ struct RowView: View {
             case .loading, .slow:
                 SkeletonStrip()
             case .empty:
-                StateLine(symbol: "tray", text: "Nothing in this catalog right now.")
+                StateLine(symbol: "inbox", text: "Nothing in this catalog right now.")
                     .padding(.horizontal, metrics.gutter)
             case .failed(let reason):
-                StateLine(symbol: "exclamationmark.triangle", text: "\(row.source) did not answer: \(reason)", action: ("Try again", retry))
+                StateLine(symbol: "triangle-alert", text: "\(row.source) did not answer: \(reason)", action: ("Try again", retry))
                     .padding(.horizontal, metrics.gutter)
             case .ready:
                 strip

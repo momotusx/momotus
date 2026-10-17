@@ -56,7 +56,7 @@ struct VersionsScreen: View {
             }
             .foregroundStyle(Theme.Palette.text)
             if let progress = progressLine {
-                Label(progress, systemImage: snapshot?.done == true ? "checkmark.circle" : "clock")
+                Label(progress, glyph: snapshot?.done == true ? "circle-check" : "clock")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
             }
@@ -89,7 +89,7 @@ struct VersionsScreen: View {
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
                 // Never the end of the road: a source is the way on.
-                Button { addSource = true } label: { Label("Add a source", systemImage: "plus") }
+                Button { addSource = true } label: { Label("Add a source", glyph: "plus") }
                     .buttonStyle(PillButtonStyle(prominent: true))
                     .padding(.top, 6)
             }
@@ -130,7 +130,7 @@ struct VersionsScreen: View {
                         Button {
                             expanded.insert(group)
                         } label: {
-                            Label("Show all \(rows.count)", systemImage: "chevron.down")
+                            Label("Show all \(rows.count)", glyph: "chevron-down")
                         }
                         .buttonStyle(.plain)
                         .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
@@ -145,7 +145,7 @@ struct VersionsScreen: View {
                     let reasons = Text(VersionWords.hidden(hidden)).foregroundStyle(Theme.Palette.muted)
                     Text("\(Text("Hidden (\(hidden.count))").fontWeight(.semibold))  \(reasons)")
                 } icon: {
-                    Image(systemName: "eye.slash")
+                    Glyph("eye-off")
                 }
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.text)
@@ -192,17 +192,18 @@ private struct PickCard: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(row.reasons, id: \.self) { reason in
-                    Label(VersionWords.reason(reason), systemImage: "checkmark")
+                    Label(VersionWords.reason(reason), glyph: "check")
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.text)
                 }
             }
-            Text(row.releaseName)
+            // Wraps at the dots between tokens, never inside one ("mp" / "4"). Not
+            // selectable: a copy would carry the zero-width break points.
+            Text(row.releaseName.replacingOccurrences(of: ".", with: ".\u{200B}"))
                 .font(.mono(Theme.type.caption + 1))
                 .foregroundStyle(Theme.Palette.muted)
-                .selectableText()
             Button(action: play) {
-                Label("Play this version", systemImage: "play.fill")
+                Label("Play this version", glyph: "play-fill")
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .padding(.top, 6)
@@ -254,24 +255,22 @@ private struct VersionRowView: View {
                         Text(row.via).foregroundStyle(Theme.Palette.muted).frame(width: 120, alignment: .leading)
                     }
                 } else {
-                    HStack {
-                        Text(VersionWords.cell(row.quality))
-                            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                        Text(row.features.joined(separator: "  "))
-                        Spacer()
-                        Text(VersionWords.size(row.sizeBytes) ?? "").monospacedDigit()
-                    }
-                    HStack {
-                        status
-                        Spacer()
-                        Text(row.via).foregroundStyle(Theme.Palette.muted)
+                    // Phone: two lines, "720p · HDR10 · 1.2 GB" over "Torrent, 12 seeds · Torrentio".
+                    Text(([VersionWords.cell(row.quality)] + row.features + [VersionWords.size(row.sizeBytes)].compactMap { $0 })
+                        .joined(separator: " \u{B7} "))
+                        .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    HStack(spacing: 6) {
+                        Circle().fill(VersionWords.statusColor(row.status)).frame(width: 8, height: 8)
+                        Text("\(VersionWords.status(row.status)) \u{B7} \(row.via)")
                     }
                 }
                 if !wide || hovered {
+                    // One line on a phone, cut in the middle so the name never splits inside a token.
                     Text(row.releaseName)
                         .font(.mono(Theme.type.caption))
                         .foregroundStyle(Theme.Palette.muted)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
             .font(.text(Theme.type.callout, relativeTo: .callout))

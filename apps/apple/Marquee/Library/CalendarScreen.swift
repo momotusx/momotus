@@ -28,7 +28,7 @@ struct CalendarScreen: View {
                             DaySection(day: day, today: s.today).id(day.date)
                         }
                     } else if let failure = calendar.failure {
-                        StateLine(symbol: "exclamationmark.triangle", text: failure)
+                        StateLine(symbol: "triangle-alert", text: failure)
                     }
                 }
                 .frame(maxWidth: 880, alignment: .leading)
@@ -60,11 +60,11 @@ struct CalendarScreen: View {
         }
         if !s.failed.isEmpty {
             StateLine(
-                symbol: "exclamationmark.triangle",
+                symbol: "triangle-alert",
                 text: "Could not load " + s.failed.map { series in series.reason.map { "\(series.name) (\($0))" } ?? series.name }.joined(separator: ", "))
         }
         if !s.noSchedule.isEmpty {
-            StateLine(symbol: "calendar.badge.exclamationmark", text: "No dated episodes yet: " + s.noSchedule.map(\.name).joined(separator: ", "))
+            StateLine(symbol: "calendar-x", text: "No dated episodes yet: " + s.noSchedule.map(\.name).joined(separator: ", "))
         }
         if s.days.isEmpty, s.pending == 0 {
             StateLine(symbol: "calendar", text: "Nothing airs from a week ago to a month ahead. Series you add to your Library show their episodes here.")
@@ -134,11 +134,11 @@ private struct CalendarRow: View {
             }
             Spacer(minLength: 0)
             if item.watched {
-                Image(systemName: "checkmark")
+                Glyph("check")
                     .foregroundStyle(Theme.Palette.muted)
                     .accessibilityLabel("Watched")
             }
-            Image(systemName: "chevron.right")
+            Glyph("chevron-right")
                 .foregroundStyle(Theme.Palette.muted)
                 .accessibilityHidden(true)
         }

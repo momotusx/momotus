@@ -7,11 +7,11 @@ enum AppTab: String, CaseIterable, Hashable {
 
     var symbol: String {
         switch self {
-        case .search: "magnifyingglass"
+        case .search: "search"
         case .home: "house"
-        case .discover: "safari"
-        case .library: "books.vertical"
-        case .settings: "gearshape"
+        case .discover: "compass"
+        case .library: "library-big"
+        case .settings: "settings"
         }
     }
 }
@@ -43,7 +43,7 @@ struct RootView: View {
             } else {
                 TabView(selection: $tab) {
                     ForEach(AppTab.allCases, id: \.self) { item in
-                        Tab(item.title, systemImage: item.symbol, value: item) { screen(item) }
+                        Tab(item.title, image: item.symbol, value: item) { screen(item) }
                     }
                 }
             }
@@ -135,7 +135,7 @@ private struct Sidebar: View {
                 Button {
                     selection = tab
                 } label: {
-                    Label(tab.title, systemImage: tab.symbol)
+                    Label(tab.title, glyph: tab.symbol)
                 }
                 .buttonStyle(SidebarItemStyle(selected: tab == selection))
                 .accessibilityAddTraits(tab == selection ? .isSelected : [])

@@ -33,7 +33,7 @@ struct TitleScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.l) {
                 hero
                 if let failure = model.failure {
-                    StateLine(symbol: "exclamationmark.triangle", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure)
                         .padding(.horizontal, metrics.gutter)
                 }
                 lower
@@ -215,7 +215,7 @@ struct TitleScreen: View {
                     addSource: { showAddons = true })
                 actions(details)
             } else if case .failed(let reason) = model.header?.state {
-                StateLine(symbol: "exclamationmark.triangle", text: reason, action: ("Try again", model.retry))
+                StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
             } else {
                 Text("Loading details")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
@@ -233,18 +233,18 @@ struct TitleScreen: View {
         let count = versions?.snapshot.map { $0.rows.count + ($0.recommended == nil ? 0 : 1) } ?? 0
         return FlowRow(spacing: 12) {
             Button { showVersions = true } label: {
-                Label(count > 0 ? "Versions (\(count))" : "Versions", systemImage: "square.stack.3d.up")
+                Label(count > 0 ? "Versions (\(count))" : "Versions", glyph: "layers")
             }
             .disabled(versions == nil)
             if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
-                Button { openURL(url) } label: { Label("Trailer", systemImage: "film") }
+                Button { openURL(url) } label: { Label("Trailer", glyph: "film") }
             }
             Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
-                Label(inLibrary ? "In Library" : "Add to Library", systemImage: inLibrary ? "bookmark.fill" : "bookmark")
+                Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
             }
             if details.kind == "movie" {
                 Button { model.setWatched(details.id, !watched); sync.schedule() } label: {
-                    Label(watched ? "Watched" : "Mark as watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle")
+                    Label(watched ? "Watched" : "Mark as watched", glyph: watched ? "circle-check" : "circle-check")
                 }
             }
         }
@@ -379,14 +379,14 @@ private struct PlayBlock: View {
         VStack(alignment: .leading, spacing: 10) {
             if versions?.done == true, versions?.recommended == nil {
                 Button(action: addSource) {
-                    Label("Add a source", systemImage: "plus")
+                    Label("Add a source", glyph: "plus")
                         .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
             } else {
                 Button(action: play) {
                     HStack(spacing: 10) {
-                        Image(systemName: "play.fill")
+                        Glyph("play-fill")
                         Text(target?.label ?? "Play")
                         if let resume = target?.resumeMs, resume > 0 {
                             Text("from \(clock(ms: resume))").fontWeight(.regular).opacity(0.8)
@@ -400,7 +400,7 @@ private struct PlayBlock: View {
             }
             Group {
                 if let failure {
-                    Label("Versions could not load: \(failure)", systemImage: "exclamationmark.triangle")
+                    Label("Versions could not load: \(failure)", glyph: "triangle-alert")
                         .foregroundStyle(Theme.Palette.muted)
                 } else {
                     VersionLine(versions: versions)
@@ -419,13 +419,13 @@ private struct VersionLine: View {
 
     var body: some View {
         if let best = versions?.recommended {
-            let dot = Text(Image(systemName: "circle.fill")).font(.system(size: 8)).foregroundStyle(VersionWords.statusColor(best.status))
+            let dot = Text("\u{25CF}").font(.system(size: 9)).foregroundStyle(VersionWords.statusColor(best.status))
             let via = Text("via \(best.via)").foregroundStyle(Theme.Palette.muted)
             Text("\(VersionWords.line(best))   \(dot) \(VersionWords.status(best.status))   \(via)")
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityLabel("\(VersionWords.line(best)), \(VersionWords.status(best.status)), via \(best.via)")
         } else if let versions, versions.done {
-            Label(VersionWords.none(versions), systemImage: "exclamationmark.circle")
+            Label(VersionWords.none(versions), glyph: "circle-alert")
                 .foregroundStyle(Theme.Palette.muted)
         } else {
             HStack(spacing: 8) {
