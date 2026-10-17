@@ -66,6 +66,8 @@ class DebridStore(
         val generation: String,
         val write: Boolean,
         val run: suspend () -> Unit,
+        /** Undoes what queueing it did, when it is settled without running (cancellation). */
+        val discard: () -> Unit,
     ) {
         @Volatile var dropped = false
         val done = CompletableDeferred<Unit>()
@@ -132,7 +134,7 @@ class DebridStore(
             gone += generation
             queues[service]?.forEach { if (it.write && it.generation == generation) it.dropped = true }
             val done =
-                enqueue(service, generation, write = false) {
+                enqueue(service, generation, write = false, discard = { synchronized(lock) { gone -= generation } }) {
                     try {
                         keystore.writeTombstone(tombstone)
                     } catch (e: Exception) {
@@ -185,9 +187,10 @@ class DebridStore(
         service: String,
         generation: String,
         write: Boolean,
+        discard: () -> Unit = {},
         run: suspend () -> Unit,
     ): CompletableDeferred<Unit> {
-        val task = Task(generation, write, run)
+        val task = Task(generation, write, run, discard)
         val pump =
             synchronized(lock) {
                 // Checked with the insert, under one lock: a write of a generation
@@ -200,12 +203,40 @@ class DebridStore(
                 if (service in pumps) {
                     null
                 } else {
-                    // Registered before it runs, so its own exit can remove it.
-                    scope.launch(start = CoroutineStart.LAZY) { pump(service) }.also { pumps[service] = it }
+                    // Registered before it runs, so its own exit can remove it. The
+                    // completion handler sits outside the body: it also runs when the
+                    // scope was cancelled before the pump ever started.
+                    val job = scope.launch(start = CoroutineStart.LAZY) { pump(service) }
+                    pumps[service] = job
+                    job.invokeOnCompletion { cause -> if (cause != null) abandon(service, job, cause) }
+                    job
                 }
             }
         pump?.start()
         return task.done
+    }
+
+    /**
+     * A pump ended by cancellation: unregister it and settle what it left queued, undoing what
+     * queueing did, so `idle` returns, a later task starts a new pump, and a disconnect that never
+     * ran does not keep its generation marked gone.
+     */
+    private fun abandon(
+        service: String,
+        job: Job,
+        cause: Throwable,
+    ) {
+        val left =
+            synchronized(lock) {
+                if (pumps[service] !== job) return
+                pumps.remove(service)
+                queues.remove(service)?.toList().orEmpty()
+            }
+        val reason = cause as? CancellationException ?: CancellationException("the debrid store stopped")
+        for (task in left) {
+            task.discard()
+            task.done.completeExceptionally(reason)
+        }
     }
 
     private suspend fun pump(service: String) {
@@ -223,15 +254,8 @@ class DebridStore(
                 task.run()
                 task.done.complete(Unit)
             } catch (e: CancellationException) {
-                // The scope is going: settle everything queued and unregister, so
-                // `idle` returns and a later task starts a new pump.
+                // The pump ends; `abandon` settles what is left queued.
                 task.done.completeExceptionally(e)
-                val left =
-                    synchronized(lock) {
-                        pumps.remove(service)
-                        queues.remove(service)?.toList().orEmpty()
-                    }
-                left.forEach { it.done.completeExceptionally(e) }
                 throw e
             } catch (e: Exception) {
                 task.done.completeExceptionally(e)

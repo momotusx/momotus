@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
@@ -30,6 +31,7 @@ import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /** Replays apps/shared/debrid-storage-vectors.json, the cases every app's helper passes. */
@@ -232,12 +234,22 @@ class DebridStoreTest {
 
         @Volatile var cancelWrites = false
 
+        /** When set, a record write waits for it and then throws cancellation. */
+        @Volatile var writeGate: CompletableDeferred<Unit>? = null
+
+        @Volatile var writeWaiting = false
+
         override suspend fun records() = stored.values.toList()
 
         override suspend fun tombstones() = stones.toList()
 
         override suspend fun writeRecord(record: DebridRecord) {
             if (cancelWrites) throw CancellationException("scope going")
+            writeGate?.let {
+                writeWaiting = true
+                it.await()
+                throw CancellationException("scope going")
+            }
             stored[record.service] = record
         }
 
@@ -321,6 +333,44 @@ class DebridStoreTest {
             store.pending(listOf(record("g1", 2)))
             withTimeout(5_000) { store.idle() }
             assertEquals(2L, shared.stored["torbox"]?.revision)
+            scope.cancel()
+        }
+
+    @Test
+    fun aCancelledScopeSettlesEverything() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { it.cancel() }
+            val shared = Shared()
+            shared.stored["torbox"] = record("g1", 1)
+            val store = DebridStore(shared, shared, scope)
+            store.pending(listOf(record("g1", 2)))
+            val drop = store.disconnect("torbox", "g1")
+            withTimeout(5_000) { store.idle() }
+            assertTrue(drop.isCancelled)
+            assertEquals(1L, shared.stored["torbox"]?.revision)
+            assertEquals(emptyList(), shared.stones.toList())
+        }
+
+    @Test
+    fun aDisconnectDroppedByCancellationLeavesItsGenerationWritable() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val shared = Shared()
+            val gate = CompletableDeferred<Unit>()
+            shared.writeGate = gate
+            val store = DebridStore(shared, shared, scope)
+            store.pending(listOf(record("g1", 1)))
+            withTimeout(5_000) { while (!shared.writeWaiting) delay(5) }
+            // Queued behind the held write, then thrown away when that write is cancelled.
+            val drop = store.disconnect("torbox", "g1")
+            shared.writeGate = null
+            gate.complete(Unit)
+            withTimeout(5_000) { store.idle() }
+            assertTrue(drop.isCancelled)
+            store.pending(listOf(record("g1", 2)))
+            withTimeout(5_000) { store.idle() }
+            assertEquals(2L, shared.stored["torbox"]?.revision, "the generation is still written")
+            assertEquals(emptyList(), shared.stones.toList())
             scope.cancel()
         }
 
