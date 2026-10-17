@@ -16,10 +16,9 @@ const tile = (t: Partial<Tile>): Tile => ({
   ...t,
 });
 
-test("captions say where you are without guessing the kind", () => {
-  expect(caption(tile({ progress: 0.37, videoId: "tt1:2:3" }))).toBe("S2:E3, 37% watched");
-  expect(caption(tile({ kind: "movie", progress: 0.24, videoId: "tt9" }))).toBe("Movie, 24% watched");
-  expect(caption(tile({ progress: 0.37 }))).toBe("37% watched");
-  expect(caption(tile({ releaseInfo: "Next: S1 E2", videoId: "tt1:1:2" }))).toBe("Next: S1 E2");
-  expect(caption(tile({}))).toBeNull();
+test("Continue Watching shows the core's caption as is; catalog tiles show none", () => {
+  expect(caption(tile({ progress: 0.37, videoId: "tt1:2:3", releaseInfo: "S2:E3 · 36 min left" }))).toBe("S2:E3 · 36 min left");
+  expect(caption(tile({ kind: "movie", progress: 0.24, releaseInfo: "1 h 12 min left" }))).toBe("1 h 12 min left");
+  expect(caption(tile({ releaseInfo: "Next: S1:E2", videoId: "tt1:1:2" }))).toBe("Next: S1:E2");
+  expect(caption(tile({ releaseInfo: "2011–2019" }))).toBeNull();
 });

@@ -15,7 +15,7 @@ import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
 import { bytes, decoded, playPath, releaseParts } from "../lib/format";
-import { groupLabel, groupOrder, hiddenSummary, languageName, qualityText, reasonText, statusText } from "../lib/words";
+import { groupLabel, groupOrder, hiddenSummary, languageName, qualityCell, qualityText, reasonText, statusText } from "../lib/words";
 import "./versions.css";
 
 const SHOWN = 3;
@@ -238,7 +238,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                         {(r) => (
                           <button class="vrow" data-f={`v:${r.key}`} onClick={() => play(r.key)}>
                             <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
-                              {qualityText(r.quality)}
+                              {qualityCell(r.quality)}
                             </span>
                             <span class="chips">
                               <For each={r.features}>{(f) => <span>{f}</span>}</For>

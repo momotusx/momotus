@@ -213,9 +213,11 @@ const plays = (type: string) => decodes(type) || document.createElement("video")
 /** What this browser can show and decode, so Versions ranks for it. A web
  * player decodes audio itself (no passthrough) and has no second engine. */
 export function displayCaps(): DeviceCaps {
-  const lines = Math.min(screen.width, screen.height) * (window.devicePixelRatio || 1);
+  // The display, never the window: a small window on a 1080p screen still
+  // shows 1080p when it goes full screen. Taller than 720 lines counts as 1080.
+  const lines = screen.height * (window.devicePixelRatio || 1);
   return {
-    displayHeight: lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : 720,
+    displayHeight: lines >= 2000 ? 2160 : lines > 720 ? 1080 : 720,
     hdr: matchMedia("(dynamic-range: high)").matches ? ["hdr10", "hlg"] : [],
     decoders: DECODERS.filter(([, type]) => decodes(type)).map(([name]) => name),
     tenBitHevc: decodes('video/mp4; codecs="hvc1.2.4.L120.90"'),

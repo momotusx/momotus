@@ -3,7 +3,8 @@ import BookmarkCheck from "lucide-solid/icons/bookmark-check";
 import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
 import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
-import CircleCheck from "lucide-solid/icons/circle-check";
+import LoaderCircle from "lucide-solid/icons/loader-circle";
+import Plus from "lucide-solid/icons/plus";
 import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
@@ -14,6 +15,7 @@ import { type TitleView, titleView, versionsView } from "../core/client";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
+import { form } from "../form";
 import { bytes, clock, decoded, episodeLabel, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { kindLabel, qualityText, statusText } from "../lib/words";
 import "./title.css";
@@ -36,6 +38,8 @@ function TitlePage(props: { kind: string; id: string }) {
   const target = () => header()?.playTarget ?? null;
   const series = () => props.kind !== "movie" && (header()?.seasons.length ?? 0) > 0;
   const [trailerOpen, setTrailerOpen] = createSignal(false);
+  const [synOpen, setSynOpen] = createSignal(false);
+  const [artMissing, setArtMissing] = createSignal(false);
   // Closing returns focus to the button that opened it.
   const closeTrailer = () => {
     setTrailerOpen(false);
@@ -75,8 +79,10 @@ function TitlePage(props: { kind: string; id: string }) {
   };
 
   return (
-    <div class="title-scr" classList={{ movie: !series() }}>
-      <Backdrop src={d()?.background} class="title-bd" />
+    <div class="title-scr" classList={{ movie: !series(), noart: artMissing() }}>
+      {/* No backdrop (none named, or it does not load): the poster, blurred
+          and faint, keeps the page from opening on a blank half. */}
+      <Backdrop src={d()?.background} fallback={d()?.poster} class="title-bd" onMissing={() => d() && setArtMissing(true)} />
       <Show when={trailerOpen() && d()?.trailers.length}>
         <TrailerOverlay trailers={d()?.trailers ?? []} onClose={closeTrailer} />
       </Show>
@@ -112,35 +118,52 @@ function TitlePage(props: { kind: string; id: string }) {
                   </For>
                 </p>
                 <Show when={x().description}>
-                  <button class="syn" data-f="title:synopsis" aria-label="Synopsis">
+                  <button class="syn" classList={{ open: synOpen() }} data-f="title:synopsis" aria-label="Synopsis" aria-expanded={synOpen()} onClick={() => setSynOpen(!synOpen())}>
                     {x().description}
                   </button>
+                  {/* Touch has no focus to open it: a phone says there is more. */}
+                  <Show when={form() === "phone" && !synOpen() && (x().description?.length ?? 0) > 140}>
+                    <button class="syn-more" onClick={() => setSynOpen(true)}>
+                      More
+                    </button>
+                  </Show>
                 </Show>
                 <div class="play">
                   <div class="play-row">
-                    <Show when={target()}>
-                      {(t) => (
-                        <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
-                          <Play aria-hidden class="fill" />
-                          {t().label}
-                          <Show when={t().resumeMs}>
-                            {(ms) => <small class="num">from {clock(ms() / 1000)}</small>}
-                          </Show>
+                    {/* When nothing can play, the way forward is a source, not
+                        a Play button that can only fail. */}
+                    <Show
+                      when={!noVersion(versions()?.state.data ?? null)}
+                      fallback={
+                        <A class="btn primary big" href="/addons" data-f="title:addsource" data-autofocus>
+                          <Plus aria-hidden />
+                          Add a source
                         </A>
-                      )}
+                      }
+                    >
+                      <Show when={target()}>
+                        {(t) => (
+                          <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
+                            <Play aria-hidden class="fill" />
+                            {t().label}
+                            <Show when={t().resumeMs}>
+                              {(ms) => <small class="num">{resumeText(ms(), runtimeMinutes(x().runtime))}</small>}
+                            </Show>
+                          </A>
+                        )}
+                      </Show>
                     </Show>
-                    {/* Movies only (episodes carry their own marks): a round
-                        toggle beside Play, its word shown on focus. */}
+                    {/* Movies only (episodes carry their own marks): two labeled
+                        states, the watched one filled with a check. */}
                     <Show when={props.kind === "movie"}>
                       <button
-                        class="watched-toggle"
-                        classList={{ on: header()?.watched ?? false }}
+                        class="btn big watched"
                         data-f="title:watched"
                         aria-pressed={header()?.watched ?? false}
                         onClick={() => view.command({ type: "setWatched", videoId: props.id, value: !header()?.watched })}
                       >
-                        <CircleCheck aria-hidden />
-                        <span class="toggle-label">{header()?.watched ? "Watched" : "Mark watched"}</span>
+                        <Check aria-hidden />
+                        {header()?.watched ? "Watched" : "Mark as watched"}
                       </button>
                     </Show>
                   </div>
@@ -179,6 +202,10 @@ function TitlePage(props: { kind: string; id: string }) {
                     {header()?.inLibrary ? "In Library" : "Add to Library"}
                   </button>
                 </div>
+                {/* Phone reads top to bottom: episodes before the details. */}
+                <Show when={series() && form() === "phone"}>
+                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} />
+                </Show>
                 <dl class="facts">
                   <Fact label="Starring" value={x().cast.slice(0, 3).join(", ")} />
                   <Fact label="Directed by" value={x().directors.slice(0, 2).join(", ")} />
@@ -186,7 +213,7 @@ function TitlePage(props: { kind: string; id: string }) {
                   <Fact label="Details from" value={x().source} />
                 </dl>
               </section>
-              <Show when={series()}>
+              <Show when={series() && form() !== "phone"}>
                 <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} />
               </Show>
             </>
@@ -225,6 +252,15 @@ function Fact(props: { label: string; value: string }): JSX.Element {
   );
 }
 
+/** Every addon answered and none offers a version this device can play. */
+const noVersion = (s: VersionsSnapshot | null) => !!s && s.done && !s.recommended && s.rows.length === 0;
+
+/** "36 min left" when the runtime is known, else the position. */
+function resumeText(resumeMs: number, runtime: number | null): string {
+  if (runtime) return `${Math.max(1, Math.round(runtime - resumeMs / 60_000))} min left`;
+  return `from ${clock(resumeMs / 1000)}`;
+}
+
 function versionCount(s: VersionsSnapshot | null): number | null {
   if (!s) return null;
   const n = s.rows.length + (s.recommended ? 1 : 0);
@@ -257,16 +293,16 @@ function VersionLine(props: { snap: VersionsSnapshot | null }) {
       <Match when={waiting()}>
         <p class="vline muted">
           <span class="st">
-            <i class="dot" />
-            Asking {props.snap?.pendingAddons.join(", ") || "your addons"} for versions
+            <LoaderCircle aria-hidden class="spin" />
+            Finding versions
           </span>
         </p>
       </Match>
       <Match when={props.snap?.done && !pick()}>
-        <p class="vline muted">
+        <p class="vline muted wrap">
           <span class="st warn">
             <i class="dot" />
-            No playable version yet. Add a source addon in Settings, Addons.
+            No playable version found. A source is an addon that finds a playable stream for a title.
           </span>
         </p>
       </Match>
@@ -354,9 +390,9 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
               {/* The row plays this episode; choosing its version or marking
                   it watched are the secondary actions beside it. */}
               <div class="ep-acts" data-fentry>
-                <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Versions of ${episodeLabel(e.season, e.episode)}`}>
+                <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`}>
                   <Layers aria-hidden />
-                  Versions
+                  Choose a version
                 </A>
                 <button
                   class="ep-act"
@@ -365,7 +401,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                   onClick={() => props.view.command({ type: "setWatched", videoId: e.videoId, value: !e.watched })}
                 >
                   <Check aria-hidden />
-                  {e.watched ? "Watched" : "Mark watched"}
+                  {e.watched ? "Watched" : "Mark as watched"}
                 </button>
               </div>
             </li>

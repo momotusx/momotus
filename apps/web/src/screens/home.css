@@ -30,8 +30,20 @@
   display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; }
 .logo { display: block; object-fit: contain; object-position: left bottom; }
 .hero-logo { height: 150px; width: auto; max-width: 560px; margin-bottom: 24px; }
-:root[data-theme="light"] .logo { filter: brightness(0) opacity(.88); }
-@media (prefers-color-scheme: light) { :root:not([data-theme]):not([data-form="tv"]) .logo { filter: brightness(0) opacity(.88); } }
+/* Light mode: logos keep their colors, lifted by a soft shadow, and the hero
+ * art fades only on its left (to 55%) and toward the rows below (done by
+ * the Continue Watching heading), so the rest of the
+ * picture keeps full color instead of a milky wash. */
+:root[data-theme="light"] .logo { filter: drop-shadow(0 2px 12px rgba(0, 0, 0, .35)); }
+:root[data-theme="light"] .home-bd img {
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, .08) 0%, #000 55%), linear-gradient(0deg, transparent 0%, transparent 44%, #000 66%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, .08) 0%, #000 55%), linear-gradient(0deg, transparent 0%, transparent 44%, #000 66%); }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]):not([data-form="tv"]) .logo { filter: drop-shadow(0 2px 12px rgba(0, 0, 0, .35)); }
+  :root:not([data-theme]):not([data-form="tv"]) .home-bd img {
+    -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, .08) 0%, #000 55%), linear-gradient(0deg, transparent 0%, transparent 44%, #000 66%);
+    mask-image: linear-gradient(90deg, rgba(0, 0, 0, .08) 0%, #000 55%), linear-gradient(0deg, transparent 0%, transparent 44%, #000 66%); }
+}
 .logo-text { font: 600 var(--type-hero) / 1.02 var(--font-display); letter-spacing: -.01em; margin-bottom: 18px; max-width: 1200px; }
 .hero .reason { font: italic 500 40px / 1.15 var(--font-display); margin-bottom: 10px; }
 .hero .meta { font: 400 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); margin-bottom: 26px; }
@@ -64,7 +76,7 @@
 .tile .pic img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
 .pic-name { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center;
   font: 600 var(--type-headline) / 1.15 var(--font-display); color: var(--text); overflow: hidden; overflow-wrap: anywhere; }
-.tile .cap { margin-top: 14px; font: 500 var(--type-caption) / 1.3 var(--font-text); color: var(--muted);
+.tile .cap { margin-top: var(--space-s); font: 500 var(--type-caption) / 1.3 var(--font-text); color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; transform: scale(var(--focus-scale-card)); }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
@@ -75,8 +87,12 @@
   [data-form="desktop"] .tile:hover { transform: scale(1.03); }
   [data-form="desktop"] .tile:hover .cap { color: var(--text); }
 }
-.bar { position: absolute; z-index: 2; left: 12px; right: 12px; bottom: 12px; height: 6px; border-radius: 3px; background: rgba(246, 239, 230, .35); }
-.bar i { display: block; height: 100%; border-radius: 3px; background: #F6EFE6; }
+/* Progress: a track and a fill on a 32 px dark strip at the card's foot, so
+ * it reads on any art, white posters included. 6 px on TV, 4 px on phone. */
+.bar { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 32px; display: flex; align-items: flex-end; padding: 0 12px 12px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, .6)); }
+.bar-track { flex: 1; height: 6px; border-radius: 3px; background: rgba(246, 239, 230, .3); overflow: hidden; }
+.bar-track i { display: block; height: 100%; border-radius: 3px; background: #F6EFE6; }
 
 /* Continue Watching: 16:9 stills, Apple TV Up Next style. A dark scrim at
  * the bottom carries the logo and the progress bar, so both read on any
@@ -88,8 +104,6 @@
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, .55)); }
 .art-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   font: 600 var(--type-headline) / 1.1 var(--font-display); color: #F6EFE6; text-shadow: 0 2px 12px rgba(0, 0, 0, .6); }
-.tile.wide .bar { left: 0; right: 0; bottom: 0; height: 6px; border-radius: 0; background: rgba(8, 6, 4, .66); }
-.tile.wide .bar i { border-radius: 0 3px 3px 0; }
 
 .row-msg { position: absolute; left: 34px; right: 114px; top: 34px; bottom: 34px; display: flex; align-items: center; gap: 28px;
   padding: 0 44px; border-radius: var(--radius-m); background: var(--surface); box-shadow: inset 0 0 0 2px var(--line); }
@@ -131,14 +145,14 @@
 [data-form="phone"] .tile .pic { border-radius: 10px; }
 [data-form="phone"] .tile .cap { margin-top: 6px; font-size: 12px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 [data-form="phone"] .pic-name { padding: 10px; font-size: 15px; }
-[data-form="phone"] .bar { left: 6px; right: 6px; bottom: 6px; height: 4px; }
+[data-form="phone"] .bar { height: 22px; padding: 0 6px 6px; }
+[data-form="phone"] .bar-track { height: 4px; }
 [data-form="phone"] .row-msg { left: 16px; right: 16px; top: 8px; bottom: 8px; gap: 12px; padding: 0 16px; flex-wrap: wrap; align-content: center; }
 [data-form="phone"] .row-msg p { font-size: 15px; }
 [data-form="phone"] .row-msg .why { font-size: 13px; }
 [data-form="phone"] .row-msg .btn { margin-left: 0; }
 [data-form="phone"] .row-msg-icon { width: 22px; height: 22px; }
 [data-form="phone"] .ph-top { position: absolute; left: 0; right: 0; top: 0; z-index: 2; padding: calc(14px + env(safe-area-inset-top)) 16px 0; }
-[data-form="phone"] .ph-top .brand { padding: 0; font-size: 24px; color: #F6EFE6; text-shadow: 0 1px 12px rgba(0, 0, 0, .5); }
-[data-form="phone"] .tile.wide .bar { left: 0; right: 0; bottom: 0; height: 4px; }
+[data-form="phone"] .ph-top .brand { padding: 0; font-size: 24px; color: var(--text); text-shadow: 0 1px 12px color-mix(in srgb, var(--bg) 75%, transparent); }
 [data-form="phone"] .tile.wide .art-brand { left: 10px; bottom: 12px; }
 [data-form="phone"] .art-name { font-size: 15px; }

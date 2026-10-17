@@ -2,6 +2,7 @@
  * filter them. Images load lazily; `onNearEnd` asks for the next page when
  * focus or the scroll position gets within two rows of the end. */
 
+import Check from "lucide-solid/icons/check";
 import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import type { Tile } from "../core/generated/Tile";
 import { remember } from "../focus/dom";
@@ -116,6 +117,9 @@ export function Chips<T>(props: {
               data-autofocus={props.autofocus && i() === 0 ? "" : undefined}
               onClick={() => props.onSelect(item.value)}
             >
+              <Show when={item.value === props.selected}>
+                <Check aria-hidden class="chip-check" />
+              </Show>
               {item.label}
               <Show when={item.note}>
                 <small>{item.note}</small>

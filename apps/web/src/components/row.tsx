@@ -89,9 +89,12 @@ export function TileCard(props: {
             </Show>
           </div>
         </Show>
+        {/* A track and a fill on a dark strip, so progress shows on white art. */}
         <Show when={props.tile.progress !== null}>
           <div class="bar">
-            <i style={{ width: pct(props.tile.progress ?? 0) }} />
+            <span class="bar-track">
+              <i style={{ width: pct(props.tile.progress ?? 0) }} />
+            </span>
           </div>
         </Show>
       </div>

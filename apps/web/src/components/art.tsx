@@ -1,14 +1,36 @@
 /** Artwork that degrades to words: backdrops fade in once decoded, logos fall
  * back to the title set in the display face, posters to their name. */
 
-import { createSignal, Show } from "solid-js";
+import { createEffect, createSignal, on, Show } from "solid-js";
 
-export function Backdrop(props: { src: string | null | undefined; class?: string; dim?: boolean }) {
+/** The backdrop, else (none named, or it fails to load) `fallback`, shown
+ * blurred; `onMissing` says the real backdrop is not there. */
+export function Backdrop(props: {
+  src: string | null | undefined;
+  class?: string;
+  dim?: boolean;
+  fallback?: string | null;
+  onMissing?: () => void;
+}) {
+  const [failed, setFailed] = createSignal(false);
+  createEffect(on(() => props.src, () => setFailed(false), { defer: true }));
+  const shown = () => (props.src && !failed() ? props.src : (props.fallback ?? null));
+  const standIn = () => !!shown() && shown() !== props.src;
+  createEffect(() => {
+    if (!props.src || failed()) props.onMissing?.();
+  });
   return (
-    <div class={`bd ${props.class ?? ""}`} classList={{ dim: props.dim }} aria-hidden="true">
-      <Show when={props.src} keyed>
+    <div class={`bd ${props.class ?? ""}`} classList={{ dim: props.dim, blur: standIn() }} aria-hidden="true">
+      <Show when={shown()} keyed>
         {(src) => (
-          <img src={src} alt="" decoding="async" class="fade" onLoad={(e) => e.currentTarget.classList.add("in")} />
+          <img
+            src={src}
+            alt=""
+            decoding="async"
+            class="fade"
+            onLoad={(e) => e.currentTarget.classList.add("in")}
+            onError={() => src === props.src && setFailed(true)}
+          />
         )}
       </Show>
     </div>
