@@ -156,12 +156,12 @@ fn a_held_write_waits_for_its_session() {
         .unwrap();
     lib.put_tracker_intent("tt2", "tt2", intent(Some("s2")))
         .unwrap();
-    assert!(lib.ready_tracker_intents(k, 10).unwrap().is_empty());
+    assert!(lib.ready_tracker_intents(k, NOW, 10).unwrap().is_empty());
     // s1's stop reached Trakt as a play: its write is dropped.
     lib.end_tracker_session("s1", true).unwrap();
     // s2's process died: at start its write is released.
     assert_eq!(lib.release_orphan_tracker_intents(&[]).unwrap(), 1);
-    let ready = lib.ready_tracker_intents(k, 10).unwrap();
+    let ready = lib.ready_tracker_intents(k, NOW, 10).unwrap();
     assert_eq!(ready.len(), 1);
     assert_eq!(ready[0].video_id, "tt2");
 }
@@ -197,11 +197,11 @@ fn an_old_acknowledgement_keeps_a_newer_write() {
         .unwrap();
     assert!(rev2 > rev1);
     assert!(!lib.ack_tracker_intent(k, "tt1:1:1", rev1).unwrap());
-    let ready = lib.ready_tracker_intents(k, 10).unwrap();
+    let ready = lib.ready_tracker_intents(k, NOW, 10).unwrap();
     assert_eq!(ready.len(), 1);
     assert_eq!((ready[0].op, ready[0].rev), (IntentOp::Remove, rev2));
     assert!(lib.ack_tracker_intent(k, "tt1:1:1", rev2).unwrap());
-    assert!(lib.ready_tracker_intents(k, 10).unwrap().is_empty());
+    assert!(lib.ready_tracker_intents(k, NOW, 10).unwrap().is_empty());
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn a_hand_mark_queues_a_write_only_when_it_flips() {
         .set_watched_by_hand("p", "tt1", "tt1:1:1", true, &hlc(20, 5), Some((k, 20)))
         .unwrap();
     assert!(!again);
-    let ready = lib.ready_tracker_intents(k, 10).unwrap();
+    let ready = lib.ready_tracker_intents(k, NOW, 10).unwrap();
     assert_eq!(ready.len(), 1);
     assert_eq!(
         (ready[0].op, ready[0].watched_ms, ready[0].rev),
@@ -245,7 +245,11 @@ fn another_account_starts_clean() {
         .unwrap();
     lib.set_tracker_account("p", "trakt", Some("b"), 2, 2)
         .unwrap();
-    assert!(lib.ready_tracker_intents(key("a"), 10).unwrap().is_empty());
+    assert!(
+        lib.ready_tracker_intents(key("a"), NOW, 10)
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(lib.tracker_state(key("a"), "history_cursor").unwrap(), None);
     assert_eq!(
         lib.tracker_account("p", "trakt").unwrap(),
@@ -293,4 +297,53 @@ fn an_unmarked_latest_episode_leaves_the_anchor_to_the_one_before() {
     let done = lib.finished_series("p", 10).unwrap();
     assert_eq!(done.len(), 1, "the show stays in Next Up");
     assert_eq!(done[0].video_id, "tt1:1:1");
+}
+
+#[test]
+fn a_season_marked_at_once_anchors_its_last_episode() {
+    let lib = Library::temporary().unwrap();
+    let plays: Vec<_> = (9..=12)
+        .map(|e| play(&format!("tt1:1:{e}"), "series", 5_000))
+        .collect();
+    lib.import_plays("p", &plays, NOW, &[]).unwrap();
+    let done = lib.finished_series("p", 10).unwrap();
+    assert_eq!(done[0].video_id, "tt1:1:12");
+}
+
+#[test]
+fn revisions_never_repeat_and_failed_writes_wait() {
+    let lib = Library::temporary().unwrap();
+    let k = key("acct");
+    let add = |lib: &Library| {
+        lib.put_tracker_intent(
+            "tt1",
+            "tt1:1:1",
+            NewIntent {
+                key: k,
+                op: IntentOp::Add,
+                watched_ms: 1,
+                session: None,
+            },
+        )
+        .unwrap()
+    };
+    let first = add(&lib);
+    assert!(lib.ack_tracker_intent(k, "tt1:1:1", first).unwrap());
+    // A new write for the same video after the old one was acknowledged.
+    let second = add(&lib);
+    assert!(second > first);
+    // A duplicate acknowledgement of the first one deletes nothing.
+    assert!(!lib.ack_tracker_intent(k, "tt1:1:1", first).unwrap());
+    assert_eq!(
+        lib.retry_tracker_intent(k, "tt1:1:1", second, NOW + 60_000)
+            .unwrap(),
+        1
+    );
+    assert!(lib.ready_tracker_intents(k, NOW, 10).unwrap().is_empty());
+    assert_eq!(
+        lib.ready_tracker_intents(k, NOW + 60_000, 10)
+            .unwrap()
+            .len(),
+        1
+    );
 }

@@ -187,20 +187,23 @@ impl Library {
         self.write(|c| put_intent(c, item_id, video_id, intent))
     }
 
-    /// Writes that may be sent now (not held by a live session), oldest first.
+    /// Writes that may be sent now (not held by a live session, not waiting
+    /// for a retry), oldest first. One sender drains them at a time (the
+    /// tracker's round), so rows are not claimed.
     pub fn ready_tracker_intents(
         &self,
         key: TrackerKey<'_>,
+        now_ms: i64,
         limit: usize,
     ) -> Result<Vec<Intent>, LibraryError> {
         self.read(|c| {
             let mut stmt = c.prepare(
                 "SELECT video_id, item_id, op, watched_ms, rev FROM tracker_outbox
-                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND held = 0
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND held = 0 AND next_ms <= ?5
                  ORDER BY watched_ms, video_id LIMIT ?4",
             )?;
             stmt.query_map(
-                params![key.profile, key.tracker, key.account, limit as i64],
+                params![key.profile, key.tracker, key.account, limit as i64, now_ms],
                 |r| {
                     Ok(Intent {
                         video_id: r.get(0)?,
@@ -216,6 +219,32 @@ impl Library {
                 },
             )?
             .collect()
+        })
+    }
+
+    /// Sending the write with this revision failed: try again at `next_ms`.
+    /// Returns the number of tries so far.
+    pub fn retry_tracker_intent(
+        &self,
+        key: TrackerKey<'_>,
+        video_id: &str,
+        rev: i64,
+        next_ms: i64,
+    ) -> Result<i64, LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "UPDATE tracker_outbox SET tries = tries + 1, next_ms = ?6
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND video_id = ?4 AND rev = ?5",
+                params![key.profile, key.tracker, key.account, video_id, rev, next_ms],
+            )?;
+            Ok(c.query_row(
+                "SELECT tries FROM tracker_outbox
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND video_id = ?4 AND rev = ?5",
+                params![key.profile, key.tracker, key.account, video_id, rev],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0))
         })
     }
 
@@ -353,10 +382,18 @@ impl Library {
             }
             // Per series, the latest play whose mark ended up set: a play a
             // newer local unmark beat must not take the anchor from the rest.
-            latest.retain(|p| watched_now(c, profile, &p.video_id).unwrap_or(false));
+            let mut kept = Vec::with_capacity(latest.len());
+            for play in latest {
+                if watched_now(c, profile, &play.video_id)? {
+                    kept.push(play);
+                }
+            }
+            let mut latest = kept;
+            // Equal dates (a season marked at once, unknown dates) break by
+            // episode number, not by id text, where 1:9 sorts after 1:12.
             latest.sort_by(|a, b| {
-                (&a.item_id, std::cmp::Reverse((a.watched_ms, &a.video_id)))
-                    .cmp(&(&b.item_id, std::cmp::Reverse((b.watched_ms, &b.video_id))))
+                (&a.item_id, std::cmp::Reverse(order(a)))
+                    .cmp(&(&b.item_id, std::cmp::Reverse(order(b))))
             });
             latest.dedup_by(|a, b| a.item_id == b.item_id);
             for play in latest {
@@ -372,6 +409,14 @@ impl Library {
             Ok(report)
         })
     }
+}
+
+/// A play's place in time: its date, then its season and episode.
+fn order(play: &ImportedPlay) -> (i64, u32, u32, &str) {
+    let mut parts = play.video_id.rsplit(':');
+    let episode = parts.next().and_then(|e| e.parse().ok()).unwrap_or(0);
+    let season = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    (play.watched_ms, season, episode, &play.video_id)
 }
 
 /// The device-0 stamp of an imported play.
@@ -431,15 +476,24 @@ fn put_intent(
     intent: NewIntent<'_>,
 ) -> rusqlite::Result<i64> {
     let k = intent.key;
+    // One counter per account that never goes down: a deleted row's
+    // revision is never handed out again, so a late acknowledgement of it
+    // cannot delete a newer write.
     let rev: i64 = c
         .query_row(
-            "SELECT rev FROM tracker_outbox WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND video_id = ?4",
-            params![k.profile, k.tracker, k.account, video_id],
-            |r| r.get(0),
+            "SELECT value FROM tracker_state WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND key = 'rev'",
+            params![k.profile, k.tracker, k.account],
+            |r| r.get::<_, String>(0),
         )
         .optional()?
+        .and_then(|v| v.parse::<i64>().ok())
         .unwrap_or(0)
         + 1;
+    c.execute(
+        "INSERT INTO tracker_state (profile_id, tracker, account, key, value) VALUES (?1, ?2, ?3, 'rev', ?4)
+         ON CONFLICT(profile_id, tracker, account, key) DO UPDATE SET value = excluded.value",
+        params![k.profile, k.tracker, k.account, rev.to_string()],
+    )?;
     c.execute(
         "INSERT INTO tracker_outbox (profile_id, tracker, account, video_id, item_id, rev, op, watched_ms, session, held)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
