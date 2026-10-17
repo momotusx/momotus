@@ -4,7 +4,7 @@
 //! answers `Unknown`. Files come back as a folder tree with a link per file;
 //! the tree is flattened depth first and numbered from 0.
 
-use crate::api::{Api, Auth, authed, bearer, fixed, form};
+use crate::api::{Api, Auth, Secret, authed, bearer, fixed, form};
 use crate::login::{Code, Credential, LoginPoll};
 use crate::util::basename;
 use crate::util::{magnet_uri, normalize_hash};
@@ -64,12 +64,6 @@ impl AllDebrid {
         self
     }
 
-    /// An error inside a successful answer (one magnet of an upload), with the
-    /// key the request sent kept out of its text.
-    fn nested(&self, code: &str, message: String) -> DebridError {
-        map_code(code, message).without(&[&self.auth.token()])
-    }
-
     /// Sends and unwraps `{status, data | error}`. Errors arrive with HTTP 200.
     async fn call<T: DeserializeOwned>(
         &self,
@@ -77,6 +71,19 @@ impl AllDebrid {
         path: &str,
         body: Option<Body>,
     ) -> Result<T, DebridError> {
+        self.call_keyed(method, path, body)
+            .await
+            .map(|(data, _)| data)
+    }
+
+    /// Like `call`, also handing back the key the answer was given for, so an
+    /// error inside the answer (one magnet of an upload) is stripped of it.
+    async fn call_keyed<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Body>,
+    ) -> Result<(T, Secret), DebridError> {
         authed(self.auth.as_ref(), |key| {
             let (method, body) = (method.clone(), body.clone());
             async move {
@@ -85,11 +92,16 @@ impl AllDebrid {
                     .call(method, path, body, bearer(&key))
                     .await
                     .map_err(map_http_error)?;
-                unwrap(response.json()?)
+                Ok((unwrap(response.json()?)?, key))
             }
         })
         .await
     }
+}
+
+/// An error inside a successful answer, without the key that answer was for.
+fn nested(code: &str, message: String, key: &Secret) -> DebridError {
+    map_code(code, message).without(&[key.expose()])
 }
 
 fn map_code(code: &str, message: String) -> DebridError {
@@ -271,8 +283,8 @@ impl Store for AllDebrid {
     async fn add_magnet(&self, info_hash: &str) -> Result<TorrentHandle, DebridError> {
         let hash = normalize_hash(info_hash)?;
         let body = form(&[("magnets[]", &magnet_uri(&hash))]);
-        let data: UploadData = self
-            .call(Method::POST, "/v4/magnet/upload", Some(body))
+        let (data, key): (UploadData, _) = self
+            .call_keyed(Method::POST, "/v4/magnet/upload", Some(body))
             .await?;
         let magnet = data
             .magnets
@@ -280,7 +292,7 @@ impl Store for AllDebrid {
             .next()
             .ok_or_else(|| DebridError::provider("empty", "no magnet in response"))?;
         if let Some(error) = magnet.error {
-            return Err(self.nested(&error.code, error.message));
+            return Err(nested(&error.code, error.message, &key));
         }
         let id = magnet
             .id
@@ -310,12 +322,12 @@ impl Store for AllDebrid {
         let mut files = Vec::new();
         if status == TorrentStatus::Ready {
             let body = form(&[("id[]", id)]);
-            let data: FilesData = self
-                .call(Method::POST, "/v4/magnet/files", Some(body))
+            let (data, key): (FilesData, _) = self
+                .call_keyed(Method::POST, "/v4/magnet/files", Some(body))
                 .await?;
             if let Some(entry) = data.magnets.into_iter().next() {
                 if let Some(error) = entry.error {
-                    return Err(self.nested(&error.code, error.message));
+                    return Err(nested(&error.code, error.message, &key));
                 }
                 flatten(entry.files.unwrap_or_default(), "", &mut files);
             }

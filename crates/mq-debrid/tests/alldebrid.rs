@@ -250,3 +250,50 @@ async fn a_magnet_error_never_carries_the_key() {
     let err = store(&server).add_magnet(HASH).await.unwrap_err();
     assert!(!format!("{err} {err:?}").contains(KEY), "{err:?}");
 }
+
+/// Hands out one key for the first request and another after: the key changed
+/// while a request was in flight.
+struct Turning(std::sync::atomic::AtomicUsize);
+
+impl mq_debrid::Auth for Turning {
+    fn token(&self) -> String {
+        let n = self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if n == 0 { "FIRST-KEY" } else { "SECOND-KEY" }.to_owned()
+    }
+    fn refused<'a>(&'a self, _used: &'a str) -> mq_debrid::BoxFuture<'a, Option<String>> {
+        Box::pin(async { None })
+    }
+}
+
+#[tokio::test]
+async fn a_nested_error_hides_the_key_that_request_sent() {
+    let server = Server::start(vec![
+        route(
+            "POST",
+            "/v4/magnet/upload",
+            200,
+            r#"{"status":"success","data":{"magnets":[{"magnet":"m","error":{"code":"MAGNET_INVALID_URI","message":"bad uri for FIRST-KEY"}}]}}"#,
+        ),
+        route(
+            "POST",
+            "/v4.1/magnet/status",
+            200,
+            r#"{"status":"success","data":{"magnets":{"id":7,"filename":"x","size":1,"status":"Ready","statusCode":4}}}"#,
+        ),
+        route(
+            "POST",
+            "/v4/magnet/files",
+            200,
+            &format!(
+                r#"{{"status":"success","data":{{"magnets":[{{"id":"7","error":{{"code":"MAGNET_INVALID_ID","message":"no files for {KEY}"}}}}]}}}}"#
+            ),
+        ),
+    ])
+    .await;
+    let auth = std::sync::Arc::new(Turning(Default::default()));
+    let turning = AllDebrid::with_auth(client(), auth).with_base_url(&server.base);
+    let err = turning.add_magnet(HASH).await.unwrap_err();
+    assert!(!format!("{err} {err:?}").contains("FIRST-KEY"), "{err:?}");
+    let err = store(&server).torrent("7").await.unwrap_err();
+    assert!(!format!("{err} {err:?}").contains(KEY), "{err:?}");
+}
