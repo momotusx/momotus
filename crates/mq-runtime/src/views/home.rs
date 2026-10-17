@@ -729,18 +729,23 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode) -> Tile {
 /// The one caption every app shows under a Continue Watching tile:
 /// "S2:E3 · 36 min left" for an episode, "36 min left" for a movie.
 fn continue_caption(item: &ContinueItem) -> String {
-    let mut parts = item.video_id.rsplit(':');
-    let episode = parts.next().and_then(|e| e.parse::<u32>().ok());
-    let season = parts.next().and_then(|s| s.parse::<u32>().ok());
     let left = if item.duration_ms > item.position_ms {
         let minutes = (item.duration_ms - item.position_ms + 59_999) / 60_000;
         format!("{minutes} min left")
     } else {
         "In progress".to_owned()
     };
+    with_episode(&item.kind, &item.video_id, left)
+}
+
+/// "S2:E3 · <rest>" for an episode of a series, else `rest`.
+pub(crate) fn with_episode(kind: &str, video_id: &str, rest: String) -> String {
+    let mut parts = video_id.rsplit(':');
+    let episode = parts.next().and_then(|e| e.parse::<u32>().ok());
+    let season = parts.next().and_then(|s| s.parse::<u32>().ok());
     match (season, episode) {
-        (Some(s), Some(e)) if item.kind == "series" => format!("S{s}:E{e} \u{b7} {left}"),
-        _ => left,
+        (Some(s), Some(e)) if kind == "series" => format!("S{s}:E{e} \u{b7} {rest}"),
+        _ => rest,
     }
 }
 

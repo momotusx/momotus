@@ -122,8 +122,13 @@ pub struct LibraryEntry {
     pub item: LibraryItemRow,
     /// Newest progress write for any of its videos.
     pub last_watched_ms: Option<i64>,
+    /// The video of that write, or `None` when nothing was played.
+    pub video_id: Option<String>,
     pub position_ms: i64,
     pub duration_ms: i64,
+    /// That video (the title itself when nothing was played) is marked
+    /// watched, and no later play started over.
+    pub watched: bool,
 }
 
 /// Position past which a video counts as finished for Continue Watching.
@@ -653,11 +658,16 @@ impl Library {
         self.read(|c| {
             let mut stmt = c.prepare(
                 "SELECT i.item_id, i.kind, i.name, i.poster, i.poster_shape, i.added_ms,
-                        p.updated_ms, COALESCE(p.position_ms, 0), COALESCE(p.duration_ms, 0)
+                        p.updated_ms, COALESCE(p.position_ms, 0), COALESCE(p.duration_ms, 0),
+                        p.video_id,
+                        COALESCE(w.watched, 0) = 1 AND (p.hlc IS NULL OR NOT p.hlc > w.hlc)
                  FROM library_items i
                  LEFT JOIN progress p ON p.profile_id = i.profile_id AND p.item_id = i.item_id
-                   AND p.updated_ms = (SELECT MAX(q.updated_ms) FROM progress q
-                                       WHERE q.profile_id = i.profile_id AND q.item_id = i.item_id)
+                   AND p.video_id = (SELECT q.video_id FROM progress q
+                                     WHERE q.profile_id = i.profile_id AND q.item_id = i.item_id
+                                     ORDER BY q.updated_ms DESC, q.video_id DESC LIMIT 1)
+                 LEFT JOIN watched w ON w.profile_id = i.profile_id
+                   AND w.video_id = COALESCE(p.video_id, i.item_id)
                  WHERE i.profile_id = ?1 AND i.in_library = 1",
             )?;
             stmt.query_map(params![profile], |r| {
@@ -673,6 +683,8 @@ impl Library {
                     last_watched_ms: r.get(6)?,
                     position_ms: r.get(7)?,
                     duration_ms: r.get(8)?,
+                    video_id: r.get(9)?,
+                    watched: r.get(10)?,
                 })
             })?
             .collect()

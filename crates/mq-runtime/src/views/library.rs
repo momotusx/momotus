@@ -204,9 +204,27 @@ fn tile(e: &LibraryEntry) -> Tile {
             .poster_shape
             .clone()
             .unwrap_or_else(|| "poster".into()),
-        release_info: None,
+        release_info: library_caption(e),
         progress: (e.duration_ms > 0)
             .then(|| (e.position_ms as f32 / e.duration_ms as f32).clamp(0.0, 1.0)),
         video_id: None,
     }
+}
+
+/// Where the user is with a title, in Continue Watching's words: "S2:E3 ·
+/// 36 min left", "36 min left", "S2:E3 · Watched", "Watched"; nothing for a
+/// title never played.
+fn library_caption(e: &LibraryEntry) -> Option<String> {
+    let finished = e.duration_ms > 0
+        && e.position_ms as f64 >= e.duration_ms as f64 * mq_library::FINISHED_RATIO;
+    let rest = if e.watched || finished {
+        "Watched".to_owned()
+    } else if e.position_ms > 0 && e.duration_ms > e.position_ms {
+        let minutes = (e.duration_ms - e.position_ms + 59_999) / 60_000;
+        format!("{minutes} min left")
+    } else {
+        return None;
+    };
+    let video = e.video_id.as_deref().unwrap_or(&e.item.item_id);
+    Some(super::home::with_episode(&e.item.kind, video, rest))
 }
