@@ -8,6 +8,8 @@
 
 #[cfg(target_os = "android")]
 mod logcat;
+#[cfg(target_vendor = "apple")]
+mod stderr_log;
 
 use mq_bridge::Session;
 use mq_runtime::{Core, CoreConfig};
@@ -50,6 +52,8 @@ impl MarqueeCore {
     ) -> Result<Arc<Self>, FfiError> {
         #[cfg(target_os = "android")]
         logcat::init();
+        #[cfg(target_vendor = "apple")]
+        stderr_log::init();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("marquee-core")

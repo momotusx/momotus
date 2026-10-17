@@ -30,3 +30,6 @@ thiserror.workspace = true
 [target.'cfg(target_os = "android")'.dependencies]
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
