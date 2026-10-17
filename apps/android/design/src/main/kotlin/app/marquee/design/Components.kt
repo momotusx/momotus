@@ -116,6 +116,7 @@ fun Chip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -128,7 +129,9 @@ fun Chip(
             modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .marqueeFocus(target / 2, Tokens.FOCUS_SCALE_CARD)
-                .heightIn(min = target)
+                .then(
+                    if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
+                ).heightIn(min = target)
                 .focusSelectable(selected, onClick)
                 .padding(vertical = (target - pill) / 2),
         contentAlignment = Alignment.Center,

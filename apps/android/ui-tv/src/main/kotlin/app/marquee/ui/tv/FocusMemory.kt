@@ -1,7 +1,10 @@
 package app.marquee.ui.tv
 
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
 
@@ -104,6 +107,23 @@ class FocusMemory {
     /** Where entry into the screen from the rail lands. */
     fun lastEntry(): FocusRequester? = focusedKey?.let(requesters::get)
 }
+
+/** A requester that is registered under [key] while its node is composed, so focus can be sent to it by key. */
+@Composable
+fun FocusMemory.requesterFor(key: String): FocusRequester {
+    val requester = remember(key) { FocusRequester() }
+    DisposableEffect(key, requester) {
+        attach(key, requester)
+        onDispose { detach(key, requester) }
+    }
+    return requester
+}
+
+/** The callback for a node's focus changes: it tells this memory where focus is. */
+fun FocusMemory.watch(
+    rowId: String?,
+    key: String,
+): (Boolean) -> Unit = { gained -> if (gained) arrived(rowId, key) else lost(key) }
 
 /**
  * What Home keeps while it is not on screen: scroll positions and focus memory. Lives in the
