@@ -84,6 +84,9 @@ export function languageName(code: string): string {
   return code.toUpperCase();
 }
 
+/** The parser could not read a resolution: say so, never as a tier. */
+export const qualityText = (q: string) => (q === "Unknown" ? "Quality unknown" : q);
+
 export function kindLabel(kind: string): string {
   const labels: Record<string, string> = { movie: "Movie", series: "Series", channel: "Channel", tv: "Live TV", anime: "Anime" };
   return labels[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);

@@ -12,7 +12,7 @@ import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { remember } from "../focus/dom";
 import { bytes, clock, decoded, episodeLabel, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { kindLabel, statusText } from "../lib/words";
+import { kindLabel, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
 export default function Title() {
@@ -200,7 +200,7 @@ function VersionLine(props: { snap: VersionsSnapshot | null }) {
           const st = () => statusText(p().status);
           return (
             <p class="vline">
-              <span>{p().quality}</span>
+              <span>{qualityText(p().quality)}</span>
               <For each={p().features}>{(f) => <span>{f}</span>}</For>
               <Show when={p().sizeBytes}>{(b) => <span class="num">{bytes(b())}</span>}</Show>
               <span class={`st ${st().tone}`}>

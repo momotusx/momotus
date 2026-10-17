@@ -1,0 +1,60 @@
+/* Browse pages: Discover, Search, Library, and the settings family. */
+
+.browse.page { position: absolute; inset: 0; padding: var(--safe-top) var(--safe-side) var(--safe-bottom) 340px; }
+.browse h1 { font: 600 var(--type-title1) / 1.05 var(--font-display); margin: 14px 0 34px; }
+.filters { display: grid; gap: 14px; margin-bottom: 40px; }
+.chips-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
+.chips-row > .kicker { width: 130px; flex: none; }
+.chips-track { position: relative; flex: 1; min-width: 0; display: flex; gap: 12px; padding: 26px 30px; margin: -26px -30px; }
+.chips-track.wrap { flex-wrap: wrap; overflow: visible; }
+.chips-row.wrap-row { align-items: flex-start; }
+.chips-row.wrap-row > .kicker { padding-top: 18px; }
+.chip { display: inline-flex; align-items: center; gap: 10px; flex: none; height: 56px; padding: 0 24px; border-radius: 28px; white-space: nowrap;
+  font: 600 var(--type-callout) / 1 var(--font-text); color: var(--muted); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.chip small { font: 400 var(--type-caption) var(--font-text); opacity: .8; }
+.chip svg { width: 24px; height: 24px; }
+.chip.on { background: var(--text); color: var(--bg); }
+.chip:focus-visible, [data-form="tv"] .chip:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
+.chip.on:focus-visible, [data-form="tv"] .chip.on:focus { color: var(--bg); }
+@media (hover: hover) { [data-form="desktop"] .chip:not(.on):hover { color: var(--text); } }
+
+.grid { display: grid; gap: 48px 32px; padding: 34px; margin: -34px; justify-content: start; }
+.grid > .tile { position: relative; }
+.grid-foot { margin-top: 40px; font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
+.sentinel { height: 1px; }
+.note { font: 400 var(--type-body) / 1.4 var(--font-text); color: var(--muted); max-width: 1100px; }
+.note.bad { display: flex; align-items: center; gap: 14px; color: var(--text); }
+.browse .problem { margin-top: 10px; }
+
+/* Search */
+.search .field { display: flex; align-items: center; gap: 20px; height: 96px; max-width: 1240px; padding: 0 34px; margin: 14px 0 40px;
+  border-radius: 48px; background: var(--surface); box-shadow: inset 0 0 0 2px var(--line);
+  transition: box-shadow var(--motion-focus) var(--ease), outline-color var(--motion-focus) var(--ease); }
+.search .field svg { width: 36px; height: 36px; color: var(--muted); }
+.search .field input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-title3) / 1 var(--font-text); outline: none; }
+.search .field input::placeholder { color: var(--muted); }
+.search .field input::-webkit-search-cancel-button { display: none; }
+.search .field input:focus { outline: none; box-shadow: none; }
+.search .field:focus-within { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+  box-shadow: 0 0 0 calc(var(--focus-ring) * 2 + var(--focus-halo)) var(--halo); }
+.recent h2 { margin-bottom: 20px; }
+.results { margin: 0 calc(var(--safe-side) * -1) 0 -340px; }
+.results .row:first-child { margin-top: 0; }
+
+/* Phone */
+[data-form="phone"] .browse.page { position: static; padding: 12px 16px 96px; }
+[data-form="phone"] .browse h1 { margin: 8px 0 16px; }
+[data-form="phone"] .filters { gap: 10px; margin-bottom: 20px; }
+[data-form="phone"] .chips-row { flex-direction: column; align-items: stretch; gap: 6px; }
+[data-form="phone"] .chips-row > .kicker { width: auto; }
+[data-form="phone"] .chips-track { overflow-x: auto; gap: 8px; padding: 2px 16px; margin: 0 -16px; }
+[data-form="phone"] .chip { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; }
+[data-form="phone"] .chip small { font-size: 12px; }
+[data-form="phone"] .chip svg { width: 16px; height: 16px; }
+[data-form="phone"] .grid { gap: 16px 11px; padding: 0; margin: 0; justify-content: space-between; }
+[data-form="phone"] .grid-foot { margin-top: 20px; font-size: 13px; }
+[data-form="phone"] .note { font-size: 15px; }
+[data-form="phone"] .search .field { height: 50px; padding: 0 16px; gap: 10px; margin: 8px 0 20px; }
+[data-form="phone"] .search .field svg { width: 20px; height: 20px; }
+[data-form="phone"] .search .field input { font-size: 17px; }
+[data-form="phone"] .results { margin: 0 -16px; }

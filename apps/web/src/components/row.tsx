@@ -86,16 +86,17 @@ export function TileCard(props: {
   );
 }
 
-export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void }) {
+export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void; scope?: string }) {
   let section!: HTMLElement;
   let track: HTMLDivElement | undefined;
   const m = metrics;
-  const id = () => props.row.rowId;
+  // Search shows the same catalogs as Home: keep their offsets and keys apart.
+  const id = () => `${props.scope ?? "home"}:${props.row.rowId}`;
   const size = () => sizeOf(m(), props.row.tiles[0]?.posterShape);
   const stride = () => size()[0] + m().gap;
   const withCaption = () => props.row.tiles.some((t) => t.progress !== null);
   const bodyHeight = () => size()[1] + m().pad * 2 + (withCaption() ? m().caption : 0);
-  const [scroll, setScroll] = createSignal(offsets.get(props.row.rowId) ?? 0);
+  const [scroll, setScroll] = createSignal(offsets.get(id()) ?? 0);
   const [viewport, setViewport] = createSignal(1920);
   const [focused, setFocused] = createSignal(-1);
   const [near, setNear] = createSignal(true);
@@ -123,7 +124,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
 
   const attachTrack = (el: HTMLDivElement) => {
     track = el;
-    const saved = offsets.get(props.row.rowId);
+    const saved = offsets.get(id());
     if (saved) queueMicrotask(() => el.scrollTo({ left: saved }));
   };
 

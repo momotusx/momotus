@@ -61,9 +61,17 @@ export function focusEl(el: HTMLElement) {
   reveal(el);
 }
 
+/** Autofocus target, else the first content element, else the rail item of
+ * the current section. */
 function initial(): HTMLElement | null {
   const all = candidates();
-  return all.find((el) => el.hasAttribute("data-autofocus")) ?? all[0] ?? null;
+  return (
+    all.find((el) => el.hasAttribute("data-autofocus")) ??
+    all.find((el) => groupOf(el) !== "rail") ??
+    all.find((el) => el.classList.contains("on")) ??
+    all[0] ??
+    null
+  );
 }
 
 export function move(dir: Direction): boolean {

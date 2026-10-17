@@ -9,6 +9,7 @@ import { createSignal, For, Show } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { CONTINUE_ROW, Row } from "../components/row";
 import { homeView } from "../core/client";
+import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
 import { playPath, titlePath } from "../lib/format";
 import { kindLabel } from "../lib/words";
@@ -39,6 +40,11 @@ export default function Home() {
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
         <Backdrop src={hero()?.tile.background ?? null} class="home-bd" />
+        <Show when={form() === "phone"}>
+          <header class="ph-top">
+            <span class="brand">Marquee</span>
+          </header>
+        </Show>
         <section class="hero" data-reveal-top aria-label="Featured">
           <Show
             when={hero()}

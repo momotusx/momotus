@@ -22,9 +22,6 @@
   border-radius: var(--radius-l); background: var(--surface); box-shadow: inset 0 0 0 2px var(--line);
   display: flex; flex-direction: column; align-items: flex-start; overflow: clip; }
 .pick h2 { font: 600 var(--type-title1) / 1.02 var(--font-display); margin: 14px 0 20px; }
-.facts-grid { display: grid; grid-template-columns: 180px 1fr; row-gap: 4px; width: 100%; }
-.facts-grid dt { font: 600 var(--type-caption) / 40px var(--font-text); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.facts-grid dd { font: 500 var(--type-callout) / 40px var(--font-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .why { display: grid; gap: 10px; margin-top: 20px; }
 .why li { display: flex; gap: 14px; font: 400 var(--type-callout) / 1.3 var(--font-text); }
 .why svg { width: 28px; height: 28px; margin-top: 1px; color: var(--ok); }
@@ -42,12 +39,15 @@
   color: var(--muted); border-bottom: 2px solid var(--line); }
 .alist { flex: 1; min-height: 0; margin: 0 -36px; padding: 6px 36px 36px; }
 .vgroup { scroll-margin-top: 12px; }
-.vgroup h3 { display: flex; justify-content: space-between; margin: 16px 0 6px; padding: 12px 22px; border-radius: 10px; background: var(--surface);
+/* Group headers stay pinned while their rows scroll, so every group always
+ * shows its label. */
+.vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 6px; padding: 12px 22px; border-radius: 10px; background: var(--surface);
   font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; }
 .vgroup h3 .num { color: var(--muted); }
 .vrow { width: 100%; min-height: 64px; padding: 10px 22px; border-radius: var(--radius-m); border-bottom: 1px solid var(--line);
   font: 500 var(--type-callout) / 1.25 var(--font-text); transform-origin: center; }
 .vrow .q { font: 700 var(--type-body) var(--font-text); }
+.vrow .q.unknown { font: 500 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); }
 .vrow .chips { display: flex; gap: 6px; min-width: 0; overflow: hidden; }
 .vrow .chips span { font: 600 var(--type-caption) / 1 var(--font-text); padding: 5px 8px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 2px var(--line); white-space: nowrap; }
 .vrow .size { color: var(--text); }
@@ -85,8 +85,6 @@
 [data-form="phone"] .vstate svg { width: 16px; height: 16px; }
 [data-form="phone"] .pick { margin-top: 16px; padding: 18px; border-radius: 16px; }
 [data-form="phone"] .pick h2 { margin: 8px 0 10px; }
-[data-form="phone"] .facts-grid { grid-template-columns: 110px 1fr; }
-[data-form="phone"] .facts-grid dt, [data-form="phone"] .facts-grid dd { line-height: 28px; }
 [data-form="phone"] .why svg { width: 18px; height: 18px; }
 [data-form="phone"] .pick .btn { margin: 16px 0 10px; width: 100%; justify-content: center; }
 [data-form="phone"] .fail svg { width: 16px; height: 16px; }

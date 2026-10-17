@@ -113,7 +113,8 @@ function Shell(props: RouteSectionProps) {
       () => {
         const wasBack = wentBack;
         wentBack = false;
-        requestAnimationFrame(() => restore(wasBack));
+        // Touch has no cursor to place; remotes and keyboards do.
+        if (form() !== "phone") requestAnimationFrame(() => restore(wasBack));
       },
     ),
   );

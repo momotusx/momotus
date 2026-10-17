@@ -15,7 +15,7 @@ import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
 import { bytes, decoded, playPath, releaseParts } from "../lib/format";
-import { groupLabel, groupOrder, hiddenSummary, languageName, reasonText, statusText } from "../lib/words";
+import { groupLabel, groupOrder, hiddenSummary, languageName, qualityText, reasonText, statusText } from "../lib/words";
 import "./versions.css";
 
 const SHOWN = 3;
@@ -165,7 +165,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                 <>
                   <p class="kicker">Recommended for this screen</p>
                   <h2>
-                    {p().quality}
+                    {qualityText(p().quality)}
                     <Show when={p().features[0]}>{(f) => <> {f()}</>}</Show>
                   </h2>
                   <dl class="facts-grid">
@@ -236,7 +236,9 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                       <For each={shown()}>
                         {(r) => (
                           <button class="vrow" data-f={`v:${r.key}`} onClick={() => play(r.key)}>
-                            <span class="q">{r.quality}</span>
+                            <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
+                              {qualityText(r.quality)}
+                            </span>
                             <span class="chips">
                               <For each={r.features}>{(f) => <span>{f}</span>}</For>
                             </span>

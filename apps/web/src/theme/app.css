@@ -64,6 +64,13 @@ svg { flex: none; }
 
 .kicker { font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 
+/* Label and value pairs (Versions pick, import summary). */
+.facts-grid { display: grid; grid-template-columns: 180px 1fr; row-gap: 4px; width: 100%; }
+.facts-grid dt { font: 600 var(--type-caption) / 40px var(--font-text); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.facts-grid dd { font: 500 var(--type-callout) / 40px var(--font-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form="phone"] .facts-grid { grid-template-columns: 110px 1fr; }
+[data-form="phone"] .facts-grid dt, [data-form="phone"] .facts-grid dd { line-height: 28px; }
+
 .skel { background: var(--surface); animation: skel 1.6s ease-in-out infinite alternate; }
 @keyframes skel { from { opacity: .55; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }

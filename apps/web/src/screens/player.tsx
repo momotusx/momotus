@@ -19,7 +19,7 @@ import { videoContext } from "../core/video";
 import { focusEl } from "../focus/dom";
 import { bytes, clock, decoded, episodeLabel, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
 import { toVtt } from "../lib/subs";
-import { languageName } from "../lib/words";
+import { languageName, qualityText } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -260,7 +260,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (s?.phase === "failed") return { tone: "bad", text: "None of the sources could be played", busy: false };
     if (s?.phase === "resolving") {
       const r = playing();
-      return { tone: "warn", text: r ? `Starting ${r.quality}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting", busy: true };
+      return { tone: "warn", text: r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting", busy: true };
     }
     const vs = versions();
     if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: "No playable version found", busy: false };
@@ -405,7 +405,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               <A class="pa" href={versionsPath(props.kind, props.id, props.videoId)} data-f="player:versionsact">
                 <Layers aria-hidden />
                 <b>Versions</b>
-                <small>{playing()?.quality ?? ""}</small>
+                <small>{playing() ? qualityText(playing()?.quality ?? "") : ""}</small>
               </A>
               <Show when={ctx.ref}>
                 {(r) => (
