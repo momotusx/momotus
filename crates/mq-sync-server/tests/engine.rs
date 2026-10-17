@@ -9,6 +9,8 @@ use mq_sync::wire::{AccountResponse, MAX_CLOCK_AHEAD_MS};
 use mq_sync::{SyncConfig, SyncError, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 struct Dir(PathBuf);
 
@@ -248,8 +250,8 @@ async fn a_lying_relay_cannot_break_clocks_or_drop_writes() {
     let lib = Library::temporary().unwrap();
     let clock = HlcClock::new(1);
     progress(&lib, "v1", &clock.tick(now_ms()).encode());
-    let err = sync_once(&lib, &http(), &config, &clock).await.unwrap_err();
-    assert!(matches!(err, SyncError::Rejected(_)), "{err:?}");
+    let report = sync_once(&lib, &http(), &config, &clock).await.unwrap();
+    assert_eq!(report.waiting, 1, "{report:?}");
     // Every stored and new timestamp still has 32 lowercase hex digits.
     let stored = lib.changed_since(&SyncCursor::default(), 10).unwrap();
     assert!(Hlc::decode(&stored[0].hlc).is_some(), "{:?}", stored[0].hlc);
@@ -267,7 +269,7 @@ async fn a_relay_with_a_slow_clock_loses_no_edits() {
     let server = serve(
         &dir.0.join("relay.sqlite"),
         Config {
-            clock_offset_ms: -30 * 60 * 1000,
+            clock_offset_ms: Arc::new((-30 * 60 * 1000).into()),
             ..Config::default()
         },
     )
@@ -312,10 +314,10 @@ async fn another_devices_version_is_never_restamped() {
         device: 99,
     };
     progress(&lib, "v1", &foreign.encode());
-    let err = sync_once(&lib, &http(), &config, &HlcClock::new(1))
+    let report = sync_once(&lib, &http(), &config, &HlcClock::new(1))
         .await
-        .unwrap_err();
-    assert!(matches!(err, SyncError::Rejected(_)), "{err:?}");
+        .unwrap();
+    assert_eq!((report.waiting, report.refused), (1, 0), "{report:?}");
     let stored = lib.changed_since(&SyncCursor::default(), 10).unwrap();
     assert_eq!(stored[0].hlc, foreign.encode(), "left as it was");
     assert!(lib.outbox(10).unwrap().last_id.is_some(), "kept for later");
@@ -326,7 +328,7 @@ async fn a_fresh_import_waits_for_a_slow_relay_instead_of_vanishing() {
     let dir = dir();
     let db = dir.0.join("relay.sqlite");
     let slow = Config {
-        clock_offset_ms: -30 * 60 * 1000,
+        clock_offset_ms: Arc::new((-30 * 60 * 1000).into()),
         ..Config::default()
     };
     let config = account(&serve(&db, slow).await).await;
@@ -340,8 +342,8 @@ async fn a_fresh_import_waits_for_a_slow_relay_instead_of_vanishing() {
     };
     progress(&a, "v1", &imported.encode());
     let clock = HlcClock::new(1);
-    let err = sync_once(&a, &http(), &config, &clock).await.unwrap_err();
-    assert!(matches!(err, SyncError::Rejected(_)), "{err:?}");
+    let report = sync_once(&a, &http(), &config, &clock).await.unwrap();
+    assert_eq!((report.waiting, report.pushed), (1, 0), "{report:?}");
     assert!(
         a.outbox(10).unwrap().last_id.is_some(),
         "still queued, not dropped"
@@ -372,7 +374,7 @@ async fn with_a_slow_relay_last_writer_falls_back_to_push_order() {
     let server = serve(
         &dir.0.join("relay.sqlite"),
         Config {
-            clock_offset_ms: -30 * 60 * 1000,
+            clock_offset_ms: Arc::new((-30 * 60 * 1000).into()),
             ..Config::default()
         },
     )
@@ -414,4 +416,81 @@ async fn with_a_slow_relay_last_writer_falls_back_to_push_order() {
     // relay's (slow) time.
     assert_eq!(registers(&phone), registers(&tv));
     assert_eq!(phone.progress("p", "v1").unwrap(), Some((3, 10)));
+}
+
+/// A relay that ran three hours fast (devices took its time, so registers
+/// are stamped ahead) keeps taking edits to those registers once its clock
+/// is fixed, instead of making them wait three hours.
+#[tokio::test]
+async fn a_register_written_while_the_relay_ran_fast_still_takes_edits() {
+    let dir = dir();
+    let offset = Arc::new(AtomicI64::new(3 * 3_600_000));
+    let fast = Config {
+        clock_offset_ms: offset.clone(),
+        ..Config::default()
+    };
+    let config = account(&serve(&dir.0.join("relay.sqlite"), fast).await).await;
+    let lib = Library::temporary().unwrap();
+    let clock = HlcClock::new(1);
+    sync_once(&lib, &http(), &config, &clock).await.unwrap();
+    progress(&lib, "v1", &clock.tick(clock.wall_now()).encode());
+    let report = sync_once(&lib, &http(), &config, &clock).await.unwrap();
+    assert_eq!(report.pushed, 1, "{report:?}");
+
+    // The operator fixes the relay's clock; the device's clock never goes
+    // back, so its next edit is still stamped three hours ahead.
+    offset.store(0, Ordering::Relaxed);
+    progress(&lib, "v1", &clock.tick(clock.wall_now()).encode());
+    let report = sync_once(&lib, &http(), &config, &clock).await.unwrap();
+    assert_eq!((report.pushed, report.waiting), (1, 0), "{report:?}");
+}
+
+/// On a slow relay, an edit made after seeing a newer version than the
+/// relay's time (an import from 25 minutes ago) is restamped just above
+/// that version, so it still wins.
+#[tokio::test]
+async fn a_restamp_lands_above_the_version_it_replaces() {
+    let dir = dir();
+    let server = serve(
+        &dir.0.join("relay.sqlite"),
+        Config {
+            clock_offset_ms: Arc::new((-30 * 60 * 1000).into()),
+            ..Config::default()
+        },
+    )
+    .await;
+    let config = account(&server).await;
+    let (tv, phone) = (Library::temporary().unwrap(), Library::temporary().unwrap());
+    let (tv_clock, phone_clock) = (HlcClock::new(1), HlcClock::new(2));
+    let row = |pos| ProgressRow {
+        video_id: "v1",
+        item_id: "tt1",
+        position_ms: pos,
+        duration_ms: 10,
+        updated_ms: pos,
+    };
+    let imported = Hlc {
+        wall_ms: now_ms() - 25 * 60 * 1000,
+        counter: 0,
+        device: 0,
+    };
+    tv.set_progress("p", row(3), &imported.encode()).unwrap();
+    sync_once(&tv, &http(), &config, &tv_clock).await.unwrap();
+    sync_once(&phone, &http(), &config, &phone_clock)
+        .await
+        .unwrap();
+    phone
+        .set_progress(
+            "p",
+            row(8),
+            &phone_clock.tick(phone_clock.wall_now()).encode(),
+        )
+        .unwrap();
+    let report = sync_once(&phone, &http(), &config, &phone_clock)
+        .await
+        .unwrap();
+    assert_eq!((report.pushed, report.waiting), (1, 0), "{report:?}");
+    sync_once(&tv, &http(), &config, &tv_clock).await.unwrap();
+    assert_eq!(tv.progress("p", "v1").unwrap(), Some((8, 10)));
+    assert_eq!(registers(&phone), registers(&tv));
 }

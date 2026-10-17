@@ -1,5 +1,8 @@
 //! `mq-sync-server --db PATH [--listen 127.0.0.1:8787] [--invite CODE] [--open]
-//! [--new-generation]`
+//! [--new-generation] [--trust-proxy]`
+//!
+//! `--trust-proxy`: behind a reverse proxy (needed for TLS), rate limits go
+//! by the client address the proxy appends to `X-Forwarded-For`.
 
 use mq_sync_server::{Config, router};
 use std::net::SocketAddr;
@@ -16,6 +19,7 @@ async fn main() {
         match flag.as_str() {
             "--open" => open = true,
             "--new-generation" => config.new_generation = true,
+            "--trust-proxy" => config.trust_proxy = true,
             _ => {
                 let value = args.next().unwrap_or_else(|| usage(&flag));
                 match flag.as_str() {
@@ -40,7 +44,7 @@ async fn main() {
 
 fn usage(flag: &str) -> ! {
     eprintln!(
-        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation]"
+        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation] [--trust-proxy]"
     );
     std::process::exit(2);
 }

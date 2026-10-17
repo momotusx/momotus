@@ -13,12 +13,16 @@ use mq_sync_server::{Config, router};
 use std::path::PathBuf;
 
 async fn relay() -> (String, PathBuf) {
+    relay_with(Config::default()).await
+}
+
+async fn relay_with(config: Config) -> (String, PathBuf) {
     let mut b = [0u8; 8];
     getrandom::fill(&mut b).unwrap();
     let dir = std::env::temp_dir().join(format!("mq-pair-{}", hex::encode(b)));
     std::fs::create_dir_all(&dir).unwrap();
     let db = dir.join("relay.sqlite");
-    let app = router(&db, Config::default()).unwrap();
+    let app = router(&db, config).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
@@ -218,4 +222,76 @@ async fn a_token_holder_cannot_plant_their_keys_in_a_recovery() {
         .unwrap();
     let pk = B64.decode(list["kits"][0]["pk"].as_str().unwrap()).unwrap();
     assert_eq!(pk.len(), 32);
+}
+
+/// The status of a POST from `client`, as a trusted proxy would forward it.
+async fn status_from(url: &str, body: serde_json::Value, client: &str) -> u16 {
+    let options = RequestOptions {
+        headers: vec![("x-forwarded-for".into(), client.into())],
+        ..local()
+    };
+    match http().post_json(url, &body, &options).await {
+        Ok(_) => 200,
+        Err(HttpError::Status { status, .. }) => status,
+        Err(e) => panic!("{e:?}"),
+    }
+}
+
+#[tokio::test]
+async fn one_flooding_client_does_not_block_anyone_else() {
+    let config = Config {
+        trust_proxy: true,
+        ..Config::default()
+    };
+    let (server, _) = relay_with(config).await;
+    let open = format!("{server}/v1/pairings");
+    let opens = |client: &'static str| status_from(&open, serde_json::json!({}), client);
+    for _ in 0..20 {
+        assert_eq!(opens("198.51.100.7").await, 200);
+    }
+    assert_eq!(opens("198.51.100.7").await, 429, "over its own budget");
+    // Hops before the proxy's are whatever the client wrote.
+    assert_eq!(opens("203.0.113.1, 198.51.100.7").await, 429);
+    assert_eq!(opens("203.0.113.9").await, 200, "another client");
+    // An IPv6 client holds its whole /64.
+    for _ in 0..20 {
+        assert_eq!(opens("2001:db8::1").await, 200);
+    }
+    assert_eq!(opens("2001:db8::2").await, 429);
+    assert_eq!(opens("2001:db8:0:1::1").await, 200);
+
+    // Requests refused for one client do not use up the relay's budget
+    // (600 recoveries a minute).
+    let redeem = format!("{server}/v1/recovery/redeem");
+    let body = serde_json::json!({ "lookup": "00", "auth": "00" });
+    for _ in 0..700 {
+        status_from(&redeem, body.clone(), "198.51.100.7").await;
+    }
+    assert_eq!(status_from(&redeem, body, "203.0.113.9").await, 404);
+}
+
+/// The usual recovery: the phone that made the kit is lost, the user
+/// recovers on a new one and later revokes the lost phone. The new device
+/// must not hang off the lost one, and the kit moves to the new device.
+#[tokio::test]
+async fn a_redeemed_kit_belongs_to_the_device_that_redeemed_it() {
+    let (server, db) = relay().await;
+    let lost = device(&server).await;
+    let kit = new_recovery_kit();
+    store_recovery(&http(), &lost, &kit).await.unwrap();
+    recover(&http(), &server, &kit).await.unwrap();
+
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let (newest, parent): (Vec<u8>, Option<Vec<u8>>) = conn
+        .query_row(
+            "SELECT token_hash, minted_by FROM device ORDER BY rowid DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(parent, None, "no parent to be revoked with");
+    let owner: Vec<u8> = conn
+        .query_row("SELECT added_by FROM recovery", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(owner, newest, "the kit moved to the new device");
 }

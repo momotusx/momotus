@@ -8,6 +8,8 @@ use mq_sync::wire::{AccountResponse, MAX_CLOCK_AHEAD_MS};
 use mq_sync::{SyncConfig, pull_changes, push_changes, sync_once};
 use proptest::prelude::*;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 const PROFILE: &str = "default";
 const URLS: [&str; 3] = [
@@ -126,7 +128,7 @@ fn op() -> impl Strategy<Value = Op> {
         }),
         (device.clone(), -7200..540i64)
             .prop_map(|(device, skew_s)| Op::ClockJump { device, skew_s }),
-        (device.clone(), 0..2u8, 0..1000i64, 1800..7200u64).prop_map(
+        (device.clone(), 0..2u8, 0..1000i64, 0..7200u64).prop_map(
             |(device, video, position, age_s)| Op::Import {
                 device,
                 video,
@@ -250,7 +252,7 @@ fn written(op: &Op, value: &serde_json::Value) -> bool {
     }
 }
 
-async fn relay(clock_offset_ms: i64) -> String {
+async fn relay(clock_offset_ms: Arc<AtomicI64>) -> String {
     let dir = std::env::temp_dir().join(format!("mq-converge-{}-{}", std::process::id(), now_ms()));
     std::fs::create_dir_all(&dir).unwrap();
     let app = mq_sync_server::router(
@@ -267,6 +269,19 @@ async fn relay(clock_offset_ms: i64) -> String {
     base
 }
 
+/// Registers so far written by one device only (no imports), with its last
+/// edit; `None` once another device or an import touched it.
+type Single = HashMap<(u8, String), Option<(usize, Op)>>;
+
+fn note(single: &mut Single, register: (u8, String), edit: Option<(usize, &Op)>) {
+    let next = match (single.get(&register), edit) {
+        (Some(None), _) | (_, None) => None,
+        (Some(Some((other, _))), Some((device, _))) if *other != device => None,
+        (_, Some((device, op))) => Some((device, op.clone())),
+    };
+    single.insert(register, next);
+}
+
 fn rand_suffix() -> String {
     let mut b = [0u8; 8];
     getrandom::fill(&mut b).unwrap();
@@ -278,9 +293,11 @@ fn registers(lib: &Library) -> Vec<mq_library::SyncRecord> {
         .unwrap()
 }
 
-/// `slow`: the relay's clock is 30 minutes behind every device.
+/// `slow`: the relay's clock is 30 minutes behind every device until the
+/// final rounds.
 async fn run(ops: Vec<Op>, slow: bool) {
-    let server = relay(if slow { -30 * 60 * 1000 } else { 0 }).await;
+    let offset = Arc::new(AtomicI64::new(if slow { -30 * 60 * 1000 } else { 0 }));
+    let server = relay(offset.clone()).await;
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let local = RequestOptions {
         allow_private: true,
@@ -327,6 +344,7 @@ async fn run(ops: Vec<Op>, slow: bool) {
     }
     // The newest write of every register, across all devices: the oracle.
     let mut newest: HashMap<(u8, String), String> = HashMap::new();
+    let mut single = Single::new();
     for op in &ops {
         match op {
             Op::Restart { device } => {
@@ -372,6 +390,11 @@ async fn run(ops: Vec<Op>, slow: bool) {
                     written(op, &stored.value),
                     "edit lost: {op:?} left {stored:?}"
                 );
+                note(
+                    &mut single,
+                    (coll::PROGRESS, key.clone()),
+                    Some((*device, op)),
+                );
                 let slot = newest.entry((coll::PROGRESS, key)).or_default();
                 if stored.hlc > *slot {
                     *slot = stored.hlc;
@@ -403,6 +426,7 @@ async fn run(ops: Vec<Op>, slow: bool) {
                 // version is checked.
                 let key = [PROFILE, &video_id].join("\u{1f}");
                 let stored = d.library.register(coll::PROGRESS, &key).unwrap().unwrap();
+                note(&mut single, (coll::PROGRESS, key.clone()), None);
                 let slot = newest.entry((coll::PROGRESS, key)).or_default();
                 if stored.hlc > *slot {
                     *slot = stored.hlc;
@@ -444,6 +468,7 @@ async fn run(ops: Vec<Op>, slow: bool) {
                     written(op, &stored.value),
                     "edit lost: {op:?} left {stored:?}"
                 );
+                note(&mut single, register.clone(), Some((*device, op)));
                 let slot = newest.entry(register).or_default();
                 if stored.hlc > *slot {
                     *slot = stored.hlc;
@@ -451,6 +476,8 @@ async fn run(ops: Vec<Op>, slow: bool) {
             }
         }
     }
+    // The operator fixes the relay's clock, so what waited goes through.
+    offset.store(0, Ordering::Relaxed);
     for _ in 0..2 {
         for (d, config) in devices.iter().zip(&configs) {
             sync_once(&d.library, &http, config, &d.clock)
@@ -484,6 +511,19 @@ async fn run(ops: Vec<Op>, slow: bool) {
         newest.len(),
         "registers missing after {ops:?}"
     );
+    // A register one device wrote alone ends with its last edit, also under
+    // a slow relay: restamps keep each device's own order.
+    for ((coll, key), edit) in &single {
+        let Some((_, op)) = edit else { continue };
+        let r = synced
+            .iter()
+            .find(|r| r.coll == *coll && r.key == *key)
+            .expect("written registers are synced");
+        assert!(
+            written(op, &r.value),
+            "lost update in {coll}:{key} after {ops:?}"
+        );
+    }
     // Syncing never drags a device's clock past the relay's 10 minutes.
     let ceiling = now_ms() + MAX_CLOCK_AHEAD_MS + 1000;
     for d in devices.iter().filter(|d| d.skew_ms <= 0) {

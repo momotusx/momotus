@@ -61,6 +61,9 @@ pub struct SyncReport {
     /// Registers the relay will never take (too large, malformed); dropped
     /// from the outbox so they do not block the rest.
     pub refused: u32,
+    /// Registers the relay cannot take yet (stamped ahead of its clock);
+    /// still queued, they go once the relay's clock reaches them.
+    pub waiting: u32,
     pub pulled: u32,
     /// Pulled registers that changed local state.
     pub applied: u32,
@@ -81,8 +84,6 @@ pub enum SyncError {
     Http(#[from] HttpError),
     #[error(transparent)]
     Library(#[from] LibraryError),
-    #[error("the relay refused a record: {0}")]
-    Rejected(String),
     #[error("the relay must use https unless it is on this network")]
     Insecure,
     #[error("pairing: {0}")]
@@ -293,7 +294,7 @@ async fn push(
                 library.set_sync_state(PULL_SEQ, &oldest.saturating_sub(1).to_string())?;
             }
         }
-        let mut stuck = None;
+        let mut waiting = false;
         for refusal in &response.rejected {
             let Some(record) = sent
                 .iter()
@@ -313,7 +314,8 @@ async fn push(
                     if Hlc::decode(&record.hlc).is_none_or(|h| h.device != clock.device()) =>
                 {
                     library.requeue(record.coll, &record.key)?;
-                    stuck = Some(refusal.reason.clone());
+                    report.waiting += 1;
+                    waiting = true;
                 }
                 Refusal::ClockAhead if restamped.insert((record.coll, record.key.clone())) => {
                     // Just above what the relay holds for this register (and no
@@ -337,7 +339,8 @@ async fn push(
                 Refusal::ClockAhead => {
                     // Still ahead after a restamp: keep it queued for a later round.
                     library.requeue(record.coll, &record.key)?;
-                    stuck = Some(refusal.reason.clone());
+                    report.waiting += 1;
+                    waiting = true;
                 }
                 _ => {
                     tracing::warn!("relay refused a register for good: {}", refusal.reason);
@@ -346,8 +349,10 @@ async fn push(
             }
         }
         library.outbox_done(through)?;
-        if let Some(reason) = stuck {
-            return Err(SyncError::Rejected(reason));
+        // What waits is at the tail of the outbox now: stop, so a round
+        // never loops on it.
+        if waiting {
+            return Ok(());
         }
     }
 }

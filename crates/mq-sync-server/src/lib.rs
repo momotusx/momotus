@@ -33,6 +33,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 const MAX_REQUEST: usize = 8 * 1024 * 1024;
@@ -58,9 +59,10 @@ pub struct Config {
     /// backup, so devices send back what the backup lost.
     pub new_generation: bool,
     /// Added to the relay's idea of the time (tests of a relay with a
-    /// wrong clock).
-    pub clock_offset_ms: i64,
-    /// Take the client address from `X-Forwarded-For` (behind a trusted proxy).
+    /// wrong clock); shared, so a test can fix the clock while it runs.
+    pub clock_offset_ms: Arc<AtomicI64>,
+    /// Take the client address from the last `X-Forwarded-For` hop, the one
+    /// a trusted reverse proxy appends.
     pub trust_proxy: bool,
 }
 
@@ -70,7 +72,7 @@ impl Default for Config {
             invite: None,
             quota_bytes: 50 * 1024 * 1024,
             new_generation: false,
-            clock_offset_ms: 0,
+            clock_offset_ms: Arc::default(),
             trust_proxy: false,
         }
     }
@@ -183,7 +185,8 @@ CREATE TABLE IF NOT EXISTS recovery (
 impl AppState {
     /// The relay's time: what clock rules and pairing expiry go by.
     fn now_ms(&self) -> u64 {
-        (now_ms() as i64 + self.config.clock_offset_ms).max(0) as u64
+        let offset = self.config.clock_offset_ms.load(Ordering::Relaxed);
+        (now_ms() as i64 + offset).max(0) as u64
     }
 }
 
@@ -268,29 +271,13 @@ async fn add_device(State(state): State<AppState>, headers: HeaderMap) -> Respon
     let Some((account, minted_by)) = authorize(&db, &headers) else {
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
     };
-    let devices: rusqlite::Result<i64> = db.query_row(
-        "SELECT COUNT(*) FROM device WHERE account = ?1 AND revoked = 0",
-        params![account],
-        |r| r.get(0),
-    );
-    match devices {
-        Ok(n) if n >= MAX_DEVICES => {
-            return error(StatusCode::FORBIDDEN, "this account has too many devices");
-        }
-        Ok(_) => {}
-        Err(e) => return storage_error("count devices", e),
-    }
-    let token = random_hex(32);
-    match db.execute(
-        "INSERT INTO device (token_hash, account, minted_by, created_ms) VALUES (?1, ?2, ?3, ?4)",
-        params![token_hash(&token), account, minted_by, now_ms() as i64],
-    ) {
-        Ok(_) => Json(AccountResponse {
+    match mint_device(&db, &account, Some(&minted_by)) {
+        Ok(token) => Json(AccountResponse {
             account,
             device_token: token,
         })
         .into_response(),
-        Err(e) => storage_error("add device", e),
+        Err(refusal) => *refusal,
     }
 }
 
@@ -409,13 +396,22 @@ async fn push(
                             .optional()?,
                         _ => None,
                     };
-                    response.rejected.push(Rejected {
-                        key_id: record.key_id.clone(),
-                        reason,
-                        code,
-                        current,
-                    });
-                    continue;
+                    // A register's own history bounds it too, so a version just
+                    // above the stored one lands even when that one is ahead of
+                    // the relay (written while the relay's clock ran fast).
+                    let stored_wall = current.as_deref().and_then(Hlc::decode).map(|h| h.wall_ms);
+                    match stored_wall.map(|wall| check(record, wall.max(server_ms), epoch)) {
+                        Some(Ok(r)) => r,
+                        _ => {
+                            response.rejected.push(Rejected {
+                                key_id: record.key_id.clone(),
+                                reason,
+                                code,
+                                current,
+                            });
+                            continue;
+                        }
+                    }
                 }
             };
             let old: Option<i64> = tx
@@ -613,32 +609,41 @@ fn limited(
             .per_client
             .retain(|_, (start, _)| now < *start + 60_000);
     }
-    let mine = spend(
+    // A client over its own budget does not spend the relay's, so one
+    // flooding address cannot block everyone else.
+    spend(
         limits.per_client.entry((which, client)).or_default(),
         now,
         per_client,
-    );
-    let all = spend(&mut limits.global[which], now, global);
-    mine || all
+    ) || spend(&mut limits.global[which], now, global)
 }
 
-/// The caller's address: the peer, or the first `X-Forwarded-For` hop when
-/// the relay sits behind a proxy it trusts.
+/// The caller's address for rate limits: the peer, or the last
+/// `X-Forwarded-For` hop (the one the trusted proxy appended; earlier hops
+/// are whatever the client wrote). IPv6 counts per /64, which one client
+/// usually holds whole.
 fn client(state: &AppState, peer: SocketAddr, headers: &HeaderMap) -> IpAddr {
     let forwarded = || {
         headers
             .get("x-forwarded-for")?
             .to_str()
             .ok()?
-            .split(',')
+            .rsplit(',')
             .next()?
             .trim()
             .parse()
             .ok()
     };
-    match state.config.trust_proxy {
+    let ip = match state.config.trust_proxy {
         true => forwarded().unwrap_or(peer.ip()),
         false => peer.ip(),
+    };
+    match ip {
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => IpAddr::V4(v4),
+            None => IpAddr::V6((u128::from(v6) & !u128::from(u64::MAX)).into()),
+        },
+        v4 => v4,
     }
 }
 
@@ -663,7 +668,11 @@ fn small_blob(text: &str) -> Option<Vec<u8>> {
 }
 
 /// Mints a device token for `account`, recording what created it.
-fn mint_device(db: &Connection, account: &str, minted_by: &[u8]) -> Result<String, Box<Response>> {
+fn mint_device(
+    db: &Connection,
+    account: &str,
+    minted_by: Option<&[u8]>,
+) -> Result<String, Box<Response>> {
     let devices: i64 = db
         .query_row(
             "SELECT COUNT(*) FROM device WHERE account = ?1 AND revoked = 0",
@@ -826,7 +835,7 @@ async fn take_pairing(
     }
     // The user confirmed the codes match: now, and only now, the new
     // device gets a token.
-    let token = match mint_device(&db, &account, &filler) {
+    let token = match mint_device(&db, &account, Some(&filler)) {
         Ok(token) => token,
         Err(refusal) => return *refusal,
     };
@@ -975,8 +984,8 @@ struct Redeem {
     auth: String,
 }
 
-/// account, redeem secret hash, sealed bundle, id tag, device that added it
-type KitRow = (String, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
+/// account, redeem secret hash, sealed bundle, id tag
+type KitRow = (String, Vec<u8>, Vec<u8>, Vec<u8>);
 
 /// Joins the account of a kit as a new device: needs the kit's redeem
 /// secret, which no device keeps, so a revoked device holding the bundle
@@ -995,15 +1004,15 @@ async fn redeem_kit(
     else {
         return not_found();
     };
-    let db = lock(&state);
+    let mut db = lock(&state);
     let found: rusqlite::Result<Option<KitRow>> = db
         .query_row(
-            "SELECT account, auth_hash, sealed, id_tag, added_by FROM recovery WHERE lookup_hash = ?1",
+            "SELECT account, auth_hash, sealed, id_tag FROM recovery WHERE lookup_hash = ?1",
             params![hash],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .optional();
-    let (account, auth_hash, sealed, id_tag, added_by) = match found {
+    let (account, auth_hash, sealed, id_tag) = match found {
         Ok(Some(found)) => found,
         Ok(None) => return not_found(),
         Err(e) => return storage_error("redeem kit", e),
@@ -1011,9 +1020,22 @@ async fn redeem_kit(
     if !same(&auth_hash, &Sha256::digest(&auth)) {
         return not_found();
     }
-    // Minted as by the device that added the kit, so revoking that device
-    // can take these tokens (and its kits) with it.
-    match mint_device(&db, &account, &added_by) {
+    // Redeeming proves the kit is in hand: the new device has no parent and
+    // owns the kit from now on, so revoking the lost device that made the
+    // kit leaves both alone, while a kit a thief added goes with its device.
+    let joined = (|| {
+        let stored = |e| Box::new(storage_error("redeem kit", e));
+        let tx = db.transaction().map_err(stored)?;
+        let token = mint_device(&tx, &account, None)?;
+        tx.execute(
+            "UPDATE recovery SET added_by = ?2 WHERE lookup_hash = ?1",
+            params![hash, token_hash(&token)],
+        )
+        .map_err(stored)?;
+        tx.commit().map_err(stored)?;
+        Ok::<_, Box<Response>>(token)
+    })();
+    match joined {
         Ok(token) => Json(json!({
             "account": account,
             "deviceToken": token,

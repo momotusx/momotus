@@ -22,3 +22,4 @@
 {"event":"pairing_rejected","round":5,"codes":{"phone":"737314","tv":"737314"},"answer":"n","key_file_written":false,"relay_devices":1}
 {"event":"paired","round":5,"codes":{"phone":"193219","tv":"193219"},"answer":"y","relay_devices_before_confirm":1,"relay_devices_after_confirm":2,"devices_with_minted_by":1,"then_synced":{"applied":2,"pulled":2,"pushed":0,"stale":1,"clockGapMs":0},"check":"B lists the same 2 addons"}
 {"event":"recovered","round":5,"kit_chars":39,"then_synced":{"applied":2,"pulled":2,"pushed":0,"stale":1},"relay_devices":3,"kits_with_id_tag_and_added_by":1,"token_lines_in_relay_log":0}
+{"event":"trust_proxy_limits","round":6,"same_client_statuses":"20x200 then 429","spoofed_prefix":429,"other_client":200}
