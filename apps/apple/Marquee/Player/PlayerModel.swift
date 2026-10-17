@@ -228,7 +228,9 @@ final class PlayerModel {
         rendered = true
         let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
         firstFrameMs = ms
-        coreLog.notice("metric first_frame_ms=\(ms, privacy: .public) key=\(self.route.key, privacy: .public)")
+        // The key's kind only ("url", "bt", "rel"): a "url:" key is the stream link, which can carry an addon's key.
+        let kind = String(route.key.prefix { $0 != ":" })
+        coreLog.notice("metric first_frame_ms=\(ms, privacy: .public) key=\(kind, privacy: .public)")
     }
 
     func selectSubtitle(_ track: SubtitleTrack?) {

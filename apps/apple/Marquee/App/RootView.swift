@@ -73,7 +73,9 @@ struct RootView: View {
                     do {
                         try await core.perform("installAddon", ["url": url])
                     } catch {
-                        coreLog.notice("debug install \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        // The host only: an addon link can carry a key in its path.
+                        let host = URL(string: url)?.host() ?? "?"
+                        coreLog.notice("debug install from \(host, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     }
                 }
             }

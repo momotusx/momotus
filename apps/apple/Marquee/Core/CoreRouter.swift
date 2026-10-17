@@ -88,7 +88,8 @@ final class CoreRouter: CoreListener {
     func onMessage(json: String) {
         let data = Data(json.utf8)
         guard let head = try? JSONDecoder().decode(Head.self, from: data) else {
-            coreLog.error("unreadable core message: \(json.prefix(200), privacy: .public)")
+            // Its size only: a message can carry addon links and their keys.
+            coreLog.error("unreadable core message, \(json.utf8.count, privacy: .public) bytes")
             return
         }
         if let sub = head.sub {
