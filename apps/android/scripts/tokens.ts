@@ -27,7 +27,7 @@ export interface Tokens {
   space: Scale;
   radius: Scale;
   safeArea: { tv: Scale; phone: Scale };
-  focus: { ring: number; halo: number; scaleCard: number; scaleTile: number };
+  focus: { ring: number; halo: { dark: number; light: number }; scaleCard: number; scaleTile: number };
   motion: { focusMs: number; panelMs: number; ease: string };
   tile: { tv: TileSet; phone: TileSet };
 }
@@ -161,7 +161,8 @@ export function generate(t: Tokens): string {
     `    val phoneTiles = ${tileSet(t.tile.phone)}`,
     "",
     `    val focusRing = ${dp(t.focus.ring)}`,
-    `    val focusHalo = ${dp(t.focus.halo)}`,
+    `    val focusHaloDark = ${dp(t.focus.halo.dark)}`,
+    `    val focusHaloLight = ${dp(t.focus.halo.light)}`,
     `    const val FOCUS_SCALE_CARD = ${float(t.focus.scaleCard)}`,
     `    const val FOCUS_SCALE_TILE = ${float(t.focus.scaleTile)}`,
     "",

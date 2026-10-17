@@ -1,5 +1,5 @@
-/** Generates design/.../Icons.kt from the Lucide icon set (lucide-static, the version the web
- * family's lucide-solid uses), so both families share one outline icon set. Only the icons named
+/** Generates design/.../Icons.kt from the Lucide icon set (lucide-static, pinned in package.json),
+ * so the families share one outline icon set (Lucide, ISC). Only the icons named
  * below are emitted; add a name and run `bun run icons`. A test fails when the output is stale.
  *
  * Lucide icons are 24x24 strokes (2 px, round caps and joins). Each element becomes SVG path
@@ -23,7 +23,9 @@ export const ICONS = [
   "chevron-right",
   "chevron-up",
   "circle-alert",
+  "circle",
   "circle-check",
+  "circle-x",
   "clapperboard",
   "clock",
   "compass",

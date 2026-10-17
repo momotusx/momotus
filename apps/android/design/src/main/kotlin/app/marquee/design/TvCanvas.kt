@@ -2,6 +2,7 @@ package app.marquee.design
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Density
@@ -24,9 +25,10 @@ fun tvScale(
  */
 @Composable
 fun TvCanvas(content: @Composable () -> Unit) {
-    val size = LocalWindowInfo.current.containerSize
-    val scale = tvScale(size.width, size.height)
-    val density = LocalDensity.current
-    val canvas = if (size.width > 0 && size.height > 0) Density(scale, fontScale = 1f) else density
-    CompositionLocalProvider(LocalDensity provides canvas) { content() }
+    val window = LocalWindowInfo.current.containerSize
+    // The window can report 0x0 on the first frame; the display size is the right answer then.
+    val screen = LocalContext.current.resources.displayMetrics
+    val width = if (window.width > 0) window.width else screen.widthPixels
+    val height = if (window.height > 0) window.height else screen.heightPixels
+    CompositionLocalProvider(LocalDensity provides Density(tvScale(width, height), fontScale = 1f)) { content() }
 }

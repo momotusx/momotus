@@ -89,11 +89,27 @@ object Icons {
         )
     }
 
+    val Circle: ImageVector by lazy {
+        strokeIcon(
+            "circle",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        )
+    }
+
     val CircleCheck: ImageVector by lazy {
         strokeIcon(
             "circle-check",
         "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
         "m16 9-5.5 5.5L8 12",
+        )
+    }
+
+    val CircleX: ImageVector by lazy {
+        strokeIcon(
+            "circle-x",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        "m15 9-6 6",
+        "m9 9 6 6",
         )
     }
 

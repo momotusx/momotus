@@ -12,6 +12,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 
 /** Which UI tree is showing: the TV tree reads tokens as points on a 1920x1080 canvas. */
 enum class Form { Tv, Phone }
@@ -42,6 +43,11 @@ object Marquee {
         @Composable @ReadOnlyComposable
         get() = if (LocalForm.current == Form.Tv) Tokens.tvSafe else Tokens.phoneSafe
 
+    /** Width of the focus halo: soft on dark, a crisp outer line on light (design/DECISION.md). */
+    val focusHalo: Dp
+        @Composable @ReadOnlyComposable
+        get() = if (LocalPalette.current === Tokens.light) Tokens.focusHaloLight else Tokens.focusHaloDark
+
     val space: Spacing get() = Tokens.space
     val radius: Radii get() = Tokens.radius
 
@@ -67,7 +73,8 @@ fun rememberReducedMotion(): Boolean {
 
 /**
  * The theme for one UI tree. TV is dark; the phone tree follows [dark]. The TV tree is drawn on
- * the point canvas ([TvCanvas]) so token sizes apply unchanged.
+ * the point canvas ([TvCanvas], applied here so no screen forgets it) and token sizes apply
+ * unchanged.
  */
 @Composable
 fun MarqueeTheme(
@@ -76,11 +83,14 @@ fun MarqueeTheme(
     content: @Composable () -> Unit,
 ) {
     val palette = if (dark) Tokens.dark else Tokens.light
-    CompositionLocalProvider(
-        LocalForm provides form,
-        LocalPalette provides palette,
-        LocalReducedMotion provides rememberReducedMotion(),
-    ) {
-        Box(Modifier.fillMaxSize().background(palette.bg).clipToBounds()) { content() }
+    val themed: @Composable () -> Unit = {
+        CompositionLocalProvider(
+            LocalForm provides form,
+            LocalPalette provides palette,
+            LocalReducedMotion provides rememberReducedMotion(),
+        ) {
+            Box(Modifier.fillMaxSize().background(palette.bg).clipToBounds()) { content() }
+        }
     }
+    if (form == Form.Tv) TvCanvas(themed) else themed()
 }

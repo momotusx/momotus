@@ -114,7 +114,7 @@ object Tokens {
             muted = Color(0xFF5F5345),
             accent = Color(0xFF9C5800),
             onAccent = Color(0xFFFFF8EE),
-            halo = Color(0x571C1611),
+            halo = Color(0xD11C1611),
             ok = Color(0xFF2E7D45),
             warn = Color(0xFF9C5800),
             bad = Color(0xFFB3261E),
@@ -194,7 +194,8 @@ object Tokens {
         )
 
     val focusRing = 4.dp
-    val focusHalo = 14.dp
+    val focusHaloDark = 14.dp
+    val focusHaloLight = 3.dp
     const val FOCUS_SCALE_CARD = 1.05f
     const val FOCUS_SCALE_TILE = 1.025f
 

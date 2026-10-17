@@ -46,10 +46,9 @@ import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
-import app.marquee.design.StatusDot
+import app.marquee.design.StatusLine
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
-import app.marquee.design.TvCanvas
 import app.marquee.design.heightOf
 
 /** Debug-only screen that shows every design component in every state. `intent extras: form, theme`. */
@@ -58,10 +57,7 @@ fun GalleryHost(
     form: Form,
     dark: Boolean,
 ) {
-    val content: @Composable () -> Unit = {
-        MarqueeTheme(form, dark) { Gallery() }
-    }
-    if (form == Form.Tv) TvCanvas(content) else content()
+    MarqueeTheme(form, dark) { Gallery() }
 }
 
 @Composable
@@ -125,10 +121,10 @@ private fun Gallery() {
                 horizontalArrangement = Arrangement.spacedBy(32.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                StatusDot(Status.Ok, "Network")
-                StatusDot(Status.Warn, "Display")
-                StatusDot(Status.Bad, "Sources")
-                StatusDot(Status.Idle, "Audio")
+                StatusLine(Status.Ok, "Network")
+                StatusLine(Status.Warn, "Display")
+                StatusLine(Status.Bad, "Sources")
+                StatusLine(Status.Idle, "Audio")
             }
         }
 

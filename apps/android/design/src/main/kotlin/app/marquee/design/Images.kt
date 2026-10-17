@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -24,8 +28,17 @@ import coil3.request.ImageRequest
 import coil3.request.ImageResult
 import coil3.request.crossfade
 import coil3.size.Size
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
+
+/** A row of posters opens many connections to one host at once; OkHttp's default is 5 per host. */
+private val posterClient: OkHttpClient by lazy {
+    OkHttpClient
+        .Builder()
+        .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
+        .build()
+}
 
 /**
  * One image loader for the app, sized for the device. What goes wrong on weak TVs is memory and
@@ -45,7 +58,7 @@ fun createImageLoader(context: Context): ImageLoader {
                 .build()
         }.components {
             add(HttpsUpgrade)
-            add(OkHttpNetworkFetcherFactory(callFactory = { OkHttpClient() }))
+            add(OkHttpNetworkFetcherFactory(callFactory = { posterClient }))
         }.crossfade(false)
         .build()
 }
@@ -96,29 +109,44 @@ fun RemoteImage(
     val density = LocalDensity.current
     val widthPx = with(density) { width.roundToPx() }
     val heightPx = with(density) { height.roundToPx() }
-    // The surface fill is what a tile shows while the picture loads and when it never comes.
+    var failed by remember(url) { mutableStateOf(url == null) }
+    // The surface fill is what a tile shows while the picture loads; the title takes over when
+    // there is no picture or it cannot load.
     Box(modifier.size(width, height).background(Marquee.colors.surface)) {
-        MqText(
-            fallbackText,
-            role = TextRole.Callout,
-            color = Marquee.colors.muted,
-            modifier = Modifier.align(Alignment.Center).padding(Marquee.space.xs),
-            maxLines = 4,
-        )
+        if (failed) {
+            MqText(
+                fallbackText,
+                role = TextRole.Callout,
+                color = Marquee.colors.muted,
+                modifier = Modifier.align(Alignment.Center).padding(Marquee.space.xs),
+                maxLines = 4,
+            )
+        }
         if (url != null) {
-            AsyncImage(
-                model =
+            val request =
+                remember(url, widthPx, heightPx) {
                     ImageRequest
                         .Builder(context)
                         .data(url)
                         .size(Size(widthPx, heightPx))
-                        .memoryCacheKey("$url@${widthPx}x$heightPx")
-                        .build(),
+                        .memoryCacheKey(imageKey(url, widthPx, heightPx))
+                        .build()
+                }
+            AsyncImage(
+                model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                onError = { failed = true },
                 modifier = Modifier.size(width, height),
             )
         }
         overlay()
     }
 }
+
+/** The memory cache key of a sized picture: a prefetch must use the same key the tile asks with. */
+fun imageKey(
+    url: String,
+    widthPx: Int,
+    heightPx: Int,
+): String = "$url@${widthPx}x$heightPx"

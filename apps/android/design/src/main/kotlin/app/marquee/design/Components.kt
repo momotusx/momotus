@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,12 +23,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -47,7 +47,7 @@ private fun ButtonShell(
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
-    val height = if (tv) (if (big) 84.dp else 72.dp) else (if (big) 52.dp else 46.dp)
+    val height = if (tv) (if (big) 84.dp else 72.dp) else (if (big) 56.dp else 48.dp)
     val pad = if (tv) (if (big) 36.dp else 30.dp) else (if (big) 24.dp else 20.dp)
     val gap = if (tv) 14.dp else 8.dp
     val corner = height / 2
@@ -60,7 +60,7 @@ private fun ButtonShell(
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .alpha(if (enabled) 1f else 0.55f)
                 .marqueeFocus(corner)
-                .height(height)
+                .heightIn(min = height) // grows with a large system font instead of cutting the label
                 .clip(shape)
                 .background(background)
                 .then(
@@ -113,29 +113,38 @@ fun Chip(
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
-    val height = if (tv) 52.dp else 36.dp
-    val shape = RoundedCornerShape(height / 2)
+    // The pill is 36 dp on a phone inside a 48 dp touch target; on TV they are the same.
+    val pill = if (tv) 52.dp else 36.dp
+    val target = if (tv) pill else 48.dp
+    val shape = RoundedCornerShape(pill / 2)
     Box(
         modifier =
             modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .marqueeFocus(height / 2, Tokens.FOCUS_SCALE_CARD)
-                .height(height)
-                .clip(shape)
-                .background(if (selected) colors.raised else Color.Transparent)
-                .border(2.dp, if (selected) colors.text.copy(alpha = 0.5f) else colors.line, shape)
-                .semantics { this.selected = selected }
-                .focusClickable(onClick, Role.Tab)
-                .padding(horizontal = if (tv) 24.dp else 14.dp),
+                .marqueeFocus(target / 2, Tokens.FOCUS_SCALE_CARD)
+                .heightIn(min = target)
+                .focusSelectable(selected, onClick)
+                .padding(vertical = (target - pill) / 2),
         contentAlignment = Alignment.Center,
     ) {
-        MqText(
-            label,
-            role = TextRole.Callout,
-            color = if (selected) colors.text else colors.muted,
-            weight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1,
-        )
+        Box(
+            Modifier
+                .heightIn(min = pill)
+                .clip(shape)
+                // Opaque when not selected, so the focus halo of a neighbour does not show through.
+                .background(if (selected) colors.raised else colors.bg)
+                .border(2.dp, if (selected) colors.text.copy(alpha = 0.5f) else colors.line, shape)
+                .padding(horizontal = if (tv) 24.dp else 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            MqText(
+                label,
+                role = TextRole.Callout,
+                color = if (selected) colors.text else colors.muted,
+                weight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -157,51 +166,30 @@ fun ProgressBar(
     }
 }
 
-/** A dot plus a word, never color alone. */
+/**
+ * One setup check: a status mark plus its name. The mark differs in shape as well as color (a
+ * check, a triangle, a cross, an empty circle) and screen readers get the status as words.
+ */
 @Composable
-fun StatusDot(
+fun StatusLine(
     kind: Status,
     label: String,
     modifier: Modifier = Modifier,
 ) {
     val colors = Marquee.colors
-    val dot = if (Marquee.form == Form.Tv) 14.dp else 9.dp
-    val fill =
+    val (icon, tint, words) =
         when (kind) {
-            Status.Ok -> colors.ok
-            Status.Warn -> colors.warn
-            Status.Bad -> colors.bad
-            Status.Idle -> Color.Transparent
+            Status.Ok -> Triple(Icons.CircleCheck, colors.ok, "OK")
+            Status.Warn -> Triple(Icons.TriangleAlert, colors.warn, "Warning")
+            Status.Bad -> Triple(Icons.CircleX, colors.bad, "Problem")
+            Status.Idle -> Triple(Icons.Circle, colors.muted, "Not checked")
         }
     Row(
-        modifier,
-        horizontalArrangement =
-            Arrangement.spacedBy(
-                if (Marquee.form ==
-                    Form.Tv
-                ) {
-                    12.dp
-                } else {
-                    8.dp
-                },
-            ),
+        modifier.semantics(mergeDescendants = true) { stateDescription = words },
+        horizontalArrangement = Arrangement.spacedBy(if (Marquee.form == Form.Tv) 12.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(dot)
-                .clip(RoundedCornerShape(dot / 2))
-                .background(fill)
-                .then(
-                    if (kind ==
-                        Status.Idle
-                    ) {
-                        Modifier.border(2.dp, colors.muted, RoundedCornerShape(dot / 2))
-                    } else {
-                        Modifier
-                    },
-                ),
-        )
+        MqIcon(icon, tint = tint)
         MqText(label, color = colors.text)
     }
 }
@@ -243,19 +231,20 @@ fun StateMessage(
 fun Skeleton(modifier: Modifier = Modifier) {
     val reduced = LocalReducedMotion.current
     val pulse =
-        if (reduced) {
-            1f
-        } else {
-            rememberInfiniteTransition(label = "skeleton")
-                .animateFloat(
-                    initialValue = 0.55f,
-                    targetValue = 1f,
-                    animationSpec = infiniteRepeatable(tween(1600), RepeatMode.Reverse),
-                    label = "pulse",
-                ).value
-        }
-    Box(modifier.alpha(pulse).clip(RoundedCornerShape(Marquee.radius.m)).background(Marquee.colors.surface))
+        rememberInfiniteTransition(label = "skeleton").animateFloat(
+            initialValue = 0.55f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1600), RepeatMode.Reverse),
+            label = "pulse",
+        )
+    Box(
+        modifier
+            // Read in the draw phase: the pulse redraws this block and recomposes nothing.
+            .graphicsLayer { alpha = if (reduced) 1f else pulse.value }
+            .clip(RoundedCornerShape(Marquee.radius.m))
+            .background(Marquee.colors.surface),
+    )
 }
 
-/** Hides decoration from screen readers while keeping the label readable. */
+/** Gives a node a spoken label. */
 fun Modifier.describe(text: String): Modifier = semantics { contentDescription = text }
