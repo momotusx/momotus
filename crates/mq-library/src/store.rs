@@ -1,0 +1,424 @@
+use crate::schema::migrations;
+use rusqlite::hooks::Action;
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
+
+#[derive(Debug, thiserror::Error)]
+pub enum LibraryError {
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+    #[error(transparent)]
+    Migration(#[from] rusqlite_migration::Error),
+    #[error("json: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+/// Tables whose changes live views care about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Table {
+    Profiles,
+    Addons,
+    LibraryItems,
+    Progress,
+    Watched,
+    StreamMemory,
+    Settings,
+    SearchHistory,
+}
+
+impl Table {
+    fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "profiles" => Table::Profiles,
+            "addons" => Table::Addons,
+            "library_items" => Table::LibraryItems,
+            "progress" => Table::Progress,
+            "watched" => Table::Watched,
+            "stream_memory" => Table::StreamMemory,
+            "settings" => Table::Settings,
+            "search_history" => Table::SearchHistory,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddonRow {
+    pub transport_url: String,
+    pub manifest_json: String,
+    pub position: i64,
+    pub enabled: bool,
+    pub allow_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryItemRow {
+    pub item_id: String,
+    pub kind: String,
+    pub name: String,
+    pub poster: Option<String>,
+    pub poster_shape: Option<String>,
+    pub added_ms: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProgressRow<'a> {
+    pub video_id: &'a str,
+    pub item_id: &'a str,
+    pub position_ms: i64,
+    pub duration_ms: i64,
+    pub updated_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContinueItem {
+    pub item_id: String,
+    pub video_id: String,
+    pub name: String,
+    pub poster: Option<String>,
+    pub kind: String,
+    pub position_ms: i64,
+    pub duration_ms: i64,
+    pub updated_ms: i64,
+}
+
+/// Position past which a video counts as finished for Continue Watching.
+const FINISHED_RATIO: f64 = 0.92;
+
+pub struct Library {
+    writer: Mutex<Connection>,
+    readers: Vec<Mutex<Connection>>,
+    next_reader: AtomicUsize,
+    changes: broadcast::Sender<Vec<Table>>,
+    temp_path: Option<PathBuf>,
+}
+
+impl Library {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, LibraryError> {
+        Self::open_with(path.as_ref().to_path_buf(), 3)
+    }
+
+    /// A throwaway database in the temp directory, removed on drop. Used by
+    /// tests and the CLI; WAL needs a real file for concurrent readers.
+    pub fn temporary() -> Result<Self, LibraryError> {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("mq-library-{}-{n}.sqlite", std::process::id()));
+        let mut lib = Self::open_with(path.clone(), 2)?;
+        lib.temp_path = Some(path);
+        Ok(lib)
+    }
+
+    fn open_with(path: PathBuf, readers: usize) -> Result<Self, LibraryError> {
+        let target = path.to_string_lossy().into_owned();
+        let mut writer = open_connection(&target)?;
+        migrations().to_latest(&mut writer)?;
+        let (changes, _) = broadcast::channel(64);
+        let pending = Arc::new(Mutex::new(Vec::new()));
+        install_hooks(&writer, pending, changes.clone())?;
+        let readers = (0..readers)
+            .map(|_| open_connection(&target).map(Mutex::new))
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            writer: Mutex::new(writer),
+            readers,
+            next_reader: AtomicUsize::new(0),
+            changes,
+            temp_path: None,
+        })
+    }
+
+    /// Receives the set of tables touched by each committed write transaction.
+    pub fn subscribe(&self) -> broadcast::Receiver<Vec<Table>> {
+        self.changes.subscribe()
+    }
+
+    fn write<T>(
+        &self,
+        f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
+    ) -> Result<T, LibraryError> {
+        let mut conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction()?;
+        let out = f(&tx)?;
+        tx.commit()?;
+        Ok(out)
+    }
+
+    fn read<T>(
+        &self,
+        f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
+    ) -> Result<T, LibraryError> {
+        let index = self.next_reader.fetch_add(1, Ordering::Relaxed) % self.readers.len();
+        let conn = self.readers[index]
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        Ok(f(&conn)?)
+    }
+
+    pub fn ensure_profile(&self, id: &str, name: &str, hlc: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO profiles (id, name, hlc) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO NOTHING",
+                params![id, name, hlc],
+            )
+            .map(drop)
+        })
+    }
+
+    /// Replaces the profile's addon list in one transaction, keeping order.
+    pub fn set_addons(
+        &self,
+        profile: &str,
+        addons: &[AddonRow],
+        hlc: &str,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute("DELETE FROM addons WHERE profile_id = ?1", params![profile])?;
+            let mut insert = c.prepare(
+                "INSERT INTO addons (profile_id, transport_url, manifest_json, position, enabled, allow_private, hlc)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            )?;
+            for (position, a) in addons.iter().enumerate() {
+                insert.execute(params![
+                    profile,
+                    a.transport_url,
+                    a.manifest_json,
+                    position as i64,
+                    a.enabled,
+                    a.allow_private,
+                    hlc
+                ])?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn addons(&self, profile: &str) -> Result<Vec<AddonRow>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(
+                "SELECT transport_url, manifest_json, position, enabled, allow_private
+                 FROM addons WHERE profile_id = ?1 ORDER BY position",
+            )?;
+            stmt.query_map(params![profile], |r| {
+                Ok(AddonRow {
+                    transport_url: r.get(0)?,
+                    manifest_json: r.get(1)?,
+                    position: r.get(2)?,
+                    enabled: r.get(3)?,
+                    allow_private: r.get(4)?,
+                })
+            })?
+            .collect()
+        })
+    }
+
+    pub fn upsert_item(
+        &self,
+        profile: &str,
+        item: &LibraryItemRow,
+        in_library: bool,
+        hlc: &str,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO library_items (profile_id, item_id, kind, name, poster, poster_shape, in_library, added_ms, hlc)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(profile_id, item_id) DO UPDATE SET
+                   kind = excluded.kind, name = excluded.name, poster = excluded.poster,
+                   poster_shape = excluded.poster_shape, in_library = excluded.in_library, hlc = excluded.hlc
+                 WHERE excluded.hlc > library_items.hlc",
+                params![
+                    profile,
+                    item.item_id,
+                    item.kind,
+                    item.name,
+                    item.poster,
+                    item.poster_shape,
+                    in_library,
+                    item.added_ms,
+                    hlc
+                ],
+            )
+            .map(drop)
+        })
+    }
+
+    /// Records playback progress. Older HLCs never overwrite newer ones.
+    pub fn set_progress(
+        &self,
+        profile: &str,
+        p: ProgressRow<'_>,
+        hlc: &str,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO progress (profile_id, video_id, item_id, position_ms, duration_ms, updated_ms, hlc)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(profile_id, video_id) DO UPDATE SET
+                   item_id = excluded.item_id, position_ms = excluded.position_ms,
+                   duration_ms = excluded.duration_ms, updated_ms = excluded.updated_ms, hlc = excluded.hlc
+                 WHERE excluded.hlc > progress.hlc",
+                params![profile, p.video_id, p.item_id, p.position_ms, p.duration_ms, p.updated_ms, hlc],
+            )
+            .map(drop)
+        })
+    }
+
+    pub fn progress(
+        &self,
+        profile: &str,
+        video_id: &str,
+    ) -> Result<Option<(i64, i64)>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT position_ms, duration_ms FROM progress WHERE profile_id = ?1 AND video_id = ?2",
+                params![profile, video_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+        })
+    }
+
+    pub fn set_watched(
+        &self,
+        profile: &str,
+        item_id: &str,
+        video_id: &str,
+        watched: bool,
+        hlc: &str,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO watched (profile_id, video_id, item_id, watched, hlc) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(profile_id, video_id) DO UPDATE SET watched = excluded.watched, hlc = excluded.hlc
+                 WHERE excluded.hlc > watched.hlc",
+                params![profile, video_id, item_id, watched, hlc],
+            )
+            .map(drop)
+        })
+    }
+
+    pub fn watched_videos(
+        &self,
+        profile: &str,
+        item_id: &str,
+    ) -> Result<Vec<String>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(
+                "SELECT video_id FROM watched WHERE profile_id = ?1 AND item_id = ?2 AND watched = 1 ORDER BY video_id",
+            )?;
+            stmt.query_map(params![profile, item_id], |r| r.get(0))?.collect()
+        })
+    }
+
+    /// Most recent unfinished video per title, newest first.
+    pub fn continue_watching(
+        &self,
+        profile: &str,
+        limit: usize,
+    ) -> Result<Vec<ContinueItem>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(
+                "SELECT p.item_id, p.video_id, COALESCE(i.name, p.item_id), i.poster, COALESCE(i.kind, 'movie'),
+                        p.position_ms, p.duration_ms, p.updated_ms
+                 FROM progress p
+                 LEFT JOIN library_items i ON i.profile_id = p.profile_id AND i.item_id = p.item_id
+                 LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
+                 WHERE p.profile_id = ?1
+                   AND p.position_ms > 0
+                   AND (p.duration_ms = 0 OR p.position_ms < p.duration_ms * ?2)
+                   AND COALESCE(w.watched, 0) = 0
+                   AND p.updated_ms = (SELECT MAX(q.updated_ms) FROM progress q
+                                       WHERE q.profile_id = p.profile_id AND q.item_id = p.item_id)
+                 ORDER BY p.updated_ms DESC
+                 LIMIT ?3",
+            )?;
+            stmt.query_map(params![profile, FINISHED_RATIO, limit as i64], |r| {
+                Ok(ContinueItem {
+                    item_id: r.get(0)?,
+                    video_id: r.get(1)?,
+                    name: r.get(2)?,
+                    poster: r.get(3)?,
+                    kind: r.get(4)?,
+                    position_ms: r.get(5)?,
+                    duration_ms: r.get(6)?,
+                    updated_ms: r.get(7)?,
+                })
+            })?
+            .collect()
+        })
+    }
+
+    pub fn store_raw_import(
+        &self,
+        source: &str,
+        imported_ms: i64,
+        payload: &str,
+    ) -> Result<i64, LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO import_raw (source, imported_ms, payload) VALUES (?1, ?2, ?3)",
+                params![source, imported_ms, payload],
+            )?;
+            Ok(c.last_insert_rowid())
+        })
+    }
+}
+
+fn open_connection(target: &str) -> Result<Connection, LibraryError> {
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+        | OpenFlags::SQLITE_OPEN_CREATE
+        | OpenFlags::SQLITE_OPEN_URI
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let conn = Connection::open_with_flags(target, flags)?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    Ok(conn)
+}
+
+/// Collects touched tables during a transaction and broadcasts them on commit.
+fn install_hooks(
+    conn: &Connection,
+    pending: Arc<Mutex<Vec<Table>>>,
+    tx: broadcast::Sender<Vec<Table>>,
+) -> rusqlite::Result<()> {
+    let on_update = pending.clone();
+    conn.update_hook(Some(move |_: Action, _db: &str, table: &str, _row: i64| {
+        if let Some(t) = Table::from_name(table) {
+            let mut tables = on_update.lock().unwrap_or_else(|p| p.into_inner());
+            if !tables.contains(&t) {
+                tables.push(t);
+            }
+        }
+    }))?;
+    let on_commit = pending.clone();
+    conn.commit_hook(Some(move || {
+        let tables = std::mem::take(&mut *on_commit.lock().unwrap_or_else(|p| p.into_inner()));
+        if !tables.is_empty() {
+            let _ = tx.send(tables);
+        }
+        false
+    }))?;
+    conn.rollback_hook(Some(move || {
+        pending.lock().unwrap_or_else(|p| p.into_inner()).clear();
+    }))?;
+    Ok(())
+}
+
+impl Drop for Library {
+    fn drop(&mut self) {
+        if let Some(path) = self.temp_path.take() {
+            for suffix in ["", "-wal", "-shm"] {
+                let mut p = path.clone().into_os_string();
+                p.push(suffix);
+                let _ = std::fs::remove_file(p);
+            }
+        }
+    }
+}
