@@ -50,7 +50,9 @@ impl MarqueeCore {
             .thread_name("marquee-core")
             .enable_all()
             .build()
-            .map_err(|e| FfiError::Open { message: e.to_string() })?;
+            .map_err(|e| FfiError::Open {
+                message: e.to_string(),
+            })?;
         let core = runtime
             .block_on(async {
                 Core::open(CoreConfig {
@@ -59,7 +61,9 @@ impl MarqueeCore {
                     device_id,
                 })
             })
-            .map_err(|e| FfiError::Open { message: e.to_string() })?;
+            .map_err(|e| FfiError::Open {
+                message: e.to_string(),
+            })?;
 
         let (out_tx, mut out_rx) = mpsc::unbounded_channel::<serde_json::Value>();
         let (in_tx, mut in_rx) = mpsc::unbounded_channel::<String>();

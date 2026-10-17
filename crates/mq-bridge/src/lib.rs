@@ -6,7 +6,8 @@
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
-use mq_runtime::{Core, HomeView, TitleView};
+use mq_runtime::{Core, HomeView, TitleView, VersionsParams, VersionsView};
+use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -41,6 +42,7 @@ enum Request {
 enum View {
     Home { _view: HomeView },
     Title(TitleView),
+    Versions(VersionsView),
 }
 
 struct Subscription {
@@ -142,6 +144,12 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (View::Title(title), to_value(&snapshot)?, forward)
             }
+            "versions" => {
+                let versions = VersionsView::open(&self.core, versions_params(params)?);
+                let (snapshot, updates) = versions.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (View::Versions(versions), to_value(&snapshot)?, forward)
+            }
             other => return Err(format!("unknown view: {other}")),
         };
         self.subs.insert(sub, Subscription { view, forward });
@@ -182,6 +190,7 @@ impl Session {
                     .set_watched(&video, value)
                     .map_err(|e| e.to_string())?;
             }
+            (View::Versions(versions), "freeze") => versions.freeze(),
             (_, other) => return Err(format!("unknown command: {other}")),
         }
         Ok(json!({}))
@@ -213,4 +222,35 @@ where
             return;
         }
     }
+}
+
+/// Versions params: `kind`, `videoId`, `title` (for wrong-content checks),
+/// optional `season`, `episode`, `displayHeight`, `hdr` (array of
+/// "dolby_vision", "hdr10", "hdr10_plus", "hlg"), `bingeGroup`.
+fn versions_params(params: &Value) -> Result<VersionsParams, String> {
+    let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
+    let mut caps = DeviceCaps::basic_1080p();
+    if let Some(height) = num("displayHeight") {
+        caps.display_height = height;
+    }
+    if let Some(hdr) = params.get("hdr") {
+        caps.display_hdr =
+            serde_json::from_value(hdr.clone()).map_err(|e| format!("bad hdr: {e}"))?;
+    }
+    Ok(VersionsParams {
+        kind: param(params, "kind")?,
+        video_id: param(params, "videoId")?,
+        target: Target {
+            title: param(params, "title").unwrap_or_default(),
+            year: None,
+            season: num("season"),
+            episode: num("episode"),
+        },
+        caps,
+        prefs: StreamPrefs::default(),
+        last_binge_group: params
+            .get("bingeGroup")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    })
 }

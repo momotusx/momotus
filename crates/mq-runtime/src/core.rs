@@ -57,6 +57,9 @@ impl Core {
     }
 
     fn with_library(library: Library, profile: String, device_id: u64) -> Result<Self, CoreError> {
+        // Build the release-name rule table off the UI path, so the first
+        // stream list does not pay for it.
+        std::thread::spawn(mq_relparse::warm_up);
         let http = HttpClient::new(ClientConfig::default())?;
         let clock = HlcClock::new(device_id);
         let library = Arc::new(library);
