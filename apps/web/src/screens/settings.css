@@ -91,3 +91,32 @@
 [data-form="phone"] .summary h2 { font-size: 22px; }
 [data-form="phone"] .summary h2 svg { width: 26px; height: 26px; }
 [data-form="phone"] .field-line input:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); outline: none; }
+
+/* Home rows: a numbered list; the row picked up for moving shifts right. */
+.hrows { display: grid; gap: 10px; max-width: 1400px; }
+.hrow { display: flex; align-items: center; gap: 16px; padding: 8px 12px 8px 8px; border-radius: var(--radius-l); background: var(--surface);
+  transition: background-color var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease); }
+.hrow-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 24px; padding: 14px 20px; border-radius: var(--radius-m); text-align: left; }
+.hrow-main:focus-visible, [data-form="tv"] .hrow-main:focus { background: var(--raised); }
+.hrow-n { width: 48px; flex: none; font: 400 var(--type-title3) / 1 var(--font-display); color: var(--muted); }
+.hrow-text { display: grid; gap: 6px; min-width: 0; }
+.hrow-text b { font: 600 var(--type-body) / 1.2 var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hrow-text small { font: 400 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); }
+.hrow.off .hrow-text b, .hrow.off .hrow-n { color: var(--muted); }
+.hrow-hint { margin-left: auto; padding-left: 24px; font: 500 var(--type-caption) var(--font-text); white-space: nowrap; }
+.hrow.moving { background: var(--raised); transform: translateX(16px); }
+.hrow.moving .hrow-n { color: var(--accent); }
+.hrow-acts { display: flex; gap: 10px; flex: none; }
+.hrow-acts .btn { height: 56px; padding: 0 20px; font-size: var(--type-callout); gap: 10px; }
+.hrow-acts .btn svg { width: 24px; height: 24px; }
+.hrow-acts .btn[aria-pressed="false"] { color: var(--muted); }
+/* TV moves rows by picking them up; Up and Down buttons serve pointers. */
+[data-form="tv"] .hrow-move { display: none; }
+[data-form="phone"] .hrow { flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: 14px; }
+[data-form="phone"] .hrow-main { flex-basis: 100%; gap: 12px; padding: 2px 0; }
+[data-form="phone"] .hrow-n { width: 24px; font-size: 20px; }
+[data-form="phone"] .hrow-text b { font-size: 16px; }
+[data-form="phone"] .hrow-text small { font-size: 12px; }
+[data-form="phone"] .hrow-acts { margin-left: 36px; gap: 8px; }
+[data-form="phone"] .hrow-acts .btn { height: 36px; padding: 0 12px; font-size: 13px; gap: 6px; }
+[data-form="phone"] .hrow-acts .btn svg { width: 16px; height: 16px; }

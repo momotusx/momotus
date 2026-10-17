@@ -12,6 +12,7 @@ import { form } from "./form";
 import Addons from "./screens/addons";
 import Discover from "./screens/discover";
 import Home from "./screens/home";
+import HomeRows from "./screens/home-rows";
 import Import from "./screens/import";
 import Library from "./screens/library";
 import Onboarding from "./screens/onboarding";
@@ -31,7 +32,7 @@ const destinations: { path: string; label: string; icon: Component<{ "aria-hidde
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/import", "/pair"];
+const settingsPages = ["/settings", "/addons", "/import", "/pair", "/home-rows"];
 const section = (path: string) => (settingsPages.includes(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
 
@@ -158,6 +159,7 @@ export function App() {
       <Route path="/addons" component={Addons} />
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />
+      <Route path="/home-rows" component={HomeRows} />
       <Route path="*" component={() => <Stub title="Not found" text="This page does not exist in Marquee." />} />
     </Router>
   );

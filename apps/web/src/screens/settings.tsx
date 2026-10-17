@@ -3,6 +3,7 @@ import ChevronRight from "lucide-solid/icons/chevron-right";
 import Download from "lucide-solid/icons/download";
 import Puzzle from "lucide-solid/icons/puzzle";
 import QrCode from "lucide-solid/icons/qr-code";
+import Rows3 from "lucide-solid/icons/rows-3";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, type JSX, Show } from "solid-js";
 import { liveView, op, prefsView, reasonOf } from "../core/client";
@@ -108,6 +109,13 @@ export default function SettingsScreen() {
           <LinkRow href="/import" fkey="settings:import" icon={<Download aria-hidden />} title="Import from Stremio" text="Addons, library and progress, with a code. No password typed here." />
           <LinkRow href="/welcome" fkey="settings:setup" icon={<Wrench aria-hidden />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />
           <LinkRow href="/pair" fkey="settings:pair" icon={<QrCode aria-hidden />} title="Pair this device" text="Join your sync account by scanning a code on a device that already syncs." />
+        </div>
+      </section>
+
+      <section class="set">
+        <h2>Home</h2>
+        <div class="links">
+          <LinkRow href="/home-rows" fkey="settings:home-rows" icon={<Rows3 aria-hidden />} title="Home rows" text="Which catalogs Home shows after Continue Watching, and in what order." />
         </div>
       </section>
 
