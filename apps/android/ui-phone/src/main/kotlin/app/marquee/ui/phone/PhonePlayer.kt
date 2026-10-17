@@ -51,7 +51,6 @@ import app.marquee.player.EndCard
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.PlayerStatus
-import app.marquee.player.PlayerTheme
 import app.marquee.player.PlayerVideo
 import app.marquee.player.RoundButton
 import app.marquee.player.Scrim
@@ -98,243 +97,241 @@ fun PhonePlayer(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    PlayerTheme {
-        val stage = controller.stage
-        val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
-        var osd by remember { mutableStateOf(true) }
-        var wake by remember { mutableIntStateOf(0) }
-        var panel by remember { mutableStateOf<Panel?>(null) }
-        // The side of the last double tap (1 right, -1 left) and how many there were, so the same side twice restarts the hint.
-        var hint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-        var taps by remember { mutableIntStateOf(0) }
-        val ended = stage == Stage.Ended
-        val showControls = osd && live && !ended && !inPip
-        val next = controller.next
-        val showEnd = ended && !(autoplayNext && next != null)
-        val showNext by remember(controller) {
-            derivedStateOf {
-                upNextDue(
-                    controller.next != null,
-                    controller.nextAtMs,
-                    controller.positionMs,
-                    controller.durationMs,
-                    controller.skippedAtMs,
+    val stage = controller.stage
+    val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
+    var osd by remember { mutableStateOf(true) }
+    var wake by remember { mutableIntStateOf(0) }
+    var panel by remember { mutableStateOf<Panel?>(null) }
+    // The side of the last double tap (1 right, -1 left) and how many there were, so the same side twice restarts the hint.
+    var hint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var taps by remember { mutableIntStateOf(0) }
+    val ended = stage == Stage.Ended
+    val showControls = osd && live && !ended && !inPip
+    val next = controller.next
+    val showEnd = ended && !(autoplayNext && next != null)
+    val showNext by remember(controller) {
+        derivedStateOf {
+            upNextDue(
+                controller.next != null,
+                controller.nextAtMs,
+                controller.positionMs,
+                controller.durationMs,
+                controller.skippedAtMs,
+            )
+        }
+    }
+    // The skippable part under the playhead (an intro, a recap), unless Up Next has taken the corner.
+    val segment by remember(controller) {
+        derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
+    }
+    val showSkip =
+        segment != null && !showNext && panel == null && !ended && !inPip && live && controller.status == null
+
+    // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
+    val secondsLeft by remember(controller) {
+        derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
+    }
+
+    // The controls hide four seconds after the last touch while playing; `wake` is read here and not in
+    // composition, so a touch recomposes nothing.
+    LaunchedEffect(osd, stage, panel, showNext) {
+        if (osd && stage == Stage.Playing && panel == null && !showNext) {
+            snapshotFlow { wake }.collectLatest {
+                kotlinx.coroutines.delay(HIDE_MS)
+                osd = false
+            }
+        }
+    }
+    LaunchedEffect(hint) {
+        if (hint != null) {
+            kotlinx.coroutines.delay(HINT_MS)
+            hint = null
+        }
+    }
+    LaunchedEffect(stage) {
+        if (stage == Stage.Ended && autoplayNext && next != null) onNext(next, controller.bingeGroup)
+    }
+    // A list that was open when the film ended closes: the end card is the only thing to answer.
+    LaunchedEffect(ended) { if (ended) panel = null }
+    BackHandler { if (panel != null) panel = null else onBack() }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(live) {
+                if (!live) return@pointerInput
+                detectTapGestures(
+                    onTap = {
+                        // A tap on the picture while a list is open closes the list, nothing else.
+                        if (panel != null) {
+                            panel = null
+                        } else {
+                            osd = !osd
+                        }
+                        wake++
+                    },
+                    onDoubleTap = { at ->
+                        val forward = at.x > size.width / 2
+                        controller.seekBy(if (forward) SEEK_MS else -SEEK_MS)
+                        hint = (if (forward) 1 else -1) to ++taps
+                    },
+                )
+            },
+    ) {
+        PlayerVideo(controller.player, Modifier.fillMaxSize())
+
+        if (!inPip) {
+            hint?.let { (side, _) ->
+                SeekHint(
+                    forward = side > 0,
+                    modifier =
+                        Modifier
+                            .align(if (side > 0) Alignment.CenterEnd else Alignment.CenterStart)
+                            .padding(horizontal = 64.dp),
+                )
+            }
+            if (stage == Stage.Opening || stage == Stage.Failed || controller.status != null) {
+                PlayerStatus(
+                    stage = stage,
+                    status = controller.status,
+                    problem = controller.problem,
+                    attempts = controller.attempts,
+                    onVersions = onVersions,
+                    onBack = onBack,
+                    focus = remember { FocusRequester() },
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .windowInsetsPadding(WindowInsets.displayCutout)
+                            .padding(start = 24.dp, end = 24.dp, top = 88.dp),
+                )
+            } else if (stage == Stage.Buffering) {
+                Spinner(Modifier.align(Alignment.Center))
+            }
+        }
+
+        // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
+        AnimatedVisibility(
+            visible = ((osd && !ended) || !live) && !inPip,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                Scrim(top = true, height = 120.dp, peak = 0.85f)
+                Row(
+                    Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RoundButton(Icons.ArrowLeft, "Back", onBack)
+                    Column(Modifier.weight(1f)) {
+                        MqText(controller.title, role = TextRole.Title3, maxLines = 1)
+                        controller.episode?.let {
+                            MqText(it, role = TextRole.Callout, maxLines = 1)
+                        }
+                    }
+                    if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
+                }
+            }
+        }
+        AnimatedVisibility(
+            visible = showControls,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Box {
+                Scrim(
+                    top = false,
+                    height = 240.dp,
+                    peak = 0.85f,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+                Controls(
+                    controller = controller,
+                    onAudio = { panel = Panel.Audio },
+                    onSubtitles = { panel = Panel.Subtitles },
+                    onVersions = onVersions,
+                    onEpisodes = onEpisodes,
+                    onTouch = { wake++ },
                 )
             }
         }
-        // The skippable part under the playhead (an intro, a recap), unless Up Next has taken the corner.
-        val segment by remember(controller) {
-            derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
-        }
-        val showSkip =
-            segment != null && !showNext && panel == null && !ended && !inPip && live && controller.status == null
 
-        // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
-        val secondsLeft by remember(controller) {
-            derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
-        }
+        if (!inPip) {
+            // The track lists are a side sheet on the right, 480 dp wide, so the picture stays in view.
+            val sheet =
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .windowInsetsPadding(WindowInsets.displayCutout)
+                    .padding(16.dp)
+                    .width(480.dp)
+                    // Touches on the sheet stay on the sheet: they must not reach the controls under it.
+                    .pointerInput(Unit) { detectTapGestures { } }
+            when (panel) {
+                Panel.Audio -> {
+                    TrackPanel("Audio", controller.audio, onPick = {
+                        controller.selectAudio(it)
+                        panel = null
+                    }, modifier = sheet)
+                }
 
-        // The controls hide four seconds after the last touch while playing; `wake` is read here and not in
-        // composition, so a touch recomposes nothing.
-        LaunchedEffect(osd, stage, panel, showNext) {
-            if (osd && stage == Stage.Playing && panel == null && !showNext) {
-                snapshotFlow { wake }.collectLatest {
-                    kotlinx.coroutines.delay(HIDE_MS)
-                    osd = false
+                Panel.Subtitles -> {
+                    TrackPanel(
+                        "Subtitles",
+                        controller.text,
+                        onPick = {
+                            controller.selectText(it)
+                            panel = null
+                        },
+                        modifier = sheet,
+                        note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
+                    )
+                }
+
+                null -> {
+                    Unit
                 }
             }
-        }
-        LaunchedEffect(hint) {
-            if (hint != null) {
-                kotlinx.coroutines.delay(HINT_MS)
-                hint = null
-            }
-        }
-        LaunchedEffect(stage) {
-            if (stage == Stage.Ended && autoplayNext && next != null) onNext(next, controller.bingeGroup)
-        }
-        // A list that was open when the film ended closes: the end card is the only thing to answer.
-        LaunchedEffect(ended) { if (ended) panel = null }
-        BackHandler { if (panel != null) panel = null else onBack() }
-
-        Box(
-            modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .pointerInput(live) {
-                    if (!live) return@pointerInput
-                    detectTapGestures(
-                        onTap = {
-                            // A tap on the picture while a list is open closes the list, nothing else.
-                            if (panel != null) {
-                                panel = null
-                            } else {
-                                osd = !osd
-                            }
+            if (showSkip) {
+                segment?.let { skip ->
+                    SkipButton(
+                        segment = skip,
+                        onSkip = {
+                            controller.skip(skip)
                             wake++
                         },
-                        onDoubleTap = { at ->
-                            val forward = at.x > size.width / 2
-                            controller.seekBy(if (forward) SEEK_MS else -SEEK_MS)
-                            hint = (if (forward) 1 else -1) to ++taps
-                        },
-                    )
-                },
-        ) {
-            PlayerVideo(controller.player, Modifier.fillMaxSize())
-
-            if (!inPip) {
-                hint?.let { (side, _) ->
-                    SeekHint(
-                        forward = side > 0,
-                        modifier =
-                            Modifier
-                                .align(if (side > 0) Alignment.CenterEnd else Alignment.CenterStart)
-                                .padding(horizontal = 64.dp),
-                    )
-                }
-                if (stage == Stage.Opening || stage == Stage.Failed || controller.status != null) {
-                    PlayerStatus(
-                        stage = stage,
-                        status = controller.status,
-                        problem = controller.problem,
-                        attempts = controller.attempts,
-                        onVersions = onVersions,
-                        onBack = onBack,
-                        focus = remember { FocusRequester() },
-                        modifier =
-                            Modifier
-                                .align(Alignment.TopStart)
-                                .windowInsetsPadding(WindowInsets.displayCutout)
-                                .padding(start = 24.dp, end = 24.dp, top = 88.dp),
-                    )
-                } else if (stage == Stage.Buffering) {
-                    Spinner(Modifier.align(Alignment.Center))
-                }
-            }
-
-            // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
-            AnimatedVisibility(
-                visible = ((osd && !ended) || !live) && !inPip,
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                Box(Modifier.fillMaxSize()) {
-                    Scrim(top = true, height = 120.dp, peak = 0.85f)
-                    Row(
-                        Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RoundButton(Icons.ArrowLeft, "Back", onBack)
-                        Column(Modifier.weight(1f)) {
-                            MqText(controller.title, role = TextRole.Title3, maxLines = 1)
-                            controller.episode?.let {
-                                MqText(it, role = TextRole.Callout, maxLines = 1)
-                            }
-                        }
-                        if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
-                    }
-                }
-            }
-            AnimatedVisibility(
-                visible = showControls,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                Box {
-                    Scrim(
-                        top = false,
-                        height = 240.dp,
-                        peak = 0.85f,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
-                    Controls(
-                        controller = controller,
-                        onAudio = { panel = Panel.Audio },
-                        onSubtitles = { panel = Panel.Subtitles },
-                        onVersions = onVersions,
-                        onEpisodes = onEpisodes,
-                        onTouch = { wake++ },
-                    )
-                }
-            }
-
-            if (!inPip) {
-                // The track lists are a side sheet on the right, 480 dp wide, so the picture stays in view.
-                val sheet =
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .windowInsetsPadding(WindowInsets.displayCutout)
-                        .padding(16.dp)
-                        .width(480.dp)
-                        // Touches on the sheet stay on the sheet: they must not reach the controls under it.
-                        .pointerInput(Unit) { detectTapGestures { } }
-                when (panel) {
-                    Panel.Audio -> {
-                        TrackPanel("Audio", controller.audio, onPick = {
-                            controller.selectAudio(it)
-                            panel = null
-                        }, modifier = sheet)
-                    }
-
-                    Panel.Subtitles -> {
-                        TrackPanel(
-                            "Subtitles",
-                            controller.text,
-                            onPick = {
-                                controller.selectText(it)
-                                panel = null
-                            },
-                            modifier = sheet,
-                            note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
-                        )
-                    }
-
-                    null -> {
-                        Unit
-                    }
-                }
-                if (showSkip) {
-                    segment?.let { skip ->
-                        SkipButton(
-                            segment = skip,
-                            onSkip = {
-                                controller.skip(skip)
-                                wake++
-                            },
-                            modifier =
-                                Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .windowInsetsPadding(WindowInsets.displayCutout)
-                                    .padding(end = 16.dp, bottom = if (showControls) 200.dp else 24.dp),
-                        )
-                    }
-                }
-                if (showNext && !ended && next != null) {
-                    UpNextCard(
-                        next = next,
-                        countdown = secondsLeft.takeIf { autoplayNext },
-                        onPlay = { onNext(next, controller.bingeGroup) },
                         modifier =
                             Modifier
                                 .align(Alignment.BottomEnd)
                                 .windowInsetsPadding(WindowInsets.displayCutout)
-                                .padding(end = 16.dp, bottom = 200.dp),
+                                .padding(end = 16.dp, bottom = if (showControls) 200.dp else 24.dp),
                     )
                 }
-                if (showEnd) {
-                    EndCard(
-                        title = controller.title,
-                        next = next,
-                        onNext = { next?.let { onNext(it, controller.bingeGroup) } },
-                        onAgain = controller::play,
-                        onBack = onBack,
-                        focus = remember { FocusRequester() },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+            }
+            if (showNext && !ended && next != null) {
+                UpNextCard(
+                    next = next,
+                    countdown = secondsLeft.takeIf { autoplayNext },
+                    onPlay = { onNext(next, controller.bingeGroup) },
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .windowInsetsPadding(WindowInsets.displayCutout)
+                            .padding(end = 16.dp, bottom = 200.dp),
+                )
+            }
+            if (showEnd) {
+                EndCard(
+                    title = controller.title,
+                    next = next,
+                    onNext = { next?.let { onNext(it, controller.bingeGroup) } },
+                    onAgain = controller::play,
+                    onBack = onBack,
+                    focus = remember { FocusRequester() },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }

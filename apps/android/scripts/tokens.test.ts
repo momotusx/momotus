@@ -26,4 +26,8 @@ test("the output carries the values the design decision names", () => {
   expect(kotlin).toContain("const val FOCUS_MS = 180");
   expect(kotlin).toContain("CubicBezierEasing(0.22f, 1f, 0.36f, 1f)");
   expect(kotlin).toContain("poster = TileSize(112.dp, 168.dp)");
+  expect(kotlin).toContain("display = 800,");
+  expect(kotlin).toContain("label = 650,");
+  expect(kotlin).toContain("display = -0.035f,");
+  expect(kotlin).toContain("heading = -0.025f,");
 });

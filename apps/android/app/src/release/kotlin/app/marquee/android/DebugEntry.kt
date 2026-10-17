@@ -9,7 +9,6 @@ object DebugEntry {
     fun show(
         activity: ComponentActivity,
         form: Form,
-        dark: Boolean,
     ): Boolean = false
 
     fun launched(activity: ComponentActivity) = Unit

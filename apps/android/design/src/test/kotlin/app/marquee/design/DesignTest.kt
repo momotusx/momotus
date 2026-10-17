@@ -1,6 +1,7 @@
 package app.marquee.design
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,6 +49,21 @@ class DesignTest {
         assertEquals(true, contrast(dark.control, dark.bg) >= 3f)
         // Dark only: the light palette mirrors the dark one.
         assertEquals(dark, Tokens.light)
+    }
+
+    @Test
+    fun `glass controls stay visible on any artwork`() {
+        // plans/android-design-v2.md 1.2: over art, the boundary is the fill against the art or the
+        // control edge against the fill, whichever is larger: 3:1 either way; text on it 4.5:1.
+        val dark = Tokens.dark
+        for (art in listOf(Color.Black, Color(0xFF808080), Color.White)) {
+            val fill = dark.glassStrong.compositeOver(art)
+            val boundary = maxOf(contrast(fill, art), contrast(dark.control, fill))
+            assertEquals(true, boundary >= 3f, "boundary $boundary on $art")
+            assertEquals(true, contrast(dark.text, fill) >= 4.5f, "text on $art")
+        }
+        // The focus ring against the page.
+        assertEquals(true, contrast(dark.accent, dark.bg) >= 3f)
     }
 
     private fun contrast(

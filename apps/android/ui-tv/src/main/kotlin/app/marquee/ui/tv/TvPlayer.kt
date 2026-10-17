@@ -57,7 +57,6 @@ import app.marquee.player.EndCard
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.PlayerStatus
-import app.marquee.player.PlayerTheme
 import app.marquee.player.PlayerVideo
 import app.marquee.player.RoundButton
 import app.marquee.player.Scrim
@@ -106,325 +105,323 @@ fun TvPlayer(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    PlayerTheme {
-        val safe = Marquee.safe
-        val stage = controller.stage
-        val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
-        var osd by remember { mutableStateOf(true) }
-        var wake by remember { mutableIntStateOf(0) }
-        var panel by remember { mutableStateOf<Panel?>(null) }
-        val ended = stage == Stage.Ended
-        val showControls = osd && live && !ended
-        val showEnd = ended && !(autoplayNext && controller.next != null)
+    val safe = Marquee.safe
+    val stage = controller.stage
+    val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
+    var osd by remember { mutableStateOf(true) }
+    var wake by remember { mutableIntStateOf(0) }
+    var panel by remember { mutableStateOf<Panel?>(null) }
+    val ended = stage == Stage.Ended
+    val showControls = osd && live && !ended
+    val showEnd = ended && !(autoplayNext && controller.next != null)
 
-        val root = remember { FocusRequester() }
-        val play = remember { FocusRequester() }
-        val audioAction = remember { FocusRequester() }
-        val subtitlesAction = remember { FocusRequester() }
-        val failFocus = remember { FocusRequester() }
-        val nextFocus = remember { FocusRequester() }
-        val endFocus = remember { FocusRequester() }
+    val root = remember { FocusRequester() }
+    val play = remember { FocusRequester() }
+    val audioAction = remember { FocusRequester() }
+    val subtitlesAction = remember { FocusRequester() }
+    val failFocus = remember { FocusRequester() }
+    val nextFocus = remember { FocusRequester() }
+    val endFocus = remember { FocusRequester() }
 
-        val next = controller.next
-        val showNext by remember(controller) {
-            derivedStateOf {
-                upNextDue(
-                    controller.next != null,
-                    controller.nextAtMs,
-                    controller.positionMs,
-                    controller.durationMs,
-                    controller.skippedAtMs,
-                )
+    val next = controller.next
+    val showNext by remember(controller) {
+        derivedStateOf {
+            upNextDue(
+                controller.next != null,
+                controller.nextAtMs,
+                controller.positionMs,
+                controller.durationMs,
+                controller.skippedAtMs,
+            )
+        }
+    }
+    // The skippable part under the playhead (an intro, a recap), unless Up Next has taken the corner.
+    val segment by remember(controller) {
+        derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
+    }
+    val showSkip = segment != null && !showNext && panel == null && !ended && live && controller.status == null
+    val skipFocus = remember { FocusRequester() }
+    // Whether the Skip button has focus, so that when it goes only its own focus is handed back.
+    var skipHasFocus by remember { mutableStateOf(false) }
+
+    // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
+    val secondsLeft by remember(controller) {
+        derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
+    }
+
+    // Controls hide while playing, once nothing is open and nothing is asking for an answer. Every key
+    // starts the wait again; `wake` is read here and not in composition, so a key press recomposes nothing.
+    LaunchedEffect(osd, stage, panel, showNext) {
+        if (osd && stage == Stage.Playing && panel == null && !showNext) {
+            snapshotFlow { wake }.collectLatest {
+                kotlinx.coroutines.delay(HIDE_MS)
+                osd = false
             }
         }
-        // The skippable part under the playhead (an intro, a recap), unless Up Next has taken the corner.
-        val segment by remember(controller) {
-            derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
-        }
-        val showSkip = segment != null && !showNext && panel == null && !ended && live && controller.status == null
-        val skipFocus = remember { FocusRequester() }
-        // Whether the Skip button has focus, so that when it goes only its own focus is handed back.
-        var skipHasFocus by remember { mutableStateOf(false) }
-
-        // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
-        val secondsLeft by remember(controller) {
-            derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
-        }
-
-        // Controls hide while playing, once nothing is open and nothing is asking for an answer. Every key
-        // starts the wait again; `wake` is read here and not in composition, so a key press recomposes nothing.
-        LaunchedEffect(osd, stage, panel, showNext) {
-            if (osd && stage == Stage.Playing && panel == null && !showNext) {
-                snapshotFlow { wake }.collectLatest {
-                    kotlinx.coroutines.delay(HIDE_MS)
-                    osd = false
-                }
-            }
-        }
-        // Focus follows what is on screen: play and pause when the controls appear, the page itself
-        // when they are gone (so keys still arrive), the way on when nothing plays.
-        LaunchedEffect(showControls) {
+    }
+    // Focus follows what is on screen: play and pause when the controls appear, the page itself
+    // when they are gone (so keys still arrive), the way on when nothing plays.
+    LaunchedEffect(showControls) {
+        withFrameNanos { }
+        runCatching { if (showControls) play.requestFocus() else root.requestFocus() }
+    }
+    LaunchedEffect(stage == Stage.Failed) {
+        if (stage == Stage.Failed) {
             withFrameNanos { }
-            runCatching { if (showControls) play.requestFocus() else root.requestFocus() }
+            runCatching { failFocus.requestFocus() }
         }
-        LaunchedEffect(stage == Stage.Failed) {
-            if (stage == Stage.Failed) {
-                withFrameNanos { }
-                runCatching { failFocus.requestFocus() }
-            }
-        }
-        // The card takes focus when it appears, unless a list is open (choosing audio near the end must not be
-        // interrupted); when it goes (a rewind), focus goes back to play and pause instead of being lost.
-        LaunchedEffect(showNext) {
-            if (showNext && panel == null) {
-                osd = true
-                withFrameNanos { }
-                runCatching { nextFocus.requestFocus() }
-            } else if (!showNext && panel == null && showControls) {
-                withFrameNanos { }
-                runCatching { play.requestFocus() }
-            }
-        }
-        // Skip takes focus when it appears with the controls up; when it goes, focus goes back to play and pause.
-        LaunchedEffect(showSkip) {
+    }
+    // The card takes focus when it appears, unless a list is open (choosing audio near the end must not be
+    // interrupted); when it goes (a rewind), focus goes back to play and pause instead of being lost.
+    LaunchedEffect(showNext) {
+        if (showNext && panel == null) {
+            osd = true
             withFrameNanos { }
-            runCatching {
-                if (showSkip && showControls) {
-                    skipFocus.requestFocus()
-                } else if (!showSkip && skipHasFocus && showControls && panel == null && !showNext) {
-                    // Only when focus was on Skip: a viewer scrubbing the bar keeps it.
-                    play.requestFocus()
-                }
-            }
-        }
-        // A list does not stay open over a failure or any state without controls.
-        LaunchedEffect(live) { if (!live) panel = null }
-        // A list that was open when the film ended closes: the end card is the only thing to answer.
-        LaunchedEffect(ended) { if (ended) panel = null }
-        LaunchedEffect(showEnd) {
-            if (showEnd) {
-                withFrameNanos { }
-                runCatching { endFocus.requestFocus() }
-            }
-        }
-        // The end of an episode starts the next one when the viewer wants that.
-        LaunchedEffect(stage) {
-            if (stage == Stage.Ended && autoplayNext && next != null) onNext(next, controller.bingeGroup)
-            if (stage == Stage.Ended) osd = true
-        }
-
-        // Closing a panel (Back, or a row chosen) returns focus to the action that opened it.
-        var returnTo by remember { mutableStateOf<FocusRequester?>(null) }
-
-        fun closePanel() {
-            returnTo = if (panel == Panel.Audio) audioAction else subtitlesAction
-            panel = null
-            wake++
-        }
-        // One handler that is always on (turning it on and off with the panel left Back ignored after a key press).
-        BackHandler { if (panel != null) closePanel() else onBack() }
-        LaunchedEffect(returnTo) {
-            val target = returnTo ?: return@LaunchedEffect
+            runCatching { nextFocus.requestFocus() }
+        } else if (!showNext && panel == null && showControls) {
             withFrameNanos { }
-            runCatching { target.requestFocus() }
-            returnTo = null
+            runCatching { play.requestFocus() }
         }
+    }
+    // Skip takes focus when it appears with the controls up; when it goes, focus goes back to play and pause.
+    LaunchedEffect(showSkip) {
+        withFrameNanos { }
+        runCatching {
+            if (showSkip && showControls) {
+                skipFocus.requestFocus()
+            } else if (!showSkip && skipHasFocus && showControls && panel == null && !showNext) {
+                // Only when focus was on Skip: a viewer scrubbing the bar keeps it.
+                play.requestFocus()
+            }
+        }
+    }
+    // A list does not stay open over a failure or any state without controls.
+    LaunchedEffect(live) { if (!live) panel = null }
+    // A list that was open when the film ended closes: the end card is the only thing to answer.
+    LaunchedEffect(ended) { if (ended) panel = null }
+    LaunchedEffect(showEnd) {
+        if (showEnd) {
+            withFrameNanos { }
+            runCatching { endFocus.requestFocus() }
+        }
+    }
+    // The end of an episode starts the next one when the viewer wants that.
+    LaunchedEffect(stage) {
+        if (stage == Stage.Ended && autoplayNext && next != null) onNext(next, controller.bingeGroup)
+        if (stage == Stage.Ended) osd = true
+    }
 
-        Box(
-            modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .focusRequester(root)
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.MediaPlayPause -> {
-                            controller.togglePlay()
-                            osd = true
-                            wake++
-                            true
+    // Closing a panel (Back, or a row chosen) returns focus to the action that opened it.
+    var returnTo by remember { mutableStateOf<FocusRequester?>(null) }
+
+    fun closePanel() {
+        returnTo = if (panel == Panel.Audio) audioAction else subtitlesAction
+        panel = null
+        wake++
+    }
+    // One handler that is always on (turning it on and off with the panel left Back ignored after a key press).
+    BackHandler { if (panel != null) closePanel() else onBack() }
+    LaunchedEffect(returnTo) {
+        val target = returnTo ?: return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { target.requestFocus() }
+        returnTo = null
+    }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(root)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.MediaPlayPause -> {
+                        controller.togglePlay()
+                        osd = true
+                        wake++
+                        true
+                    }
+
+                    Key.MediaPlay -> {
+                        controller.play()
+                        osd = true
+                        wake++
+                        true
+                    }
+
+                    Key.MediaPause -> {
+                        controller.pause()
+                        osd = true
+                        wake++
+                        true
+                    }
+
+                    Key.MediaRewind -> {
+                        controller.seekBy(-SEEK_MS)
+                        osd = true
+                        wake++
+                        true
+                    }
+
+                    Key.MediaFastForward -> {
+                        controller.seekBy(SEEK_MS)
+                        osd = true
+                        wake++
+                        true
+                    }
+
+                    Key.Back -> {
+                        // Handled here while focus is in the player: on the emulator a Back that came
+                        // after a D-pad press never reached the BackHandler below (it still covers
+                        // the moments when no node has focus).
+                        // A held Back repeats: only the first press acts, the rest are eaten.
+                        if (event.nativeKeyEvent.repeatCount == 0) {
+                            if (panel != null) closePanel() else onBack()
                         }
+                        true
+                    }
 
-                        Key.MediaPlay -> {
-                            controller.play()
-                            osd = true
-                            wake++
-                            true
-                        }
-
-                        Key.MediaPause -> {
-                            controller.pause()
-                            osd = true
-                            wake++
-                            true
-                        }
-
-                        Key.MediaRewind -> {
-                            controller.seekBy(-SEEK_MS)
-                            osd = true
-                            wake++
-                            true
-                        }
-
-                        Key.MediaFastForward -> {
-                            controller.seekBy(SEEK_MS)
-                            osd = true
-                            wake++
-                            true
-                        }
-
-                        Key.Back -> {
-                            // Handled here while focus is in the player: on the emulator a Back that came
-                            // after a D-pad press never reached the BackHandler below (it still covers
-                            // the moments when no node has focus).
-                            // A held Back repeats: only the first press acts, the rest are eaten.
-                            if (event.nativeKeyEvent.repeatCount == 0) {
-                                if (panel != null) closePanel() else onBack()
-                            }
-                            true
-                        }
-
-                        else -> {
-                            wake++
-                            // While the controls are hidden the first key only brings them back, except select
-                            // while a Skip button shows: that presses it.
-                            if (live && !osd) {
-                                val skip = segment
-                                if (showSkip && skip != null && event.key in selectKeys) {
-                                    controller.skip(skip)
-                                } else {
-                                    osd = true
-                                }
-                                true
+                    else -> {
+                        wake++
+                        // While the controls are hidden the first key only brings them back, except select
+                        // while a Skip button shows: that presses it.
+                        if (live && !osd) {
+                            val skip = segment
+                            if (showSkip && skip != null && event.key in selectKeys) {
+                                controller.skip(skip)
                             } else {
-                                false
+                                osd = true
                             }
+                            true
+                        } else {
+                            false
                         }
                     }
-                }.focusProperties { exit = { FocusRequester.Cancel } }
-                .focusable(),
+                }
+            }.focusProperties { exit = { FocusRequester.Cancel } }
+            .focusable(),
+    ) {
+        PlayerVideo(controller.player, Modifier.fillMaxSize())
+
+        // Scrims run edge to edge (no box with an edge to see): 320 dp at the foot to 72% black,
+        // 200 dp at the top to 60%, so the words over bright pictures hold their contrast.
+        AnimatedVisibility(
+            visible = showControls,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(),
+            exit = fadeOut(),
         ) {
-            PlayerVideo(controller.player, Modifier.fillMaxSize())
-
-            // Scrims run edge to edge (no box with an edge to see): 320 dp at the foot to 72% black,
-            // 200 dp at the top to 60%, so the words over bright pictures hold their contrast.
-            AnimatedVisibility(
-                visible = showControls,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                Scrim(top = false, height = 380.dp, peak = 0.85f)
+            Scrim(top = false, height = 380.dp, peak = 0.85f)
+        }
+        AnimatedVisibility(visible = (osd && !ended) || !live, enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxSize()) {
+                Scrim(top = true, height = 200.dp, peak = 0.85f)
+                Header(controller, Modifier.padding(start = safe.side, top = safe.top))
+                EndsAt(controller, Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 70.dp))
             }
-            AnimatedVisibility(visible = (osd && !ended) || !live, enter = fadeIn(), exit = fadeOut()) {
-                Box(Modifier.fillMaxSize()) {
-                    Scrim(top = true, height = 200.dp, peak = 0.85f)
-                    Header(controller, Modifier.padding(start = safe.side, top = safe.top))
-                    EndsAt(controller, Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 70.dp))
-                }
-            }
+        }
 
-            if (stage == Stage.Opening || stage == Stage.Failed || controller.status != null) {
-                PlayerStatus(
-                    stage = stage,
-                    status = controller.status,
-                    problem = controller.problem,
-                    attempts = controller.attempts,
-                    onVersions = onVersions,
-                    onBack = onBack,
-                    focus = failFocus,
-                    modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = 360.dp),
-                )
-            } else if (stage == Stage.Buffering) {
-                Spinner(Modifier.align(Alignment.Center))
-            }
+        if (stage == Stage.Opening || stage == Stage.Failed || controller.status != null) {
+            PlayerStatus(
+                stage = stage,
+                status = controller.status,
+                problem = controller.problem,
+                attempts = controller.attempts,
+                onVersions = onVersions,
+                onBack = onBack,
+                focus = failFocus,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = 360.dp),
+            )
+        } else if (stage == Stage.Buffering) {
+            Spinner(Modifier.align(Alignment.Center))
+        }
 
-            AnimatedVisibility(
-                visible = showControls,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                Controls(
-                    controller = controller,
-                    play = play,
-                    audioAction = audioAction,
-                    subtitlesAction = subtitlesAction,
-                    onAudio = { panel = Panel.Audio },
-                    onSubtitles = { panel = Panel.Subtitles },
-                    onVersions = onVersions,
-                    onEpisodes = onEpisodes,
-                    modifier = Modifier.padding(start = safe.side, end = safe.side, bottom = safe.bottom),
-                )
-            }
+        AnimatedVisibility(
+            visible = showControls,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Controls(
+                controller = controller,
+                play = play,
+                audioAction = audioAction,
+                subtitlesAction = subtitlesAction,
+                onAudio = { panel = Panel.Audio },
+                onSubtitles = { panel = Panel.Subtitles },
+                onVersions = onVersions,
+                onEpisodes = onEpisodes,
+                modifier = Modifier.padding(start = safe.side, end = safe.side, bottom = safe.bottom),
+            )
+        }
 
-            when (panel) {
-                Panel.Audio -> {
-                    TrackPanel(
-                        title = "Audio",
-                        rows = controller.audio,
-                        onPick = {
-                            controller.selectAudio(it)
-                            closePanel()
-                        },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
-                    )
-                }
-
-                Panel.Subtitles -> {
-                    TrackPanel(
-                        title = "Subtitles",
-                        rows = controller.text,
-                        note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
-                        onPick = {
-                            controller.selectText(it)
-                            closePanel()
-                        },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
-                    )
-                }
-
-                null -> {
-                    Unit
-                }
-            }
-
-            if (showEnd) {
-                EndCard(
-                    title = controller.title,
-                    next = next,
-                    onNext = { next?.let { onNext(it, controller.bingeGroup) } },
-                    onAgain = controller::play,
-                    onBack = onBack,
-                    focus = endFocus,
-                    modifier = Modifier.fillMaxSize(),
+        when (panel) {
+            Panel.Audio -> {
+                TrackPanel(
+                    title = "Audio",
+                    rows = controller.audio,
+                    onPick = {
+                        controller.selectAudio(it)
+                        closePanel()
+                    },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
                 )
             }
 
-            if (showSkip) {
-                segment?.let { skip ->
-                    SkipButton(
-                        segment = skip,
-                        onSkip = { controller.skip(skip) },
-                        focus = skipFocus,
-                        onFocusChange = { skipHasFocus = it },
-                        modifier =
-                            Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = safe.side, bottom = if (showControls) 330.dp else 96.dp),
-                    )
-                }
-            }
-
-            if (showNext && !ended && next != null) {
-                UpNextCard(
-                    next = next,
-                    countdown = secondsLeft.takeIf { autoplayNext },
-                    onPlay = { onNext(next, controller.bingeGroup) },
-                    focus = nextFocus,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 330.dp),
+            Panel.Subtitles -> {
+                TrackPanel(
+                    title = "Subtitles",
+                    rows = controller.text,
+                    note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
+                    onPick = {
+                        controller.selectText(it)
+                        closePanel()
+                    },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
                 )
             }
+
+            null -> {
+                Unit
+            }
+        }
+
+        if (showEnd) {
+            EndCard(
+                title = controller.title,
+                next = next,
+                onNext = { next?.let { onNext(it, controller.bingeGroup) } },
+                onAgain = controller::play,
+                onBack = onBack,
+                focus = endFocus,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        if (showSkip) {
+            segment?.let { skip ->
+                SkipButton(
+                    segment = skip,
+                    onSkip = { controller.skip(skip) },
+                    focus = skipFocus,
+                    onFocusChange = { skipHasFocus = it },
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = safe.side, bottom = if (showControls) 330.dp else 96.dp),
+                )
+            }
+        }
+
+        if (showNext && !ended && next != null) {
+            UpNextCard(
+                next = next,
+                countdown = secondsLeft.takeIf { autoplayNext },
+                onPlay = { onNext(next, controller.bingeGroup) },
+                focus = nextFocus,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 330.dp),
+            )
         }
     }
 }

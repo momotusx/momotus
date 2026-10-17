@@ -43,10 +43,8 @@ object Marquee {
         @Composable @ReadOnlyComposable
         get() = if (LocalForm.current == Form.Tv) Tokens.tvSafe else Tokens.phoneSafe
 
-    /** Width of the focus halo: soft on dark, a crisp outer line on light (design/DECISION.md). */
-    val focusHalo: Dp
-        @Composable @ReadOnlyComposable
-        get() = if (LocalPalette.current === Tokens.light) Tokens.focusHaloLight else Tokens.focusHaloDark
+    /** Width of the focus halo around the ring (design/DECISION.md). */
+    val focusHalo: Dp get() = Tokens.focusHaloDark
 
     val space: Spacing get() = Tokens.space
     val radius: Radii get() = Tokens.radius
@@ -61,14 +59,6 @@ object Marquee {
         get() = if (LocalReducedMotion.current) 0 else Tokens.PANEL_MS
 }
 
-/**
- * Over a picture (a hero, the player) the colors are the dark ones in both themes: light on dark, never the
- * other way. A secondary button in light mode would otherwise print dark text on a dark scrim.
- */
-@Composable
-fun OverPicture(content: @Composable () -> Unit) =
-    CompositionLocalProvider(LocalPalette provides Tokens.dark, content = content)
-
 /** Animations are off when the system animator scale is zero (Developer options, accessibility). */
 @Composable
 fun rememberReducedMotion(): Boolean {
@@ -80,17 +70,16 @@ fun rememberReducedMotion(): Boolean {
 }
 
 /**
- * The theme for one UI tree. TV is dark; the phone tree follows [dark]. The TV tree is drawn on
+ * The theme for one UI tree, dark on every form (design/DECISION.md v2). The TV tree is drawn on
  * the point canvas ([TvCanvas], applied here so no screen forgets it) and token sizes apply
  * unchanged.
  */
 @Composable
 fun MarqueeTheme(
     form: Form,
-    dark: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val palette = if (dark) Tokens.dark else Tokens.light
+    val palette = Tokens.dark
     val themed: @Composable () -> Unit = {
         CompositionLocalProvider(
             LocalForm provides form,

@@ -57,13 +57,10 @@ import app.marquee.design.UpNextArt
 import app.marquee.design.laneHeight
 import app.marquee.player.SkipButton
 
-/** Debug-only screen that shows every design component in every state. `intent extras: form, theme`. */
+/** Debug-only screen that shows every design component in every state. `intent extras: form`. */
 @Composable
-fun GalleryHost(
-    form: Form,
-    dark: Boolean,
-) {
-    MarqueeTheme(form, dark) { Gallery() }
+fun GalleryHost(form: Form) {
+    MarqueeTheme(form) { Gallery() }
 }
 
 @Composable
@@ -96,6 +93,8 @@ private fun Gallery() {
                     maxLines = 1,
                 )
             }
+            // Titles outside Latin fall back to the system font without clipping.
+            MqText("Title2: Ayla, Dağların Kızı · 千と千尋の神隠し · Ёлки", role = TextRole.Title2, maxLines = 1)
         }
 
         Section("Buttons") {

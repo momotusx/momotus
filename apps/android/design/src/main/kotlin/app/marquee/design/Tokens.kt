@@ -79,6 +79,23 @@ data class Insets(
     val side: Dp,
 )
 
+/** Font weights by role (CSS numbers). */
+@Immutable
+data class Weights(
+    val display: Int,
+    val heading: Int,
+    val label: Int,
+    val body: Int,
+)
+
+/** Letter spacing by role, in em. */
+@Immutable
+data class Tracking(
+    val display: Float,
+    val heading: Float,
+    val label: Float,
+)
+
 /** Width and height of one tile shape. */
 @Immutable
 data class TileSize(
@@ -222,6 +239,19 @@ object Tokens {
             inset = 16.dp,
             peek = 40.dp,
             caption = 22.dp,
+        )
+
+    val weight = Weights(
+            display = 800,
+            heading = 800,
+            label = 650,
+            body = 400,
+        )
+
+    val tracking = Tracking(
+            display = -0.035f,
+            heading = -0.025f,
+            label = -0.01f,
         )
 
     val focusRing = 4.dp

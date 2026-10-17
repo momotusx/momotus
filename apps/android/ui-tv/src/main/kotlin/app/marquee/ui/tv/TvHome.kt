@@ -205,7 +205,7 @@ private fun TvHero(
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
             Logo(tile.logo, tile.name, height = 150.dp, maxWidth = 560.dp, color = Tokens.dark.text)
-            MqText(hero.reason, role = TextRole.Title3, color = Tokens.dark.text, maxLines = 2, italic = true)
+            MqText(hero.reason, role = TextRole.Title3, color = Tokens.dark.text, maxLines = 2)
             MqText(TileCopy.heroMeta(tile), role = TextRole.Callout, color = Tokens.dark.muted)
             Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 if (tile.playable()) {

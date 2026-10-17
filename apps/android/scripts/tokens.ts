@@ -30,6 +30,8 @@ export interface Tokens {
   focus: { ring: number; halo: { dark: number; light: number }; scaleCard: number; scaleTile: number };
   motion: { focusMs: number; panelMs: number; ease: string };
   tile: { tv: TileSet; phone: TileSet };
+  weight: Scale;
+  tracking: Scale;
 }
 
 export const tokensPath = join(import.meta.dir, "../../../design/tokens.json");
@@ -125,6 +127,8 @@ export function generate(t: Tokens): string {
       ["bottom", "Dp"],
       ["side", "Dp"],
     ]),
+    dataClass("Weights", "Font weights by role (CSS numbers).", Object.keys(t.weight).map((k) => [k, "Int"])),
+    dataClass("Tracking", "Letter spacing by role, in em.", Object.keys(t.tracking).map((k) => [k, "Float"])),
     dataClass("TileSize", "Width and height of one tile shape.", [
       ["width", "Dp"],
       ["height", "Dp"],
@@ -159,6 +163,10 @@ export function generate(t: Tokens): string {
     `    val tvTiles = ${tileSet(t.tile.tv)}`,
     "",
     `    val phoneTiles = ${tileSet(t.tile.phone)}`,
+    "",
+    `    val weight = ${instance("Weights", Object.keys(t.weight).map((k) => [k, num(t.weight[k] as number)]))}`,
+    "",
+    `    val tracking = ${instance("Tracking", Object.keys(t.tracking).map((k) => [k, float(t.tracking[k] as number)]))}`,
     "",
     `    val focusRing = ${dp(t.focus.ring)}`,
     `    val focusHaloDark = ${dp(t.focus.halo.dark)}`,

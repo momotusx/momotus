@@ -71,7 +71,6 @@ import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
-import app.marquee.design.OverPicture
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RemoteImage
 import app.marquee.design.SecondaryButton
@@ -80,10 +79,6 @@ import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
-
-/** The player is over the picture: the dark colors in both themes. */
-@Composable
-fun PlayerTheme(content: @Composable () -> Unit) = OverPicture(content)
 
 /** 3725 s as "1:02:05". */
 fun clockText(ms: Long): String = Format.clock(ms / 1000)

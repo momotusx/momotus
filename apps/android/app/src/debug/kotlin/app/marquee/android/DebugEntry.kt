@@ -31,11 +31,10 @@ object DebugEntry {
     fun show(
         activity: ComponentActivity,
         form: Form,
-        dark: Boolean,
     ): Boolean {
         when (activity.intent.getStringExtra("screen")) {
             "gallery" -> {
-                activity.setContent { GalleryHost(form, dark) }
+                activity.setContent { GalleryHost(form) }
             }
 
             "diagnostics" -> {
