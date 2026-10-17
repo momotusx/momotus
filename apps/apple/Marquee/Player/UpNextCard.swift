@@ -20,7 +20,7 @@ struct UpNextCard: View {
                             .tracking(1.6)
                             .foregroundStyle(.white.opacity(0.7))
                         Text("S\(next.season):E\(next.episode) \(next.title)")
-                            .font(.display(Theme.type.headline + 2))
+                            .display(Theme.type.headline + 2)
                             .foregroundStyle(.white)
                             .lineLimit(2)
                         if model.startingNext {
@@ -46,8 +46,7 @@ struct UpNextCard: View {
             }
             .padding(Theme.Space.s)
             .frame(maxWidth: metrics.wide ? 560 : 380, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(.black.opacity(0.78)))
-            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).strokeBorder(.white.opacity(0.12)))
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true, shadow: true)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Up next")
         }
@@ -126,7 +125,7 @@ struct EndCard: View {
     }
 
     private func heading(_ text: String) -> some View {
-        Text(text).font(.display(Theme.type.title2)).lineLimit(3)
+        Text(text).display(Theme.type.title2).lineLimit(3)
     }
 
     /// Side by side when they fit, else stacked with the first on top.

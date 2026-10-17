@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Episodes as a table of contents (Folio): number, title, a dotted leader,
-/// runtime or time left; the current episode shows its synopsis and progress.
-/// Selecting an episode plays it; choosing a version, the synopsis and the
+/// Episodes as glass cards: a still with the number and a Watched chip, the
+/// title, "57 min · Feb 18, 2022" (or the time left) and two lines of
+/// synopsis. Selecting an episode plays it; choosing a version and the
 /// watched mark are the secondary actions (long press, right click, or a
 /// long press of select on tvOS).
 struct EpisodeList: View {
@@ -19,23 +19,20 @@ struct EpisodeList: View {
     let chooseVersion: (Episode) -> Void
     let addSource: () -> Void
     let setWatched: (String, Bool) -> Void
-
-    @State private var opened: Set<String> = []
+    @Environment(\.metrics) private var metrics
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text("Episodes")
-                .font(.display(Theme.type.title1))
+                .display(metrics.wide ? Theme.type.title1 : Theme.type.title2)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             SeasonPicker(seasons: seasons, selected: selected, select: select)
-            Rectangle().fill(Theme.Palette.line).frame(height: 1)
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: metrics.wide ? 14 : 10) {
                 ForEach(episodes, id: \.videoId) { episode in
-                    let expanded = episode.videoId == current || opened.contains(episode.videoId)
                     EpisodeRow(
                         episode: episode,
-                        expanded: expanded,
+                        current: episode.videoId == current,
                         minutes: minutes(runtime),
                         status: status(episode)
                     ) {
@@ -43,11 +40,6 @@ struct EpisodeList: View {
                     }
                     .contextMenu {
                         Button("Choose a version", glyph: "layers") { chooseVersion(episode) }
-                        if episode.overview?.isEmpty == false, episode.videoId != current {
-                            Button(expanded ? "Hide synopsis" : "Show synopsis", glyph: "text-align-start") {
-                                opened.formSymmetricDifference([episode.videoId])
-                            }
-                        }
                         Button(episode.watched ? "Mark as unwatched" : "Mark as watched",
                                glyph: episode.watched ? "eye-off" : "check") {
                             setWatched(episode.videoId, !episode.watched)
@@ -68,10 +60,7 @@ struct EpisodeList: View {
                         }
                         .buttonStyle(PillButtonStyle(prominent: true))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 56)
-                        .padding(.bottom, 12)
                     }
-                    Rectangle().fill(Theme.Palette.line.opacity(0.6)).frame(height: 1)
                 }
             }
         }
@@ -91,7 +80,8 @@ struct EpisodeFailure: Equatable {
     let noVersion: Bool
 }
 
-/// "SEASON 1 2 [3] 4 Specials": the selected season sits on a raised fill.
+/// "SEASON (1) [2] (3) Specials": pills with a control edge; the selected
+/// season is a lighter fill with a bright edge (the ring is only ever focus).
 private struct SeasonPicker: View {
     let seasons: [Int]
     let selected: Int?
@@ -99,12 +89,12 @@ private struct SeasonPicker: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Text("SEASON")
-                    .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
-                    .tracking(1.6)
+                    .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
+                    .tracking(Theme.type.caption * 0.12)
                     .foregroundStyle(Theme.Palette.muted)
-                    .padding(.trailing, 8)
+                    .padding(.trailing, 6)
                 ForEach(ordered, id: \.self) { season in
                     Button(season == 0 ? "Specials" : "\(season)") { select(season) }
                         .buttonStyle(SeasonButtonStyle(selected: season == selected, round: season != 0))
@@ -112,7 +102,7 @@ private struct SeasonPicker: View {
                         .accessibilityAddTraits(season == selected ? .isSelected : [])
                 }
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
         }
         .scrollIndicators(.hidden)
         .scrollClipDisabled()
@@ -129,17 +119,21 @@ private struct SeasonButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.text(Theme.type.headline, weight: selected ? .semibold : .medium, relativeTo: .headline))
+            .font(.text(Theme.type.callout, weight: selected ? .bold : .semibold, relativeTo: .callout))
             .foregroundStyle(selected ? Theme.Palette.text : Theme.Palette.muted)
-            .padding(.horizontal, round ? 0 : 12)
-            .frame(width: round ? 38 : nil, height: 38)
-            // Selection is a fill; the ring is only ever focus.
-            .background {
-                if selected { Capsule().fill(Theme.Palette.raised) }
-            }
+            .padding(.horizontal, round ? 0 : 14)
+            .frame(width: round ? Self.size : nil, height: Self.size)
+            .background { Capsule().fill(.white.opacity(selected ? 0.16 : 0)) }
+            .overlay { Capsule().strokeBorder(selected ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: edgeWidth) }
             .contentShape(Capsule())
             .modifier(SeasonFocus(pressed: configuration.isPressed))
     }
+
+    #if os(tvOS)
+    private static let size: CGFloat = 54
+    #else
+    private static let size: CGFloat = 36
+    #endif
 }
 
 private struct SeasonFocus: ViewModifier {
@@ -149,130 +143,134 @@ private struct SeasonFocus: ViewModifier {
     func body(content: Content) -> some View {
         content
             .modifier(FocusRing(shape: Capsule(), active: focused))
-            .scaleEffect(pressed ? 0.95 : 1)
+            .scaleEffect(pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
             .animation(Theme.Motion.focus, value: pressed)
+            .animation(Theme.Motion.focus, value: focused)
     }
 }
 
 private struct EpisodeRow: View {
     let episode: Episode
-    let expanded: Bool
+    /// The play target: its card holds the time left.
+    let current: Bool
     let minutes: Int?
     /// "Finding a version", or why it could not start.
     let status: String?
     let play: () -> Void
+    @Environment(\.metrics) private var metrics
 
     var body: some View {
         Button(action: play) {
-            HStack(alignment: .firstTextBaseline, spacing: 18) {
-                Text("\(episode.episode)")
-                    .font(.display(Theme.type.title2))
-                    .foregroundStyle(Theme.Palette.muted)
-                    .frame(minWidth: 30, alignment: .leading)
-                    .monospacedDigit()
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(episode.title.isEmpty ? "Episode \(episode.episode)" : episode.title)
-                            .font(.text(Theme.type.body, weight: .medium))
-                            .foregroundStyle(Theme.Palette.text)
-                            .lineLimit(1)
-                            .layoutPriority(1)
-                        DottedLeader()
-                        trailing
+            HStack(alignment: .top, spacing: metrics.wide ? 18 : 12) {
+                still
+                VStack(alignment: .leading, spacing: metrics.wide ? 6 : 4) {
+                    CardTitle(text: episode.title.isEmpty ? "Episode \(episode.episode)" : episode.title, size: metrics.cardName + 2)
+                    if !meta.isEmpty {
+                        Text(meta)
+                            .font(.text(metrics.cardInfo, weight: .medium, relativeTo: .caption))
+                            .foregroundStyle(current && episode.progress != nil ? Theme.Palette.text : Theme.Palette.dim)
+                            .monospacedDigit()
                     }
-                    if expanded, let overview = episode.overview, !overview.isEmpty {
+                    if let overview = episode.overview, !overview.isEmpty {
                         Text(overview)
-                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .font(.text(metrics.cardInfo + 1, relativeTo: .callout))
                             .foregroundStyle(Theme.Palette.muted)
+                            .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let progress = episode.progress, !episode.watched {
-                        ProgressLine(value: progress)
                     }
                     if let status {
-                        Label(status, glyph: status == "Finding a version" ? "clock" : "circle-alert")
-                            .font(.text(Theme.type.callout, relativeTo: .callout))
-                            .foregroundStyle(Theme.Palette.muted)
+                        Label(status, glyph: status == "Finding a version" ? "clock" : "circle-alert", size: metrics.cardInfo + 2)
+                            .font(.text(metrics.cardInfo + 1, relativeTo: .callout))
+                            .foregroundStyle(Theme.Palette.text)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .padding(.top, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .contentShape(Rectangle())
+            .padding(metrics.wide ? 12 : 10)
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         }
-        .buttonStyle(RowButtonStyle())
+        .buttonStyle(CardButtonStyle(radius: Theme.Radius.card, scale: Theme.Focus.scaleTile))
         .accessibilityElement(children: .combine)
         .accessibilityValue(episode.watched ? "Watched" : "")
         .accessibilityHint("Plays this episode")
     }
 
-    @ViewBuilder private var trailing: some View {
-        HStack(spacing: 6) {
-            if episode.watched {
-                Glyph("check").accessibilityHidden(true)
+    /// The still with the number at its bottom left, a Watched chip at its
+    /// top right and progress on its foot.
+    private var still: some View {
+        let width: CGFloat = metrics.wide ? (metrics.poster.width >= Theme.Poster.tv.width ? 224 : 168) : 128
+        let chip = metrics.cardInfo - 1
+        return ArtImage(url: episode.thumbnail, maxPixels: 640)
+            .frame(width: width, height: width * 9 / 16)
+            .overlay(alignment: .bottomLeading) {
+                Text("\(episode.episode)")
+                    .font(.text(chip + 2, weight: .heavy, relativeTo: .caption))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Palette.text)
+                    .padding(.horizontal, chip * 0.5)
+                    .frame(minWidth: chip * 2, minHeight: chip * 2)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.Palette.bg.opacity(0.72)))
+                    .padding(6)
             }
-            Text(trailingText)
-        }
-        .font(.text(Theme.type.callout, relativeTo: .callout))
-        .foregroundStyle(episode.progress != nil && !episode.watched ? Theme.Palette.text : Theme.Palette.muted)
-        .monospacedDigit()
-        .fixedSize()
-    }
-
-    private var trailingText: String {
-        if let released = releaseDate(episode.released), released > .now {
-            return "Airs \(released.formatted(.dateTime.month(.abbreviated).day()))"
-        }
-        guard let minutes else { return "" }
-        if let progress = episode.progress, !episode.watched {
-            return "\(max(1, Int((Double(minutes) * (1 - progress)).rounded()))) min left"
-        }
-        return "\(minutes) min"
-    }
-}
-
-/// The dotted rule between an entry and its page number.
-private struct DottedLeader: View {
-    var body: some View {
-        Line()
-            .stroke(Theme.Palette.muted.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [0.1, 6]))
-            .frame(height: 1.5)
-            .frame(minWidth: 12)
-            .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+            .overlay(alignment: .topTrailing) {
+                if episode.watched {
+                    Label("Watched", glyph: "check", size: chip)
+                        .labelStyle(ChipLabelStyle())
+                        .font(.text(chip, weight: .bold, relativeTo: .caption2))
+                        .foregroundStyle(Theme.Palette.text)
+                        .padding(.horizontal, chip * 0.55)
+                        .frame(height: chip * 1.8)
+                        .background(Capsule().fill(Theme.Palette.bg.opacity(0.72)))
+                        .overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
+                        .padding(5)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let progress = episode.progress, !episode.watched {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(.white.opacity(0.25))
+                            Rectangle().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(progress, 0), 1))
+                        }
+                    }
+                    .frame(height: metrics.wide ? 4 : 3)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: metrics.wide ? 10 : 8, style: .continuous))
             .accessibilityHidden(true)
     }
 
-    private struct Line: Shape {
-        func path(in rect: CGRect) -> Path {
-            Path { $0.move(to: CGPoint(x: rect.minX, y: rect.midY)); $0.addLine(to: CGPoint(x: rect.maxX, y: rect.midY)) }
+    /// "57 min · Feb 18, 2022", "36 min left · Feb 18, 2022" or "Airs Oct 21".
+    private var meta: String {
+        let released = releaseDate(episode.released)
+        if let released, released > .now {
+            return "Airs \(released.formatted(Self.day.month(.abbreviated).day()))"
         }
+        var parts: [String] = []
+        if let minutes {
+            if let progress = episode.progress, !episode.watched {
+                parts.append("\(max(1, Int((Double(minutes) * (1 - progress)).rounded()))) min left")
+            } else {
+                parts.append("\(minutes) min")
+            }
+        }
+        if let released { parts.append(released.formatted(Self.day.month(.abbreviated).day().year())) }
+        return parts.joined(separator: " \u{B7} ")
     }
+
+    /// Release dates are days, kept in UTC so they never slip a day.
+    private static let day = Date.FormatStyle(timeZone: TimeZone(identifier: "UTC") ?? .current)
 }
 
-/// Rows highlight on hover, focus and press instead of scaling.
-private struct RowButtonStyle: ButtonStyle {
+private struct ChipLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        RowBody(configuration: configuration)
-    }
-
-    private struct RowBody: View {
-        let configuration: ButtonStyleConfiguration
-        @Environment(\.isFocused) private var focused
-        @State private var hovered = false
-
-        var body: some View {
-            configuration.label
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)
-                        .fill(Theme.Palette.surface.opacity(configuration.isPressed ? 1 : hovered || focused ? 0.8 : 0)))
-                .modifier(FocusRing(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous), active: focused))
-                .animation(Theme.Motion.focus, value: hovered)
-                #if !os(tvOS)
-                .onHover { hovered = $0 }
-                #endif
+        HStack(spacing: 3) {
+            configuration.icon
+            configuration.title
         }
     }
 }

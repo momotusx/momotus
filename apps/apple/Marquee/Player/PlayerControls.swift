@@ -46,13 +46,13 @@ struct PlayerControls: View {
             Button(action: back) {
                 Glyph("chevron-left", size: 22)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(.black.opacity(0.35)))
+                    .glass(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Back")
             VStack(alignment: .leading, spacing: 2) {
                 Text(target.title)
-                    .font(.display(metrics.wide ? Theme.type.title1 : Theme.type.title2))
+                    .display(metrics.wide ? Theme.type.title1 : Theme.type.title2)
                 if let season = target.season, let episode = target.episode {
                     Text("S\(season):E\(episode)")
                         .font(.text(Theme.type.callout, relativeTo: .callout))
@@ -113,17 +113,17 @@ struct PlayerControls: View {
 
     private var transport: some View {
         HStack(spacing: metrics.wide ? 28 : 20) {
-            Button { model.skip(-10) } label: { SkipGlyph(name: "rotate-ccw") }
+            Button { model.skip(-10) } label: { SkipGlyph(name: "rotate-ccw", wide: metrics.wide) }
             .accessibilityLabel("Back 10 seconds")
             Button(action: model.togglePlay) {
                 Glyph(model.playing ? "pause-fill" : "play-fill", size: 26)
-                    .foregroundStyle(Theme.Palette.onAccent)
+                    .foregroundStyle(Theme.Palette.onPrimary)
                     .frame(width: 68, height: 68)
-                    .background(Circle().fill(Color(white: 0.96)))
+                    .background(Circle().fill(Theme.Palette.primary))
                     .overlay(Circle().strokeBorder(Theme.Palette.accent, lineWidth: 3).padding(-5))
             }
             .accessibilityLabel(model.playing ? "Pause" : "Play")
-            Button { model.skip(10) } label: { SkipGlyph(name: "rotate-cw") }
+            Button { model.skip(10) } label: { SkipGlyph(name: "rotate-cw", wide: metrics.wide) }
             .accessibilityLabel("Forward 10 seconds")
         }
         .buttonStyle(.plain)
@@ -229,15 +229,19 @@ struct PlayerControls: View {
     }
 }
 
-/// The skip arrow with its interval inside, as the audit asks ("10").
+/// The skip arrow with its interval inside, as the audit asks ("10"), in a
+/// round glass button.
 private struct SkipGlyph: View {
     let name: String
+    let wide: Bool
 
     var body: some View {
-        Glyph(name, size: 30)
+        Glyph(name, size: 26)
             .overlay {
-                Text("10").font(.text(10, weight: .bold)).monospacedDigit().offset(y: 1)
+                Text("10").font(.text(9, weight: .bold)).monospacedDigit().offset(y: 1)
             }
+            .frame(width: wide ? 56 : 50, height: wide ? 56 : 50)
+            .glass(Circle())
     }
 }
 

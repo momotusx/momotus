@@ -159,8 +159,10 @@ private struct SkipButton: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 10) {
+            // A white pill with an accent edge.
             Button(action: skip) { Label(segment.label, glyph: "skip-forward") }
                 .buttonStyle(PillButtonStyle(prominent: true))
+                .overlay { Capsule().strokeBorder(Theme.Palette.accent, lineWidth: 2).allowsHitTesting(false) }
                 .focused($focused)
             Text("Skip data: \(segment.source)")
                 .font(.text(Theme.type.caption, relativeTo: .caption))
@@ -210,7 +212,7 @@ private struct StatusOverlay: View {
         if model.playback?.phase == "failed" {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text("This could not play")
-                    .font(.display(Theme.type.title1))
+                    .display(Theme.type.title1)
                 ForEach(Array((model.playback?.attempts ?? []).enumerated()), id: \.offset) { _, attempt in
                     Label("\(attempt.via): \(attempt.error)", glyph: "circle-x")
                         .font(.text(Theme.type.body))
@@ -226,7 +228,7 @@ private struct StatusOverlay: View {
             .foregroundStyle(Theme.Palette.text)
             .padding(Theme.Space.l)
             .frame(maxWidth: 640, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.Radius.m).fill(Theme.Palette.surface))
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
             .padding(.horizontal, Theme.Space.m)
         } else if model.firstFrameMs == nil || model.waiting {
             VStack(spacing: 14) {

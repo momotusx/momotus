@@ -195,8 +195,7 @@ struct TitleScreen: View {
     @ViewBuilder private var decisionBody: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let details {
-                Text(metaLine(details, seasons: model.header?.seasons ?? []))
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                MetaLine(rating: details.rating, parts: metaParts(details, seasons: model.header?.seasons ?? []), size: Theme.type.callout)
                     .foregroundStyle(Theme.Palette.muted)
                 if let description = details.description {
                     Synopsis(text: description, lines: 3)
@@ -225,30 +224,34 @@ struct TitleScreen: View {
     }
 
     /// Versions, Trailer (when the metadata names one), Library and, for a
-    /// movie, Watched. They wrap onto a second line on narrow screens.
+    /// movie, Watched: round buttons with their words, a held state lit.
     private func actions(_ details: TitleDetails) -> some View {
         let header = model.header
         let inLibrary = header?.inLibrary ?? false
         let watched = header?.watched ?? false
         let count = versions?.snapshot.map { $0.rows.count + ($0.recommended == nil ? 0 : 1) } ?? 0
-        return FlowRow(spacing: 12) {
+        return FlowRow(spacing: metrics.wide ? 26 : 22) {
             Button { showVersions = true } label: {
                 Label(count > 0 ? "Versions (\(count))" : "Versions", glyph: "layers")
             }
+            .buttonStyle(RoundButtonStyle())
             .disabled(versions == nil)
             if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
                 Button { openURL(url) } label: { Label("Trailer", glyph: "film") }
+                    .buttonStyle(RoundButtonStyle())
             }
             Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
                 Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
             }
+            .buttonStyle(RoundButtonStyle(on: inLibrary))
             if details.kind == "movie" {
                 Button { model.setWatched(details.id, !watched); sync.schedule() } label: {
-                    Label(watched ? "Watched" : "Mark as watched", glyph: watched ? "circle-check" : "circle-check")
+                    Label(watched ? "Watched" : "Mark as watched", glyph: "circle-check")
                 }
+                .buttonStyle(RoundButtonStyle(on: watched))
             }
         }
-        .buttonStyle(PillButtonStyle())
+        .padding(.top, 4)
     }
 
     @ViewBuilder private var lower: some View {
@@ -256,7 +259,7 @@ struct TitleScreen: View {
             let series = !(model.header?.seasons.isEmpty ?? true)
             if metrics.wide && series {
                 HStack(alignment: .top, spacing: Theme.Space.xl) {
-                    Credits(details: details, series: true).frame(width: 300, alignment: .leading)
+                    Credits(details: details, series: true).frame(width: 360, alignment: .leading)
                     episodes
                 }
                 .padding(.horizontal, metrics.gutter)
@@ -302,7 +305,7 @@ private struct Synopsis: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(text)
                 .font(.text(Theme.type.body))
-                .foregroundStyle(Theme.Palette.text)
+                .foregroundStyle(Theme.Palette.muted)
                 .lineLimit(open ? nil : lines)
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shown = $0 }

@@ -47,7 +47,7 @@ struct VersionsScreen: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text("Versions")
-                    .font(.display(Theme.type.title1))
+                    .display(Theme.type.title1)
                     .accessibilityAddTraits(.isHeader)
                 Text("for \(heading)")
                     .font(.text(Theme.type.headline, relativeTo: .headline))
@@ -83,7 +83,7 @@ struct VersionsScreen: View {
         } else if snapshot?.done == true {
             VStack(alignment: .leading, spacing: 10) {
                 Text("No version to play")
-                    .font(.display(Theme.type.title2))
+                    .display(Theme.type.title2)
                     .foregroundStyle(Theme.Palette.text)
                 Text(snapshot.map { $0.hidden.count > 0 ? VersionWords.hidden($0.hidden) : "None of your addons had a source for this." } ?? "")
                     .font(.text(Theme.type.body))
@@ -95,9 +95,9 @@ struct VersionsScreen: View {
             }
             .padding(Theme.Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface))
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
         } else {
-            RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
                 .fill(Theme.Palette.surface)
                 .frame(height: 280)
                 .accessibilityLabel("Finding versions")
@@ -118,7 +118,7 @@ struct VersionsScreen: View {
                     .foregroundStyle(Theme.Palette.text)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
+                    .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                     let shown = expanded.contains(group) ? rows : Array(rows.prefix(3))
                     ForEach(shown) { row in
                         VersionRowView(row: row, wide: metrics.wide) {
@@ -151,7 +151,7 @@ struct VersionsScreen: View {
                 .foregroundStyle(Theme.Palette.text)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
+                .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -181,7 +181,7 @@ private struct PickCard: View {
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
             Text(row.quality)
-                .font(.display(Theme.type.title1 + 6))
+                .display(Theme.type.title1 + 6)
                 .foregroundStyle(Theme.Palette.text)
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
                 if !row.features.isEmpty { fact("Features", row.features.joined(separator: ", ")) }
@@ -210,8 +210,7 @@ private struct PickCard: View {
         }
         .padding(Theme.Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).strokeBorder(Theme.Palette.line, lineWidth: 1))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
     }
 
     private func fact(_ label: String, _ value: String, dot: Color? = nil) -> some View {
@@ -278,7 +277,7 @@ private struct VersionRowView: View {
             .padding(.vertical, 12)
             .padding(.horizontal, 14)
             .contentShape(Rectangle())
-            .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface.opacity(hovered ? 0.8 : 0)))
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(.white.opacity(hovered ? 0.06 : 0)))
         }
         .buttonStyle(.plain)
         #if !os(tvOS)
