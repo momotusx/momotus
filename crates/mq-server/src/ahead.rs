@@ -42,7 +42,8 @@ pub(crate) enum Refusal {
     /// The origin's own error answer, passed on to the player with its
     /// `Content-Range` (a 416 names the length).
     Status(StatusCode, HeaderMap),
-    Failed,
+    /// No answer; the reason, for the playback's attempt list.
+    Failed(String),
 }
 
 /// What the first upstream answer told about the file.
@@ -222,13 +223,14 @@ impl Source {
         if let Some(meta) = self.shared.meta.get() {
             return Ok(meta.clone());
         }
-        let cursor = self.cursor_at(pos).ok_or(Refusal::Failed)?;
+        let released = || Refusal::Failed("playback released".into());
+        let cursor = self.cursor_at(pos).ok_or_else(released)?;
         let mut rx = cursor.progress.subscribe();
         let _ = rx.wait_for(|p| p.phase != Phase::Opening).await;
         if let Some(meta) = self.shared.meta.get() {
             return Ok(meta.clone());
         }
-        Err(lock(&cursor.refusal).clone().unwrap_or(Refusal::Failed))
+        Err(lock(&cursor.refusal).clone().unwrap_or_else(released))
     }
 
     /// The bytes at `pos`, up to the end of its block or `end`.
@@ -358,11 +360,11 @@ impl Shared {
                 Ok(Ok(upstream)) => upstream,
                 Ok(Err(e)) => {
                     tracing::warn!("stream upstream failed: {e}");
-                    return Err(Refusal::Failed);
+                    return Err(Refusal::Failed(e.to_string()));
                 }
                 Err(_) => {
                     tracing::warn!("stream upstream sent no answer in {OPEN:?}");
-                    return Err(Refusal::Failed);
+                    return Err(Refusal::Failed("no answer in time".into()));
                 }
             };
         let len = match upstream.status {
@@ -409,7 +411,7 @@ impl Shared {
             });
         if changed {
             tracing::warn!("stream upstream changed during playback");
-            return Err(Refusal::Failed);
+            return Err(Refusal::Failed("the file changed during playback".into()));
         }
         Ok(upstream)
     }

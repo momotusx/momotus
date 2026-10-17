@@ -614,3 +614,58 @@ async fn a_validator_that_disappears_means_another_version() {
     }
     assert!(seen.ranges().len() > 1);
 }
+
+/// Opening checks the origin with the read that goes on to serve the
+/// player: one origin request, and the player's first bytes need no wait.
+#[tokio::test]
+async fn open_checks_the_origin_with_the_read_that_serves_the_player() {
+    let data = file(1 << 20);
+    let delay = Duration::from_millis(400);
+    let how = Behaviour {
+        slow_start: Some(delay),
+        ..Default::default()
+    };
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let (origin, seen) = range_origin(data.clone(), how).await;
+    let upstream = |url: &str| Upstream::Http {
+        url: url.to_owned(),
+        headers: vec![],
+        allow_private: true,
+    };
+    let started = std::time::Instant::now();
+    let url = server
+        .open(upstream(&origin), "v.mkv", Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert!(started.elapsed() >= delay);
+    let first = std::time::Instant::now();
+    assert_eq!(range(&http, &url, 0, 1000).await, data[..1000]);
+    let wait = first.elapsed();
+    assert!(wait < delay / 2, "first bytes took {wait:?}");
+    assert_eq!(seen.ranges(), ["0-"], "no separate liveness request");
+
+    // A refusing origin and a dead port fail at open and are released.
+    let (refusing, _) = range_origin(
+        data,
+        Behaviour {
+            token: true,
+            ..Default::default()
+        },
+    )
+    .await;
+    let err = server
+        .open(upstream(&refusing), "v.mkv", Duration::from_secs(5))
+        .await
+        .unwrap_err();
+    assert!(err.contains("http status 403"), "{err}");
+    let err = server
+        .open(
+            upstream("http://127.0.0.1:9/v.mkv"),
+            "v.mkv",
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.starts_with("source did not answer"), "{err}");
+}

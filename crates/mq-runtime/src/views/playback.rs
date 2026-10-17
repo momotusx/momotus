@@ -12,7 +12,6 @@ use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
-use mq_http::{Priority, RequestOptions};
 use mq_library::{FINISHED_RATIO, LibraryItemRow, ProgressRow};
 use mq_media::{ByteCache, HttpRangeReader};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
@@ -517,12 +516,20 @@ async fn resolve_next(
             s.next += 1;
             stream
         };
-        match open_source(&core, &stream, &target).await {
+        let opened = match open_source(&core, &stream, &target).await {
             Ok((upstream, filename, size)) => {
                 let name = filename
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
-                let url = server.register(upstream.clone(), &name);
+                server
+                    .open(upstream.clone(), &name, PROBE_TIMEOUT)
+                    .await
+                    .map(|url| (upstream, filename, size, url))
+            }
+            Err(e) => Err(e),
+        };
+        match opened {
+            Ok((upstream, filename, size, url)) => {
                 let wanted = core.prefs().subtitle_languages;
                 let allow_private = addon_allows_private(&core, &stream.addon_id);
                 {
@@ -583,7 +590,7 @@ fn addon_allows_private(core: &Core, addon_id: &str) -> bool {
         .any(|a| a.id() == addon_id && a.allow_private)
 }
 
-/// Resolves one stream to an upstream and checks that it answers.
+/// Resolves one stream to an upstream.
 async fn open_source(
     core: &Core,
     stream: &ParsedStream,
@@ -645,24 +652,7 @@ async fn open_source(
         }
         other => return Err(format!("{} streams cannot play here", source_word(other))),
     };
-    let options = RequestOptions {
-        priority: Priority::Playback,
-        timeout: PROBE_TIMEOUT,
-        allow_private,
-        headers: headers.clone(),
-        ..RequestOptions::default()
-    };
-    // Only the status line is read: origins that ignore Range answer 200
-    // with the whole file, and that still counts as alive.
-    let probe = core.http().stream(&url, Some("bytes=0-0".into()), &options);
-    let status = tokio::time::timeout(PROBE_TIMEOUT, probe)
-        .await
-        .map_err(|_| "source did not answer in time".to_owned())?
-        .map_err(|e| format!("source did not answer: {e}"))?
-        .status;
-    if !(200..300).contains(&status) {
-        return Err(format!("source did not answer: http status {status}"));
-    }
+    // Whether it answers is checked by the stream server's first read.
     Ok((
         Upstream::Http {
             url,

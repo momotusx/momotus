@@ -106,6 +106,10 @@ impl StreamServer {
     /// players guess the container; it carries no secrets.
     /// An HTTP upstream starts reading its first bytes at once.
     pub fn register(&self, upstream: Upstream, filename: &str) -> String {
+        self.add(upstream, filename).0
+    }
+
+    fn add(&self, upstream: Upstream, filename: &str) -> (String, Session) {
         let session = match upstream {
             Upstream::Http {
                 url,
@@ -129,8 +133,37 @@ impl StreamServer {
             },
         };
         let token = new_token();
-        lock(&self.state.sessions).insert(token.clone(), session);
-        format!("http://{}/s/{token}/{}", self.addr, sanitize(filename))
+        lock(&self.state.sessions).insert(token.clone(), session.clone());
+        let url = format!("http://{}/s/{token}/{}", self.addr, sanitize(filename));
+        (url, session)
+    }
+
+    /// Registers a playback and waits up to `deadline` for its origin's
+    /// first answer, so a dead link fails here instead of in the player. For
+    /// HTTP that answer is the read that goes on to serve the player; no
+    /// extra request is made. A dead link is released again.
+    pub async fn open(
+        &self,
+        upstream: Upstream,
+        filename: &str,
+        deadline: Duration,
+    ) -> Result<String, String> {
+        let (url, session) = self.add(upstream, filename);
+        // Torrent playbacks are checked before they get here.
+        #[allow(irrefutable_let_patterns)] // one variant without `torrent`
+        let Session::Http(source) = session else {
+            return Ok(url);
+        };
+        let error = match tokio::time::timeout(deadline, source.meta(0)).await {
+            Ok(Ok(_) | Err(ahead::Refusal::Passthrough)) => return Ok(url),
+            Ok(Err(ahead::Refusal::Status(status, _))) => {
+                format!("source did not answer: http status {}", status.as_u16())
+            }
+            Ok(Err(ahead::Refusal::Failed(reason))) => format!("source did not answer: {reason}"),
+            Err(_) => "source did not answer in time".into(),
+        };
+        self.release(&url);
+        Err(error)
     }
 
     /// Registers an addon's subtitle file and returns a URL that serves it as
@@ -451,7 +484,7 @@ async fn serve_http(
             return proxy_http(http, &source, range, head_only).await;
         }
         Err(ahead::Refusal::Status(status, headers)) => return (status, headers).into_response(),
-        Err(ahead::Refusal::Failed) => return StatusCode::BAD_GATEWAY.into_response(),
+        Err(ahead::Refusal::Failed(_)) => return StatusCode::BAD_GATEWAY.into_response(),
     };
     let mut out = meta.headers.clone();
     out.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
