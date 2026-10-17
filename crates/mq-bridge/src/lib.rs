@@ -248,6 +248,9 @@ impl Request {
             | Request::UnlockProfile { .. }
             | Request::SwitchProfile { .. }
             | Request::SyncNow { .. }
+            // Debrid keys are the device's: an app hands them over at
+            // start, locked or not.
+            | Request::SetDebridKeys { .. }
             | Request::Ping { .. }
             | Request::Lifecycle { .. } => true,
             _ => false,
@@ -316,14 +319,19 @@ struct Shared {
 }
 
 impl Shared {
-    /// A switch or a lock: every view but the picker closes (playback saves
-    /// its position as it closes) and older work is fenced off.
-    fn transition(&mut self, core: Core, locked: bool) {
+    /// A switch or a lock: every view but the picker leaves the session and
+    /// older work is fenced off. The views it returns close (playback saves
+    /// its position) when the caller drops them, after the session lock.
+    #[must_use = "drop the closed views after releasing the session lock"]
+    fn transition(&mut self, core: Core, locked: bool) -> Vec<Subscription> {
         self.generation += 1;
         self.core = core;
-        self.subs
-            .retain(|_, s| matches!(s.view, View::Profiles { .. }));
+        let (picker, closed) = std::mem::take(&mut self.subs)
+            .into_iter()
+            .partition(|(_, s)| matches!(s.view, View::Profiles { .. }));
+        self.subs = picker;
         self.set_locked(locked);
+        closed.into_values().collect()
     }
 
     fn set_locked(&mut self, locked: bool) {
@@ -361,6 +369,11 @@ impl Session {
         // Subscribe before reading what is gone, so no removal slips by.
         let changes = core.library().subscribe();
         let gone = core.library().gone_profiles().unwrap_or_default();
+        // Removals made while the app was closed: it may still hold their
+        // keystore entries.
+        for id in &gone {
+            let _ = out.send(json!({ "profile": "gone", "id": id }));
+        }
         let (state, _) = watch::channel((core.profile().to_owned(), locked));
         let shared = Arc::new(Mutex::new(Shared {
             core: core.clone(),
@@ -631,9 +644,8 @@ impl Session {
                 self.reply_profiles(id, result);
             }
             Request::LockSession { id } => {
-                let mut shared = lock(&self.shared);
-                shared.transition(core, true);
-                drop(shared);
+                let closed = lock(&self.shared).transition(core, true);
+                drop(closed);
                 self.reply_profiles(id, Ok(()));
             }
         }
@@ -668,10 +680,27 @@ impl Session {
         }
         let target = self.core().for_profile(profile);
         target.check_pin(profile, pin).await?;
-        target.make_active()?;
+        self.commit_switch(target)
+    }
+
+    /// The switch, once its PIN passed. The target is checked again under
+    /// the session lock: a deletion can land while the PIN is checked, and
+    /// the watcher only locks the session a removed profile is running.
+    fn commit_switch(&mut self, target: Core) -> Result<Value, Failure> {
         let mut shared = lock(&self.shared);
-        shared.transition(target, false);
-        Ok(json!(shared.core.profiles_snapshot(false)))
+        let usable = target
+            .library()
+            .profile(target.profile())
+            .map_err(ProfileError::from)?;
+        if !usable.is_some_and(|p| p.ready()) {
+            return Err(ProfileError::Unknown.into());
+        }
+        target.make_active()?;
+        let closed = shared.transition(target, false);
+        let snapshot = json!(shared.core.profiles_snapshot(false));
+        drop(shared);
+        drop(closed);
+        Ok(snapshot)
     }
 
     /// Unlocks with the session profile's PIN (none needed without one). A
@@ -1153,12 +1182,23 @@ async fn watch_gone(
             return;
         };
         let mut shared = lock(&shared);
-        for id in gone.iter().filter(|id| !known.contains(*id)) {
-            if shared.core.profile() == id {
-                let core = shared.core.clone();
-                shared.transition(core, true);
-            }
+        // Checked against every tombstone on each pass, not only new ones,
+        // so a session that reached a removed profile still locks.
+        let mut closed = Vec::new();
+        if !shared.locked && gone.iter().any(|id| id == shared.core.profile()) {
+            let core = shared.core.clone();
+            closed = shared.transition(core, true);
+        }
+        let new: Vec<&String> = gone.iter().filter(|id| !known.contains(*id)).collect();
+        for id in &new {
             let _ = out.send(json!({ "profile": "gone", "id": id }));
+        }
+        drop(shared);
+        drop(closed);
+        if !new.is_empty() {
+            // Answers cached in memory were fetched with the removed
+            // profile's addon URLs (the disk copies went with the purge).
+            core.addons().forget_memory();
         }
         known = gone.into_iter().collect();
     }
@@ -1360,5 +1400,68 @@ mod fence {
             .expect("the forwarder stops")
             .unwrap();
         assert!(rx.try_recv().is_err(), "an older push went out");
+    }
+
+    /// A deletion that lands while a switch checks the PIN: the switch is
+    /// refused instead of leaving the session unlocked on a tombstone.
+    #[tokio::test]
+    async fn a_switch_whose_target_goes_during_the_pin_check_is_refused() {
+        let core = Core::temporary("default").unwrap();
+        let kid = core.create_profile("Kid", "fox").unwrap();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let mut session = Session::new(core.clone(), tx);
+        let target = core.for_profile(&kid);
+        target.check_pin(&kid, None).await.unwrap();
+        core.delete_profile(&kid).unwrap();
+        let refused = session.commit_switch(target).expect_err("refused");
+        assert_eq!(refused.code, Some("unknownProfile"), "{}", refused.error);
+        let shared = lock(&session.shared);
+        assert_eq!((shared.core.profile(), shared.locked), ("default", false));
+    }
+
+    /// A session running a profile whose removal was already announced (the
+    /// race above, had it gone through) still locks at the next change.
+    #[tokio::test]
+    async fn a_session_on_a_known_tombstone_locks() {
+        let core = Core::temporary("default").unwrap();
+        let kid = core.create_profile("Kid", "fox").unwrap();
+        core.delete_profile(&kid).unwrap();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let session = Session::new(core.clone(), tx);
+        lock(&session.shared).core = core.for_profile(&kid);
+        core.update_profile("default", Some("Owner"), None, None)
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !lock(&session.shared).locked {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the session locks");
+    }
+}
+
+#[cfg(test)]
+mod closing {
+    use super::*;
+
+    /// A lock hands the views it closes back to the caller, which drops
+    /// them once the session lock is released (playback saves on drop).
+    #[tokio::test]
+    async fn a_lock_hands_back_the_views_it_closes() {
+        let core = Core::temporary("default").unwrap();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let mut session = Session::new(core.clone(), tx);
+        for (id, view) in [(1, "home"), (2, "profiles"), (3, "addons")] {
+            let open = json!({"id": id, "op": "subscribe", "view": view});
+            session.handle_text(&open.to_string()).await;
+        }
+        let mut shared = lock(&session.shared);
+        let closed = shared.transition(core, true);
+        let mut names: Vec<&str> = closed.iter().map(|s| s.view.name()).collect();
+        names.sort();
+        assert_eq!(names, ["addons", "home"]);
+        let left: Vec<&str> = shared.subs.values().map(|s| s.view.name()).collect();
+        assert_eq!(left, ["profiles"]);
     }
 }

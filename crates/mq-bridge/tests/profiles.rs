@@ -298,7 +298,6 @@ async fn a_locked_session_answers_only_the_picker_unlocking_and_sync() {
         json!({"op": "moveAddon", "url": "https://a.example/manifest.json", "to": 0}),
         json!({"op": "setAddonEnabled", "url": "https://a.example/manifest.json", "enabled": false}),
         json!({"op": "setPrefs", "patch": {}}),
-        json!({"op": "setDebridKeys", "keys": []}),
         json!({"op": "homeCatalogs"}),
         json!({"op": "setHomeRow", "rowId": "x", "hidden": true}),
         json!({"op": "moveHomeRow", "rowId": "x", "by": 1}),
@@ -316,6 +315,9 @@ async fn a_locked_session_answers_only_the_picker_unlocking_and_sync() {
         assert_eq!(c.code(request.clone()).await, "locked", "{request}");
     }
     c.ok(json!({"op": "ping"})).await;
+    // Debrid keys are the device's, handed over at start, locked or not.
+    let keys = json!({"op": "setDebridKeys", "keys": [["realdebrid", "k"]]});
+    assert_eq!(c.ok(keys).await["stores"], 1);
     c.ok(json!({"op": "lifecycle", "event": "background"}))
         .await;
     let report = c.ok(json!({"op": "syncNow", "record": record})).await;
@@ -557,4 +559,25 @@ async fn a_remote_deletion_locks_the_session_running_as_that_profile() {
         .call(json!({"op": "command", "sub": home, "command": {"type": "setQuery"}}))
         .await;
     assert_eq!(reply["error"], format!("no subscription {home}"), "{reply}");
+}
+
+#[tokio::test]
+async fn a_new_session_names_every_profile_removed_before_it() {
+    let core = Core::temporary("default").unwrap();
+    let mut removed = Vec::new();
+    for name in ["A", "B"] {
+        let id = core.create_profile(name, "fox").unwrap();
+        core.delete_profile(&id).unwrap();
+        removed.push(id);
+    }
+    let mut c = Client::new(core);
+    let mut named = Vec::new();
+    for _ in 0..2 {
+        let push = c.recv().await;
+        assert_eq!(push["profile"], "gone", "{push}");
+        named.push(push["id"].as_str().unwrap().to_owned());
+    }
+    named.sort();
+    removed.sort();
+    assert_eq!(named, removed);
 }
