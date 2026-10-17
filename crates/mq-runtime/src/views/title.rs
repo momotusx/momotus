@@ -406,7 +406,7 @@ fn season_of(meta: &MetaItem, video_id: &str) -> Option<u32> {
 }
 
 /// Resume the most recent unfinished video; otherwise the first unwatched
-/// regular episode; for movies, the movie itself.
+/// regular episode; for movies, the movie itself ("Play again" once watched).
 fn play_target(
     meta: &MetaItem,
     kind: &str,
@@ -426,9 +426,10 @@ fn play_target(
         });
     }
     if kind == "movie" || meta.videos.is_empty() {
+        let again = watched.contains(&meta.preview.id);
         return Some(PlayTarget {
             video_id: meta.preview.id.clone(),
-            label: "Play".into(),
+            label: if again { "Play again" } else { "Play" }.into(),
             resume_ms: None,
         });
     }

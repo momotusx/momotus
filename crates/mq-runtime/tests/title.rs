@@ -196,3 +196,43 @@ async fn a_movie_offers_its_trailer_and_a_watched_flag() {
     }
     panic!("the watched flag never came back");
 }
+
+/// A movie marked watched after a partial play starts over; a rewatch
+/// started after the mark resumes again, as Continue Watching shows it.
+#[tokio::test]
+async fn a_watched_movie_plays_again_until_a_rewatch_resumes() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(MOVIE).await], &core.hlc())
+        .unwrap();
+    let progress = |position_ms, updated_ms| ProgressRow {
+        video_id: "tt1727587",
+        item_id: "tt1727587",
+        position_ms,
+        duration_ms: 888_000,
+        updated_ms,
+    };
+    core.library()
+        .set_progress("p", progress(400_000, 1), &core.hlc())
+        .unwrap();
+    core.library()
+        .set_watched("p", "tt1727587", "tt1727587", true, &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "movie", "tt1727587");
+    let target = settle(&view).await.header.play_target.unwrap();
+    assert_eq!(target.label, "Play again");
+    assert_eq!(target.resume_ms, None);
+
+    core.library()
+        .set_progress("p", progress(120_000, 2), &core.hlc())
+        .unwrap();
+    for _ in 0..100 {
+        let target = view.snapshot().header.play_target.unwrap();
+        if target.label == "Resume" {
+            assert_eq!(target.resume_ms, Some(120_000));
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the rewatch never offered Resume");
+}

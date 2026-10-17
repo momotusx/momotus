@@ -563,7 +563,9 @@ impl Library {
     }
 
     /// The most recently updated progress row for a title:
-    /// (video id, position ms, duration ms).
+    /// (video id, position ms, duration ms). The position is 0 when the
+    /// video was marked watched after it, so there is nothing to resume (the
+    /// rewatch rule of Continue Watching).
     pub fn latest_progress(
         &self,
         profile: &str,
@@ -571,8 +573,14 @@ impl Library {
     ) -> Result<Option<(String, i64, i64)>, LibraryError> {
         self.read(|c| {
             c.query_row(
-                "SELECT video_id, position_ms, duration_ms FROM progress
-                 WHERE profile_id = ?1 AND item_id = ?2 ORDER BY updated_ms DESC LIMIT 1",
+                "SELECT p.video_id,
+                        CASE WHEN COALESCE(w.watched, 0) = 1 AND NOT p.hlc > w.hlc
+                             THEN 0 ELSE p.position_ms END,
+                        p.duration_ms
+                 FROM progress p
+                 LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
+                 WHERE p.profile_id = ?1 AND p.item_id = ?2
+                 ORDER BY p.updated_ms DESC, p.video_id DESC LIMIT 1",
                 params![profile, item_id],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
