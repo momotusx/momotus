@@ -25,8 +25,7 @@ enum DebridKeys {
     @discardableResult
     static func set(_ service: String, _ key: String?) -> Bool {
         guard let key, !key.isEmpty else {
-            Keychain.delete("debrid.\(service)")
-            return true
+            return Keychain.delete("debrid.\(service)")
         }
         return Keychain.write("debrid.\(service)", Data(key.utf8))
     }
@@ -49,7 +48,10 @@ struct DebridScreen: View {
     let core: CoreClient
     @State private var drafts: [String: String] = [:]
     @State private var saved: [String: Bool] = [:]
-    @State private var status: String?
+    /// What the last change did, under its service's row; `ok` when it went through, here and in the core.
+    @State private var said: (service: String, text: String, ok: Bool)?
+    /// The key field being typed in.
+    @FocusState private var typing: String?
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
 
@@ -62,11 +64,6 @@ struct DebridScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
                 ForEach(DebridKeys.services) { service in
                     row(service)
-                }
-                if let status {
-                    Label(status, glyph: "circle-check")
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
-                        .foregroundStyle(Theme.Palette.muted)
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -95,11 +92,14 @@ struct DebridScreen: View {
                         .buttonStyle(.plain)
                         .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
+                        // Spoken with the service, so a list of controls says whose key it is.
+                        .accessibilityLabel("Get \("AEIOU".contains(service.name.prefix(1)) ? "an" : "a") \(service.name) key")
                 }
             }
             HStack(spacing: 10) {
                 SecureField(saved[service.id] == true ? "Replace the saved key" : "API key", text: Binding(
                     get: { drafts[service.id] ?? "" }, set: { drafts[service.id] = $0 }))
+                    .focused($typing, equals: service.id)
                     .textFieldStyle(.plain)
                     .font(.mono(Theme.type.body))
                     .padding(.horizontal, 14)
@@ -111,9 +111,18 @@ struct DebridScreen: View {
                 Button("Save") { apply(service.id, drafts[service.id]) }
                     .buttonStyle(PillButtonStyle(prominent: !draft.isEmpty))
                     .disabled(draft.isEmpty)
+                    .accessibilityLabel("Save \(service.name) key")
                 if saved[service.id] == true {
-                    Button("Remove") { apply(service.id, nil) }.buttonStyle(PillButtonStyle())
+                    Button("Remove") { apply(service.id, nil) }
+                        .buttonStyle(PillButtonStyle())
+                        .accessibilityLabel("Remove \(service.name) key")
                 }
+            }
+            if let said, said.service == service.id {
+                Label(said.text, glyph: said.ok ? "circle-check" : "triangle-alert")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(said.ok ? Theme.Palette.muted : Theme.Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .foregroundStyle(Theme.Palette.text)
@@ -123,18 +132,22 @@ struct DebridScreen: View {
 
     private func apply(_ service: String, _ key: String?) {
         let trimmed = key?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let removing = trimmed?.isEmpty ?? true
+        // The keyboard goes, so the result under the row is in view.
+        typing = nil
+        // A refusal changes nothing: the core keeps the keys it has, so nothing is handed over.
         guard DebridKeys.set(service, trimmed) else {
-            status = "The Keychain refused the key, so it was not saved. Use a signed build."
+            said = (service, DebridWords.refused(removing: removing), false)
             return
         }
         drafts[service] = nil
-        saved[service] = trimmed != nil
+        saved[service] = !removing
         Task {
             do {
                 let count = try await DebridKeys.handOver(to: core)
-                status = count == 0 ? "No debrid service in use." : "\(count) debrid \(count == 1 ? "service" : "services") in use."
+                said = (service, DebridWords.outcome(removed: removing, inUse: count), true)
             } catch {
-                status = "Saved, but the core did not take it: \(error.localizedDescription)"
+                said = (service, DebridWords.outcome(removed: removing, inUse: nil, refused: error.localizedDescription), false)
             }
         }
     }

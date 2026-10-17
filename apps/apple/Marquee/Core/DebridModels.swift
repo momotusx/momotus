@@ -103,3 +103,27 @@ extension DebridRecord: CustomStringConvertible, CustomDebugStringConvertible, C
         Mirror(self, children: ["service": service, "generation": generation, "revision": revision, "credential": credential])
     }
 }
+
+/// What a debrid key change says, storing and handing over apart (Android's `DebridCopy`).
+enum DebridWords {
+    static func inUse(_ count: Int) -> String {
+        switch count {
+        case 0: "No debrid service in use."
+        case 1: "1 debrid service in use."
+        default: "\(count) debrid services in use."
+        }
+    }
+
+    /// After the Keychain took the change: what the core did with it, with
+    /// its count, or its refusal when `inUse` is nil.
+    static func outcome(removed: Bool, inUse count: Int?, refused: String? = nil) -> String {
+        let kept = removed ? "Removed from this device." : "Saved on this device."
+        guard let count else { return "\(kept) The core did not take it: \(refused ?? "no answer")." }
+        return "\(kept) \(inUse(count))"
+    }
+
+    /// The Keychain refused: nothing changed, here or in the core.
+    static func refused(removing: Bool) -> String {
+        removing ? "This device could not remove the key, so nothing changed." : "This device could not store the key, so nothing changed."
+    }
+}

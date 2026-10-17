@@ -38,7 +38,7 @@ struct ScenePhaseForward: ViewModifier {
             case .active:
                 core.lifecycle("foreground")
                 // Pull what other devices changed while this one was away.
-                if sync.joined { Task { await sync.syncNow() } }
+                if sync.joined { sync.request() }
             case .background:
                 core.lifecycle("background")
             default:

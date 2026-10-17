@@ -20,6 +20,8 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
     @ObservationIgnored private let params: [String: any Sendable]
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = -1
+    /// Sees every snapshot as it lands, whether or not a view shows it (pairing stores its join here).
+    @ObservationIgnored var onSnapshot: ((Snapshot) -> Void)?
 
     init(_ view: String, params: [String: any Sendable] = [:], core: CoreClient) {
         self.view = view
@@ -52,6 +54,7 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
                     case .snapshot(let value): snapshot = value
                     case .updates(let values): if let last = values.last { snapshot = last }
                     }
+                    if let snapshot { onSnapshot?(snapshot) }
                 }
             } catch is CancellationError {
             } catch {

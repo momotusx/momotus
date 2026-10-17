@@ -4,13 +4,19 @@ import SwiftUI
 /// Joins this device to a sync account: a device that already syncs scans
 /// the QR, both show the same six digits, the user confirms, and the record
 /// it hands over goes to the Keychain. Nothing is kept before confirming.
+/// The attempt belongs to the sync model, which stores the join as it arrives.
 struct PairingScreen: View {
     let core: CoreClient
+    /// Where Done goes after joining: Home from onboarding; nil goes back.
+    var done: (() -> Void)?
     @State private var server = UserDefaults.standard.string(forKey: "syncServer") ?? "https://"
     @State private var name = DeviceName.current
-    @State private var pairing: LiveRecord<PairingSnapshot>?
-    /// nil while saving the joined record, then whether the Keychain kept it.
-    @State private var stored: Bool?
+    /// The address had a user name or password: it was not kept or sent.
+    @State private var badAddress = false
+    /// tvOS: the answer of the step on screen has focus.
+    @FocusState private var answer: Bool
+    /// The field being typed in.
+    @FocusState private var typing: String?
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
 
@@ -18,16 +24,19 @@ struct PairingScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Pair this device")
-                Text("Join your sync account by scanning a code with a device that already syncs. Your library stays end to end encrypted.")
-                    .font(.text(Theme.type.body))
-                    .foregroundStyle(Theme.Palette.muted)
-                if let pairing {
+                // Once joined, the page is the result, the last sync and Done: no second pairing starts here.
+                if !joinedHere {
+                    Text("Join your sync account by scanning a code with a device that already syncs. Your library stays end to end encrypted.")
+                        .font(.text(Theme.type.body))
+                        .foregroundStyle(Theme.Palette.muted)
+                }
+                if let pairing = sync.pairing {
                     phase(pairing)
                     if let failure = pairing.failure {
-                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { self.pairing = nil }))
+                        again(PairingWords.problem(failure), symbol: "triangle-alert")
                     }
                 } else if Self.previewJoined {
-                    JoinedState(core: core, stored: true)
+                    JoinedState(core: core, stored: true, done: done)
                 } else {
                     form
                 }
@@ -40,7 +49,37 @@ struct PairingScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
-        .task(id: pairing?.taskId) { pairing?.start() }
+        // Opens it again after a core restart; the model started it already.
+        .task(id: sync.pairing?.taskId) { sync.pairing?.start() }
+        #if os(tvOS)
+        // Each step's answer takes focus, so the remote is never left on the form below.
+        .onChange(of: answerStep, initial: true) { _, step in answer = step != nil }
+        #endif
+    }
+
+    /// The step whose answer is on screen: confirm, or start again after an expiry or a failure.
+    private var answerStep: String? {
+        guard let pairing = sync.pairing else { return nil }
+        if pairing.failure != nil { return "failure" }
+        switch pairing.snapshot {
+        case .confirm?: return "confirm"
+        case .expired?: return "expired"
+        case .failed?: return "failed"
+        default: return nil
+        }
+    }
+
+    /// Why pairing stopped, and Start again.
+    private func again(_ text: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(text, glyph: symbol)
+                .font(.text(Theme.type.body))
+                .foregroundStyle(Theme.Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { sync.endPairing() } label: { Label("Start again", glyph: "refresh-cw") }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .focused($answer)
+        }
     }
 
     private var form: some View {
@@ -48,14 +87,22 @@ struct PairingScreen: View {
             field("Sync server", text: $server, prompt: "https://sync.example.org")
             field("This device's name", text: $name, prompt: "Living room")
             Button {
+                // The keyboard goes, so the answer (a code, or why not) is in view.
+                typing = nil
                 let trimmed = server.trimmingCharacters(in: .whitespaces)
+                // An address with a user name or password is never kept or sent.
+                badAddress = !PairingWords.plainAddress(trimmed)
+                guard !badAddress else { return }
                 UserDefaults.standard.set(trimmed, forKey: "syncServer")
-                pairing = LiveRecord("pairing", params: ["server": trimmed, "name": name], core: core)
+                sync.startPairing(server: trimmed, name: name)
             } label: {
                 Label("Show pairing code", glyph: "qr-code")
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .disabled(URL(string: server)?.host() == nil || name.isEmpty)
+            if badAddress {
+                StateLine(symbol: "triangle-alert", text: "Enter the address without a user name or password.")
+            }
         }
     }
 
@@ -66,6 +113,7 @@ struct PairingScreen: View {
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
             TextField(prompt, text: text)
+                .focused($typing, equals: label)
                 .textFieldStyle(.plain)
                 .font(.text(Theme.type.body))
                 .autocorrectionDisabled()
@@ -106,23 +154,26 @@ struct PairingScreen: View {
                     .tracking(8)
                     .foregroundStyle(Theme.Palette.text)
                 HStack(spacing: 12) {
-                    Button { pairing.command(["type": "confirm"]) } label: { Label("They match", glyph: "check") }
+                    Button { pairing.command(["type": "confirm"]) } label: { Label("Yes, they match", glyph: "check") }
                         .buttonStyle(PillButtonStyle(prominent: true))
-                    Button { pairing.command(["type": "reject"]) } label: { Label("They differ", glyph: "x") }
+                        .focused($answer)
+                    Button { pairing.command(["type": "reject"]) } label: { Label("No, they differ", glyph: "x") }
                         .buttonStyle(PillButtonStyle())
                 }
             }
-        case .joined(let record)?:
-            JoinedState(core: core, stored: stored)
-                .task(id: record) {
-                    stored = SyncRecord.store(record)
-                    if stored == true { await sync.didJoin() }
-                }
+        case .joined?:
+            JoinedState(core: core, stored: sync.joinStored, done: done)
         case .expired?:
-            StateLine(symbol: "clock-alert", text: "The code expired before it was scanned.", action: ("New code", { self.pairing = nil }))
+            again("The code expired before it was scanned.", symbol: "clock-alert")
         case .failed(let reason)?:
-            StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", { self.pairing = nil }))
+            again(PairingWords.problem(reason), symbol: "triangle-alert")
         }
+    }
+
+    /// This page's attempt joined (or the debug preview shows a join).
+    private var joinedHere: Bool {
+        if case .joined? = sync.pairing?.snapshot { return true }
+        return sync.pairing == nil && Self.previewJoined
     }
 
     #if DEBUG
@@ -138,14 +189,18 @@ struct PairingScreen: View {
 private struct JoinedState: View {
     /// nil while saving the joined record, then whether the Keychain kept it.
     let stored: Bool?
+    /// Where Done goes: Home from onboarding, else back to Settings.
+    let done: (() -> Void)?
     @State private var library: LiveRecord<LibrarySnapshot>
     @State private var addons: LiveRecord<AddonsSnapshot>
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var doneFocused: Bool
 
-    init(core: CoreClient, stored: Bool?) {
+    init(core: CoreClient, stored: Bool?, done: (() -> Void)?) {
         self.stored = stored
+        self.done = done
         _library = State(initialValue: LiveRecord("library", core: core))
         _addons = State(initialValue: LiveRecord("addons", core: core))
     }
@@ -155,7 +210,7 @@ private struct JoinedState: View {
             Group {
                 switch stored {
                 case true?: Label("This device joined your sync account.", glyph: "circle-check")
-                case false?: Label("Joined, but the Keychain refused the account, so it was not kept. Pair again from a signed build.", glyph: "triangle-alert")
+                case false?: Label(PairingWords.sessionOnly, glyph: "triangle-alert")
                 case nil: Label("Saving the account to this device", glyph: "clock")
                 }
             }
@@ -163,10 +218,15 @@ private struct JoinedState: View {
             .foregroundStyle(Theme.Palette.text)
             if stored == true { arrived }
             if stored != nil {
-                Button("Done") { dismiss() }
+                Button("Done") { if let done { done() } else { dismiss() } }
                     .buttonStyle(PillButtonStyle(prominent: true))
+                    .focused($doneFocused)
             }
         }
+        #if os(tvOS)
+        // The remote lands on Done once the join is kept.
+        .onChange(of: stored != nil, initial: true) { _, shown in doneFocused = shown }
+        #endif
         .task(id: library.taskId) { library.start() }
         .task(id: addons.taskId) { addons.start() }
     }
@@ -179,6 +239,8 @@ private struct JoinedState: View {
         } else {
             if let problem = sync.problem {
                 StateLine(symbol: "triangle-alert", text: problem.words)
+            } else if let at = sync.lastSynced {
+                StateLine(symbol: "refresh-cw", text: "Last sync \(at.formatted(date: .omitted, time: .shortened)).")
             }
             if let counts {
                 VStack(alignment: .leading, spacing: 6) {

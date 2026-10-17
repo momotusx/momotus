@@ -31,8 +31,11 @@ enum Keychain {
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    static func delete(_ account: String) {
-        SecItemDelete(query(account) as CFDictionary)
+    /// Removes the value; false when the Keychain refused (an absent value is removed already).
+    @discardableResult
+    static func delete(_ account: String) -> Bool {
+        let status = SecItemDelete(query(account) as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 }
 

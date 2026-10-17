@@ -75,7 +75,7 @@ struct SyncScreen: View {
                 // Trying again is the safe first step; forgetting is destructive, so it
                 // reads as such and never wears the accent.
                 HStack(spacing: 12) {
-                    Button("Try again") { Task { await sync.syncNow() } }.buttonStyle(PillButtonStyle(prominent: true))
+                    Button("Try again") { sync.request() }.buttonStyle(PillButtonStyle(prominent: true))
                     Button("Forget it on this device") { sync.forgetHere() }.buttonStyle(DestructiveTextStyle())
                 }
                 Text("Forgetting keeps your library. Pair again to join an account.")
@@ -83,7 +83,7 @@ struct SyncScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
             case "unsent":
                 HStack(spacing: 12) {
-                    Button("Sync now") { Task { await sync.syncNow() } }.buttonStyle(PillButtonStyle(prominent: true))
+                    Button("Sync now") { sync.request() }.buttonStyle(PillButtonStyle(prominent: true))
                     Button("Leave anyway") { Task { await sync.signOut(force: true) } }.buttonStyle(DestructiveTextStyle())
                 }
             default:
@@ -124,7 +124,7 @@ struct SyncScreen: View {
 
     private var actions: some View {
         FlowRow(spacing: 12) {
-            Button { Task { await sync.syncNow() } } label: { Label("Sync now", glyph: "refresh-cw") }
+            Button { sync.request() } label: { Label("Sync now", glyph: "refresh-cw") }
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .disabled(sync.syncing || !sync.joined)
             #if !os(tvOS)

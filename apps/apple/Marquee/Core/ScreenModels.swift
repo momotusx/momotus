@@ -170,3 +170,18 @@ struct CalendarSeries: Decodable, Hashable, Sendable {
     let name: String
     let reason: String?
 }
+
+/// One Home catalog as the Home rows screen lists it; hidden ones sit
+/// where they would show.
+struct HomeCatalog: Decodable, Hashable, Sendable {
+    let rowId: String
+    let title: String
+    let source: String
+    let hidden: Bool
+
+    /// The row's hidden value after a toggle, read from the latest list (not
+    /// from what was on screen when it was pressed); nil when the row is gone.
+    static func toggled(_ rowId: String, in rows: [HomeCatalog]?) -> Bool? {
+        rows?.first { $0.rowId == rowId }.map { !$0.hidden }
+    }
+}

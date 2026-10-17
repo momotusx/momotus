@@ -1,20 +1,14 @@
 import SwiftUI
 
-/// One Home catalog as the Customize Home screen lists it; hidden ones sit
-/// where they would show.
-struct HomeCatalog: Decodable, Hashable, Sendable {
-    let rowId: String
-    let title: String
-    let source: String
-    let hidden: Bool
-}
-
 /// Settings > Home rows: show or hide each catalog and set the order. Each
-/// edit answers with the new list, which replaces the one on screen.
+/// edit answers with the new list, which replaces the one on screen. Edits
+/// run one at a time, in order, and each reads the list the last one left.
 struct HomeRowsScreen: View {
     let core: CoreClient
     @State private var rows: [HomeCatalog]?
     @State private var failure: String?
+    /// The last edit asked for; the next one waits for it.
+    @State private var last: Task<Void, Never>?
     /// tvOS: the row picked up; up and down move it, select or Back drops it.
     @State private var picked: String?
     @Environment(\.metrics) private var metrics
@@ -37,8 +31,13 @@ struct HomeRowsScreen: View {
                         HomeRowLine(
                             row: row, first: index == 0, last: index == rows.count - 1,
                             picked: picked == row.rowId, locked: picked != nil && picked != row.rowId,
-                            toggle: { edit("setHomeRow", ["rowId": row.rowId, "hidden": !row.hidden]) },
-                            move: { by in edit("moveHomeRow", ["rowId": row.rowId, "by": by]) },
+                            // The row as the last reply has it, so two quick presses flip it twice.
+                            toggle: {
+                                edit { rows in
+                                    HomeCatalog.toggled(row.rowId, in: rows).map { ("setHomeRow", ["rowId": row.rowId, "hidden": $0]) }
+                                }
+                            },
+                            move: { by in edit { _ in ("moveHomeRow", ["rowId": row.rowId, "by": by]) } },
                             pick: { picked = picked == row.rowId ? nil : row.rowId })
                     }
                 } else if failure == nil {
@@ -72,8 +71,13 @@ struct HomeRowsScreen: View {
         #endif
     }
 
-    private func edit(_ op: String, _ fields: [String: any Sendable]) {
-        Task {
+    /// Queues an edit after the last one; `make` reads the rows as its turn
+    /// comes and names the op, or nil when there is nothing left to do.
+    private func edit(_ make: @escaping @MainActor ([HomeCatalog]?) -> (String, [String: any Sendable])?) {
+        let previous = last
+        last = Task {
+            await previous?.value
+            guard let (op, fields) = make(rows) else { return }
             do {
                 rows = try await core.call(op, fields, as: [HomeCatalog].self)
                 failure = nil
