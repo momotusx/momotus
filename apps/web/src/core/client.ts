@@ -69,9 +69,16 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
   let closed = false;
   const apply = (s: S) => setState("data", reconcile(s as never, { merge: true }));
   bridge
-    .subscribe<S, S>(view, params, (updates) => {
-      const last = updates[updates.length - 1];
-      if (last !== undefined) apply(last);
+    .subscribe<S, S>(view, params, {
+      snapshot: (s) =>
+        batch(() => {
+          apply(s);
+          setState("status", { state: "open" });
+        }),
+      updates: (updates) => {
+        const last = updates[updates.length - 1];
+        if (last !== undefined) apply(last);
+      },
     })
     .then((s) => {
       setLink("open");
@@ -79,10 +86,6 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
       setSub(s.sub);
       closeSub = s.close;
       command = s.command;
-      batch(() => {
-        apply(s.snapshot);
-        setState("status", { state: "open" });
-      });
     })
     .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
   const close = () => {
@@ -108,18 +111,17 @@ export function homeView(): HomeState {
   const [state, setState] = createStore<HomeState>({ status: { state: "opening" }, hero: null, rows: [] });
   home = state;
   bridge
-    .subscribe<HomeSnapshot, HomeUpdate>("home", {}, (updates) =>
-      batch(() => {
-        for (const u of updates) {
-          if (u.kind === "header") setState("hero", reconcile(u.header.hero));
-          else setState("rows", reconcile(applyDiffs(state.rows, u.diffs), { key: "rowId" }));
-        }
-      }),
-    )
-    .then(({ snapshot }) => {
-      setLink("open");
-      setState({ status: { state: "open" }, hero: snapshot.header.hero, rows: snapshot.rows });
+    .subscribe<HomeSnapshot, HomeUpdate>("home", {}, {
+      snapshot: (snapshot) => setState({ status: { state: "open" }, hero: snapshot.header.hero, rows: snapshot.rows }),
+      updates: (updates) =>
+        batch(() => {
+          for (const u of updates) {
+            if (u.kind === "header") setState("hero", reconcile(u.header.hero));
+            else setState("rows", reconcile(applyDiffs(state.rows, u.diffs), { key: "rowId" }));
+          }
+        }),
     })
+    .then(() => setLink("open"))
     .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
   return state;
 }
@@ -146,20 +148,21 @@ export function titleView(kind: string, id: string): TitleView {
     void close?.();
   });
   bridge
-    .subscribe<TitleSnapshot, TitleUpdate>("title", { kind, id }, (updates) =>
-      batch(() => {
-        for (const u of updates) {
-          if (u.kind === "header") setState("header", reconcile(u.header));
-          else setState("episodes", reconcile(applyDiffs(state.episodes, u.diffs), { key: "videoId" }));
-        }
-      }),
-    )
+    .subscribe<TitleSnapshot, TitleUpdate>("title", { kind, id }, {
+      snapshot: (snapshot) => setState({ status: { state: "open" }, header: snapshot.header, episodes: snapshot.episodes }),
+      updates: (updates) =>
+        batch(() => {
+          for (const u of updates) {
+            if (u.kind === "header") setState("header", reconcile(u.header));
+            else setState("episodes", reconcile(applyDiffs(state.episodes, u.diffs), { key: "videoId" }));
+          }
+        }),
+    })
     .then((sub) => {
       setLink("open");
       if (disposed) return void sub.close();
       close = sub.close;
       command = sub.command;
-      setState({ status: { state: "open" }, header: sub.snapshot.header, episodes: sub.snapshot.episodes });
     })
     .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
   return { state, command: (c) => command(c) };
