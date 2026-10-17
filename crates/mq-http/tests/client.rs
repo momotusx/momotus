@@ -1,4 +1,4 @@
-use mq_http::{ClientConfig, HttpClient, HttpError, Priority, RequestOptions};
+use mq_http::{Body, ClientConfig, HttpClient, HttpError, Method, Priority, RequestOptions};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -112,4 +112,61 @@ async fn fetches_real_cinemeta_manifest() {
         .await
         .unwrap();
     assert_eq!(manifest["id"], "com.linvo.cinemeta");
+}
+
+#[tokio::test]
+async fn posts_form_json_and_multipart_bodies() {
+    let cases = [
+        (
+            Body::Form(vec![("a".into(), "x y".into()), ("b".into(), "1".into())]),
+            "content-type: application/x-www-form-urlencoded",
+            "a=x+y&b=1",
+        ),
+        (
+            Body::Json(serde_json::json!({"k": 1})),
+            "content-type: application/json",
+            "{\"k\":1}",
+        ),
+        (
+            Body::Multipart(vec![("magnet".into(), "magnet:?xt=urn:btih:abc".into())]),
+            "content-type: multipart/form-data; boundary=",
+            "name=\"magnet\"\r\n\r\nmagnet:?xt=urn:btih:abc\r\n",
+        ),
+    ];
+    for (body, content_type, expected) in cases {
+        let (base, head) = serve(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
+            Duration::ZERO,
+        )
+        .await;
+        let client = HttpClient::new(ClientConfig::default()).unwrap();
+        let resp = client
+            .request(Method::POST, &base, Some(body), &local_opts())
+            .await
+            .unwrap();
+        assert_eq!(resp.status, 200);
+        let head = head.await.unwrap();
+        assert!(head.starts_with("POST "), "{head}");
+        assert!(head.to_ascii_lowercase().contains(content_type), "{head}");
+        assert!(head.contains(expected), "{head}");
+    }
+}
+
+#[tokio::test]
+async fn surfaces_retry_after_on_status_errors() {
+    let (base, _) = serve(
+        b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 7\r\nContent-Length: 0\r\n\r\n",
+        Duration::ZERO,
+    )
+    .await;
+    let client = HttpClient::new(ClientConfig::default()).unwrap();
+    let err = client.get(&base, &local_opts()).await.unwrap_err();
+    match err {
+        HttpError::Status {
+            status: 429,
+            retry_after,
+            ..
+        } => assert_eq!(retry_after, Some(Duration::from_secs(7))),
+        other => panic!("{other:?}"),
+    }
 }

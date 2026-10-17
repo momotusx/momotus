@@ -6,17 +6,18 @@ mod net;
 
 pub use budget::Priority;
 pub use net::{is_private_host, redact_url};
+pub use reqwest::Method;
 pub use reqwest::header::HeaderMap;
 
 use budget::Budget;
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt;
-use reqwest::header::{HeaderName, HeaderValue, RANGE};
+use reqwest::header::{CONTENT_TYPE, HeaderName, HeaderValue, RANGE, RETRY_AFTER};
 use std::sync::{Arc, Once};
 use std::time::Duration;
 use url::Url;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum HttpError {
     #[error("invalid url: {0}")]
     InvalidUrl(String),
@@ -27,7 +28,12 @@ pub enum HttpError {
     #[error("response larger than {limit} bytes")]
     TooLarge { limit: usize },
     #[error("http status {status}")]
-    Status { status: u16, body: Bytes },
+    Status {
+        status: u16,
+        body: Bytes,
+        /// Parsed `Retry-After` seconds, when the server sent one.
+        retry_after: Option<Duration>,
+    },
     #[error("network: {0}")]
     Network(String),
     #[error("decode: {0}")]
@@ -71,6 +77,48 @@ impl Default for RequestOptions {
             max_bytes: 8 * 1024 * 1024,
             allow_private: false,
             headers: Vec::new(),
+        }
+    }
+}
+
+/// Request body for non-GET calls.
+#[derive(Debug, Clone)]
+pub enum Body {
+    Form(Vec<(String, String)>),
+    /// Text fields only, sent as `multipart/form-data`.
+    Multipart(Vec<(String, String)>),
+    Json(serde_json::Value),
+}
+
+// ponytail: fixed boundary, fine for the short text fields callers send;
+// switch to a random boundary if arbitrary user text is ever carried.
+const MULTIPART_BOUNDARY: &str = "mq7d3f9a2c51e84b06a9d1f3c5e7b2a4d8";
+
+impl Body {
+    fn encode(&self) -> (String, Vec<u8>) {
+        match self {
+            Body::Form(pairs) => (
+                "application/x-www-form-urlencoded".into(),
+                url::form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(pairs)
+                    .finish()
+                    .into_bytes(),
+            ),
+            Body::Json(value) => ("application/json".into(), value.to_string().into_bytes()),
+            Body::Multipart(fields) => {
+                let mut out = String::new();
+                for (name, value) in fields {
+                    out.push_str(&format!(
+                        "--{MULTIPART_BOUNDARY}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{value}\r\n",
+                        name.replace('"', "%22")
+                    ));
+                }
+                out.push_str(&format!("--{MULTIPART_BOUNDARY}--\r\n"));
+                (
+                    format!("multipart/form-data; boundary={MULTIPART_BOUNDARY}"),
+                    out.into_bytes(),
+                )
+            }
         }
     }
 }
@@ -144,7 +192,18 @@ impl HttpClient {
     }
 
     pub async fn get(&self, url: &str, opts: &RequestOptions) -> Result<Response, HttpError> {
-        self.send(url, opts, None).await
+        self.send(Method::GET, url, None, opts, None).await
+    }
+
+    /// Any method with an optional body (POST, PUT, DELETE for provider APIs).
+    pub async fn request(
+        &self,
+        method: Method,
+        url: &str,
+        body: Option<Body>,
+        opts: &RequestOptions,
+    ) -> Result<Response, HttpError> {
+        self.send(method, url, body, opts, None).await
     }
 
     /// Reads `len` bytes starting at `offset` with a Range request.
@@ -156,8 +215,14 @@ impl HttpClient {
         opts: &RequestOptions,
     ) -> Result<Response, HttpError> {
         let end = offset + len.saturating_sub(1);
-        self.send(url, opts, Some(format!("bytes={offset}-{end}")))
-            .await
+        self.send(
+            Method::GET,
+            url,
+            None,
+            opts,
+            Some(format!("bytes={offset}-{end}")),
+        )
+        .await
     }
 
     pub async fn get_json<T: serde::de::DeserializeOwned>(
@@ -170,7 +235,9 @@ impl HttpClient {
 
     async fn send(
         &self,
+        method: Method,
         raw: &str,
+        body: Option<Body>,
         opts: &RequestOptions,
         range: Option<String>,
     ) -> Result<Response, HttpError> {
@@ -180,11 +247,16 @@ impl HttpClient {
             return Err(HttpError::BlockedPrivate(host));
         }
         let _permit = self.budget.acquire(&host, opts.priority).await;
-        let request = self
-            .inner
-            .get(url)
-            .timeout(opts.timeout)
-            .headers(build_headers(&opts.headers, range));
+        let mut headers = build_headers(&opts.headers, range);
+        let mut request = self.inner.request(method, url).timeout(opts.timeout);
+        if let Some(body) = body {
+            let (content_type, bytes) = body.encode();
+            if let Ok(value) = HeaderValue::try_from(content_type) {
+                headers.insert(CONTENT_TYPE, value);
+            }
+            request = request.body(bytes);
+        }
+        let request = request.headers(headers);
         let response = request
             .send()
             .await
@@ -222,6 +294,12 @@ async fn read_capped(
     let status = response.status().as_u16();
     let headers = response.headers().clone();
     let final_url = response.url().clone();
+    let retry_after = response
+        .headers()
+        .get(RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(Duration::from_secs);
     if let Some(len) = response.content_length()
         && len as usize > opts.max_bytes
     {
@@ -242,7 +320,11 @@ async fn read_capped(
     }
     let body = body.freeze();
     if !(200..300).contains(&status) {
-        return Err(HttpError::Status { status, body });
+        return Err(HttpError::Status {
+            status,
+            body,
+            retry_after,
+        });
     }
     Ok(Response {
         status,
