@@ -6,8 +6,8 @@ use mq_http::{ClientConfig, HttpClient};
 use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock, Weak};
 use std::time::Duration;
 use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard};
 
@@ -58,10 +58,11 @@ pub struct Core {
     profile: Arc<str>,
 }
 
-/// Everything device-wide: one library, clock, sync gate, stream server,
-/// torrent engine, addon cache, skip cache and debrid resolver, whichever
-/// profile is in use.
+/// Everything device-wide: the device's state, one stream server, torrent
+/// engine, addon cache, skip cache and debrid resolver, whichever profile is
+/// in use.
 struct Inner {
+    device: Arc<Device>,
     http: HttpClient,
     addons: AddonClient,
     server: OnceCell<Arc<StreamServer>>,
@@ -71,45 +72,29 @@ struct Inner {
     #[cfg(feature = "torrent")]
     engine: OnceCell<mq_engine::Engine>,
     debrid: RwLock<Option<Resolver>>,
+    /// Skip segment lookups and their session cache.
+    segments: crate::segments::Finder,
+}
+
+/// What is one per data directory however often it is opened: the library
+/// (its rows and change notifications), the clock, the sync gate and the PIN
+/// throttle. Two opens with their own would count PIN tries apart and miss
+/// each other's deletions. Services bound to an async runtime (the stream
+/// server, the torrent engine) stay with each open.
+struct Device {
     library: Arc<Library>,
     clock: HlcClock,
     /// One sync or roster operation at a time, across every session.
     sync_gate: Arc<Mutex<()>>,
-    /// Skip segment lookups and their session cache.
-    segments: crate::segments::Finder,
     /// PIN attempts, one throttle for every session and profile.
     pins: std::sync::Mutex<crate::profiles::Throttle>,
 }
 
-impl Core {
-    pub fn open(config: CoreConfig) -> Result<Self, CoreError> {
-        std::fs::create_dir_all(&config.data_dir)?;
-        let library = Library::open(config.data_dir.join("library.sqlite"))?;
-        let torrents = config.data_dir.join("torrents");
-        Ok(Self::with_library(library, &config.profile_id, config.device_id, torrents)?.active())
-    }
+/// Devices open in this process, by canonical data directory.
+static OPEN: std::sync::Mutex<Vec<(PathBuf, Weak<Device>)>> = std::sync::Mutex::new(Vec::new());
 
-    /// A core over a throwaway database, for tests and the CLI. `profile` is
-    /// created (with no PIN) and made the active one.
-    pub fn temporary(profile: &str) -> Result<Self, CoreError> {
-        let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
-        let core = Self::with_library(Library::temporary()?, profile, 1, torrents)?;
-        core.library()
-            .ensure_profile(profile, profile, &core.zero_hlc())?;
-        core.library().set_active_profile(profile)?;
-        Ok(core)
-    }
-
-    fn with_library(
-        library: Library,
-        profile: &str,
-        device_id: u64,
-        torrent_dir: PathBuf,
-    ) -> Result<Self, CoreError> {
-        // Build the release-name rule table off the UI path, so the first
-        // stream list does not pay for it.
-        std::thread::spawn(mq_relparse::warm_up);
-        let http = HttpClient::new(ClientConfig::default())?;
+impl Device {
+    fn new(library: Library, device_id: u64) -> Result<Arc<Self>, CoreError> {
         let device_id = match device_id {
             0 => stored_device_id(&library)?,
             id => id,
@@ -120,13 +105,70 @@ impl Core {
             // bounds a row stamped by a lying relay.
             clock.observe(newest, clock.wall_now());
         }
-        let library = Arc::new(library);
-        let store = Arc::new(LibraryCache(library.clone()));
-        let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
         // The owner, with the lowest hlc: what another device synced wins.
         library.ensure_profile(OWNER, OWNER, &Hlc::zero(device_id).encode())?;
+        Ok(Arc::new(Self {
+            library: Arc::new(library),
+            clock,
+            sync_gate: Arc::default(),
+            pins: std::sync::Mutex::new(crate::profiles::Throttle::new(std::time::Instant::now())),
+        }))
+    }
+
+    /// The device over `data_dir`, shared with every open handle on it.
+    fn open(data_dir: &Path, device_id: u64) -> Result<Arc<Self>, CoreError> {
+        let path = std::fs::canonicalize(data_dir)?;
+        let mut open = OPEN.lock().unwrap_or_else(|p| p.into_inner());
+        open.retain(|(_, device)| device.strong_count() > 0);
+        if let Some(device) = open
+            .iter()
+            .find(|(p, _)| *p == path)
+            .and_then(|(_, device)| device.upgrade())
+        {
+            return Ok(device);
+        }
+        let device = Self::new(Library::open(path.join("library.sqlite"))?, device_id)?;
+        open.push((path, Arc::downgrade(&device)));
+        Ok(device)
+    }
+}
+
+impl Core {
+    /// Opens the core over `config.data_dir`. A directory already open in
+    /// this process shares its device state with the new handle.
+    pub fn open(config: CoreConfig) -> Result<Self, CoreError> {
+        std::fs::create_dir_all(&config.data_dir)?;
+        let device = Device::open(&config.data_dir, config.device_id)?;
+        let torrents = config.data_dir.join("torrents");
+        Ok(Self::with_device(device, &config.profile_id, torrents)?.active())
+    }
+
+    /// A core over a throwaway database, for tests and the CLI. `profile` is
+    /// created (with no PIN) and made the active one.
+    pub fn temporary(profile: &str) -> Result<Self, CoreError> {
+        let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
+        let device = Device::new(Library::temporary()?, 1)?;
+        let core = Self::with_device(device, profile, torrents)?;
+        core.library()
+            .ensure_profile(profile, profile, &core.zero_hlc())?;
+        core.library().set_active_profile(profile)?;
+        Ok(core)
+    }
+
+    fn with_device(
+        device: Arc<Device>,
+        profile: &str,
+        torrent_dir: PathBuf,
+    ) -> Result<Self, CoreError> {
+        // Build the release-name rule table off the UI path, so the first
+        // stream list does not pay for it.
+        std::thread::spawn(mq_relparse::warm_up);
+        let http = HttpClient::new(ClientConfig::default())?;
+        let store = Arc::new(LibraryCache(device.library.clone()));
+        let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
         Ok(Self {
             inner: Arc::new(Inner {
+                device,
                 http: http.clone(),
                 addons,
                 server: OnceCell::new(),
@@ -134,13 +176,7 @@ impl Core {
                 #[cfg(feature = "torrent")]
                 engine: OnceCell::new(),
                 debrid: RwLock::new(None),
-                library,
-                clock,
-                sync_gate: Arc::default(),
                 segments: crate::segments::Finder::new(http.clone()),
-                pins: std::sync::Mutex::new(crate::profiles::Throttle::new(
-                    std::time::Instant::now(),
-                )),
             }),
             profile: profile.into(),
         })
@@ -167,7 +203,7 @@ impl Core {
     }
 
     pub fn library(&self) -> &Library {
-        &self.inner.library
+        &self.inner.device.library
     }
 
     pub fn profile(&self) -> &str {
@@ -175,16 +211,16 @@ impl Core {
     }
 
     pub(crate) fn pins(&self) -> &std::sync::Mutex<crate::profiles::Throttle> {
-        &self.inner.pins
+        &self.inner.device.pins
     }
 
     pub fn hlc(&self) -> String {
-        self.inner.clock.tick(self.inner.clock.wall_now()).encode()
+        self.clock().tick(self.clock().wall_now()).encode()
     }
 
     /// The lowest hlc of this device, for rows that only cache what it saw.
     pub fn zero_hlc(&self) -> String {
-        Hlc::zero(self.inner.clock.device()).encode()
+        Hlc::zero(self.clock().device()).encode()
     }
 
     /// One sync round with the relay: push local changes, pull and apply
@@ -194,13 +230,13 @@ impl Core {
         config: &mq_sync::SyncConfig,
     ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
         let _gate = self.sync_gate().await;
-        mq_sync::sync_once(self.library(), self.http(), config, &self.inner.clock).await
+        mq_sync::sync_once(self.library(), self.http(), config, self.clock()).await
     }
 
     /// Held for the whole of a sync round or a roster change: two at once
     /// would race over the outbox, the cursors and the roster pin.
     pub async fn sync_gate(&self) -> OwnedMutexGuard<()> {
-        self.inner.sync_gate.clone().lock_owned().await
+        self.inner.device.sync_gate.clone().lock_owned().await
     }
 
     /// The OS is short of memory: drop what can be read again (the addon
@@ -212,7 +248,7 @@ impl Core {
     /// The clock that stamps this device's writes (sync and roster calls
     /// take it).
     pub fn clock(&self) -> &HlcClock {
-        &self.inner.clock
+        &self.inner.device.clock
     }
 
     /// The loopback stream server, started on first use.

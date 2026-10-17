@@ -65,6 +65,8 @@ impl ProfileError {
             Self::WrongPin => "wrongPin",
             Self::Throttled { .. } => "locked",
             Self::Unknown | Self::Syncing => "unknownProfile",
+            // Removed while the request ran.
+            Self::Library(LibraryError::ProfileGone(_)) => "unknownProfile",
             Self::Unreadable | Self::Library(_) | Self::Internal(_) => return None,
         })
     }
@@ -72,21 +74,17 @@ impl ProfileError {
 
 impl Core {
     /// The profile a session opens as: the one this device last switched
-    /// to, else this handle's (the app's first-run hint), else the owner.
-    /// Never a profile that is gone or still syncing, and never a new one.
+    /// to; with none stored, this handle's (the app's first-run hint). A
+    /// stored or hinted profile that is gone, unknown or still syncing opens
+    /// the owner; none is ever created.
     pub fn active(&self) -> Core {
         let library = self.library();
         let usable = |id: &str| matches!(library.profile(id), Ok(Some(p)) if p.ready());
-        let id = library
-            .active_profile()
-            .ok()
-            .flatten()
-            .filter(|id| usable(id))
-            .unwrap_or_else(|| {
-                let hint = self.profile();
-                if usable(hint) { hint } else { OWNER }.to_owned()
-            });
-        self.for_profile(&id)
+        let chosen = match library.active_profile() {
+            Ok(Some(stored)) => stored,
+            _ => self.profile().to_owned(),
+        };
+        self.for_profile(if usable(&chosen) { &chosen } else { OWNER })
     }
 
     /// Remembers this handle's profile as the device's active one.
@@ -367,7 +365,15 @@ fn attempt(
 ) -> Result<(), ProfileError> {
     let mut throttle = throttle.lock().unwrap_or_else(|p| p.into_inner());
     let now = now();
-    let row = library.profile(profile)?.ok_or(ProfileError::Unknown)?;
+    let live = library.profiles()?;
+    // Waits of profiles removed since (here or by sync) go with them.
+    throttle
+        .until
+        .retain(|id, _| live.iter().any(|p| p.id == *id));
+    let row = live
+        .into_iter()
+        .find(|p| p.id == profile)
+        .ok_or(ProfileError::Unknown)?;
     let stored = match row.lock {
         None => return Err(ProfileError::Syncing),
         Some(None) => return Ok(()),
@@ -583,5 +589,56 @@ mod tests {
         assert!(matches!(syncing, Err(ProfileError::Syncing)));
         // An unreadable hash takes no PIN at all.
         wrong(attempt(&lib, &throttle, "x", Some(PIN), || t0, verify));
+    }
+
+    #[test]
+    fn the_throttle_forgets_removed_profiles() {
+        let lib = locked_profile();
+        let hlc = |wall| {
+            Hlc {
+                wall_ms: wall,
+                counter: 0,
+                device: 1,
+            }
+            .encode()
+        };
+        lib.create_profile("y", "y", "", &hlc(3)).unwrap();
+        lib.set_pin_hash("y", Some("stored"), &hlc(4)).unwrap();
+        let t0 = Instant::now();
+        let throttle = Mutex::new(Throttle::new(t0));
+        wrong(try_at(&lib, &throttle, t0, "0000"));
+        assert!(throttle.lock().unwrap().until.contains_key("x"));
+        lib.delete_profile("x", &hlc(5)).unwrap();
+        let other = attempt(&lib, &throttle, "y", Some("0000"), || t0, |_, _| Ok(false));
+        wrong(other);
+        let kept: Vec<String> = throttle.lock().unwrap().until.keys().cloned().collect();
+        assert_eq!(kept, ["y"]);
+    }
+
+    #[test]
+    fn an_attempt_on_a_profile_removed_mid_check_reports_it_unknown() {
+        let lib = locked_profile();
+        let t0 = Instant::now();
+        let throttle = Mutex::new(Throttle::new(t0));
+        // The deletion lands while the hash is compared.
+        let result = attempt(
+            &lib,
+            &throttle,
+            "x",
+            Some(PIN),
+            || t0,
+            |_, _| {
+                let hlc = Hlc {
+                    wall_ms: 9,
+                    counter: 0,
+                    device: 1,
+                };
+                lib.delete_profile("x", &hlc.encode()).unwrap();
+                Ok(true)
+            },
+        );
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), Some("unknownProfile"), "{err:?}");
+        assert_eq!(lib.pin_failures("x").unwrap(), 0, "no row came back");
     }
 }
