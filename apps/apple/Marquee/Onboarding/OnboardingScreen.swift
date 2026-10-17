@@ -19,7 +19,9 @@ struct OnboardingScreen: View {
     @State private var busy: String?
     @State private var note: (ok: Bool, text: String)?
     @State private var showImport = false
+    @State private var showPairing = false
     @Environment(\.metrics) private var metrics
+    @Environment(SyncModel.self) private var sync
 
     /// Official Stremio addons for metadata and subtitles, offered as fixes.
     /// Marquee ships no stream sources; the user adds those.
@@ -52,6 +54,8 @@ struct OnboardingScreen: View {
         .topScrim()
         .animation(Theme.Motion.panel, value: step)
         .navigationDestination(isPresented: $showImport) { ImportScreen(core: core) }
+        // A join is the way in: Done goes Home, as the other doors end.
+        .navigationDestination(isPresented: $showPairing) { PairingScreen(core: core, done: close) }
         .task(id: addons.taskId) { addons.start() }
         .task { await pingLoop() }
         .task { await watchNetwork() }
@@ -85,10 +89,17 @@ struct OnboardingScreen: View {
                 Button { step = .source } label: {
                     Door(symbol: "sparkle", title: "Start fresh", text: "Browse catalogs right away. Add a source when you want to play.")
                 }
+                if !sync.joined {
+                    Button { showPairing = true } label: {
+                        Door(symbol: "qr-code", title: "I already use Marquee", text: "Join your other device's sync account with a code. Library and addons follow.")
+                    }
+                }
             }
             .buttonStyle(.plain)
             if metrics.wide {
+                // On one row the doors share one height.
                 HStack(alignment: .top, spacing: Theme.Space.s) { doors }
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 VStack(spacing: 12) { doors }
             }
@@ -249,10 +260,23 @@ private struct Door: View {
     let title: String
     let text: String
     @State private var hovered = false
+    @Environment(\.metrics) private var metrics
 
     var body: some View {
-        HStack(spacing: Theme.Space.s) {
-            Glyph(symbol, size: 26).frame(width: 36)
+        // Side by side on a row the doors are narrow: the icon and chevron go above the words.
+        let layout = metrics.wide
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Space.s))
+            : AnyLayout(HStackLayout(spacing: Theme.Space.s))
+        layout {
+            if metrics.wide {
+                HStack {
+                    Glyph(symbol, size: 26)
+                    Spacer(minLength: 0)
+                    Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
+                }
+            } else {
+                Glyph(symbol, size: 26).frame(width: 36)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).display(Theme.type.title3)
                 Text(text)
@@ -260,12 +284,15 @@ private struct Door: View {
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
-            Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
+            if !metrics.wide {
+                Spacer(minLength: 0)
+                Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
+            }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s + 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .brightness(hovered ? 0.04 : 0)
         .contentShape(Rectangle())

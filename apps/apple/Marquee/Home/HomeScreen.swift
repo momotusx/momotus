@@ -5,6 +5,7 @@ struct HomeScreen: View {
     let model: HomeModel
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
+    @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
     @State private var onboarding = false
     /// Rows have scrolled under the status bar.
@@ -39,6 +40,7 @@ struct HomeScreen: View {
                 OnboardingScreen(core: core) { onboarding = false }
             }
             .environment(\.metrics, metrics)
+            .environment(sync)
         })
     }
 
