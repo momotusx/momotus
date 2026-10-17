@@ -13,6 +13,7 @@ pub use mq_import::Endpoints as StremioEndpoints;
 pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
 pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
+pub use views::library::{KindCount, LibrarySnapshot, LibrarySort, LibraryView};
 pub use views::playback::{
     Attempt, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
 };

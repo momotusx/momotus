@@ -164,3 +164,22 @@ fn search_history_newest_first_and_capped() {
     assert_eq!(recent.len(), 50);
     assert_eq!(&recent[..2], ["q3", "q59"]);
 }
+
+#[test]
+fn library_lists_added_titles_with_their_newest_progress() {
+    let lib = Library::temporary().unwrap();
+    lib.ensure_profile("p", "p", "0").unwrap();
+    lib.upsert_item("p", &item("tt1", "One"), true, "1")
+        .unwrap();
+    lib.upsert_item("p", &item("tt2", "Two"), false, "1")
+        .unwrap();
+    lib.set_progress("p", progress("tt1:1:1", "tt1", 10, 100, 5), "2")
+        .unwrap();
+    lib.set_progress("p", progress("tt1:1:2", "tt1", 20, 100, 9), "3")
+        .unwrap();
+    let entries = lib.library("p").unwrap();
+    assert_eq!(entries.len(), 1, "titles not in the library are left out");
+    assert_eq!(entries[0].item.name, "One");
+    assert_eq!(entries[0].last_watched_ms, Some(9));
+    assert_eq!((entries[0].position_ms, entries[0].duration_ms), (20, 100));
+}

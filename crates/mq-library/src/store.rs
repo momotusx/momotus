@@ -85,8 +85,17 @@ pub struct ContinueItem {
     pub updated_ms: i64,
 }
 
+/// A title in the library with its latest progress, for the Library screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryEntry {
+    pub item: LibraryItemRow,
+    /// Newest progress write for any of its videos.
+    pub last_watched_ms: Option<i64>,
+    pub position_ms: i64,
+    pub duration_ms: i64,
+}
+
 /// Position past which a video counts as finished for Continue Watching.
-/// Past this share of the runtime a video counts as finished.
 pub const FINISHED_RATIO: f64 = 0.92;
 
 pub struct Library {
@@ -486,6 +495,37 @@ impl Library {
 }
 
 impl Library {
+    /// Titles the user added (`in_library`), each with its newest progress row.
+    pub fn library(&self, profile: &str) -> Result<Vec<LibraryEntry>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(
+                "SELECT i.item_id, i.kind, i.name, i.poster, i.poster_shape, i.added_ms,
+                        p.updated_ms, COALESCE(p.position_ms, 0), COALESCE(p.duration_ms, 0)
+                 FROM library_items i
+                 LEFT JOIN progress p ON p.profile_id = i.profile_id AND p.item_id = i.item_id
+                   AND p.updated_ms = (SELECT MAX(q.updated_ms) FROM progress q
+                                       WHERE q.profile_id = i.profile_id AND q.item_id = i.item_id)
+                 WHERE i.profile_id = ?1 AND i.in_library = 1",
+            )?;
+            stmt.query_map(params![profile], |r| {
+                Ok(LibraryEntry {
+                    item: LibraryItemRow {
+                        item_id: r.get(0)?,
+                        kind: r.get(1)?,
+                        name: r.get(2)?,
+                        poster: r.get(3)?,
+                        poster_shape: r.get(4)?,
+                        added_ms: r.get(5)?,
+                    },
+                    last_watched_ms: r.get(6)?,
+                    position_ms: r.get(7)?,
+                    duration_ms: r.get(8)?,
+                })
+            })?
+            .collect()
+        })
+    }
+
     pub fn is_in_library(&self, profile: &str, item_id: &str) -> Result<bool, LibraryError> {
         self.read(|c| {
             c.query_row(

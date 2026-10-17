@@ -1,7 +1,7 @@
 use rusqlite_migration::{M, Migrations};
 
 pub(crate) fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V1), M::up(V2)])
+    Migrations::new(vec![M::up(V1), M::up(V2), M::up(V3)])
 }
 
 const V1: &str = r#"
@@ -101,4 +101,9 @@ CREATE TABLE http_cache (
     stale_error_s       INTEGER NOT NULL
 );
 CREATE INDEX http_cache_age ON http_cache (stored_ms);
+"#;
+
+/// Newest progress per title (Continue Watching, Library) without a scan.
+const V3: &str = r#"
+CREATE INDEX progress_by_item ON progress (profile_id, item_id, updated_ms);
 "#;

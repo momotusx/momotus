@@ -4,13 +4,13 @@
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
 //! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setDebridKeys", ...}`.
-//! Views: home, search, title, versions, playback, addons, import.
+//! Views: home, search, library, title, versions, playback, addons, import.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
 use mq_runtime::{
-    AddonsView, Core, HomeView, ImportView, PlayTarget, PlaybackView, SearchView, StoreId,
-    StremioEndpoints, TitleView, VersionsParams, VersionsView,
+    AddonsView, Core, HomeView, ImportView, LibrarySort, LibraryView, PlayTarget, PlaybackView,
+    SearchView, StoreId, StremioEndpoints, TitleView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
@@ -70,6 +70,7 @@ enum View {
     Versions(VersionsView),
     Playback(PlaybackView),
     Search(SearchView),
+    Library(LibraryView),
     Addons { _view: AddonsView },
     Import { _view: ImportView },
 }
@@ -226,6 +227,12 @@ impl Session {
                     forward,
                 )
             }
+            "library" => {
+                let library = LibraryView::open(&self.core);
+                let (snapshot, updates) = library.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (View::Library(library), to_value(&snapshot)?, forward)
+            }
             "search" => {
                 let search = SearchView::open(&self.core);
                 let (snapshot, updates) = search.subscribe();
@@ -279,6 +286,20 @@ impl Session {
                     .map_err(|e| e.to_string())?;
             }
             (View::Versions(versions), "freeze") => versions.freeze(),
+            (View::Library(library), "setFilter") => {
+                library.set_filter(
+                    command
+                        .get("kind")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                );
+            }
+            (View::Library(library), "setSort") => {
+                let sort: LibrarySort =
+                    serde_json::from_value(command.get("sort").cloned().unwrap_or_default())
+                        .map_err(|e| format!("bad sort: {e}"))?;
+                library.set_sort(sort);
+            }
             (View::Search(search), "setQuery") => search.set_query(&param(command, "query")?),
             (View::Search(search), "remember") => search.remember().map_err(|e| e.to_string())?,
             (View::Playback(playback), "progress") => {
