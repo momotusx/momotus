@@ -61,6 +61,14 @@ object Marquee {
         get() = if (LocalReducedMotion.current) 0 else Tokens.PANEL_MS
 }
 
+/**
+ * Over a picture (a hero, the player) the colors are the dark ones in both themes: light on dark, never the
+ * other way. A secondary button in light mode would otherwise print dark text on a dark scrim.
+ */
+@Composable
+fun OverPicture(content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalPalette provides Tokens.dark, content = content)
+
 /** Animations are off when the system animator scale is zero (Developer options, accessibility). */
 @Composable
 fun rememberReducedMotion(): Boolean {

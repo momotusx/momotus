@@ -31,6 +31,7 @@ import app.marquee.core.client.CoreError
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
+import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
@@ -46,7 +47,10 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun AutoFocus(requester: FocusRequester) {
-    LaunchedEffect(requester) {
+    // Only for a D-pad: on a touch screen nothing should look focused until a key asks for it.
+    val dpad = Marquee.form == Form.Tv
+    LaunchedEffect(requester, dpad) {
+        if (!dpad) return@LaunchedEffect
         repeat(AUTO_FOCUS_FRAMES) {
             withFrameNanos { }
             if (runCatching { requester.requestFocus() }.getOrDefault(false)) return@LaunchedEffect

@@ -433,6 +433,7 @@ class PlaybackController(
         val length = player.duration
         if (length <= 0 || durationSentFor == key) return
         durationSentFor = key
+        CoreLog.d("duration $length ms sent for the playing version")
         view?.duration(key, length)
     }
 

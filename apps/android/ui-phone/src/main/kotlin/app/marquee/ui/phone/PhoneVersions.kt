@@ -108,7 +108,7 @@ fun PhoneVersions(
             item(key = "group:$group") {
                 // Group headers are the one place that is set in capitals, with the count of rows in them.
                 MqText(
-                    "${VersionsCopy.group(group).uppercase()}  ${rows.size}",
+                    "${VersionsCopy.group(group, snapshot?.recommended != null).uppercase()}  ${rows.size}",
                     role = TextRole.Caption,
                     color = colors.muted,
                     weight = FontWeight.SemiBold,

@@ -55,7 +55,7 @@ if (/text="Watched"/.test(dump())) {
     await Bun.sleep(400);
   }
   key("KEYCODE_DPAD_CENTER");
-  await until("the mark turned off", 20_000, () => /text="Mark watched"/.test(dump()));
+  await until("the mark turned off", 20_000, () => /text="Mark as watched"/.test(dump()));
   for (let i = 0; i < 3; i++) {
     key("KEYCODE_DPAD_LEFT");
     await Bun.sleep(400);
@@ -122,7 +122,8 @@ let backs = 0;
 let lastBack = 0;
 const resumeText = await until("Resume on the title page", 90_000, () => {
   const screen = dump();
-  if (/Resume from 0:\d\d/.test(screen)) return /Resume from 0:\d\d/.exec(screen)?.[0];
+  const resume = /Resume( from 0:\d\d| · \d+ min left)/.exec(screen)?.[0];
+  if (resume) return resume;
   if (/content-desc="Back 10 seconds"/.test(screen) && backs < 4 && Date.now() - lastBack > 8_000) {
     backs++;
     lastBack = Date.now();
@@ -131,6 +132,23 @@ const resumeText = await until("Resume on the title page", 90_000, () => {
   return undefined;
 });
 check("the title page offers to resume", true, { text: resumeText, backPresses: backs });
+
+// Resume from the middle: Play again from the saved position, which the stream server must serve
+// from a seeked start. The first frame is measured the same way as the first run.
+adb("logcat", "-c");
+let middle: { ms: number; line: string } | undefined;
+for (let attempt = 1; attempt <= 3 && !middle; attempt++) {
+  key("KEYCODE_DPAD_CENTER");
+  middle = await until("the first frame of the resumed run", 45_000, () => /first frame versions .* first frame (\d+) ms/.exec(log()))
+    .then((m) => ({ ms: Number(m[1]), line: m[0] }))
+    .catch(() => undefined);
+  if (!middle) console.log(`no resumed first frame after press ${attempt}`);
+}
+check("a resume from the middle reaches its first frame", !!middle, middle?.line);
+if (middle) result.resumeFirstFrameMs = middle.ms;
+await Bun.sleep(3_000);
+key("KEYCODE_BACK");
+await until("the title page again", 30_000, () => /Resume( from 0:\d\d| · \d+ min left)/.test(dump()));
 
 // Kill and relaunch: Continue Watching leads Home.
 adb("shell", "am", "force-stop", "app.marquee.android");

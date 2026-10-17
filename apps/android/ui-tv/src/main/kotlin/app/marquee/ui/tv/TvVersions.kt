@@ -220,6 +220,7 @@ private fun Sources(
 ) {
     val colors = Marquee.colors
     val groups = snapshot?.rows.orEmpty().groupBy { it.group }
+    val showFeatures = snapshot?.rows.orEmpty().any { it.features.isNotEmpty() }
     LazyColumn(
         modifier =
             modifier
@@ -235,14 +236,14 @@ private fun Sources(
             item(key = "group:$group") {
                 // Group headers are the one place that is set in capitals, with the count of rows in them.
                 MqText(
-                    "${VersionsCopy.group(group).uppercase()}  ${rows.size}",
+                    "${VersionsCopy.group(group, snapshot?.recommended != null).uppercase()}  ${rows.size}",
                     role = TextRole.Caption,
                     color = colors.muted,
                     weight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = Marquee.space.s, start = 4.dp),
                 )
             }
-            items(rows, key = { rowKey(it) }) { row -> SourceRow(row, focus, onPlay, onFocusedRow) }
+            items(rows, key = { rowKey(it) }) { row -> SourceRow(row, showFeatures, focus, onPlay, onFocusedRow) }
         }
         val addons = snapshot?.let(VersionsCopy::addons)
         val hidden = snapshot?.hidden?.takeIf { it.count > 0 }
@@ -263,6 +264,7 @@ private fun Sources(
 @Composable
 private fun SourceRow(
     row: VersionRow,
+    showFeatures: Boolean,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
     onFocusedRow: (VersionRow?) -> Unit,
@@ -287,34 +289,37 @@ private fun SourceRow(
                 stateDescription = VersionsCopy.status(row.status)
             }.focusClickable({ onPlay(row) }, Role.Button)
             .padding(horizontal = Marquee.space.m, vertical = Marquee.space.s),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MqText(
             VersionsCopy.cell(row.quality),
             weight = FontWeight.SemiBold,
-            modifier = Modifier.width(110.dp),
+            modifier = if (showFeatures) Modifier.width(110.dp) else Modifier.weight(1f),
             maxLines = 1,
         )
+        // A column no row has anything in is left out, and the quality takes its room.
+        if (showFeatures) {
+            MqText(
+                row.features.joinToString(", "),
+                role = TextRole.Callout,
+                color = colors.muted,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+        }
         MqText(
-            row.features.joinToString(", "),
-            role = TextRole.Callout,
-            color = colors.muted,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-        )
-        MqText(
-            row.sizeBytes?.let(Format::bytes) ?: "Size unknown",
+            row.sizeBytes?.let(Format::bytes) ?: "Unknown",
             role = TextRole.Callout,
             color = if (row.sizeBytes == null) colors.muted else colors.text,
-            modifier = Modifier.width(130.dp),
+            modifier = Modifier.width(150.dp),
             maxLines = 1,
         )
-        MqText(row.via, role = TextRole.Callout, modifier = Modifier.width(170.dp), maxLines = 1)
+        MqText(row.via, role = TextRole.Callout, modifier = Modifier.width(150.dp), maxLines = 1)
         StatusWord(
             VersionsCopy.status(row.status),
             if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn,
-            Modifier.width(260.dp),
+            Modifier.width(220.dp),
         )
     }
 }

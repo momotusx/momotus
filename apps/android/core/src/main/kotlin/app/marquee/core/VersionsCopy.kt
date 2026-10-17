@@ -70,9 +70,16 @@ object VersionsCopy {
             }
         }
 
-    fun group(group: Group): String =
+    /**
+     * A group's header. The recommendation sits above the list (not in it), so when there is one the best group
+     * reads "Other good choices": "Best quality" over a 720p row would say 720p is the best.
+     */
+    fun group(
+        group: Group,
+        pickAbove: Boolean = false,
+    ): String =
         when (group) {
-            Group.Best -> "Best quality"
+            Group.Best -> if (pickAbove) "Other good choices" else "Best quality"
             Group.SmallerFaster -> "Smaller and faster"
             Group.OtherLanguages -> "Other languages"
             Group.NeedsDownload -> "Needs download"

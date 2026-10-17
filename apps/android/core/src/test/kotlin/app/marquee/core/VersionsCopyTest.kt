@@ -120,6 +120,9 @@ class VersionsCopyTest {
             Group.entries.map(VersionsCopy::group),
         )
         assertEquals("Needs download on Real-Debrid", VersionsCopy.status(VersionStatus.NeedsDownload("Real-Debrid")))
+        // With the pick above the list, the best group is not "Best quality".
+        assertEquals("Other good choices", VersionsCopy.group(Group.Best, pickAbove = true))
+        assertEquals("Smaller and faster", VersionsCopy.group(Group.SmallerFaster, pickAbove = true))
     }
 
     @Test

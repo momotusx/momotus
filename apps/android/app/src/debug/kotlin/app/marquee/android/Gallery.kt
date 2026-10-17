@@ -31,8 +31,11 @@ import app.marquee.core.client.Trace
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeUpdate
 import app.marquee.core.model.ListDiff
+import app.marquee.core.model.Segment
+import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.Tile
 import app.marquee.design.Chip
+import app.marquee.design.ChosenVersion
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -47,10 +50,12 @@ import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusLine
+import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.UpNextArt
-import app.marquee.design.heightOf
+import app.marquee.design.laneHeight
+import app.marquee.player.SkipButton
 
 /** Debug-only screen that shows every design component in every state. `intent extras: form, theme`. */
 @Composable
@@ -101,9 +106,40 @@ private fun Gallery() {
                 PrimaryButton("Play", {}, icon = Icons.Play)
                 PrimaryButton("Resume from 41:12", {}, icon = Icons.Play, big = true)
                 SecondaryButton("Versions", {}, icon = Icons.Layers)
-                SecondaryButton("In library", {}, icon = Icons.BookmarkCheck)
+                SecondaryButton("Add to Library", {}, icon = Icons.BookmarkPlus)
+                SecondaryButton("In Library", {}, icon = Icons.BookmarkCheck, selected = true)
+                SecondaryButton("Mark as watched", {}, icon = Icons.Check)
+                SecondaryButton("Watched", {}, icon = Icons.Check, selected = true)
                 SecondaryButton("Unavailable", {}, enabled = false)
             }
+        }
+
+        Section("Under the primary action: the chosen version, a wait, and why nothing plays") {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                ChosenVersion(
+                    facts = listOf("1080p", "1.6 GB"),
+                    status = "Torrent, 10 seeds",
+                    tone = Status.Warn,
+                    via = "Torrentio",
+                    spoken = "1080p, 1.6 GB, Torrent, 10 seeds, via Torrentio",
+                )
+                ChosenVersion(
+                    facts = listOf("4K", "Dolby Vision", "18 GB"),
+                    status = "Ready on Real-Debrid",
+                    tone = Status.Ok,
+                    via = "Real-Debrid",
+                    spoken = "4K, Dolby Vision, 18 GB, Ready on Real-Debrid, via Real-Debrid",
+                )
+                StatusNote("Finding versions", busy = true)
+                StatusNote(
+                    "No playable version found. A source is an addon that finds a playable stream for a title.",
+                    tone = Status.Warn,
+                )
+            }
+        }
+
+        Section("Skip button (shown while a skippable part plays)") {
+            SkipButton(Segment(SegmentKind.Intro, 30_000, 75_000, "TheIntroDB"), {})
         }
 
         Section("Chips") {
@@ -131,9 +167,7 @@ private fun Gallery() {
 
         Section("Tiles (the third is focused, the fourth is in progress, the last has no picture)") {
             Row(
-                Modifier.height(
-                    Marquee.tiles.heightOf(TileShape.Poster) + Marquee.tiles.pad * 2 + Marquee.tiles.caption,
-                ),
+                Modifier.height(Marquee.tiles.laneHeight(TileShape.Poster)),
                 horizontalArrangement = Arrangement.spacedBy(Marquee.tiles.gap),
             ) {
                 tiles.take(5).forEachIndexed { index, tile ->
@@ -152,11 +186,7 @@ private fun Gallery() {
 
         Section("Continue Watching card (a real title with sample progress)") {
             tiles.firstOrNull { it.background != null }?.let { tile ->
-                Row(
-                    Modifier.height(
-                        Marquee.tiles.heightOf(TileShape.Landscape) + Marquee.tiles.pad * 2 + Marquee.tiles.caption,
-                    ),
-                ) {
+                Row(Modifier.height(Marquee.tiles.laneHeight(TileShape.Landscape))) {
                     PosterTile(
                         title = tile.name,
                         imageUrl = tile.background,

@@ -50,6 +50,7 @@ import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
+import app.marquee.design.OverPicture
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.SecondaryButton
@@ -172,12 +173,14 @@ private fun PhoneHero(
             MqText(TileCopy.heroMeta(tile), role = TextRole.Caption, color = Tokens.dark.muted)
             // The card is the control for screen readers (it opens the details); the buttons
             // repeat it for sighted touch.
-            Row(
-                Modifier.padding(top = Marquee.space.xs).clearAndSetSemantics { },
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            ) {
-                if (tile.playable()) PrimaryButton(label = "Play", icon = Icons.Play, onClick = { onPlay(tile) })
-                SecondaryButton(label = "Details", icon = Icons.Info, onClick = { onOpen(tile) })
+            OverPicture {
+                Row(
+                    Modifier.padding(top = Marquee.space.xs).clearAndSetSemantics { },
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                ) {
+                    if (tile.playable()) PrimaryButton(label = "Play", icon = Icons.Play, onClick = { onPlay(tile) })
+                    SecondaryButton(label = "Details", icon = Icons.Info, onClick = { onOpen(tile) })
+                }
             }
         }
     }

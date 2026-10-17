@@ -5,11 +5,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -86,7 +89,10 @@ fun OnboardingScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -125,7 +131,10 @@ fun OnboardingScreen(
                 )
             }
             if (tv) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) { doors(Modifier.weight(1f)) }
+                // Two doors share the width; a single one keeps the width of a card, not of the screen.
+                Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
+                    doors(if (onImport == null) Modifier.widthIn(max = 640.dp) else Modifier.weight(1f))
+                }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) { doors(Modifier.fillMaxWidth()) }
             }

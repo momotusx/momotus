@@ -71,6 +71,7 @@ import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.OverPicture
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RemoteImage
 import app.marquee.design.SecondaryButton
@@ -80,10 +81,9 @@ import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 
-/** Over the picture the colors are the dark ones in both themes: light on dark, never the other way. */
+/** The player is over the picture: the dark colors in both themes. */
 @Composable
-fun PlayerTheme(content: @Composable () -> Unit) =
-    CompositionLocalProvider(LocalPalette provides Tokens.dark, content = content)
+fun PlayerTheme(content: @Composable () -> Unit) = OverPicture(content)
 
 /** 3725 s as "1:02:05". */
 fun clockText(ms: Long): String = Format.clock(ms / 1000)
@@ -288,7 +288,13 @@ fun PlayerStatus(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(top = Marquee.space.xs),
             ) {
-                PrimaryButton("Choose another version", onVersions, icon = Icons.Layers, focusRequester = focus)
+                // Nothing was tried (no version is ready, as for a next episode): "another" would be wrong.
+                PrimaryButton(
+                    if (attempts.isEmpty()) "Choose a version" else "Choose another version",
+                    onVersions,
+                    icon = Icons.Layers,
+                    focusRequester = focus,
+                )
                 SecondaryButton("Back", onBack)
             }
         } else if (status != null) {
