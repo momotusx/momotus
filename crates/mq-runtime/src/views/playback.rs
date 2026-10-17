@@ -408,7 +408,7 @@ async fn resolve_next(
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
                 let url = server.register(upstream.clone(), &name);
                 let wanted = core.prefs().subtitle_languages;
-                let Upstream::Http { allow_private, .. } = upstream;
+                let allow_private = addon_allows_private(&core, &stream.addon_id);
                 {
                     let mut s = lock(&state);
                     s.snapshot.phase = PlaybackPhase::Ready;
@@ -457,17 +457,22 @@ async fn resolve_next(
 
 type Opened = (Upstream, Option<String>, Option<u64>);
 
+/// Whether the addon that listed a stream may reach private addresses (a
+/// local addon); its stream and subtitle URLs get the same allowance.
+fn addon_allows_private(core: &Core, addon_id: &str) -> bool {
+    core.installed_addons()
+        .unwrap_or_default()
+        .iter()
+        .any(|a| a.id() == addon_id && a.allow_private)
+}
+
 /// Resolves one stream to an upstream and checks that it answers.
 async fn open_source(
     core: &Core,
     stream: &ParsedStream,
     target: &PlayTarget,
 ) -> Result<Opened, String> {
-    let allow_private = core
-        .installed_addons()
-        .unwrap_or_default()
-        .iter()
-        .any(|a| a.id() == stream.addon_id && a.allow_private);
+    let allow_private = addon_allows_private(core, &stream.addon_id);
     let (url, headers, filename, size) = match &stream.source {
         Source::Http { url } => (
             url.to_string(),
