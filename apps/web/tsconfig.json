@@ -12,5 +12,5 @@
     "types": ["vite/client", "bun-types"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src"]
+  "include": ["src", "e2e", "scripts", "playwright.config.ts", "vite.config.ts"]
 }
