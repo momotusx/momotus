@@ -32,6 +32,8 @@ dependencies {
     api(libs.kotlinx.serialization.json)
     api(platform(libs.compose.bom))
     api(libs.compose.runtime)
+    // Route keys implement NavKey; the runtime artifact has no UI.
+    api(libs.androidx.navigation3.runtime)
     // The generated bindings use androidx.annotation.RequiresApi (android = true).
     implementation(libs.androidx.core.ktx)
     implementation(libs.rustls.platform.verifier)

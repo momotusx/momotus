@@ -13,6 +13,8 @@ import app.marquee.core.model.HomeSnapshot
 import app.marquee.core.model.HomeUpdate
 import app.marquee.core.model.RowState
 import app.marquee.core.model.applyDiffs
+import app.marquee.core.session.CoreOps
+import app.marquee.core.session.LifecycleEvent
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.SearchView
 import app.marquee.core.views.TitleView
@@ -345,6 +347,91 @@ class CoreClientTest {
             until("open again") { view.status == ViewStatus.Open }
             assertEquals(listOf(10L, 11L), subscribed.toList())
             assertEquals(0, view.rows.size)
+        }
+
+    private fun homeCore(
+        subscribed: MutableList<Long>,
+        unsubscribed: MutableList<Long>,
+        firstSub: Long,
+    ) = CoreTransport { text ->
+        val request = requestOf(text)
+        val id = request.getValue("id").jsonPrimitive.long
+        when (request["op"]?.jsonPrimitive?.content) {
+            "subscribe" -> {
+                subscribed += firstSub
+                client.onMessage(
+                    """{"id":$id,"ok":true,"result":{"sub":$firstSub,"snapshot":{"header":{"hero":null},"rows":[]}}}""",
+                )
+            }
+
+            "unsubscribe" -> {
+                unsubscribed += request.getValue("sub").jsonPrimitive.long
+            }
+        }
+        // any other request (setPrefs in these tests) is never answered
+    }
+
+    @Test
+    fun `lifecycle events and ping go out with the names the core expects`() =
+        runBlocking {
+            val sent = CopyOnWriteArrayList<JsonObject>()
+            client.attach(
+                CoreTransport { text ->
+                    sent += requestOf(text)
+                    client.onMessage("""{"id":${idOf(text)},"ok":true,"result":{}}""")
+                },
+            )
+            val ops = CoreOps(client)
+            ops.ping()
+            ops.lifecycle(LifecycleEvent.MemoryPressure)
+            until("both sent") { sent.size == 2 }
+            assertEquals("ping", sent[0].getValue("op").jsonPrimitive.content)
+            assertEquals("lifecycle", sent[1].getValue("op").jsonPrimitive.content)
+            assertEquals("memoryPressure", sent[1].getValue("event").jsonPrimitive.content)
+        }
+
+    @Test
+    fun `a core that died fails what waits for it and refuses new requests`() =
+        runBlocking {
+            val died = CopyOnWriteArrayList<String>()
+            client.onCoreDied = { died += it }
+            client.attach(homeCore(CopyOnWriteArrayList(), CopyOnWriteArrayList(), 10))
+            val view = HomeView(client, scope).also { it.open() }
+            view.opened.await()
+            until("open") { view.status == ViewStatus.Open }
+            val waiting = async { runCatching { client.request("setPrefs") } }
+            delay(50)
+
+            client.onMessage("""{"core":"died","reason":"task panicked"}""")
+
+            assertEquals("The core stopped.", waiting.await().exceptionOrNull()?.message)
+            until("reported") { died == listOf("task panicked") }
+            until("the view shows it") { view.status == ViewStatus.Failed("The core stopped.") }
+            assertFailsWith<CoreError> { client.request("setPrefs") }
+            assertTrue(view.currentSubscription?.alive == false)
+            Unit
+        }
+
+    @Test
+    fun `views of a dead core subscribe again on the new one and never close its subscriptions`() =
+        runBlocking {
+            val subscribed = CopyOnWriteArrayList<Long>()
+            val unsubscribed = CopyOnWriteArrayList<Long>()
+            client.attach(homeCore(subscribed, unsubscribed, 10))
+            val view = HomeView(client, scope).also { it.open() }
+            until("open") { view.status == ViewStatus.Open }
+            client.onMessage("""{"core":"died","reason":"x"}""")
+            until("failed") { view.status is ViewStatus.Failed }
+
+            // A new core hands out the same id for its first view: it must survive the old view's cleanup.
+            client.attach(homeCore(subscribed, unsubscribed, 10))
+            until("subscribed again") { subscribed.size == 2 }
+            until("open again") { view.status == ViewStatus.Open }
+            delay(100)
+            assertEquals(emptyList<Long>(), unsubscribed.toList())
+            assertTrue(view.currentSubscription?.alive == true)
+            view.close()
+            until("closed on the new core") { unsubscribed == listOf(10L) }
         }
 
     @Test

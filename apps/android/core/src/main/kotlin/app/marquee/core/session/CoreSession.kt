@@ -1,14 +1,15 @@
 package app.marquee.core.session
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import app.marquee.core.NativeCore
 import app.marquee.core.client.BridgeMetrics
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
-import app.marquee.core.client.LifecycleSink
-import app.marquee.core.client.NoOpLifecycleSink
 import app.marquee.core.ffi.CoreListener
 import app.marquee.core.ffi.MarqueeCore
 import app.marquee.core.secrets.DeviceId
@@ -36,13 +37,27 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
+
+/** Whether the core is running. The UI shows [Stopped] with a way to try again. */
+sealed interface CoreHealth {
+    data object Starting : CoreHealth
+
+    data object Running : CoreHealth
+
+    /** [reason] is for the log and diagnostics; it can quote a panic message. */
+    data class Stopped(
+        val reason: String,
+    ) : CoreHealth
+}
 
 /**
  * The process-wide handle on the Rust core: boots it on a background thread as early as possible,
  * owns the protocol client and the secret store, and creates live views. One per process
- * (the Application holds it); the core object is kept referenced forever, because dropping it
- * stops the core's runtime.
+ * (the Application holds it); the core object is kept referenced, because dropping it stops the
+ * core's runtime. When the core reports that it died, the session opens a fresh one and the
+ * client brings the open views back on it ([CoreClient.attach]).
  */
 class CoreSession(
     private val context: Context,
@@ -54,11 +69,12 @@ class CoreSession(
     val ops = CoreOps(client)
     val secrets = SecretStore(File(context.noBackupFilesDir, "secrets.bin"), KeystoreKeySource())
 
-    /** Completes when the core is open, or fails with why it could not be. */
+    /** Completes when the core first opens, or fails with why it could not. */
     val ready = CompletableDeferred<Unit>()
 
-    @Volatile
-    var lifecycle: LifecycleSink = NoOpLifecycleSink
+    /** What the UI shows when the core is not running. Written by the boot and state threads. */
+    var health: CoreHealth by mutableStateOf(CoreHealth.Starting)
+        private set
 
     @Volatile
     var openMillis: Long = -1
@@ -66,13 +82,29 @@ class CoreSession(
 
     @Volatile
     private var core: MarqueeCore? = null
+    private var keepAttached = true
+    private val booting = AtomicBoolean(false)
+    private val restartTimes = ArrayDeque<Long>()
 
     fun version(): String? = core?.version()
 
     fun start(keepCallbackThreadsAttached: Boolean = true) {
+        keepAttached = keepCallbackThreadsAttached
+        client.onCoreDied = ::onCoreDied
+        boot()
+    }
+
+    /** Opens the core again after it stopped. Does nothing while a boot is already running. */
+    fun restart() = boot()
+
+    private fun boot() {
+        if (!booting.compareAndSet(false, true)) return
         thread(name = "marquee-boot") {
             try {
                 val started = System.nanoTime()
+                // The dead core holds the database and its runtime; drop it before opening a new one.
+                core?.close()
+                core = null
                 val listener =
                     object : CoreListener {
                         override fun onMessage(json: String) = client.onMessage(json)
@@ -83,20 +115,46 @@ class CoreSession(
                         File(context.filesDir, "marquee"),
                         DeviceId.load(context.noBackupFilesDir),
                         listener,
-                        keepCallbackThreadsAttached,
+                        keepAttached,
                     )
                 core = opened
                 client.attach { text -> opened.send(text) }
                 openMillis = (System.nanoTime() - started) / 1_000_000
                 CoreLog.d("core open $openMillis ms, version ${opened.version()}")
+                health = CoreHealth.Running
                 ready.complete(Unit)
                 restoreSecrets()
             } catch (t: Throwable) {
                 CoreLog.e("core failed to open", t)
+                val reason = "The core could not start: ${t.message ?: t.javaClass.simpleName}"
                 // Waiting requests fail with the real reason instead of timing out as "not responding".
-                client.attachFailed("The core could not start: ${t.message ?: t.javaClass.simpleName}")
+                client.attachFailed(reason)
+                health = CoreHealth.Stopped(reason)
                 ready.completeExceptionally(t)
+            } finally {
+                booting.set(false)
             }
+        }
+    }
+
+    /** The core's request loop ended by a panic: say so, and open it again unless it keeps dying. */
+    private fun onCoreDied(reason: String) {
+        health = CoreHealth.Stopped(reason)
+        if (!mayRestart()) return
+        scope.launch {
+            delay(500)
+            restart()
+        }
+    }
+
+    /** At most three automatic restarts in a minute; after that the user decides. */
+    private fun mayRestart(): Boolean {
+        val now = System.nanoTime() / 1_000_000
+        synchronized(restartTimes) {
+            while (restartTimes.isNotEmpty() && now - restartTimes.first() > 60_000) restartTimes.removeFirst()
+            if (restartTimes.size >= 3) return false
+            restartTimes.addLast(now)
+            return true
         }
     }
 

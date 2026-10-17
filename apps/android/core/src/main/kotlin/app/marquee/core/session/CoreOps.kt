@@ -16,6 +16,15 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+enum class LifecycleEvent(
+    val wire: String,
+) {
+    Foreground("foreground"),
+    Background("background"),
+    MemoryPressure("memoryPressure"),
+    NetworkChanged("networkChanged"),
+}
+
 /**
  * The core's one-shot ops (plans/core-protocol.md "Ops"). Home, Discover and Search follow addon
  * changes on their own, so nothing here reopens a view. Secrets (debrid keys, the sync record)
@@ -32,6 +41,17 @@ class CoreOps(
     ): T = client.json.decodeFromJsonElement(serializer, client.request(op, fields))
 
     private fun text(value: String) = JsonPrimitive(value)
+
+    /** Answers at once from the core's request loop: use it for a liveness check, not a network op. */
+    suspend fun ping() {
+        client.request("ping")
+    }
+
+    /**
+     * The app's life as the OS reports it, sent without waiting for the answer. `memoryPressure`
+     * frees the core's in-memory caches; the others are accepted today and need no action.
+     */
+    fun lifecycle(event: LifecycleEvent) = client.post("lifecycle", mapOf("event" to text(event.wire)))
 
     suspend fun installAddon(url: String): InstalledAddon =
         call("installAddon", mapOf("url" to text(url)), InstalledAddon.serializer())

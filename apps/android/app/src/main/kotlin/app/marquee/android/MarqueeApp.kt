@@ -14,6 +14,12 @@ class MarqueeApp :
     SingletonImageLoader.Factory {
     lateinit var session: CoreSession
         private set
+    private lateinit var lifecycle: AppLifecycle
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (::lifecycle.isInitialized) lifecycle.trimMemory(level)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -26,6 +32,7 @@ class MarqueeApp :
         }
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
+        lifecycle = AppLifecycle(this, session).also { it.register() }
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = createImageLoader(context)

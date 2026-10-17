@@ -28,4 +28,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "marquee-android"
 
-include(":app", ":core", ":design")
+include(":app", ":core", ":design", ":ui-phone", ":ui-tv")

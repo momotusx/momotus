@@ -114,16 +114,35 @@ class CoreClient(
     private val pending = ConcurrentHashMap<Long, Pending>()
     private val subs = ConcurrentHashMap<Long, ViewBinding<*, *>>()
     private val closed: MutableSet<Long> = ConcurrentHashMap.newKeySet()
-    private val early = HashMap<Long, ArrayDeque<String>>() // state thread only, JSON arrays of updates
-    private val attached = CompletableDeferred<CoreTransport>()
+    private val early = HashMap<Long, ArrayDeque<String>>()
+
+    // state thread only, JSON arrays of updates
+    @Volatile
+    private var attached = CompletableDeferred<CoreTransport>()
+
+    /** Counts the cores that died. Subscription ids restart in a new core, so a handle from an older one is dead. */
+    @Volatile
+    internal var epoch = 0
+        private set
+
+    private val orphans = ArrayList<ViewBinding<*, *>>() // state thread only: views the dead core left open
+
+    /** Called on the state thread when the core's request loop ended by a panic (plans/core-protocol.md). */
+    @Volatile
+    var onCoreDied: ((reason: String) -> Unit)? = null
 
     init {
         scope.launch { pump() }
     }
 
-    /** Connects the core. Requests made earlier wait for this, outside their timeout. */
+    /**
+     * Connects the core. Requests made earlier wait for this, outside their timeout. Called again
+     * after the core died and was opened anew: the views it left open subscribe again.
+     */
     fun attach(transport: CoreTransport) {
-        attached.complete(transport)
+        if (attached.complete(transport)) return
+        attached = CompletableDeferred<CoreTransport>().also { it.complete(transport) }
+        scope.launch { revive() }
     }
 
     /** The core could not open: every waiting and later request fails with this reason. */
@@ -192,6 +211,7 @@ class CoreClient(
         binding: ViewBinding<S, U>,
     ): Subscription {
         val transport = attached.await()
+        val born = epoch
         val id = nextId.getAndIncrement()
         val deferred = CompletableDeferred<Long>()
         pending[id] = Pending.Subscribe(binding, deferred)
@@ -200,18 +220,22 @@ class CoreClient(
             transport.send(encode(id, "subscribe", mapOf("view" to JsonPrimitive(view), "params" to params)))
             val sub = withTimeout(CoreTimeouts.local) { deferred.await() }
             handedOver = true
-            return Subscription(this, sub)
+            return Subscription(this, sub, born)
         } catch (e: TimeoutCancellationException) {
             throw CoreError("subscribe $view did not answer in ${CoreTimeouts.local}", timedOut = true)
         } finally {
             pending.remove(id)
             // The reply was handled but nobody took the subscription (cancelled or timed out
             // meanwhile): close it, or the core keeps the view alive for the whole process.
-            if (!handedOver && deferred.isCompleted && !deferred.isCancelled) unsubscribe(deferred.getCompleted())
+            if (!handedOver && deferred.isCompleted && !deferred.isCancelled) unsubscribe(deferred.getCompleted(), born)
         }
     }
 
-    internal fun unsubscribe(sub: Long) {
+    internal fun unsubscribe(
+        sub: Long,
+        born: Int,
+    ) {
+        if (born != epoch) return // that core is gone, and its ids now mean other views
         closed.add(sub)
         subs.remove(sub)
         post("unsubscribe", mapOf("sub" to JsonPrimitive(sub)))
@@ -249,6 +273,8 @@ class CoreClient(
                 val updates = message["updates"] as? JsonArray
                 if (sub != null && updates != null) {
                     push(sub, updates.toString(), actions, groups)
+                } else if (message["core"]?.jsonPrimitive?.contentOrNull == "died") {
+                    died(message["reason"]?.jsonPrimitive?.contentOrNull ?: "unknown", actions, completions)
                 } else {
                     reply(message, actions, completions, groups)
                 }
@@ -269,6 +295,42 @@ class CoreClient(
         val done = nanoTime()
         metrics?.recordBatch(done - started)
         if (metrics != null) for (raw in batch) metrics.recordMessage(done - raw.arrivedNs)
+    }
+
+    /** The core's request loop ended: fail what waits for it, mark its views, and refuse new requests until it is opened again. */
+    private fun died(
+        reason: String,
+        actions: MutableList<() -> Unit>,
+        completions: MutableList<() -> Unit>,
+    ) {
+        CoreLog.e("the core stopped: ${reason.take(200)}")
+        val message = "The core stopped."
+        epoch++
+        attached = CompletableDeferred<CoreTransport>().also { it.completeExceptionally(CoreError(message)) }
+        val waiting = pending.values.toList()
+        val open = subs.values.toList()
+        subs.clear()
+        closed.clear()
+        early.clear()
+        orphans.addAll(open)
+        actions.add { for (binding in open) binding.sink.onFailure(message) }
+        completions.add {
+            for (w in waiting) {
+                when (w) {
+                    is Pending.Plain -> w.deferred.completeExceptionally(CoreError(message))
+                    is Pending.Subscribe -> w.deferred.completeExceptionally(CoreError(message))
+                }
+            }
+            onCoreDied?.invoke(reason)
+        }
+    }
+
+    /** A new core is attached: views the dead one left open subscribe again, on fresh ids. */
+    private fun revive() {
+        val old = orphans.toList()
+        orphans.clear()
+        if (old.isEmpty()) return
+        Snapshot.withMutableSnapshot { for (binding in old) binding.sink.onFailure("desync: the core restarted") }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -322,7 +384,8 @@ class CoreClient(
             val orphan = result?.get("sub")?.jsonPrimitive?.longOrNull
             if (ok && orphan != null) {
                 early.remove(orphan)
-                completions.add { unsubscribe(orphan) }
+                val born = epoch
+                completions.add { unsubscribe(orphan, born) }
             }
             return
         }
@@ -394,13 +457,22 @@ class CoreClient(
 class Subscription internal constructor(
     private val client: CoreClient,
     val sub: Long,
+    private val born: Int,
 ) {
-    suspend fun command(command: JsonObject): JsonElement =
-        client.request("command", mapOf("sub" to JsonPrimitive(sub), "command" to command))
+    /** False once the core this subscription belongs to has died. */
+    val alive: Boolean get() = born == client.epoch
 
-    fun post(command: JsonObject) = client.post("command", mapOf("sub" to JsonPrimitive(sub), "command" to command))
+    suspend fun command(command: JsonObject): JsonElement {
+        if (!alive) throw CoreError("The core stopped.")
+        return client.request("command", mapOf("sub" to JsonPrimitive(sub), "command" to command))
+    }
 
-    fun close() = client.unsubscribe(sub)
+    fun post(command: JsonObject) {
+        if (!alive) return CoreLog.w("a command for a view of a stopped core was dropped")
+        client.post("command", mapOf("sub" to JsonPrimitive(sub), "command" to command))
+    }
+
+    fun close() = client.unsubscribe(sub, born)
 }
 
 /**

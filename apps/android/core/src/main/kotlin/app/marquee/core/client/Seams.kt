@@ -33,27 +33,6 @@ object CoreTimeouts {
     fun forOp(op: String): Duration = if (op in networkOps) network else local
 }
 
-/** Interim seam (request C3): lifecycle events for the core. A no-op until the core has an op for them. */
-interface LifecycleSink {
-    fun foreground()
-
-    fun background()
-
-    fun memoryPressure(level: Int)
-
-    fun networkChanged(kind: String)
-}
-
-object NoOpLifecycleSink : LifecycleSink {
-    override fun foreground() = Unit
-
-    override fun background() = Unit
-
-    override fun memoryPressure(level: Int) = Unit
-
-    override fun networkChanged(kind: String) = Unit
-}
-
 /**
  * What the device tells the ranking (`versions` params, plans/core-protocol.md). Names follow the
  * core's snake_case enums: decoders `h264`, `h265`, `av1`, `vp9`; passthrough `ac3`, `eac3`,
