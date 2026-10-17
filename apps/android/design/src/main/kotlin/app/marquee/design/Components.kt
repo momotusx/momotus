@@ -507,7 +507,7 @@ fun RoundButton(
 }
 
 /**
- * A row's header: a short accent bar, the title, the source in `dim` and a hairline to the end
+ * A row's header: a short white bar, the title, the source in `dim` and a hairline to the end
  * (design/DECISION.md v2, Section headers).
  */
 @Composable
@@ -527,7 +527,7 @@ fun RowHeader(
             Modifier
                 .size(width = if (tv) 5.dp else 3.dp, height = if (tv) 34.dp else 20.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(colors.accent),
+                .background(colors.text),
         )
         MqText(title, role = TextRole.Title3, maxLines = 1)
         if (source != null) MqText(source, role = TextRole.Callout, color = colors.dim, maxLines = 1)
