@@ -170,9 +170,29 @@ export interface DeviceCaps {
   hdr: string[];
   decoders: string[];
   tenBitHevc: boolean;
+  audioDecoders: string[];
+  containers: string[];
   passthrough: string[];
   hasFallbackEngine: boolean;
+  /** ISO 639-1; the core prefers it, then English, until the user picks. */
+  language: string;
 }
+
+// Audio names as the core expects them. DTS and TrueHD are never decoded by
+// a browser, so they are not probed.
+const AUDIO: [name: string, type: string][] = [
+  ["aac", 'audio/mp4; codecs="mp4a.40.2"'],
+  ["opus", 'audio/webm; codecs="opus"'],
+  ["mp3", "audio/mpeg"],
+  ["flac", "audio/flac"],
+  ["ac3", 'audio/mp4; codecs="ac-3"'],
+  ["eac3", 'audio/mp4; codecs="ec-3"'],
+];
+
+const CONTAINERS: [name: string, type: string][] = [
+  ["mp4", "video/mp4"],
+  ["webm", "video/webm"],
+];
 
 // Codec names as the core's ranking expects them, with a probe for each.
 const DECODERS: [name: string, type: string][] = [
@@ -184,6 +204,8 @@ const DECODERS: [name: string, type: string][] = [
 
 const decodes = (type: string) =>
   (typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(type)) || document.createElement("video").canPlayType(type) === "probably";
+// Plain types without codecs answer "maybe" at best.
+const plays = (type: string) => decodes(type) || document.createElement("video").canPlayType(type) !== "";
 
 /** What this browser can show and decode, so Versions ranks for it. A web
  * player decodes audio itself (no passthrough) and has no second engine. */
@@ -194,8 +216,11 @@ export function displayCaps(): DeviceCaps {
     hdr: matchMedia("(dynamic-range: high)").matches ? ["hdr10", "hlg"] : [],
     decoders: DECODERS.filter(([, type]) => decodes(type)).map(([name]) => name),
     tenBitHevc: decodes('video/mp4; codecs="hvc1.2.4.L120.90"'),
+    audioDecoders: AUDIO.filter(([, type]) => plays(type)).map(([name]) => name),
+    containers: CONTAINERS.filter(([, type]) => plays(type)).map(([name]) => name),
     passthrough: [],
     hasFallbackEngine: false,
+    language: (navigator.language || "en").slice(0, 2).toLowerCase(),
   };
 }
 

@@ -89,7 +89,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   };
   const caps = displayCaps();
   const codecNames: Record<string, string> = { h264: "H.264", h265: "HEVC", av1: "AV1", vp9: "VP9" };
-  const device = `This screen: ${caps.displayHeight >= 2160 ? "4K" : `${caps.displayHeight}p`}${caps.hdr.length ? ", HDR" : ""}, plays ${caps.decoders.map((d) => codecNames[d] ?? d).join(", ")}`;
+  const device = `This screen: ${caps.displayHeight >= 2160 ? "4K" : `${caps.displayHeight}p`}${caps.hdr.length ? ", HDR" : ""}, plays ${caps.decoders.map((d) => codecNames[d] ?? d).join(", ")} in ${caps.containers.map((c) => (c === "webm" ? "WebM" : c.toUpperCase())).join(", ")}`;
   const progress = () => {
     const s = snap();
     if (!s) return { tone: "idle", text: "Opening" };

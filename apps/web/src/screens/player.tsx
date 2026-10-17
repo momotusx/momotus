@@ -144,8 +144,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       clearTimeout(hideTimer);
       window.removeEventListener("keydown", onKey, { capture: true });
       report();
-      const t = track();
-      if (t) URL.revokeObjectURL(t.src);
     });
   });
 
@@ -185,28 +183,17 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     setRate(next);
   };
 
-  const pickSubtitle = async (t: SubtitleTrack | null) => {
+  // The core serves every track as UTF-8 WebVTT on a loopback URL any origin
+  // may read; the <video> is crossorigin, so the track loads it directly.
+  const pickSubtitle = (t: SubtitleTrack | null) => {
     setPanel(null);
     setSubError(null);
-    const old = track();
-    if (old) URL.revokeObjectURL(old.src);
-    setTrack(null);
-    if (!t) return;
-    try {
-      // The core serves every track as UTF-8 WebVTT that any origin may
-      // read. A same-origin blob keeps the <video> request free of CORS,
-      // which the media route does not answer.
-      const res = await fetch(t.url);
-      if (!res.ok) throw new Error(`the subtitle server answered ${res.status}`);
-      const blob = await res.blob();
-      setTrack({ src: URL.createObjectURL(blob), lang: t.lang });
+    setTrack(t ? { src: t.url, lang: t.lang } : null);
+    if (t)
       queueMicrotask(() => {
         const tt = video.textTracks[0];
         if (tt) tt.mode = "showing";
       });
-    } catch (e) {
-      setSubError(`Could not load ${languageName(t.lang)} subtitles: ${e instanceof Error ? e.message : e}`);
-    }
   };
 
   const onError = () => {
@@ -299,6 +286,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         classList={{ on: started() }}
         playsinline
         preload="auto"
+        crossorigin="anonymous"
         onPlay={() => {
           setPaused(false);
           wake();
@@ -319,7 +307,17 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         onEnded={onEnded}
         onError={onError}
       >
-        <Show when={track()}>{(t) => <track kind="subtitles" src={t().src} srclang={t().lang} default />}</Show>
+        <Show when={track()} keyed>
+          {(t) => (
+            <track
+              kind="subtitles"
+              src={t.src}
+              srclang={t.lang}
+              default
+              onError={() => setSubError(`Could not load ${languageName(t.lang)} subtitles from the core`)}
+            />
+          )}
+        </Show>
       </video>
       <div class="osd-top" />
       <div class="osd-bot" />
