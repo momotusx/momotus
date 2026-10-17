@@ -39,7 +39,8 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 
-#[derive(Debug, Deserialize)]
+// No Debug: requests carry keys, PINs, recovery kits and sync records.
+#[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
 enum Request {
     Subscribe {
@@ -360,8 +361,8 @@ struct Shared {
 }
 
 impl Shared {
-    /// A switch or a lock: every view but the picker leaves the session and
-    /// older work is fenced off. The views it returns close (playback saves
+    /// A switch or a lock: every view but the picker and the device's debrid
+    /// accounts leaves the session and older work is fenced off. The views it returns close (playback saves
     /// its position) when the caller drops them, after the session lock.
     #[must_use = "drop the closed views after releasing the session lock"]
     fn transition(&mut self, core: Core, locked: bool) -> Vec<Subscription> {
@@ -369,7 +370,7 @@ impl Shared {
         self.core = core;
         let (picker, closed) = std::mem::take(&mut self.subs)
             .into_iter()
-            .partition(|(_, s)| matches!(s.view, View::Profiles { .. }));
+            .partition(|(_, s)| matches!(s.view, View::Profiles { .. } | View::Debrid { .. }));
         self.subs = picker;
         self.set_locked(locked);
         closed.into_values().collect()

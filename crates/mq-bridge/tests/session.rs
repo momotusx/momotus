@@ -371,24 +371,29 @@ async fn debrid_records_round_trip_through_the_bridge() {
     let (tx, mut rx) = mpsc::unbounded_channel();
     let mut session = Session::new(core, tx);
     let (s, rx) = (&mut session, &mut rx);
-    // Debrid is the device's: every call works on a locked session.
-    ok(s, rx, json!({"id": 1, "op": "lockSession"})).await;
+    let reply = ok(s, rx, json!({"id": 1, "op": "subscribe", "view": "debrid"})).await;
+    let sub = reply["sub"].as_u64().unwrap();
+    // Debrid is the device's: the view stays open through a lock, and
+    // every call works on a locked session.
+    ok(s, rx, json!({"id": 2, "op": "lockSession"})).await;
     // As a JavaScript number this would lose its low bits.
     let generation = "fffffffffffffffffffffffffffffff1";
     let answer = ok(
         s,
         rx,
-        json!({"id": 2, "op": "restoreDebrid", "records": [{
+        json!({"id": 3, "op": "restoreDebrid", "records": [{
         "service": "premiumize", "generation": generation, "revision": 1,
         "credential": {"kind": "key", "key": "pm"}
     }], "tombstones": []}),
     )
     .await;
     assert_eq!(answer, json!({"refused": [], "tombstones": []}));
-    let reply = ok(s, rx, json!({"id": 3, "op": "subscribe", "view": "debrid"})).await;
-    let sub = reply["sub"].as_u64().unwrap();
+    let pushed = push_until(rx, sub, |v| {
+        v["accounts"].as_array().is_some_and(|a| !a.is_empty())
+    })
+    .await;
     assert_eq!(
-        reply["snapshot"]["accounts"],
+        pushed["accounts"],
         json!([{"service": "premiumize", "generation": generation, "state": "ok"}])
     );
     let reply = ok(
