@@ -285,7 +285,7 @@ fun PlayerStatus(
                 }
             }
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 modifier = Modifier.padding(top = Marquee.space.xs),
             ) {
                 // Nothing was tried (no version is ready, as for a next episode): "another" would be wrong.

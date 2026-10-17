@@ -4,6 +4,7 @@
  *
  * Run: bun scripts/sintel-addon.ts [port]   (default 7780, listens on all interfaces)
  * FAILOVER=1 bun scripts/sintel-addon.ts   adds two broken mirrors ahead of the 1080p trailer
+ * BROKEN=1 bun scripts/sintel-addon.ts     every stream is a dead URL (the failure screen)
  * Install in the emulator: `adb reverse tcp:7780 tcp:7780`, then http://127.0.0.1:7780/manifest.json
  * Install on the host bridge: http://127.0.0.1:7780/manifest.json */
 
@@ -67,6 +68,12 @@ if (process.env.FAILOVER === "1") {
       behaviorHints: { filename: release },
     },
   );
+}
+
+// BROKEN=1 points every stream at a dead URL (HTTP 404), so the core has to give up on all of them and
+// say why for each: the failure screen with its reasons.
+if (process.env.BROKEN === "1") {
+  for (const stream of streams) stream.url = stream.url.replace(/\.(mkv|mp4)$/, "-dead.$1");
 }
 
 const headers = { "content-type": "application/json", "access-control-allow-origin": "*" };
