@@ -52,7 +52,9 @@ struct DiscoverScreen: View {
     }
 
     @ViewBuilder private func content(_ s: DiscoverSnapshot) -> some View {
-        if s.genreRequired && s.genre == nil {
+        if s.kinds.isEmpty {
+            StateLine(symbol: "square.stack", text: "No addon with catalogs is installed yet. Add one in Settings, then Addons.")
+        } else if s.genreRequired && s.genre == nil {
             StateLine(symbol: "line.3.horizontal.decrease", text: "This catalog lists titles by genre. Pick one above.")
         }
         PosterGrid(tiles: s.items, onEnd: {
@@ -65,7 +67,7 @@ struct DiscoverScreen: View {
             StateLine(symbol: "exclamationmark.triangle", text: "This catalog did not answer: \(reason)", action: ("Try again", {
                 discover.command(["type": "loadMore"])
             }))
-        case .end where s.items.isEmpty:
+        case .end where s.items.isEmpty && !s.kinds.isEmpty:
             StateLine(symbol: "tray", text: "Nothing in this catalog.")
         case .ready, .end:
             EmptyView()

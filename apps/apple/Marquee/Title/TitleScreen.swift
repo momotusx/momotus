@@ -7,6 +7,7 @@ struct TitleScreen: View {
     let core: CoreClient
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
+    @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
     /// Versions for the play target: the line under Play, Play itself, and the Versions page.
     @State private var versions: VersionsModel?
@@ -171,11 +172,11 @@ struct TitleScreen: View {
             if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
                 Button { openURL(url) } label: { Label("Trailer", systemImage: "film") }
             }
-            Button { model.setInLibrary(!inLibrary) } label: {
+            Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
                 Label(inLibrary ? "In Library" : "Add to Library", systemImage: inLibrary ? "bookmark.fill" : "bookmark")
             }
             if details.kind == "movie" {
-                Button { model.setWatched(details.id, !watched) } label: {
+                Button { model.setWatched(details.id, !watched); sync.schedule() } label: {
                     Label(watched ? "Watched" : "Mark watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle")
                 }
             }
@@ -211,7 +212,7 @@ struct TitleScreen: View {
             current: model.header?.playTarget?.videoId,
             runtime: details?.runtime,
             select: model.selectSeason,
-            setWatched: model.setWatched)
+            setWatched: { model.setWatched($0, $1); sync.schedule() })
     }
 }
 

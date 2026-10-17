@@ -33,9 +33,11 @@ final class VersionsModel {
     @ObservationIgnored private let record: LiveRecord<VersionsSnapshot>
     @ObservationIgnored private var frozen = false
 
-    init(target: PlayTargetInfo, core: CoreClient) {
+    /// `bingeGroup`: the playing stream's, so the next episode keeps its release line.
+    init(target: PlayTargetInfo, core: CoreClient, bingeGroup: String? = nil) {
         self.target = target
         var params = DeviceCaps.params()
+        if let bingeGroup { params["bingeGroup"] = bingeGroup }
         params["kind"] = target.kind
         params["videoId"] = target.videoId
         params["title"] = target.title

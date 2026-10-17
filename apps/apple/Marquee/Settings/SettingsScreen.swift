@@ -8,6 +8,7 @@ struct SettingsScreen: View {
     @State private var prefs: LiveRecord<Prefs>
     @State private var addons: LiveRecord<AddonsSnapshot>
     @Environment(\.metrics) private var metrics
+    @Environment(SyncModel.self) private var sync
 
     init(core: CoreClient) {
         self.core = core
@@ -33,11 +34,33 @@ struct SettingsScreen: View {
                 }
                 .buttonStyle(.plain)
                 NavigationLink {
-                    PairingScreen(core: core)
+                    DebridScreen(core: core)
                 } label: {
-                    SettingsRow(symbol: "qrcode", title: "Pair this device", detail: "Join your sync account by scanning a code on a device that already syncs.")
+                    SettingsRow(symbol: "bolt.horizontal", title: "Debrid services", detail: "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.")
                 }
                 .buttonStyle(.plain)
+                NavigationLink {
+                    OnboardingScreen(core: core)
+                } label: {
+                    SettingsRow(symbol: "checklist", title: "Setup check", detail: "Network, display, catalogs, sources and subtitles at a glance.")
+                }
+                .buttonStyle(.plain)
+                section("Sync").padding(.top, Theme.Space.s)
+                if sync.joined {
+                    NavigationLink {
+                        SyncScreen()
+                    } label: {
+                        SettingsRow(symbol: "arrow.triangle.2.circlepath", title: "Sync", detail: syncSummary)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink {
+                        PairingScreen(core: core)
+                    } label: {
+                        SettingsRow(symbol: "qrcode", title: "Pair this device", detail: "Join your sync account by scanning a code on a device that already syncs.")
+                    }
+                    .buttonStyle(.plain)
+                }
                 if let p = prefs.snapshot {
                     section("Playback").padding(.top, Theme.Space.s)
                     playback(p)
@@ -66,6 +89,13 @@ struct SettingsScreen: View {
             .font(.display(Theme.type.title2))
             .foregroundStyle(Theme.Palette.text)
             .accessibilityAddTraits(.isHeader)
+    }
+
+    /// "Synced 14:02" or the problem in words.
+    private var syncSummary: String {
+        if let problem = sync.problem { return problem.words }
+        if let at = sync.lastSynced { return "Synced \(at.formatted(date: .omitted, time: .shortened)). Devices, recovery kit, leaving." }
+        return "Devices, recovery kit, leaving."
     }
 
     /// "4 installed. Streams from Torrentio, Sample Source."

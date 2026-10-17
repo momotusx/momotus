@@ -18,6 +18,15 @@ enum DebugHooks {
     /// `-MQAutoPlay YES` presses Play on the title page once a version is picked.
     static var autoPlay: Bool { UserDefaults.standard.bool(forKey: "MQAutoPlay") }
 
+    /// `-MQSeekTo 575` seeks the first playback of the process there, once.
+    @MainActor static func takeSeek() -> Double? {
+        guard !seekTaken, UserDefaults.standard.object(forKey: "MQSeekTo") != nil else { return nil }
+        seekTaken = true
+        return UserDefaults.standard.double(forKey: "MQSeekTo")
+    }
+
+    @MainActor private static var seekTaken = false
+
     /// `-MQShowVersions YES` opens the Versions page once versions are in.
     static var showVersions: Bool { UserDefaults.standard.bool(forKey: "MQShowVersions") }
 

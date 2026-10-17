@@ -3,15 +3,14 @@ import SwiftUI
 /// Full-screen playback with an OSD that hides itself while playing.
 struct PlayerScreen: View {
     @State private var model: PlayerModel
-    let versions: VersionsModel?
     @Environment(\.dismiss) private var dismiss
     @Environment(Immersion.self) private var immersion
+    @Environment(SyncModel.self) private var sync
     @State private var controls = true
     @State private var lastTouch = ContinuousClock.now
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
-        _model = State(initialValue: PlayerModel(route: route, core: core))
-        self.versions = versions
+        _model = State(initialValue: PlayerModel(route: route, versions: versions, core: core))
     }
 
     var body: some View {
@@ -35,10 +34,19 @@ struct PlayerScreen: View {
             }
             StatusOverlay(model: model, back: close)
             if controls, model.playback?.phase != "failed" {
-                PlayerControls(model: model, versions: versions, back: close)
+                PlayerControls(model: model, versions: model.versions, back: close)
                     .transition(.opacity)
             }
+            if model.showNext || model.nextFailure != nil {
+                UpNextCard(model: model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, Theme.Space.m)
+                    .padding(.bottom, controls ? 200 : Theme.Space.l)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .animation(Theme.Motion.panel, value: controls)
+            }
         }
+        .animation(Theme.Motion.panel, value: model.showNext)
         .contentShape(Rectangle())
         .onTapGesture { touched(toggle: true) }
         #if !os(tvOS)
@@ -77,6 +85,7 @@ struct PlayerScreen: View {
 
     private func close() {
         model.close()
+        sync.schedule()
         dismiss()
     }
 

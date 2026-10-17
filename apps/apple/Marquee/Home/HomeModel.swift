@@ -6,13 +6,9 @@ import Observation
 final class HomeModel {
     enum Phase: Equatable {
         case opening
-        case settingUp
         case ready
         case failed(String)
     }
-
-    static let starterAddon = "https://v3-cinemeta.strem.io/manifest.json"
-    private static let starterKey = "starterAddonInstalled"
 
     private(set) var phase = Phase.opening
     private(set) var header = HomeHeader(hero: nil)
@@ -39,9 +35,6 @@ final class HomeModel {
             let view = try await core.open("home", as: (HomeSnapshot.self, HomeUpdate.self))
             for await event in view.events {
                 apply(event)
-                if case .snapshot = event, needsStarterAddon {
-                    await installStarterAddon()
-                }
             }
         } catch is CancellationError {
         } catch {
@@ -49,24 +42,9 @@ final class HomeModel {
         }
     }
 
-    /// First launch with no catalogs: install Cinemeta so Home has content.
-    private var needsStarterAddon: Bool {
-        !UserDefaults.standard.bool(forKey: Self.starterKey)
-            && !rows.contains { $0.rowId != "continue-watching" }
-    }
-
-    private func installStarterAddon() async {
-        phase = .settingUp
-        do {
-            try await core.perform("installAddon", ["url": Self.starterAddon])
-        } catch let error as CoreError where error.message.contains("already installed") {
-        } catch {
-            phase = .failed("Could not install Cinemeta: \(error.localizedDescription)")
-            return
-        }
-        UserDefaults.standard.set(true, forKey: Self.starterKey)
-        // Home follows installed addons on its own: the new rows arrive as updates.
-        phase = .ready
+    /// No addon with catalogs: Home offers setup instead of rows (the first run).
+    var needsSetup: Bool {
+        phase == .ready && !rows.contains { $0.rowId != "continue-watching" }
     }
 
     /// Applies one core batch with a single assignment per property.

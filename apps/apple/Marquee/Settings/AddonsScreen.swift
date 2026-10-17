@@ -4,8 +4,6 @@ import SwiftUI
 /// field to install more. Addon URLs can hold API keys and are never shown.
 struct AddonsScreen: View {
     let addons: LiveRecord<AddonsSnapshot>
-    @State private var link = ""
-    @State private var installing = false
     @State private var removing: AddonInfo?
     @Environment(\.metrics) private var metrics
 
@@ -16,7 +14,7 @@ struct AddonsScreen: View {
                 Text("Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.")
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
-                install
+                InstallField(addons: addons)
                 if let failure = addons.failure {
                     StateLine(symbol: "exclamationmark.triangle", text: failure)
                 }
@@ -36,6 +34,7 @@ struct AddonsScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .task(id: addons.taskId) { addons.start() }
         .confirmationDialog(
             "Remove \(removing?.name ?? "this addon")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
             titleVisibility: .visible
@@ -48,7 +47,36 @@ struct AddonsScreen: View {
         }
     }
 
-    private var install: some View {
+    private func act(_ op: String, _ addon: AddonInfo, _ fields: [String: any Sendable]) {
+        var all = fields
+        all["url"] = addon.url
+        Task { await addons.perform(op, all) }
+    }
+}
+
+/// The Addons page with its own subscription, for links outside Settings.
+struct AddonsPage: View {
+    @State private var addons: LiveRecord<AddonsSnapshot>
+
+    init(core: CoreClient) {
+        _addons = State(initialValue: LiveRecord("addons", core: core))
+    }
+
+    var body: some View {
+        AddonsScreen(addons: addons)
+    }
+}
+
+/// An addon link field with Install; shared by Addons and onboarding.
+struct InstallField: View {
+    let addons: LiveRecord<AddonsSnapshot>
+    /// Bump to move focus into the field ("Start fresh" does).
+    var focusRequest = 0
+    @State private var link = ""
+    @State private var installing = false
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("ADDON LINK")
                 .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
@@ -64,6 +92,8 @@ struct AddonsScreen: View {
                     .keyboardType(.URL)
                     #endif
                     .onSubmit(installLink)
+                    .focused($fieldFocused)
+                    .onChange(of: focusRequest) { fieldFocused = true }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
@@ -85,12 +115,6 @@ struct AddonsScreen: View {
             if await addons.perform("installAddon", ["url": url]) { link = "" }
             installing = false
         }
-    }
-
-    private func act(_ op: String, _ addon: AddonInfo, _ fields: [String: any Sendable]) {
-        var all = fields
-        all["url"] = addon.url
-        Task { await addons.perform(op, all) }
     }
 }
 

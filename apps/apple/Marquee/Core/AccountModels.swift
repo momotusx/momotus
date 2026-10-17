@@ -70,6 +70,52 @@ enum PairingSnapshot: Decodable, Hashable, Sendable {
     }
 }
 
+/// What one `syncNow` round did (apps/web/src/core/generated/SyncReport.ts).
+struct SyncReport: Decodable, Hashable, Sendable {
+    let pushed: Int
+    let stale: Int
+    let refused: Int
+    /// Edits the relay takes only once its clock catches up; still queued.
+    let waiting: Int
+    let pulled: Int
+    let applied: Int
+    let unreadable: Int
+    let newer: Int
+    /// Records waiting for a key this device does not hold yet.
+    let parked: Int
+    /// Above 0: the relay may be hiding roster changes.
+    let oldEpochWrites: Int
+    /// This device's clock minus the relay's.
+    let clockGapMs: Int64
+    let rotationWaitMs: Int64
+    /// "rotationPending", "notActive" or "relayDisagrees".
+    let blocked: String?
+    let fingerprint: String
+    /// A changed keystore record: store it, then sync again at once.
+    let record: JSONValue?
+    let again: Bool
+}
+
+/// The account's members (Devices.ts).
+struct SyncDevices: Decodable, Hashable, Sendable {
+    let members: [MemberInfo]
+    let fingerprint: String
+    let epoch: Int64
+    let rotationPending: Bool
+    let record: JSONValue?
+}
+
+struct MemberInfo: Decodable, Hashable, Sendable, Identifiable {
+    let id: String
+    /// A recovery kit rather than a device.
+    let kit: Bool
+    let name: String?
+    /// Who vouched for it.
+    let sponsor: String?
+    let addedMs: Int64
+    let thisDevice: Bool
+}
+
 /// Any JSON, kept as is: for records the app stores and hands back but never reads.
 enum JSONValue: Codable, Hashable, Sendable {
     case null
@@ -88,6 +134,19 @@ enum JSONValue: Codable, Hashable, Sendable {
         else if let v = try? c.decode(String.self) { self = .string(v) }
         else if let v = try? c.decode([JSONValue].self) { self = .array(v) }
         else { self = .object(try c.decode([String: JSONValue].self)) }
+    }
+
+    /// The value as Foundation objects for JSONSerialization; numbers stay
+    /// exact as NSDecimalNumber.
+    var foundation: Any {
+        switch self {
+        case .null: NSNull()
+        case .bool(let v): v
+        case .number(let v): NSDecimalNumber(decimal: v)
+        case .string(let v): v
+        case .array(let v): v.map(\.foundation)
+        case .object(let v): v.mapValues(\.foundation)
+        }
     }
 
     func encode(to encoder: any Encoder) throws {

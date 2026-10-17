@@ -29,14 +29,20 @@ final class SystemEvents {
 /// Forwards foreground and background to the core.
 struct ScenePhaseForward: ViewModifier {
     let core: CoreClient
+    let sync: SyncModel
     @Environment(\.scenePhase) private var phase
 
     func body(content: Content) -> some View {
-        content.onChange(of: phase) { _, phase in
+        content.onChange(of: phase, initial: true) { _, phase in
             switch phase {
-            case .active: core.lifecycle("foreground")
-            case .background: core.lifecycle("background")
-            default: break
+            case .active:
+                core.lifecycle("foreground")
+                // Pull what other devices changed while this one was away.
+                if sync.joined { Task { await sync.syncNow() } }
+            case .background:
+                core.lifecycle("background")
+            default:
+                break
             }
         }
     }

@@ -12,6 +12,7 @@ struct PairingScreen: View {
     /// nil while saving the joined record, then whether the Keychain kept it.
     @State private var stored: Bool?
     @Environment(\.metrics) private var metrics
+    @Environment(SyncModel.self) private var sync
 
     var body: some View {
         ScrollView(.vertical) {
@@ -118,7 +119,10 @@ struct PairingScreen: View {
             }
             .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
             .foregroundStyle(Theme.Palette.text)
-            .task(id: record) { stored = SyncRecord.store(record) }
+            .task(id: record) {
+                stored = SyncRecord.store(record)
+                if stored == true { await sync.didJoin() }
+            }
         case .expired?:
             StateLine(symbol: "clock.badge.xmark", text: "The code expired before it was scanned.", action: ("New code", { self.pairing = nil }))
         case .failed(let reason)?:
@@ -138,6 +142,10 @@ enum SyncRecord {
 
     static func load() -> JSONValue? {
         Keychain.read("syncRecord").flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }
+    }
+
+    static func delete() {
+        Keychain.delete("syncRecord")
     }
 }
 

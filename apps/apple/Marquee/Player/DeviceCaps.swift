@@ -24,6 +24,13 @@ enum DeviceCaps {
         ]
     }
 
+    /// "4K, HDR", "1080p": the display as the setup check names it.
+    @MainActor static var displayWords: String {
+        let lines = displayHeight()
+        let name = lines >= 2000 ? "4K" : lines >= 1000 ? "1080p" : "720p"
+        return AVPlayer.eligibleForHDRPlayback ? "\(name), HDR" : name
+    }
+
     /// The display's short side in pixels: what a landscape video fills.
     @MainActor private static func displayHeight() -> Int {
         #if os(macOS)

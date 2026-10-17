@@ -52,6 +52,27 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(hero.tile.background != nil)
 }
 
+/// Continue Watching comes first from the library, without artwork, and the
+/// metas' artwork follows as a set on the same row (the core's 1728f97).
+@Test func continueWatchingGainsArtworkInPlace() throws {
+    let tile = #"{"id":"tt0903747","kind":"series","name":"Breaking Bad","poster":"https://p/bb.jpg","posterShape":"poster","releaseInfo":null,"progress":0.02,"videoId":"tt0903747:1:6","#
+    let row = { (art: String) in #"{"rowId":"continue-watching","title":"Continue Watching","source":"","state":{"state":"ready"},"tiles":[\#(tile)\#(art)}]}"# }
+    let pushes = """
+        [{"sub":1,"updates":[{"kind":"rows","diffs":[{"op":"pushFront","value":\(row(#""background":null,"logo":null"#))}]}]},
+         {"sub":1,"updates":[{"kind":"rows","diffs":[{"op":"set","index":0,"value":\(row(#""background":"https://b/s1e6.jpg","logo":"https://l/bb.png""#))}]}]}]
+        """
+    var rows = [HomeRow(rowId: "popular", title: "Popular Movies", source: "Cinemeta", state: .ready, tiles: [])]
+    var seen: [Tile] = []
+    for push in try JSONDecoder().decode([Push<HomeUpdate>].self, from: Data(pushes.utf8)) {
+        for case .rows(let diffs) in push.updates { rows = applyDiffs(rows, diffs) }
+        #expect(rows.map(\.rowId) == ["continue-watching", "popular"])
+        seen.append(try #require(rows.first?.tiles.first))
+    }
+    #expect(seen.map(\.background) == [nil, "https://b/s1e6.jpg"])
+    #expect(seen.map(\.logo) == [nil, "https://l/bb.png"])
+    #expect(Set(seen.map(\.poster)) == ["https://p/bb.jpg"])
+}
+
 @Test func emptyHomeHasNoRows() throws {
     let reply = try fixture("home-empty-reply.json", as: Reply<Opened<HomeSnapshot>>.self)
     #expect(try #require(reply.result).snapshot.rows.isEmpty)

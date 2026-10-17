@@ -112,6 +112,13 @@ final class CoreClient {
         try await request(op, fields) { _ in }
     }
 
+    /// Round trip to the core's request loop in milliseconds, or nil when it does not answer.
+    func ping() async -> Int? {
+        let start = ContinuousClock.now
+        guard (try? await request("ping", [:]) { _ in }) != nil else { return nil }
+        return Int((ContinuousClock.now - start) / .milliseconds(1))
+    }
+
     /// Tells the core about app and system events (`foreground`, `background`,
     /// `memoryPressure`, `networkChanged`).
     func lifecycle(_ event: String) {
@@ -144,8 +151,9 @@ final class CoreClient {
         core.send(json: text)
     }
 
-    private static func encode(op: String, id: UInt64, fields: [String: any Sendable]) throws -> String {
-        var message: [String: Any] = fields
+    static func encode(op: String, id: UInt64, fields: [String: any Sendable]) throws -> String {
+        // Opaque records (the sync account) go back exactly as the core gave them.
+        var message: [String: Any] = fields.mapValues { ($0 as? JSONValue)?.foundation ?? $0 }
         message["id"] = id
         message["op"] = op
         return String(decoding: try JSONSerialization.data(withJSONObject: message), as: UTF8.self)
