@@ -153,3 +153,101 @@ private fun RatingChip(
         MqText(rating, role = TextRole.Caption, weight = FontWeight.Bold, color = colors.text, maxLines = 1)
     }
 }
+
+/**
+ * An episode on a card (design/DECISION.md v2, Episodes): a 16:9 still with the number at its
+ * bottom left, a Watched chip and the watched line, then the title, the core's caption and two
+ * lines of synopsis. The card is one control; [spoken] is what a screen reader says.
+ */
+@Composable
+fun EpisodeCard(
+    number: String,
+    title: String,
+    caption: String?,
+    overview: String?,
+    imageUrl: String?,
+    watched: Boolean,
+    progress: Float?,
+    spoken: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    longClickLabel: String? = null,
+) {
+    val metrics = Marquee.tiles
+    val colors = Marquee.colors
+    val size = metrics.landscape
+    val corner = Marquee.radius.card
+    val shape = RoundedCornerShape(corner)
+    val lift = remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .lifted(lift)
+            .then(modifier)
+            .width(size.width)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .marqueeFocus(corner, Tokens.FOCUS_SCALE_CARD, lift = lift)
+            .then(if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier)
+            .clip(shape)
+            .background(colors.raised)
+            .border(1.dp, if (lift.value) colors.text else colors.edge, shape)
+            .semantics(mergeDescendants = true) { contentDescription = spoken }
+            .focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
+    ) {
+        RemoteImage(imageUrl, size.width, size.height, fallbackText = number) {
+            if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
+            MqText(
+                number,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(Marquee.radius.pill))
+                        .background(colors.bg)
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                role = TextRole.Caption,
+                weight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
+        }
+        Column(
+            Modifier.padding(horizontal = EPISODE_PAD, vertical = EPISODE_PAD * 0.75f).clearAndSetSemantics { },
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            MqText(title, role = TextRole.Callout, weight = FontWeight.Bold, maxLines = 1)
+            if (caption != null) MqText(caption, role = TextRole.Caption, color = colors.dim, maxLines = 1)
+            MqText(overview.orEmpty(), role = TextRole.Caption, color = colors.muted, maxLines = 2, minLines = 2)
+        }
+    }
+}
+
+/** The height of a lane of [EpisodeCard]s: the focus room, the still and the four text lines. */
+@Composable
+fun TileMetrics.episodeLaneHeight(): Dp {
+    val type = Marquee.type
+    val text = with(LocalDensity.current) { type.callout.toDp() * LINE + type.caption.toDp() * LINE * 3 }
+    return pad * 2 + landscape.height + EPISODE_PAD * 1.5f + text + 8.dp
+}
+
+@Composable
+private fun WatchedChip(modifier: Modifier) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier
+            .padding(if (tv) 10.dp else 6.dp)
+            .clip(RoundedCornerShape(Marquee.radius.pill))
+            .background(colors.glassStrong)
+            .padding(horizontal = if (tv) 10.dp else 6.dp, vertical = if (tv) 4.dp else 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(Icons.Check, tint = colors.text, size = if (tv) 18.dp else 12.dp)
+        MqText("Watched", role = TextRole.Caption, weight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+private val EPISODE_PAD = 16.dp

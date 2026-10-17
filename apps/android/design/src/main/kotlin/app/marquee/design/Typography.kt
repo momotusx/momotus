@@ -68,6 +68,8 @@ fun MqText(
     color: Color = Marquee.colors.text,
     weight: FontWeight? = null,
     maxLines: Int = Int.MAX_VALUE,
+    /** Keeps room for this many lines, so cards of one row stay one height. */
+    minLines: Int = 1,
     textAlign: TextAlign? = null,
     /** Told after layout whether [maxLines] cut the text, so a screen can offer "More". */
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
@@ -97,6 +99,7 @@ fun MqText(
                 textAlign = textAlign ?: TextAlign.Unspecified,
             ),
         maxLines = maxLines,
+        minLines = minLines,
         overflow = TextOverflow.Ellipsis,
     )
 }

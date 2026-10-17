@@ -93,8 +93,8 @@ object TitleCopy {
         }
 
     /**
-     * "7.8 IMDb · 2010 · Animation, Short · 52 min" (a series says "2 seasons" instead of a runtime):
-     * what the metadata gives, nothing invented. Each item is one unit that never breaks inside, so a
+     * "2010 · Animation, Short · 52 min" (a series says "2 seasons" instead of a runtime), after the
+     * star rating: what the metadata gives, nothing invented. Each item is one unit that never breaks inside, so a
      * long line wraps only after a dot.
      */
     fun meta(
@@ -102,7 +102,6 @@ object TitleCopy {
         seasons: Int = 0,
     ): String =
         listOfNotNull(
-            details.rating?.let { "$it IMDb" },
             details.releaseInfo,
             details.genres
                 .take(3)
@@ -112,12 +111,17 @@ object TitleCopy {
                 ?: details.runtime.takeIf { details.kind == "movie" },
         ).joinToString("$NBSP· ") { it.replace(' ', NBSP) }
 
-    /** The Details block under the actions: label and value, in the web's words, left out when empty. */
-    fun facts(details: TitleDetails): List<Pair<String, String>> =
+    /** The facts table: label and value, in the web's words, left out when empty. */
+    fun facts(
+        details: TitleDetails,
+        seasons: Int = 0,
+    ): List<Pair<String, String>> =
         listOf(
-            "Starring" to details.cast.take(3).joinToString(", "),
-            "Directed by" to details.directors.take(2).joinToString(", "),
+            (if (details.kind == "movie") "Released" else "Aired") to (details.releaseInfo ?: ""),
+            "Seasons" to (seasons.takeIf { it > 0 }?.toString() ?: ""),
             "Runtime" to (details.runtime?.let { if (details.kind == "movie") it else "$it an episode" } ?: ""),
+            "Directed by" to details.directors.take(2).joinToString(", "),
+            "Starring" to details.cast.take(3).joinToString(", "),
             "Details from" to details.source,
         ).filter { it.second.isNotBlank() }
 
@@ -151,16 +155,13 @@ object TitleCopy {
         }
     }
 
-    /** The caption of an episode tile: "S1:E2 · 36 min left", and the episode's title under it. */
+    /** The line under an episode card's title: "S1:E2 · 36 min left". */
     fun episodeCaption(
         episode: Episode,
         runtime: String?,
-    ): String {
-        val first =
-            listOfNotNull(
-                Format.episodeLabel(episode.season, episode.episode),
-                episodeNote(episode, runtime),
-            ).joinToString(" · ")
-        return listOf(first, episode.title).filter { it.isNotBlank() }.joinToString("\n")
-    }
+    ): String =
+        listOfNotNull(
+            Format.episodeLabel(episode.season, episode.episode),
+            episodeNote(episode, runtime),
+        ).joinToString(" · ")
 }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -597,5 +598,64 @@ fun RatingLine(
             MqText("·", modifier = Modifier.clearAndSetSemantics { }, role = TextRole.Callout, color = colors.dim)
         }
         MqText(facts, role = TextRole.Callout, color = colors.muted, weight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+/**
+ * Opens a trailer's watch page in the YouTube app or a browser. False when the device has neither
+ * (some TVs), so the caller can say so.
+ */
+fun openTrailer(
+    context: android.content.Context,
+    url: String,
+): Boolean =
+    try {
+        context.startActivity(
+            android.content
+                .Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        true
+    } catch (e: android.content.ActivityNotFoundException) {
+        false
+    }
+
+/**
+ * A title's facts as a key-value table on glass (design/DECISION.md v2, Title page): a `dim`
+ * label and its value per row. Over artwork the strong glass keeps both readable.
+ */
+@Composable
+fun FactsTable(
+    facts: List<Pair<String, String>>,
+    modifier: Modifier = Modifier,
+) {
+    if (facts.isEmpty()) return
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(Marquee.radius.l)
+    Column(
+        modifier
+            .clip(shape)
+            .background(colors.glassStrong)
+            .border(1.dp, colors.edge, shape)
+            .padding(if (tv) 28.dp else 16.dp),
+        verticalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 10.dp),
+    ) {
+        for ((label, value) in facts) {
+            Row(
+                Modifier.semantics(mergeDescendants = true) {},
+                horizontalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 12.dp),
+            ) {
+                MqText(
+                    label,
+                    modifier = Modifier.width(if (tv) 170.dp else 104.dp),
+                    role = TextRole.Caption,
+                    color = colors.dim,
+                    weight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                MqText(value, role = TextRole.Caption, maxLines = 2)
+            }
+        }
     }
 }

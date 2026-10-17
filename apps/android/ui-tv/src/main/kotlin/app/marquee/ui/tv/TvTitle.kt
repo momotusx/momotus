@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -33,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.PrimaryAction
@@ -47,6 +50,8 @@ import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
 import app.marquee.design.Chip
 import app.marquee.design.ChosenVersion
+import app.marquee.design.EpisodeCard
+import app.marquee.design.FactsTable
 import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
@@ -54,6 +59,8 @@ import app.marquee.design.MenuAction
 import app.marquee.design.MqText
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
+import app.marquee.design.RatingLine
+import app.marquee.design.RoundButton
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -61,7 +68,9 @@ import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
+import app.marquee.design.openTrailer
 
 private const val PLAY = "play"
 private const val EPISODES = "episodes"
@@ -167,9 +176,19 @@ fun TvTitle(
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 ) {
                     item(key = "info") {
-                        Box(
+                        // The facts sit at the right, over the art, on strong glass.
+                        Row(
                             Modifier.padding(horizontal = safe.side),
-                        ) { Info(title, versions, versionsFailed, focus, onPlay, onVersions, onAddSource) }
+                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xl),
+                        ) {
+                            Box(Modifier.weight(1f)) {
+                                Info(title, versions, versionsFailed, focus, onPlay, onVersions, onAddSource)
+                            }
+                            FactsTable(
+                                TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons)),
+                                Modifier.width(560.dp).padding(top = Marquee.space.xl),
+                            )
+                        }
                     }
                     if (header.seasons.isNotEmpty()) item(key = "seasons") { Seasons(title, focus) }
                     if (title.episodes.isNotEmpty()) {
@@ -197,14 +216,13 @@ private fun Info(
     val target = header.playTarget
     val recommended = versions?.recommended
     val primary = TitleCopy.primary(target, versions, details.runtime)
+    val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Logo(details.logo, details.name, height = 160.dp, maxWidth = 480.dp)
-        MqText(
+        RatingLine(
+            details.rating,
             TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)),
-            role = TextRole.Callout,
-            color = colors.muted,
-            maxLines = 2,
-            modifier = Modifier.widthIn(max = 640.dp),
+            Modifier.widthIn(max = 760.dp),
         )
         details.description?.let {
             MqText(
@@ -220,7 +238,8 @@ private fun Info(
                 .padding(top = Marquee.space.xs)
                 .focusProperties { enter = { focus.rowEntry(ACTIONS) ?: FocusRequester.Default } }
                 .focusGroup(),
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
+            verticalAlignment = Alignment.Top,
         ) {
             // One button for every state, so its node (and the focus on it) survives the addons answering:
             // Play turning into "Add a source" must not drop focus onto the page underneath.
@@ -246,28 +265,41 @@ private fun Info(
             )
             // Always there once there is something to play, so focus on it is never pulled out from under the viewer.
             if (target != null) {
-                SecondaryButton(
-                    label = "Versions",
+                RoundButton(
                     icon = Icons.Layers,
+                    label = "Versions",
                     onClick = { onVersions(target.videoId) },
+                    showLabel = true,
                     focusRequester = focus.requesterFor("versions"),
                     onFocusChange = focus.watch(ACTIONS, "versions"),
                 )
             }
-            SecondaryButton(
-                label = if (header.inLibrary) "In Library" else "Add to Library",
+            details.trailers.firstOrNull()?.let { trailer ->
+                RoundButton(
+                    icon = Icons.Film,
+                    label = "Trailer",
+                    onClick = { openTrailer(context, trailer.url) },
+                    showLabel = true,
+                    focusRequester = focus.requesterFor("trailer"),
+                    onFocusChange = focus.watch(ACTIONS, "trailer"),
+                )
+            }
+            RoundButton(
                 icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
-                selected = header.inLibrary,
+                label = if (header.inLibrary) "In Library" else "Add to Library",
                 onClick = { title.setInLibrary(!header.inLibrary) },
+                selected = header.inLibrary,
+                showLabel = true,
                 focusRequester = focus.requesterFor("library"),
                 onFocusChange = focus.watch(ACTIONS, "library"),
             )
             if (details.kind == "movie") {
-                SecondaryButton(
-                    label = if (header.watched) "Watched" else "Mark as watched",
+                RoundButton(
                     icon = Icons.Check,
-                    selected = header.watched,
+                    label = if (header.watched) "Watched" else "Mark as watched",
                     onClick = { title.setWatched(details.id, !header.watched) },
+                    selected = header.watched,
+                    showLabel = true,
                     focusRequester = focus.requesterFor("watched"),
                     onFocusChange = focus.watch(ACTIONS, "watched"),
                 )
@@ -278,7 +310,6 @@ private fun Info(
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed), Modifier.widthIn(max = 760.dp))
         }
-        Details(TitleCopy.facts(details), Modifier.padding(top = Marquee.space.xl - Marquee.space.s))
     }
 }
 
@@ -306,28 +337,6 @@ private fun VersionStatus(
 
         is VersionLine.Problem -> {
             StatusNote(line.text, modifier, tone = Status.Warn)
-        }
-    }
-}
-
-/** Cast, directors, runtime and where the details came from: small labels over their values. */
-@Composable
-private fun Details(
-    facts: List<Pair<String, String>>,
-    modifier: Modifier,
-) {
-    if (facts.isEmpty()) return
-    FlowRow(
-        // Only as wide as the version line: the scrim is dark enough for small text no further out.
-        modifier.widthIn(max = 760.dp),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.l),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-    ) {
-        for ((label, value) in facts) {
-            Column(Modifier.widthIn(max = 360.dp)) {
-                MqText(label, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
-                MqText(value, role = TextRole.Callout, maxLines = 2)
-            }
         }
     }
 }
@@ -369,7 +378,7 @@ private fun Episodes(
     onVersions: (Episode) -> Unit,
 ) {
     val metrics = Marquee.tiles
-    val laneHeight = metrics.laneHeight(TileShape.Landscape)
+    val laneHeight = metrics.episodeLaneHeight()
     val runtime = title.header?.details?.runtime
     var menuFor by remember { mutableStateOf<Episode?>(null) }
     menuFor?.let { episode ->
@@ -398,14 +407,17 @@ private fun Episodes(
         ) {
             items(title.episodes, key = { it.videoId }) { episode ->
                 val key = "episode:${episode.videoId}"
-                PosterTile(
+                EpisodeCard(
+                    number = "E${episode.episode}",
                     title = episode.title.ifBlank { Format.episodeLabel(episode.season, episode.episode) },
+                    caption = TitleCopy.episodeCaption(episode, runtime),
+                    overview = episode.overview,
                     imageUrl = episode.thumbnail,
+                    watched = episode.watched,
+                    progress = episode.progress,
+                    spoken = TitleCopy.episode(episode),
                     onClick = { onEpisode(episode) },
                     modifier = Modifier.padding(top = metrics.pad),
-                    shape = TileShape.Landscape,
-                    progress = episode.progress,
-                    caption = TitleCopy.episodeCaption(episode, runtime),
                     focusRequester = focus.requesterFor(key),
                     onFocusChange = focus.watch(EPISODES, key),
                     onLongClick = { menuFor = episode },

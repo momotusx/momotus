@@ -1,6 +1,7 @@
 package app.marquee.ui.phone
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,6 +55,7 @@ import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
 import app.marquee.design.Chip
 import app.marquee.design.ChosenVersion
+import app.marquee.design.FactsTable
 import app.marquee.design.Icons
 import app.marquee.design.LightStatusBarIcons
 import app.marquee.design.Logo
@@ -62,7 +65,9 @@ import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.ProgressBar
+import app.marquee.design.RatingLine
 import app.marquee.design.RemoteImage
+import app.marquee.design.RoundButton
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -71,6 +76,7 @@ import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
+import app.marquee.design.openTrailer
 
 /** How many lines of the synopsis show before "More". */
 private const val SYNOPSIS_LINES = 3
@@ -193,8 +199,9 @@ fun PhoneTitle(
                         onMore = { menuFor = episode },
                     )
                 }
-                TitleCopy.facts(details).takeIf { it.isNotEmpty() }?.let { facts ->
-                    item(key = "details") { Details(facts) }
+                val facts = TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons))
+                if (facts.isNotEmpty()) {
+                    item(key = "details") { FactsTable(facts, Modifier.padding(horizontal = side).fillMaxWidth()) }
                 }
             }
         }
@@ -289,11 +296,7 @@ private fun Info(
         Modifier.padding(horizontal = Marquee.safe.side),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
-        MqText(
-            TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)),
-            role = TextRole.Callout,
-            color = colors.muted,
-        )
+        RatingLine(details.rating, TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)))
         details.description?.let { Synopsis(it) }
         PrimaryButton(
             label = primary.label,
@@ -319,25 +322,28 @@ private fun Info(
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        ) {
+        val context = LocalContext.current
+        Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
             if (target != null) {
-                SecondaryButton("Versions", icon = Icons.Layers, onClick = { onVersions(target.videoId) })
+                RoundButton(Icons.Layers, "Versions", { onVersions(target.videoId) }, showLabel = true)
             }
-            SecondaryButton(
-                label = if (header.inLibrary) "In Library" else "Add to Library",
+            details.trailers.firstOrNull()?.let { trailer ->
+                RoundButton(Icons.Film, "Trailer", { openTrailer(context, trailer.url) }, showLabel = true)
+            }
+            RoundButton(
                 icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
-                selected = header.inLibrary,
+                label = if (header.inLibrary) "In Library" else "Add to Library",
                 onClick = { title.setInLibrary(!header.inLibrary) },
+                selected = header.inLibrary,
+                showLabel = true,
             )
             if (details.kind == "movie") {
-                SecondaryButton(
-                    label = if (header.watched) "Watched" else "Mark as watched",
+                RoundButton(
                     icon = Icons.Check,
-                    selected = header.watched,
+                    label = if (header.watched) "Watched" else "Mark as watched",
                     onClick = { title.setWatched(details.id, !header.watched) },
+                    selected = header.watched,
+                    showLabel = true,
                 )
             }
         }
@@ -392,22 +398,6 @@ private fun Synopsis(text: String) {
     }
 }
 
-/** Cast, directors, runtime and where the details came from: a label over its value. */
-@Composable
-private fun Details(facts: List<Pair<String, String>>) {
-    Column(
-        Modifier.padding(horizontal = Marquee.safe.side),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-    ) {
-        for ((label, value) in facts) {
-            Column {
-                MqText(label, role = TextRole.Caption, color = Marquee.colors.muted)
-                MqText(value, role = TextRole.Callout)
-            }
-        }
-    }
-}
-
 @Composable
 private fun EpisodeRow(
     episode: Episode,
@@ -417,16 +407,22 @@ private fun EpisodeRow(
 ) {
     val colors = Marquee.colors
     val spoken = TitleCopy.episode(episode)
+    // A glass card per episode (design/DECISION.md v2, Episodes).
+    val card = RoundedCornerShape(Marquee.radius.card)
     Row(
         Modifier
+            .padding(horizontal = Marquee.safe.side, vertical = Marquee.space.xs / 2)
             .fillMaxWidth()
+            .clip(card)
+            .background(colors.raised)
+            .border(1.dp, colors.edge, card)
             .semantics { contentDescription = spoken }
             .focusClickable(
                 onClick,
                 Role.Button,
                 onLongClick = onMore,
                 longClickLabel = "More options",
-            ).padding(horizontal = Marquee.safe.side, vertical = Marquee.space.xs),
+            ).padding(Marquee.space.xs),
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         Box(Modifier.clip(RoundedCornerShape(Marquee.radius.s))) {
@@ -436,6 +432,18 @@ private fun EpisodeRow(
                 72.dp,
                 fallbackText = Format.episodeLabel(episode.season, episode.episode),
             ) {
+                MqText(
+                    "E${episode.episode}",
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(Marquee.radius.pill))
+                            .background(colors.bg)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    role = TextRole.Caption,
+                    weight = FontWeight.Bold,
+                )
                 episode.progress?.let { ProgressBar(it, Modifier.align(Alignment.BottomStart)) }
             }
         }
@@ -458,6 +466,6 @@ private fun EpisodeRow(
             )
             episode.overview?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
         }
-        if (episode.watched) MqIcon(Icons.Check, tint = colors.muted)
+        if (episode.watched) MqIcon(Icons.Check, tint = colors.text)
     }
 }

@@ -48,7 +48,7 @@ class TitleCopyTest {
     @Test
     fun `the meta line follows the shared order and keeps each item whole`() {
         assertEquals(
-            "7.8${nbsp}IMDb$nbsp· 2010$nbsp· Animation,${nbsp}Short,${nbsp}Fantasy$nbsp· 52${nbsp}min",
+            "2010$nbsp· Animation,${nbsp}Short,${nbsp}Fantasy$nbsp· 52${nbsp}min",
             TitleCopy.meta(details()),
         )
         assertEquals("2010", TitleCopy.meta(details(runtime = null, rating = null, genres = emptyList())))
@@ -62,7 +62,7 @@ class TitleCopyTest {
     fun `a series says its seasons instead of a runtime`() {
         val series = details(kind = "series", releaseInfo = "2011-2019", rating = "9.2", genres = listOf("Drama"))
         assertEquals(
-            "9.2${nbsp}IMDb$nbsp· 2011-2019$nbsp· Drama$nbsp· 8${nbsp}seasons",
+            "2011-2019$nbsp· Drama$nbsp· 8${nbsp}seasons",
             TitleCopy.meta(series, seasons = 8),
         )
         assertEquals(
@@ -81,15 +81,28 @@ class TitleCopyTest {
     }
 
     @Test
-    fun `the details block lists what is known in the web's words`() {
+    fun `the facts table lists what is known in the web's words`() {
         assertEquals(
             listOf(
-                "Starring" to "A, B, C",
-                "Directed by" to "X, Y",
+                "Released" to "2010",
                 "Runtime" to "52 min",
+                "Directed by" to "X, Y",
+                "Starring" to "A, B, C",
                 "Details from" to "Cinemeta",
             ),
             TitleCopy.facts(details()),
+        )
+        assertEquals(
+            listOf("Aired" to "2011-2019", "Seasons" to "8"),
+            TitleCopy
+                .facts(
+                    details(
+                        kind = "series",
+                        releaseInfo = "2011-2019",
+                        runtime = null,
+                    ).copy(cast = emptyList(), directors = emptyList()),
+                    8,
+                ).take(2),
         )
         assertEquals(
             "52 min an episode",
@@ -97,7 +110,9 @@ class TitleCopyTest {
         )
         assertEquals(
             listOf("Details from" to "Cinemeta"),
-            TitleCopy.facts(details(runtime = null).copy(cast = emptyList(), directors = emptyList())),
+            TitleCopy.facts(
+                details(releaseInfo = null, runtime = null).copy(cast = emptyList(), directors = emptyList()),
+            ),
         )
     }
 
@@ -109,12 +124,12 @@ class TitleCopyTest {
     }
 
     @Test
-    fun `an episode tile says what is left under its number, then its title`() {
+    fun `an episode card says its number and what is left under its title`() {
         val fresh = Episode("tt1:2:1", 2, 1, "The North Remembers", watched = false)
-        assertEquals("S2:E1 · 52 min\nThe North Remembers", TitleCopy.episodeCaption(fresh, "52 min"))
-        assertEquals("S2:E1\nThe North Remembers", TitleCopy.episodeCaption(fresh, null))
+        assertEquals("S2:E1 · 52 min", TitleCopy.episodeCaption(fresh, "52 min"))
+        assertEquals("S2:E1", TitleCopy.episodeCaption(fresh, null))
         val part = fresh.copy(progress = 0.5f)
-        assertEquals("S2:E1 · 26 min left\nThe North Remembers", TitleCopy.episodeCaption(part, "52 min"))
+        assertEquals("S2:E1 · 26 min left", TitleCopy.episodeCaption(part, "52 min"))
         assertEquals("50% watched", TitleCopy.episodeNote(part, null))
         assertEquals("Watched", TitleCopy.episodeNote(fresh.copy(watched = true), "52 min"))
     }
