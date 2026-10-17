@@ -18,3 +18,4 @@
 /.mq-data/
 /apps/web/test-results/
 /apps/web/playwright-report/
+/apps/web/e2e/.cache/

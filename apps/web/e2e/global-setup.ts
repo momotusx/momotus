@@ -1,10 +1,11 @@
 /** One fresh core per run: real addons installed through the protocol, then
  * two titles watched part way so Continue Watching has real progress. */
 
-import { BBB_ID, startSource } from "./source";
+import { BBB_ID, ensureMedia, startSource } from "./source";
 import { Client, cleanup, GOT, PORTS, startBridge, until, watch } from "./core";
 
 export default async function globalSetup() {
+  await ensureMedia();
   const source = await startSource(PORTS.source);
   const { proc, data } = await startBridge();
   const c = new Client();

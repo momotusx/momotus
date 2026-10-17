@@ -7,6 +7,9 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   // One core is shared by every test, so they run in order.
   workers: 1,
+  // Live third-party data (addons, image CDN) has slow moments; one retry,
+  // and the report shows any test that needed it.
+  retries: 1,
   fullyParallel: false,
   reporter: [["list"]],
   globalSetup: "./e2e/global-setup.ts",

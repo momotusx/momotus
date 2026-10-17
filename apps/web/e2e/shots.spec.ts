@@ -115,6 +115,19 @@ for (const form of Object.keys(FORMS) as Form[]) {
         page.on("pageerror", (e) => errors.push(e.message));
         await page.goto(`${screen.path}?form=${form}`);
         await screen.ready(page, form);
+        // Give on-screen art up to 15 s to decode; a tile still loading shows
+        // its name card, which is a valid state, so this never fails.
+        await page
+          .waitForFunction(
+            () =>
+              [...document.querySelectorAll<HTMLImageElement>(".tile img:not(.in)")].every((img) => {
+                const r = img.getBoundingClientRect();
+                return r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth;
+              }),
+            null,
+            { timeout: 15_000 },
+          )
+          .catch(() => undefined);
         // Let focus motion and image fades settle.
         await page.waitForTimeout(700);
         const suffix = scheme === "light" ? "-light" : "";
