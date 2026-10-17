@@ -208,8 +208,6 @@ const SCREENS: Screen[] = [
   { name: "pairing", path: "/pair", ready: visible(".install") },
 ];
 
-const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "versions", "player-skip", "discover", "search", "library", "addons", "settings", "home-rows", "calendar", "welcome", "welcome-source", "welcome-check", "import", "pairing"]);
-const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "versions", "player-skip", "discover", "library", "addons", "settings", "home-rows", "calendar", "welcome", "welcome-check", "import", "pairing"]);
 
 // Each shot opens a fresh context, so artwork is fetched once here and
 // served to every context after that, instead of asking the image CDN for
@@ -235,15 +233,14 @@ async function cacheArt(context: BrowserContext) {
 
 for (const form of Object.keys(FORMS) as Form[]) {
   for (const screen of SCREENS) {
-    for (const scheme of ["dark", "light"] as const) {
-      // TV stays dark unless chosen; these screens are also shot with light chosen.
-      if (scheme === "light" && !(form === "tv" ? TV_LIGHT : LIGHT).has(screen.name)) continue;
-      test(`${screen.name} ${form} ${scheme}`, async ({ browser }) => {
+    {
+      // Dark only (design/DECISION.md v2).
+      test(`${screen.name} ${form}`, async ({ browser }) => {
         const f = FORMS[form];
         const context = await browser.newContext({
           viewport: { width: f.width, height: f.height },
           deviceScaleFactor: f.scale,
-          colorScheme: scheme,
+          colorScheme: "dark",
           isMobile: form === "phone",
           hasTouch: form === "phone",
         });
@@ -252,7 +249,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
         const errors: string[] = [];
         page.on("pageerror", (e) => errors.push(e.message));
         const join = screen.path.includes("?") ? "&" : "?";
-        await page.goto(`${screen.path}${join}form=${form}${form === "tv" && scheme === "light" ? "&theme=light" : ""}`);
+        await page.goto(`${screen.path}${join}form=${form}`);
         await screen.ready(page, form);
         // Give on-screen art up to 15 s to decode; a tile still loading shows
         // its name card, which is a valid state, so this never fails.
@@ -269,8 +266,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
           .catch(() => undefined);
         // Let focus motion and image fades settle.
         await page.waitForTimeout(700);
-        const suffix = scheme === "light" ? "-light" : "";
-        await page.screenshot({ path: `e2e/shots/${screen.name}-${form}${suffix}.jpg`, type: "jpeg", quality: 80 });
+        await page.screenshot({ path: `e2e/shots/${screen.name}-${form}.jpg`, type: "jpeg", quality: 80 });
         await screen.after?.(page);
         expect(errors).toEqual([]);
         await context.unrouteAll({ behavior: "ignoreErrors" });

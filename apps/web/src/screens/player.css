@@ -23,7 +23,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .player-scr.idle .osd-top, .player-scr.idle .osd-bot, .player-scr.idle .ptitle, .player-scr.idle .clock, .player-scr.idle .osd { opacity: 0; pointer-events: none; }
 
 .ptitle { position: absolute; left: var(--safe-side); top: var(--safe-top); max-width: 1200px; }
-.ptitle h1 { font: 600 var(--type-title2) / 1.05 var(--font-display); }
+.ptitle h1 { font: 800 var(--type-title2) / 1.05 var(--font-display); }
 .ptitle p { font: 400 var(--type-body) var(--font-text); margin-top: 8px; color: #D9CEBF; }
 .clock { position: absolute; right: var(--safe-side); top: 70px; font: 500 var(--type-callout) var(--font-text); color: #D9CEBF; }
 
@@ -67,7 +67,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 
 .panel { position: absolute; right: var(--safe-side); bottom: 300px; width: 640px; max-height: 620px; display: flex; flex-direction: column;
   padding: 28px 24px; border-radius: var(--radius-l); background: #1B1815; box-shadow: inset 0 0 0 2px #3D362E; }
-.panel h2 { font: 600 var(--type-headline) var(--font-display); margin: 0 12px 14px; }
+.panel h2 { font: 800 var(--type-headline) var(--font-display); margin: 0 12px 14px; }
 .panel-list { margin: 0 -24px; padding: 4px 24px 24px; }
 .opt { position: relative; display: grid; gap: 4px; width: 100%; padding: 14px 18px 14px 56px; border-radius: var(--radius-m); color: #F6EFE6; font: 600 var(--type-callout) / 1.2 var(--font-text); }
 .opt span { font: 400 var(--type-caption) / 1.3 var(--font-text); color: #D9CEBF; }
@@ -81,7 +81,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
   background: #1B1815; box-shadow: inset 0 0 0 2px #3D362E; max-width: 900px; }
 .next img { width: 320px; height: 180px; border-radius: var(--radius-m); object-fit: cover; }
 .next .kicker { color: #D9CEBF; }
-.next h3 { font: 600 var(--type-headline) / 1.2 var(--font-display); margin: 8px 0 6px; }
+.next h3 { font: 800 var(--type-headline) / 1.2 var(--font-display); margin: 8px 0 6px; }
 .next p.num { font: 500 var(--type-callout) var(--font-text); color: #D9CEBF; margin-bottom: 16px; }
 .next .btn { margin-top: 10px; }
 /* Skip: bottom right, centred on the control row (Netflix, Prime, Apple TV),
@@ -106,7 +106,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .endcard { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: var(--safe-top) var(--safe-side); background: rgba(0, 0, 0, .72); }
 .end-body { display: grid; justify-items: center; gap: 22px; max-width: 1400px; text-align: center; }
 .end-body .kicker { color: var(--muted); }
-.end-body h2 { font: 600 var(--type-title1) / 1.1 var(--font-display); }
+.end-body h2 { font: 800 var(--type-title1) / 1.1 var(--font-display); }
 .end-body .st { gap: 16px; font: 500 var(--type-headline) / 1.3 var(--font-text); text-align: left; }
 .end-body .st svg { width: 36px; height: 36px; flex: none; color: var(--bad); }
 .end-body .attempts { text-align: left; }

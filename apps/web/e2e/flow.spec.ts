@@ -28,7 +28,7 @@ test("remote flow: Home, Title, seasons, Versions and Back restore focus", async
   // Real Game of Thrones data from Cinemeta, resuming where the seed left off.
   await expect(page).toHaveURL(/\/title\/series\/tt0944947/);
   await expect(page.locator(".title-logo")).toHaveAttribute("alt", "Game of Thrones");
-  await expect(page.locator(".info .meta")).toContainText("IMDb");
+  await expect(page.locator(".info .meta .rate")).toHaveAttribute("aria-label", /^IMDb \d/);
   await expect(page.locator('[data-f="title:play"]')).toContainText("Resume S2:E3");
   await expect(page.locator('[data-f="season:2"]')).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".ep-t").first()).toHaveText("The North Remembers");

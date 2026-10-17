@@ -9,7 +9,7 @@
 .crumbs svg { width: 24px; height: 24px; }
 .crumbs .here { color: var(--text); font-weight: 650; }
 .vhead-row { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; margin-top: 18px; }
-.vhead h1 { font: 600 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vhead h1 span { font: 400 var(--type-headline) var(--font-text); color: var(--muted); margin-left: 18px; }
 .vstate { display: flex; align-items: center; gap: 36px; flex: none; font: 500 var(--type-caption) / 1 var(--font-text); color: var(--muted); }
 .vstate .device { display: inline-flex; align-items: center; gap: 10px; }
@@ -19,9 +19,9 @@
 @media (prefers-reduced-motion: reduce) { .dot.live, .live .dot { animation: none; } }
 
 .pick { position: absolute; left: var(--safe-side); top: 232px; bottom: var(--safe-bottom); width: 620px; padding: 34px 40px;
-  border-radius: var(--radius-l); background: var(--surface); box-shadow: inset 0 0 0 2px var(--line);
+  border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); box-shadow: inset 0 0 0 2px var(--line);
   display: flex; flex-direction: column; align-items: flex-start; overflow: clip; }
-.pick h2 { font: 600 var(--type-title1) / 1.02 var(--font-display); margin: 14px 0 20px; }
+.pick h2 { font: 800 var(--type-title1) / 1.02 var(--font-display); margin: 14px 0 20px; }
 .why { display: grid; gap: 10px; margin-top: 20px; }
 .why li { display: flex; gap: 14px; font: 400 var(--type-callout) / 1.3 var(--font-text); }
 .why svg { width: 28px; height: 28px; margin-top: 1px; color: var(--ok); }
@@ -41,7 +41,7 @@
 .vgroup { scroll-margin-top: 12px; }
 /* Group headers stay pinned while their rows scroll, so every group always
  * shows its label. */
-.vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 6px; padding: 12px 22px; border-radius: 10px; background: var(--surface);
+.vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 6px; padding: 12px 22px; border-radius: 10px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
   font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; }
 .vgroup h3 .num { color: var(--muted); }
 .vrow { width: 100%; min-height: 64px; padding: 10px 22px; border-radius: var(--radius-m); border-bottom: 1px solid var(--line);
@@ -58,13 +58,13 @@
 .vrow .more .sub { display: block; margin-top: 6px; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
 .vrow:focus-visible, [data-form="tv"] .vrow:focus { background: var(--raised); border-bottom-color: transparent; transform: scale(var(--focus-scale-tile)); }
 .vrow:focus-visible .more, [data-form="tv"] .vrow:focus .more { display: block; }
-@media (hover: hover) { [data-form="desktop"] .vrow:hover { background: var(--surface); } }
+@media (hover: hover) { [data-form="desktop"] .vrow:hover { background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); } }
 .fold { display: inline-flex; align-items: center; gap: 12px; height: 54px; margin-top: 6px; padding: 0 22px; border-radius: 27px;
   font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); }
 .fold svg { width: 24px; height: 24px; transition: transform var(--motion-focus) var(--ease); }
 .fold[aria-expanded="true"] svg { transform: rotate(180deg); }
 .fold:focus-visible, [data-form="tv"] .fold:focus { color: var(--text); }
-.hidden-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 16px 22px; border-radius: var(--radius-m); background: var(--surface);
+.hidden-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 16px 22px; border-radius: var(--radius-m); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
   font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
 .hidden-row b { font: 600 var(--type-callout) var(--font-text); color: var(--text); white-space: nowrap; }
 .hidden-row svg { width: 26px; height: 26px; color: var(--text); flex: none; }

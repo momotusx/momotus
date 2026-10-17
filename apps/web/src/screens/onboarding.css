@@ -4,16 +4,16 @@
 .welcome-head { display: flex; align-items: center; justify-content: space-between; }
 .welcome-head .brand { padding-left: 0; }
 .step-body { display: grid; justify-items: start; gap: 22px; max-width: 1560px; margin-top: 56px; }
-.step-body h1 { font: 600 var(--type-hero) / 1.04 var(--font-display); letter-spacing: -.01em; }
+.step-body h1 { font: 800 var(--type-hero) / 1.04 var(--font-display); letter-spacing: -.01em; }
 .step-body .lead { font: 400 var(--type-headline) / 1.35 var(--font-text); color: var(--muted); max-width: 1200px; }
 .step-body .acts { margin-top: 12px; }
 
 /* Step 1: two doors side by side on TV and desktop, stacked on a phone. */
 .doors { display: grid; grid-template-columns: repeat(2, 720px); gap: 40px; margin-top: 20px; }
-.door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 34px 34px; border-radius: 26px; background: var(--surface);
+.door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 34px 34px; border-radius: 26px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
   box-shadow: inset 0 0 0 2px var(--line); transform-origin: center; text-align: left; }
 .door > svg { width: 44px; height: 44px; flex: none; }
-.door b { display: block; font: 600 var(--type-title3) / 1.1 var(--font-display); }
+.door b { display: block; font: 800 var(--type-title3) / 1.1 var(--font-display); }
 .door small { display: block; margin-top: 8px; font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
 .door .chev { margin-left: auto; width: 32px; height: 32px; color: var(--muted); }
 .door:focus-visible, [data-form="tv"] .door:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }

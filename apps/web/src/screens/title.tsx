@@ -5,6 +5,7 @@ import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import Plus from "lucide-solid/icons/plus";
+import Star from "lucide-solid/icons/star";
 import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
@@ -70,7 +71,6 @@ function TitlePage(props: { kind: string; id: string }) {
     if (!x) return [];
     const seasons = header()?.seasons.filter((s) => s > 0).length ?? 0;
     return [
-      x.rating ? `${x.rating} IMDb` : null,
       x.releaseInfo,
       x.genres.slice(0, 3).join(", ") || null,
       seasons ? `${seasons} ${seasons === 1 ? "season" : "seasons"}` : null,
@@ -106,6 +106,16 @@ function TitlePage(props: { kind: string; id: string }) {
               <section class="info" aria-label={x().name}>
                 <Logo src={x().logo} name={x().name} class="title-logo" />
                 <p class="meta">
+                  {/* The rating leads, a gold star and the number, as on Home. */}
+                  <Show when={x().rating}>
+                    <span class="rate num" aria-label={`IMDb ${x().rating}`}>
+                      <Star aria-hidden />
+                      {x().rating}
+                    </span>
+                    <Show when={metaLine().length}>
+                      <b aria-hidden="true"> · </b>
+                    </Show>
+                  </Show>
                   <For each={metaLine()}>
                     {(part, i) => (
                       <>
@@ -367,25 +377,32 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
           {(e) => (
             <li class="ep" classList={{ seen: e.watched, now: e.progress !== null, later: !released(e) }}>
               <A class="ep-main" href={playPath(props.kind, props.id, e.videoId)} data-f={`ep:${e.videoId}`}>
-                <span class="ep-line">
+                {/* A card: the still with its number, then the title, the time
+                    and two lines of synopsis. */}
+                <span class="ep-still" aria-hidden="true">
+                  <Show when={e.thumbnail}>
+                    <img src={e.thumbnail ?? undefined} alt="" loading="lazy" decoding="async" class="fade" onLoad={(ev) => ev.currentTarget.classList.add("in")} />
+                  </Show>
                   <b class="ep-n num">{e.episode}</b>
-                  <span class="ep-t">{e.title || episodeLabel(e.season, e.episode)}</span>
-                  <i class="dots" aria-hidden="true" />
-                  <span class="ep-r num">
-                    <Show when={e.watched}>
+                  <Show when={e.watched}>
+                    <span class="ep-chip">
                       <Check aria-hidden />
-                    </Show>
-                    {left(e)}
-                  </span>
+                      Watched
+                    </span>
+                  </Show>
+                  <Show when={e.progress !== null}>
+                    <span class="meter">
+                      <i style={{ width: pct(e.progress ?? 0) }} />
+                    </span>
+                  </Show>
                 </span>
-                <Show when={e.overview}>
-                  <span class="ep-ov">{e.overview}</span>
-                </Show>
-                <Show when={e.progress !== null}>
-                  <span class="meter">
-                    <i style={{ width: pct(e.progress ?? 0) }} />
-                  </span>
-                </Show>
+                <span class="ep-text">
+                  <span class="ep-t">{e.title || episodeLabel(e.season, e.episode)}</span>
+                  <span class="ep-r num">{left(e)}</span>
+                  <Show when={e.overview}>
+                    <span class="ep-ov">{e.overview}</span>
+                  </Show>
+                </span>
               </A>
               {/* The row plays this episode; choosing its version or marking
                   it watched are the secondary actions beside it. */}

@@ -67,7 +67,10 @@ export function reveal(el: HTMLElement) {
   const block = el.closest<HTMLElement>("[data-row]") ?? el;
   const b = block.getBoundingClientRect();
   const p = page.getBoundingClientRect();
-  const visible = b.top >= p.top && b.bottom <= p.bottom;
+  // A row under the floating navigation is not visible: its scroll margin
+  // keeps it clear of the pill.
+  const clear = parseFloat(getComputedStyle(block).scrollMarginTop) || 0;
+  const visible = b.top >= p.top + clear && b.bottom <= p.bottom;
   if (!visible) block.scrollIntoView({ block: block === el ? "nearest" : "start", behavior });
 }
 
@@ -107,8 +110,9 @@ export function move(dir: Direction): boolean {
   }));
   const here = list[els.indexOf(current)] as Candidate<string>;
   let target: string | null = null;
-  // Leaving the navigation rail returns to where you were on this screen.
-  if (here.group === "rail" && dir === "right") {
+  // Leaving the navigation (a pill along the top) returns to where you were
+  // on this screen.
+  if (here.group === "rail" && dir === "down") {
     const back = content.get(path());
     if (back && list.some((c) => c.key === back)) target = back;
   }

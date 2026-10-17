@@ -1,10 +1,22 @@
-/* Base, shell and shared atoms. Sizes are TV points on the 1920x1080 canvas;
- * desktop scales the canvas, phone overrides under [data-form="phone"]. */
+/* Base, shell and shared atoms (design/DECISION.md v2: minimal, dark, glass).
+ * Sizes are TV points on the 1920x1080 canvas; desktop scales the canvas,
+ * phone overrides under [data-form="phone"]. */
+
+:root {
+  /* The floating navigation pill and where content starts below it. */
+  --nav-h: 72px;
+  --nav-top: 28px;
+  --content-top: calc(var(--nav-top) + var(--nav-h) + 48px);
+}
+[data-form="phone"] { --nav-h: 64px; --content-top: 16px; }
+/* What focus scrolls into view lands below the floating navigation pill. */
+[data-vscroll] [data-row], [data-vscroll] [data-f] { scroll-margin-top: calc(var(--nav-top) + var(--nav-h) + 20px); }
+[data-form="phone"] [data-vscroll] [data-row], [data-form="phone"] [data-vscroll] [data-f] { scroll-margin-top: 12px; }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--bg); color: var(--text); }
 body { font: 400 var(--type-body) / 1.4 var(--font-text); -webkit-font-smoothing: antialiased; overflow: hidden;
-  text-rendering: optimizeLegibility; }
+  text-rendering: optimizeLegibility; font-feature-settings: "cv11", "ss01"; }
 button, input { font: inherit; color: inherit; background: none; border: 0; }
 button { cursor: pointer; text-align: inherit; }
 a { color: inherit; text-decoration: none; }
@@ -13,6 +25,17 @@ ul, ol { list-style: none; }
 svg { flex: none; }
 .num { font-variant-numeric: tabular-nums; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Display and heading type: heavy, tight. */
+.display { font-family: var(--font-display); font-weight: var(--weight-display); letter-spacing: var(--tracking-display); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading); letter-spacing: var(--tracking-heading); }
+
+/* Glass: a translucent surface over the page with a cool hairline edge and a
+ * top highlight. Strong glass for panels that hold long text. */
+.glass { background: var(--glass); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow); }
+.glass.strong { background: var(--glass-strong); }
 
 /* Canvas: fixed 1920x1080 on TV, fluid and scaled on desktop, native on phone. */
 .app { position: fixed; left: var(--ox, 0); top: var(--oy, 0); width: var(--cw, 100vw); height: var(--ch, 100vh);
@@ -27,33 +50,47 @@ svg { flex: none; }
 [data-hscroll] { overflow-x: auto; overflow-y: clip; }
 
 /* Focus: a 4 px accent ring, a dark halo that keeps 3:1 on any artwork, and
- * a small scale. Never color alone. TV always shows it; desktop and phone
+ * a small lift. Never color alone. TV always shows it; desktop and phone
  * show it for keyboard focus only. */
 [data-f] { outline: 0 solid transparent; position: relative;
   transition: transform var(--motion-focus) var(--ease), box-shadow var(--motion-focus) var(--ease),
-    outline-color var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
+    outline-color var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease), color var(--motion-focus) var(--ease); }
 [data-f]:focus-visible, [data-form="tv"] [data-f]:focus {
   outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
   box-shadow: var(--focus-shadow); z-index: 3; }
 [data-f]:focus:not(:focus-visible) { outline: none; }
 [data-form="tv"] [data-f]:focus { outline: var(--focus-ring) solid var(--accent); }
 
-/* Buttons */
-.btn { display: inline-flex; align-items: center; gap: 14px; height: 72px; padding: 0 30px; border-radius: 36px;
-  font: 600 var(--type-body) / 1 var(--font-text); white-space: nowrap; color: var(--text);
-  background: color-mix(in srgb, var(--text) 12%, transparent);
-  box-shadow: inset 0 0 0 2px var(--control); transform-origin: left center; }
+/* Buttons. The one primary action is a white pill; the rest are glass pills
+ * with a control edge; `.round` is an icon in a circle with its label under it. */
+.btn { display: inline-flex; align-items: center; gap: 14px; height: 72px; padding: 0 32px; border-radius: var(--radius-pill);
+  font: var(--weight-label) var(--type-body) / 1 var(--font-text); letter-spacing: var(--tracking-label); white-space: nowrap; color: var(--text);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .065));
+  box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); transform-origin: center; }
 .btn svg { width: 30px; height: 30px; }
-.btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: none; }
-.btn.primary svg.fill { fill: currentColor; }
-.btn small { font: 500 var(--type-callout) var(--font-text); opacity: .8; margin-left: 4px; }
-.btn.big { height: 84px; padding: 0 36px; border-radius: 42px; font-size: var(--type-headline); }
+.btn.primary { background: var(--primary); color: var(--on-primary); box-shadow: 0 3px 16px rgba(0, 0, 0, .28); }
+.btn.primary svg.fill, .btn svg.fill { fill: currentColor; }
+.btn small { font: 500 var(--type-callout) var(--font-text); opacity: .7; margin-left: 4px; }
+.btn.big { height: 84px; padding: 0 40px; font-size: var(--type-headline); }
 .btn:focus-visible, [data-form="tv"] .btn:focus { transform: scale(var(--focus-scale-card)); }
 .btn[aria-disabled="true"] { opacity: .55; }
 @media (hover: hover) {
-  [data-form="desktop"] .btn:hover { background: color-mix(in srgb, var(--text) 20%, transparent); }
-  [data-form="desktop"] .btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); }
+  [data-form="desktop"] .btn:hover { background: linear-gradient(145deg, rgba(255, 255, 255, .19), rgba(255, 255, 255, .1));
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .44), inset 0 1px 0 rgba(255, 255, 255, .09); }
+  [data-form="desktop"] .btn.primary:hover { background: color-mix(in srgb, var(--primary) 88%, var(--bg)); box-shadow: 0 3px 16px rgba(0, 0, 0, .28); }
 }
+/* An icon in a circle, its word under it (Add, Details, Trailer). */
+.rbtn { display: inline-flex; flex-direction: column; align-items: center; gap: 10px; font: var(--weight-label) var(--type-caption) / 1 var(--font-text);
+  color: var(--muted); border-radius: 18px; padding: 0 4px 2px; }
+.rbtn .ring { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; color: var(--text);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .065));
+  box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
+  transition: transform var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
+.rbtn .ring svg { width: 30px; height: 30px; }
+.rbtn:focus-visible, [data-form="tv"] .rbtn:focus { outline: none; box-shadow: none; color: var(--text); }
+.rbtn:focus-visible .ring, [data-form="tv"] .rbtn:focus .ring { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+  box-shadow: var(--focus-shadow); transform: scale(var(--focus-scale-card)); }
+@media (hover: hover) { [data-form="desktop"] .rbtn:hover { color: var(--text); } [data-form="desktop"] .rbtn:hover .ring { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .44); } }
 
 /* Status: a dot plus a word, never color alone. */
 .st { display: inline-flex; align-items: center; gap: 12px; }
@@ -62,11 +99,17 @@ svg { flex: none; }
 .warn .dot, .dot.warn { background: var(--warn); box-shadow: none; }
 .bad .dot, .dot.bad { background: var(--bad); box-shadow: none; }
 
-.kicker { font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+/* An eyebrow: accent, spaced capitals. */
+.kicker { font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.eyebrow { font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+
+/* A star and a rating: gold star, white number. */
+.rate { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text); }
+.rate svg { width: .9em; height: .9em; fill: var(--star); color: var(--star); }
 
 /* Label and value pairs (Versions pick, import summary). */
 .facts-grid { display: grid; grid-template-columns: 180px 1fr; row-gap: 4px; width: 100%; }
-.facts-grid dt { font: 600 var(--type-caption) / 40px var(--font-text); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.facts-grid dt { font: 700 var(--type-caption) / 40px var(--font-text); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
 .facts-grid dd { font: 500 var(--type-callout) / 40px var(--font-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-form="phone"] .facts-grid { grid-template-columns: 110px 1fr; }
 [data-form="phone"] .facts-grid dt, [data-form="phone"] .facts-grid dd { line-height: 28px; }
@@ -80,47 +123,52 @@ svg { flex: none; }
 .fade.in { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
 
-/* Left navigation rail (TV and desktop) */
-.rail { position: absolute; left: 0; top: 0; bottom: 0; width: 300px; z-index: 10; display: flex; flex-direction: column;
-  padding: var(--safe-top) 0 var(--safe-bottom) 56px; }
-.brand { font: 600 40px / 1 var(--font-display); letter-spacing: -.01em; padding-left: 24px; }
-.rail ul { margin-top: 64px; display: grid; gap: 6px; }
-.nav { display: flex; align-items: center; gap: 16px; height: 60px; padding: 0 24px 0 24px; border-radius: 30px; width: fit-content;
-  font: 500 var(--type-body) / 1 var(--font-text); color: var(--muted); transform-origin: left center; }
-.nav svg { width: 30px; height: 30px; }
-.nav.on { color: var(--text); font-weight: 650; }
-.nav.on::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 4px; border-radius: 2px; background: var(--text); }
-.nav:focus-visible, [data-form="tv"] .nav:focus { background: var(--raised); color: var(--text); transform: scale(var(--focus-scale-card)); }
-.nav:focus-visible::before, [data-form="tv"] .nav:focus::before { display: none; }
+/* Navigation (TV and desktop): a floating glass pill centered at the top. */
+.topnav { position: absolute; left: 50%; top: var(--nav-top); z-index: 10; transform: translateX(-50%); display: flex; align-items: center; gap: 6px;
+  height: var(--nav-h); padding: 0 10px 0 28px; border-radius: var(--radius-pill); }
+.brand { display: inline-flex; align-items: center; gap: 12px; font: var(--weight-display) 32px / 1 var(--font-display); letter-spacing: var(--tracking-display); margin-right: 18px; }
+.brand::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+.topnav .sep { width: 2px; height: 32px; margin: 0 10px; border-radius: 1px; background: var(--line-strong); }
+.nav { display: inline-flex; align-items: center; gap: 12px; height: 54px; padding: 0 24px; border-radius: var(--radius-pill);
+  font: 600 var(--type-callout) / 1 var(--font-text); color: var(--dim); transform-origin: center; white-space: nowrap; }
+.nav svg { width: 26px; height: 26px; }
+.nav.on { color: var(--text); background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
+.nav:focus-visible, [data-form="tv"] .nav:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .nav:hover { color: var(--text); } }
 
-/* Phone bottom navigation */
-.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; height: calc(64px + env(safe-area-inset-bottom));
-  padding: 8px 6px env(safe-area-inset-bottom); display: flex; justify-content: space-around;
-  background: var(--bg); box-shadow: 0 -1px 0 var(--line); }
-.tabs a { display: grid; justify-items: center; align-content: center; gap: 4px; min-width: 64px; font: 500 11px / 1 var(--font-text); color: var(--muted); }
-.tabs a.on { color: var(--text); font-weight: 650; }
-.tabs svg { width: 24px; height: 24px; }
+/* Phone: a floating glass bar at the bottom. */
+.tabs { position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 20; height: var(--nav-h);
+  padding: 6px; display: flex; justify-content: space-around; border-radius: 24px; }
+.tabs a { display: grid; justify-items: center; align-content: center; gap: 4px; flex: 1; min-width: 0; border-radius: 18px;
+  font: 600 10.5px / 1 var(--font-text); color: var(--dim); }
+.tabs a.on { color: var(--text); background: rgba(255, 255, 255, .12); }
+.tabs svg { width: 22px; height: 22px; }
+
+/* A round glass back button on deep pages. */
+.back { position: absolute; left: var(--safe-side); top: var(--nav-top); z-index: 10; display: grid; place-items: center; width: var(--nav-h); height: var(--nav-h);
+  border-radius: 50%; color: var(--text); }
+.back svg { width: 30px; height: 30px; }
 
 /* Connection banner */
-.banner { position: absolute; left: 50%; top: var(--safe-top); transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 14px;
-  padding: 16px 26px; border-radius: 16px; background: var(--raised); box-shadow: inset 0 0 0 2px var(--line);
+.banner { position: absolute; left: 50%; top: calc(var(--nav-top) + var(--nav-h) + 16px); transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 14px;
+  padding: 16px 26px; border-radius: 16px; background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
   font: 500 var(--type-callout) / 1.3 var(--font-text); }
 [data-form="phone"] .banner { top: 12px; width: calc(100% - 32px); padding: 12px 14px; }
 
 /* Explained empty and failed states */
 .problem { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; max-width: 1100px; }
-.problem h2 { font: 600 var(--type-title2) / 1.1 var(--font-display); }
+.problem h2 { font-size: var(--type-title2); line-height: 1.1; }
 .problem p { color: var(--muted); font-size: var(--type-callout); line-height: 1.4; }
 
-/* Stub screens */
-.stub { position: absolute; inset: 0; padding: var(--safe-top) var(--safe-side) var(--safe-bottom) 340px; overflow-y: auto; }
-.stub h1 { font: 600 var(--type-title1) / 1.05 var(--font-display); margin: 88px 0 16px; }
+/* Stub and settings-like pages: content starts below the navigation pill. */
+.stub { position: absolute; inset: 0; padding: var(--content-top) var(--safe-side) var(--safe-bottom); overflow-y: auto; }
+.stub h1 { font-size: var(--type-title1); line-height: 1.05; margin: 0 0 16px; }
 .stub > p { color: var(--muted); font-size: var(--type-headline); max-width: 1100px; margin-bottom: 40px; line-height: 1.4; }
 .stub section { margin-bottom: 48px; }
 .stub h2 { margin-bottom: 18px; }
 .stub .acts { display: flex; flex-wrap: wrap; gap: 20px; }
-[data-form="phone"] .stub { position: static; padding: 16px 16px 96px; overflow: visible; }
+[data-form="phone"] .stub { position: static; padding: 16px 16px 112px; overflow: visible; }
 [data-form="phone"] .stub h1 { margin: 24px 0 8px; }
 [data-form="phone"] .stub > p { font-size: var(--type-body); margin-bottom: 24px; }
 [data-form="phone"] .stub .acts { gap: 10px; }
@@ -129,10 +177,15 @@ svg { flex: none; }
 [data-form="phone"] body { overflow: auto; }
 [data-form="phone"] .app { position: relative; min-height: 100dvh; overflow: visible; }
 [data-form="phone"] .screen { position: relative; inset: auto; }
-[data-form="phone"] .btn { height: 46px; padding: 0 20px; gap: 8px; border-radius: 23px; font-size: var(--type-body); }
+[data-form="phone"] .btn { height: 46px; padding: 0 20px; gap: 8px; font-size: var(--type-body); }
 [data-form="phone"] .btn svg { width: 18px; height: 18px; }
-[data-form="phone"] .btn.big { height: 52px; border-radius: 26px; padding: 0 24px; }
+[data-form="phone"] .btn.big { height: 52px; padding: 0 24px; }
 [data-form="phone"] .btn small { font-size: var(--type-callout); }
+[data-form="phone"] .rbtn { gap: 6px; font-size: 12px; }
+[data-form="phone"] .rbtn .ring { width: 44px; height: 44px; }
+[data-form="phone"] .rbtn .ring svg { width: 20px; height: 20px; }
 [data-form="phone"] .dot { width: 9px; height: 9px; }
 [data-form="phone"] .st { gap: 8px; }
 [data-form="phone"] .problem { gap: 10px; }
+[data-form="phone"] .back { left: 16px; top: calc(12px + env(safe-area-inset-top)); width: 40px; height: 40px; }
+[data-form="phone"] .back svg { width: 20px; height: 20px; }

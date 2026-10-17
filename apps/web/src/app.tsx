@@ -26,13 +26,14 @@ import { Stub } from "./screens/stub";
 import Title from "./screens/title";
 import Versions from "./screens/versions";
 
-const destinations: { path: string; label: string; icon: Component<{ "aria-hidden"?: boolean }> }[] = [
-  { path: "/search", label: "Search", icon: SearchIcon },
+type Destination = { path: string; label: string; icon: Component<{ "aria-hidden"?: boolean }>; tool?: boolean };
+const destinations: Destination[] = [
   { path: "/", label: "Home", icon: House },
   { path: "/discover", label: "Discover", icon: Compass },
   { path: "/library", label: "Library", icon: LibraryBig },
   { path: "/calendar", label: "Calendar", icon: CalendarDays },
-  { path: "/settings", label: "Settings", icon: Settings },
+  { path: "/search", label: "Search", icon: SearchIcon, tool: true },
+  { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
 const settingsPages = ["/settings", "/addons", "/import", "/pair", "/home-rows"];
@@ -59,23 +60,24 @@ export const markBack = () => {
   wentBack = true;
 };
 
-function Rail() {
+/** TV and desktop: a floating glass pill at the top. Sections are words;
+ * Search and Settings, after a divider, carry their icon. */
+function TopNav() {
   const location = useLocation();
+  const link = (d: Destination) => (
+    <A href={d.path} end class="nav" classList={{ on: section(location.pathname) === d.path }} data-f={`nav:${d.path}`}>
+      <Show when={d.tool}>
+        <d.icon aria-hidden />
+      </Show>
+      <span>{d.label}</span>
+    </A>
+  );
   return (
-    <nav class="rail" aria-label="Main" data-fgroup="rail">
-      <div class="brand">Marquee</div>
-      <ul>
-        <For each={destinations}>
-          {(d) => (
-            <li>
-              <A href={d.path} end class="nav" classList={{ on: section(location.pathname) === d.path }} data-f={`nav:${d.path}`}>
-                <d.icon aria-hidden />
-                <span>{d.label}</span>
-              </A>
-            </li>
-          )}
-        </For>
-      </ul>
+    <nav class="topnav glass" aria-label="Main" data-fgroup="rail">
+      <span class="brand">Marquee</span>
+      <For each={destinations.filter((d) => !d.tool)}>{link}</For>
+      <span class="sep" aria-hidden="true" />
+      <For each={destinations.filter((d) => d.tool)}>{link}</For>
     </nav>
   );
 }
@@ -83,7 +85,7 @@ function Rail() {
 function Tabs() {
   const location = useLocation();
   return (
-    <nav class="tabs" aria-label="Main">
+    <nav class="tabs glass strong" aria-label="Main">
       <For each={destinations}>
         {(d) => (
           <A href={d.path} end classList={{ on: section(location.pathname) === d.path }}>
@@ -131,7 +133,7 @@ function Shell(props: RouteSectionProps) {
   return (
     <div class="app">
       <Show when={nav() && form() !== "phone"}>
-        <Rail />
+        <TopNav />
       </Show>
       <div class="screen">{props.children}</div>
       <Show when={nav() && form() === "phone"}>

@@ -11,7 +11,7 @@ import { liveView, op, prefsView, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { Prefs } from "../core/generated/Prefs";
 import type { QualityPref } from "../core/generated/QualityPref";
-import { chooseForm, chooseTheme, type Form, form, type Theme, theme } from "../form";
+import { chooseForm, type Form, form } from "../form";
 import { languageName } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
@@ -202,17 +202,6 @@ export default function SettingsScreen() {
             ]}
             isOn={(v) => form() === v}
             onPick={(v) => chooseForm(v)}
-          />
-          <Choice<Theme | null>
-            label="Theme"
-            group="dev-theme"
-            items={[
-              { value: null, label: "Follow the system" },
-              { value: "dark", label: "Dark" },
-              { value: "light", label: "Light" },
-            ]}
-            isOn={(v) => theme() === v}
-            onPick={(v) => chooseTheme(v)}
           />
         </div>
       </section>

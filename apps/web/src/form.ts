@@ -85,43 +85,7 @@ export function fit() {
   root.style.setProperty("--oy", `${(h - ch * k) / 2}px`);
 }
 
-export type Theme = "dark" | "light";
-const THEME_KEY = "mq.theme";
-
-function readTheme(): Theme | null {
-  const q = new URLSearchParams(location.search).get("theme");
-  if (q === "dark" || q === "light") return q;
-  try {
-    const v = localStorage.getItem(THEME_KEY);
-    return v === "dark" || v === "light" ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-const [theme, setTheme] = createSignal<Theme | null>(readTheme());
-export { theme };
-
-/** `null` follows the system (TV stays dark unless a theme is chosen). */
-export function chooseTheme(next: Theme | null) {
-  try {
-    if (next) localStorage.setItem(THEME_KEY, next);
-    else localStorage.removeItem(THEME_KEY);
-  } catch {
-    // Not persisted; still applies now.
-  }
-  setTheme(next);
-  applyTheme();
-}
-
-function applyTheme() {
-  const t = theme();
-  if (t) document.documentElement.dataset.theme = t;
-  else delete document.documentElement.dataset.theme;
-}
-
 export function startFitting() {
-  applyTheme();
   fit();
   window.addEventListener("resize", fit, { passive: true });
 }

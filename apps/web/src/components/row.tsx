@@ -4,9 +4,10 @@
 
 import { A } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
+import Star from "lucide-solid/icons/star";
 import Wrench from "lucide-solid/icons/wrench";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
-import { Poster, useTrimmedLogo } from "./art";
+import { Poster } from "./art";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { form } from "../form";
@@ -29,8 +30,10 @@ interface Metrics {
   caption: number;
 }
 
-const TV: Metrics = { poster: [240, 360], landscape: [384, 216], square: [300, 300], gap: 32, pad: 34, inset: 34, peek: 140, caption: 52 };
-const PHONE: Metrics = { poster: [112, 168], landscape: [240, 135], square: [140, 140], gap: 12, pad: 8, inset: 16, peek: 40, caption: 40 };
+// `caption` is the room under every tile for its two lines (name, then the
+// year or the core's caption).
+const TV: Metrics = { poster: [240, 360], landscape: [384, 216], square: [300, 300], gap: 32, pad: 34, inset: 34, peek: 140, caption: 80 };
+const PHONE: Metrics = { poster: [112, 168], landscape: [240, 135], square: [140, 140], gap: 12, pad: 8, inset: 16, peek: 40, caption: 44 };
 export const metrics = () => (form() === "phone" ? PHONE : TV);
 
 const sizeOf = (m: Metrics, shape: string | undefined) =>
@@ -55,9 +58,10 @@ export function TileCard(props: {
   /** Continue Watching: a 16:9 still with the logo, Apple TV Up Next style. */
   wide?: boolean;
 }) {
+  // Two lines under the art: the name, then the core's caption (Continue
+  // Watching, Library) or the year.
   const cap = () => (props.captions === false ? null : caption(props.tile));
-  const [logoBroken, setLogoBroken] = createSignal(false);
-  const tileLogo = useTrimmedLogo(() => (props.wide ? props.tile.logo : null));
+  const sub = () => cap() ?? props.tile.releaseInfo;
   return (
     <A
       href={titlePath(props.tile.kind, props.tile.id)}
@@ -83,12 +87,12 @@ export function TileCard(props: {
             eager={props.eager}
             nameCard={false}
           />
-          <div class="art-scrim" />
-          <div class="art-brand">
-            <Show when={props.tile.logo && !logoBroken() && tileLogo() !== null} fallback={<span class="art-name">{props.tile.name}</span>}>
-              <img class="art-logo" src={tileLogo() ?? undefined} alt="" decoding="async" onError={() => setLogoBroken(true)} />
-            </Show>
-          </div>
+        </Show>
+        <Show when={!props.wide && props.tile.rating}>
+          <span class="chip-rate num" aria-hidden="true">
+            <Star class="fill" />
+            {props.tile.rating}
+          </span>
         </Show>
         {/* A track and a fill on a dark strip, so progress shows on white art. */}
         <Show when={props.tile.progress !== null}>
@@ -99,8 +103,13 @@ export function TileCard(props: {
           </div>
         </Show>
       </div>
-      <Show when={cap()}>
-        <p class="cap">{cap()}</p>
+      <Show when={props.captions !== false}>
+        <p class="cap">
+          <b>{props.tile.name}</b>
+          <Show when={sub()}>
+            <span class="num">{sub()}</span>
+          </Show>
+        </p>
       </Show>
     </A>
   );
@@ -116,8 +125,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
   const wide = () => props.row.rowId === CONTINUE_ROW;
   const size = () => (wide() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
   const stride = () => size()[0] + m().gap;
-  const withCaption = () => props.row.tiles.some((t) => t.progress !== null);
-  const bodyHeight = () => size()[1] + m().pad * 2 + (withCaption() ? m().caption : 0);
+  const bodyHeight = () => size()[1] + m().pad * 2 + m().caption;
   const [scroll, setScroll] = createSignal(offsets.get(id()) ?? 0);
   const [viewport, setViewport] = createSignal(1920);
   const [focused, setFocused] = createSignal(-1);

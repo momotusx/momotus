@@ -3,6 +3,7 @@ import CircleAlert from "lucide-solid/icons/circle-alert";
 import Info from "lucide-solid/icons/info";
 import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
+import Star from "lucide-solid/icons/star";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, Show } from "solid-js";
@@ -39,13 +40,14 @@ export default function Home() {
   return (
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
-        <Backdrop src={hero()?.tile.background ?? null} class="home-bd" />
-        <Show when={form() === "phone"}>
-          <header class="ph-top">
-            <span class="brand">Marquee</span>
-          </header>
-        </Show>
         <section class="hero" data-reveal-top aria-label="Featured">
+          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" />
+          <Show when={form() === "phone"}>
+            <header class="ph-top">
+              <span class="brand">Marquee</span>
+            </header>
+          </Show>
+          <div class="hero-body">
           <Show
             when={hero()}
             fallback={
@@ -59,15 +61,31 @@ export default function Home() {
           >
             {(h) => (
               <>
+                <p class="reason eyebrow">{h().reason}</p>
                 <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" />
-                <p class="reason">{h().reason}</p>
                 <p class="meta">
-                  {kindLabel(h().tile.kind)}
-                  <Show when={h().tile.releaseInfo}>
-                    <b aria-hidden="true"> · </b>
+                  <Show when={h().tile.rating}>
+                    <span class="rate num">
+                      <Star aria-hidden />
+                      {h().tile.rating}
+                    </span>
+                    <b aria-hidden="true">·</b>
+                  </Show>
+                  <Show when={h().tile.releaseInfo} fallback={kindLabel(h().tile.kind)}>
                     <span class="num">{h().tile.releaseInfo}</span>
                   </Show>
+                  <Show when={h().runtime}>
+                    <b aria-hidden="true">·</b>
+                    <span class="num">{h().runtime}</span>
+                  </Show>
+                  <Show when={h().genres.length}>
+                    <b aria-hidden="true">·</b>
+                    <span>{h().genres.join(", ")}</span>
+                  </Show>
                 </p>
+                <Show when={h().description}>
+                  <p class="hero-syn">{h().description}</p>
+                </Show>
                 <div class="acts">
                   <Show when={playHref(h().tile)}>
                     {(href) => (
@@ -78,18 +96,21 @@ export default function Home() {
                     )}
                   </Show>
                   <A
-                    class="btn"
+                    class="rbtn"
                     href={titlePath(h().tile.kind, h().tile.id)}
                     data-f="hero:details"
                     data-autofocus={hasContinue() || playHref(h().tile) ? undefined : ""}
                   >
-                    <Info aria-hidden />
-                    Details
+                    <span class="ring">
+                      <Info aria-hidden />
+                    </span>
+                    <span class="lbl">Details</span>
                   </A>
                 </div>
               </>
             )}
           </Show>
+          </div>
         </section>
 
         <Show when={home.status.state === "failed" && home.status}>
