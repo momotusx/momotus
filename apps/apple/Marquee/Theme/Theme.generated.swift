@@ -4,20 +4,28 @@ import SwiftUI
 enum Theme {
     /// Colors resolve per appearance: light and dark from the token file.
     enum Palette {
-        static let bg = Color(light: RGBA(0.9608, 0.9373, 0.9020, 1), dark: RGBA(0.0588, 0.0510, 0.0431, 1))
-        static let surface = Color(light: RGBA(0.9216, 0.8902, 0.8431, 1), dark: RGBA(0.1059, 0.0941, 0.0824, 1))
-        static let raised = Color(light: RGBA(0.8784, 0.8353, 0.7765, 1), dark: RGBA(0.1647, 0.1451, 0.1216, 1))
-        static let line = Color(light: RGBA(0.8118, 0.7608, 0.6902, 1), dark: RGBA(0.2392, 0.2118, 0.1804, 1))
-        static let control = Color(light: RGBA(0.5490, 0.4902, 0.4157, 1), dark: RGBA(0.4627, 0.4157, 0.3569, 1))
-        static let text = Color(light: RGBA(0.1098, 0.0863, 0.0667, 1), dark: RGBA(0.9647, 0.9373, 0.9020, 1))
-        static let muted = Color(light: RGBA(0.3725, 0.3255, 0.2706, 1), dark: RGBA(0.7216, 0.6706, 0.6078, 1))
-        static let accent = Color(light: RGBA(0.6118, 0.3451, 0.0000, 1), dark: RGBA(1.0000, 0.7098, 0.2784, 1))
-        static let onAccent = Color(light: RGBA(1.0000, 0.9725, 0.9333, 1), dark: RGBA(0.1020, 0.0706, 0.0235, 1))
-        static let halo = Color(light: RGBA(0.1098, 0.0863, 0.0667, 0.82), dark: RGBA(0.0471, 0.0353, 0.0235, 0.62))
-        static let ok = Color(light: RGBA(0.1804, 0.4902, 0.2706, 1), dark: RGBA(0.4824, 0.8471, 0.5608, 1))
-        static let warn = Color(light: RGBA(0.6118, 0.3451, 0.0000, 1), dark: RGBA(1.0000, 0.7098, 0.2784, 1))
-        static let bad = Color(light: RGBA(0.7020, 0.1490, 0.1176, 1), dark: RGBA(1.0000, 0.4784, 0.4196, 1))
-        static let scrim = Color(light: RGBA(0.9608, 0.9373, 0.9020, 0.78), dark: RGBA(0.0588, 0.0510, 0.0431, 0.72))
+        static let bg = Color(light: RGBA(0.0235, 0.0353, 0.0549, 1), dark: RGBA(0.0235, 0.0353, 0.0549, 1))
+        static let surface = Color(light: RGBA(0.0471, 0.0667, 0.0941, 1), dark: RGBA(0.0471, 0.0667, 0.0941, 1))
+        static let raised = Color(light: RGBA(0.0784, 0.1059, 0.1412, 1), dark: RGBA(0.0784, 0.1059, 0.1412, 1))
+        static let glass = Color(light: RGBA(0.0510, 0.0706, 0.0980, 0.58), dark: RGBA(0.0510, 0.0706, 0.0980, 0.58))
+        static let glassStrong = Color(light: RGBA(0.0353, 0.0510, 0.0745, 0.84), dark: RGBA(0.0353, 0.0510, 0.0745, 0.84))
+        static let edge = Color(light: RGBA(0.8431, 0.9098, 1.0000, 0.13), dark: RGBA(0.8431, 0.9098, 1.0000, 0.13))
+        static let line = Color(light: RGBA(1.0000, 1.0000, 1.0000, 0.08), dark: RGBA(1.0000, 1.0000, 1.0000, 0.08))
+        static let lineStrong = Color(light: RGBA(1.0000, 1.0000, 1.0000, 0.16), dark: RGBA(1.0000, 1.0000, 1.0000, 0.16))
+        static let control = Color(light: RGBA(0.3843, 0.4157, 0.4510, 1), dark: RGBA(0.3843, 0.4157, 0.4510, 1))
+        static let text = Color(light: RGBA(1.0000, 1.0000, 1.0000, 1), dark: RGBA(1.0000, 1.0000, 1.0000, 1))
+        static let muted = Color(light: RGBA(0.8627, 0.8667, 0.8667, 1), dark: RGBA(0.8627, 0.8667, 0.8667, 1))
+        static let dim = Color(light: RGBA(0.6667, 0.6706, 0.6784, 1), dark: RGBA(0.6667, 0.6706, 0.6784, 1))
+        static let accent = Color(light: RGBA(0.8980, 0.2157, 0.1647, 1), dark: RGBA(0.8980, 0.2157, 0.1647, 1))
+        static let onAccent = Color(light: RGBA(1.0000, 1.0000, 1.0000, 1), dark: RGBA(1.0000, 1.0000, 1.0000, 1))
+        static let primary = Color(light: RGBA(1.0000, 1.0000, 1.0000, 1), dark: RGBA(1.0000, 1.0000, 1.0000, 1))
+        static let onPrimary = Color(light: RGBA(0.0392, 0.0392, 0.0471, 1), dark: RGBA(0.0392, 0.0392, 0.0471, 1))
+        static let star = Color(light: RGBA(0.9608, 0.7725, 0.0941, 1), dark: RGBA(0.9608, 0.7725, 0.0941, 1))
+        static let halo = Color(light: RGBA(0.0000, 0.0000, 0.0000, 0.62), dark: RGBA(0.0000, 0.0000, 0.0000, 0.62))
+        static let ok = Color(light: RGBA(0.4824, 0.8471, 0.5608, 1), dark: RGBA(0.4824, 0.8471, 0.5608, 1))
+        static let warn = Color(light: RGBA(0.9608, 0.7725, 0.0941, 1), dark: RGBA(0.9608, 0.7725, 0.0941, 1))
+        static let bad = Color(light: RGBA(1.0000, 0.4196, 0.3686, 1), dark: RGBA(1.0000, 0.4196, 0.3686, 1))
+        static let scrim = Color(light: RGBA(0.0235, 0.0353, 0.0549, 0.72), dark: RGBA(0.0235, 0.0353, 0.0549, 0.72))
     }
 
     struct TypeScale: Sendable {
@@ -62,8 +70,10 @@ enum Theme {
 
     enum Radius {
         static let s: CGFloat = 8
-        static let m: CGFloat = 14
-        static let l: CGFloat = 22
+        static let m: CGFloat = 12
+        static let card: CGFloat = 14
+        static let l: CGFloat = 18
+        static let hero: CGFloat = 22
         static let pill: CGFloat = 999
     }
 
@@ -77,8 +87,8 @@ enum Theme {
     }
 
     enum Motion {
-        static let focus = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.18)
-        static let panel = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.32)
+        static let focus = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.18)
+        static let panel = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.26)
     }
 
     enum Poster {
@@ -87,7 +97,7 @@ enum Theme {
     }
 
     enum Family {
-        static let display = "Fraunces"
+        static let display = "Inter"
         static let text = "Inter"
         static let mono = "IBM Plex Mono"
     }

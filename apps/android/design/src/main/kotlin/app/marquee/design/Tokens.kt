@@ -15,12 +15,20 @@ data class Palette(
     val bg: Color,
     val surface: Color,
     val raised: Color,
+    val glass: Color,
+    val glassStrong: Color,
+    val edge: Color,
     val line: Color,
+    val lineStrong: Color,
     val control: Color,
     val text: Color,
     val muted: Color,
+    val dim: Color,
     val accent: Color,
     val onAccent: Color,
+    val primary: Color,
+    val onPrimary: Color,
+    val star: Color,
     val halo: Color,
     val ok: Color,
     val warn: Color,
@@ -57,7 +65,9 @@ data class Spacing(
 data class Radii(
     val s: Dp,
     val m: Dp,
+    val card: Dp,
     val l: Dp,
+    val hero: Dp,
     val pill: Dp,
 )
 
@@ -91,37 +101,53 @@ data class TileMetrics(
 
 object Tokens {
     val dark = Palette(
-            bg = Color(0xFF0F0D0B),
-            surface = Color(0xFF1B1815),
-            raised = Color(0xFF2A251F),
-            line = Color(0xFF3D362E),
-            control = Color(0xFF766A5B),
-            text = Color(0xFFF6EFE6),
-            muted = Color(0xFFB8AB9B),
-            accent = Color(0xFFFFB547),
-            onAccent = Color(0xFF1A1206),
-            halo = Color(0x9E0C0906),
+            bg = Color(0xFF06090E),
+            surface = Color(0xFF0C1118),
+            raised = Color(0xFF141B24),
+            glass = Color(0x940D1219),
+            glassStrong = Color(0xD6090D13),
+            edge = Color(0x21D7E8FF),
+            line = Color(0x14FFFFFF),
+            lineStrong = Color(0x29FFFFFF),
+            control = Color(0xFF626A73),
+            text = Color(0xFFFFFFFF),
+            muted = Color(0xFFDCDDDD),
+            dim = Color(0xFFAAABAD),
+            accent = Color(0xFFE5372A),
+            onAccent = Color(0xFFFFFFFF),
+            primary = Color(0xFFFFFFFF),
+            onPrimary = Color(0xFF0A0A0C),
+            star = Color(0xFFF5C518),
+            halo = Color(0x9E000000),
             ok = Color(0xFF7BD88F),
-            warn = Color(0xFFFFB547),
-            bad = Color(0xFFFF7A6B),
-            scrim = Color(0xB80F0D0B),
+            warn = Color(0xFFF5C518),
+            bad = Color(0xFFFF6B5E),
+            scrim = Color(0xB806090E),
         )
 
     val light = Palette(
-            bg = Color(0xFFF5EFE6),
-            surface = Color(0xFFEBE3D7),
-            raised = Color(0xFFE0D5C6),
-            line = Color(0xFFCFC2B0),
-            control = Color(0xFF8C7D6A),
-            text = Color(0xFF1C1611),
-            muted = Color(0xFF5F5345),
-            accent = Color(0xFF9C5800),
-            onAccent = Color(0xFFFFF8EE),
-            halo = Color(0xD11C1611),
-            ok = Color(0xFF2E7D45),
-            warn = Color(0xFF9C5800),
-            bad = Color(0xFFB3261E),
-            scrim = Color(0xC7F5EFE6),
+            bg = Color(0xFF06090E),
+            surface = Color(0xFF0C1118),
+            raised = Color(0xFF141B24),
+            glass = Color(0x940D1219),
+            glassStrong = Color(0xD6090D13),
+            edge = Color(0x21D7E8FF),
+            line = Color(0x14FFFFFF),
+            lineStrong = Color(0x29FFFFFF),
+            control = Color(0xFF626A73),
+            text = Color(0xFFFFFFFF),
+            muted = Color(0xFFDCDDDD),
+            dim = Color(0xFFAAABAD),
+            accent = Color(0xFFE5372A),
+            onAccent = Color(0xFFFFFFFF),
+            primary = Color(0xFFFFFFFF),
+            onPrimary = Color(0xFF0A0A0C),
+            star = Color(0xFFF5C518),
+            halo = Color(0x9E000000),
+            ok = Color(0xFF7BD88F),
+            warn = Color(0xFFF5C518),
+            bad = Color(0xFFFF6B5E),
+            scrim = Color(0xB806090E),
         )
 
     val tvType = TypeScale(
@@ -157,8 +183,10 @@ object Tokens {
 
     val radius = Radii(
             s = 8.dp,
-            m = 14.dp,
-            l = 22.dp,
+            m = 12.dp,
+            card = 14.dp,
+            l = 18.dp,
+            hero = 22.dp,
             pill = 999.dp,
         )
 
@@ -203,11 +231,11 @@ object Tokens {
     const val FOCUS_SCALE_TILE = 1.025f
 
     const val FOCUS_MS = 180
-    const val PANEL_MS = 320
-    val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+    const val PANEL_MS = 260
+    val ease = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
     object Fonts {
-        val display = listOf("Fraunces", "Georgia", "serif")
+        val display = listOf("Inter", "system-ui", "sans-serif")
         val text = listOf("Inter", "system-ui", "sans-serif")
         val mono = listOf("IBM Plex Mono", "ui-monospace", "monospace")
     }

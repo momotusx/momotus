@@ -1,32 +1,40 @@
-# Design decision (provisional)
+# Design decision
 
-Status: provisional pick made on 2026-10-17 so implementation can proceed. The owner may override by naming systems or pieces from `design/exploration/index.html`; the UI is token driven, so a different system or accent is a change to `design/tokens.json`, not a rewrite.
+Status: v2, the owner's pick on 2026-10-17: "go like flystream.net; 1 (Ember) is good". The study of the reference is `design/reference/flystream.md`; the six directions shown are `design/exploration/v2/index.html` (Ember is direction 1). v1 (warm black, Fraunces, amber) is retired; its history is in git.
 
-## The blend
+## The language
 
-| Piece | Taken from | Why |
-|---|---|---|
-| Palette, typography, hero | 01 Lobby | Calm, cinematic, premium at 3 m (text 17.0:1, accent 11.0:1 on dark). Fraunces display titles over Inter for every decision. Warm black reads as a cinema, not as another navy streaming app. |
-| Accent `#FFB547` ("marquee bulb") | 01 Lobby | The name is a theatre marquee; the accent is its bulb. Used only for focus and the one primary action per screen. |
-| Poster rows and the focus ring with a dark halo | 07 Billboard | Art sells titles (Netflix artwork research); the ring plus halo holds 3:1 on any artwork (WCAG 2.4.13). |
-| Versions panel: "best pick" card left, grouped table right, hidden-with-reasons row | 10 Transit | The clearest form of the stream picker spec (research/14 5.3): three plain reasons, every intent group visible, full release name on the focused row. |
-| Wayfinding | 10 Transit, toned down | Breadcrumbs on deep pages only; no "You are here" label on Home. |
-| Episode list | 03 Folio | Reads like a table of contents: number, title, runtime, progress. |
-| Onboarding setup check | 04 Readout | Network, Display, Audio, Sources: each a dot plus a word, with a fix action. |
-| Phone and desktop light theme | 05 Daylight principles in Lobby's light tokens | Light theme for bright rooms and phones; TV defaults to dark. |
+Minimal, dark, glass. One cool near-black page, translucent surfaces with a cool hairline edge, white for the one primary action, a single red-orange accent used sparingly, heavy tight sans titles, pills everywhere.
 
-## Brand risk to check
+| Piece | Rule |
+|---|---|
+| Page | `bg` #06090E, a cool near-black. Dark only: there is no light theme; `color.light` mirrors `color.dark` so the platform generators keep working while the apps drop their light code |
+| Surfaces | Glass: `glass` rgba(13,18,25,.58) or `glassStrong` rgba(9,13,19,.84), backdrop blur 18 px with saturate 1.08, a 1 px `edge` rgba(215,232,255,.13), a top highlight `inset 0 1px 0 rgba(255,255,255,.055)`, shadow `0 18px 48px rgba(0,0,0,.24)`. Solid fallbacks where blur is unavailable: `surface` #0C1118, `raised` #141B24 |
+| Text | White by level: `text` #FFFFFF, `muted` #DCDDDD, `dim` #AAABAD. Never grey on grey |
+| Primary action | One per screen (Play, Resume, Play again, Install): a white pill (`primary` #FFFFFF, `onPrimary` #0A0A0C), weight 650. Secondary actions are round or pill glass buttons with a `control` #626A73 edge (3.63:1 on `bg`) |
+| Accent | `accent` #E5372A (4.66:1 on `bg`): the focus ring, the active tab marker, eyebrow labels, a focused or hovered title, Skip and progress. Never a large fill |
+| Ratings | `star` #F5C518, only beside a number |
+| Type | Inter (OFL) everywhere. Display weight 800 at tracking -0.035em; headings 800 at -0.025em; labels 650 at -0.01em; body 400. TV and phone sizes stay as in `type` |
+| Radii | Posters `m` 12, cards and rows `card` 14, panels `l` 18, the home hero card `hero` 22, pills 999 |
+| Motion | 180 ms focus, 260 ms panels, `cubic-bezier(0.22, 1, 0.36, 1)`; content fades up on load; reduced motion honoured |
 
-The accent sits near Plex's amber (`#E5A00D`). Distinctiveness comes from the warm black, the serif display face and the marquee motif rather than hue alone. If the owner wants a hue no streaming brand uses, Readout's chartreuse `#B8F23B` is the alternative with no close brand.
+## Patterns
 
-## Rules every implementation follows
+- **Navigation.** TV and desktop: a floating glass pill centered at the top (wordmark, Home, Movies, Series, Calendar, Library, a divider, Search, Settings); the active link sits in a lighter inner pill. Phone: a floating glass bar at the bottom with icons and labels; the active one in a lighter rounded square.
+- **Home hero.** An inset rounded card (`hero` radius, 1 px `edge`) holding the backdrop, the title (logo when it reads, else the title in display type), a meta line (star rating, year, runtime, genres), three lines of synopsis, the white Play pill and round glass secondaries with labels, and dash indicators for the carousel.
+- **Section headers.** A 3 px bar, the title (heading weight), a hairline running to the edge, an "All" pill at the end.
+- **Cards.** Posters 2:3 with a glass rating chip at the top right; the title (700) and year (`dim`) under the art, never over it. Continue Watching: 16:9 stills with a thin accent progress line and the core's caption as is. Focus (TV and keyboard) and hover lift the card, add a 1 px white edge, and turn the title `accent`.
+- **Title page.** A full-bleed backdrop fading to `bg` from the left and the bottom; the logo; genres; the white primary pill and round glass secondaries (Trailer, Add to Library, Versions) with labels; a meta row; three lines of synopsis with More; a glass key-value table at the right (Status, First aired, Country, Seasons, Episodes, or Released and Runtime with "Ends at").
+- **Episodes.** A toolbar of pills (seasons, search, sort); rows as glass cards with a hairline edge: a 16:9 still with the number at the bottom left and a "Watched" chip, the title (700), "56 min · Feb 18, 2022", the synopsis.
+- **Player.** Full-width scrims top and bottom; title and "S1:E3 · Name" at the top left; the scrubber; round transport buttons; pill buttons Audio, Subtitles, Versions, Speed; Skip as a white pill with an accent edge, bottom right.
+- **Search.** A centered command palette on `glassStrong` over the blurred page: scope pill, a pill input, result rows with a small poster, title and "Movie · 2021 · ★ 8.0 · genres".
+- **Browse pages.** An accent eyebrow over a big display title, a muted subtitle, filter pills, then text tabs with an accent underline.
 
-- One token source: `design/tokens.json`, generated to CSS variables (web), Compose and SwiftUI.
+## Rules that stay (TV and accessibility)
+
+- One token source: `design/tokens.json` (v2), generated to CSS variables (web), Compose and SwiftUI.
 - TV canvas 1920x1080 points; body 29 pt, floor 23 pt; safe area 60 pt top and bottom, 80 pt sides.
-- Focus: scale 1.05 on cards (1.025 on large tiles) plus a 4 px accent ring with a dark halo: 14 px soft on the dark theme, where it melts into the background, and a crisp 3 px outer line on the light theme, where a wide halo reads as a gray block (seen on Android P2); never color alone.
-- Motion: 180 ms focus, 320 ms panels, interruptible; reduced motion honored.
-- Every navigation icon has a visible label; no emoji anywhere; one outline icon set (Lucide).
-
-## Control edges (2026-10-17)
-
-`line` (1.4 to 1.5:1 on `surface`) is for dividers only. Input fields, secondary buttons and pills use `control` for their edge: dark `#766A5B` (3.35:1 on `surface`, 3.68:1 on `bg`), light `#8C7D6A` (3.14:1 on `surface`, 3.49:1 on `bg`), measured with the WCAG formula; on `raised` both are about 2.8:1, so controls sit on `surface` or `bg`. Source: `plans/reviews/design-audit-2026-10-17.md` item 8.
+- Focus: a 4 px `accent` ring with a dark halo plus the card lift, never color alone; desktop and phone show it for keyboard focus only.
+- The core's captions, labels and states are shown as is.
+- Lucide icons with visible labels on TV; no emoji anywhere.
+- Contrast floors: text 4.5:1, control edges 3:1 (measured above with the WCAG formula).
