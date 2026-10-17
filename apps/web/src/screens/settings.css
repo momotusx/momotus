@@ -42,7 +42,7 @@
 .addon-acts .btn { height: 60px; padding: 0 22px; font-size: var(--type-callout); gap: 10px; }
 .addon-acts .btn svg { width: 26px; height: 26px; }
 .btn.danger { background: var(--bad); color: var(--bg); box-shadow: none; }
-.btn[aria-pressed="false"] { color: var(--muted); }
+.addon-acts .btn[aria-pressed="false"] { color: var(--muted); }
 
 /* Device codes and QR (Import, Pairing). */
 .pair-grid { display: flex; align-items: center; gap: 60px; margin-top: 12px; }

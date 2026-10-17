@@ -2,7 +2,6 @@ import { A, useParams } from "@solidjs/router";
 import BookmarkCheck from "lucide-solid/icons/bookmark-check";
 import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
 import Check from "lucide-solid/icons/check";
-import Circle from "lucide-solid/icons/circle";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Film from "lucide-solid/icons/film";
@@ -118,17 +117,33 @@ function TitlePage(props: { kind: string; id: string }) {
                   </button>
                 </Show>
                 <div class="play">
-                  <Show when={target()}>
-                    {(t) => (
-                      <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
-                        <Play aria-hidden class="fill" />
-                        {t().label}
-                        <Show when={t().resumeMs}>
-                          {(ms) => <small class="num">from {clock(ms() / 1000)}</small>}
-                        </Show>
-                      </A>
-                    )}
-                  </Show>
+                  <div class="play-row">
+                    <Show when={target()}>
+                      {(t) => (
+                        <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
+                          <Play aria-hidden class="fill" />
+                          {t().label}
+                          <Show when={t().resumeMs}>
+                            {(ms) => <small class="num">from {clock(ms() / 1000)}</small>}
+                          </Show>
+                        </A>
+                      )}
+                    </Show>
+                    {/* Movies only (episodes carry their own marks): a round
+                        toggle beside Play, its word shown on focus. */}
+                    <Show when={props.kind === "movie"}>
+                      <button
+                        class="watched-toggle"
+                        classList={{ on: header()?.watched ?? false }}
+                        data-f="title:watched"
+                        aria-pressed={header()?.watched ?? false}
+                        onClick={() => view.command({ type: "setWatched", videoId: props.id, value: !header()?.watched })}
+                      >
+                        <CircleCheck aria-hidden />
+                        <span class="toggle-label">{header()?.watched ? "Watched" : "Mark watched"}</span>
+                      </button>
+                    </Show>
+                  </div>
                   <VersionLine snap={versions()?.state.data ?? null} />
                 </div>
                 <div class="acts">
@@ -136,10 +151,13 @@ function TitlePage(props: { kind: string; id: string }) {
                     {(t) => (
                       <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions">
                         <Layers aria-hidden />
-                        Versions
-                        <Show when={versionCount(versions()?.state.data ?? null)}>
-                          {(n) => <span class="num">({n()})</span>}
-                        </Show>
+                        {/* One inline label, so the count never wraps apart from its word. */}
+                        <span>
+                          Versions
+                          <Show when={versionCount(versions()?.state.data ?? null)}>
+                            {(n) => <span class="num"> ({n()})</span>}
+                          </Show>
+                        </span>
                       </A>
                     )}
                   </Show>
@@ -160,19 +178,6 @@ function TitlePage(props: { kind: string; id: string }) {
                     </Show>
                     {header()?.inLibrary ? "In Library" : "Add to Library"}
                   </button>
-                  <Show when={props.kind === "movie"}>
-                    <button
-                      class="btn"
-                      data-f="title:watched"
-                      aria-pressed={header()?.watched ?? false}
-                      onClick={() => view.command({ type: "setWatched", videoId: props.id, value: !header()?.watched })}
-                    >
-                      <Show when={header()?.watched} fallback={<Circle aria-hidden />}>
-                        <CircleCheck aria-hidden />
-                      </Show>
-                      {header()?.watched ? "Watched" : "Mark watched"}
-                    </button>
-                  </Show>
                 </div>
                 <dl class="facts">
                   <Fact label="Starring" value={x().cast.slice(0, 3).join(", ")} />

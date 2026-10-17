@@ -11,7 +11,7 @@
     linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 92%, transparent) 30%, color-mix(in srgb, var(--bg) 50%, transparent) 55%, transparent 80%),
     linear-gradient(0deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 60%, transparent) 22%, transparent 45%); }
 
-.info { position: absolute; left: var(--safe-side); top: var(--safe-top); bottom: var(--safe-bottom); width: 820px;
+.info { position: absolute; left: var(--safe-side); top: var(--safe-top); bottom: var(--safe-bottom); width: 840px;
   display: flex; flex-direction: column; align-items: flex-start; }
 .title-scr.movie .info { width: 1000px; }
 /* A fixed height: the box is there before the logo loads, so nothing moves. */
@@ -25,6 +25,24 @@
   margin: 0 -14px; padding: 0 14px; border-radius: var(--radius-m); font: 400 var(--type-body) / 1.42 var(--font-text); color: var(--text); }
 .syn:focus-visible, [data-form="tv"] .syn:focus, .syn:hover { -webkit-line-clamp: unset; background: var(--raised); }
 .play { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; margin: 26px 0 22px; }
+.play-row { display: flex; align-items: center; gap: 24px; }
+
+/* Watched: a round toggle beside Play (Apple TV, Infuse). Its word appears on
+ * focus or hover; the button always carries it as its name. */
+.watched-toggle { width: 84px; height: 84px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 22%, transparent); }
+.watched-toggle svg { width: 40px; height: 40px; }
+.watched-toggle.on { background: var(--text); color: var(--bg); box-shadow: none; }
+.watched-toggle:focus-visible, [data-form="tv"] .watched-toggle:focus { transform: scale(var(--focus-scale-card)); }
+.toggle-label { position: absolute; left: calc(100% + 32px); top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
+  font: 600 var(--type-callout) / 1 var(--font-text); color: var(--text); opacity: 0; transition: opacity var(--motion-focus) var(--ease); }
+.watched-toggle:focus-visible .toggle-label, [data-form="tv"] .watched-toggle:focus .toggle-label { opacity: 1; }
+@media (hover: hover) { [data-form="desktop"] .watched-toggle:hover .toggle-label { opacity: 1; } }
+
+/* Secondary actions: one row on TV and desktop that never wraps, so no
+ * action is ever left alone on a second line. */
+.info .acts { flex-wrap: nowrap; gap: 16px; }
+.info .acts .btn { padding: 0 24px; }
 .vline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding-left: 8px; font: 500 var(--type-callout) / 1.3 var(--font-text); }
 .vline > span { white-space: nowrap; }
 .muted { color: var(--muted); }
@@ -87,7 +105,17 @@
 [data-form="phone"] .info .meta { margin-bottom: 8px; }
 [data-form="phone"] .syn { -webkit-line-clamp: 4; font-size: var(--type-body); }
 [data-form="phone"] .play { margin: 16px 0 14px; gap: 10px; width: 100%; }
-[data-form="phone"] .play .btn { width: 100%; justify-content: center; }
+[data-form="phone"] .play-row { width: 100%; gap: 10px; }
+[data-form="phone"] .play-row .btn { flex: 1; min-width: 0; justify-content: center; }
+/* Touch has no focus to reveal the word, so the toggle wears it. */
+[data-form="phone"] .watched-toggle { width: auto; height: 52px; padding: 0 16px; gap: 8px; display: flex; align-items: center; border-radius: 26px; }
+[data-form="phone"] .watched-toggle svg { width: 20px; height: 20px; }
+[data-form="phone"] .toggle-label { position: static; transform: none; opacity: 1; font-size: 15px; color: inherit; }
+/* Secondary actions on a phone: equal columns, icon over word. */
+[data-form="phone"] .info .acts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; width: 100%; }
+[data-form="phone"] .info .acts .btn { flex-direction: column; justify-content: center; height: 64px; padding: 0 6px; gap: 4px; border-radius: 14px;
+  font-size: 13px; overflow: hidden; }
+[data-form="phone"] .info .acts .btn svg { width: 20px; height: 20px; }
 [data-form="phone"] .vline { padding-left: 2px; gap: 4px 12px; }
 [data-form="phone"] .facts { margin-top: 20px; gap: 14px 28px; padding-top: 16px; }
 [data-form="phone"] .facts dd { font-size: 17px; }
