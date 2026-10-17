@@ -20,6 +20,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
+
+fn disconnected() -> DebridError {
+    DebridError::provider("disconnected", "the account was disconnected")
+}
 
 /// Wall clock in unix seconds, injectable so TTL logic is testable.
 pub trait Clock: Send + Sync {
@@ -99,6 +104,8 @@ impl ResolveRequest {
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Key {
     store: StoreId,
+    /// The account connection; a replaced one never shares results.
+    generation: Arc<str>,
     hash: String,
     file_idx: Option<u32>,
     filename: Option<String>,
@@ -111,6 +118,8 @@ type Flight = Shared<BoxFuture<'static, Result<ResolvedLink, DebridError>>>;
 struct Cached {
     link: ResolvedLink,
     valid_until: u64,
+    /// The connection's; once cancelled the entry is never served.
+    gone: CancellationToken,
 }
 
 #[derive(Default)]
@@ -128,6 +137,10 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Clone)]
 struct Slot {
     id: StoreId,
+    generation: Arc<str>,
+    /// Cancelled when the connection is replaced or disconnected: its
+    /// flights stop and nothing it resolved is published.
+    gone: CancellationToken,
     resolve: Arc<dyn DynStore>,
     prefetch: Arc<dyn DynStore>,
 }
@@ -158,14 +171,37 @@ impl Resolver {
     /// Adds a store. The factory is called once per priority (`Resolve` for
     /// user-initiated calls, `Prefetch` for warming) so the HTTP budget can
     /// tell them apart.
-    pub fn add_store<S: Store + 'static>(mut self, factory: impl Fn(Priority) -> S) -> Self {
+    pub fn add_store<S: Store + 'static>(self, factory: impl Fn(Priority) -> S) -> Self {
+        self.add_connection("", CancellationToken::new(), factory)
+    }
+
+    /// Adds one account connection. Results are keyed by `generation`;
+    /// cancelling `gone` stops its in-flight resolves and keeps anything
+    /// they return out of the cache.
+    pub fn add_connection<S: Store + 'static>(
+        mut self,
+        generation: &str,
+        gone: CancellationToken,
+        factory: impl Fn(Priority) -> S,
+    ) -> Self {
         let resolve = factory(Priority::Resolve);
         self.slots.push(Slot {
             id: resolve.id(),
+            generation: generation.into(),
+            gone,
             resolve: Arc::new(resolve),
             prefetch: Arc::new(factory(Priority::Prefetch)),
         });
         self
+    }
+
+    /// A resolver with no stores that shares this one's cache and flights,
+    /// so connections kept across a rebuild keep their results.
+    pub fn sharing(&self) -> Self {
+        Self {
+            slots: Vec::new(),
+            ..self.clone()
+        }
     }
 
     /// The configured stores, default first.
@@ -197,9 +233,13 @@ impl Resolver {
         priority: Priority,
     ) -> Result<ResolvedLink, DebridError> {
         let slot = self.slot(req.store)?;
+        if slot.gone.is_cancelled() {
+            return Err(disconnected());
+        }
         let hash = normalize_hash(&req.info_hash)?;
         let key = Key {
             store: slot.id,
+            generation: slot.generation.clone(),
             hash: hash.clone(),
             file_idx: req.file_idx,
             filename: req.filename_hint.as_ref().map(|f| f.to_lowercase()),
@@ -223,9 +263,14 @@ impl Resolver {
                     };
                     let this = self.clone();
                     let flight_key = key.clone();
+                    let gone = slot.gone.clone();
                     let flight: Flight = async move {
-                        let link = this.resolve_uncached(store.as_ref(), &hash, &req).await?;
-                        this.remember(flight_key, &link);
+                        let work = this.resolve_uncached(store.as_ref(), &hash, &req);
+                        let link = tokio::select! {
+                            link = work => link?,
+                            () = gone.cancelled() => return Err(disconnected()),
+                        };
+                        this.remember(flight_key, &link, &gone)?;
                         Ok(link)
                     }
                     .boxed()
@@ -247,7 +292,9 @@ impl Resolver {
         let now = self.clock.now();
         let mut cache = lock(&self.state.cache);
         match cache.get(key) {
-            Some(entry) if entry.valid_until > now => Some(entry.link.clone()),
+            Some(entry) if entry.valid_until > now && !entry.gone.is_cancelled() => {
+                Some(entry.link.clone())
+            }
             Some(_) => {
                 cache.remove(key);
                 None
@@ -256,25 +303,43 @@ impl Resolver {
         }
     }
 
-    fn remember(&self, key: Key, link: &ResolvedLink) {
+    /// Caches `link` unless its connection is gone, checked under the cache
+    /// lock: whoever cancels a connection first and then prunes under that
+    /// lock leaves nothing of it behind.
+    fn remember(
+        &self,
+        key: Key,
+        link: &ResolvedLink,
+        gone: &CancellationToken,
+    ) -> Result<(), DebridError> {
         let now = self.clock.now();
         let mut valid_until = now.saturating_add(self.config.link_ttl.as_secs());
         if let Some(expires) = link.expires_at {
             valid_until = valid_until.min(expires);
         }
         let mut cache = lock(&self.state.cache);
-        // Expired entries are dropped on every insert, which bounds the map to
-        // the links resolved within one TTL window.
-        cache.retain(|_, e| e.valid_until > now);
+        if gone.is_cancelled() {
+            return Err(disconnected());
+        }
+        // Expired entries and those of gone connections are dropped on every
+        // insert, which bounds the map to the links of one TTL window.
+        cache.retain(|_, e| e.valid_until > now && !e.gone.is_cancelled());
         if valid_until > now {
             cache.insert(
                 key,
                 Cached {
                     link: link.clone(),
                     valid_until,
+                    gone: gone.clone(),
                 },
             );
         }
+        Ok(())
+    }
+
+    /// Drops what gone connections left in the cache. Call after cancelling.
+    pub fn prune(&self) {
+        lock(&self.state.cache).retain(|_, e| !e.gone.is_cancelled());
     }
 
     async fn resolve_uncached(

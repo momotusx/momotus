@@ -15,8 +15,8 @@
 //! account of the first provider whose variable is set.
 
 use mq_debrid::{
-    AllDebrid, DeviceLogin, Premiumize, RealDebrid, ResolveRequest, Resolver, ResolverConfig,
-    Store, TorBox,
+    AllDebrid, Login, Premiumize, RealDebrid, ResolveRequest, Resolver, ResolverConfig, Store,
+    StoreId, TorBox,
 };
 use mq_http::{ClientConfig, HttpClient};
 
@@ -85,12 +85,19 @@ async fn live_premiumize() {
 #[tokio::test]
 #[ignore = "network"]
 async fn live_real_debrid_device_code() {
-    let login = DeviceLogin::start(&http()).await.expect("start");
+    let login = Login::start(&http(), StoreId::RealDebrid)
+        .await
+        .expect("start");
+    let code = login.code();
     eprintln!(
         "go to {} and enter {} (poll every {:?}, valid {:?})",
-        login.verification_url, login.user_code, login.interval, login.expires_in
+        code.url, code.user_code, code.interval, code.expires_in
     );
-    assert!(!login.user_code.is_empty());
+    assert!(!code.user_code.is_empty());
+    assert!(
+        !code.qr.contains("device_id"),
+        "the QR must not carry the device code"
+    );
     assert!(matches!(
         login.poll().await.expect("poll"),
         mq_debrid::LoginPoll::Pending

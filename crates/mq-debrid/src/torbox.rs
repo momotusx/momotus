@@ -4,18 +4,21 @@
 //! download together, so `select_files` is a no-op. `requestdl` takes the key
 //! as a `token` query parameter; mq-http redacts query values in logs.
 
-use crate::api::{Api, Secret, bearer, with_query};
+use crate::api::{Api, Auth, Secret, authed, bearer, fixed, with_query};
+use crate::login::{Code, Credential, LoginPoll};
 use crate::util::{magnet_uri, normalize_hash, parse_utc, unix_now};
 use crate::{
     CacheStatus, Capabilities, DebridError, ResolvedLink, Store, StoreId, StoreUser, TorrentFile,
     TorrentHandle, TorrentInfo, TorrentStatus,
 };
-use mq_http::{Body, HttpClient, HttpError, Method, Priority, Response};
+use mq_http::{Body, HttpClient, HttpError, Method, Priority};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Duration;
 
-const BASE: &str = "https://api.torbox.app";
+pub(crate) const BASE: &str = "https://api.torbox.app";
 const CHECK_CHUNK: usize = 100;
 /// The docs say both 1 and 3 hours; take the shorter.
 const LINK_VALID_SECS: u64 = 3600;
@@ -23,7 +26,7 @@ const LINK_VALID_SECS: u64 = 3600;
 #[derive(Clone)]
 pub struct TorBox {
     api: Api,
-    key: Secret,
+    auth: Arc<dyn Auth>,
 }
 
 #[derive(Deserialize)]
@@ -37,9 +40,14 @@ struct Envelope<T> {
 
 impl TorBox {
     pub fn new(http: HttpClient, api_key: impl Into<String>) -> Self {
+        Self::with_auth(http, fixed(api_key))
+    }
+
+    /// A store that reads its key from `auth` and tells it about a refusal.
+    pub fn with_auth(http: HttpClient, auth: Arc<dyn Auth>) -> Self {
         Self {
             api: Api::new(http, BASE),
-            key: Secret::new(api_key),
+            auth,
         }
     }
 
@@ -54,26 +62,21 @@ impl TorBox {
         self
     }
 
-    async fn send(
+    /// One request with `key`, the envelope unwrapped and `success: false`
+    /// turned into an error.
+    async fn call_as<T: DeserializeOwned>(
         &self,
-        method: Method,
-        path: &str,
-        body: Option<Body>,
-    ) -> Result<Response, DebridError> {
-        self.api
-            .call(method, &format!("/v1/api{path}"), body, bearer(&self.key))
-            .await
-            .map_err(map_error)
-    }
-
-    /// Sends and unwraps the envelope, turning `success: false` into an error.
-    async fn call<T: DeserializeOwned>(
-        &self,
+        key: &Secret,
         method: Method,
         path: &str,
         body: Option<Body>,
     ) -> Result<Option<T>, DebridError> {
-        let envelope: Envelope<T> = self.send(method, path, body).await?.json()?;
+        let envelope: Envelope<T> = self
+            .api
+            .call(method, &format!("/v1/api{path}"), body, bearer(key))
+            .await
+            .map_err(map_error)?
+            .json()?;
         if envelope.success {
             Ok(envelope.data)
         } else {
@@ -82,6 +85,19 @@ impl TorBox {
                 envelope.detail.unwrap_or_default(),
             ))
         }
+    }
+
+    async fn call<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Body>,
+    ) -> Result<Option<T>, DebridError> {
+        authed(self.auth.as_ref(), |key| {
+            let (method, body) = (method.clone(), body.clone());
+            async move { self.call_as(&key, method, path, body).await }
+        })
+        .await
     }
 }
 
@@ -331,18 +347,20 @@ impl Store for TorBox {
             .iter()
             .find(|f| f.index == file_index)
             .ok_or(DebridError::NoPlayableFile)?;
-        let path = with_query(
-            "/torrents/requestdl",
-            &[
-                ("token", self.key.expose()),
-                ("torrent_id", &torrent.id),
-                ("file_id", &file_index.to_string()),
-            ],
-        );
-        let url: String = self
-            .call(Method::GET, &path, None)
-            .await?
-            .ok_or_else(|| DebridError::provider("empty", "no download link"))?;
+        let file_id = file_index.to_string();
+        let url: String = authed(self.auth.as_ref(), |key| {
+            let path = with_query(
+                "/torrents/requestdl",
+                &[
+                    ("token", key.expose()),
+                    ("torrent_id", &torrent.id),
+                    ("file_id", &file_id),
+                ],
+            );
+            async move { self.call_as(&key, Method::GET, &path, None).await }
+        })
+        .await?
+        .ok_or_else(|| DebridError::provider("empty", "no download link"))?;
         Ok(ResolvedLink {
             url,
             size: Some(file.size),
@@ -360,5 +378,105 @@ impl Store for TorBox {
         self.call::<serde_json::Value>(Method::POST, "/torrents/controltorrent", Some(body))
             .await?;
         Ok(())
+    }
+}
+
+/// Device sign-in (in the OpenAPI file only): the user enters `code` at
+/// `verification_url`; the app collects the account's key once with the
+/// device code. A second collection answers `DEVICE_CODE_USED`.
+pub(crate) struct Device {
+    api: Api,
+    device_code: Secret,
+}
+
+#[derive(Deserialize)]
+struct DeviceStart {
+    device_code: String,
+    code: String,
+    interval: u64,
+    expires_in: u64,
+    verification_url: String,
+    verification_url_complete: Option<String>,
+}
+
+/// The collected token: the docs say only "returns the user's token", Kodi
+/// reads `data.access_token`; a bare string is accepted too.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Collected {
+    Token { access_token: String },
+    Bare(String),
+}
+
+impl Device {
+    pub(crate) async fn start(http: &HttpClient, base: &str) -> Result<(Self, Code), DebridError> {
+        let api = Api::new(http.clone(), base);
+        let path = with_query("/v1/api/user/auth/device/start", &[("app", "Marquee")]);
+        let envelope: Envelope<DeviceStart> = api
+            .call(Method::GET, &path, None, Vec::new())
+            .await
+            .map_err(map_error)?
+            .json()?;
+        let start = match (envelope.success, envelope.data) {
+            (true, Some(start)) => start,
+            _ => {
+                return Err(envelope_error(
+                    envelope.error.as_deref(),
+                    envelope.detail.unwrap_or_default(),
+                ));
+            }
+        };
+        // The complete URL carries only the user code.
+        let code = Code {
+            qr: start
+                .verification_url_complete
+                .unwrap_or_else(|| start.verification_url.clone()),
+            url: start.verification_url,
+            user_code: start.code,
+            interval: Duration::from_secs(start.interval.max(1)),
+            expires_in: Duration::from_secs(start.expires_in),
+        };
+        let device = Self {
+            api,
+            device_code: Secret::new(start.device_code),
+        };
+        Ok((device, code))
+    }
+
+    pub(crate) async fn poll(&self) -> Result<LoginPoll, DebridError> {
+        let body = Body::Json(serde_json::json!({ "device_code": self.device_code.expose() }));
+        let response = self
+            .api
+            .call(
+                Method::POST,
+                "/v1/api/user/auth/device/token",
+                Some(body),
+                Vec::new(),
+            )
+            .await
+            .map_err(map_error);
+        let envelope: Envelope<Collected> = match response {
+            Ok(response) => response.json()?,
+            Err(DebridError::Provider { code, .. }) => {
+                return Ok(match code.as_str() {
+                    "DEVICE_CODE_USED" => LoginPoll::Used,
+                    "ITEM_NOT_FOUND" => LoginPoll::Expired,
+                    _ => LoginPoll::Pending,
+                });
+            }
+            Err(DebridError::RateLimited { .. }) => return Ok(LoginPoll::SlowDown),
+            Err(e) => return Err(e),
+        };
+        match envelope.data {
+            Some(Collected::Token { access_token: key } | Collected::Bare(key))
+                if envelope.success && !key.is_empty() =>
+            {
+                Ok(LoginPoll::Approved(Credential::Key(key)))
+            }
+            _ => Err(DebridError::provider(
+                envelope.error.unwrap_or_else(|| "empty".into()),
+                "no token in the answer",
+            )),
+        }
     }
 }

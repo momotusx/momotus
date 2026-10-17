@@ -3,7 +3,8 @@
 //! `instantAvailability` is documented but disabled by the provider (the
 //! error table lists "Disabled endpoint"), so `check` answers `Unknown`.
 
-use crate::api::{Api, Secret, bearer, form, with_query};
+use crate::api::{Api, Auth, authed, bearer, fixed, form, with_query};
+use crate::login::{Code, Credential, LoginPoll};
 use crate::util::{magnet_uri, normalize_hash, parse_utc};
 use crate::{
     CacheStatus, Capabilities, DebridError, ResolvedLink, Store, StoreId, StoreUser, TorrentFile,
@@ -12,10 +13,11 @@ use crate::{
 use mq_http::{Body, HttpClient, HttpError, Method, Priority, Response};
 use serde::Deserialize;
 use std::fmt;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 const BASE: &str = "https://api.real-debrid.com/rest/1.0";
-const OAUTH_BASE: &str = "https://api.real-debrid.com/oauth/v2";
+pub(crate) const OAUTH_BASE: &str = "https://api.real-debrid.com/oauth/v2";
 /// Client id Real-Debrid publishes for open source apps.
 const OPEN_SOURCE_CLIENT_ID: &str = "X245A4XAIBGVM";
 const DEVICE_GRANT: &str = "http://oauth.net/grant_type/device/1.0";
@@ -23,14 +25,20 @@ const DEVICE_GRANT: &str = "http://oauth.net/grant_type/device/1.0";
 #[derive(Clone)]
 pub struct RealDebrid {
     api: Api,
-    token: Secret,
+    auth: Arc<dyn Auth>,
 }
 
 impl RealDebrid {
     pub fn new(http: HttpClient, access_token: impl Into<String>) -> Self {
+        Self::with_auth(http, fixed(access_token))
+    }
+
+    /// A store that reads its token from `auth` per request and asks it for
+    /// a newer one on a refusal (a rotated OAuth token).
+    pub fn with_auth(http: HttpClient, auth: Arc<dyn Auth>) -> Self {
         Self {
             api: Api::new(http, BASE),
-            token: Secret::new(access_token),
+            auth,
         }
     }
 
@@ -51,10 +59,16 @@ impl RealDebrid {
         path: &str,
         body: Option<Body>,
     ) -> Result<Response, DebridError> {
-        self.api
-            .call(method, path, body, bearer(&self.token))
-            .await
-            .map_err(map_error)
+        authed(self.auth.as_ref(), |token| {
+            let (method, body) = (method.clone(), body.clone());
+            async move {
+                self.api
+                    .call(method, path, body, bearer(&token))
+                    .await
+                    .map_err(map_error)
+            }
+        })
+        .await
     }
 }
 
@@ -352,23 +366,12 @@ impl Credentials {
     }
 }
 
-#[derive(Debug)]
-pub enum LoginPoll {
-    Pending,
-    Approved(Credentials),
-    Expired,
-}
-
-/// Device-code login for open source apps: the user types `user_code` at
-/// `verification_url`, the app polls every `interval` until approved.
-pub struct DeviceLogin {
+/// Device-code sign-in for open source apps: the user types `user_code` at
+/// `verification_url`; each poll asks for the user-bound client id and
+/// secret, then trades them and the device code for tokens.
+pub(crate) struct Device {
     api: Api,
     device_code: String,
-    deadline: Instant,
-    pub user_code: String,
-    pub verification_url: String,
-    pub interval: Duration,
-    pub expires_in: Duration,
 }
 
 #[derive(Deserialize)]
@@ -380,13 +383,8 @@ struct DeviceCode {
     verification_url: String,
 }
 
-impl DeviceLogin {
-    pub async fn start(http: &HttpClient) -> Result<Self, DebridError> {
-        Self::start_at(http, OAUTH_BASE).await
-    }
-
-    /// Like [`DeviceLogin::start`] against another OAuth base URL.
-    pub async fn start_at(http: &HttpClient, base: &str) -> Result<Self, DebridError> {
+impl Device {
+    pub(crate) async fn start(http: &HttpClient, base: &str) -> Result<(Self, Code), DebridError> {
         let api = Api::new(http.clone(), base);
         let path = with_query(
             "/device/code",
@@ -400,23 +398,23 @@ impl DeviceLogin {
             .await
             .map_err(map_error)?
             .json()?;
-        let expires_in = Duration::from_secs(code.expires_in);
-        Ok(Self {
+        // The QR carries the page and the user code, never the device code:
+        // the undocumented `direct_verification_url` embeds it.
+        let shown = Code {
+            qr: code.verification_url.clone(),
+            url: code.verification_url,
+            user_code: code.user_code,
+            interval: Duration::from_secs(code.interval.max(1)),
+            expires_in: Duration::from_secs(code.expires_in),
+        };
+        let device = Self {
             api,
             device_code: code.device_code,
-            deadline: Instant::now() + expires_in,
-            user_code: code.user_code,
-            verification_url: code.verification_url,
-            interval: Duration::from_secs(code.interval),
-            expires_in,
-        })
+        };
+        Ok((device, shown))
     }
 
-    /// One poll. Callers wait `interval` between calls.
-    pub async fn poll(&self) -> Result<LoginPoll, DebridError> {
-        if Instant::now() >= self.deadline {
-            return Ok(LoginPoll::Expired);
-        }
+    pub(crate) async fn poll(&self) -> Result<LoginPoll, DebridError> {
         let path = with_query(
             "/device/credentials",
             &[
@@ -434,21 +432,21 @@ impl DeviceLogin {
             }) => body,
             Err(e) => return Err(map_error(e)),
         };
-        #[derive(Deserialize)]
+        #[derive(Deserialize, Default)]
         struct Pair {
             client_id: Option<String>,
             client_secret: Option<String>,
             error: Option<String>,
         }
-        let pair: Pair = serde_json::from_slice(&body).unwrap_or(Pair {
-            client_id: None,
-            client_secret: None,
-            error: None,
-        });
+        let pair: Pair = serde_json::from_slice(&body).unwrap_or_default();
         let (Some(client_id), Some(client_secret)) = (pair.client_id, pair.client_secret) else {
-            let expired = pair.error.is_some_and(|e| e.contains("expired"));
-            return Ok(if expired {
+            let error = pair.error.unwrap_or_default();
+            return Ok(if error.contains("expired") {
                 LoginPoll::Expired
+            } else if error.contains("denied") {
+                LoginPoll::Denied
+            } else if error.contains("slow_down") {
+                LoginPoll::SlowDown
             } else {
                 LoginPoll::Pending
             });
@@ -463,12 +461,12 @@ impl DeviceLogin {
             ],
         )
         .await?;
-        Ok(LoginPoll::Approved(Credentials {
+        Ok(LoginPoll::Approved(Credential::OAuth(Credentials {
             client_id,
             client_secret,
             access_token: token.access_token,
             refresh_token: token.refresh_token,
             expires_in: token.expires_in,
-        }))
+        })))
     }
 }

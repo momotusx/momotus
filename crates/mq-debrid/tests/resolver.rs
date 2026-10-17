@@ -436,3 +436,55 @@ async fn invalid_hash_is_rejected_before_any_store_call() {
     assert!(matches!(err, DebridError::Provider { ref code, .. } if code == "invalid_info_hash"));
     assert_eq!(state.adds(), 0);
 }
+
+fn mock(state: &Arc<State>) -> impl Fn(Priority) -> Mock + use<> {
+    let state = state.clone();
+    move |priority| Mock {
+        state: state.clone(),
+        priority,
+    }
+}
+
+#[tokio::test]
+async fn old_generation_results_are_never_published() {
+    use tokio_util::sync::CancellationToken;
+    // Cached: a link resolved under one connection never serves the next.
+    let state = Arc::new(State::new());
+    let gone = CancellationToken::new();
+    let old = Resolver::new(config()).add_connection("A", gone.clone(), mock(&state));
+    old.resolve(req()).await.unwrap();
+    gone.cancel();
+    old.prune();
+    let new = old
+        .sharing()
+        .add_connection("B", CancellationToken::new(), mock(&state));
+    new.resolve(req()).await.unwrap();
+    assert_eq!(state.adds(), 2, "the new connection resolves on its own");
+    assert!(
+        old.resolve(req()).await.is_err(),
+        "a gone connection resolves nothing"
+    );
+
+    // In flight: cancelling stops the resolve and caches nothing.
+    let mut slow = State::new();
+    slow.add_delay = Duration::from_millis(150);
+    let slow = Arc::new(slow);
+    let gone = CancellationToken::new();
+    let old = Resolver::new(config()).add_connection("A", gone.clone(), mock(&slow));
+    let flight = tokio::spawn({
+        let old = old.clone();
+        async move { old.resolve(req()).await }
+    });
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    gone.cancel();
+    let err = flight.await.unwrap().unwrap_err();
+    assert!(
+        matches!(&err, DebridError::Provider { code, .. } if code == "disconnected"),
+        "{err:?}"
+    );
+    let new = old
+        .sharing()
+        .add_connection("B", CancellationToken::new(), mock(&slow));
+    new.resolve(req()).await.unwrap();
+    assert_eq!(slow.adds(), 2, "nothing of the cancelled flight was kept");
+}

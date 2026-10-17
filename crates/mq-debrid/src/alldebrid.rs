@@ -4,23 +4,26 @@
 //! answers `Unknown`. Files come back as a folder tree with a link per file;
 //! the tree is flattened depth first and numbered from 0.
 
-use crate::api::{Api, Secret, bearer, form};
+use crate::api::{Api, Auth, authed, bearer, fixed, form};
+use crate::login::{Code, Credential, LoginPoll};
 use crate::util::basename;
 use crate::util::{magnet_uri, normalize_hash};
 use crate::{
     CacheStatus, Capabilities, DebridError, ResolvedLink, Store, StoreId, StoreUser, TorrentFile,
     TorrentHandle, TorrentInfo, TorrentStatus,
 };
-use mq_http::{Body, HttpClient, HttpError, Method, Priority, Response};
+use mq_http::{Body, HttpClient, HttpError, Method, Priority};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use std::sync::Arc;
+use std::time::Duration;
 
-const BASE: &str = "https://api.alldebrid.com";
+pub(crate) const BASE: &str = "https://api.alldebrid.com";
 
 #[derive(Clone)]
 pub struct AllDebrid {
     api: Api,
-    key: Secret,
+    auth: Arc<dyn Auth>,
 }
 
 #[derive(Deserialize)]
@@ -39,9 +42,14 @@ struct ErrorBody {
 
 impl AllDebrid {
     pub fn new(http: HttpClient, api_key: impl Into<String>) -> Self {
+        Self::with_auth(http, fixed(api_key))
+    }
+
+    /// A store that reads its key from `auth` and tells it about a refusal.
+    pub fn with_auth(http: HttpClient, auth: Arc<dyn Auth>) -> Self {
         Self {
             api: Api::new(http, BASE),
-            key: Secret::new(api_key),
+            auth,
         }
     }
 
@@ -56,18 +64,6 @@ impl AllDebrid {
         self
     }
 
-    async fn send(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<Body>,
-    ) -> Result<Response, DebridError> {
-        self.api
-            .call(method, path, body, bearer(&self.key))
-            .await
-            .map_err(map_http_error)
-    }
-
     /// Sends and unwraps `{status, data | error}`. Errors arrive with HTTP 200.
     async fn call<T: DeserializeOwned>(
         &self,
@@ -75,12 +71,18 @@ impl AllDebrid {
         path: &str,
         body: Option<Body>,
     ) -> Result<T, DebridError> {
-        let envelope: Envelope<T> = self.send(method, path, body).await?.json()?;
-        match (envelope.status.as_str(), envelope.data, envelope.error) {
-            ("success", Some(data), _) => Ok(data),
-            (_, _, Some(error)) => Err(map_code(&error.code, error.message)),
-            _ => Err(DebridError::provider("empty", "no data in response")),
-        }
+        authed(self.auth.as_ref(), |key| {
+            let (method, body) = (method.clone(), body.clone());
+            async move {
+                let response = self
+                    .api
+                    .call(method, path, body, bearer(&key))
+                    .await
+                    .map_err(map_http_error)?;
+                unwrap(response.json()?)
+            }
+        })
+        .await
     }
 }
 
@@ -377,5 +379,98 @@ impl Store for AllDebrid {
         self.call::<serde_json::Value>(Method::POST, "/v4/magnet/delete", Some(body))
             .await?;
         Ok(())
+    }
+}
+
+/// The docs poll every 5 s, and a check sooner than 5 s after the start
+/// answers `PIN_INVALID`.
+const PIN_INTERVAL: Duration = Duration::from_secs(5);
+
+/// PIN sign-in: the user enters `pin` at `user_url`; the app checks with
+/// `pin` and `check` until AllDebrid hands out the account's key.
+pub(crate) struct Pin {
+    api: Api,
+    pin: String,
+    check: String,
+}
+
+#[derive(Deserialize)]
+struct PinStart {
+    pin: String,
+    check: String,
+    expires_in: u64,
+    user_url: String,
+    #[serde(default)]
+    base_url: String,
+}
+
+#[derive(Deserialize)]
+struct PinCheck {
+    #[serde(default)]
+    activated: bool,
+    apikey: Option<String>,
+}
+
+impl Pin {
+    pub(crate) async fn start(http: &HttpClient, base: &str) -> Result<(Self, Code), DebridError> {
+        let api = Api::new(http.clone(), base);
+        let start: PinStart = unwrap(
+            api.call(Method::GET, "/v4.1/pin/get", None, Vec::new())
+                .await
+                .map_err(map_http_error)?
+                .json()?,
+        )?;
+        // `user_url` carries only the PIN, so it is the QR as is.
+        let code = Code {
+            url: if start.base_url.is_empty() {
+                start.user_url.clone()
+            } else {
+                start.base_url
+            },
+            qr: start.user_url,
+            user_code: start.pin.clone(),
+            interval: PIN_INTERVAL,
+            expires_in: Duration::from_secs(start.expires_in),
+        };
+        let pin = Self {
+            api,
+            pin: start.pin,
+            check: start.check,
+        };
+        Ok((pin, code))
+    }
+
+    pub(crate) async fn poll(&self) -> Result<LoginPoll, DebridError> {
+        let body = form(&[("pin", &self.pin), ("check", &self.check)]);
+        let response = self
+            .api
+            .call(Method::POST, "/v4/pin/check", Some(body), Vec::new())
+            .await
+            .map_err(map_http_error)?;
+        let envelope: Envelope<PinCheck> = response.json()?;
+        if let Some(error) = envelope.error {
+            return match error.code.as_str() {
+                "PIN_EXPIRED" => Ok(LoginPoll::Expired),
+                "PIN_ALREADY_AUTHED" => Ok(LoginPoll::Used),
+                // Too early, or not entered yet; the deadline bounds it.
+                "PIN_INVALID" => Ok(LoginPoll::Pending),
+                code => Err(map_code(code, error.message)),
+            };
+        }
+        Ok(match envelope.data {
+            Some(PinCheck {
+                activated: true,
+                apikey: Some(key),
+            }) if !key.is_empty() => LoginPoll::Approved(Credential::Key(key)),
+            _ => LoginPoll::Pending,
+        })
+    }
+}
+
+fn unwrap<T>(envelope: Envelope<T>) -> Result<T, DebridError> {
+    match (envelope.status.as_str(), envelope.data, envelope.error) {
+        ("success", Some(data), _) => Ok(data),
+        (_, _, Some(error)) => Err(map_code(&error.code, error.message)),
+        _ => Err(DebridError::provider("empty", "no data in response")),
     }
 }

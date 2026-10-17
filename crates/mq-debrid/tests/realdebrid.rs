@@ -2,7 +2,8 @@ mod common;
 
 use common::{ErrorCheck, HASH, Server, client, route};
 use mq_debrid::{
-    CacheStatus, DebridError, DeviceLogin, LoginPoll, RealDebrid, Store, TorrentStatus,
+    CacheStatus, Credential, DebridError, Login, LoginPoll, RealDebrid, Store, StoreId,
+    TorrentStatus,
 };
 use std::time::Duration;
 
@@ -206,14 +207,16 @@ async fn device_login_goes_pending_then_approved() {
     ])
     .await;
     let http = client();
-    let login = DeviceLogin::start_at(&http, &server.base).await.unwrap();
-    assert_eq!(login.user_code, "ABCD1234");
-    assert_eq!(login.verification_url, "https://real-debrid.com/device");
-    assert_eq!(login.interval, Duration::from_secs(5));
-    assert_eq!(login.expires_in, Duration::from_secs(1800));
+    let login = Login::start_at(&http, StoreId::RealDebrid, &server.base)
+        .await
+        .unwrap();
+    assert_eq!(login.code().user_code, "ABCD1234");
+    assert_eq!(login.code().url, "https://real-debrid.com/device");
+    assert_eq!(login.code().interval, Duration::from_secs(5));
+    assert_eq!(login.code().expires_in, Duration::from_secs(1800));
 
     assert!(matches!(login.poll().await.unwrap(), LoginPoll::Pending));
-    let LoginPoll::Approved(creds) = login.poll().await.unwrap() else {
+    let LoginPoll::Approved(Credential::OAuth(creds)) = login.poll().await.unwrap() else {
         panic!("expected approval");
     };
     assert_eq!(creds.access_token, "ACC");
@@ -253,7 +256,7 @@ async fn device_login_reports_expiry() {
         r#"{"device_code":"D","user_code":"U","interval":5,"expires_in":0,"verification_url":"https://real-debrid.com/device"}"#,
     )])
     .await;
-    let login = DeviceLogin::start_at(&client(), &server.base)
+    let login = Login::start_at(&client(), StoreId::RealDebrid, &server.base)
         .await
         .unwrap();
     assert!(matches!(login.poll().await.unwrap(), LoginPoll::Expired));
@@ -272,7 +275,7 @@ async fn device_login_surfaces_server_expiry() {
         ),
     ])
     .await;
-    let login = DeviceLogin::start_at(&client(), &server.base)
+    let login = Login::start_at(&client(), StoreId::RealDebrid, &server.base)
         .await
         .unwrap();
     assert!(matches!(login.poll().await.unwrap(), LoginPoll::Expired));
@@ -302,4 +305,61 @@ async fn refresh_swaps_the_access_token() {
         body.contains("code=REF") && body.contains("client_secret=CSECRET"),
         "{body}"
     );
+}
+
+#[tokio::test]
+async fn rd_qr_never_carries_the_device_code() {
+    let server = Server::start(vec![route(
+        "GET",
+        "/device/code",
+        200,
+        r#"{"device_code":"DEVSECRET","user_code":"ABCD1234","interval":5,"expires_in":900,"verification_url":"https://real-debrid.com/device","direct_verification_url":"https://real-debrid.com/authorize?client_id=X&device_id=DEVSECRET"}"#,
+    )])
+    .await;
+    let login = Login::start_at(&client(), StoreId::RealDebrid, &server.base)
+        .await
+        .unwrap();
+    assert_eq!(login.code().qr, "https://real-debrid.com/device");
+    assert!(!login.code().qr.contains("DEVSECRET"));
+}
+
+#[tokio::test]
+async fn a_rotated_token_is_retried_once() {
+    use std::sync::{Arc, Mutex};
+    /// Hands out OLD, then NEW after the first refusal; counts refusals.
+    struct Rotating(Mutex<(String, u32)>);
+    impl mq_debrid::Auth for Rotating {
+        fn token(&self) -> String {
+            self.0.lock().unwrap().0.clone()
+        }
+        fn refused<'a>(&'a self, used: &'a str) -> mq_debrid::BoxFuture<'a, Option<String>> {
+            Box::pin(async move {
+                let mut state = self.0.lock().unwrap();
+                state.1 += 1;
+                assert_eq!(used, "OLD");
+                state.0 = "NEW".into();
+                Some(state.0.clone())
+            })
+        }
+    }
+    let server = Server::start(vec![
+        route(
+            "GET",
+            "/user",
+            401,
+            r#"{"error":"bad_token","error_code":8}"#,
+        )
+        .then(
+            200,
+            r#"{"id":1,"username":"alice","type":"premium","expiration":null}"#,
+        ),
+    ])
+    .await;
+    let auth = Arc::new(Rotating(Mutex::new(("OLD".into(), 0))));
+    let store = RealDebrid::with_auth(client(), auth.clone()).with_base_url(&server.base);
+    assert_eq!(store.user().await.unwrap().name, "alice");
+    assert_eq!(auth.0.lock().unwrap().1, 1);
+    let requests = server.requests();
+    assert!(requests[0].head.contains("bearer old"));
+    assert!(requests[1].head.contains("bearer new"));
 }

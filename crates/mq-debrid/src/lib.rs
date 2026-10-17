@@ -8,6 +8,7 @@
 mod alldebrid;
 mod api;
 mod error;
+mod login;
 mod premiumize;
 mod realdebrid;
 mod resolver;
@@ -16,10 +17,12 @@ mod torbox;
 mod util;
 
 pub use alldebrid::AllDebrid;
+pub use api::Auth;
 pub use error::DebridError;
+pub use login::{Code, Credential, Login, LoginPoll};
 pub use mq_http::Priority;
 pub use premiumize::Premiumize;
-pub use realdebrid::{Credentials, DeviceLogin, LoginPoll, RealDebrid};
+pub use realdebrid::{Credentials, RealDebrid};
 pub use resolver::{Clock, ManualClock, ResolveRequest, Resolver, ResolverConfig, SystemClock};
 pub use select::pick_file;
 pub use torbox::TorBox;
@@ -60,6 +63,16 @@ impl StoreId {
             .into_iter()
             .filter_map(|id| Some((id, std::env::var(id.env_var()).ok()?)))
             .collect()
+    }
+
+    /// The service name the bridge and the keystore records use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::RealDebrid => "realdebrid",
+            Self::TorBox => "torbox",
+            Self::AllDebrid => "alldebrid",
+            Self::Premiumize => "premiumize",
+        }
     }
 
     /// Maps the service names addons use (`ClientResolve.service`).
@@ -185,7 +198,7 @@ pub trait Store: Send + Sync {
     fn remove(&self, id: &str) -> impl Future<Output = Result<(), DebridError>> + Send;
 }
 
-type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Object-safe twin of [`Store`] so the resolver can hold a mixed set.
 pub(crate) trait DynStore: Send + Sync {

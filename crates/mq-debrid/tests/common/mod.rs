@@ -7,6 +7,7 @@
 use mq_http::{ClientConfig, HttpClient};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -23,7 +24,7 @@ pub struct Route {
     method: &'static str,
     path: &'static str,
     query: Option<&'static str>,
-    responses: Vec<(u16, String)>,
+    responses: Vec<(u16, String, Duration)>,
     headers: Vec<(&'static str, &'static str)>,
     hits: AtomicUsize,
 }
@@ -33,7 +34,7 @@ pub fn route(method: &'static str, path: &'static str, status: u16, body: &str) 
         method,
         path,
         query: None,
-        responses: vec![(status, body.to_owned())],
+        responses: vec![(status, body.to_owned(), Duration::ZERO)],
         headers: Vec::new(),
         hits: AtomicUsize::new(0),
     }
@@ -48,7 +49,17 @@ impl Route {
 
     /// Next response after the previous ones were served.
     pub fn then(mut self, status: u16, body: &str) -> Self {
-        self.responses.push((status, body.to_owned()));
+        self.responses
+            .push((status, body.to_owned(), Duration::ZERO));
+        self
+    }
+
+    /// The last response added is answered only after `delay` (a request
+    /// in flight).
+    pub fn delayed(mut self, delay: Duration) -> Self {
+        if let Some(last) = self.responses.last_mut() {
+            last.2 = delay;
+        }
         self
     }
 
@@ -141,7 +152,8 @@ async fn handle(mut socket: TcpStream, routes: Arc<Vec<Route>>, log: Arc<Mutex<V
                 .hits
                 .fetch_add(1, Ordering::SeqCst)
                 .min(r.responses.len() - 1);
-            let (status, payload) = r.responses[i].clone();
+            let (status, payload, delay) = r.responses[i].clone();
+            tokio::time::sleep(delay).await;
             (status, payload, r.headers.clone())
         }
         None => (404, r#"{"error":"no route"}"#.to_owned(), Vec::new()),

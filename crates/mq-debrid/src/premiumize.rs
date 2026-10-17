@@ -6,7 +6,7 @@
 //! are `dd:<hash>`. Anything else becomes a regular transfer.
 //! Responses are `{status: "success" | "error", message}`, often with HTTP 200.
 
-use crate::api::{Api, Secret, form, with_query};
+use crate::api::{Api, Auth, authed, fixed, form, with_query};
 use crate::util::{basename, magnet_uri, normalize_hash, unix_now};
 use crate::{
     CacheStatus, Capabilities, DebridError, ResolvedLink, Store, StoreId, StoreUser, TorrentFile,
@@ -15,8 +15,9 @@ use crate::{
 use mq_http::{HttpClient, HttpError, Method, Priority, Response};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use std::sync::Arc;
 
-const BASE: &str = "https://www.premiumize.me/api";
+pub(crate) const BASE: &str = "https://www.premiumize.me/api";
 const CHECK_CHUNK: usize = 50;
 const MAX_FOLDER_DEPTH: u32 = 4;
 const DIRECT_PREFIX: &str = "dd:";
@@ -24,7 +25,7 @@ const DIRECT_PREFIX: &str = "dd:";
 #[derive(Clone)]
 pub struct Premiumize {
     api: Api,
-    key: Secret,
+    auth: Arc<dyn Auth>,
 }
 
 #[derive(Deserialize)]
@@ -35,9 +36,14 @@ struct Status {
 
 impl Premiumize {
     pub fn new(http: HttpClient, api_key: impl Into<String>) -> Self {
+        Self::with_auth(http, fixed(api_key))
+    }
+
+    /// A store that reads its key from `auth` and tells it about a refusal.
+    pub fn with_auth(http: HttpClient, auth: Arc<dyn Auth>) -> Self {
         Self {
             api: Api::new(http, BASE),
-            key: Secret::new(api_key),
+            auth,
         }
     }
 
@@ -52,22 +58,49 @@ impl Premiumize {
         self
     }
 
-    async fn get(&self, path: &str, pairs: &[(&str, &str)]) -> Result<Response, DebridError> {
-        let mut all = vec![("apikey", self.key.expose())];
-        all.extend_from_slice(pairs);
-        self.api
-            .call(Method::GET, &with_query(path, &all), None, Vec::new())
-            .await
-            .map_err(map_http_error)
+    async fn get<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        pairs: &[(&str, &str)],
+    ) -> Result<T, DebridError> {
+        self.send(Method::GET, path, pairs).await
     }
 
-    async fn post(&self, path: &str, pairs: &[(&str, &str)]) -> Result<Response, DebridError> {
-        let mut all = vec![("apikey", self.key.expose())];
-        all.extend_from_slice(pairs);
-        self.api
-            .call(Method::POST, path, Some(form(&all)), Vec::new())
-            .await
-            .map_err(map_http_error)
+    async fn post<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        pairs: &[(&str, &str)],
+    ) -> Result<T, DebridError> {
+        self.send(Method::POST, path, pairs).await
+    }
+
+    /// The key goes in the query on GET and in the form on POST.
+    async fn send<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        pairs: &[(&str, &str)],
+    ) -> Result<T, DebridError> {
+        authed(self.auth.as_ref(), |key| {
+            let method = method.clone();
+            let mut all = vec![("apikey", key.expose().to_owned())];
+            all.extend(pairs.iter().map(|(k, v)| (*k, (*v).to_owned())));
+            async move {
+                let all: Vec<(&str, &str)> = all.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                let (url, body) = if method == Method::GET {
+                    (with_query(path, &all), None)
+                } else {
+                    (path.to_owned(), Some(form(&all)))
+                };
+                let response = self
+                    .api
+                    .call(method, &url, body, Vec::new())
+                    .await
+                    .map_err(map_http_error)?;
+                decode(&response)
+            }
+        })
+        .await
     }
 }
 
@@ -190,10 +223,9 @@ fn map_transfer_status(status: &str) -> TorrentStatus {
 
 impl Premiumize {
     async fn direct_files(&self, hash: &str) -> Result<Vec<TorrentFile>, DebridError> {
-        let response = self
+        let direct: DirectDl = self
             .post("/transfer/directdl", &[("src", &magnet_uri(hash))])
             .await?;
-        let direct: DirectDl = decode(&response)?;
         let mut files: Vec<TorrentFile> = direct
             .content
             .into_iter()
@@ -215,8 +247,7 @@ impl Premiumize {
         let mut files = Vec::new();
         let mut pending = vec![(folder_id.to_owned(), String::new(), 0u32)];
         while let Some((id, prefix, depth)) = pending.pop() {
-            let response = self.get("/folder/list", &[("id", &id)]).await?;
-            let list: FolderList = decode(&response)?;
+            let list: FolderList = self.get("/folder/list", &[("id", &id)]).await?;
             for item in list.content {
                 let path = if prefix.is_empty() {
                     item.name.clone()
@@ -246,8 +277,7 @@ impl Premiumize {
     }
 
     async fn single_file(&self, file_id: &str) -> Result<Vec<TorrentFile>, DebridError> {
-        let response = self.get("/item/details", &[("id", file_id)]).await?;
-        let item: Item = decode(&response)?;
+        let item: Item = self.get("/item/details", &[("id", file_id)]).await?;
         Ok(vec![TorrentFile {
             index: 0,
             path: item.name,
@@ -274,8 +304,7 @@ impl Store for Premiumize {
     }
 
     async fn user(&self) -> Result<StoreUser, DebridError> {
-        let response = self.get("/account/info", &[]).await?;
-        let account: Account = decode(&response)?;
+        let account: Account = self.get("/account/info", &[]).await?;
         let name = match &account.customer_id {
             serde_json::Value::String(s) => s.clone(),
             serde_json::Value::Null => String::new(),
@@ -295,8 +324,7 @@ impl Store for Premiumize {
             let magnets: Vec<String> = chunk.iter().map(|h| magnet_uri(h)).collect();
             let pairs: Vec<(&str, &str)> =
                 magnets.iter().map(|m| ("items[]", m.as_str())).collect();
-            let response = self.get("/cache/check", &pairs).await?;
-            let check: CacheCheck = decode(&response)?;
+            let check: CacheCheck = self.get("/cache/check", &pairs).await?;
             out.extend((0..chunk.len()).map(|i| match check.response.get(i) {
                 Some(true) => CacheStatus::Cached,
                 Some(false) => CacheStatus::NotCached,
@@ -319,10 +347,9 @@ impl Store for Premiumize {
                 hash,
             });
         }
-        let response = self
+        let created: Created = self
             .post("/transfer/create", &[("src", &magnet_uri(&hash))])
             .await?;
-        let created: Created = decode(&response)?;
         Ok(TorrentHandle {
             id: created.id,
             hash,
@@ -341,8 +368,7 @@ impl Store for Premiumize {
                 files,
             });
         }
-        let response = self.get("/transfer/list", &[]).await?;
-        let list: Transfers = decode(&response)?;
+        let list: Transfers = self.get("/transfer/list", &[]).await?;
         let transfer = list
             .transfers
             .into_iter()
@@ -398,12 +424,7 @@ impl Store for Premiumize {
         if id.starts_with(DIRECT_PREFIX) {
             return Ok(());
         }
-        let response = self.post("/transfer/delete", &[("id", id)]).await?;
-        let status: Status = response.json()?;
-        if status.status == "success" {
-            Ok(())
-        } else {
-            Err(map_message(status.message.unwrap_or_default()))
-        }
+        let _: Status = self.post("/transfer/delete", &[("id", id)]).await?;
+        Ok(())
     }
 }
