@@ -127,6 +127,7 @@ fun SettingsScreen(
     onImport: () -> Unit,
     onSync: () -> Unit,
     onDebrid: () -> Unit,
+    onHomeRows: () -> Unit,
 ) {
     val holder =
         viewModel<SettingsHolder>(
@@ -264,6 +265,15 @@ fun SettingsScreen(
                     onSync,
                 )
             }
+        }
+        item(key = "home-head") { Kicker("Home") }
+        item(key = "home-rows") {
+            LinkRow(
+                Icons.Rows3,
+                "Home rows",
+                "Which catalogs Home shows after Continue Watching, and in what order.",
+                onHomeRows,
+            )
         }
         item(key = "playback-head") { Kicker("Playback") }
         item(key = "playback") { Playback(holder, busy != null) { what, op -> run(what, Place.Playback, op = op) } }

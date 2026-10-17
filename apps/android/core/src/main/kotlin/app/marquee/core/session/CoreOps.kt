@@ -3,6 +3,7 @@ package app.marquee.core.session
 import app.marquee.core.client.CoreClient
 import app.marquee.core.model.ApprovedPairing
 import app.marquee.core.model.Devices
+import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.InstalledAddon
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.Prefs
@@ -10,6 +11,7 @@ import app.marquee.core.model.RecoveryKitResult
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -36,6 +38,8 @@ enum class LifecycleEvent(
 class CoreOps(
     private val client: CoreClient,
 ) {
+    private val catalogs = ListSerializer(HomeCatalog.serializer())
+
     private suspend fun <T> call(
         op: String,
         fields: Map<String, JsonElement>,
@@ -75,6 +79,22 @@ class CoreOps(
     ) {
         client.request("setAddonEnabled", mapOf("url" to text(url), "enabled" to JsonPrimitive(enabled)))
     }
+
+    /** The catalogs Home can show after Continue Watching, in order; hidden ones sit where they would show. */
+    suspend fun homeCatalogs(): List<HomeCatalog> = call("homeCatalogs", emptyMap(), catalogs)
+
+    /** Shows or hides a Home row. Returns the new list. */
+    suspend fun setHomeRow(
+        rowId: String,
+        hidden: Boolean,
+    ): List<HomeCatalog> =
+        call("setHomeRow", mapOf("rowId" to text(rowId), "hidden" to JsonPrimitive(hidden)), catalogs)
+
+    /** Moves a Home row [by] places (negative is up). Returns the new list. */
+    suspend fun moveHomeRow(
+        rowId: String,
+        by: Int,
+    ): List<HomeCatalog> = call("moveHomeRow", mapOf("rowId" to text(rowId), "by" to JsonPrimitive(by)), catalogs)
 
     /** Nested objects merge, e.g. `{"streams": {"languages": ["tr"]}}`. Returns the full prefs. */
     suspend fun setPrefs(patch: JsonObject): Prefs = call("setPrefs", mapOf("patch" to patch), Prefs.serializer())

@@ -204,9 +204,11 @@ private fun AppNav(
                             onImport = { backStack.add(Route.Import) },
                             onSync = { backStack.add(if (sync.joined) Route.Sync else Route.Pairing) },
                             onDebrid = { backStack.add(Route.Debrid) },
+                            onHomeRows = { backStack.add(Route.HomeRows) },
                         )
                     }
                     entry<Route.Debrid> { DebridScreen(session) }
+                    entry<Route.HomeRows> { HomeRowsScreen(session) }
                     entry<Route.Pairing> {
                         PairingScreen(session, sync, onDone = {
                             if (backStack.size >

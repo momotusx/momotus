@@ -47,6 +47,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object Debrid : Route
 
+    /** Which catalogs Home shows after Continue Watching, and their order. */
+    @Serializable
+    data object HomeRows : Route
+
     @Serializable
     data class Title(
         val kind: String,
