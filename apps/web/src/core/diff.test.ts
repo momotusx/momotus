@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { applyDiffs } from "./diff";
-import { Bridge, type Transport } from "./bridge";
+import { Bridge, BridgeError, type Transport } from "./bridge";
 
 describe("applyDiffs", () => {
   test("matches the core semantics for every op", () => {
@@ -105,5 +105,20 @@ describe("Bridge", () => {
     const pending = bridge.request("subscribe", { view: "nope" });
     deliver({ id: 1, ok: false, error: "unknown view: nope" });
     await expect(pending).rejects.toThrow("unknown view: nope");
+  });
+
+  test("a structured error code reaches the caller unchanged", async () => {
+    const { transport, deliver } = loopback();
+    const bridge = new Bridge(transport);
+    const coded = bridge.request("syncNow");
+    const plain = bridge.request("ping");
+    deliver({ id: 1, ok: false, error: "This device has no sync record yet", code: "noSyncRecord" });
+    deliver({ id: 2, ok: false, error: "bad request" });
+    const a = await coded.catch((e: unknown) => e);
+    expect(a).toBeInstanceOf(BridgeError);
+    expect((a as BridgeError).code).toBe("noSyncRecord");
+    expect((a as BridgeError).message).toBe("This device has no sync record yet");
+    const b = await plain.catch((e: unknown) => e);
+    expect((b as BridgeError).code).toBeUndefined();
   });
 });

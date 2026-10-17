@@ -8,10 +8,20 @@ export interface Transport {
   onClose(handler: () => void): void;
 }
 
-type Reply = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string };
+/** `code` names an error the app acts on (sync, keystore); `error` is the
+ * plain text to show. */
+type Reply = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string; code?: string };
 type Push = { sub: number; updates: unknown[] };
 
-export class BridgeError extends Error {}
+export class BridgeError extends Error {
+  constructor(
+    message: string,
+    /** The reply's structured `code`, unchanged, when it had one. */
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
 
 interface Waiter {
   resolve: (v: unknown) => void;
@@ -67,7 +77,14 @@ export class Bridge {
     if (message.ok) {
       waiter.onResult?.(message.result);
       waiter.resolve(message.result);
-    } else waiter.reject(new BridgeError(message.error));
+    } else waiter.reject(new BridgeError(message.error, message.code));
+  }
+
+  /** Pushes on a subscription the host owns rather than the core (a desktop
+   * shell sends player events on `0`). Returns the way to stop listening. */
+  listen(sub: number, fn: (updates: unknown[]) => void): () => void {
+    this.listeners.set(sub, fn);
+    return () => this.listeners.delete(sub);
   }
 
   request<T>(op: string, fields: Record<string, unknown> = {}, onResult?: (result: T) => void): Promise<T> {
@@ -106,6 +123,99 @@ export class Bridge {
       },
     };
   }
+}
+
+/** What a desktop shell injects at document start, top frame only. It holds
+ * no secret: the document's token arrives with `ready`. */
+export interface ShellInfo {
+  platform: "linux" | "windows";
+}
+
+/** The shell's answer to `hello`, called in the main frame only. */
+export interface ShellReady {
+  /** The nonce this document's `hello` carried: a `ready` that lands in a
+   * later document after a navigation carries the old one and is refused. */
+  nonce: string;
+  generation: number;
+  token: string;
+  platform: string;
+  /** DeviceCaps for the shell's player (mpv), in the core's names. */
+  caps?: unknown;
+}
+
+/** Where the shell reaches the page. */
+export interface ShellHost {
+  __mq?: { recv(batch: string[]): void; ready(r: ShellReady): void };
+}
+
+declare global {
+  interface Window extends ShellHost {
+    __MQ_SHELL__?: ShellInfo;
+    webkit?: { messageHandlers?: { mq?: { postMessage(text: string): void } } };
+    ipc?: { postMessage(text: string): void };
+  }
+}
+
+/** Requests that may wait for `ready`; more means the shell is not answering. */
+const PRE_READY_LIMIT = 256;
+
+/** Desktop shells (plans/m3-desktop.md sections 2.2 and 3): requests go out
+ * through the shell's message handler carrying the document's token; the
+ * shell calls `__mq.recv` with batches. Until `ready`, only `hello` goes out
+ * and requests wait in order. */
+export function ipcTransport(post: (text: string) => void, onReady?: (r: ShellReady) => void, host: ShellHost = window): Transport {
+  // Made by this document, so only an answer to this document's hello counts.
+  const nonce = crypto.randomUUID();
+  let token: string | null = null;
+  let closed = false;
+  const waiting: string[] = [];
+  let receive: (text: string) => void = () => {};
+  const closers: (() => void)[] = [];
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    waiting.length = 0;
+    for (const c of closers) c();
+  };
+  // Every request is a JSON object: the token goes in as its first field.
+  const withToken = (text: string) => `{"token":${JSON.stringify(token)}${text.length > 2 ? `,${text.slice(1)}` : "}"}`;
+  host.__mq = {
+    recv: (batch) => {
+      for (const text of batch) receive(text);
+    },
+    ready: (r) => {
+      // Only the answer to this document's hello, and only once: a repeat
+      // (after a repeated hello) changes nothing.
+      if (r.nonce !== nonce || token !== null || closed) return;
+      token = r.token;
+      onReady?.(r);
+      for (const text of waiting.splice(0)) post(withToken(text));
+    },
+  };
+  post(JSON.stringify({ op: "hello", nonce }));
+  return {
+    send(text) {
+      if (closed) return;
+      if (token !== null) return post(withToken(text));
+      if (waiting.length >= PRE_READY_LIMIT) return close();
+      waiting.push(text);
+    },
+    onMessage(handler) {
+      receive = handler;
+    },
+    onClose(handler) {
+      closers.push(handler);
+    },
+  };
+}
+
+/** The shell's message handler on this platform, or null in a browser. */
+export function shellPost(host: Window = window): ((text: string) => void) | null {
+  const linux = host.webkit?.messageHandlers?.mq;
+  if (linux) return (text) => linux.postMessage(text);
+  const win = host.ipc;
+  if (win) return (text) => win.postMessage(text);
+  return null;
 }
 
 /** WebSocket transport that queues sends until the socket opens. */

@@ -22,6 +22,7 @@ import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocus, goBack } from "../focus/dom";
+import { createVideoEngine } from "../player/video-engine";
 import { bytes, clock, decoded, episodeLabel, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
 import { languageName, qualityCell, qualityText } from "../lib/words";
 import "./player.css";
@@ -54,7 +55,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
   const prefs = prefsView();
   const versions = () => ctx.versions()?.state.data ?? null;
-  let video!: HTMLVideoElement;
 
   // The version to play: the one picked on Versions, else the pick once it
   // settles (every addon answered, or a short wait after the first pick).
@@ -93,38 +93,52 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const url = () => (snap()?.phase === "ready" ? snap()?.url : null) ?? null;
   const playing = () => [...(versions()?.recommended ? [versions()?.recommended] : []), ...(versions()?.rows ?? [])].find((r) => r?.key === snap()?.key) ?? null;
 
-  // Media state mirrored from the element.
-  const [paused, setPaused] = createSignal(true);
-  const [started, setStarted] = createSignal(false);
-  const [time, setTime] = createSignal(0);
-  const [duration, setDuration] = createSignal(0);
-  const [buffered, setBuffered] = createSignal<[number, number][]>([]);
-  const [rate, setRate] = createSignal(1);
   const [osd, setOsd] = createSignal(true);
   const [panel, setPanel] = createSignal<"subs" | "audio" | null>(null);
-  const [track, setTrack] = createSignal<{ src: string; lang: string } | null>(null);
+  // The core's subtitle in use, if any.
+  const [track, setTrack] = createSignal<{ url: string; lang: string } | null>(null);
   const [subError, setSubError] = createSignal<string | null>(null);
   const [ended, setEnded] = createSignal(false);
-  let resumed = false;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Whatever decodes the picture (player/engine.ts); the screen only talks to it.
+  const engine = createVideoEngine({
+    onPlay: () => wake(),
+    onPause: () => {
+      setOsd(true);
+      report();
+    },
+    onEnded: () => onEnded(),
+    onError: (why) => void playback()?.command({ type: "failOver", error: why }),
+    onLoaded: () => sendDuration(),
+    onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
+  });
+  const { time, duration, paused, buffered, started, rate } = engine;
 
   const wake = () => {
     setOsd(true);
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      if (!video?.paused && !panel()) setOsd(false);
+      if (!paused() && !panel()) setOsd(false);
     }, HIDE_MS);
   };
 
   const report = () => {
     const p = playback();
-    if (!p || !video || !Number.isFinite(video.duration) || video.duration <= 0) return;
-    void p.command({ type: "progress", positionMs: Math.round(video.currentTime * 1000), durationMs: Math.round(video.duration * 1000) });
+    if (!p || duration() <= 0) return;
+    void p.command({ type: "progress", positionMs: Math.round(engine.position() * 1000), durationMs: Math.round(duration() * 1000) });
   };
+
+  // The page says which engine draws the picture; with mpv under it, the
+  // page turns transparent while the player is open (player.css).
+  onMount(() => {
+    document.documentElement.dataset.engine = engine.kind;
+    onCleanup(() => delete document.documentElement.dataset.engine);
+  });
 
   onMount(() => {
     wake();
-    const timer = setInterval(() => !video?.paused && report(), PROGRESS_MS);
+    const timer = setInterval(() => !paused() && report(), PROGRESS_MS);
     // While the controls are hidden, the first press only shows them.
     const onKey = (e: KeyboardEvent) => {
       const back = e.key === "Escape" || e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 10009 || e.keyCode === 461;
@@ -156,68 +170,35 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       clearTimeout(hideTimer);
       window.removeEventListener("keydown", onKey, { capture: true });
       report();
+      engine.stop();
     });
   });
 
   // A new source (first start or failover) keeps the position.
   createEffect(
     on(url, (u, prev) => {
-      if (!u || !video) return;
-      const at = prev ? video.currentTime : (snap()?.resumeMs ?? 0) / 1000;
-      video.src = u;
-      resumed = false;
-      video.addEventListener(
-        "loadedmetadata",
-        () => {
-          if (!resumed && at > 0) video.currentTime = at;
-          resumed = true;
-          sendDuration();
-        },
-        { once: true },
-      );
-      void video.play().catch(() => setPaused(true));
+      if (u) engine.load(u, prev ? engine.position() : (snap()?.resumeMs ?? 0) / 1000);
     }),
   );
 
   const toggle = () => {
-    if (!video) return;
-    if (video.paused) void video.play().catch(() => undefined);
-    else video.pause();
+    engine.toggle();
     wake();
   };
   const seek = (delta: number) => {
-    if (!video || !Number.isFinite(video.duration)) return;
-    video.currentTime = Math.min(Math.max(0, video.currentTime + delta), video.duration - 0.5);
+    if (!duration()) return;
+    engine.seek(Math.min(Math.max(0, engine.position() + delta), duration() - 0.5));
     wake();
   };
-  const cycleSpeed = () => {
-    const next = SPEEDS[(SPEEDS.indexOf(rate()) + 1) % SPEEDS.length] ?? 1;
-    video.playbackRate = next;
-    setRate(next);
-  };
+  const cycleSpeed = () => engine.setRate(SPEEDS[(SPEEDS.indexOf(rate()) + 1) % SPEEDS.length] ?? 1);
 
-  // The core serves every track as UTF-8 WebVTT on a loopback URL any origin
-  // may read; the <video> is crossorigin, so the track loads it directly.
+  // The core serves every subtitle as UTF-8 WebVTT on a loopback URL.
   const pickSubtitle = (t: SubtitleTrack | null) => {
     setPanel(null);
     setSubError(null);
-    setTrack(t ? { src: t.url, lang: t.lang } : null);
-    if (t)
-      queueMicrotask(() => {
-        const tt = video.textTracks[0];
-        if (tt) tt.mode = "showing";
-      });
-  };
-
-  const onError = () => {
-    const err = video.error;
-    const why =
-      err?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
-        ? "this device cannot decode the file"
-        : err?.code === MediaError.MEDIA_ERR_NETWORK
-          ? "the network dropped"
-          : (err?.message ?? "player error");
-    void playback()?.command({ type: "failOver", error: why });
+    const sub = t ? { url: t.url, lang: t.lang } : null;
+    setTrack(sub);
+    engine.setSubtitle(sub);
   };
 
   const remaining = () => Math.max(0, duration() - time());
@@ -232,9 +213,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const sendDuration = () => {
     const p = playback();
     const key = snap()?.key;
-    if (!p || !key || durationSent.has(key) || !video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    if (!p || !key || durationSent.has(key) || duration() <= 0) return;
     durationSent.add(key);
-    void p.command({ type: "duration", key, durationMs: Math.round(video.duration * 1000) });
+    void p.command({ type: "duration", key, durationMs: Math.round(duration() * 1000) });
   };
 
   // The segment under the playhead, active on [startMs, endMs).
@@ -250,9 +231,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const skip = (s: Segment) => {
     if (creditsToEnd(s)) {
       if (next()) setSkippedAt(s.startMs);
-      else video.currentTime = Math.max(0, video.duration - 0.05);
+      else engine.seek(Math.max(0, duration() - 0.05));
     } else {
-      video.currentTime = s.endMs / 1000;
+      engine.seek(s.endMs / 1000);
     }
     wake();
   };
@@ -328,14 +309,25 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const playAgain = () => {
     setEnded(false);
     setSkippedAt(null);
-    video.currentTime = 0;
-    void video.play().catch(() => undefined);
+    engine.seek(0);
+    engine.play();
   };
-  // Audio: the track the element reports, else what the playing version says.
+  // The engine's own tracks (player/engine.ts): mpv lists the file's audio
+  // and subtitle tracks; the <video> engine at most the audio ones.
+  const audioTracks = () => engine.tracks().filter((t) => t.kind === "audio");
+  const fileSubs = () => engine.tracks().filter((t) => t.kind === "sub");
+  // Audio: the track the engine reports, else what the playing version says.
   const audioText = () => {
+    const picked = audioTracks().find((t) => t.selected);
+    if (picked && audioTracks().length > 1) return picked.lang ? languageName(picked.lang) : picked.label;
     const lang = playing()?.languages[0];
     const channels = playing()?.features.find((f) => /^\d\.\d$|Atmos/.test(f));
     return [lang ? languageName(lang) : null, channels].filter(Boolean).join(" ") || "Default";
+  };
+  // A subtitle inside the file replaces the core's one, and the other way round.
+  const pickFileSub = (id: string) => {
+    pickSubtitle(null);
+    engine.selectTrack("sub", id);
   };
 
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
@@ -359,7 +351,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     <div
       class="player-scr"
       data-scheme="dark"
-      classList={{ idle: !osd() && !!url() }}
+      classList={{ idle: !osd() && !!url(), started: started() }}
       onPointerMove={wake}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.
@@ -370,48 +362,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       }}
     >
       <Backdrop src={ctx.details()?.background} class="player-bd" dim />
-      <video
-        ref={video}
-        class="video"
-        classList={{ on: started() }}
-        playsinline
-        preload="auto"
-        crossorigin="anonymous"
-        onPlay={() => {
-          setPaused(false);
-          wake();
-        }}
-        onPlaying={() => setStarted(true)}
-        onPause={() => {
-          setPaused(true);
-          setOsd(true);
-          report();
-        }}
-        onTimeUpdate={() => setTime(video.currentTime)}
-        onDurationChange={() => {
-          setDuration(Number.isFinite(video.duration) ? video.duration : 0);
-          sendDuration();
-        }}
-        onProgress={() => {
-          const out: [number, number][] = [];
-          for (let i = 0; i < video.buffered.length; i++) out.push([video.buffered.start(i), video.buffered.end(i)]);
-          setBuffered(out);
-        }}
-        onEnded={onEnded}
-        onError={onError}
-      >
-        <Show when={track()} keyed>
-          {(t) => (
-            <track
-              kind="subtitles"
-              src={t.src}
-              srclang={t.lang}
-              default
-              onError={() => setSubError(`Could not load ${languageName(t.lang)} subtitles from the core`)}
-            />
-          )}
-        </Show>
-      </video>
+      {engine.view}
       <div class="osd-top" />
       <div class="osd-bot" />
 
@@ -548,7 +499,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               }}
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
-                if (video && duration()) video.currentTime = ((e.clientX - r.left) / r.width) * duration();
+                if (duration()) engine.seek(((e.clientX - r.left) / r.width) * duration());
               }}
             >
               <For each={buffered()}>{([a, b]) => <i class="buf" style={{ left: pct(a), width: `calc(${pct(b)} - ${pct(a)})` }} />}</For>
@@ -625,11 +576,40 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         <aside class="panel" aria-label="Audio" data-fgroup="audio">
           <h2>Audio</h2>
           <div class="panel-list" data-vscroll>
-            <button class="opt on" data-f="audio:current" data-autofocus onClick={() => setPanel(null)}>
-              <Check aria-hidden class="opt-check" />
-              <b>{audioText()}</b>
-              <span>The track this version plays</span>
-            </button>
+            {/* The engine's own tracks when the file has a choice (mpv lists
+                every one); otherwise the one this version plays. */}
+            <Show
+              when={audioTracks().length > 1}
+              fallback={
+                <button class="opt on" data-f="audio:current" data-autofocus onClick={() => setPanel(null)}>
+                  <Check aria-hidden class="opt-check" />
+                  <b>{audioText()}</b>
+                  <span>The track this version plays</span>
+                </button>
+              }
+            >
+              <For each={audioTracks()}>
+                {(t) => (
+                  <button
+                    class="opt"
+                    classList={{ on: t.selected }}
+                    data-f={`audio:${t.id}`}
+                    onClick={() => {
+                      engine.selectTrack("audio", t.id);
+                      setPanel(null);
+                    }}
+                  >
+                    <Show when={t.selected}>
+                      <Check aria-hidden class="opt-check" />
+                    </Show>
+                    <b>{t.lang ? languageName(t.lang) : t.label}</b>
+                    <Show when={t.lang && t.label !== t.lang}>
+                      <span>{t.label}</span>
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </Show>
             <p class="opt-note">Other languages come with other versions.</p>
             <A class="opt" href={versionsPath(props.kind, props.id, props.videoId)} data-f="audio:versions">
               <b>Choose a version</b>
@@ -651,8 +631,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             </button>
             <For each={snap()?.subtitles ?? []}>
               {(t, i) => (
-                <button class="opt" classList={{ on: track()?.src === t.url }} data-f={`sub:${i()}`} onClick={() => pickSubtitle(t)}>
-                  <Show when={track()?.src === t.url}>
+                <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${i()}`} onClick={() => pickSubtitle(t)}>
+                  <Show when={track()?.url === t.url}>
                     <Check aria-hidden class="opt-check" />
                   </Show>
                   <b>{languageName(t.lang)}</b>
@@ -662,6 +642,22 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 </button>
               )}
             </For>
+            <Show when={fileSubs().length}>
+              <p class="opt-note">In the file</p>
+              <For each={fileSubs()}>
+                {(t) => (
+                  <button class="opt" classList={{ on: t.selected && !track() }} data-f={`subfile:${t.id}`} onClick={() => pickFileSub(t.id)}>
+                    <Show when={t.selected && !track()}>
+                      <Check aria-hidden class="opt-check" />
+                    </Show>
+                    <b>{t.lang ? languageName(t.lang) : t.label}</b>
+                    <Show when={t.lang && t.label !== t.lang}>
+                      <span>{t.label}</span>
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </Show>
             <Show when={snap()?.subtitlesPending}>
               <p class="opt-note">Still asking subtitle addons</p>
             </Show>

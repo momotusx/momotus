@@ -4,7 +4,7 @@
 
 import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { Bridge, webSocketTransport } from "./bridge";
+import { Bridge, ipcTransport, shellPost, webSocketTransport } from "./bridge";
 import { applyDiffs } from "./diff";
 import type { Episode } from "./generated/Episode";
 import type { Hero } from "./generated/Hero";
@@ -19,7 +19,13 @@ import type { VersionsSnapshot } from "./generated/VersionsSnapshot";
 
 export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
 
-const transport = webSocketTransport(bridgeUrl);
+// In a desktop shell the core runs in process and answers through the shell's
+// message handler (plans/m3-desktop.md section 3); in a browser it is the
+// development WebSocket.
+const shellHandler = window.__MQ_SHELL__ ? shellPost() : null;
+// The shell's player capabilities, from its `ready`, in the core's names.
+let shellCaps: DeviceCaps | null = null;
+const transport = shellHandler ? ipcTransport(shellHandler, (r) => (shellCaps = asCaps(r.caps))) : webSocketTransport(bridgeUrl);
 export const bridge = new Bridge(transport);
 
 export type Link = "connecting" | "open" | "closed";
@@ -210,9 +216,30 @@ const decodes = (type: string) =>
 // Plain types without codecs answer "maybe" at best.
 const plays = (type: string) => decodes(type) || document.createElement("video").canPlayType(type) !== "";
 
-/** What this browser can show and decode, so Versions ranks for it. A web
- * player decodes audio itself (no passthrough) and has no second engine. */
+/** Shell capabilities only when every field has the core's shape; anything
+ * else falls back to what the browser reports. */
+function asCaps(x: unknown): DeviceCaps | null {
+  const c = x as Partial<DeviceCaps> | null;
+  const strings = (v: unknown) => Array.isArray(v) && v.every((s) => typeof s === "string");
+  const ok =
+    !!c &&
+    typeof c.displayHeight === "number" &&
+    strings(c.hdr) &&
+    strings(c.decoders) &&
+    strings(c.audioDecoders) &&
+    strings(c.containers) &&
+    strings(c.passthrough) &&
+    typeof c.tenBitHevc === "boolean" &&
+    typeof c.hasFallbackEngine === "boolean" &&
+    typeof c.language === "string";
+  return ok ? (c as DeviceCaps) : null;
+}
+
+/** What this device can show and decode, so Versions ranks for it: the
+ * shell's player when there is one, else this browser. A web player decodes
+ * audio itself (no passthrough) and has no second engine. */
 export function displayCaps(): DeviceCaps {
+  if (shellCaps) return shellCaps;
   // The display, never the window: a small window on a 1080p screen still
   // shows 1080p when it goes full screen. Taller than 720 lines counts as 1080.
   const lines = screen.height * (window.devicePixelRatio || 1);
