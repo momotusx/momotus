@@ -10,3 +10,4 @@ stremio-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 url.workspace = true
+thiserror.workspace = true
