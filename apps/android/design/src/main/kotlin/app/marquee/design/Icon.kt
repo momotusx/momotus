@@ -39,6 +39,9 @@ val StarFilled: ImageVector by lazy { filledIcon("star-filled", STAR) }
 /** Play filled (Lucide's play with a fill), on the primary Play pill, as on web and Apple. */
 val PlayFilled: ImageVector by lazy { filledIcon("play-filled", PLAY) }
 
+/** Pause filled, the player's main button beside [PlayFilled]. */
+val PauseFilled: ImageVector by lazy { filledIcon("pause-filled", PAUSE) }
+
 private fun filledIcon(
     name: String,
     d: String,
@@ -55,6 +58,10 @@ private fun filledIcon(
         ).build()
 
 private const val PLAY = "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"
+
+private const val PAUSE =
+    "M15 3h3a1 1 0 0 1 1 1v16a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-16a1 1 0 0 1 1 -1z" +
+        "M6 3h3a1 1 0 0 1 1 1v16a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-16a1 1 0 0 1 1 -1z"
 
 private const val STAR =
     "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"

@@ -136,6 +136,9 @@ class PlaybackController(
     var playingKey: String? by mutableStateOf(null)
         private set
 
+    /** The quality of the version that plays ("1080p"), the Versions button's value; the screen sets it, as it knows the ranking. */
+    var versionLabel: String? by mutableStateOf(null)
+
     private var view: PlaybackView? = null
     private var loadedUrl: String? = null
     private var loadedSubs: List<SubtitleTrack> = emptyList()

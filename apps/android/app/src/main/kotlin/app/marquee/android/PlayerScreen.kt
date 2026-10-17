@@ -14,6 +14,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
 import app.marquee.core.PlayPick
+import app.marquee.core.VersionsCopy
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.VersionRow
 import app.marquee.core.pickVersion
@@ -73,6 +74,17 @@ class PlayerHolder(
 
     init {
         viewModelScope.launch { start() }
+        // The Versions button names the quality of what plays, also after a failover.
+        viewModelScope.launch {
+            val key = keyFor(route.kind, route.videoId, route.title, route.binge)
+            snapshotFlow {
+                val playing = controller.playingKey
+                val snapshot = versions.view(key)?.snapshot
+                (listOfNotNull(snapshot?.recommended) + snapshot?.rows.orEmpty())
+                    .firstOrNull { it.key == playing }
+                    ?.let { VersionsCopy.cell(it.quality) }
+            }.collect { controller.versionLabel = it }
+        }
     }
 
     private suspend fun start() {

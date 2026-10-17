@@ -44,6 +44,8 @@ import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.PauseFilled
+import app.marquee.design.PlayFilled
 import app.marquee.design.RoundButton
 import app.marquee.design.Spinner
 import app.marquee.design.TextRole
@@ -393,7 +395,7 @@ private fun Controls(
                 badge = "10",
             )
             RoundButton(
-                icon = if (playing) Icons.Pause else Icons.Play,
+                icon = if (playing) PauseFilled else PlayFilled,
                 label = if (playing) "Pause" else "Play",
                 onClick = {
                     onTouch()
@@ -456,7 +458,7 @@ private fun Controls(
                 ActionButton(Icons.Volume2, "Audio", controller.audioDetail(), onAudio)
             }
             ActionButton(Icons.Captions, "Subtitles", controller.subtitlesDetail(), onSubtitles)
-            ActionButton(Icons.Layers, "Versions", null, onVersions)
+            ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
             ActionButton(Icons.Gauge, "Speed", speedText(controller.speed), {
                 onTouch()
                 controller.changeSpeed(nextSpeed(controller.speed))

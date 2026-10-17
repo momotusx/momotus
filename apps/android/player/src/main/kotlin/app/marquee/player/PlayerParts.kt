@@ -57,12 +57,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.Segment
+import app.marquee.design.CapsLabel
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LocalForm
@@ -358,9 +360,11 @@ fun SkipButton(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
     ) {
         MqText("Skip data: ${segment.source}", role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
+        // The white pill with an accent edge (design/DECISION.md v2, Player).
         PrimaryButton(
             skipLabel(segment.kind),
             onSkip,
+            Modifier.border(2.dp, Marquee.colors.accent, RoundedCornerShape(Marquee.radius.pill)),
             icon = Icons.SkipForward,
             focusRequester = focus,
             onFocusChange = onFocusChange,
@@ -387,6 +391,9 @@ fun EndCard(
     val tv = Marquee.form == Form.Tv
     Box(modifier.background(Color.Black.copy(alpha = 0.72f)), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // What ended, as on the web: a capitals kicker over the name.
+            CapsLabel("Finished", color = colors.muted)
+            MqText(title, role = TextRole.Title1, maxLines = 2, textAlign = TextAlign.Center)
             if (next != null) {
                 MqText(
                     "Next: ${Format.episodeLabel(next.season, next.episode)} ${next.title}".trim(),

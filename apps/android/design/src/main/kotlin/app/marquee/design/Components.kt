@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,12 +48,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -520,13 +523,18 @@ fun RoundButton(
         ) {
             MqIcon(icon, tint = if (lit) colors.onPrimary else colors.text, size = glyph)
             if (badge != null) {
-                // The label already says the seconds; the badge is only for the eye.
-                MqText(
+                // The label already says the seconds; the badge is only for the eye. A third of the
+                // glyph, so it sits inside the arrow as on the web rather than over it.
+                BasicText(
                     badge,
                     modifier = Modifier.clearAndSetSemantics { },
-                    role = TextRole.Caption,
-                    weight = FontWeight.Bold,
-                    color = if (lit) colors.onPrimary else colors.text,
+                    style =
+                        TextStyle(
+                            color = if (lit) colors.onPrimary else colors.text,
+                            fontSize = with(LocalDensity.current) { (glyph * 0.34f).toSp() },
+                            fontFamily = MarqueeFonts.text,
+                            fontWeight = FontWeight.Bold,
+                        ),
                 )
             }
         }

@@ -49,6 +49,8 @@ import app.marquee.core.model.NextEpisode
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
+import app.marquee.design.PauseFilled
+import app.marquee.design.PlayFilled
 import app.marquee.design.RoundButton
 import app.marquee.design.Spinner
 import app.marquee.design.TextRole
@@ -219,8 +221,18 @@ fun TvPlayer(
         panel = null
         wake++
     }
+
+    // Back, one step at a time (plans/android-design-v2.md 2.2, as Leanback does): an open panel
+    // closes, then the controls hide, then the player leaves.
+    fun back() {
+        when {
+            panel != null -> closePanel()
+            showControls -> osd = false
+            else -> onBack()
+        }
+    }
     // One handler that is always on (turning it on and off with the panel left Back ignored after a key press).
-    BackHandler { if (panel != null) closePanel() else onBack() }
+    BackHandler { back() }
     LaunchedEffect(returnTo) {
         val target = returnTo ?: return@LaunchedEffect
         withFrameNanos { }
@@ -276,9 +288,7 @@ fun TvPlayer(
                         // after a D-pad press never reached the BackHandler below (it still covers
                         // the moments when no node has focus).
                         // A held Back repeats: only the first press acts, the rest are eaten.
-                        if (event.nativeKeyEvent.repeatCount == 0) {
-                            if (panel != null) closePanel() else onBack()
-                        }
+                        if (event.nativeKeyEvent.repeatCount == 0) back()
                         true
                     }
 
@@ -507,7 +517,7 @@ private fun Controls(
                 ) {
                     RoundButton(Icons.RotateCcw, "Back 10 seconds", { controller.seekBy(-SEEK_MS) }, badge = "10")
                     RoundButton(
-                        icon = if (playing) Icons.Pause else Icons.Play,
+                        icon = if (playing) PauseFilled else PlayFilled,
                         label = if (playing) "Pause" else "Play",
                         onClick = controller::togglePlay,
                         main = true,
@@ -533,7 +543,7 @@ private fun Controls(
                         onSubtitles,
                         focusRequester = subtitlesAction,
                     )
-                    ActionButton(Icons.Layers, "Versions", null, onVersions)
+                    ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
                     ActionButton(
                         Icons.Gauge,
                         "Speed",
