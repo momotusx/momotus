@@ -13,7 +13,6 @@ path = "src/main.rs"
 mq-runtime = { path = "../mq-runtime" }
 mq-streams = { path = "../mq-streams" }
 mq-sync = { path = "../mq-sync" }
-hex = "0.4"
 axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.7", features = ["fs", "cors"] }
 tokio = { workspace = true, features = ["net", "signal"] }

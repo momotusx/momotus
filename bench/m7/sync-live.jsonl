@@ -5,3 +5,8 @@
 {"event":"synced","device":"A","ms":3,"report":{"applied":2,"pulled":2,"pushed":0,"stale":0,"unreadable":0},"check":"A lists WatchHub fifth"}
 {"event":"relay_scan","records":4,"plaintext_hits":{"Sintel":0,"tt1727587":0,"Cinemeta":0,"torrentio":0,"watchhub":0,"default":0}}
 {"event":"property_test","devices":3,"cases":256,"max_ops":39,"seconds":6.5,"mutations_caught":["client progress guard removed","server upsert guard removed","addon list guard removed"]}
+{"event":"setup","date":"2026-10-17","note":"after review round 1: outbox push, key bundle, per-device tokens via /v1/devices; device A = copy of the earlier data dir, device B empty"}
+{"event":"synced","device":"A","ms":8,"report":{"applied":0,"pulled":4,"pushed":4,"stale":0,"unreadable":0}}
+{"event":"synced","device":"B","ms":4,"report":{"applied":4,"pulled":4,"pushed":0,"stale":1,"unreadable":0},"check":"B lists Cinemeta, Torrentio, Local Test, OpenSubtitles v3, WatchHub"}
+{"event":"relay_scan","devices":2,"accounts":1,"records":4,"distinct_device_tokens":true}
+{"event":"property_test","devices":3,"cases":256,"ops":["progress","watched","library","setting","addons incl. empty","stream memory","sync","push","pull","restart","clock jump"],"seconds":5.7,"mutations_caught":["progress write not queued","client progress guard removed"]}

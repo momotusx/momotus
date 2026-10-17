@@ -55,6 +55,10 @@ pub struct PullResponse {
     pub records: Vec<WireRecord>,
     /// Cursor for the next pull.
     pub last: u64,
+    /// The account's newest seq. Below a device's cursor it means the relay
+    /// lost records, and the device sends and reads everything again.
+    #[serde(default)]
+    pub head: u64,
     pub more: bool,
     pub server_ms: u64,
 }

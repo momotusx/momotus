@@ -1,7 +1,7 @@
 use rusqlite_migration::{M, Migrations};
 
 pub(crate) fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V1), M::up(V2), M::up(V3), M::up(V4)])
+    Migrations::new(vec![M::up(V1), M::up(V2), M::up(V3), M::up(V4), M::up(V5)])
 }
 
 const V1: &str = r#"
@@ -119,5 +119,16 @@ INSERT INTO addon_list (profile_id, hlc) SELECT profile_id, MAX(hlc) FROM addons
 CREATE TABLE sync_state (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
+);
+"#;
+
+/// Sync outbox: every local register write queues its key in the same
+/// transaction, so a push never misses a write that committed after a later
+/// hlc did. Pulled writes are not queued; the first sync queues everything.
+const V5: &str = r#"
+CREATE TABLE sync_outbox (
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    coll  INTEGER NOT NULL,
+    key   TEXT NOT NULL
 );
 "#;

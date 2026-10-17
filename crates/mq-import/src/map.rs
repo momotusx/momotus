@@ -77,9 +77,11 @@ pub struct ImportReport {
     pub raw_import_id: Option<i64>,
 }
 
+/// Stremio's modification time as the register clock, never later than now:
+/// a future time would win every later edit and be refused by the relay.
 fn import_hlc(wall_ms: i64) -> String {
     Hlc {
-        wall_ms: wall_ms.max(0) as u64,
+        wall_ms: (wall_ms.max(0) as u64).min(mq_library::hlc::now_ms()),
         counter: 0,
         device: IMPORT_DEVICE,
     }

@@ -3,18 +3,21 @@
 //! `sync_state`, so a crash at any point only repeats work: pushes are
 //! upserts and applies are idempotent.
 
-use crate::seal::{AccountKey, SealError};
-use crate::wire::{AccountResponse, PAGE, PullResponse, PushRequest, PushResponse, WireRecord};
+use crate::seal::{AccountKey, KeyBundle, SCHEMA_VERSION, SealError};
+use crate::wire::{
+    AccountResponse, MAX_CLOCK_AHEAD_MS, PAGE, PullResponse, PushRequest, PushResponse, WireRecord,
+};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions};
 use mq_library::hlc::{Hlc, HlcClock, now_ms};
-use mq_library::{Library, LibraryError, SyncCursor, SyncRecord};
+use mq_library::{Library, LibraryError, SyncRecord};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-const PUSH_CURSOR: &str = "push_cursor";
 const PULL_SEQ: &str = "pull_seq";
+const SCHEMA: &str = "pull_schema";
+const QUEUED_ALL: &str = "queued_all";
 
 /// Where and as whom to sync. The token and key come from the platform
 /// keystore and are never logged.
@@ -22,7 +25,7 @@ const PULL_SEQ: &str = "pull_seq";
 pub struct SyncConfig {
     pub server: String,
     pub device_token: String,
-    pub account_key: [u8; 32],
+    pub keys: KeyBundle,
 }
 
 impl std::fmt::Debug for SyncConfig {
@@ -70,7 +73,7 @@ pub async fn sync_once(
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<SyncReport, SyncError> {
-    let key = AccountKey::from_bytes(&config.account_key);
+    let key = AccountKey::from_bundle(&config.keys);
     let mut report = SyncReport::default();
     push(library, http, config, &key, clock, &mut report).await?;
     pull(library, http, config, &key, clock, &mut report).await?;
@@ -87,7 +90,7 @@ pub async fn create_account(
     let mut options = options(&SyncConfig {
         server: server.to_owned(),
         device_token: String::new(),
-        account_key: [0; 32],
+        keys: KeyBundle::generate(),
     });
     options.headers = invite
         .map(|i| vec![("x-invite".to_owned(), i.to_owned())])
@@ -95,6 +98,28 @@ pub async fn create_account(
     Ok(http
         .post_json(
             &format!("{server}/v1/accounts"),
+            &serde_json::json!({}),
+            &options,
+        )
+        .await?
+        .json()?)
+}
+
+/// A token for a new device of an account, asked for by a device that
+/// already belongs to it. Each device then gets revoked on its own.
+pub async fn add_device(
+    http: &HttpClient,
+    server: &str,
+    device_token: &str,
+) -> Result<AccountResponse, SyncError> {
+    let options = options(&SyncConfig {
+        server: server.to_owned(),
+        device_token: device_token.to_owned(),
+        keys: KeyBundle::generate(),
+    });
+    Ok(http
+        .post_json(
+            &format!("{server}/v1/devices"),
             &serde_json::json!({}),
             &options,
         )
@@ -110,7 +135,7 @@ pub async fn push_changes(
     clock: &HlcClock,
 ) -> Result<SyncReport, SyncError> {
     let mut report = SyncReport::default();
-    let key = AccountKey::from_bytes(&config.account_key);
+    let key = AccountKey::from_bundle(&config.keys);
     push(library, http, config, &key, clock, &mut report).await?;
     Ok(report)
 }
@@ -123,7 +148,7 @@ pub async fn pull_changes(
     clock: &HlcClock,
 ) -> Result<SyncReport, SyncError> {
     let mut report = SyncReport::default();
-    let key = AccountKey::from_bytes(&config.account_key);
+    let key = AccountKey::from_bundle(&config.keys);
     pull(library, http, config, &key, clock, &mut report).await?;
     Ok(report)
 }
@@ -153,16 +178,25 @@ async fn push(
     clock: &HlcClock,
     report: &mut SyncReport,
 ) -> Result<(), SyncError> {
-    let mut cursor: SyncCursor = library
-        .sync_state(PUSH_CURSOR)?
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
+    // Registers written before this device ever synced are not queued yet.
+    if library.sync_state(QUEUED_ALL)?.is_none() {
+        library.queue_all()?;
+        library.set_sync_state(QUEUED_ALL, "1")?;
+    }
     loop {
-        let page = library.changed_since(&cursor, PAGE)?;
-        let Some(last) = page.last().map(SyncRecord::cursor) else {
+        let page = library.outbox(PAGE)?;
+        let Some(last_id) = page.last_id else {
             return Ok(());
         };
-        let records = page.iter().map(|r| seal(key, r)).collect();
+        if page.records.is_empty() {
+            library.outbox_done(last_id)?;
+            continue;
+        }
+        let records = page
+            .records
+            .iter()
+            .map(|(_, r)| seal(key, config.keys.epoch, r))
+            .collect();
         let response: PushResponse = http
             .post_json(
                 &format!("{}/v1/push", config.server),
@@ -172,27 +206,23 @@ async fn push(
             .await?
             .json()?;
         observe_server(clock, response.server_ms);
+        report.pushed += response.accepted;
+        report.stale += response.stale;
         if let Some(refused) = response.rejected.first() {
-            // Keep the cursor before the refused record so it is pushed
-            // again once the cause (usually this device's clock) is fixed.
+            // Keep the refused register queued so it is pushed again once the
+            // cause (usually this device's clock) is fixed.
             let blind = |r: &SyncRecord| hex::encode(key.key_id(r.coll, &r.key));
-            if let Some(stop) = page.iter().position(|r| blind(r) == refused.key_id)
-                && stop > 0
+            if let Some((id, _)) = page
+                .records
+                .iter()
+                .find(|(_, r)| blind(r) == refused.key_id)
             {
-                save_push_cursor(library, &page[stop - 1].cursor())?;
+                library.outbox_done(id - 1)?;
             }
             return Err(SyncError::Rejected(refused.reason.clone()));
         }
-        report.pushed += response.accepted;
-        report.stale += response.stale;
-        save_push_cursor(library, &last)?;
-        cursor = last;
+        library.outbox_done(last_id)?;
     }
-}
-
-fn save_push_cursor(library: &Library, cursor: &SyncCursor) -> Result<(), SyncError> {
-    let json = serde_json::to_string(cursor).expect("cursor serializes");
-    Ok(library.set_sync_state(PUSH_CURSOR, &json)?)
 }
 
 async fn pull(
@@ -203,10 +233,16 @@ async fn pull(
     clock: &HlcClock,
     report: &mut SyncReport,
 ) -> Result<(), SyncError> {
-    let mut after: u64 = library
-        .sync_state(PULL_SEQ)?
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+    // A newer app version may read records an older one skipped (a new
+    // collection, a new schema): pull everything again once after upgrading.
+    let schema = SCHEMA_VERSION.to_string();
+    let mut after: u64 = match library.sync_state(SCHEMA)? {
+        Some(s) if s == schema => library
+            .sync_state(PULL_SEQ)?
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
+        _ => 0,
+    };
     loop {
         let page: PullResponse = http
             .get(
@@ -216,6 +252,14 @@ async fn pull(
             .await?
             .json()?;
         observe_server(clock, page.server_ms);
+        if page.head < after {
+            // The relay lost records (restored from a backup): send it
+            // everything this device holds and read it all again.
+            library.queue_all()?;
+            library.set_sync_state(PULL_SEQ, "0")?;
+            after = 0;
+            continue;
+        }
         let mut records = Vec::with_capacity(page.records.len());
         for wire in &page.records {
             match open(key, wire) {
@@ -234,17 +278,21 @@ async fn pull(
         library.set_sync_state(PULL_SEQ, &page.last.to_string())?;
         after = page.last;
         if !page.more {
+            library.set_sync_state(SCHEMA, &schema)?;
             return Ok(());
         }
     }
 }
 
 /// Lifts a slow local clock to the relay's time so new writes sort after
-/// what other devices already pushed.
+/// what other devices already pushed. The relay is not trusted with more
+/// than the 10 minutes it allows devices: a time far in the future would
+/// pin this clock there.
 fn observe_server(clock: &HlcClock, server_ms: u64) {
+    let now = now_ms();
     clock.observe(
         Hlc {
-            wall_ms: server_ms,
+            wall_ms: server_ms.min(now + MAX_CLOCK_AHEAD_MS),
             counter: 0,
             device: 0,
         },
@@ -252,7 +300,7 @@ fn observe_server(clock: &HlcClock, server_ms: u64) {
     );
 }
 
-fn seal(key: &AccountKey, record: &SyncRecord) -> WireRecord {
+fn seal(key: &AccountKey, epoch: u32, record: &SyncRecord) -> WireRecord {
     let key_id = key.key_id(record.coll, &record.key);
     let payload = serde_json::to_vec(&Payload {
         k: record.key.clone(),
@@ -263,8 +311,8 @@ fn seal(key: &AccountKey, record: &SyncRecord) -> WireRecord {
         coll: record.coll,
         key_id: hex::encode(key_id),
         hlc: record.hlc.clone(),
-        epoch: 0,
-        body: B64.encode(key.seal(record.coll, &key_id, &record.hlc, 0, &payload)),
+        epoch,
+        body: B64.encode(key.seal(record.coll, &key_id, &record.hlc, epoch, &payload)),
         seq: 0,
     }
 }

@@ -248,9 +248,10 @@ async fn sync_account_then_two_devices_share_preferences() {
     a.handle_text(&json!({"id": 1, "op": "createSyncAccount", "server": server}).to_string())
         .await;
     let account = next(&mut rx_a).await["result"].clone();
-    assert_eq!(account["accountKey"].as_str().unwrap().len(), 64);
+    assert_eq!(account["keys"]["ak"].as_str().unwrap().len(), 64);
+    assert_ne!(account["keys"]["ak"], account["keys"]["idKey"]);
     let sync = json!({"op": "syncNow", "server": server,
-        "deviceToken": account["deviceToken"], "accountKey": account["accountKey"]});
+        "deviceToken": account["deviceToken"], "keys": account["keys"]});
 
     a.handle_text(
         &json!({"id": 2, "op": "setPrefs", "patch": {"subtitleLanguages": ["tur"]}}).to_string(),
@@ -277,7 +278,7 @@ async fn sync_account_then_two_devices_share_preferences() {
 
     let mut bad = sync;
     bad["id"] = json!(5);
-    bad["accountKey"] = json!("zz");
+    bad["keys"]["ak"] = json!("zz");
     b.handle_text(&bad.to_string()).await;
     assert_eq!(next(&mut rx_b).await["ok"], false);
     let _ = std::fs::remove_dir_all(&dir);

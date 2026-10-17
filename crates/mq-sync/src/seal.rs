@@ -25,6 +25,56 @@ pub enum SealError {
     Malformed,
 }
 
+/// Everything a device needs to read and write the account's records. QR
+/// enrollment and the recovery kit carry this bundle, not a bare key.
+///
+/// `ak` encrypts records and changes when a device is revoked (with
+/// `epoch`); `id_key` names registers and never changes, so a rotation does
+/// not rename every record on the relay.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyBundle {
+    pub v: u8,
+    pub epoch: u32,
+    #[serde(with = "hex32")]
+    pub ak: [u8; 32],
+    #[serde(with = "hex32")]
+    pub id_key: [u8; 32],
+}
+
+impl std::fmt::Debug for KeyBundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "KeyBundle(epoch {}, <redacted>)", self.epoch)
+    }
+}
+
+impl KeyBundle {
+    pub fn generate() -> Self {
+        Self {
+            v: 1,
+            epoch: 0,
+            ak: AccountKey::generate(),
+            id_key: AccountKey::generate(),
+        }
+    }
+}
+
+mod hex32 {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&hex::encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
+        let text = String::deserialize(d)?;
+        hex::decode(&text)
+            .ok()
+            .and_then(|b| b.try_into().ok())
+            .ok_or_else(|| serde::de::Error::custom("expected 64 hex digits"))
+    }
+}
+
 /// The account key, held in memory only; the platform keystore owns it.
 #[derive(Clone)]
 pub struct AccountKey {
@@ -39,15 +89,11 @@ impl std::fmt::Debug for AccountKey {
 }
 
 impl AccountKey {
-    pub fn from_bytes(ak: &[u8; 32]) -> Self {
-        let hk = Hkdf::<Sha256>::new(None, ak);
-        let mut enc = [0u8; 32];
-        let mut id = [0u8; 32];
-        hk.expand(b"marquee/sync/enc/v1", &mut enc)
-            .expect("32 bytes is a valid HKDF length");
-        hk.expand(b"marquee/sync/id/v1", &mut id)
-            .expect("32 bytes is a valid HKDF length");
-        Self { enc, id }
+    pub fn from_bundle(bundle: &KeyBundle) -> Self {
+        Self {
+            enc: expand(&bundle.ak, b"marquee/sync/enc/v1"),
+            id: expand(&bundle.id_key, b"marquee/sync/id/v1"),
+        }
     }
 
     /// A fresh random account key.
@@ -124,6 +170,14 @@ impl AccountKey {
     }
 }
 
+fn expand(ikm: &[u8; 32], info: &[u8]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    Hkdf::<Sha256>::new(None, ikm)
+        .expand(info, &mut out)
+        .expect("32 bytes is a valid HKDF length");
+    out
+}
+
 fn aad(coll: u8, key_id: &[u8; 16], hlc: &str, epoch: u32) -> Vec<u8> {
     let mut aad = b"mq1".to_vec();
     aad.push(coll);
@@ -174,8 +228,17 @@ mod tests {
 
     const HLC: &str = "000190000000000000000000000000a1";
 
+    fn bundle(n: u8) -> KeyBundle {
+        KeyBundle {
+            v: 1,
+            epoch: 0,
+            ak: [n; 32],
+            id_key: [n; 32],
+        }
+    }
+
     fn key() -> AccountKey {
-        AccountKey::from_bytes(&[7u8; 32])
+        AccountKey::from_bundle(&bundle(7))
     }
 
     #[test]
@@ -230,7 +293,7 @@ mod tests {
             Err(SealError::Open),
             "body"
         );
-        let stranger = AccountKey::from_bytes(&[8u8; 32]);
+        let stranger = AccountKey::from_bundle(&bundle(8));
         assert_eq!(
             stranger.open(3, &id, HLC, 0, &body),
             Err(SealError::Open),
@@ -245,7 +308,7 @@ mod tests {
         assert_ne!(k.key_id(2, "p/tt1"), k.key_id(3, "p/tt1"));
         assert_ne!(
             k.key_id(2, "p/tt1"),
-            AccountKey::from_bytes(&[9u8; 32]).key_id(2, "p/tt1")
+            AccountKey::from_bundle(&bundle(9)).key_id(2, "p/tt1")
         );
     }
 

@@ -20,8 +20,20 @@ impl Hlc {
         )
     }
 
+    /// The lowest timestamp of a device: for writes that only cache what the
+    /// device saw (a title it played, its first profile row), so any real
+    /// edit from any device wins over them.
+    pub fn zero(device: u64) -> Self {
+        Self {
+            wall_ms: 0,
+            counter: 0,
+            device,
+        }
+    }
+
     pub fn decode(s: &str) -> Option<Self> {
-        if s.len() != 32 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        // Lowercase only: hlcs are compared as text, and "A" sorts before "a".
+        if s.len() != 32 || !s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
             return None;
         }
         Some(Self {
@@ -56,6 +68,10 @@ impl HlcClock {
         }
     }
 
+    pub fn device(&self) -> u64 {
+        self.device
+    }
+
     /// Timestamp for a local event.
     pub fn tick(&self, now_ms: u64) -> Hlc {
         let mut last = self.last.lock().unwrap_or_else(|p| p.into_inner());
@@ -66,11 +82,7 @@ impl HlcClock {
                 device: self.device,
             }
         } else {
-            Hlc {
-                wall_ms: last.wall_ms,
-                counter: last.counter.saturating_add(1),
-                device: self.device,
-            }
+            bump(last.wall_ms, last.counter, self.device)
         };
         *last = next;
         next
@@ -80,19 +92,36 @@ impl HlcClock {
     pub fn observe(&self, remote: Hlc, now_ms: u64) -> Hlc {
         let mut last = self.last.lock().unwrap_or_else(|p| p.into_inner());
         let wall = now_ms.max(last.wall_ms).max(remote.wall_ms);
-        let counter = match (wall == last.wall_ms, wall == remote.wall_ms) {
-            (true, true) => last.counter.max(remote.counter).saturating_add(1),
-            (true, false) => last.counter.saturating_add(1),
-            (false, true) => remote.counter.saturating_add(1),
-            (false, false) => 0,
-        };
-        let next = Hlc {
-            wall_ms: wall,
-            counter,
-            device: self.device,
+        let next = match (wall == last.wall_ms, wall == remote.wall_ms) {
+            (true, true) => bump(wall, last.counter.max(remote.counter), self.device),
+            (true, false) => bump(wall, last.counter, self.device),
+            (false, true) => bump(wall, remote.counter, self.device),
+            (false, false) => Hlc {
+                wall_ms: wall,
+                counter: 0,
+                device: self.device,
+            },
         };
         *last = next;
         next
+    }
+}
+
+/// The next timestamp after `(wall_ms, counter)`. When the counter is used up
+/// the wall time moves one millisecond instead, so a clock never repeats a
+/// timestamp (a repeat would lose last-writer-wins ties).
+fn bump(wall_ms: u64, counter: u16, device: u64) -> Hlc {
+    match counter.checked_add(1) {
+        Some(counter) => Hlc {
+            wall_ms,
+            counter,
+            device,
+        },
+        None => Hlc {
+            wall_ms: wall_ms + 1,
+            counter: 0,
+            device,
+        },
     }
 }
 
@@ -142,5 +171,20 @@ mod tests {
         assert_eq!(t3.counter, 4);
         let t4 = clock.tick(1002);
         assert!(t4 > t3, "local ticks stay ahead of what we observed");
+    }
+
+    #[test]
+    fn a_used_up_counter_moves_the_wall_time() {
+        let clock = HlcClock::new(1);
+        let far = Hlc {
+            wall_ms: 10,
+            counter: u16::MAX,
+            device: 2,
+        };
+        let t1 = clock.observe(far, 5);
+        assert!(t1 > far);
+        let t2 = clock.tick(5);
+        assert!(t2 > t1, "{t1:?} then {t2:?}");
+        assert_eq!(Hlc::decode(&t2.encode().to_uppercase()), None);
     }
 }

@@ -44,11 +44,24 @@ impl Core {
     /// The profile's preferences, defaults for anything never set.
     pub fn prefs(&self) -> Prefs {
         let mut merged = serde_json::to_value(Prefs::default()).unwrap_or_default();
-        for (key, value) in self.library().settings(self.profile()).unwrap_or_default() {
-            if let (Some(object), Ok(value)) =
-                (merged.as_object_mut(), serde_json::from_str(&value))
-            {
-                object.insert(key, value);
+        let mut rows = self.library().settings(self.profile()).unwrap_or_default();
+        // Whole fields first, then the leaves inside them ("streams.quality").
+        rows.sort_by_key(|(key, _)| key.contains('.'));
+        for (key, value) in rows {
+            let Ok(value) = serde_json::from_str::<Value>(&value) else {
+                continue;
+            };
+            let mut next = merged.clone();
+            let slot = key.split('.').try_fold(&mut next, |at, part| {
+                at.as_object_mut()
+                    .map(|o| o.entry(part).or_insert(Value::Null))
+            });
+            let Some(slot) = slot else { continue };
+            *slot = value;
+            // A value this version cannot read (written by a newer one) is
+            // skipped on its own instead of resetting everything.
+            if serde_json::from_value::<Prefs>(next.clone()).is_ok() {
+                merged = next;
             }
         }
         serde_json::from_value(merged).unwrap_or_default()
@@ -72,9 +85,28 @@ impl Core {
             serde_json::from_value(merged).map_err(|e| CoreError::BadPrefs(e.to_string()))?;
         let stored = serde_json::to_value(&prefs).unwrap_or_default();
         let hlc = self.hlc();
-        for key in fields.keys() {
+        // Objects are stored leaf by leaf, so two devices changing different
+        // stream preferences both keep their change.
+        let mut writes = Vec::new();
+        for (key, value) in fields {
+            let leaves: Vec<String> = match (value, &stored[key]) {
+                (Value::Object(patch), Value::Object(_)) => {
+                    patch.keys().map(|leaf| format!("{key}.{leaf}")).collect()
+                }
+                _ => vec![key.clone()],
+            };
+            for leaf in leaves {
+                let value = leaf
+                    .split('.')
+                    .try_fold(&stored, |at, part| at.get(part))
+                    .ok_or_else(|| CoreError::BadPrefs(format!("unknown setting: {leaf}")))?;
+                writes.push((leaf, value.to_string()));
+            }
+        }
+        // Checked in full above, so a bad patch writes nothing.
+        for (leaf, value) in writes {
             self.library()
-                .set_setting(self.profile(), key, &stored[key].to_string(), &hlc)?;
+                .set_setting(self.profile(), &leaf, &value, &hlc)?;
         }
         Ok(prefs)
     }

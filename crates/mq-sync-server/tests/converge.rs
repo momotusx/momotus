@@ -42,6 +42,15 @@ enum Op {
         device: usize,
         order: Vec<usize>,
     },
+    /// App restart: a fresh clock seeded from the stored registers.
+    Restart {
+        device: usize,
+    },
+    /// The device clock jumps (a user fixes the time, NTP corrects it).
+    ClockJump {
+        device: usize,
+        skew_s: i64,
+    },
     Memory {
         device: usize,
         item: u8,
@@ -92,6 +101,9 @@ fn op() -> impl Strategy<Value = Op> {
             group
         }),
         device.clone().prop_map(|device| Op::Sync { device }),
+        device.clone().prop_map(|device| Op::Restart { device }),
+        (device.clone(), -300..300i64)
+            .prop_map(|(device, skew_s)| Op::ClockJump { device, skew_s }),
         device.clone().prop_map(|device| Op::Push { device }),
         device.prop_map(|device| Op::Pull { device }),
     ]
@@ -175,7 +187,11 @@ impl Device {
                     .unwrap();
                 ((coll::STREAM_MEMORY, key(&[PROFILE, &item_id])), hlc)
             }
-            Op::Sync { .. } | Op::Push { .. } | Op::Pull { .. } => {
+            Op::Sync { .. }
+            | Op::Push { .. }
+            | Op::Pull { .. }
+            | Op::Restart { .. }
+            | Op::ClockJump { .. } => {
                 unreachable!("handled by the runner")
             }
         }
@@ -214,7 +230,7 @@ async fn run(ops: Vec<Op>) {
         allow_private: true,
         ..Default::default()
     };
-    let account_key = mq_sync::seal::AccountKey::generate();
+    let keys = mq_sync::seal::KeyBundle::generate();
     let mut configs = Vec::new();
     let mut devices = Vec::new();
     for (i, skew) in [0i64, -40_000, 25_000].into_iter().enumerate() {
@@ -234,7 +250,7 @@ async fn run(ops: Vec<Op>) {
             configs.push(SyncConfig {
                 server: server.clone(),
                 device_token: account.device_token,
-                account_key,
+                keys: keys.clone(),
             });
         } else {
             configs.push(configs[0].clone());
@@ -254,6 +270,20 @@ async fn run(ops: Vec<Op>) {
     let mut newest: HashMap<(u8, String), String> = HashMap::new();
     for op in &ops {
         match op {
+            Op::Restart { device } => {
+                let d = &mut devices[*device];
+                d.clock = HlcClock::new(*device as u64 + 1);
+                if let Some(newest) = d
+                    .library
+                    .newest_hlc()
+                    .unwrap()
+                    .as_deref()
+                    .and_then(mq_library::Hlc::decode)
+                {
+                    d.clock.observe(newest, now_ms());
+                }
+            }
+            Op::ClockJump { device, skew_s } => devices[*device].skew_ms = skew_s * 1000,
             Op::Sync { device } => {
                 let d = &devices[*device];
                 sync_once(&d.library, &http, &configs[*device], &d.clock)

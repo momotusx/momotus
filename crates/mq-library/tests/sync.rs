@@ -121,3 +121,34 @@ fn unknown_or_damaged_records_are_skipped() {
     ];
     assert_eq!(lib.apply(&records).unwrap(), 0);
 }
+
+#[test]
+fn a_write_landing_during_a_push_stays_queued() {
+    let lib = Library::temporary().unwrap();
+    lib.ensure_profile("p", "p", &hlc(1, 1)).unwrap();
+    lib.upsert_item("p", &item("tt1"), true, &hlc(2, 1))
+        .unwrap();
+    let page = lib.outbox(500).unwrap();
+    assert_eq!(page.records.len(), 2);
+    // Written after the page was read, with an older clock than the item.
+    lib.set_progress(
+        "p",
+        ProgressRow {
+            video_id: "v",
+            item_id: "tt1",
+            position_ms: 1,
+            duration_ms: 2,
+            updated_ms: 1,
+        },
+        &hlc(1, 2),
+    )
+    .unwrap();
+    lib.outbox_done(page.last_id.unwrap()).unwrap();
+    let next = lib.outbox(500).unwrap();
+    assert_eq!(next.records.len(), 1);
+    assert_eq!(next.records[0].1.coll, coll::PROGRESS);
+    // Pulled registers are never queued: no echo.
+    let other = Library::temporary().unwrap();
+    other.apply(&all(&lib)).unwrap();
+    assert_eq!(other.outbox(500).unwrap().last_id, None);
+}

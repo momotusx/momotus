@@ -25,6 +25,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 const MAX_REQUEST: usize = 2 * 1024 * 1024;
+/// Bytes charged per stored record on top of its body.
+const RECORD_OVERHEAD: i64 = 96;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -60,6 +62,7 @@ pub fn router(db: &Path, config: Config) -> rusqlite::Result<Router> {
         .route("/v1/accounts", post(create_account))
         .route("/v1/push", post(push))
         .route("/v1/pull", get(pull))
+        .route("/v1/devices", post(add_device))
         .layer(DefaultBodyLimit::max(MAX_REQUEST))
         .with_state(state))
 }
@@ -140,6 +143,30 @@ async fn create_account(State(state): State<AppState>, headers: HeaderMap) -> Re
         .into_response(),
         Err(e) => {
             tracing::error!("create account: {e}");
+            error(StatusCode::INTERNAL_SERVER_ERROR, "storage error")
+        }
+    }
+}
+
+/// A new token for another device of the caller's account, so each device
+/// can be revoked on its own.
+async fn add_device(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let db = lock(&state);
+    let Some(account) = authorize(&db, &headers) else {
+        return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
+    };
+    let token = random_hex(32);
+    match db.execute(
+        "INSERT INTO device (token_hash, account, created_ms) VALUES (?1, ?2, ?3)",
+        params![token_hash(&token), account, now_ms() as i64],
+    ) {
+        Ok(_) => Json(AccountResponse {
+            account,
+            device_token: token,
+        })
+        .into_response(),
+        Err(e) => {
+            tracing::error!("add device: {e}");
             error(StatusCode::INTERNAL_SERVER_ERROR, "storage error")
         }
     }
@@ -242,7 +269,8 @@ async fn push(
                     |row| row.get(0),
                 )
                 .optional()?;
-            let grown = bytes - old.unwrap_or(0) + r.body.len() as i64;
+            // Rows cost their key, clock and index entries too, not only the body.
+            let grown = bytes - old.unwrap_or(-RECORD_OVERHEAD) + r.body.len() as i64;
             if grown as u64 > state.config.quota_bytes {
                 return Ok(Err(error(
                     StatusCode::PAYLOAD_TOO_LARGE,
@@ -254,7 +282,7 @@ async fn push(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                  ON CONFLICT(account, coll, key_id) DO UPDATE SET
                    hlc = excluded.hlc, epoch = excluded.epoch, seq = excluded.seq, body = excluded.body
-                 WHERE excluded.hlc > record.hlc",
+                 WHERE (excluded.hlc, excluded.epoch) > (record.hlc, record.epoch)",
                 params![account, r.coll, r.key_id, r.hlc, r.epoch, seq + 1, r.body],
             )?;
             if changed == 1 {
@@ -300,7 +328,12 @@ async fn pull(
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
     };
     let limit = query.limit.unwrap_or(PAGE).clamp(1, PAGE);
-    let rows = (|| -> rusqlite::Result<Vec<WireRecord>> {
+    let rows = (|| -> rusqlite::Result<(Vec<WireRecord>, u64)> {
+        let head: i64 = db.query_row(
+            "SELECT seq FROM account WHERE id = ?1",
+            params![account],
+            |r| r.get(0),
+        )?;
         let mut stmt = db.prepare(
             "SELECT coll, key_id, hlc, epoch, body, seq FROM record
              WHERE account = ?1 AND seq > ?2 ORDER BY seq LIMIT ?3",
@@ -318,16 +351,18 @@ async fn pull(
                 })
             },
         )?
-        .collect()
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map(|records| (records, head as u64))
     })();
     match rows {
-        Ok(mut records) => {
+        Ok((mut records, head)) => {
             let more = records.len() > limit;
             records.truncate(limit);
             let last = records.last().map_or(query.after, |r| r.seq);
             Json(PullResponse {
                 records,
                 last,
+                head,
                 more,
                 server_ms,
             })

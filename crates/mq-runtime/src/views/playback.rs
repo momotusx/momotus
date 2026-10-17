@@ -329,7 +329,8 @@ fn save_progress(
             poster_shape: None,
             added_ms: mq_library::hlc::now_ms() as i64,
         };
-        library.upsert_item(profile, &row, false, &core.hlc())?;
+        // Only a cache of what was played: any real library edit wins.
+        library.upsert_item(profile, &row, false, &core.zero_hlc())?;
     }
     library.set_progress(
         profile,

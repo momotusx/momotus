@@ -87,7 +87,8 @@ impl Core {
         let library = Arc::new(library);
         let store = Arc::new(LibraryCache(library.clone()));
         let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
-        library.ensure_profile(&profile, &profile, &clock.tick(now_ms()).encode())?;
+        // The lowest hlc: a profile synced from another device keeps its name.
+        library.ensure_profile(&profile, &profile, &Hlc::zero(device_id).encode())?;
         Ok(Self {
             inner: Arc::new(Inner {
                 http,
@@ -119,6 +120,11 @@ impl Core {
 
     pub fn hlc(&self) -> String {
         self.inner.clock.tick(now_ms()).encode()
+    }
+
+    /// The lowest hlc of this device, for rows that only cache what it saw.
+    pub fn zero_hlc(&self) -> String {
+        Hlc::zero(self.inner.clock.device()).encode()
     }
 
     /// One sync round with the relay: push local changes, pull and apply

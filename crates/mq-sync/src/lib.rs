@@ -5,5 +5,6 @@ pub mod seal;
 pub mod wire;
 
 pub use engine::{
-    SyncConfig, SyncError, SyncReport, create_account, pull_changes, push_changes, sync_once,
+    SyncConfig, SyncError, SyncReport, add_device, create_account, pull_changes, push_changes,
+    sync_once,
 };

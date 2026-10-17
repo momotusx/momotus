@@ -1,5 +1,5 @@
 use crate::schema::migrations;
-use crate::sync::sql;
+use crate::sync::{coll, queue, sql};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -172,11 +172,11 @@ impl Library {
 
     pub fn ensure_profile(&self, id: &str, name: &str, hlc: &str) -> Result<(), LibraryError> {
         self.write(|c| {
-            c.execute(
+            let added = c.execute(
                 "INSERT INTO profiles (id, name, hlc) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO NOTHING",
                 params![id, name, hlc],
-            )
-            .map(drop)
+            )?;
+            queue(c, added, coll::PROFILES, &[id])
         })
     }
 
@@ -188,7 +188,10 @@ impl Library {
         addons: &[AddonRow],
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| sql::set_addons(c, profile, addons, hlc, false).map(drop))
+        self.write(|c| {
+            let n = sql::set_addons(c, profile, addons, hlc, false)?;
+            queue(c, n, coll::ADDONS, &[profile])
+        })
     }
 
     pub fn addons(&self, profile: &str) -> Result<Vec<AddonRow>, LibraryError> {
@@ -217,7 +220,10 @@ impl Library {
         in_library: bool,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| sql::upsert_item(c, profile, item, in_library, hlc).map(drop))
+        self.write(|c| {
+            let n = sql::upsert_item(c, profile, item, in_library, hlc)?;
+            queue(c, n, coll::ITEMS, &[profile, &item.item_id])
+        })
     }
 
     /// Records playback progress. Older HLCs never overwrite newer ones.
@@ -227,7 +233,10 @@ impl Library {
         p: ProgressRow<'_>,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| sql::set_progress(c, profile, &p, hlc).map(drop))
+        self.write(|c| {
+            let n = sql::set_progress(c, profile, &p, hlc)?;
+            queue(c, n, coll::PROGRESS, &[profile, p.video_id])
+        })
     }
 
     pub fn progress(
@@ -253,7 +262,10 @@ impl Library {
         watched: bool,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| sql::set_watched(c, profile, item_id, video_id, watched, hlc).map(drop))
+        self.write(|c| {
+            let n = sql::set_watched(c, profile, item_id, video_id, watched, hlc)?;
+            queue(c, n, coll::WATCHED, &[profile, video_id])
+        })
     }
 
     pub fn watched_videos(
@@ -536,7 +548,8 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            sql::set_stream_memory(c, profile, item_id, binge_group, stream_json, hlc).map(drop)
+            let n = sql::set_stream_memory(c, profile, item_id, binge_group, stream_json, hlc)?;
+            queue(c, n, coll::STREAM_MEMORY, &[profile, item_id])
         })
     }
 
@@ -575,7 +588,10 @@ impl Library {
         value_json: &str,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| sql::set_setting(c, profile, key, value_json, hlc).map(drop))
+        self.write(|c| {
+            let n = sql::set_setting(c, profile, key, value_json, hlc)?;
+            queue(c, n, coll::SETTINGS, &[profile, key])
+        })
     }
 
     /// Remembers a search the user acted on; keeps the newest 50.

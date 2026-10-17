@@ -156,7 +156,8 @@ async fn newer_wins_each_replacement_takes_a_seq_and_pull_pages() {
 #[tokio::test]
 async fn refuses_future_clocks_bad_tokens_and_overflowing_accounts() {
     let relay = relay(Config {
-        quota_bytes: 10,
+        // One 8-byte body plus its 96-byte row overhead fits, two do not.
+        quota_bytes: 150,
         ..Config::default()
     })
     .await;
@@ -222,5 +223,53 @@ async fn invite_gates_sign_up() {
             .post_json(&url, &serde_json::json!({}), &with)
             .await
             .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn head_epochs_canonical_clocks_and_device_tokens() {
+    let relay = relay(Config::default()).await;
+    let a = relay.account().await;
+    let now = now_ms();
+    relay
+        .push(&a.device_token, vec![record(1, hlc(now, 1), "v0")])
+        .await
+        .unwrap();
+    // Re-sealed under a new key epoch with the same hlc: replaces.
+    let mut rotated = record(1, hlc(now, 1), "v1");
+    rotated.epoch = 1;
+    let r = relay.push(&a.device_token, vec![rotated]).await.unwrap();
+    assert_eq!(r.accepted, 1);
+    // Uppercase hex would sort wrongly as text: refused.
+    let r = relay
+        .push(
+            &a.device_token,
+            vec![record(2, hlc(now, 1).to_uppercase(), "x")],
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.rejected.len(), 1);
+
+    let page = relay.pull(&a.device_token, 0, 500).await;
+    assert_eq!((page.head, page.last), (2, 2));
+    assert_eq!(page.records[0].epoch, 1);
+
+    // A second device gets its own token on the same account.
+    let second: AccountResponse = relay
+        .http
+        .post_json(
+            &format!("{}/v1/devices", relay.base),
+            &serde_json::json!({}),
+            &opts(Some(&a.device_token)),
+        )
+        .await
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(second.account, a.account);
+    assert_ne!(second.device_token, a.device_token);
+    assert_eq!(
+        relay.pull(&second.device_token, 0, 500).await.records.len(),
+        1
     );
 }

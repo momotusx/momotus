@@ -31,6 +31,15 @@ pub struct SyncRecord {
     pub hlc: String,
 }
 
+/// Registers waiting to be pushed, with the newest outbox id read.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OutboxPage {
+    /// Current value of each queued register, oldest queue entry first.
+    pub records: Vec<(i64, SyncRecord)>,
+    /// Highest outbox id in this page; `None` when the outbox is empty.
+    pub last_id: Option<i64>,
+}
+
 /// Position in export order.
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SyncCursor {
@@ -122,7 +131,7 @@ struct SettingValue {
     value_json: String,
 }
 
-fn key(parts: &[&str]) -> String {
+pub(crate) fn key(parts: &[&str]) -> String {
     parts.join(&SEP.to_string())
 }
 
@@ -153,7 +162,7 @@ impl Library {
                 coll::SETTINGS,
                 coll::STREAM_MEMORY,
             ] {
-                out.extend(export(c, coll, after, limit)?);
+                out.extend(export(c, coll, Filter::After(after, limit))?);
             }
             out.sort_by_cached_key(SyncRecord::cursor);
             out.truncate(limit);
@@ -197,6 +206,60 @@ impl Library {
         })
     }
 
+    /// Up to `limit` queued registers with their current values. A register
+    /// queued several times is read once, at its newest entry.
+    pub fn outbox(&self, limit: usize) -> Result<OutboxPage, LibraryError> {
+        self.read(|c| {
+            let mut stmt =
+                c.prepare("SELECT id, coll, key FROM sync_outbox ORDER BY id LIMIT ?1")?;
+            let queued: Vec<(i64, u8, String)> = stmt
+                .query_map(params![limit as i64], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            let last_id = queued.last().map(|q| q.0);
+            let mut newest: std::collections::HashMap<(u8, &str), i64> = Default::default();
+            for (id, coll, key) in &queued {
+                newest.insert((*coll, key), *id);
+            }
+            let mut records = Vec::new();
+            for (id, coll, key) in &queued {
+                if newest.get(&(*coll, key.as_str())) != Some(id) {
+                    continue;
+                }
+                for record in export(c, *coll, Filter::Key(key))? {
+                    records.push((*id, record));
+                }
+            }
+            Ok(OutboxPage { records, last_id })
+        })
+    }
+
+    /// Queues every register: on a device's first sync, and when the relay
+    /// lost records.
+    pub fn queue_all(&self) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute_batch(
+                "INSERT INTO sync_outbox (coll, key)
+                   SELECT 0, id FROM profiles
+                   UNION ALL SELECT 1, profile_id FROM addon_list
+                   UNION ALL SELECT 2, profile_id || char(31) || item_id FROM library_items
+                   UNION ALL SELECT 3, profile_id || char(31) || video_id FROM progress
+                   UNION ALL SELECT 4, profile_id || char(31) || video_id FROM watched
+                   UNION ALL SELECT 5, profile_id || char(31) || key FROM settings
+                   UNION ALL SELECT 6, profile_id || char(31) || item_id FROM stream_memory",
+            )
+        })
+    }
+
+    /// Drops queue entries up to `id` once the relay has them.
+    pub fn outbox_done(&self, id: i64) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute("DELETE FROM sync_outbox WHERE id <= ?1", params![id])
+                .map(drop)
+        })
+    }
+
     pub fn sync_state(&self, key: &str) -> Result<Option<String>, LibraryError> {
         self.read(|c| {
             c.query_row(
@@ -222,43 +285,59 @@ impl Library {
 
 /// One table's registers after the cursor. The key expression and the
 /// ordering match `SyncCursor`, so pages are exact.
-fn export(
-    c: &Connection,
-    coll: u8,
-    after: &SyncCursor,
-    limit: usize,
-) -> rusqlite::Result<Vec<SyncRecord>> {
-    let sep = SEP.to_string();
+/// Which registers of a table to read.
+enum Filter<'a> {
+    /// Up to n registers after the cursor, in export order.
+    After(&'a SyncCursor, usize),
+    /// The register with this key.
+    Key(&'a str),
+}
+
+fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<SyncRecord>> {
     let (sql, key_expr) = match coll {
         coll::PROFILES => ("SELECT id, name, hlc FROM profiles", "id"),
         coll::ADDONS => ("SELECT profile_id, hlc FROM addon_list", "profile_id"),
         coll::ITEMS => (
             "SELECT profile_id, item_id, kind, name, poster, poster_shape, in_library, added_ms, hlc FROM library_items",
-            "profile_id || ?5 || item_id",
+            "profile_id || char(31) || item_id",
         ),
         coll::PROGRESS => (
             "SELECT profile_id, video_id, item_id, position_ms, duration_ms, updated_ms, hlc FROM progress",
-            "profile_id || ?5 || video_id",
+            "profile_id || char(31) || video_id",
         ),
         coll::WATCHED => (
             "SELECT profile_id, video_id, item_id, watched, hlc FROM watched",
-            "profile_id || ?5 || video_id",
+            "profile_id || char(31) || video_id",
         ),
         coll::SETTINGS => (
             "SELECT profile_id, key, value_json, hlc FROM settings",
-            "profile_id || ?5 || key",
+            "profile_id || char(31) || key",
         ),
         coll::STREAM_MEMORY => (
             "SELECT profile_id, item_id, binge_group, stream_json, hlc FROM stream_memory",
-            "profile_id || ?5 || item_id",
+            "profile_id || char(31) || item_id",
         ),
         _ => return Ok(Vec::new()),
     };
-    let query = format!(
-        "{sql} WHERE (hlc, ?6, {key_expr}) > (?1, ?2, ?3) ORDER BY hlc, {key_expr} LIMIT ?4"
-    );
+    let (query, values): (String, Vec<Box<dyn rusqlite::ToSql>>) = match filter {
+        Filter::After(after, limit) => (
+            format!(
+                "{sql} WHERE (hlc, {coll}, {key_expr}) > (?1, ?2, ?3) ORDER BY hlc, {key_expr} LIMIT ?4"
+            ),
+            vec![
+                Box::new(after.hlc.clone()),
+                Box::new(after.coll),
+                Box::new(after.key.clone()),
+                Box::new(limit as i64),
+            ],
+        ),
+        Filter::Key(key) => (
+            format!("{sql} WHERE {key_expr} = ?1"),
+            vec![Box::new(key.to_owned())],
+        ),
+    };
     let mut stmt = c.prepare(&query)?;
-    let args = params![after.hlc, after.coll, after.key, limit as i64, sep, coll];
+    let args = rusqlite::params_from_iter(values.iter().map(|v| v.as_ref()));
     let rows = match coll {
         coll::PROFILES => stmt
             .query_map(args, |r| {
@@ -458,6 +537,22 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         // A collection from a newer app version.
         _ => 0,
     })
+}
+
+/// Queues a register for push when a local write changed it.
+pub(crate) fn queue(
+    c: &Connection,
+    changed: usize,
+    coll: u8,
+    parts: &[&str],
+) -> rusqlite::Result<()> {
+    if changed > 0 {
+        c.execute(
+            "INSERT INTO sync_outbox (coll, key) VALUES (?1, ?2)",
+            params![coll, key(parts)],
+        )?;
+    }
+    Ok(())
 }
 
 /// The one copy of each register write, shared by local writes and sync.

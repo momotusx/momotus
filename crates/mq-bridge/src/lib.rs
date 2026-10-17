@@ -63,7 +63,7 @@ enum Request {
         keys: Vec<(String, String)>,
     },
     /// Creates a relay account. The reply carries the device token and a new
-    /// account key (hex); the platform stores both in its keystore.
+    /// key bundle; the platform stores both in its keystore.
     CreateSyncAccount {
         id: u64,
         server: String,
@@ -76,7 +76,7 @@ enum Request {
         id: u64,
         server: String,
         device_token: String,
-        account_key: String,
+        keys: mq_sync::seal::KeyBundle,
     },
     /// Merges `patch` into the profile preferences (see `Core::set_prefs`).
     SetPrefs {
@@ -174,11 +174,10 @@ impl Session {
                 let result = mq_sync::create_account(self.core.http(), &server, invite.as_deref())
                     .await
                     .map(|a| {
-                        let key = mq_sync::seal::AccountKey::generate();
                         json!({
                             "account": a.account,
                             "deviceToken": a.device_token,
-                            "accountKey": hex::encode(key),
+                            "keys": mq_sync::seal::KeyBundle::generate(),
                         })
                     })
                     .map_err(|e| e.to_string());
@@ -188,24 +187,19 @@ impl Session {
                 id,
                 server,
                 device_token,
-                account_key,
+                keys,
             } => {
-                let result = match hex::decode(&account_key)
-                    .ok()
-                    .and_then(|k| k.try_into().ok())
-                {
-                    Some(account_key) => self
-                        .core
-                        .sync(&mq_sync::SyncConfig {
-                            server,
-                            device_token,
-                            account_key,
-                        })
-                        .await
-                        .map_err(|e| e.to_string())
-                        .and_then(|r| to_value(&r)),
-                    None => Err("accountKey must be 64 hex digits".into()),
+                let config = mq_sync::SyncConfig {
+                    server,
+                    device_token,
+                    keys,
                 };
+                let result = self
+                    .core
+                    .sync(&config)
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| to_value(&r));
                 self.reply(json!(id), result);
             }
             Request::SetPrefs { id, patch } => {

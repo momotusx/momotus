@@ -113,7 +113,7 @@ async fn main() {
             SyncAction::Init { server, invite } => {
                 sync::init(&cli.data, &server, invite.as_deref()).await
             }
-            SyncAction::Join { from } => sync::join(&cli.data, &from),
+            SyncAction::Join { from } => sync::join(&cli.data, &from).await,
             SyncAction::Now => sync::now(&core, &cli.data).await,
         },
         Command::Import { timeout_secs } => import(&core, Duration::from_secs(timeout_secs)).await,

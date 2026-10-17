@@ -32,3 +32,33 @@ async fn patches_merge_per_field_and_the_view_follows() {
     assert!(core.set_prefs(&json!({"autoplayNext": "yes"})).is_err());
     assert_eq!(core.prefs(), prefs, "rejected patches change nothing");
 }
+
+#[tokio::test]
+async fn nested_fields_are_separate_registers_and_bad_leaves_write_nothing() {
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&json!({"streams": {"quality": "balanced", "maxHeight": 720}}))
+        .unwrap();
+    let keys: Vec<String> = core
+        .library()
+        .settings("p")
+        .unwrap()
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert!(keys.contains(&"streams.quality".to_string()), "{keys:?}");
+    assert!(keys.contains(&"streams.maxHeight".to_string()), "{keys:?}");
+
+    let before = core.prefs();
+    assert!(
+        core.set_prefs(&json!({"streams": {"quality": "best", "bogus": 1}}))
+            .is_err()
+    );
+    assert_eq!(core.prefs(), before, "nothing of the bad patch was stored");
+
+    // A value from a newer app version this one cannot read is skipped alone.
+    core.library()
+        .set_setting("p", "streams.quality", "\"ultra\"", &core.hlc())
+        .unwrap();
+    let prefs = core.prefs();
+    assert_eq!(prefs.streams.max_height, Some(720));
+}
