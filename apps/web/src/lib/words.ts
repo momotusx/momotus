@@ -1,0 +1,102 @@
+/** Plain-language copy for the core's typed facts. The core sends enums and
+ * codes; every UI turns them into the same words. */
+
+import type { Group } from "../core/generated/Group";
+import type { HiddenSummary } from "../core/generated/HiddenSummary";
+import type { HideReason } from "../core/generated/HideReason";
+import type { Reason } from "../core/generated/Reason";
+import type { VersionStatus } from "../core/generated/VersionStatus";
+
+export function reasonText(r: Reason, status: VersionStatus): string {
+  switch (r) {
+    case "readyNow":
+      return status.kind === "ready" && status.service ? `Ready now, cached on ${status.service}` : "Ready now";
+    case "playsDirectly":
+      return "Plays directly on this device";
+    case "matchesScreen":
+      return "Matches your screen";
+    case "sameReleaseAsLast":
+      return "Same release as the last episode";
+    case "yourLanguage":
+      return "In your language";
+    case "smallerFaster":
+      return "Smaller and faster to start";
+  }
+}
+
+export const groupLabel: Record<Group, string> = {
+  best: "Best quality",
+  smallerFaster: "Smaller and faster",
+  otherLanguages: "Other languages",
+  needsDownload: "Needs download",
+};
+
+export const groupOrder: Group[] = ["best", "smallerFaster", "otherLanguages", "needsDownload"];
+
+const hideText: Record<HideReason, [one: string, many: string]> = {
+  wrongTitle: ["is for another title", "are for other titles"],
+  wrongEpisode: ["is another episode", "are other episodes"],
+  excluded: ["matches your avoid list", "match your avoid list"],
+  tooLarge: ["is over your size limit", "are over your size limit"],
+  unplayable: ["cannot play on this device", "cannot play on this device"],
+  unsupportedSource: ["uses a source this app cannot open yet", "use a source this app cannot open yet"],
+};
+
+/** "19 are for other titles, 1 is another episode". */
+export function hiddenSummary(h: HiddenSummary): string {
+  return h.byReason.map(([reason, n]) => `${n} ${hideText[reason][n === 1 ? 0 : 1]}`).join(", ");
+}
+
+export type Tone = "ok" | "warn" | "bad" | "idle";
+
+/** Status in words with a tone for its dot; the word always carries it. */
+export function statusText(s: VersionStatus): { tone: Tone; text: string } {
+  switch (s.kind) {
+    case "ready":
+      return { tone: "ok", text: s.service ? `Ready on ${s.service}` : "Ready" };
+    case "direct":
+      return { tone: "ok", text: "Direct link" };
+    case "torrent":
+      return { tone: "warn", text: s.seeds === null ? "Torrent" : `Torrent, ${s.seeds} seeds` };
+    case "needsDownload":
+      return { tone: "warn", text: s.service ? `Needs download on ${s.service}` : "Needs download" };
+  }
+}
+
+const names = (() => {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" });
+  } catch {
+    return null;
+  }
+})();
+
+/** "fr" or "fre" to "French"; unknown codes stay as given, upper-cased. */
+export function languageName(code: string): string {
+  const c = code.toLowerCase();
+  const iso1: Record<string, string> = { eng: "en", tur: "tr", fre: "fr", fra: "fr", ger: "de", deu: "de", spa: "es", ita: "it", por: "pt", rus: "ru", jpn: "ja", kor: "ko", chi: "zh", zho: "zh", ara: "ar", dut: "nl", nld: "nl", pol: "pl", swe: "sv", hin: "hi", gre: "el", ell: "el", rum: "ro", ron: "ro", hun: "hu", cze: "cs", ces: "cs", heb: "he", per: "fa", fas: "fa", pob: "pt-BR" };
+  try {
+    const name = names?.of(iso1[c] ?? c);
+    if (name && name.toLowerCase() !== c) return name;
+  } catch {
+    // Not a language code: fall through.
+  }
+  return code.toUpperCase();
+}
+
+export function kindLabel(kind: string): string {
+  const labels: Record<string, string> = { movie: "Movie", series: "Series", channel: "Channel", tv: "Live TV", anime: "Anime" };
+  return labels[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+/** What an addon provides, in words. */
+export function providesText(p: string): string {
+  const labels: Record<string, string> = {
+    catalog: "Catalogs",
+    meta: "Details",
+    stream: "Streams",
+    subtitles: "Subtitles",
+    addon_catalog: "Addon lists",
+  };
+  return labels[p] ?? p;
+}

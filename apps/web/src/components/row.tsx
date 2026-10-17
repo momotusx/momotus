@@ -6,6 +6,7 @@ import { A } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Wrench from "lucide-solid/icons/wrench";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { Poster } from "./art";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { form } from "../form";
@@ -37,40 +38,41 @@ const sizeOf = (m: Metrics, shape: string | undefined) =>
 // Survives the Home screen unmounting, so Back lands on the same offsets.
 const offsets = new Map<string, number>();
 
-function caption(tile: TileData): string | null {
+/** Continue Watching says where you are: "Next: S1 E2" for Up Next, else the
+ * episode and how much is watched. */
+export function caption(tile: TileData): string | null {
+  if (tile.releaseInfo?.startsWith("Next:")) return tile.releaseInfo;
   if (tile.progress === null) return null;
   const ref = tile.videoId ? parseVideo(tile.videoId) : null;
   const where = ref ? episodeLabel(ref.season, ref.episode) : "Movie";
   return `${where}, ${Math.round(tile.progress * 100)}% watched`;
 }
 
-function Tile(props: { tile: TileData; rowId: string; index: number; left: number; top: number; w: number; h: number; autofocus: boolean }) {
-  const [broken, setBroken] = createSignal(false);
-  const cap = () => caption(props.tile);
+export function TileCard(props: {
+  tile: TileData;
+  fkey: string;
+  index?: number;
+  w: number;
+  h: number;
+  autofocus?: boolean;
+  style?: Record<string, string>;
+  captions?: boolean;
+  onOpen?: () => void;
+}) {
+  const cap = () => (props.captions === false ? null : caption(props.tile));
   return (
     <A
       href={titlePath(props.tile.kind, props.tile.id)}
       class="tile"
-      data-f={`tile:${props.rowId}:${props.tile.id}`}
+      data-f={props.fkey}
       data-index={props.index}
       data-autofocus={props.autofocus ? "" : undefined}
       aria-label={cap() ? `${props.tile.name}, ${cap()}` : props.tile.name}
-      style={{ left: `${props.left}px`, top: `${props.top}px`, width: `${props.w}px` }}
+      style={{ width: `${props.w}px`, ...props.style }}
+      onClick={() => props.onOpen?.()}
     >
       <div class="pic" style={{ height: `${props.h}px` }}>
-        <Show when={props.tile.poster && !broken()} fallback={<span class="pic-name">{props.tile.name}</span>}>
-          <img
-            src={props.tile.poster as string}
-            width={props.w}
-            height={props.h}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            class="fade"
-            onLoad={(e) => e.currentTarget.classList.add("in")}
-            onError={() => setBroken(true)}
-          />
-        </Show>
+        <Poster src={props.tile.poster} name={props.tile.name} w={props.w} h={props.h} />
         <Show when={props.tile.progress !== null}>
           <div class="bar">
             <i style={{ width: pct(props.tile.progress ?? 0) }} />
@@ -84,7 +86,7 @@ function Tile(props: { tile: TileData; rowId: string; index: number; left: numbe
   );
 }
 
-export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null }) {
+export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void }) {
   let section!: HTMLElement;
   let track: HTMLDivElement | undefined;
   const m = metrics;
@@ -191,15 +193,15 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                   {(i) => (
                     <Show when={props.row.tiles[i]}>
                       {(tile) => (
-                        <Tile
+                        <TileCard
                           tile={tile()}
-                          rowId={id()}
+                          fkey={`tile:${id()}:${tile().id}`}
                           index={i}
-                          left={m().inset + i * stride()}
-                          top={m().pad}
+                          style={{ position: "absolute", left: `${m().inset + i * stride()}px`, top: `${m().pad}px` }}
                           w={size()[0]}
                           h={size()[1]}
                           autofocus={props.autofocus && i === 0}
+                          onOpen={props.onOpen}
                         />
                       )}
                     </Show>

@@ -1,6 +1,6 @@
 /** The app's one bridge connection and the live views built on it. Each view
- * is a Solid store fed by the core's snapshot and diffs, so components read
- * plain fields and re-render only what changed. */
+ * is a Solid store fed by the core's snapshot and pushes, so components read
+ * plain fields and re-render only what changed (see plans/core-protocol.md). */
 
 import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
@@ -11,9 +11,11 @@ import type { Hero } from "./generated/Hero";
 import type { HomeRow } from "./generated/HomeRow";
 import type { HomeSnapshot } from "./generated/HomeSnapshot";
 import type { HomeUpdate } from "./generated/HomeUpdate";
+import type { Prefs } from "./generated/Prefs";
 import type { TitleHeader } from "./generated/TitleHeader";
 import type { TitleSnapshot } from "./generated/TitleSnapshot";
 import type { TitleUpdate } from "./generated/TitleUpdate";
+import type { VersionsSnapshot } from "./generated/VersionsSnapshot";
 
 export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
 
@@ -25,12 +27,65 @@ const [link, setLink] = createSignal<Link>("connecting");
 export { link };
 transport.onClose(() => setLink("closed"));
 
-type ViewStatus = { state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
+export type ViewStatus = { state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
 
-const reasonOf = (e: unknown) =>
+export const reasonOf = (e: unknown) =>
   e instanceof Error && e.message === "connection closed"
-    ? `Cannot reach the core at ${bridgeUrl}. Start it with cargo run -p mq-bridge.`
+    ? `Cannot reach the core at ${bridgeUrl}. Start it with: cargo run -p mq-bridge`
     : String(e instanceof Error ? e.message : e);
+
+/** Runs a one-shot op such as `installAddon` or `setPrefs`. */
+export async function op<T = unknown>(name: string, fields: Record<string, unknown> = {}): Promise<T> {
+  const result = await bridge.request<T>(name, fields);
+  setLink("open");
+  return result;
+}
+
+export interface Live<S> {
+  status: ViewStatus;
+  data: S | null;
+}
+
+export interface LiveView<S> {
+  state: Live<S>;
+  sub: () => number | null;
+  command(c: object): Promise<void>;
+  close(): void;
+}
+
+/** Opens a record view (pushes are whole snapshots; the last one wins). It
+ * closes with the calling component unless `keep` is set. */
+export function liveView<S>(view: string, params: Record<string, unknown> = {}, keep = false): LiveView<S> {
+  const [state, setState] = createStore<Live<S>>({ status: { state: "opening" }, data: null });
+  const [sub, setSub] = createSignal<number | null>(null);
+  let command: (c: object) => Promise<void> = async () => undefined;
+  let closeSub: (() => Promise<void>) | undefined;
+  let closed = false;
+  const apply = (s: S) => setState("data", reconcile(s as never, { merge: true }));
+  bridge
+    .subscribe<S, S>(view, params, (updates) => {
+      const last = updates[updates.length - 1];
+      if (last !== undefined) apply(last);
+    })
+    .then((s) => {
+      setLink("open");
+      if (closed) return void s.close();
+      setSub(s.sub);
+      closeSub = s.close;
+      command = s.command;
+      batch(() => {
+        apply(s.snapshot);
+        setState("status", { state: "open" });
+      });
+    })
+    .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
+  const close = () => {
+    closed = true;
+    void closeSub?.();
+  };
+  if (!keep) onCleanup(close);
+  return { state, sub, command: (c) => command(c), close };
+}
 
 export interface HomeState {
   status: ViewStatus;
@@ -104,9 +159,41 @@ export function titleView(kind: string, id: string): TitleView {
   return { state, command: (c) => command(c) };
 }
 
-/** Installs an addon by manifest URL; resolves to its display name. */
-export async function installAddon(url: string): Promise<string> {
-  const result = await bridge.request<{ id: string; name: string }>("installAddon", { url });
-  setLink("open");
-  return result.name;
+/** What this screen can show, for the versions ranking. */
+export function displayCaps(): { displayHeight: number; hdr: string[] } {
+  const lines = Math.min(screen.width, screen.height) * (window.devicePixelRatio || 1);
+  const displayHeight = lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : 720;
+  const hdr = matchMedia("(dynamic-range: high)").matches ? ["hdr10", "hlg"] : [];
+  return { displayHeight, hdr };
+}
+
+export interface VersionsParams {
+  kind: string;
+  videoId: string;
+  title: string;
+  season?: number;
+  episode?: number;
+  bingeGroup?: string;
+}
+
+let versions: { key: string; view: LiveView<VersionsSnapshot> } | null = null;
+
+/** One Versions view at a time, shared by the Versions screen and the player:
+ * playback takes rows by key from the same open view, so it outlives both
+ * screens until a different video asks for versions. */
+export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
+  const key = `${p.kind}|${p.videoId}|${p.bingeGroup ?? ""}`;
+  if (versions?.key === key && versions.view.state.status.state !== "failed") return versions.view;
+  versions?.view.close();
+  const view = liveView<VersionsSnapshot>("versions", { ...p, ...displayCaps() }, true);
+  versions = { key, view };
+  return view;
+}
+
+let prefs: LiveView<Prefs> | undefined;
+
+/** The profile's preferences, kept open for the app's lifetime. */
+export function prefsView(): LiveView<Prefs> {
+  prefs ??= liveView<Prefs>("settings", {}, true);
+  return prefs;
 }

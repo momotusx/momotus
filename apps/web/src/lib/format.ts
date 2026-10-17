@@ -29,12 +29,24 @@ export function parseVideo(videoId: string): VideoRef | null {
 
 export const episodeLabel = (season: number, episode: number) => `S${season}:E${episode}`;
 
-export const titlePath = (kind: string, id: string) => `/title/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`;
+// Ids keep their colons ("tt0944947:1:1"): they are valid in a path segment.
+const seg = (s: string) => encodeURIComponent(s).replace(/%3A/gi, ":");
 
-/** The title page a video belongs to, used when Back has no history. */
-export function titleOfVideo(videoId: string): string {
-  const ref = parseVideo(videoId);
-  return ref ? titlePath("series", ref.id) : titlePath("movie", videoId);
+export const titlePath = (kind: string, id: string) => `/title/${seg(kind)}/${seg(id)}`;
+
+export const playPath = (kind: string, id: string, videoId: string) =>
+  `/play/${seg(kind)}/${seg(id)}/${seg(videoId)}`;
+
+export const versionsPath = (kind: string, id: string, videoId: string) =>
+  `${titlePath(kind, id)}/versions/${seg(videoId)}`;
+
+/** Route params arrive as written in the URL; ids may hold escapes. */
+export function decoded(s: string | undefined): string {
+  try {
+    return decodeURIComponent(s ?? "");
+  } catch {
+    return s ?? "";
+  }
 }
 
 export const pct = (x: number) => `${Math.round(Math.min(1, Math.max(0, x)) * 1000) / 10}%`;
