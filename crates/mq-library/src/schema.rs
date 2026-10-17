@@ -8,6 +8,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V4),
         M::up(V5),
         M::up(V6),
+        M::up(V7),
     ])
 }
 
@@ -149,5 +150,45 @@ CREATE TABLE sync_roster (
     body     BLOB NOT NULL,
     sig      BLOB NOT NULL,
     PRIMARY KEY (genesis, seq)
+);
+"#;
+
+/// Watch trackers (Trakt): the account connected per profile, writes waiting
+/// to be sent (one per video, `held` while their playback session lives),
+/// and cursors. Local to the device, never synced.
+const V7: &str = r#"
+CREATE TABLE tracker_account (
+    profile_id   TEXT NOT NULL,
+    tracker      TEXT NOT NULL,
+    account      TEXT NOT NULL,
+    generation   INTEGER NOT NULL,
+    connected_ms INTEGER NOT NULL,
+    PRIMARY KEY (profile_id, tracker)
+);
+
+CREATE TABLE tracker_outbox (
+    profile_id  TEXT NOT NULL,
+    tracker     TEXT NOT NULL,
+    account     TEXT NOT NULL,
+    video_id    TEXT NOT NULL,
+    item_id     TEXT NOT NULL,
+    rev         INTEGER NOT NULL,
+    op          TEXT NOT NULL,
+    watched_ms  INTEGER NOT NULL,
+    session     TEXT,
+    held        INTEGER NOT NULL,
+    tries       INTEGER NOT NULL DEFAULT 0,
+    next_ms     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (profile_id, tracker, account, video_id)
+);
+CREATE INDEX tracker_outbox_session ON tracker_outbox (session) WHERE session IS NOT NULL;
+
+CREATE TABLE tracker_state (
+    profile_id  TEXT NOT NULL,
+    tracker     TEXT NOT NULL,
+    account     TEXT NOT NULL,
+    key         TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    PRIMARY KEY (profile_id, tracker, account, key)
 );
 "#;

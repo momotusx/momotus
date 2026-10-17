@@ -9,6 +9,7 @@ pub mod hlc;
 mod schema;
 mod store;
 mod sync;
+mod tracker;
 
 pub use hlc::{Hlc, HlcClock};
 
@@ -17,3 +18,4 @@ pub use store::{
     LibraryItemRow, ProgressRow, Table,
 };
 pub use sync::{OutboxPage, SignedEntry, SyncCursor, SyncRecord, coll};
+pub use tracker::{ImportReport, ImportedPlay, Intent, IntentOp, NewIntent, TrackerKey};

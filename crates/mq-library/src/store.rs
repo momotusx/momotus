@@ -333,8 +333,9 @@ impl Library {
                  LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
                  WHERE p.profile_id = ?1
                    AND {condition}
-                   AND p.updated_ms = (SELECT MAX(q.updated_ms) FROM progress q
-                                       WHERE q.profile_id = p.profile_id AND q.item_id = p.item_id)
+                   AND p.video_id = (SELECT q.video_id FROM progress q
+                                     WHERE q.profile_id = p.profile_id AND q.item_id = p.item_id
+                                     ORDER BY q.updated_ms DESC, q.video_id DESC LIMIT 1)
                  ORDER BY p.updated_ms DESC
                  LIMIT ?3",
             ))?;
