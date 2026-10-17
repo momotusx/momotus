@@ -65,10 +65,10 @@ final class DebridStore {
 
     /// Every `debrid` view push: store each pending record, then acknowledge it.
     func pending(_ records: [DebridRecord]) {
-        let retry = unfinished
+        let interrupted = unfinished
         unfinished.removeAll()
-        for tombstone in retry {
-            let job = enqueue(tombstone.service, tombstone.generation, write: false) { [self] in try await finish(tombstone) }
+        for tombstone in interrupted {
+            let job = enqueue(tombstone.service, tombstone.generation, write: false) { [self] in try await retry(tombstone) }
             Task { [self] in
                 do { try await job.value() } catch { remember(tombstone) }
             }
@@ -117,9 +117,28 @@ final class DebridStore {
                 gone.remove(generation)
                 throw error
             }
-            try await core.disconnect(service: service, generation: generation)
-            do { try await finish(tombstone) } catch { remember(tombstone) }
+            // The tombstone is durable now: from here any failure, cancellation
+            // included, is remembered and the rest (core, then record and
+            // tombstone) runs again with the next push.
+            do {
+                try await core.disconnect(service: service, generation: generation)
+            } catch {
+                remember(tombstone)
+                throw error
+            }
+            do {
+                try await finish(tombstone)
+            } catch {
+                remember(tombstone)
+                if error is CancellationError { throw error }
+            }
         }
+    }
+
+    /// An interrupted disconnect: tell the core again (it is idempotent), then clean up.
+    private func retry(_ tombstone: DebridTombstone) async throws {
+        try await core.disconnect(service: tombstone.service, generation: tombstone.generation)
+        try await finish(tombstone)
     }
 
     private func save(_ record: DebridRecord) async throws {

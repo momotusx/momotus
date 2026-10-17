@@ -78,6 +78,8 @@ final class DebridStoreTests: XCTestCase {
     /// Answers `restore` the way the core does.
     @MainActor private final class FakeCore: DebridCore {
         var acks: [String] = []
+        /// The next this many disconnects fail (the bridge call errors).
+        var failing = 0
         var disconnects: [String] = []
         var restores: [[[String]]] = []
 
@@ -95,6 +97,10 @@ final class DebridStoreTests: XCTestCase {
         }
 
         func disconnect(service: String, generation: String) async throws {
+            if failing > 0 {
+                failing -= 1
+                throw Failure()
+            }
             disconnects.append("\(service) \(generation)")
         }
     }
@@ -148,7 +154,8 @@ final class DebridStoreTests: XCTestCase {
             case "release":
                 keystore.release()
             case "fail":
-                keystore.failing[text("call")] = step["times"] as? Int ?? 0
+                let times = step["times"] as? Int ?? 0
+                if text("call") == "disconnect" { core.failing = times } else { keystore.failing[text("call")] = times }
             case "settle":
                 await store.idle()
             case "restart":
@@ -179,7 +186,7 @@ final class DebridStoreTests: XCTestCase {
             .standardizedFileURL
         let file = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         let cases = file?["cases"] as? [[String: Any]] ?? []
-        XCTAssertEqual(cases.count, 10, "cases in \(url.path)")
+        XCTAssertEqual(cases.count, 11, "cases in \(url.path)")
         for testCase in cases {
             try await replay(testCase)
         }
@@ -222,7 +229,16 @@ final class DebridStoreTests: XCTestCase {
             stored[record.service] = record
         }
 
-        func deleteRecord(service: String, generation: String) {
+        /// The next this many record deletes throw cancellation.
+        private var cancelDeletes = 0
+
+        func cancelNextDeletes(_ times: Int) { cancelDeletes = times }
+
+        func deleteRecord(service: String, generation: String) throws {
+            if cancelDeletes > 0 {
+                cancelDeletes -= 1
+                throw CancellationError()
+            }
             if stored[service]?.generation == generation { stored[service] = nil }
         }
 
@@ -362,6 +378,30 @@ final class DebridStoreTests: XCTestCase {
         let revision = await shared.stored["torbox"]?.revision
         let stones = await shared.stones
         XCTAssertEqual(revision, 2, "the generation is still written")
+        XCTAssertEqual(stones, [])
+    }
+
+    func testACancelledCleanupIsTriedAgain() async {
+        let shared = Shared(Self.record("g1", 1))
+        await shared.cancelNextDeletes(1)
+        let store = DebridStore(keystore: shared, core: shared)
+        let drop = store.disconnect(service: "torbox", generation: "g1")
+        let stopped = await settled(store)
+        XCTAssertTrue(stopped, "the cancelled pump unregisters")
+        do {
+            try await drop.value
+            XCTFail("a cancelled cleanup reported success")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
+        let held = await shared.stones.count
+        XCTAssertEqual(held, 1, "the tombstone stays until the record is gone")
+        store.pending([])
+        let retried = await settled(store)
+        XCTAssertTrue(retried, "the retry ran")
+        let left = await shared.stored["torbox"]
+        let stones = await shared.stones
+        XCTAssertNil(left)
         XCTAssertEqual(stones, [])
     }
 
