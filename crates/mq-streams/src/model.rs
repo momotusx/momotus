@@ -1,8 +1,8 @@
 //! Inputs and outputs of stream ranking.
 
 use mq_protocol::Source;
-use mq_relparse::{Audio, Hdr, ParsedRelease, Resolution, VideoCodec};
-use serde::Serialize;
+use mq_relparse::{Audio, Hdr, ParsedRelease, VideoCodec};
+use serde::{Deserialize, Serialize};
 
 /// What this device can decode and show. Produced by each platform.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -34,7 +34,12 @@ impl DeviceCaps {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum QualityPref {
     #[default]
@@ -44,11 +49,18 @@ pub enum QualityPref {
 }
 
 /// The user's profile preferences for picking streams.
-#[derive(Debug, Clone, PartialEq, Serialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
 pub struct StreamPrefs {
     pub quality: QualityPref,
-    pub max_resolution: Option<Resolution>,
+    /// Never pick above this many lines (720, 1080, 2160), whatever the screen.
+    pub max_height: Option<u32>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub max_size_bytes: Option<u64>,
     /// ISO 639-1 audio language preferences, most wanted first.
     pub languages: Vec<String>,

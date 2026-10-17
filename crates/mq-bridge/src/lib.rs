@@ -3,14 +3,14 @@
 //! IPC channel.
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
-//! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setDebridKeys", ...}`.
-//! Views: home, search, library, title, versions, playback, addons, import.
+//! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys", ...}`.
+//! Views: home, search, library, title, versions, playback, addons, import, settings.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
 use mq_runtime::{
     AddonsView, Core, HomeView, ImportView, LibrarySort, LibraryView, PlayTarget, PlaybackView,
-    SearchView, StoreId, StremioEndpoints, TitleView, VersionsParams, VersionsView,
+    SearchView, SettingsView, StoreId, StremioEndpoints, TitleView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
@@ -61,6 +61,11 @@ enum Request {
         id: u64,
         keys: Vec<(String, String)>,
     },
+    /// Merges `patch` into the profile preferences (see `Core::set_prefs`).
+    SetPrefs {
+        id: u64,
+        patch: Value,
+    },
 }
 
 /// Holding a view keeps its background work alive; dropping it cancels.
@@ -71,6 +76,7 @@ enum View {
     Playback(PlaybackView),
     Search(SearchView),
     Library(LibraryView),
+    Settings { _view: SettingsView },
     Addons { _view: AddonsView },
     Import { _view: ImportView },
 }
@@ -147,6 +153,14 @@ impl Session {
                 let result = self.core.set_addon_enabled(&url, enabled);
                 self.reply(json!(id), done(result));
             }
+            Request::SetPrefs { id, patch } => {
+                let result = self
+                    .core
+                    .set_prefs(&patch)
+                    .map_err(|e| e.to_string())
+                    .and_then(|p| to_value(&p));
+                self.reply(json!(id), result);
+            }
             Request::SetDebridKeys { id, keys } => {
                 let result = keys
                     .into_iter()
@@ -202,7 +216,10 @@ impl Session {
                 (View::Title(title), to_value(&snapshot)?, forward)
             }
             "versions" => {
-                let versions = VersionsView::open(&self.core, versions_params(params)?);
+                let versions = VersionsView::open(
+                    &self.core,
+                    versions_params(params, self.core.prefs().streams)?,
+                );
                 let (snapshot, updates) = versions.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (View::Versions(versions), to_value(&snapshot)?, forward)
@@ -223,6 +240,16 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (
                     View::Import { _view: import },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
+            "settings" => {
+                let settings = SettingsView::open(&self.core);
+                let (snapshot, updates) = settings.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (
+                    View::Settings { _view: settings },
                     to_value(&snapshot)?,
                     forward,
                 )
@@ -389,7 +416,7 @@ where
 /// Versions params: `kind`, `videoId`, `title` (for wrong-content checks),
 /// optional `season`, `episode`, `displayHeight`, `hdr` (array of
 /// "dolby_vision", "hdr10", "hdr10_plus", "hlg"), `bingeGroup`.
-fn versions_params(params: &Value) -> Result<VersionsParams, String> {
+fn versions_params(params: &Value, prefs: StreamPrefs) -> Result<VersionsParams, String> {
     let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
     let mut caps = DeviceCaps::basic_1080p();
     if let Some(height) = num("displayHeight") {
@@ -409,7 +436,7 @@ fn versions_params(params: &Value) -> Result<VersionsParams, String> {
             episode: num("episode"),
         },
         caps,
-        prefs: StreamPrefs::default(),
+        prefs,
         last_binge_group: params
             .get("bingeGroup")
             .and_then(Value::as_str)

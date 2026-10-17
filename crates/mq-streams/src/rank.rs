@@ -159,8 +159,8 @@ fn tier(s: &ParsedStream) -> u8 {
 
 fn effective_height(s: &ParsedStream, input: &RankInput<'_>) -> u32 {
     let mut cap = input.caps.display_height;
-    if let Some(max) = input.prefs.max_resolution {
-        cap = cap.min(max.height());
+    if let Some(max) = input.prefs.max_height {
+        cap = cap.min(max);
     }
     let height = s.release.resolution.height();
     if height == 0 {

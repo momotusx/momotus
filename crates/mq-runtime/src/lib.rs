@@ -18,5 +18,6 @@ pub use views::playback::{
     Attempt, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
 };
 pub use views::search::{SearchSnapshot, SearchView};
+pub use views::settings::{Prefs, SettingsView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{VersionRow, VersionsParams, VersionsSnapshot, VersionsView};

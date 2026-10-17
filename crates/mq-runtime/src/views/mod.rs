@@ -4,5 +4,6 @@ pub mod import;
 pub mod library;
 pub mod playback;
 pub mod search;
+pub mod settings;
 pub mod title;
 pub mod versions;

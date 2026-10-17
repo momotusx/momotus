@@ -28,6 +28,8 @@ pub enum CoreError {
     AlreadyInstalled(String),
     #[error("addon is not installed: {0}")]
     NotInstalled(String),
+    #[error("invalid setting: {0}")]
+    BadPrefs(String),
     #[error("stored manifest is invalid: {0}")]
     BadManifest(String),
 }

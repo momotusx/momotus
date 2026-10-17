@@ -556,6 +556,35 @@ impl Library {
         })
     }
 
+    /// Every setting of the profile as (key, JSON value).
+    pub fn settings(&self, profile: &str) -> Result<Vec<(String, String)>, LibraryError> {
+        self.read(|c| {
+            let mut stmt =
+                c.prepare("SELECT key, value_json FROM settings WHERE profile_id = ?1")?;
+            stmt.query_map(params![profile], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect()
+        })
+    }
+
+    /// One setting, last writer wins by HLC like every synced row.
+    pub fn set_setting(
+        &self,
+        profile: &str,
+        key: &str,
+        value_json: &str,
+        hlc: &str,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO settings (profile_id, key, value_json, hlc) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(profile_id, key) DO UPDATE SET value_json = excluded.value_json, hlc = excluded.hlc
+                 WHERE excluded.hlc > settings.hlc",
+                params![profile, key, value_json, hlc],
+            )
+            .map(drop)
+        })
+    }
+
     /// Remembers a search the user acted on; keeps the newest 50.
     pub fn record_search(
         &self,

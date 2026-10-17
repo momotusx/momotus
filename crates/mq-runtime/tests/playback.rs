@@ -261,6 +261,8 @@ fn expected_hash(file: &[u8]) -> String {
 async fn finds_subtitles_by_hash_size_and_filename() {
     let (base, asked) = file_and_subtitles().await;
     let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({"subtitleLanguages": ["tur"]}))
+        .unwrap();
     let manifest = serde_json::json!({
         "id": "subs", "version": "1.0.0", "name": "Subs",
         "types": ["movie"], "resources": ["stream", "subtitles"], "catalogs": []
@@ -300,12 +302,13 @@ async fn finds_subtitles_by_hash_size_and_filename() {
     }
     let s = done.expect("subtitles settled");
     let urls: Vec<_> = s.subtitles.iter().map(|t| t.url.as_str()).collect();
+    // The preferred language comes first; the rest keep arrival order.
     assert_eq!(
         urls,
         [
+            "https://subs.example/2.srt",
             "https://own.example/en.srt",
-            "https://subs.example/1.srt",
-            "https://subs.example/2.srt"
+            "https://subs.example/1.srt"
         ]
     );
     let path = asked.lock().unwrap()[0].clone();

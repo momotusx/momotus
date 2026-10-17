@@ -372,6 +372,7 @@ async fn resolve_next(
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
                 let url = server.register(upstream.clone(), &name);
+                let wanted = core.prefs().subtitle_languages;
                 {
                     let mut s = lock(&state);
                     s.snapshot.phase = PlaybackPhase::Ready;
@@ -384,6 +385,7 @@ async fn resolve_next(
                         .iter()
                         .map(|w| track(w, &stream.addon_name))
                         .collect();
+                    order_subtitles(&mut s.snapshot.subtitles, &wanted);
                     s.snapshot.subtitles_pending = true;
                     snapshot.set(s.snapshot.clone());
                 }
@@ -590,6 +592,7 @@ async fn find_subtitles(
         .into_iter()
         .filter(|a| a.supports(&path))
         .collect();
+    let wanted = core.prefs().subtitle_languages;
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     while let Some(event) = fanout.next().await {
         let mut s = lock(state);
@@ -607,6 +610,7 @@ async fn find_subtitles(
                         s.snapshot.subtitles.push(track(w, &source));
                     }
                 }
+                order_subtitles(&mut s.snapshot.subtitles, &wanted);
             }
             AddonEvent::Done => s.snapshot.subtitles_pending = false,
             _ => continue,
@@ -625,4 +629,14 @@ fn extra_value(name: &str, value: String) -> ExtraValue {
         name: name.into(),
         value,
     }
+}
+
+/// Preferred languages first, in preference order; the rest keep their order.
+fn order_subtitles(tracks: &mut [SubtitleTrack], wanted: &[String]) {
+    tracks.sort_by_key(|t| {
+        wanted
+            .iter()
+            .position(|w| w.eq_ignore_ascii_case(&t.lang))
+            .unwrap_or(wanted.len())
+    });
 }

@@ -10,7 +10,7 @@ use mq_runtime::{
     PlaybackView, RowState, SearchView, StoreId, StremioEndpoints, TitleView, VersionsParams,
     VersionsView,
 };
-use mq_streams::{DeviceCaps, StreamPrefs, Target};
+use mq_streams::{DeviceCaps, Target};
 use serde_json::json;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -286,7 +286,7 @@ async fn play(
                 episode,
             },
             caps: DeviceCaps::basic_1080p(),
-            prefs: StreamPrefs::default(),
+            prefs: core.prefs().streams,
             last_binge_group: None,
         },
     );
