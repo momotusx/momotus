@@ -458,13 +458,14 @@ async fn continue_watching_tiles_carry_the_episode_still() {
             .rows
             .into_iter()
             .find(|r| r.row_id == CONTINUE_ROW_ID)
-            .and_then(|r| r.tiles.into_iter().next());
+            .and_then(|r| r.tiles.into_iter().next())
+            .filter(|t| t.background.is_some());
         if tile.is_some() {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    let tile = tile.expect("Continue Watching tile");
+    let tile = tile.expect("Continue Watching tile with artwork");
     assert_eq!(tile.video_id.as_deref(), Some("tt9:1:1"));
     assert_eq!(
         tile.background.as_deref(),
@@ -475,4 +476,77 @@ async fn continue_watching_tiles_carry_the_episode_still() {
         Some("https://images.example/tt9-logo.png")
     );
     assert_eq!(tile.progress, Some(0.4));
+}
+
+/// The row is on screen before a slow meta addon answers; the artwork
+/// arrives as an update to the same row.
+#[tokio::test]
+async fn continue_watching_shows_before_its_metas_answer() {
+    let core = Core::temporary("p").unwrap();
+    let mut meta = catalog_addon("meta", Duration::from_secs(2), 200, SERIES_WITH_STILLS).await;
+    meta.manifest_json = serde_json::json!({
+        "id": "meta", "version": "1.0.0", "name": "Meta",
+        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    })
+    .to_string();
+    core.library()
+        .set_addons("p", &[meta], &core.hlc())
+        .unwrap();
+    let show = LibraryItemRow {
+        item_id: "tt9".into(),
+        kind: "series".into(),
+        name: "Show".into(),
+        poster: Some("https://images.example/tt9-poster.jpg".into()),
+        poster_shape: None,
+        added_ms: 1,
+    };
+    core.library()
+        .upsert_item("p", &show, true, &core.hlc())
+        .unwrap();
+    core.library()
+        .set_progress(
+            "p",
+            ProgressRow {
+                video_id: "tt9:1:1",
+                item_id: "tt9",
+                position_ms: 400,
+                duration_ms: 1000,
+                updated_ms: 5,
+            },
+            &core.hlc(),
+        )
+        .unwrap();
+    let view = HomeView::open(&core);
+    let first_tile = |view: &HomeView| {
+        view.snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == CONTINUE_ROW_ID)
+            .and_then(|r| r.tiles.into_iter().next())
+    };
+    let mut early = None;
+    for _ in 0..50 {
+        early = first_tile(&view);
+        if early.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let early = early.expect("row within 500 ms, long before the meta answers");
+    assert_eq!(early.video_id.as_deref(), Some("tt9:1:1"));
+    assert_eq!(early.background, None);
+    let mut late = None;
+    for _ in 0..400 {
+        late = first_tile(&view).filter(|t| t.background.is_some());
+        if late.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(
+        late.expect("artwork after the meta answers")
+            .background
+            .as_deref(),
+        Some("https://images.example/tt9-1-1.jpg")
+    );
 }

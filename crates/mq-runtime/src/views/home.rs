@@ -503,6 +503,15 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     let finished = library
         .finished_series(core.profile(), ROW_TILES)
         .unwrap_or_default();
+    // A new row shows at once from the library, so it never pushes the page
+    // down late; artwork and Next Up follow when the metas answer.
+    if find_row(&lock(rows), CONTINUE_ROW_ID).is_none() {
+        let quick = unfinished
+            .iter()
+            .map(|item| (item.updated_ms, tile_from_continue(item.clone(), None)))
+            .collect();
+        apply_continue(rows, quick);
+    }
     // Metas come from the addon cache after the first look; they give the
     // tiles their artwork (the episode's still, else the backdrop).
     let mut items: Vec<(i64, Tile)> =
@@ -521,6 +530,12 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     }))
     .await;
     items.extend(next_up.into_iter().flatten());
+    apply_continue(rows, items);
+}
+
+/// Puts the newest tiles in the Continue Watching row, adding or removing
+/// the row as needed.
+fn apply_continue(rows: &Mutex<ObservableVector<HomeRow>>, mut items: Vec<(i64, Tile)>) {
     items.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
     let tiles: Vec<Tile> = items.into_iter().take(ROW_TILES).map(|(_, t)| t).collect();
     let mut rows = lock(rows);
