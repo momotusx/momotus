@@ -16,6 +16,13 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(4);
 const REST: Duration = Duration::from_secs(3600);
 /// Lookups kept in memory.
 const CACHE_LOOKUPS: usize = 200;
+/// When the release-matched source could not be asked (a timeout, a refusal), the
+/// playback view asks it again after each of these waits while the version plays.
+const RETRIES: [Duration; 3] = [
+    Duration::from_secs(10),
+    Duration::from_secs(30),
+    Duration::from_secs(90),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(
@@ -147,6 +154,7 @@ pub struct Finder {
     http: HttpClient,
     hosts: Mutex<Hosts>,
     memory: Mutex<Memory>,
+    retries: Mutex<Vec<Duration>>,
 }
 
 impl Finder {
@@ -155,6 +163,7 @@ impl Finder {
             http,
             hosts: Mutex::new(Hosts::default()),
             memory: Mutex::default(),
+            retries: Mutex::new(RETRIES.to_vec()),
         }
     }
 
@@ -163,14 +172,24 @@ impl Finder {
         *lock(&self.memory) = Memory::default();
     }
 
+    /// The waits before asking a source again that could not be asked; tests shorten them.
+    pub fn retries(&self) -> Vec<Duration> {
+        lock(&self.retries).clone()
+    }
+
+    pub fn set_retries(&self, waits: Vec<Duration>) {
+        *lock(&self.retries) = waits;
+    }
+
     /// The release-matched source: TheIntroDB for IMDb ids, AniSkip for
-    /// Kitsu ids. Misses and failures are empty.
-    pub async fn primary(&self, target: &Target, duration_ms: u64) -> Found {
+    /// Kitsu ids. A miss is empty; `None` when the source could not be asked
+    /// (a timeout, a refusal), so the caller may ask again later.
+    pub async fn primary(&self, target: &Target, duration_ms: u64) -> Option<Found> {
         // The exact duration: another file of the same length to the second
         // is not proof of the same cut.
         let key = (target.clone(), duration_ms);
         if let Some(found) = lock(&self.memory).found.get(&key) {
-            return found.clone();
+            return Some(found.clone());
         }
         let raw = match target {
             Target::Movie { .. } | Target::Episode { .. } => {
@@ -178,10 +197,8 @@ impl Finder {
             }
             Target::Kitsu { id, episode } => self.aniskip(*id, *episode, duration_ms).await,
         };
-        // A failure is not remembered: the next playback asks again.
-        let Some(raw) = raw else {
-            return Found::default();
-        };
+        // A failure is not remembered: it is asked again.
+        let raw = raw?;
         let segments = normalize(raw, duration_ms);
         let next_at_ms = segments
             .iter()
@@ -198,7 +215,7 @@ impl Finder {
             memory.found.clear();
         }
         memory.found.insert(key, found.clone());
-        found
+        Some(found)
     }
 
     /// IntroDB's segments of the kinds `have` lacks (IMDb ids only). They

@@ -13,16 +13,23 @@ const DURATION: u64 = 3_500_000;
 /// One local server for the stream files and the skip databases. Every
 /// request line is recorded; TheIntroDB answers after `delay`.
 async fn server(delay: Duration) -> (String, Arc<Mutex<Vec<String>>>) {
+    server_failing(delay, 0).await
+}
+
+/// As [server], with TheIntroDB refusing (503) its first `failures` lookups.
+async fn server_failing(delay: Duration, failures: usize) -> (String, Arc<Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let seen = Arc::new(Mutex::new(Vec::new()));
     let log = seen.clone();
+    let refused = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     tokio::spawn(async move {
         loop {
             let Ok((mut socket, _)) = listener.accept().await else {
                 return;
             };
             let log = log.clone();
+            let refused = refused.clone();
             tokio::spawn(async move {
                 let mut buf = vec![0u8; 4096];
                 let n = socket.read(&mut buf).await.unwrap_or(0);
@@ -38,6 +45,10 @@ async fn server(delay: Duration) -> (String, Arc<Mutex<Vec<String>>>) {
                 };
                 let resp = if line.starts_with("GET /a.mkv") || line.starts_with("GET /b.mkv") {
                     b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/10\r\nContent-Length: 1\r\nConnection: close\r\n\r\nM".to_vec()
+                } else if line.starts_with("GET /v3/media")
+                    && refused.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < failures
+                {
+                    b"HTTP/1.1 503 Busy\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
                 } else if line.starts_with("GET /v3/media") {
                     tokio::time::sleep(delay).await;
                     json(
@@ -164,6 +175,44 @@ async fn segments_arrive_after_the_duration_and_fill_the_gaps() {
 }
 
 #[tokio::test]
+async fn a_refused_lookup_is_asked_again_while_the_version_plays() {
+    let (base, seen) = server_failing(Duration::ZERO, 1).await;
+    let core = Core::temporary("p").unwrap();
+    core.segments()
+        .set_retries(vec![Duration::from_millis(300)]);
+    let view = PlaybackView::open(&core, setup(&core, &base), target());
+    let ready = wait_for(&view, |s| s.phase == PlaybackPhase::Ready).await;
+    view.report_duration(ready.key.as_deref().unwrap(), DURATION);
+
+    // TheIntroDB refused: the filler goes ahead at once.
+    let s = wait_for(&view, |s| !s.segments.is_empty()).await;
+    assert!(
+        s.segments.iter().all(|g| g.source == "IntroDB"),
+        "{:?}",
+        s.segments
+    );
+    assert_eq!(s.next_at_ms, None);
+
+    // Asked again: its segments take precedence, and the credits set Up Next.
+    let s = wait_for(&view, |s| s.next_at_ms.is_some()).await;
+    let got: Vec<_> = s
+        .segments
+        .iter()
+        .map(|g| (g.kind, g.source.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (SegmentKind::Intro, "TheIntroDB"),
+            (SegmentKind::Recap, "IntroDB"),
+            (SegmentKind::Credits, "TheIntroDB"),
+        ]
+    );
+    assert_eq!(s.next_at_ms, Some(3_400_000));
+    assert_eq!(lookups(&seen), 2);
+}
+
+#[tokio::test]
 async fn unusable_reports_start_no_lookup_and_repeats_start_one() {
     let (base, seen) = server(Duration::ZERO).await;
     let core = Core::temporary("p").unwrap();
@@ -244,7 +293,11 @@ async fn live_skip_sources() {
     for (name, target, duration) in cases {
         let target = target.unwrap();
         let started = std::time::Instant::now();
-        let found = core.segments().primary(&target, duration).await;
+        let found = core
+            .segments()
+            .primary(&target, duration)
+            .await
+            .unwrap_or_default();
         let primary_ms = started.elapsed().as_millis();
         let extra = core
             .segments()
@@ -306,14 +359,12 @@ async fn a_failed_lookup_is_not_remembered() {
         local: true,
     });
     let target = Target::from_ids("movie", "tt1727587", "tt1727587").unwrap();
-    assert!(
-        core.segments()
-            .primary(&target, DURATION)
-            .await
-            .segments
-            .is_empty()
+    assert_eq!(
+        core.segments().primary(&target, DURATION).await,
+        None,
+        "a failure is not a miss"
     );
-    let second = core.segments().primary(&target, DURATION).await;
+    let second = core.segments().primary(&target, DURATION).await.unwrap();
     assert_eq!(second.segments.len(), 1, "asked again after the failure");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }

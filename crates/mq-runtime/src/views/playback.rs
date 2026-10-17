@@ -30,7 +30,8 @@ const SAVE_EVERY: Duration = Duration::from_secs(5);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 /// The subtitle hash reads two 64 KiB ranges; past this, ask without it.
 const HASH_TIMEOUT: Duration = Duration::from_secs(4);
-/// One skip segment lookup, queueing, mapping and the gap filler included.
+/// One step of a skip segment lookup (the release-matched source, or the gap
+/// filler), queueing and mapping included.
 const SEGMENTS_DEADLINE: Duration = Duration::from_secs(6);
 /// A torrent's swarm must send its metadata within this...
 #[cfg(feature = "torrent")]
@@ -375,8 +376,13 @@ fn clear_segments(s: &mut State) {
 }
 
 /// Finds skip segments for one source and duration: the release-matched
-/// source first, published at once, then the gap filler. Results for a
-/// source or duration that is no longer current are dropped.
+/// source first, published at once, then the gap filler. When the
+/// release-matched source cannot be asked (a timeout, a refusal), the filler
+/// goes ahead and that source is asked again after each of the finder's
+/// waits, so one slow answer does not cost the whole playback its Skip; what
+/// it finds later takes precedence over the filler's. Results for a source or
+/// duration that is no longer current are dropped, and the task ends with the
+/// source.
 async fn find_segments(
     core: Core,
     state: Arc<Mutex<State>>,
@@ -392,21 +398,46 @@ async fn find_segments(
         }
     };
     let duration_ms = lookup.1;
-    let find = async {
-        let finder = core.segments();
-        let found = finder.primary(&target, duration_ms).await;
-        if !found.segments.is_empty() {
-            publish(&|s| {
-                s.segments = found.segments.clone();
-                s.next_at_ms = found.next_at_ms;
-            });
-        }
-        let extra = finder.fill(&target, duration_ms, &found.segments).await;
-        if !extra.is_empty() {
-            publish(&|s| s.segments = segments::merge(&s.segments, extra.clone()));
+    let finder = core.segments();
+    let fill = |have: Vec<Segment>| {
+        let finder = &finder;
+        let target = &target;
+        async move {
+            let extra =
+                tokio::time::timeout(SEGMENTS_DEADLINE, finder.fill(target, duration_ms, &have))
+                    .await
+                    .unwrap_or_default();
+            if !extra.is_empty() {
+                publish(&|s| s.segments = segments::merge(&s.segments, extra.clone()));
+            }
         }
     };
-    let _ = tokio::time::timeout(SEGMENTS_DEADLINE, find).await;
+    let mut filled = false;
+    let waits = std::iter::once(Duration::ZERO).chain(finder.retries());
+    for wait in waits {
+        tokio::time::sleep(wait).await;
+        let asked =
+            tokio::time::timeout(SEGMENTS_DEADLINE, finder.primary(&target, duration_ms)).await;
+        match asked {
+            Ok(Some(found)) => {
+                if !found.segments.is_empty() {
+                    publish(&|s| {
+                        s.segments = segments::merge(&found.segments, s.segments.clone());
+                        s.next_at_ms = found.next_at_ms;
+                    });
+                }
+                if !filled {
+                    fill(found.segments).await;
+                }
+                return;
+            }
+            _ if !filled => {
+                filled = true;
+                fill(Vec::new()).await;
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Ends the stream's and the subtitles' loopback URLs; they stop working.
