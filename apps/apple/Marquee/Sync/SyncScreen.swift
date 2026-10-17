@@ -92,13 +92,13 @@ struct SyncScreen: View {
         }
         .padding(Theme.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
     @ViewBuilder private var devices: some View {
         if let list = sync.devices {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Devices").font(.display(Theme.type.title2)).foregroundStyle(Theme.Palette.text)
+                Text("Devices").display(Theme.type.title2).foregroundStyle(Theme.Palette.text)
                 ForEach(list.members) { member in
                     HStack(spacing: Theme.Space.s) {
                         Glyph(member.kit ? "key-round" : "monitor-smartphone")
@@ -173,7 +173,7 @@ private struct RecoveryKitSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            Text("Your recovery kit").font(.display(Theme.type.title1))
+            Text("Your recovery kit").display(Theme.type.title1)
             Text("Write it down or save it in a password manager. It lets you get your library back if you lose every device. Marquee does not keep a copy.")
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)

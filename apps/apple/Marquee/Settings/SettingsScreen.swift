@@ -79,7 +79,7 @@ struct SettingsScreen: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                 // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
-                Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Fraunces, Inter and IBM Plex Mono, SIL Open Font License 1.1.")
+                Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1.")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -98,7 +98,7 @@ struct SettingsScreen: View {
 
     private func section(_ title: String) -> some View {
         Text(title)
-            .font(.display(Theme.type.title2))
+            .display(Theme.type.title2)
             .foregroundStyle(Theme.Palette.text)
             .accessibilityAddTraits(.isHeader)
     }
@@ -215,7 +215,8 @@ struct SettingsRow: View {
         }
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface.opacity(hovered ? 1 : 0.8)))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .brightness(hovered ? 0.04 : 0)
         .contentShape(Rectangle())
         #if !os(tvOS)
         .onHover { hovered = $0 }

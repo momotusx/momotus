@@ -118,7 +118,7 @@ struct DebridScreen: View {
         }
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface.opacity(0.6)))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
     private func apply(_ service: String, _ key: String?) {

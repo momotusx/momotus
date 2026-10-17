@@ -219,7 +219,7 @@ private struct AddonCard: View {
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
     private var logo: some View {
@@ -229,7 +229,7 @@ private struct AddonCard: View {
                 if addon.logo != nil {
                     ArtImage(url: addon.logo, mode: .fit, maxPixels: 160).padding(6)
                 } else {
-                    Text(addon.name.prefix(1).uppercased()).font(.display(Theme.type.title3))
+                    Text(addon.name.prefix(1).uppercased()).display(Theme.type.title3)
                 }
             }
             .frame(width: 48, height: 48)

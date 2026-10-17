@@ -23,7 +23,7 @@ struct ArtImage: View {
                         .transition(.opacity)
                 } else if missing, let fallback {
                     Text(fallback)
-                        .font(.display(Theme.type.headline))
+                        .display(Theme.type.headline)
                         .foregroundStyle(Theme.Palette.text.opacity(0.85))
                         .multilineTextAlignment(.center)
                         .padding(Theme.Space.xs)
@@ -56,42 +56,40 @@ func reveal(since start: ContinuousClock.Instant) -> Animation? {
 }
 
 /// Accent ring with a dark halo, the focus mark from the design system. It
-/// keeps 3:1 contrast on any artwork and never relies on color alone. The
-/// halo is soft on the dark theme and a crisp outer line on the light one.
+/// keeps 3:1 contrast on any artwork and never relies on color alone.
 struct FocusRing<S: InsettableShape>: ViewModifier {
     let shape: S
     let active: Bool
-    @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
         content.overlay {
             // tvOS and macOS only: iOS keeps no TV-style ring, and the system
             // draws its own indicator for keyboard users.
-            if active, !Self.touch {
-                let gap: CGFloat = 3
-                ZStack {
-                    if scheme == .dark {
-                        ring(gap).shadow(color: Theme.Palette.halo, radius: Theme.Focus.haloDark / 2)
-                    } else {
-                        shape.inset(by: -(gap + Theme.Focus.ring + Theme.Focus.haloLight))
-                            .strokeBorder(Theme.Palette.halo, lineWidth: Theme.Focus.haloLight)
-                        ring(gap)
-                    }
-                }
-                .allowsHitTesting(false)
+            if active, !touch {
+                shape.inset(by: -(3 + Theme.Focus.ring))
+                    .strokeBorder(Theme.Palette.accent, lineWidth: Theme.Focus.ring)
+                    .shadow(color: Theme.Palette.halo, radius: Theme.Focus.halo / 2)
+                    .allowsHitTesting(false)
             }
         }
     }
+}
 
-    private func ring(_ gap: CGFloat) -> some View {
-        shape.inset(by: -(gap + Theme.Focus.ring)).strokeBorder(Theme.Palette.accent, lineWidth: Theme.Focus.ring)
-    }
+#if os(iOS)
+let touch = true
+#else
+let touch = false
+#endif
 
-    #if os(iOS)
-    private static var touch: Bool { true }
-    #else
-    private static var touch: Bool { false }
-    #endif
+/// What a card shows of its state: focus rings its art; focus or hover
+/// light the art's edge and turn its title accent.
+struct CardState: Equatable {
+    var focused = false
+    var lit = false
+}
+
+extension EnvironmentValues {
+    @Entry var card = CardState()
 }
 
 /// Shared interaction state for cards and pills: focus (tvOS, keyboard),
@@ -101,6 +99,8 @@ private struct Interactive<S: InsettableShape>: View {
     let shape: S
     let focusScale: CGFloat
     let content: AnyView
+    /// A card: its art carries the ring (`cardArt`) and the card lifts.
+    var card = false
 
     @Environment(\.isFocused) private var focused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -108,9 +108,11 @@ private struct Interactive<S: InsettableShape>: View {
 
     var body: some View {
         content
-            .modifier(FocusRing(shape: shape, active: focused))
-            .brightness(hovered && !focused ? 0.04 : 0)
-            .scaleEffect(reduceMotion ? 1 : scale)
+            .environment(\.card, CardState(focused: focused, lit: focused || hovered))
+            .modifier(FocusRing(shape: shape, active: focused && !card))
+            .brightness(hovered && !focused && !card ? 0.04 : 0)
+            .scaleEffect(reduceMotion ? 1 : scale, anchor: card ? .bottom : .center)
+            .offset(y: card && !reduceMotion && (focused || hovered) ? -6 : 0)
             .animation(Theme.Motion.focus, value: focused)
             .animation(Theme.Motion.focus, value: hovered)
             .animation(Theme.Motion.focus, value: configuration.isPressed)
@@ -122,25 +124,65 @@ private struct Interactive<S: InsettableShape>: View {
     private var scale: CGFloat {
         if configuration.isPressed { return 0.97 }
         if focused { return focusScale }
-        return hovered ? 1.03 : 1
+        return hovered && !card ? 1.03 : 1
     }
 }
 
-/// Poster and episode cards.
+/// Poster, still and settings cards.
 struct CardButtonStyle: ButtonStyle {
-    var radius: CGFloat = Theme.Radius.s
+    /// A corner radius rings the whole card; nil leaves the ring to its art.
+    var radius: CGFloat?
+    var scale = Theme.Focus.scaleCard
 
     func makeBody(configuration: Configuration) -> some View {
         Interactive(
             configuration: configuration,
-            shape: RoundedRectangle(cornerRadius: radius, style: .continuous),
-            focusScale: Theme.Focus.scaleCard,
-            content: AnyView(configuration.label)
+            shape: RoundedRectangle(cornerRadius: radius ?? Theme.Radius.m, style: .continuous),
+            focusScale: scale,
+            content: AnyView(configuration.label),
+            card: radius == nil
         )
     }
 }
 
-/// Capsule buttons. `prominent` is the one primary action on a screen.
+extension View {
+    /// A card's art: rounded, a faint edge that turns white while the card is
+    /// lit, and the focus ring.
+    func cardArt(radius: CGFloat = Theme.Radius.m) -> some View {
+        modifier(CardArt(radius: radius))
+    }
+}
+
+private struct CardArt: ViewModifier {
+    let radius: CGFloat
+    @Environment(\.card) private var card
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        content
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(.white.opacity(card.lit ? 0.5 : 0.06), lineWidth: 1).allowsHitTesting(false) }
+            .modifier(FocusRing(shape: shape, active: card.focused))
+    }
+}
+
+/// A card's name: 700, accent while the card is lit.
+struct CardTitle: View {
+    let text: String
+    var size = Theme.type.callout
+    @Environment(\.card) private var card
+
+    var body: some View {
+        Text(text)
+            .font(.text(size, weight: .bold, relativeTo: .callout))
+            .tracking(size * Theme.Tracking.label)
+            .foregroundStyle(card.lit ? Theme.Palette.accent : Theme.Palette.text)
+            .lineLimit(1)
+    }
+}
+
+/// Capsule buttons. `prominent` is the one primary action on a screen: the
+/// white pill. The rest are a faint sheen with a `control` edge.
 struct PillButtonStyle: ButtonStyle {
     var prominent = false
     @Environment(\.isEnabled) private var enabled
@@ -152,18 +194,23 @@ struct PillButtonStyle: ButtonStyle {
             focusScale: Theme.Focus.scaleTile,
             content: AnyView(
                 configuration.label
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .labelFont(Theme.type.headline)
                     .labelStyle(PillLabelStyle())
-                    .foregroundStyle(prominent ? Theme.Palette.onAccent : enabled ? Theme.Palette.text : Theme.Palette.muted)
+                    .foregroundStyle(prominent ? Theme.Palette.onPrimary : Theme.Palette.text)
                     .padding(.horizontal, Self.horizontal)
                     .padding(.vertical, Self.vertical)
                     .background {
-                        Capsule().fill(prominent ? AnyShapeStyle(Theme.Palette.accent) : AnyShapeStyle(Theme.Palette.raised.opacity(0.72)))
+                        if prominent {
+                            Capsule().fill(Theme.Palette.primary).shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                        } else {
+                            Capsule().fill(Theme.controlFill)
+                        }
                     }
                     .overlay {
-                        if !prominent { Capsule().strokeBorder(Theme.Palette.control, lineWidth: 1) }
+                        if !prominent { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) }
                     }
                     .contentShape(Capsule())
+                    .opacity(enabled ? 1 : 0.55)
             )
         )
     }
@@ -173,7 +220,89 @@ struct PillButtonStyle: ButtonStyle {
     private static let vertical: CGFloat = 18
     #else
     private static let horizontal: CGFloat = 20
-    private static let vertical: CGFloat = 11
+    private static let vertical: CGFloat = 13
+    #endif
+}
+
+/// The width of a control's edge: 2 pt on TV, 1.5 pt elsewhere.
+#if os(tvOS)
+let edgeWidth: CGFloat = 2
+#else
+let edgeWidth: CGFloat = 1.5
+#endif
+
+/// A round button with its word under the circle (Details, Trailer,
+/// Versions). `on` marks a state that holds, like In Library: a lighter fill
+/// and a bright edge, never the ring (the ring means focus).
+struct RoundButtonStyle: ButtonStyle {
+    var on = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.labelStyle(RoundLabelStyle(on: on, pressed: configuration.isPressed))
+    }
+}
+
+private struct RoundLabelStyle: LabelStyle {
+    let on: Bool
+    let pressed: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        RoundLabel(icon: configuration.icon, title: configuration.title, on: on, pressed: pressed)
+    }
+}
+
+private struct RoundLabel<Icon: View, Title: View>: View {
+    let icon: Icon
+    let title: Title
+    let on: Bool
+    let pressed: Bool
+    @Environment(\.isFocused) private var focused
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovered = false
+
+    var body: some View {
+        VStack(spacing: Self.gap) {
+            icon
+                .foregroundStyle(Theme.Palette.text)
+                .frame(width: Self.size, height: Self.size)
+                .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
+                .overlay(Circle().strokeBorder(edge, lineWidth: edgeWidth))
+                .modifier(FocusRing(shape: Circle(), active: focused))
+                .scaleEffect(reduceMotion ? 1 : pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
+            title
+                .font(.text(Self.word, weight: Font.Weight(token: Theme.Weight.label), relativeTo: .caption))
+                .foregroundStyle(focused || hovered ? Theme.Palette.text : Theme.Palette.muted)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .opacity(enabled ? 1 : 0.55)
+        .contentShape(Rectangle())
+        .animation(Theme.Motion.focus, value: focused)
+        .animation(Theme.Motion.focus, value: hovered)
+        .animation(Theme.Motion.focus, value: pressed)
+        #if !os(tvOS)
+        .onHover { hovered = $0 }
+        #endif
+    }
+
+    private var edge: Color {
+        if on { return .white.opacity(0.55) }
+        return hovered ? .white.opacity(0.44) : Theme.Palette.control
+    }
+
+    #if os(tvOS)
+    private static var size: CGFloat { 72 }
+    private static var word: CGFloat { Theme.type.caption }
+    private static var gap: CGFloat { 10 }
+    #elseif os(macOS)
+    private static var size: CGFloat { 48 }
+    private static var word: CGFloat { 13 }
+    private static var gap: CGFloat { 8 }
+    #else
+    private static var size: CGFloat { 44 }
+    private static var word: CGFloat { 12 }
+    private static var gap: CGFloat { 6 }
     #endif
 }
 
@@ -189,7 +318,7 @@ struct DestructiveTextStyle: ButtonStyle {
             focusScale: Theme.Focus.scaleTile,
             content: AnyView(
                 configuration.label
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .labelFont(Theme.type.headline)
                     .labelStyle(PillLabelStyle())
                     .foregroundStyle(enabled ? Theme.Palette.bad : Theme.Palette.muted)
                     .padding(.horizontal, 14)
@@ -259,7 +388,7 @@ struct ProgressLine: View {
         GeometryReader { geo in
             Capsule().fill(Theme.Palette.text.opacity(0.25))
                 .overlay(alignment: .leading) {
-                    Capsule().fill(Theme.Palette.text).frame(width: geo.size.width * min(max(value, 0), 1))
+                    Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
                 }
         }
         .frame(height: 4)

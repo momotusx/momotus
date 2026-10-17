@@ -129,7 +129,7 @@ private struct HomeRowLine: View {
         .disabled(locked)
         .padding(Theme.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(Theme.Palette.surface))
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
     #if os(tvOS)

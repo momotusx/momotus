@@ -73,7 +73,7 @@ struct ImportScreen: View {
                 .foregroundStyle(Theme.Palette.text)
         case .done(let summary)?:
             VStack(alignment: .leading, spacing: 8) {
-                Label("Imported", glyph: "circle-check").font(.display(Theme.type.title2))
+                Label("Imported", glyph: "circle-check").display(Theme.type.title2)
                 Text("\(summary.addonsImported) addons, \(summary.titles) titles, \(summary.inProgress) in progress, \(summary.watched) watched.")
                 ForEach(summary.addonsSkipped, id: \.self) { Label($0, glyph: "circle-minus") }
                 if summary.seriesUnmatched > 0 {

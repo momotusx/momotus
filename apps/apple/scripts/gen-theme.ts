@@ -26,23 +26,24 @@ function rgba(value: string): string {
 const fields = (o: Record<string, number>) =>
   Object.entries(o).map(([k, v]) => `${k}: ${v}`).join(", ");
 
-const colors = Object.keys(tokens.color.dark)
-  .map((k) => {
-    if (!(k in tokens.color.light)) throw new Error(`light theme lacks ${k}`);
-    return `        static let ${k} = Color(light: ${rgba(tokens.color.light[k])}, dark: ${rgba(tokens.color.dark[k])})`;
-  })
+// Dark only (design v2): `color.light` mirrors `color.dark` for the other
+// generators; the Apple apps read the dark palette.
+const colors = Object.entries(tokens.color.dark as Record<string, string>)
+  .map(([k, v]) => `        static let ${k} = Color(${rgba(v)})`)
   .join("\n");
 
+const lets = (o: Record<string, number>) =>
+  Object.entries(o).map(([k, v]) => `        static let ${k}: CGFloat = ${v}`).join("\n");
 const typeKeys = Object.keys(tokens.type.tv);
-const space = Object.entries(tokens.space).map(([k, v]) => `        static let ${k}: CGFloat = ${v}`).join("\n");
-const radius = Object.entries(tokens.radius).map(([k, v]) => `        static let ${k}: CGFloat = ${v}`).join("\n");
+const space = lets(tokens.space);
+const radius = lets(tokens.radius);
 const ease = tokens.motion.ease.match(/cubic-bezier\(([^)]+)\)/)[1].split(",").map((s: string) => Number(s.trim()));
 
 const swift = `// Generated from design/tokens.json by apps/apple/scripts/gen-theme.ts. Do not edit.
 import SwiftUI
 
 enum Theme {
-    /// Colors resolve per appearance: light and dark from the token file.
+    /// The one palette: Marquee is dark only.
     enum Palette {
 ${colors}
     }
@@ -81,9 +82,8 @@ ${radius}
 
     enum Focus {
         static let ring: CGFloat = ${tokens.focus.ring}
-        /// Dark theme: a soft halo this wide. Light theme: a crisp outer line this wide.
-        static let haloDark: CGFloat = ${tokens.focus.halo.dark}
-        static let haloLight: CGFloat = ${tokens.focus.halo.light}
+        /// A soft dark halo this wide around the ring.
+        static let halo: CGFloat = ${tokens.focus.halo.dark}
         static let scaleCard: CGFloat = ${tokens.focus.scaleCard}
         static let scaleTile: CGFloat = ${tokens.focus.scaleTile}
     }
@@ -96,6 +96,16 @@ ${radius}
     enum Poster {
         static let tv = CGSize(width: ${tokens.poster.tv.width}, height: ${tokens.poster.tv.height})
         static let landscape = CGSize(width: ${tokens.poster.landscape.width}, height: ${tokens.poster.landscape.height})
+    }
+
+    /// Font weights, 100 to 900.
+    enum Weight {
+${lets(tokens.weight)}
+    }
+
+    /// Letter spacing in em: multiply by the font size.
+    enum Tracking {
+${lets(tokens.tracking)}
     }
 
     enum Family {
