@@ -19,8 +19,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
@@ -205,6 +207,28 @@ private fun Session(
 ) {
     val tv = Marquee.form == Form.Tv
     val status = view.status
+    // Each step that asks something takes focus to its answer: on a TV the remote is never left on
+    // the form below while "Yes, they match" waits.
+    val answer = remember { FocusRequester() }
+    // Named by hand, not by class name: a release build shortens class names.
+    val step =
+        if (status is ViewStatus.Failed) {
+            "could not start"
+        } else {
+            when (view.snapshot) {
+                is PairingSnapshot.Confirm -> "confirm"
+                is PairingSnapshot.Joined -> "joined"
+                PairingSnapshot.Expired -> "expired"
+                is PairingSnapshot.Failed -> "stopped"
+                else -> null
+            }
+        }
+    LaunchedEffect(step) {
+        if (tv && step != null) {
+            withFrameNanos { }
+            runCatching { answer.requestFocus() }
+        }
+    }
     if (status is ViewStatus.Failed) {
         StateMessage(
             "Pairing could not start",
@@ -212,6 +236,7 @@ private fun Session(
             icon = Icons.CircleAlert,
             actionLabel = "Start again",
             onAction = onAgain,
+            actionFocus = answer,
         )
         return
     }
@@ -256,7 +281,7 @@ private fun Session(
                     horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                 ) {
-                    PrimaryButton("Yes, they match", view::confirm, icon = Icons.Check)
+                    PrimaryButton("Yes, they match", view::confirm, icon = Icons.Check, focusRequester = answer)
                     SecondaryButton("No, they differ", view::reject, icon = Icons.CircleX)
                 }
             }
@@ -272,7 +297,7 @@ private fun Session(
                     MqText("This device joined your sync account.", role = TextRole.Headline)
                 }
                 SyncState(sync)
-                PrimaryButton("Done", onDone)
+                PrimaryButton("Done", onDone, focusRequester = answer)
             }
         }
 
@@ -283,6 +308,7 @@ private fun Session(
                 icon = Icons.Clock,
                 actionLabel = "Start again",
                 onAction = onAgain,
+                actionFocus = answer,
             )
         }
 
@@ -293,6 +319,7 @@ private fun Session(
                 icon = Icons.CircleAlert,
                 actionLabel = "Start again",
                 onAction = onAgain,
+                actionFocus = answer,
             )
         }
     }

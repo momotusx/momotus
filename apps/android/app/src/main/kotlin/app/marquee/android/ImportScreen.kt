@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -228,6 +231,15 @@ private fun Done(
     onDone: () -> Unit,
 ) {
     val colors = Marquee.colors
+    // On a TV the remote lands on the way home as soon as the import is done.
+    val home = remember { FocusRequester() }
+    val tv = Marquee.form == Form.Tv
+    LaunchedEffect(Unit) {
+        if (tv) {
+            withFrameNanos { }
+            runCatching { home.requestFocus() }
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -258,6 +270,6 @@ private fun Done(
                 color = colors.muted,
             )
         }
-        PrimaryButton("Go to Home", onDone, icon = Icons.House)
+        PrimaryButton("Go to Home", onDone, icon = Icons.House, focusRequester = home)
     }
 }
