@@ -156,3 +156,31 @@ async fn subtitles_come_out_as_utf8_webvtt_for_any_page() {
     server.release(&url);
     assert!(http.get(&url, &local()).await.is_err(), "released");
 }
+
+/// Live: time range requests through the loopback server against an origin
+/// that redirects (archive.org). Run with `--ignored --nocapture`.
+#[tokio::test]
+#[ignore = "network"]
+async fn live_redirecting_origin_range_times() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let url = server.register(
+        Upstream::Http {
+            url: "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4".into(),
+            headers: vec![],
+            allow_private: false,
+        },
+        "bbb.mp4",
+    );
+    let mut times = Vec::new();
+    for i in 0..6u64 {
+        let started = std::time::Instant::now();
+        let resp = http
+            .get_range(&url, i * 4_000_000, 65_536, &local())
+            .await
+            .unwrap();
+        assert_eq!(resp.status, 206);
+        times.push(started.elapsed().as_millis());
+    }
+    println!("range request ms: {times:?}");
+}

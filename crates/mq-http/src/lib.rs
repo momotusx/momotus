@@ -175,13 +175,32 @@ fn install_crypto_provider() {
     });
 }
 
+/// Follows at most 5 redirects. Callers check only the first URL against
+/// `allow_private`, so a chain that starts at a public address may not
+/// lead to a private one.
+fn redirect(attempt: reqwest::redirect::Attempt) -> reqwest::redirect::Action {
+    let first = attempt.previous().first();
+    if attempt.previous().len() > 5 {
+        attempt.error("too many redirects")
+    } else if first.is_some_and(|first| !redirect_allowed(first, attempt.url())) {
+        attempt.error("redirect from a public to a private address")
+    } else {
+        attempt.follow()
+    }
+}
+
+fn redirect_allowed(first: &Url, next: &Url) -> bool {
+    let private = |u: &Url| is_private_host(u.host_str().unwrap_or_default());
+    private(first) || !private(next)
+}
+
 impl HttpClient {
     pub fn new(config: ClientConfig) -> Result<Self, HttpError> {
         install_crypto_provider();
         let inner = reqwest::Client::builder()
             .user_agent(config.user_agent)
             .connect_timeout(config.connect_timeout)
-            .redirect(reqwest::redirect::Policy::limited(5))
+            .redirect(reqwest::redirect::Policy::custom(redirect))
             .pool_idle_timeout(Duration::from_secs(90))
             .build()
             .map_err(|e| HttpError::Network(e.to_string()))?;
@@ -414,4 +433,25 @@ async fn read_capped(
         body,
         final_url,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redirects_never_lead_from_public_to_private() {
+        let url = |s: &str| Url::parse(s).unwrap();
+        let public = url("https://cdn.example/video.mkv");
+        let lan = url("http://192.168.1.1/admin");
+        assert!(!redirect_allowed(&public, &lan));
+        assert!(!redirect_allowed(&public, &url("http://localhost:8080/")));
+        assert!(redirect_allowed(
+            &public,
+            &url("https://ia800.example/v.mp4")
+        ));
+        // A local addon (already allowed to reach private addresses).
+        assert!(redirect_allowed(&url("http://127.0.0.1:7000/s"), &lan));
+        assert!(redirect_allowed(&url("http://127.0.0.1:7000/s"), &public));
+    }
 }
