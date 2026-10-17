@@ -14,6 +14,21 @@ const screens = new Map<string, string>(); // path -> last key
 const content = new Map<string, string>(); // path -> last key outside the rail
 
 const path = () => location.pathname;
+
+// The last kind of input: focus may move by itself (autofocus, restore, a
+// Skip button taking focus) only on a remote or after keys. On pointer and
+// touch builds a ring nobody asked for reads as a glitch.
+let lastInput: "keys" | "pointer" | null = null;
+export const mayAutoFocus = () => document.documentElement.dataset.form === "tv" || lastInput === "keys";
+/** Focuses `el` when focus may move by itself; see `mayAutoFocus`. */
+export function autoFocus(el: HTMLElement | null | undefined) {
+  if (el && mayAutoFocus()) focusEl(el);
+}
+
+let recovering = false;
+let backHandler: (() => void) | null = null;
+/** The app's one Back: in-app history first, else the screen's parent. */
+export const goBack = () => backHandler?.();
 const groupOf = (el: Element) => el.closest<HTMLElement>("[data-fgroup]")?.dataset.fgroup;
 export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -120,6 +135,7 @@ export function cancelRestore() {
  * waiting for live data to render it. Any input cancels the wait. */
 export function restore(back: boolean) {
   cancelRestore();
+  if (!mayAutoFocus()) return;
   const want = back ? screens.get(path()) : undefined;
   const started = performance.now();
   const attempt = () => {
@@ -158,7 +174,26 @@ const typing = (t: EventTarget | null) =>
   t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t instanceof HTMLElement && t.isContentEditable);
 
 export function installFocus(onBack: () => void) {
+  backHandler = onBack;
+  window.addEventListener("keydown", () => (lastInput = "keys"), { capture: true });
+  window.addEventListener("pointerdown", () => (lastInput = "pointer"), { capture: true });
+  // Live data can replace the focused element (Play becomes "Add a source"
+  // once every addon answered). Focus then falls to the page; on a remote that
+  // is a dead end, so it goes to the screen's autofocus target, else its
+  // first element.
+  // This stopgap focus is not a choice the viewer made, so it is not
+  // remembered: Back still restores what they had.
+  new MutationObserver(() => {
+    const active = document.activeElement;
+    if (!mayAutoFocus() || (active && active !== document.body && active.isConnected)) return;
+    const el = initialIfMarked(true);
+    if (!el) return;
+    recovering = true;
+    focusEl(el);
+    recovering = false;
+  }).observe(document.body, { childList: true, subtree: true });
   document.addEventListener("focusin", (e) => {
+    if (recovering) return;
     const el = e.target as HTMLElement;
     const key = el.dataset?.f;
     if (!key) return;
