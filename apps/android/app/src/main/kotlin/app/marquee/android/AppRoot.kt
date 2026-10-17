@@ -250,10 +250,10 @@ private fun AppNav(
     if (tv) {
         TvShell(
             selected = selected,
-            showRail = framed,
+            showNav = framed,
             onSelect = ::choose,
             contentEntry = { if (top == Route.Home) app.tvHome.focus.lastEntry() else null },
-            onRailFocus = { app.tvHome.focus.leftContent() },
+            onNavFocus = { app.tvHome.focus.leftContent() },
             onKey = { app.tvHome.focus.interacted() },
             content = content,
         )

@@ -86,7 +86,7 @@ class FocusMemory {
         interactions++
     }
 
-    /** Focus moved out of the content (to the rail). */
+    /** Focus moved out of the content (to the pill). */
     fun leftContent() {
         hasFocus = false
         refresh()
@@ -112,7 +112,7 @@ class FocusMemory {
     /** Where vertical entry into a row lands: the tile that row last had focused, if it is composed. */
     fun rowEntry(rowId: String): FocusRequester? = chosenInRow[rowId]?.let(requesters::get)
 
-    /** Where entry into the screen from the rail lands. */
+    /** Where entry into the screen from the pill lands. */
     fun lastEntry(): FocusRequester? = focusedKey?.let(requesters::get)
 }
 

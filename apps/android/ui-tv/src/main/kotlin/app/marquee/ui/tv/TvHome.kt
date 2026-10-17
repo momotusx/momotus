@@ -117,11 +117,12 @@ fun TvHome(
         }
     }
 
-    AnchoredScrolling(lead = ROW_LEAD, trail = 0.dp) {
+    // A focused row rests under the pill, never behind it.
+    AnchoredScrolling(lead = tvContentTop(), trail = 0.dp) {
         LazyColumn(
             state = state.page,
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = safe.bottom),
+            contentPadding = PaddingValues(top = tvContentTop(), bottom = safe.bottom),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
             val hero = home.hero
@@ -134,11 +135,9 @@ fun TvHome(
     }
 }
 
-private val ROW_LEAD = 140.dp
-
 @Composable
 private fun HomeState(home: HomeView) {
-    val inset = Marquee.tiles.inset
+    val inset = Marquee.safe.side
     when (val status = home.status) {
         is ViewStatus.Failed -> {
             StateMessage(
@@ -199,7 +198,7 @@ private fun TvHero(
         Column(
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = Marquee.tiles.inset, bottom = Marquee.space.l)
+                .padding(start = Marquee.safe.side, bottom = Marquee.space.l)
                 .widthIn(max = 820.dp),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
@@ -245,7 +244,7 @@ private fun TvRow(
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
 ) {
-    val inset = Marquee.tiles.inset
+    val inset = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         Row(
             Modifier.padding(start = inset),
@@ -305,7 +304,7 @@ private fun SkeletonLane(shape: TileShape) {
             metrics.square
         }
     Row(
-        Modifier.height(Marquee.tiles.laneHeight(shape)).padding(start = metrics.inset, top = metrics.pad),
+        Modifier.height(Marquee.tiles.laneHeight(shape)).padding(start = Marquee.safe.side, top = metrics.pad),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
         repeat(SKELETON_TILES) { Skeleton(Modifier.size(size.width, size.height)) }
@@ -330,7 +329,7 @@ private fun TileLane(
                 .height(Marquee.tiles.laneHeight(shape))
                 .focusProperties { enter = { state.focus.rowEntry(row.rowId) ?: FocusRequester.Default } }
                 .focusGroup(),
-        contentPadding = PaddingValues(horizontal = metrics.inset),
+        contentPadding = PaddingValues(horizontal = Marquee.safe.side),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
         itemsIndexed(row.tiles, key = { index, _ -> keys[index] }) { index, tile ->
