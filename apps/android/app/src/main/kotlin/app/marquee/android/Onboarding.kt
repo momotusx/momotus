@@ -4,10 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
@@ -47,14 +50,17 @@ private const val CINEMETA = "https://v3-cinemeta.strem.io/manifest.json"
 
 /**
  * A new user's first screen, one decision: how to begin. "I use Stremio" brings a library over (only
- * offered when [onImport] is given), "Start fresh" installs the standard catalog. "Browse first" skips
- * both. Nothing is typed here: adding a source is a later step, and on TV it never asks for a keyboard.
+ * offered when [onImport] is given), "Start fresh" installs the standard catalog, and "I already use
+ * Marquee" joins that device's sync account (only offered when [onPair] is given). "Browse
+ * first" skips them. Nothing is typed here: adding a source is a later step, and on TV it never asks
+ * for a keyboard.
  */
 @Composable
 fun OnboardingScreen(
     session: CoreSession,
     onDone: () -> Unit,
     onImport: (() -> Unit)? = null,
+    onPair: (() -> Unit)? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val scope = rememberCoroutineScope()
@@ -129,11 +135,22 @@ fun OnboardingScreen(
                     door,
                     first.takeIf { onImport == null },
                 )
+                onPair?.let {
+                    Door(
+                        "I already use Marquee",
+                        "Join your other device's sync account with a code. Library and addons follow.",
+                        Icons.QrCode,
+                        it,
+                        door,
+                        null,
+                    )
+                }
             }
+            val single = onImport == null && onPair == null
             if (tv) {
-                // Two doors share the width; a single one keeps the width of a card, not of the screen.
-                Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
-                    doors(if (onImport == null) Modifier.widthIn(max = 640.dp) else Modifier.weight(1f))
+                // The doors share the width; a single one keeps the width of a card, not of the screen.
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
+                    doors(if (single) Modifier.widthIn(max = 640.dp) else Modifier.weight(1f).fillMaxHeight())
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) { doors(Modifier.fillMaxWidth()) }
@@ -155,7 +172,7 @@ fun OnboardingScreen(
     }
 }
 
-/** One of the two ways to begin: a card with an icon, a serif title and one line. */
+/** One of the ways to begin: a card with an icon, a title and one line. */
 @Composable
 private fun Door(
     title: String,

@@ -177,7 +177,12 @@ private fun AppNav(
             entryProvider =
                 entryProvider {
                     entry<Route.Onboarding> {
-                        OnboardingScreen(session, onDone = ::arrive, onImport = { backStack.add(Route.Import) })
+                        OnboardingScreen(
+                            session,
+                            onDone = ::arrive,
+                            onImport = { backStack.add(Route.Import) },
+                            onPair = { backStack.add(Route.Pairing) },
+                        )
                     }
                     entry<Route.Import> { ImportScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
@@ -210,11 +215,11 @@ private fun AppNav(
                     entry<Route.Debrid> { DebridScreen(session) }
                     entry<Route.HomeRows> { HomeRowsScreen(session) }
                     entry<Route.Pairing> {
+                        // From onboarding, a join is the way in: Done goes Home. From Settings it goes back.
                         PairingScreen(session, sync, onDone = {
-                            if (backStack.size >
-                                1
-                            ) {
-                                backStack.removeAt(backStack.lastIndex)
+                            when {
+                                backStack.firstOrNull() == Route.Onboarding -> arrive()
+                                backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
                             }
                         })
                     }

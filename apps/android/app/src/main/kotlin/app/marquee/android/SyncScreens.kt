@@ -139,7 +139,7 @@ fun PairingScreen(
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                BrowseHeader("Settings", "Pair this device")
+                BrowseHeader("Sync", "Pair this device")
                 MqText(
                     "Joins your sync account so library, progress and addons follow you. Nothing is kept until both " +
                         "screens show the same code.",
@@ -156,30 +156,37 @@ fun PairingScreen(
                 }
             }
         }
-        if (known.isEmpty()) item(key = "once") { Note("Enter your sync server once; this device remembers it.") }
-        item(key = "advanced") {
-            Column(
-                Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-            ) {
-                SecondaryButton("Advanced", { advanced = !advanced }, icon = Icons.Settings, selected = advanced)
-                if (advanced) {
-                    MqTextField(
-                        server,
-                        { server = it },
-                        label = "Sync server",
-                        placeholder = "https://sync.example.org",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                    )
-                    if (badAddress) {
-                        Note(
-                            "Enter the address without a user name or password.",
-                            failed = true,
-                            side = 0.dp,
+        // Once joined, the page is the result and Done: no second pairing starts from it.
+        val joined = holder.view?.snapshot is PairingSnapshot.Joined
+        if (known.isEmpty() && !joined) {
+            item(key = "once") { Note("Enter your sync server once; this device remembers it.") }
+        }
+        if (!joined) {
+            item(key = "advanced") {
+                Column(
+                    Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),
+                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                ) {
+                    SecondaryButton("Advanced", { advanced = !advanced }, icon = Icons.Settings, selected = advanced)
+                    if (advanced) {
+                        MqTextField(
+                            server,
+                            { server = it },
+                            label = "Sync server",
+                            placeholder = "https://sync.example.org",
+                            keyboardOptions =
+                                KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                         )
+                        if (badAddress) {
+                            Note(
+                                "Enter the address without a user name or password.",
+                                failed = true,
+                                side = 0.dp,
+                            )
+                        }
+                        MqTextField(name, { name = it }, label = "This device", placeholder = "Marquee")
+                        PrimaryButton("Show a code", begin, icon = Icons.QrCode, enabled = server.isNotBlank())
                     }
-                    MqTextField(name, { name = it }, label = "This device", placeholder = "Marquee")
-                    PrimaryButton("Show a code", begin, icon = Icons.QrCode, enabled = server.isNotBlank())
                 }
             }
         }
