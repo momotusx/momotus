@@ -247,33 +247,37 @@ impl Session {
                 invite,
                 name,
             } => {
-                let created =
-                    mq_sync::create_account(self.core.http(), &server, invite.as_deref(), &name)
-                        .await;
-                self.reply(json!(id), answer(created));
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let http = core.http();
+                    answer(mq_sync::create_account(http, &server, invite.as_deref(), &name).await)
+                });
             }
             Request::SyncNow { id, record } => {
-                let report = self.core.sync(&record).await;
-                self.reply(json!(id), answer(report));
+                let core = self.core.clone();
+                self.spawn(id, async move { answer(core.sync(&record).await) });
             }
             Request::ApprovePairing { id, record, qr } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let approved =
-                    mq_sync::pair::approve_pairing(library, http, &record, clock, &qr).await;
-                let result = approved
-                    .map(|(code, record)| json!({ "code": code, "record": record }))
-                    .map_err(|e| e.to_string());
-                self.reply(json!(id), result);
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    mq_sync::pair::approve_pairing(library, http, &record, clock, &qr)
+                        .await
+                        .map(|(code, record)| json!({ "code": code, "record": record }))
+                        .map_err(|e| e.to_string())
+                });
             }
             Request::CreateRecoveryKit { id, record } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let made = mq_sync::pair::make_kit(library, http, &record, clock).await;
-                let result = made
-                    .map(|(kit, record)| json!({ "kit": kit, "record": record }))
-                    .map_err(|e| e.to_string());
-                self.reply(json!(id), result);
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    mq_sync::pair::make_kit(library, http, &record, clock)
+                        .await
+                        .map(|(kit, record)| json!({ "kit": kit, "record": record }))
+                        .map_err(|e| e.to_string())
+                });
             }
             Request::Recover {
                 id,
@@ -281,27 +285,35 @@ impl Session {
                 kit,
                 name,
             } => {
-                let joined = mq_sync::pair::recover(self.core.http(), &server, &kit, &name).await;
-                self.reply(json!(id), answer(joined));
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    answer(mq_sync::pair::recover(core.http(), &server, &kit, &name).await)
+                });
             }
             Request::SyncDevices { id, record } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let devices = mq_sync::devices(library, http, &record, clock).await;
-                self.reply(json!(id), answer(devices));
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    answer(mq_sync::devices(library, http, &record, clock).await)
+                });
             }
             Request::LostPreview { id, record, lost } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let preview = mq_sync::lost_preview(library, http, &record, clock, lost).await;
-                self.reply(json!(id), answer(preview));
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    answer(mq_sync::lost_preview(library, http, &record, clock, lost).await)
+                });
             }
             Request::RemoveDevice { id, record, device } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let removed =
-                    mq_sync::remove_devices(library, http, &record, clock, vec![device]).await;
-                self.reply(json!(id), answer(removed));
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    let devices = vec![device];
+                    answer(mq_sync::remove_devices(library, http, &record, clock, devices).await)
+                });
             }
             Request::ReportLost {
                 id,
@@ -309,26 +321,31 @@ impl Session {
                 lost,
                 keep,
             } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let reported =
-                    mq_sync::report_lost(library, http, &record, clock, lost, keep).await;
-                self.reply(json!(id), answer(reported));
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    answer(mq_sync::report_lost(library, http, &record, clock, lost, keep).await)
+                });
             }
             Request::SignOut { id, record, force } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let out = mq_sync::sign_out(library, http, &record, clock, force).await;
-                self.reply(
-                    json!(id),
-                    out.map(|()| json!({})).map_err(|e| e.to_string()),
-                );
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    mq_sync::sign_out(library, http, &record, clock, force)
+                        .await
+                        .map(|()| json!({}))
+                        .map_err(|e| e.to_string())
+                });
             }
             Request::UseServerRoster { id, record, drop } => {
-                let (library, http, clock) =
-                    (self.core.library(), self.core.http(), self.core.clock());
-                let adopted = mq_sync::use_server_roster(library, http, &record, clock, drop).await;
-                self.reply(json!(id), answer(adopted));
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    answer(mq_sync::use_server_roster(library, http, &record, clock, drop).await)
+                });
             }
             Request::SetPrefs { id, patch } => {
                 let result = self
@@ -354,23 +371,29 @@ impl Session {
                 self.reply(json!(id), result);
             }
             Request::InstallAddon { id, url } => {
-                let result = self
-                    .core
-                    .install_addon(&url)
-                    .await
-                    .map(|a| json!({ "id": a.id(), "name": a.manifest.name }))
-                    .map_err(|e| e.to_string());
-                self.reply(json!(id), result);
+                let core = self.core.clone();
+                self.spawn(id, async move {
+                    core.install_addon(&url)
+                        .await
+                        .map(|a| json!({ "id": a.id(), "name": a.manifest.name }))
+                        .map_err(|e| e.to_string())
+                });
             }
         }
     }
 
     fn reply(&self, id: Value, result: Result<Value, String>) {
-        let message = match result {
-            Ok(value) => json!({ "id": id, "ok": true, "result": value }),
-            Err(error) => json!({ "id": id, "ok": false, "error": error }),
-        };
-        let _ = self.out.send(message);
+        let _ = self.out.send(message(id, result));
+    }
+
+    /// Runs a request that waits on the network off the request loop, so a
+    /// sync or an addon fetch never holds up playback commands. Replies
+    /// carry the request id, so they may arrive in any order.
+    fn spawn(&self, id: u64, work: impl Future<Output = Result<Value, String>> + Send + 'static) {
+        let out = self.out.clone();
+        tokio::spawn(async move {
+            let _ = out.send(message(json!(id), work.await));
+        });
     }
 
     fn subscribe(&mut self, view: &str, params: &Value) -> Result<Value, String> {
@@ -578,6 +601,13 @@ impl Session {
             episode: num("episode"),
         };
         Ok(PlaybackView::open(&self.core, candidates, target))
+    }
+}
+
+fn message(id: Value, result: Result<Value, String>) -> Value {
+    match result {
+        Ok(value) => json!({ "id": id, "ok": true, "result": value }),
+        Err(error) => json!({ "id": id, "ok": false, "error": error }),
     }
 }
 

@@ -30,3 +30,4 @@
 {"event":"report_lost","by":"C","lost":"A","listed":{"devices":["TV"],"kits":1},"kept":["TV"],"epoch":1,"tv":"adopted epoch 1 from its own box in 2 rounds (5 ms, 3 ms)","phone":"this device was removed from the account","old_kit_redeem":404,"members":["TV","Laptop"]}
 {"event":"sign_out","device":"B","then":"C rotated to epoch 2 on its next sync","members":["Laptop"]}
 {"event":"journal_restart","roster_rows":{"before":7,"after_deleting_from_database":3,"after_restart":7},"epoch_after_restart":2,"laptop_sync_ms":4,"phone_after_restart":"this device was removed from the account","token_lines_in_relay_log":0}
+{"event":"phase3_verified_by_main","pair_code_match":"048237","tv_pulled_addons":1,"fingerprints_equal_after_pair":"23CF7Y8KMSF9","lost_epoch":1,"lost_dropped_kits":1,"removed_device_answer":"this device was removed from the account","old_kit_redeem_status":404,"token_lines_in_relay_log":0}

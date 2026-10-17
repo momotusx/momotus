@@ -9,7 +9,7 @@ use mq_server::StreamServer;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use tokio::sync::OnceCell;
+use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard};
 
 const META_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -58,6 +58,8 @@ struct Inner {
     library: Arc<Library>,
     clock: HlcClock,
     profile: String,
+    /// One sync or roster operation at a time, across every session.
+    sync_gate: Arc<Mutex<()>>,
 }
 
 impl Core {
@@ -101,6 +103,7 @@ impl Core {
                 library,
                 clock,
                 profile,
+                sync_gate: Arc::default(),
             }),
         })
     }
@@ -136,7 +139,14 @@ impl Core {
         &self,
         config: &mq_sync::SyncConfig,
     ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
+        let _gate = self.sync_gate().await;
         mq_sync::sync_once(self.library(), self.http(), config, &self.inner.clock).await
+    }
+
+    /// Held for the whole of a sync round or a roster change: two at once
+    /// would race over the outbox, the cursors and the roster pin.
+    pub async fn sync_gate(&self) -> OwnedMutexGuard<()> {
+        self.inner.sync_gate.clone().lock_owned().await
     }
 
     /// The clock that stamps this device's writes (sync and roster calls

@@ -292,3 +292,44 @@ async fn sync_account_then_two_devices_share_preferences() {
     assert_eq!(next(&mut rx_b).await["ok"], false);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A sync against a relay that never answers must not hold up the requests
+/// after it (a sync on foreground used to delay playback commands).
+#[tokio::test]
+async fn a_hanging_sync_does_not_block_other_requests() {
+    let dir = std::env::temp_dir().join(format!("mq-bridge-hang-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+    session
+        .handle_text(
+            &json!({"id": 1, "op": "createSyncAccount", "server": server, "name": "Phone"})
+                .to_string(),
+        )
+        .await;
+    let mut record = next(&mut rx).await["result"].clone();
+
+    // A relay that accepts connections and never answers.
+    let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    record["server"] = json!(format!("http://{}", silent.local_addr().unwrap()));
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((socket, _)) = silent.accept().await {
+            held.push(socket);
+        }
+    });
+    let sync = json!({"id": 2, "op": "syncNow", "record": record}).to_string();
+    tokio::time::timeout(Duration::from_secs(2), session.handle_text(&sync))
+        .await
+        .expect("the request loop does not wait for the sync");
+    session
+        .handle_text(&json!({"id": 3, "op": "setPrefs", "patch": {}}).to_string())
+        .await;
+    let reply = next(&mut rx).await;
+    assert_eq!(reply["id"], 3, "{reply}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
