@@ -503,7 +503,7 @@ impl CacheStore for LibraryCache {
         })
     }
 
-    fn save(&self, key: &str, value: &StoredResponse) {
+    fn save(&self, key: &str, value: &StoredResponse, generation: u64) {
         let row = mq_library::CachedResponse {
             body: value.body.to_vec(),
             stored_ms: value.stored_ms as i64,
@@ -511,8 +511,14 @@ impl CacheStore for LibraryCache {
             stale_revalidate_s: value.control.stale_revalidate.as_secs() as i64,
             stale_error_s: value.control.stale_error.as_secs() as i64,
         };
-        if let Err(e) = self.0.cache_put(key, &row) {
+        if let Err(e) = self.0.cache_put(key, &row, generation) {
             tracing::warn!("http cache write failed: {e}");
         }
+    }
+
+    /// Every open of the data directory shares the library, so a removal
+    /// anywhere retires every memory cache's older answers.
+    fn generation(&self) -> u64 {
+        self.0.removals()
     }
 }

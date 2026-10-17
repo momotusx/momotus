@@ -77,7 +77,14 @@ pub struct StoredResponse {
 /// Second cache tier that survives restarts (the library database in apps).
 pub trait CacheStore: Send + Sync {
     fn load(&self, key: &str) -> Option<StoredResponse>;
-    fn save(&self, key: &str, value: &StoredResponse);
+    /// Stores `value`, fetched while `generation` was current; the store
+    /// drops it when the generation moved on meanwhile.
+    fn save(&self, key: &str, value: &StoredResponse, generation: u64);
+    /// Moves on when cached answers must no longer be used (the library
+    /// counts profile removals: their URLs can carry the profile's keys).
+    fn generation(&self) -> u64 {
+        0
+    }
 }
 
 fn wall_ms() -> u64 {
@@ -94,7 +101,9 @@ type Entry = StoredResponse;
 // entries, switch to an LRU list if the budget grows past a few thousand.
 pub struct ResponseCache {
     capacity: usize,
-    entries: Mutex<HashMap<String, Entry>>,
+    /// Each entry with the store generation it was fetched or loaded under;
+    /// one from an older generation is never served.
+    entries: Mutex<HashMap<String, (Entry, u64)>>,
     store: Option<std::sync::Arc<dyn CacheStore>>,
 }
 
@@ -112,6 +121,12 @@ impl ResponseCache {
             store: Some(store),
             ..Self::new(capacity)
         }
+    }
+
+    /// The store's generation; capture it before a fetch and pass it to
+    /// `put`.
+    pub fn generation(&self) -> u64 {
+        self.store.as_ref().map_or(0, |s| s.generation())
     }
 
     /// Fresh hit, or stale-while-revalidate hit flagged as stale.
@@ -157,8 +172,10 @@ impl ResponseCache {
             .clear();
     }
 
-    pub fn put(&self, key: String, body: Bytes, control: CacheControl) {
-        if !control.cacheable() {
+    /// Keeps an answer fetched while `generation` (from `generation()`) was
+    /// current; one the generation moved past meanwhile is dropped.
+    pub fn put(&self, key: String, body: Bytes, control: CacheControl, generation: u64) {
+        if !control.cacheable() || generation != self.generation() {
             return;
         }
         let entry = Entry {
@@ -167,37 +184,39 @@ impl ResponseCache {
             control,
         };
         if let Some(store) = &self.store {
-            store.save(&key, &entry);
+            store.save(&key, &entry, generation);
         }
-        self.remember(key, entry);
+        self.remember(key, entry, generation);
     }
 
     fn memory_or_store(&self, key: &str) -> Option<Entry> {
-        if let Some(entry) = self
+        let current = self.generation();
+        if let Some((entry, generation)) = self
             .entries
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .get(key)
+            && *generation == current
         {
             return Some(entry.clone());
         }
         let entry = self.store.as_ref()?.load(key)?;
-        self.remember(key.to_owned(), entry.clone());
+        self.remember(key.to_owned(), entry.clone(), current);
         Some(entry)
     }
 
-    fn remember(&self, key: String, entry: Entry) {
+    fn remember(&self, key: String, entry: Entry, generation: u64) {
         let mut entries = self.entries.lock().unwrap_or_else(|p| p.into_inner());
         if entries.len() >= self.capacity && !entries.contains_key(&key) {
             let oldest = entries
                 .iter()
-                .min_by_key(|(_, e)| e.stored_ms)
+                .min_by_key(|(_, (e, _))| e.stored_ms)
                 .map(|(k, _)| k.clone());
             if let Some(oldest) = oldest {
                 entries.remove(&oldest);
             }
         }
-        entries.insert(key, entry);
+        entries.insert(key, (entry, generation));
     }
 }
 
@@ -235,7 +254,7 @@ mod tests {
             max_age: Duration::from_secs(60),
             ..Default::default()
         };
-        cache.put("a".into(), Bytes::from_static(b"1"), fresh);
+        cache.put("a".into(), Bytes::from_static(b"1"), fresh, 0);
         assert!(!cache.get("a").unwrap().is_stale_but_usable());
 
         let stale = CacheControl {
@@ -243,13 +262,14 @@ mod tests {
             stale_revalidate: Duration::from_secs(60),
             stale_error: Duration::ZERO,
         };
-        cache.put("b".into(), Bytes::from_static(b"2"), stale);
+        cache.put("b".into(), Bytes::from_static(b"2"), stale, 0);
         assert!(cache.get("b").unwrap().is_stale_but_usable());
 
         cache.put(
             "c".into(),
             Bytes::from_static(b"3"),
             CacheControl::default(),
+            0,
         );
         assert!(
             cache.get("c").is_none(),
@@ -260,7 +280,7 @@ mod tests {
             stale_error: Duration::from_secs(60),
             ..Default::default()
         };
-        cache.put("d".into(), Bytes::from_static(b"4"), only_error);
+        cache.put("d".into(), Bytes::from_static(b"4"), only_error, 0);
         assert!(cache.get("d").is_none());
         assert!(cache.get_on_error("d").is_some());
         assert_eq!(cache.entries.lock().unwrap().len(), 2, "capacity enforced");
@@ -278,9 +298,75 @@ mod memory {
             max_age: Duration::from_secs(60),
             ..Default::default()
         };
-        cache.put("k".into(), Bytes::from_static(b"v"), control);
+        cache.put("k".into(), Bytes::from_static(b"v"), control, 0);
         assert!(cache.get("k").is_some());
         cache.forget_memory();
         assert!(cache.get("k").is_none(), "no store, so nothing left");
+    }
+}
+
+#[cfg(test)]
+mod generations {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// A store whose generation moves when the test says so (a profile
+    /// removal), clearing what it holds.
+    #[derive(Default)]
+    struct Moving {
+        generation: AtomicU64,
+        held: Mutex<HashMap<String, StoredResponse>>,
+    }
+
+    impl Moving {
+        fn remove_a_profile(&self) {
+            self.generation.fetch_add(1, Ordering::SeqCst);
+            self.held.lock().unwrap().clear();
+        }
+    }
+
+    impl CacheStore for Moving {
+        fn load(&self, key: &str) -> Option<StoredResponse> {
+            self.held.lock().unwrap().get(key).cloned()
+        }
+
+        fn save(&self, key: &str, value: &StoredResponse, generation: u64) {
+            if generation == self.generation() {
+                self.held.lock().unwrap().insert(key.into(), value.clone());
+            }
+        }
+
+        fn generation(&self) -> u64 {
+            self.generation.load(Ordering::SeqCst)
+        }
+    }
+
+    #[test]
+    fn answers_of_an_older_generation_are_neither_kept_nor_served() {
+        let store = Arc::new(Moving::default());
+        let cache = ResponseCache::with_store(8, store.clone());
+        let fresh = CacheControl {
+            max_age: Duration::from_secs(60),
+            ..CacheControl::default()
+        };
+        let before = cache.generation();
+        cache.put("a".into(), Bytes::from_static(b"1"), fresh, before);
+        assert!(cache.get("a").is_some());
+
+        store.remove_a_profile();
+        assert!(cache.get("a").is_none(), "the memory copy is retired too");
+        // An answer whose fetch began before the removal.
+        cache.put("b".into(), Bytes::from_static(b"2"), fresh, before);
+        assert!(cache.get("b").is_none());
+        assert!(store.held.lock().unwrap().is_empty());
+        // Fetched after it: kept.
+        cache.put(
+            "c".into(),
+            Bytes::from_static(b"3"),
+            fresh,
+            cache.generation(),
+        );
+        assert!(cache.get("c").is_some());
     }
 }

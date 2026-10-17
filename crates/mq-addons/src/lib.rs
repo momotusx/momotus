@@ -95,9 +95,12 @@ impl AddonClient {
         timeout: Duration,
     ) -> Result<Fetched, AddonError> {
         let url = resource_url(&addon.transport_url, path)?;
+        // Taken before the network: an answer that a profile removal
+        // overtakes is not cached.
+        let generation = self.cache.generation();
         if let Some(hit) = self.cache.get(&url) {
             if hit.is_stale_but_usable() {
-                self.spawn_refresh(addon.clone(), url.clone(), timeout);
+                self.spawn_refresh(addon.clone(), url.clone(), timeout, generation);
             }
             return Ok(Fetched {
                 body: hit.body,
@@ -105,7 +108,7 @@ impl AddonClient {
                 latency: Duration::ZERO,
             });
         }
-        match self.fetch_network(addon, &url, timeout).await {
+        match self.fetch_network(addon, &url, timeout, generation).await {
             Ok(fetched) => Ok(fetched),
             Err(error) => match self.cache.get_on_error(&url) {
                 Some(hit) => Ok(Fetched {
@@ -123,6 +126,7 @@ impl AddonClient {
         addon: &InstalledAddon,
         url: &str,
         timeout: Duration,
+        generation: u64,
     ) -> Result<Fetched, AddonError> {
         let opts = RequestOptions {
             priority: Priority::Addon,
@@ -137,7 +141,7 @@ impl AddonClient {
         let response = result.map_err(AddonError::Http)?;
         let control = CacheControl::from_response(&response.headers, &response.body);
         self.cache
-            .put(url.to_owned(), response.body.clone(), control);
+            .put(url.to_owned(), response.body.clone(), control, generation);
         Ok(Fetched {
             body: response.body,
             from_cache: false,
@@ -145,10 +149,18 @@ impl AddonClient {
         })
     }
 
-    fn spawn_refresh(&self, addon: InstalledAddon, url: String, timeout: Duration) {
+    fn spawn_refresh(
+        &self,
+        addon: InstalledAddon,
+        url: String,
+        timeout: Duration,
+        generation: u64,
+    ) {
         let client = self.clone();
         tokio::spawn(async move {
-            let _ = client.fetch_network(&addon, &url, timeout).await;
+            let _ = client
+                .fetch_network(&addon, &url, timeout, generation)
+                .await;
         });
     }
 

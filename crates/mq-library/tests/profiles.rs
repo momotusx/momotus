@@ -477,3 +477,28 @@ fn a_pin_attempt_never_brings_back_a_purged_count() {
     gone_error(lib.set_pin_failures("x", 3));
     assert_eq!(lib.pin_failures("x").unwrap(), 0);
 }
+
+#[test]
+fn an_avatar_from_another_device_is_held_to_the_local_rule() {
+    let lib = Library::temporary().unwrap();
+    let long = "x".repeat(65);
+    let cases = [
+        ("fox:amber_2", "fox:amber_2"),
+        ("<svg onload=x>", ""),
+        (long.as_str(), ""),
+    ];
+    for (wall, (avatar, stored)) in (10..).zip(cases) {
+        let record = SyncRecord {
+            coll: coll::PROFILES,
+            key: "y".into(),
+            value: serde_json::json!({"profile": "y", "name": "y", "avatar": avatar}),
+            hlc: hlc(wall, 2),
+        };
+        assert_eq!(lib.apply(&[record]).unwrap(), 1);
+        assert_eq!(
+            lib.profile("y").unwrap().unwrap().avatar,
+            stored,
+            "{avatar}"
+        );
+    }
+}

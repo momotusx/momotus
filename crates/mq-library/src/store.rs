@@ -3,7 +3,7 @@ use crate::sync::{Gone, coll, local, queue, refuse_gone, sql};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
@@ -135,6 +135,14 @@ pub struct Library {
     next_reader: AtomicUsize,
     changes: broadcast::Sender<Vec<Table>>,
     temp_path: Option<PathBuf>,
+    /// Bumped (under the writer) whenever a profile is removed. Cached addon
+    /// answers carry the count they were fetched under, and only the
+    /// current count may be stored or served: a fetch begun before a
+    /// removal never puts the removed profile's URLs back.
+    removals: AtomicU64,
+    /// A removal's log could not be emptied (a reader was in the middle of
+    /// a read); the next read or write tries again.
+    scrub_pending: AtomicBool,
 }
 
 impl Library {
@@ -164,13 +172,19 @@ impl Library {
         let readers = (0..readers)
             .map(|_| open_connection(&target).map(Mutex::new))
             .collect::<Result<_, _>>()?;
-        Ok(Self {
+        let library = Self {
             writer: Mutex::new(writer),
             readers,
             next_reader: AtomicUsize::new(0),
             changes,
             temp_path: None,
-        })
+            removals: AtomicU64::new(0),
+            scrub_pending: AtomicBool::new(false),
+        };
+        // Rows a migration dropped, or a removal whose scrub a crash cut
+        // short, leave the files now.
+        library.checkpoint();
+        Ok(library)
     }
 
     /// Receives the set of tables touched by each committed write transaction.
@@ -182,32 +196,69 @@ impl Library {
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
     ) -> Result<T, LibraryError> {
-        let mut conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
-        let tx = conn.transaction()?;
-        let out = f(&tx)?;
-        tx.commit()?;
+        let out = {
+            let mut conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+            let tx = conn.transaction()?;
+            let out = f(&tx)?;
+            tx.commit()?;
+            out
+        };
+        self.scrub_if_pending();
         Ok(out)
     }
 
     /// Moves the write-ahead log into the database and empties it, so the
-    /// old copies of rows deleted since are gone from the files too. Best
-    /// effort: a reader in the middle of a read leaves the log for later.
+    /// old copies of rows deleted since are gone from the files too. A
+    /// reader in the middle of a read holds it up: then it is tried again
+    /// after the next read or write.
     pub(crate) fn checkpoint(&self) {
         let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
-        if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)") {
-            tracing::warn!("checkpoint after a profile removal failed: {e}");
+        // Wait only briefly for readers; the retry covers the rest.
+        let _ = conn.busy_timeout(std::time::Duration::from_millis(50));
+        let busy = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+            r.get::<_, i64>(0)
+        });
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+        let done = match busy {
+            Ok(busy) => busy == 0,
+            Err(e) => {
+                tracing::warn!("checkpoint after a profile removal failed: {e}");
+                false
+            }
+        };
+        self.scrub_pending.store(!done, Ordering::SeqCst);
+    }
+
+    fn scrub_if_pending(&self) {
+        if self.scrub_pending.load(Ordering::SeqCst) {
+            self.checkpoint();
         }
+    }
+
+    /// Counts a profile removal; called inside its write transaction.
+    pub(crate) fn count_removal(&self) {
+        self.removals.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// How many profiles were removed while this library was open: cached
+    /// addon answers fetched under another count are not used.
+    pub fn removals(&self) -> u64 {
+        self.removals.load(Ordering::SeqCst)
     }
 
     pub(crate) fn read<T>(
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
     ) -> Result<T, LibraryError> {
-        let index = self.next_reader.fetch_add(1, Ordering::Relaxed) % self.readers.len();
-        let conn = self.readers[index]
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        Ok(f(&conn)?)
+        let out = {
+            let index = self.next_reader.fetch_add(1, Ordering::Relaxed) % self.readers.len();
+            let conn = self.readers[index]
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            f(&conn)?
+        };
+        self.scrub_if_pending();
+        Ok(out)
     }
 
     /// Creates the profile and its lock register (no PIN), each only when
@@ -545,8 +596,19 @@ impl Library {
         })
     }
 
-    pub fn cache_put(&self, key: &str, value: &CachedResponse) -> Result<(), LibraryError> {
+    /// Stores an addon answer fetched while `removals` was the count; one
+    /// that a profile removal overtook is dropped (checked under the writer,
+    /// which every removal holds). Returns whether it was stored.
+    pub fn cache_put(
+        &self,
+        key: &str,
+        value: &CachedResponse,
+        removals: u64,
+    ) -> Result<bool, LibraryError> {
         self.write(|c| {
+            if self.removals() != removals {
+                return Ok(false);
+            }
             c.execute(
                 "INSERT OR REPLACE INTO http_cache (key, body, stored_ms, max_age_s, stale_revalidate_s, stale_error_s)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -557,7 +619,7 @@ impl Library {
                    SELECT key FROM http_cache ORDER BY stored_ms DESC LIMIT -1 OFFSET ?1)",
                 params![HTTP_CACHE_ROWS],
             )?;
-            Ok(())
+            Ok(true)
         })
     }
 }

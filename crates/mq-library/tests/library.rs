@@ -185,7 +185,8 @@ fn http_cache_round_trip_and_trim() {
         stale_revalidate_s: 3600,
         stale_error_s: 0,
     };
-    lib.cache_put("https://a/catalog.json", &value).unwrap();
+    lib.cache_put("https://a/catalog.json", &value, lib.removals())
+        .unwrap();
     assert_eq!(
         lib.cache_get("https://a/catalog.json").unwrap(),
         Some(value)

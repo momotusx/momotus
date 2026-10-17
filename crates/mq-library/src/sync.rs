@@ -41,6 +41,14 @@ const SEP: char = '\u{1f}';
 /// The owner profile: every device starts with it, it can never be gone.
 pub const OWNER: &str = "default";
 
+/// Avatars are an app's own ids (a bundled image and a colour token), and
+/// they sync to every device: up to 64 ASCII letters, digits, ':', '-' or
+/// '_' (empty means the default).
+pub fn valid_avatar(avatar: &str) -> bool {
+    let allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, ':' | '-' | '_');
+    avatar.len() <= 64 && avatar.chars().all(allowed)
+}
+
 /// Whether the profile was removed for good.
 pub(crate) fn gone(c: &Connection, profile: &str) -> rusqlite::Result<bool> {
     c.query_row(
@@ -283,6 +291,9 @@ impl Library {
     pub fn apply(&self, records: &[SyncRecord]) -> Result<usize, LibraryError> {
         let removal = records.iter().any(|r| r.coll == coll::PROFILE_GONE);
         let changed = self.write(|c| {
+            if removal {
+                self.count_removal();
+            }
             let mut changed = 0;
             for r in records {
                 match apply_one(c, r) {
@@ -778,7 +789,14 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         coll::PROFILES => {
             let v: ProfileValue = serde_json::from_value(value)?;
             same_key(r, &[&v.profile])?;
-            sql::set_profile(c, &v.profile, &v.name, &v.avatar, v.position, hlc)?
+            // Held to what this device would write itself: anything else
+            // shows as the default avatar.
+            let avatar = if valid_avatar(&v.avatar) {
+                v.avatar.as_str()
+            } else {
+                ""
+            };
+            sql::set_profile(c, &v.profile, &v.name, avatar, v.position, hlc)?
         }
         coll::PROFILE_LOCK => {
             let v: LockValue = serde_json::from_value(value)?;

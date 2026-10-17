@@ -16,9 +16,6 @@ use std::time::{Duration, Instant};
 /// sync to one more; all are shown).
 pub const MAX_PROFILES: usize = 6;
 const NAME_CHARS: usize = 30;
-/// Avatars are an app's own ids (a bundled image and a colour token): short
-/// ASCII, never text from elsewhere, since they sync to every device.
-const AVATAR_CHARS: usize = 64;
 
 /// OWASP's minimum Argon2id setting: 19 MiB, two passes, one lane.
 const M_KIB: u32 = 19_456;
@@ -36,7 +33,7 @@ pub enum ProfileError {
     TooMany,
     #[error("a profile name has 1 to {NAME_CHARS} characters")]
     BadName,
-    #[error("an avatar is up to {AVATAR_CHARS} letters, digits, ':', '-' or '_'")]
+    #[error("an avatar is up to 64 letters, digits, ':', '-' or '_'")]
     BadAvatar,
     #[error("the owner profile cannot be removed")]
     OwnerProfile,
@@ -186,8 +183,6 @@ impl Core {
         }
         self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
         self.library().delete_profile(id, &self.hlc())?;
-        // Answers cached in memory were fetched with its addon URLs.
-        self.addons().forget_memory();
         Ok(())
     }
 
@@ -272,8 +267,7 @@ async fn blocking<T: Send + 'static>(
 }
 
 fn valid_avatar(avatar: &str) -> Result<(), ProfileError> {
-    let allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, ':' | '-' | '_');
-    if avatar.len() <= AVATAR_CHARS && avatar.chars().all(allowed) {
+    if mq_library::valid_avatar(avatar) {
         Ok(())
     } else {
         Err(ProfileError::BadAvatar)

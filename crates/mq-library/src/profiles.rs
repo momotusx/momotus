@@ -151,6 +151,7 @@ impl Library {
             return Err(LibraryError::OwnerProfile);
         }
         self.write(|c| {
+            self.count_removal();
             let changed = sql::set_gone(c, id, hlc)?;
             queue(c, changed, coll::PROFILE_GONE, &[id])
         })?;
@@ -284,8 +285,8 @@ mod tests {
                 stale_revalidate_s: 0,
                 stale_error_s: 0,
             };
-            lib.cache_put(&format!("https://addon.example/{secret}/catalog"), &cached)
-                .unwrap();
+            let url = format!("https://addon.example/{secret}/catalog");
+            lib.cache_put(&url, &cached, lib.removals()).unwrap();
         };
         fill("x", "SECRET-local-7f3a9c");
         fill("z", "SECRET-synced-41be");
@@ -319,5 +320,144 @@ mod tests {
         assert!(found("kept-0d2e"), "other profiles stay");
         drop(lib);
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod verify_round {
+    use super::*;
+    use crate::hlc::Hlc;
+    use crate::store::CachedResponse;
+    use std::path::{Path, PathBuf};
+
+    fn hlc(wall: u64) -> String {
+        Hlc {
+            wall_ms: wall,
+            counter: 0,
+            device: 1,
+        }
+        .encode()
+    }
+
+    fn temp(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("mq-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Whether `text` is anywhere in the database or its log.
+    fn in_files(path: &Path, text: &str) -> bool {
+        ["", "-wal"].iter().any(|suffix| {
+            let mut file = path.to_path_buf().into_os_string();
+            file.push(suffix);
+            let bytes = std::fs::read(file).unwrap_or_default();
+            bytes.windows(text.len()).any(|w| w == text.as_bytes())
+        })
+    }
+
+    /// V7 raw imports had no profile: with one profile they are its, with
+    /// more nobody can tell and they go (addon keys can be in them).
+    #[test]
+    fn raw_imports_from_before_profiles_get_their_owner_or_go() {
+        for (profiles, kept) in [(&["default"][..], true), (&["default", "kid"][..], false)] {
+            let dir = temp("migrate");
+            let path = dir.join("library.sqlite");
+            {
+                let mut c = rusqlite::Connection::open(&path).unwrap();
+                crate::schema::migrations().to_version(&mut c, 7).unwrap();
+                for p in profiles {
+                    c.execute(
+                        "INSERT INTO profiles (id, name, hlc) VALUES (?1, ?1, '0')",
+                        [p],
+                    )
+                    .unwrap();
+                }
+                c.execute(
+                    "INSERT INTO import_raw (source, imported_ms, payload) VALUES ('stremio', 1, 'SECRET-legacy-9b')",
+                    [],
+                )
+                .unwrap();
+            }
+            let lib = Library::open(&path).unwrap();
+            let rows: Vec<(String, String)> = lib
+                .read(|c| {
+                    let mut stmt = c.prepare("SELECT profile_id, payload FROM import_raw")?;
+                    stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                        .collect()
+                })
+                .unwrap();
+            if kept {
+                assert_eq!(rows, [("default".into(), "SECRET-legacy-9b".into())]);
+            } else {
+                assert!(rows.is_empty(), "{rows:?}");
+                assert!(!in_files(&path, "SECRET-legacy"), "dropped, not readable");
+            }
+            // New rows must name their profile.
+            let unnamed = lib.write(|c| {
+                c.execute(
+                    "INSERT INTO import_raw (source, imported_ms, payload) VALUES ('x', 1, 'y')",
+                    [],
+                )
+            });
+            assert!(unnamed.is_err());
+            drop(lib);
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// A reader in the middle of a read holds the scrub up; it finishes
+    /// once the reader is done and the library is used again.
+    #[test]
+    fn a_scrub_held_up_by_a_reader_finishes_after_it() {
+        let dir = temp("held");
+        let path = dir.join("library.sqlite");
+        let lib = Library::open(&path).unwrap();
+        lib.create_profile("x", "x", "", &hlc(1)).unwrap();
+        lib.set_setting("x", "notes", "\"SECRET-held-5c1\"", &hlc(2))
+            .unwrap();
+        lib.checkpoint();
+        let reader = rusqlite::Connection::open(&path).unwrap();
+        reader.execute_batch("BEGIN").unwrap();
+        let _: i64 = reader
+            .query_row("SELECT COUNT(*) FROM settings", [], |r| r.get(0))
+            .unwrap();
+
+        lib.delete_profile("x", &hlc(3)).unwrap();
+        assert!(in_files(&path, "SECRET-held"), "the reader holds it up");
+        reader.execute_batch("COMMIT").unwrap();
+        lib.profiles().unwrap();
+        assert!(!in_files(&path, "SECRET-held"), "scrubbed once it could");
+        drop((reader, lib));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// An addon answer fetched before a removal is not stored after it.
+    #[test]
+    fn a_cache_write_a_removal_overtook_is_dropped() {
+        let lib = Library::temporary().unwrap();
+        lib.create_profile("x", "x", "", &hlc(1)).unwrap();
+        let row = CachedResponse {
+            body: b"{}".to_vec(),
+            stored_ms: 1,
+            max_age_s: 60,
+            stale_revalidate_s: 0,
+            stale_error_s: 0,
+        };
+        let before = lib.removals();
+        lib.delete_profile("x", &hlc(2)).unwrap();
+        assert!(!lib.cache_put("https://a/x", &row, before).unwrap());
+        assert_eq!(lib.cache_get("https://a/x").unwrap(), None);
+        assert!(lib.cache_put("https://a/x", &row, lib.removals()).unwrap());
+        // A removal arriving by sync counts too.
+        let before = lib.removals();
+        let gone = crate::sync::SyncRecord {
+            coll: coll::PROFILE_GONE,
+            key: "y".into(),
+            value: serde_json::json!({"profile": "y"}),
+            hlc: hlc(3),
+        };
+        lib.apply(&[gone]).unwrap();
+        assert_ne!(lib.removals(), before);
     }
 }

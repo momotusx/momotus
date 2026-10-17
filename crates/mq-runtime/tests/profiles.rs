@@ -148,7 +148,7 @@ async fn avatars_are_short_app_ids() {
 }
 
 /// A catalog addon on loopback whose answers may be cached for ten minutes.
-async fn cached_addon() -> mq_library::AddonRow {
+async fn cached_addon(delay: Duration) -> mq_library::AddonRow {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -157,6 +157,7 @@ async fn cached_addon() -> mq_library::AddonRow {
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let _ = socket.read(&mut buf).await;
+                tokio::time::sleep(delay).await;
                 let body = r#"{"metas":[]}"#;
                 let reply = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: max-age=600\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -182,7 +183,7 @@ async fn cached_addon() -> mq_library::AddonRow {
 #[tokio::test]
 async fn a_removal_forgets_cached_addon_answers() {
     let core = Core::temporary(OWNER).unwrap();
-    let row = cached_addon().await;
+    let row = cached_addon(Duration::ZERO).await;
     core.library()
         .set_addons(OWNER, &[row], &core.hlc())
         .unwrap();
@@ -209,4 +210,63 @@ async fn a_removal_forgets_cached_addon_answers() {
         !cached().await,
         "memory and disk copies went with the profile"
     );
+}
+
+fn catalog() -> mq_protocol::ResourcePath {
+    mq_protocol::ResourcePath {
+        resource: "catalog".into(),
+        r#type: "movie".into(),
+        id: "top".into(),
+        extra: vec![],
+    }
+}
+
+#[tokio::test]
+async fn an_answer_that_a_removal_overtakes_is_not_cached() {
+    let core = Core::temporary(OWNER).unwrap();
+    let row = cached_addon(Duration::from_millis(300)).await;
+    core.library()
+        .set_addons(OWNER, &[row], &core.hlc())
+        .unwrap();
+    let addon = core.installed_addons().unwrap().remove(0);
+    let kid = core.create_profile("Kid", "fox").unwrap();
+    let slow = {
+        let (core, addon) = (core.clone(), addon.clone());
+        tokio::spawn(async move {
+            core.addons()
+                .fetch(&addon, &catalog(), Duration::from_secs(5))
+                .await
+                .unwrap()
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    core.delete_profile(&kid).unwrap();
+    assert!(!slow.await.unwrap().from_cache);
+    let again = core
+        .addons()
+        .fetch(&addon, &catalog(), Duration::from_secs(5))
+        .await
+        .unwrap();
+    assert!(!again.from_cache, "the overtaken answer was not kept");
+}
+
+#[tokio::test]
+async fn a_removal_through_one_open_retires_another_opens_cache() {
+    let dir = dir("caches");
+    let (a, b) = (open(&dir, OWNER), open(&dir, OWNER));
+    let row = cached_addon(Duration::ZERO).await;
+    a.library().set_addons(OWNER, &[row], &a.hlc()).unwrap();
+    let addon = b.installed_addons().unwrap().remove(0);
+    let cached = || async {
+        b.addons()
+            .fetch(&addon, &catalog(), Duration::from_secs(5))
+            .await
+            .unwrap()
+            .from_cache
+    };
+    assert!(!cached().await);
+    assert!(cached().await);
+    let kid = a.create_profile("Kid", "fox").unwrap();
+    a.delete_profile(&kid).unwrap();
+    assert!(!cached().await, "b's memory copy went too");
 }
