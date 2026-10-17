@@ -1,13 +1,14 @@
 //! Loopback stream server. Every playback gets one URL,
 //! `http://127.0.0.1:<port>/s/<token>/<filename>`, where the token is 32
 //! random bytes. Players never learn where bytes come from: an upstream
-//! HTTP(S) URL proxied with Range passthrough, or (feature `torrent`, full
-//! builds only) a file of the embedded torrent engine served from verified
-//! pieces.
+//! HTTP(S) URL served through a read-ahead block cache (`ahead`), or
+//! (feature `torrent`, full builds only) a file of the embedded torrent
+//! engine served from verified pieces.
 //!
 //! Subtitles get `http://127.0.0.1:<port>/sub/<token>/<lang>.vtt`: the
 //! addon's file fetched on request and served as UTF-8 WebVTT.
 
+mod ahead;
 mod subtitles;
 
 pub use subtitles::to_vtt;
@@ -50,10 +51,22 @@ struct Subtitle {
     allow_private: bool,
 }
 
+/// A registered playback.
+#[derive(Clone)]
+enum Session {
+    Http(Arc<ahead::Source>),
+    #[cfg(feature = "torrent")]
+    Torrent {
+        engine: mq_engine::Engine,
+        torrent: mq_engine::TorrentHandle,
+        file: usize,
+    },
+}
+
 #[derive(Clone)]
 struct AppState {
     http: HttpClient,
-    sessions: Arc<Mutex<HashMap<String, Upstream>>>,
+    sessions: Arc<Mutex<HashMap<String, Session>>>,
     subtitles: Arc<Mutex<HashMap<String, Subtitle>>>,
     port: u16,
 }
@@ -91,9 +104,32 @@ impl StreamServer {
 
     /// Registers a playback and returns its URL. `filename` only helps
     /// players guess the container; it carries no secrets.
+    /// An HTTP upstream starts reading its first bytes at once.
     pub fn register(&self, upstream: Upstream, filename: &str) -> String {
+        let session = match upstream {
+            Upstream::Http {
+                url,
+                headers,
+                allow_private,
+            } => {
+                let source =
+                    ahead::Source::new(self.state.http.clone(), url, headers, allow_private);
+                source.prefetch();
+                Session::Http(source)
+            }
+            #[cfg(feature = "torrent")]
+            Upstream::Torrent {
+                engine,
+                torrent,
+                file,
+            } => Session::Torrent {
+                engine,
+                torrent,
+                file,
+            },
+        };
         let token = new_token();
-        lock(&self.state.sessions).insert(token.clone(), upstream);
+        lock(&self.state.sessions).insert(token.clone(), session);
         format!("http://{}/s/{token}/{}", self.addr, sanitize(filename))
     }
 
@@ -117,7 +153,8 @@ impl StreamServer {
         format!("http://{}/sub/{token}/{}.vtt", self.addr, sanitize(lang))
     }
 
-    /// Ends a playback or a subtitle; its URL stops working immediately.
+    /// Ends a playback or a subtitle; its URL stops working immediately and
+    /// its upstream reads stop.
     pub fn release(&self, url: &str) {
         let token = |prefix| {
             url.split(prefix)
@@ -125,8 +162,9 @@ impl StreamServer {
                 .and_then(|rest: &str| rest.split('/').next())
                 .map(str::to_owned)
         };
-        if let Some(token) = token("/s/") {
-            lock(&self.state.sessions).remove(&token);
+        let removed = token("/s/").and_then(|token| lock(&self.state.sessions).remove(&token));
+        if let Some(Session::Http(source)) = removed {
+            source.shutdown();
         }
         if let Some(token) = token("/sub/") {
             lock(&self.state.subtitles).remove(&token);
@@ -235,7 +273,7 @@ async fn serve(
     if !host_ok(&state, request.headers()) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let Some(upstream) = lock(&state.sessions).get(&token).cloned() else {
+    let Some(session) = lock(&state.sessions).get(&token).cloned() else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let range = request
@@ -243,59 +281,66 @@ async fn serve(
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
-    match upstream {
-        Upstream::Http {
-            url,
-            headers,
-            allow_private,
-        } => {
-            proxy_http(
-                &state.http,
-                &url,
-                headers,
-                allow_private,
-                range,
-                request.method() == Method::HEAD,
-            )
-            .await
-        }
+    let head_only = request.method() == Method::HEAD;
+    match session {
+        Session::Http(source) => serve_http(&state.http, source, range, head_only).await,
         #[cfg(feature = "torrent")]
-        Upstream::Torrent {
+        Session::Torrent {
             engine,
             torrent,
             file,
-        } => {
-            torrent::serve(
-                &engine,
-                torrent,
-                file,
-                range.as_deref(),
-                request.method() == Method::HEAD,
-            )
-            .await
-        }
+        } => torrent::serve(&engine, torrent, file, range.as_deref(), head_only).await,
     }
+}
+
+/// `bytes=a-b`, `bytes=a-` or `bytes=-n` against `len`, as `[start, end)`.
+/// `None` when unsatisfiable or not a single byte range.
+fn parse_range(header: &str, len: u64) -> Option<(u64, u64)> {
+    let spec = header.trim().strip_prefix("bytes=")?;
+    let (a, b) = spec.split_once('-')?;
+    let (start, end) = match (a.trim(), b.trim()) {
+        ("", n) => (len.saturating_sub(n.parse().ok()?), len),
+        (a, "") => (a.parse().ok()?, len),
+        (a, b) => (
+            a.parse().ok()?,
+            b.parse::<u64>().ok()?.saturating_add(1).min(len),
+        ),
+    };
+    (start < end && start < len).then_some((start, end))
+}
+
+/// Status and span for a request against `len`, with `Content-Range` and
+/// `Content-Length` set. `None` is unsatisfiable: answer 416 with `out`.
+fn range_headers(
+    range: Option<&str>,
+    len: u64,
+    out: &mut HeaderMap,
+) -> Option<(StatusCode, u64, u64)> {
+    let (status, start, end) = match range {
+        None => (StatusCode::OK, 0, len),
+        Some(h) => match parse_range(h, len) {
+            Some((start, end)) => {
+                let value = format!("bytes {start}-{}/{len}", end - 1);
+                if let Ok(v) = HeaderValue::from_str(&value) {
+                    out.insert(header::CONTENT_RANGE, v);
+                }
+                (StatusCode::PARTIAL_CONTENT, start, end)
+            }
+            None => {
+                if let Ok(v) = HeaderValue::from_str(&format!("bytes */{len}")) {
+                    out.insert(header::CONTENT_RANGE, v);
+                }
+                return None;
+            }
+        },
+    };
+    out.insert(header::CONTENT_LENGTH, HeaderValue::from(end - start));
+    Some((status, start, end))
 }
 
 #[cfg(feature = "torrent")]
 mod torrent {
     use super::*;
-
-    /// `bytes=a-b`, `bytes=a-` or `bytes=-n` against `len`, as `[start, end)`.
-    /// `None` when unsatisfiable or not a single byte range.
-    pub(crate) fn parse_range(header: &str, len: u64) -> Option<(u64, u64)> {
-        let spec = header.trim().strip_prefix("bytes=")?;
-        let (a, b) = spec.split_once('-')?;
-        let (start, end) = match (a.trim(), b.trim()) {
-            ("", n) => (len.saturating_sub(n.parse().ok()?), len),
-            (a, "") => (a.parse().ok()?, len),
-            (a, b) => (
-                a.parse().ok()?,
-                b.parse::<u64>().ok()?.saturating_add(1).min(len),
-            ),
-        };
-        (start < end && start < len).then_some((start, end))
-    }
 
     fn content_type(name: &str) -> &'static str {
         let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
@@ -336,25 +381,10 @@ mod torrent {
             header::CONTENT_TYPE,
             HeaderValue::from_static(content_type(&reader.file().path)),
         );
-        let (status, start, end) = match range {
-            None => (StatusCode::OK, 0, len),
-            Some(h) => match parse_range(h, len) {
-                Some((start, end)) => {
-                    let value = format!("bytes {start}-{}/{len}", end - 1);
-                    if let Ok(v) = HeaderValue::from_str(&value) {
-                        out.insert(header::CONTENT_RANGE, v);
-                    }
-                    (StatusCode::PARTIAL_CONTENT, start, end)
-                }
-                None => {
-                    if let Ok(v) = HeaderValue::from_str(&format!("bytes */{len}")) {
-                        out.insert(header::CONTENT_RANGE, v);
-                    }
-                    return (StatusCode::RANGE_NOT_SATISFIABLE, out).into_response();
-                }
-            },
+        let (status, start, end) = match range_headers(range, len, &mut out) {
+            Some(span) => span,
+            None => return (StatusCode::RANGE_NOT_SATISFIABLE, out).into_response(),
         };
-        out.insert(header::CONTENT_LENGTH, HeaderValue::from(end - start));
         if head_only {
             return (status, out).into_response();
         }
@@ -386,40 +416,99 @@ mod torrent {
         use super::*;
 
         #[test]
-        fn parses_single_byte_ranges() {
-            assert_eq!(parse_range("bytes=0-", 100), Some((0, 100)));
-            assert_eq!(parse_range("bytes=10-19", 100), Some((10, 20)));
-            assert_eq!(parse_range("bytes=90-500", 100), Some((90, 100)));
-            assert_eq!(parse_range("bytes=-10", 100), Some((90, 100)));
-            assert_eq!(parse_range("bytes=100-", 100), None);
-            assert_eq!(parse_range("bytes=20-10", 100), None);
-            assert_eq!(parse_range("bytes=0-1,5-6", 100), None);
-            assert_eq!(parse_range("items=0-1", 100), None);
+        fn names_content_types() {
             assert_eq!(content_type("A/B.MKV"), "video/x-matroska");
             assert_eq!(content_type("x.iso"), "application/octet-stream");
         }
     }
 }
 
+/// Serves a range from the playback's read-ahead cache.
+async fn serve_http(
+    http: &HttpClient,
+    source: Arc<ahead::Source>,
+    range: Option<String>,
+    head_only: bool,
+) -> Response {
+    if source.passthrough() {
+        return proxy_http(http, &source, range, head_only).await;
+    }
+    let first = range
+        .as_deref()
+        .and_then(|h| {
+            h.trim()
+                .strip_prefix("bytes=")?
+                .split_once('-')?
+                .0
+                .trim()
+                .parse()
+                .ok()
+        })
+        .unwrap_or(0);
+    let meta = match source.meta(first).await {
+        Ok(meta) => meta,
+        Err(ahead::Refusal::Passthrough) => {
+            return proxy_http(http, &source, range, head_only).await;
+        }
+        Err(ahead::Refusal::Status(status, headers)) => return (status, headers).into_response(),
+        Err(ahead::Refusal::Failed) => return StatusCode::BAD_GATEWAY.into_response(),
+    };
+    let mut out = meta.headers.clone();
+    out.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    // A page may read it as `<video crossorigin>`; the token is the capability.
+    out.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+    let (status, start, end) = match range_headers(range.as_deref(), meta.len, &mut out) {
+        Some(span) => span,
+        None => return (StatusCode::RANGE_NOT_SATISFIABLE, out).into_response(),
+    };
+    if head_only {
+        return (status, out).into_response();
+    }
+    let body = stream::unfold(Some(start), move |pos| {
+        let source = source.clone();
+        async move {
+            let pos = pos.filter(|&p| p < end)?;
+            match source.read(pos, end).await {
+                Ok(bytes) => {
+                    let next = pos + bytes.len() as u64;
+                    Some((Ok(bytes), Some(next)))
+                }
+                Err(e) => Some((Err(e), None)),
+            }
+        }
+    });
+    (status, out, Body::from_stream(body)).into_response()
+}
+
+/// Plain proxy with Range passthrough, for origins that ignore ranges or
+/// give no length.
 async fn proxy_http(
     http: &HttpClient,
-    url: &str,
-    headers: Vec<(String, String)>,
-    allow_private: bool,
+    source: &ahead::Source,
     range: Option<String>,
     head_only: bool,
 ) -> Response {
     let opts = RequestOptions {
         priority: Priority::Playback,
         timeout: Duration::from_secs(30),
-        allow_private,
-        headers,
+        allow_private: source.allow_private(),
+        headers: source.headers().to_vec(),
         ..Default::default()
     };
-    let upstream = match http.stream(url, range, &opts).await {
-        Ok(response) => response,
-        Err(e) => {
+    let released = source.released().clone();
+    let open = tokio::time::timeout(ahead::OPEN, http.stream(source.url(), range, &opts));
+    let upstream = match released.run_until_cancelled(open).await {
+        None => return StatusCode::NOT_FOUND.into_response(),
+        Some(Ok(Ok(response))) => response,
+        Some(Ok(Err(e))) => {
             tracing::warn!("stream upstream failed: {e}");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+        Some(Err(_)) => {
+            tracing::warn!("stream upstream sent no answer in {:?}", ahead::OPEN);
             return StatusCode::BAD_GATEWAY.into_response();
         }
     };
@@ -440,9 +529,33 @@ async fn proxy_http(
     if head_only {
         return (status, out).into_response();
     }
-    let body = stream::unfold(upstream, |mut upstream| async move {
-        let chunk = upstream.next_chunk().await?;
-        Some((chunk.map_err(std::io::Error::other), upstream))
+    // Release ends the body too.
+    let body = stream::unfold(upstream, move |mut upstream| {
+        let released = released.clone();
+        async move {
+            let chunk = released
+                .run_until_cancelled(upstream.next_chunk())
+                .await
+                .flatten()?;
+            Some((chunk.map_err(std::io::Error::other), upstream))
+        }
     });
     (status, out, Body::from_stream(body)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_single_byte_ranges() {
+        assert_eq!(parse_range("bytes=0-", 100), Some((0, 100)));
+        assert_eq!(parse_range("bytes=10-19", 100), Some((10, 20)));
+        assert_eq!(parse_range("bytes=90-500", 100), Some((90, 100)));
+        assert_eq!(parse_range("bytes=-10", 100), Some((90, 100)));
+        assert_eq!(parse_range("bytes=100-", 100), None);
+        assert_eq!(parse_range("bytes=20-10", 100), None);
+        assert_eq!(parse_range("bytes=0-1,5-6", 100), None);
+        assert_eq!(parse_range("items=0-1", 100), None);
+    }
 }

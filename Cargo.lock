@@ -2771,6 +2771,7 @@ dependencies = [
  "getrandom 0.3.4",
  "mq-engine",
  "mq-http",
+ "mq-media",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

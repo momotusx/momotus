@@ -84,6 +84,11 @@ impl ByteCache {
         span.map(|(first, last)| (first * BLOCK_SIZE, (last + 1) * BLOCK_SIZE))
     }
 
+    /// Drops every block.
+    pub fn clear(&self) {
+        *self.lock() = Inner::default();
+    }
+
     /// Stores `data` read at a block-aligned `offset`. A trailing partial
     /// block is kept and marks the end of the source.
     pub fn insert(&self, source: &str, offset: u64, data: &Bytes) {
