@@ -165,7 +165,10 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
     <section class="row" data-row data-fgroup={`row:${id()}`} ref={section} aria-label={props.row.title}>
       <header class="row-head">
         <h2>{props.row.title}</h2>
-        <span class="row-src">{props.row.rowId === CONTINUE_ROW ? "From your library" : props.row.source}</span>
+        {/* Continue Watching comes from what was played, not from an addon: it names no source. */}
+        <Show when={props.row.rowId !== CONTINUE_ROW}>
+          <span class="row-src">{props.row.source}</span>
+        </Show>
         <Show when={state() === "slow" && !ready()}>
           <span class="st warn row-note">
             <i class="dot" />

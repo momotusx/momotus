@@ -48,8 +48,8 @@ class TileCopyTest {
     }
 
     @Test
-    fun `the source label names the library for Continue Watching`() {
-        assertEquals("From your library", TileCopy.source(TileCopy.CONTINUE_ROW, "Local"))
+    fun `the source label names the addon, and Continue Watching has none`() {
+        assertNull(TileCopy.source(TileCopy.CONTINUE_ROW, "Local"))
         assertEquals("Cinemeta", TileCopy.source("a:movie:top", "Cinemeta"))
     }
 

@@ -8,11 +8,14 @@ object TileCopy {
     /** Id of the Continue Watching row: its tiles are 16:9 stills with the logo on them. */
     const val CONTINUE_ROW = "continue-watching"
 
-    /** What a row's source label says: the library for Continue Watching, else the addon's name. */
+    /**
+     * What a row's source label says: the addon's name. Continue Watching has none: it comes from
+     * what was played, not from an addon or the library.
+     */
     fun source(
         rowId: String,
         source: String,
-    ): String = if (rowId == CONTINUE_ROW) "From your library" else source
+    ): String? = if (rowId == CONTINUE_ROW) null else source
 
     /**
      * The line under a tile. Only Continue Watching has one, and the core writes it ("S2:E3 · 36 min
