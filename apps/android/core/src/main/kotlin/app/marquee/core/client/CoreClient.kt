@@ -34,10 +34,14 @@ fun interface CoreTransport {
     fun send(text: String)
 }
 
-/** The core answered `ok: false` (its plain text is the message), or did not answer in time. */
+/**
+ * The core answered `ok: false` (its plain text is the message, and [code] names the failures an app
+ * can act on, such as "dropped" for sync), or did not answer in time.
+ */
 class CoreError(
     message: String,
     val timedOut: Boolean = false,
+    val code: String? = null,
 ) : Exception(message)
 
 /** The protocol's JSON settings: tolerant of keys a newer core adds. Tests decode strictly. */
@@ -412,13 +416,14 @@ class CoreClient(
             return
         }
         val error = message["error"]?.jsonPrimitive?.contentOrNull ?: "request failed"
+        val code = message["code"]?.jsonPrimitive?.contentOrNull
         when (waiting) {
             is Pending.Plain -> {
                 completions.add {
                     if (ok) {
                         waiting.deferred.complete(message["result"] ?: JsonObject(emptyMap()))
                     } else {
-                        waiting.deferred.completeExceptionally(CoreError(error))
+                        waiting.deferred.completeExceptionally(CoreError(error, code = code))
                     }
                 }
             }

@@ -89,6 +89,7 @@ private fun AppNav(
     initial: List<Route>,
 ) {
     val backStack = rememberNavBackStack(*initial.toTypedArray())
+    val sync = (LocalContext.current.applicationContext as MarqueeApp).sync
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
@@ -196,7 +197,24 @@ private fun AppNav(
                             onDiscover = { choose(Route.Discover) },
                         )
                     }
-                    entry<Route.Settings> { SettingsScreen(session, onImport = { backStack.add(Route.Import) }) }
+                    entry<Route.Settings> {
+                        SettingsScreen(
+                            session,
+                            sync,
+                            onImport = { backStack.add(Route.Import) },
+                            onSync = { backStack.add(if (sync.joined) Route.Sync else Route.Pairing) },
+                        )
+                    }
+                    entry<Route.Pairing> {
+                        PairingScreen(session, sync, onDone = {
+                            if (backStack.size >
+                                1
+                            ) {
+                                backStack.removeAt(backStack.lastIndex)
+                            }
+                        })
+                    }
+                    entry<Route.Sync> { SyncScreen(sync) }
                     entry<Route.Title> { route ->
                         TitleScreen(
                             route,

@@ -35,6 +35,14 @@ sealed interface Route : NavKey {
     @Serializable
     data object Import : Route
 
+    /** Join a sync account: this device shows a code another device approves. */
+    @Serializable
+    data object Pairing : Route
+
+    /** The sync account this device is in. */
+    @Serializable
+    data object Sync : Route
+
     @Serializable
     data class Title(
         val kind: String,

@@ -64,6 +64,7 @@ import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.MqTextField
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RoundButton
 import app.marquee.design.Status
@@ -121,7 +122,9 @@ private fun SaidLine(
 @Composable
 fun SettingsScreen(
     session: CoreSession,
+    sync: SyncController,
     onImport: () -> Unit,
+    onSync: () -> Unit,
 ) {
     val holder =
         viewModel<SettingsHolder>(
@@ -233,6 +236,20 @@ fun SettingsScreen(
                 "Addons, library and progress, with a code. No password typed here.",
                 onImport,
             )
+        }
+        item(key = "devices-head") { Kicker("Devices and sync") }
+        item(key = "devices") {
+            if (sync.joined) {
+                val words = sync.problem ?: if (sync.syncing) "Syncing" else "Library, progress and addons follow you."
+                LinkRow(Icons.RefreshCw, "Sync", words, onSync)
+            } else {
+                LinkRow(
+                    Icons.QrCode,
+                    "Pair this device",
+                    "Join your sync account by scanning a code on a device that already syncs.",
+                    onSync,
+                )
+            }
         }
         item(key = "playback-head") { Kicker("Playback") }
         item(key = "playback") { Playback(holder, busy != null) { what, op -> run(what, Place.Playback, op = op) } }
@@ -352,8 +369,6 @@ private fun InstallField(
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     var text by remember { mutableStateOf("") }
-    var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(Marquee.radius.pill)
     val keyboard = LocalSoftwareKeyboardController.current
     // The keyboard goes, so how it went (under the button) is in sight.
     val add = {
@@ -365,42 +380,15 @@ private fun InstallField(
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             MqText("Add an addon", role = TextRole.Headline, weight = FontWeight.Bold)
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(if (tv) 72.dp else 48.dp)
-                    .clip(shape)
-                    .background(colors.raised)
-                    .border(2.dp, if (focused) colors.accent else colors.control, shape)
-                    .padding(horizontal = if (tv) 24.dp else 16.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    singleLine = true,
-                    textStyle =
-                        TextStyle(
-                            color = colors.text,
-                            fontSize = Marquee.type.callout,
-                            fontFamily = MarqueeFonts.text,
-                        ),
-                    cursorBrush = SolidColor(colors.accent),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                    // The keyboard's Go adds it, as the button does.
-                    keyboardActions = KeyboardActions(onGo = { add() }),
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .dpadExits()
-                            .then(Modifier.onFocusChanged { focused = it.isFocused })
-                            .semantics { contentDescription = "Addon link" },
-                    decorationBox = { inner ->
-                        if (text.isEmpty()) MqText("https://... manifest.json", color = colors.dim, maxLines = 1)
-                        inner()
-                    },
-                )
-            }
+            MqTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = "Addon link",
+                placeholder = "https://... manifest.json",
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                // The keyboard's Go adds it, as the button does.
+                keyboardActions = KeyboardActions(onGo = { add() }),
+            )
             PrimaryButton(
                 label = "Add",
                 icon = Icons.Plus,

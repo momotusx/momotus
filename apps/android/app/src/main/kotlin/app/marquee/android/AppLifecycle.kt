@@ -18,13 +18,20 @@ import coil3.SingletonImageLoader
 class AppLifecycle(
     private val app: Application,
     private val session: CoreSession,
+    private val sync: SyncController,
 ) {
     fun register() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
-                override fun onStart(owner: LifecycleOwner) = session.ops.lifecycle(LifecycleEvent.Foreground)
+                override fun onStart(owner: LifecycleOwner) {
+                    session.ops.lifecycle(LifecycleEvent.Foreground)
+                    sync.foreground()
+                }
 
-                override fun onStop(owner: LifecycleOwner) = session.ops.lifecycle(LifecycleEvent.Background)
+                override fun onStop(owner: LifecycleOwner) {
+                    session.ops.lifecycle(LifecycleEvent.Background)
+                    sync.background()
+                }
             },
         )
         watchNetwork()

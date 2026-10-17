@@ -23,6 +23,10 @@ class MarqueeApp :
     SingletonImageLoader.Factory {
     lateinit var session: CoreSession
         private set
+
+    /** The sync account on this device, for the app's life. */
+    lateinit var sync: SyncController
+        private set
     private lateinit var lifecycle: AppLifecycle
 
     /**
@@ -53,7 +57,8 @@ class MarqueeApp :
         }
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
-        lifecycle = AppLifecycle(this, session).also { it.register() }
+        sync = SyncController(session).also { it.start() }
+        lifecycle = AppLifecycle(this, session, sync).also { it.register() }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }
         deviceCaps = {
             runCatching {

@@ -1,0 +1,97 @@
+package app.marquee.core
+
+import app.marquee.core.model.Blocked
+import app.marquee.core.model.SyncReport
+import kotlin.math.abs
+
+/** The words of sync, equal to Apple's `SyncWords`: what went wrong and what a round left to say. */
+object SyncCopy {
+    /** A sync failure in plain words; [code] names the ones with a fix. */
+    fun problem(
+        code: String?,
+        message: String,
+    ): String {
+        // The core's transport errors read "network: ..." with an address; nobody needs that.
+        if (code == null && message.startsWith("network")) {
+            return "The sync server did not answer. Your changes wait here and go out on the next sync."
+        }
+        return when (code) {
+            "dropped" -> {
+                "This device was removed from your sync account. Your library stays here as local data."
+            }
+
+            "fork" -> {
+                "The sync server lists different devices than this device knows. " +
+                    "Use the server's list to keep syncing."
+            }
+
+            "wrongRelay" -> {
+                "This is not the sync server this device joined. " +
+                    "Try again, or forget the account here and pair again."
+            }
+
+            "relayBehind" -> {
+                "The sync server lost device entries it cannot get back. " +
+                    "Pair this device again from one that still syncs."
+            }
+
+            "notJoined" -> {
+                "This device has not joined a sync account yet."
+            }
+
+            "unsent" -> {
+                "Some changes have not been sent yet. Sync again first, or leave anyway and they stay only here."
+            }
+
+            "insecure" -> {
+                "The sync server address must start with https."
+            }
+
+            else -> {
+                message
+            }
+        }
+    }
+
+    /** Things worth telling the user after a round, in words. */
+    fun notes(report: SyncReport): List<String> =
+        buildList {
+            val gapMinutes = abs(report.clockGapMs) / 60_000
+            if (abs(report.clockGapMs) > 600_000) {
+                add(
+                    "The sync server's clock and this device's disagree by $gapMinutes minutes, " +
+                        "so edits sync in the order they are sent.",
+                )
+            }
+            if (report.waiting > 0) add("${report.waiting} edits wait for the sync server's clock to catch up.")
+            if (report.parked > 0) add("${report.parked} records wait for a key this device does not have yet.")
+            if (report.oldEpochWrites >
+                0
+            ) {
+                add("The sync server may be hiding device changes. Compare the fingerprint on each device.")
+            }
+            if (report.rotationWaitMs > 0) {
+                val minutes = maxOf(1, report.rotationWaitMs / 60_000)
+                add("Changes wait $minutes ${if (minutes == 1L) "minute" else "minutes"} after a sync server restore.")
+            }
+            when (report.blocked) {
+                Blocked.RotationPending -> {
+                    add("Edits wait until a key change finishes.")
+                }
+
+                Blocked.NotActive -> {
+                    add("This device is not active in the account, so its edits were not sent.")
+                }
+
+                Blocked.RelayDisagrees -> {
+                    add(
+                        "The sync server disagrees about the device list, so edits were not sent.",
+                    )
+                }
+
+                null -> {
+                    Unit
+                }
+            }
+        }
+}

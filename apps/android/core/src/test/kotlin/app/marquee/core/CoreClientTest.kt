@@ -248,6 +248,18 @@ class CoreClientTest {
         }
 
     @Test
+    fun `an error reply keeps its code, so an app can act on it`() =
+        runBlocking {
+            client.attach(
+                CoreTransport { text ->
+                    client.onMessage("""{"id":${idOf(text)},"ok":false,"error":"removed","code":"dropped"}""")
+                },
+            )
+            val error = assertFailsWith<CoreError> { client.request("syncNow") }
+            assertEquals("dropped", error.code)
+        }
+
+    @Test
     fun `replies may come in any order`() =
         runBlocking {
             val sent = CopyOnWriteArrayList<Long>()
