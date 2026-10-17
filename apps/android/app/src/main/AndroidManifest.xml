@@ -14,6 +14,8 @@
     <application
         android:name=".MarqueeApp"
         android:allowBackup="false"
+        android:banner="@drawable/banner"
+        android:icon="@drawable/ic_launcher"
         android:label="Marquee"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"

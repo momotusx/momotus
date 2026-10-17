@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder TV banner until the owner supplies the logo: warm black with a row of amber
+     "marquee bulbs" (design/DECISION.md). Colors are the dark bg and accent tokens. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#0F0D0B"
+        android:pathData="M0,0h320v180h-320z" />
+    <path
+        android:fillColor="#FFB547"
+        android:pathData="M60,90m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+    <path
+        android:fillColor="#FFB547"
+        android:pathData="M110,90m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+    <path
+        android:fillColor="#FFB547"
+        android:pathData="M160,90m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+    <path
+        android:fillColor="#FFB547"
+        android:pathData="M210,90m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+    <path
+        android:fillColor="#FFB547"
+        android:pathData="M260,90m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+</vector>

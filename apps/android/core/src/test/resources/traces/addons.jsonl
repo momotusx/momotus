@@ -1,0 +1,8 @@
+{"t":0,"dir":"out","msg":{"id":1,"op":"installAddon","url":"https://v3-cinemeta.strem.io/manifest.json"}}
+{"t":97,"dir":"in","msg":{"id":1,"ok":true,"result":{"id":"com.linvo.cinemeta","name":"Cinemeta"}}}
+{"t":97,"dir":"out","msg":{"id":2,"op":"installAddon","url":"http://127.0.0.1:7780/manifest.json"}}
+{"t":98,"dir":"in","msg":{"id":2,"ok":true,"result":{"id":"app.marquee.localtest","name":"Local Test"}}}
+{"t":98,"dir":"out","msg":{"id":3,"op":"subscribe","view":"addons","params":{}}}
+{"t":99,"dir":"in","msg":{"id":3,"ok":true,"result":{"snapshot":{"addons":[{"configurable":false,"description":"The official addon for movie and series catalogs","enabled":true,"host":"v3-cinemeta.strem.io","logo":null,"name":"Cinemeta","provides":["catalog","meta","addon_catalog"],"types":["movie","series"],"url":"https://v3-cinemeta.strem.io/manifest.json","version":"3.0.14"},{"configurable":false,"description":"Sintel sample streams for verification","enabled":true,"host":"127.0.0.1","logo":null,"name":"Local Test","provides":["stream"],"types":["movie"],"url":"http://127.0.0.1:7780/manifest.json","version":"0.1.0"}]},"sub":1}}}
+{"t":399,"dir":"out","msg":{"id":4,"op":"unsubscribe","sub":1}}
+{"t":399,"dir":"in","msg":{"id":4,"ok":true,"result":{}}}

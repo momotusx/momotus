@@ -16,4 +16,18 @@ plugins {
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.spotless)
+}
+
+// Format and lint: ktlint through Spotless. Generated sources are left alone.
+spotless {
+    kotlin {
+        target("*/src/**/*.kt")
+        targetExclude("**/generated/**", "**/model/Generated.kt", "**/design/Tokens.kt", "**/design/Icons.kt")
+        ktlint("1.8.0")
+    }
+    kotlinGradle {
+        target("*.gradle.kts", "*/*.gradle.kts")
+        ktlint("1.8.0")
+    }
 }

@@ -1,0 +1,142 @@
+package app.marquee.core
+
+import app.marquee.core.client.CoreJson
+import app.marquee.core.model.DiscoverSnapshot
+import app.marquee.core.model.DiscoverState
+import app.marquee.core.model.HideReason
+import app.marquee.core.model.HomeRow
+import app.marquee.core.model.ImportSnapshot
+import app.marquee.core.model.PairingSnapshot
+import app.marquee.core.model.PlaybackPhase
+import app.marquee.core.model.PlaybackSnapshot
+import app.marquee.core.model.RowState
+import app.marquee.core.model.Tuple2
+import app.marquee.core.model.VersionStatus
+import app.marquee.core.model.VersionsSnapshot
+import kotlinx.serialization.json.Json
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+
+/**
+ * Shapes the recorded traces do not reach (they need a failing addon, a torrent, a long download,
+ * a sync server), written the way the Rust serde output writes them: camelCase fields, a tag
+ * field per union, `null` for an absent value, tuples as arrays. Strict: an unknown key fails.
+ */
+class ShapeDecodeTest {
+    private val strict = Json(CoreJson) { ignoreUnknownKeys = false }
+
+    @Test
+    fun `row states carry their reason`() {
+        val row =
+            strict.decodeFromString(
+                HomeRow.serializer(),
+                """{"rowId":"a:movie:top","title":"Popular","source":"Cinemeta","tiles":[],
+                    "state":{"state":"failed","reason":"timed out"}}""",
+            )
+        assertEquals(RowState.Failed("timed out"), row.state)
+        assertIs<RowState.Slow>(
+            strict
+                .decodeFromString(
+                    HomeRow.serializer(),
+                    """{"rowId":"r","title":"t","source":"s","tiles":[],"state":{"state":"slow"}}""",
+                ).state,
+        )
+    }
+
+    @Test
+    fun `version rows keep sizes above two gigabytes, every status, and the hidden reasons as tuples`() {
+        val snapshot =
+            strict.decodeFromString(
+                VersionsSnapshot.serializer(),
+                """{"recommended":{"key":"k1","quality":"4K","features":["Dolby Vision","Atmos"],"sizeBytes":18253611008,
+                      "status":{"kind":"ready","service":"Real-Debrid"},"via":"Real-Debrid","releaseName":"A.2160p.mkv",
+                      "languages":["en"],"reasons":["readyNow","matchesScreen"],"group":"best","failoverCount":2},
+                   "rows":[
+                     {"key":"k2","quality":"1080p","features":[],"sizeBytes":null,"status":{"kind":"torrent","seeds":120},
+                      "via":"Torrentio","releaseName":"B.1080p","languages":[],"reasons":[],"group":"smallerFaster","failoverCount":0},
+                     {"key":"k3","quality":"720p","features":[],"sizeBytes":1,"status":{"kind":"needsDownload","service":null},
+                      "via":"X","releaseName":"C","languages":["tr"],"reasons":["yourLanguage"],"group":"otherLanguages","failoverCount":0},
+                     {"key":"k4","quality":"SD","features":[],"sizeBytes":2,"status":{"kind":"direct"},
+                      "via":"Y","releaseName":"D","languages":[],"reasons":["playsDirectly"],"group":"needsDownload","failoverCount":0}],
+                   "hidden":{"count":5,"byReason":[["wrongTitle",3],["tooLarge",2]]},
+                   "pendingAddons":["Slow"],"slowAddons":[],"failedAddons":["Broken"],"done":false,"frozen":true}""",
+            )
+        assertEquals(18_253_611_008L, snapshot.recommended?.sizeBytes)
+        assertEquals(VersionStatus.Ready("Real-Debrid"), snapshot.recommended?.status)
+        assertEquals(VersionStatus.Torrent(120), snapshot.rows[0].status)
+        assertEquals(VersionStatus.NeedsDownload(null), snapshot.rows[1].status)
+        assertEquals(VersionStatus.Direct, snapshot.rows[2].status)
+        assertEquals(listOf(Tuple2(HideReason.WrongTitle, 3), Tuple2(HideReason.TooLarge, 2)), snapshot.hidden.byReason)
+    }
+
+    @Test
+    fun `playback carries attempts, subtitles, the next episode and a progress position`() {
+        val snapshot =
+            strict.decodeFromString(
+                PlaybackSnapshot.serializer(),
+                """{"phase":"ready","url":"http://127.0.0.1:1/s/t/x.mkv","key":"k","filename":"x.mkv","sizeBytes":5000000000,
+                    "resumeMs":4000,"attempts":[{"key":"k0","via":"Local","error":"source did not answer: http status 404"}],
+                    "subtitles":[{"url":"https://s/x.srt","lang":"eng","label":null,"source":"OpenSubtitles","forced":false,"hearingImpaired":true}],
+                    "subtitlesPending":true,
+                    "next":{"videoId":"tt1:1:2","title":"Two","season":1,"episode":2,"thumbnail":null},
+                    "bingeGroup":"torrentio|4k"}""",
+            )
+        assertEquals(PlaybackPhase.Ready, snapshot.phase)
+        assertEquals(5_000_000_000L, snapshot.sizeBytes)
+        assertEquals("OpenSubtitles", snapshot.subtitles.single().source)
+        assertEquals(2, snapshot.next?.episode)
+    }
+
+    @Test
+    fun `discover states and the import flow decode`() {
+        val end = strict.decodeFromString(DiscoverState.serializer(), """{"state":"end"}""")
+        assertEquals(DiscoverState.End, end)
+        assertIs<DiscoverState.Failed>(
+            strict.decodeFromString(DiscoverState.serializer(), """{"state":"failed","reason":"x"}"""),
+        )
+        val discover =
+            strict.decodeFromString(
+                DiscoverSnapshot.serializer(),
+                """{"kinds":[["movie","Movies"],["series","Series"]],"kind":"movie","catalogs":[],"catalog":null,"genres":[],
+                    "genre":null,"genreRequired":false,"items":[],"state":{"state":"loading"}}""",
+            )
+        assertEquals(Tuple2("movie", "Movies"), discover.kinds.first())
+
+        val link =
+            strict.decodeFromString(
+                ImportSnapshot.serializer(),
+                """{"phase":"waitingForLink","code":"ABCD","linkUrl":"https://link.example/ABCD","qrUrl":null}""",
+            )
+        assertIs<ImportSnapshot.WaitingForLink>(link)
+        val done =
+            strict.decodeFromString(
+                ImportSnapshot.serializer(),
+                """{"phase":"done","summary":{"addonsImported":3,"addonsSkipped":["X: no manifest"],"titles":10,"inProgress":2,
+                    "watched":5,"seriesUnmatched":1}}""",
+            )
+        assertIs<ImportSnapshot.Done>(done)
+    }
+
+    @Test
+    fun `pairing phases decode`() {
+        assertIs<PairingSnapshot.Waiting>(
+            strict.decodeFromString(
+                PairingSnapshot.serializer(),
+                """{"phase":"waiting","qr":"mqpair:abc","expiresMs":300000}""",
+            ),
+        )
+        assertEquals(
+            PairingSnapshot.Confirm("123456"),
+            strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"confirm","code":"123456"}"""),
+        )
+        assertEquals(
+            PairingSnapshot.Expired,
+            strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"expired"}"""),
+        )
+        assertEquals(
+            PairingSnapshot.Failed("no"),
+            strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"failed","reason":"no"}"""),
+        )
+    }
+}

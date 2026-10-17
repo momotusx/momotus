@@ -1,0 +1,432 @@
+package app.marquee.core.client
+
+import androidx.compose.runtime.snapshots.Snapshot
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration
+
+/** The Rust core, from the client's side: one request text out. Replies come in through [CoreClient.onMessage]. */
+fun interface CoreTransport {
+    fun send(text: String)
+}
+
+/** The core answered `ok: false` (its plain text is the message), or did not answer in time. */
+class CoreError(
+    message: String,
+    val timedOut: Boolean = false,
+) : Exception(message)
+
+/** The protocol's JSON settings: tolerant of keys a newer core adds. Tests decode strictly. */
+val CoreJson: Json =
+    Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+    }
+
+/** What a live view does with what the core sends. Called on the state thread inside one Compose snapshot. */
+interface ViewSink<S, U> {
+    fun onSnapshot(snapshot: S)
+
+    fun onUpdates(updates: List<U>)
+
+    /**
+     * Decoding or applying failed. A reason starting with "desync" means the view's list can no
+     * longer be trusted and it should subscribe again. Called on the state thread.
+     */
+    fun onFailure(reason: String)
+}
+
+class ViewBinding<S, U>(
+    val snapshot: KSerializer<S>,
+    val update: KSerializer<U>,
+    val sink: ViewSink<S, U>,
+)
+
+private class Raw(
+    val text: String,
+    val arrivedNs: Long,
+)
+
+private sealed interface Pending {
+    class Plain(
+        val deferred: CompletableDeferred<JsonElement>,
+    ) : Pending
+
+    class Subscribe(
+        val binding: ViewBinding<*, *>,
+        val deferred: CompletableDeferred<Long>,
+    ) : Pending
+}
+
+/** Merged pushes of one subscription within a batch: one apply call per view per batch. */
+private class PushGroup<U>(
+    val binding: ViewBinding<*, U>,
+) {
+    val updates = ArrayList<U>()
+}
+
+/**
+ * Client for the core protocol (plans/core-protocol.md), the Kotlin twin of `bridge.ts`.
+ *
+ * Threads: [onMessage] is called on a core thread and only enqueues, because the core's
+ * forwarding task calls it synchronously on a tokio worker. One state thread (the dispatcher
+ * given to the constructor) parses, completes requests, and applies views, so it is the only
+ * writer of view state and Compose reads it from the main thread. Everything that reaches the
+ * state thread together is applied in one Compose snapshot, so a batch is never seen half done.
+ *
+ * Replies match requests by id and may arrive in any order (the core runs requests that wait on
+ * the network alongside the others).
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class CoreClient(
+    dispatcher: CoroutineDispatcher,
+    val json: Json = CoreJson,
+    private val metrics: BridgeMetrics? = null,
+    private val nanoTime: () -> Long = System::nanoTime,
+) : AutoCloseable {
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val inbox = Channel<Raw>(Channel.UNLIMITED)
+    private val nextId = AtomicLong(1)
+    private val pending = ConcurrentHashMap<Long, Pending>()
+    private val subs = ConcurrentHashMap<Long, ViewBinding<*, *>>()
+    private val closed: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+    private val early = HashMap<Long, ArrayDeque<String>>() // state thread only, JSON arrays of updates
+    private val attached = CompletableDeferred<CoreTransport>()
+
+    init {
+        scope.launch { pump() }
+    }
+
+    /** Connects the core. Requests made earlier wait for this, outside their timeout. */
+    fun attach(transport: CoreTransport) {
+        attached.complete(transport)
+    }
+
+    /** The core could not open: every waiting and later request fails with this reason. */
+    fun attachFailed(reason: String) {
+        attached.completeExceptionally(CoreError(reason))
+    }
+
+    /** Entry point for the core's listener. Never blocks, never parses. */
+    fun onMessage(text: String) {
+        inbox.trySend(Raw(text, nanoTime()))
+    }
+
+    /** Runs [block] on the state thread, the only thread that writes view state. */
+    fun onState(block: () -> Unit) {
+        scope.launch { block() }
+    }
+
+    private fun encode(
+        id: Long,
+        op: String,
+        fields: Map<String, JsonElement>,
+    ): String =
+        buildJsonObject {
+            put("id", id)
+            put("op", op)
+            for ((key, value) in fields) put(key, value)
+        }.toString()
+
+    /** One request and its reply. The core's error text becomes [CoreError]. */
+    suspend fun request(
+        op: String,
+        fields: Map<String, JsonElement> = emptyMap(),
+        timeout: Duration = CoreTimeouts.forOp(op),
+    ): JsonElement {
+        val transport = attached.await()
+        val id = nextId.getAndIncrement()
+        val deferred = CompletableDeferred<JsonElement>()
+        pending[id] = Pending.Plain(deferred)
+        try {
+            transport.send(encode(id, op, fields))
+            return withTimeout(timeout) { deferred.await() }
+        } catch (e: TimeoutCancellationException) {
+            throw CoreError("$op did not answer in $timeout", timedOut = true)
+        } finally {
+            pending.remove(id)
+        }
+    }
+
+    /** Fire and forget, for commands sent from click handlers. Failures are logged. */
+    fun post(
+        op: String,
+        fields: Map<String, JsonElement> = emptyMap(),
+    ) {
+        scope.launch {
+            try {
+                request(op, fields)
+            } catch (e: Exception) {
+                CoreLog.w("$op failed: ${CoreLog.describe(e)}")
+            }
+        }
+    }
+
+    suspend fun <S, U> subscribe(
+        view: String,
+        params: JsonObject,
+        binding: ViewBinding<S, U>,
+    ): Subscription {
+        val transport = attached.await()
+        val id = nextId.getAndIncrement()
+        val deferred = CompletableDeferred<Long>()
+        pending[id] = Pending.Subscribe(binding, deferred)
+        var handedOver = false
+        try {
+            transport.send(encode(id, "subscribe", mapOf("view" to JsonPrimitive(view), "params" to params)))
+            val sub = withTimeout(CoreTimeouts.local) { deferred.await() }
+            handedOver = true
+            return Subscription(this, sub)
+        } catch (e: TimeoutCancellationException) {
+            throw CoreError("subscribe $view did not answer in ${CoreTimeouts.local}", timedOut = true)
+        } finally {
+            pending.remove(id)
+            // The reply was handled but nobody took the subscription (cancelled or timed out
+            // meanwhile): close it, or the core keeps the view alive for the whole process.
+            if (!handedOver && deferred.isCompleted && !deferred.isCancelled) unsubscribe(deferred.getCompleted())
+        }
+    }
+
+    internal fun unsubscribe(sub: Long) {
+        closed.add(sub)
+        subs.remove(sub)
+        post("unsubscribe", mapOf("sub" to JsonPrimitive(sub)))
+    }
+
+    private suspend fun pump() {
+        for (first in inbox) {
+            val batch = ArrayList<Raw>()
+            batch.add(first)
+            while (true) batch.add(inbox.tryReceive().getOrNull() ?: break)
+            try {
+                process(batch)
+            } catch (e: Exception) {
+                CoreLog.e("batch failed: ${CoreLog.describe(e)}")
+            }
+        }
+    }
+
+    private fun process(batch: List<Raw>) {
+        val started = nanoTime()
+        val actions = ArrayList<() -> Unit>()
+        val completions = ArrayList<() -> Unit>()
+        val groups = HashMap<Long, PushGroup<Any?>>()
+        for (raw in batch) {
+            try {
+                // Pushes are the hot path: read the subscription id off the front of the text and
+                // decode the updates straight into typed values, without a JSON tree in between.
+                val head = PushHead.scan(raw.text)
+                if (head != null) {
+                    push(head.sub, raw.text.substring(head.updatesStart, raw.text.length - 1), actions, groups)
+                    continue
+                }
+                val message = json.parseToJsonElement(raw.text).jsonObject
+                val sub = message["sub"]?.jsonPrimitive?.longOrNull
+                val updates = message["updates"] as? JsonArray
+                if (sub != null && updates != null) {
+                    push(sub, updates.toString(), actions, groups)
+                } else {
+                    reply(message, actions, completions, groups)
+                }
+            } catch (e: Exception) {
+                // One malformed message must not drop the rest of the batch.
+                CoreLog.e("cannot handle a message from the core: ${CoreLog.describe(e)}")
+            }
+        }
+        try {
+            if (actions.isNotEmpty()) Snapshot.withMutableSnapshot { for (action in actions) action() }
+        } catch (e: Exception) {
+            CoreLog.e("a batch could not be applied: ${CoreLog.describe(e)}")
+            for (binding in subs.values) binding.sink.onFailure("desync: the batch could not be applied")
+        } finally {
+            // Replies are answered even when applying failed: the core did answer.
+            for (completion in completions) completion()
+        }
+        val done = nanoTime()
+        metrics?.recordBatch(done - started)
+        if (metrics != null) for (raw in batch) metrics.recordMessage(done - raw.arrivedNs)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun push(
+        sub: Long,
+        updates: String,
+        actions: MutableList<() -> Unit>,
+        groups: MutableMap<Long, PushGroup<Any?>>,
+    ) {
+        if (sub in closed) return
+        val binding = subs[sub] as ViewBinding<Any?, Any?>?
+        if (binding == null) {
+            // A push before its subscribe reply was handled: keep it, briefly and bounded.
+            val held = early.getOrPut(sub) { ArrayDeque() }
+            if (held.size < EARLY_LIMIT) held.addLast(updates)
+            return
+        }
+        val group =
+            groups.getOrPut(sub) {
+                PushGroup(binding).also { g ->
+                    actions.add { guarded(binding) { binding.sink.onUpdates(g.updates) } }
+                }
+            }
+        try {
+            group.updates.addAll(json.decodeFromString(ListSerializer(binding.update), updates))
+        } catch (e: Exception) {
+            // Updates are diffs against the list the view holds: one lost makes it untrustworthy.
+            CoreLog.e("cannot decode an update for sub $sub: ${CoreLog.describe(e)}")
+            actions.add { binding.sink.onFailure("desync: an update could not be decoded") }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun reply(
+        message: JsonObject,
+        actions: MutableList<() -> Unit>,
+        completions: MutableList<() -> Unit>,
+        groups: MutableMap<Long, PushGroup<Any?>>,
+    ) {
+        val id = message["id"]?.jsonPrimitive?.longOrNull
+        if (id == null) {
+            CoreLog.w("reply without an id: ${message["error"]?.jsonPrimitive?.contentOrNull}")
+            return
+        }
+        val ok = message["ok"]?.jsonPrimitive?.booleanOrNull == true
+        val result = message["result"] as? JsonObject
+        val waiting = pending[id]
+        if (waiting == null) {
+            // Nobody waits any more (timed out or cancelled). A subscription that opened anyway
+            // must be closed, or the core keeps its view and its work for the whole process.
+            val orphan = result?.get("sub")?.jsonPrimitive?.longOrNull
+            if (ok && orphan != null) {
+                early.remove(orphan)
+                completions.add { unsubscribe(orphan) }
+            }
+            return
+        }
+        val error = message["error"]?.jsonPrimitive?.contentOrNull ?: "request failed"
+        when (waiting) {
+            is Pending.Plain -> {
+                completions.add {
+                    if (ok) {
+                        waiting.deferred.complete(message["result"] ?: JsonObject(emptyMap()))
+                    } else {
+                        waiting.deferred.completeExceptionally(CoreError(error))
+                    }
+                }
+            }
+
+            is Pending.Subscribe -> {
+                if (!ok) {
+                    completions.add { waiting.deferred.completeExceptionally(CoreError(error)) }
+                    return
+                }
+                val sub = result?.get("sub")?.jsonPrimitive?.longOrNull
+                if (result == null || sub == null) {
+                    completions.add {
+                        waiting.deferred.completeExceptionally(CoreError("the core answered subscribe without an id"))
+                    }
+                    return
+                }
+                val binding = waiting.binding as ViewBinding<Any?, Any?>
+                subs[sub] = binding
+                actions.add {
+                    try {
+                        binding.sink.onSnapshot(
+                            json.decodeFromJsonElement(binding.snapshot, result.getValue("snapshot")),
+                        )
+                    } catch (e: Exception) {
+                        CoreLog.e("cannot decode the snapshot of sub $sub: ${CoreLog.describe(e)}")
+                        binding.sink.onFailure("protocol mismatch: the snapshot could not be decoded")
+                    }
+                }
+                early.remove(sub)?.forEach { held -> push(sub, held, actions, groups) }
+                completions.add { waiting.deferred.complete(sub) }
+            }
+        }
+    }
+
+    private fun <S, U> guarded(
+        binding: ViewBinding<S, U>,
+        block: () -> Unit,
+    ) {
+        try {
+            block()
+        } catch (e: Exception) {
+            CoreLog.e("cannot apply an update: ${CoreLog.describe(e)}")
+            binding.sink.onFailure("desync: an update did not fit the list")
+        }
+    }
+
+    override fun close() {
+        scope.cancel()
+        inbox.close()
+    }
+
+    private companion object {
+        const val EARLY_LIMIT = 64
+    }
+}
+
+/** A live view's handle: commands go to the view, [close] ends it and cancels its work in the core. */
+class Subscription internal constructor(
+    private val client: CoreClient,
+    val sub: Long,
+) {
+    suspend fun command(command: JsonObject): JsonElement =
+        client.request("command", mapOf("sub" to JsonPrimitive(sub), "command" to command))
+
+    fun post(command: JsonObject) = client.post("command", mapOf("sub" to JsonPrimitive(sub), "command" to command))
+
+    fun close() = client.unsubscribe(sub)
+}
+
+/**
+ * The core writes pushes as `{"sub":<id>,"updates":[...]}` (serde_json sorts keys). Reading the
+ * id off the front lets the client decode the updates without building a JSON tree first; any
+ * other shape falls back to the tree.
+ */
+internal object PushHead {
+    class Head(
+        val sub: Long,
+        val updatesStart: Int,
+    )
+
+    private const val PREFIX = "{\"sub\":"
+    private const val MIDDLE = ",\"updates\":"
+
+    fun scan(text: String): Head? {
+        if (!text.startsWith(PREFIX) || !text.endsWith("]}")) return null
+        val digits = PREFIX.length
+        var i = digits
+        var sub = 0L
+        while (i < text.length && text[i] in '0'..'9') {
+            sub = sub * 10 + (text[i] - '0')
+            i++
+        }
+        if (i == digits || !text.startsWith(MIDDLE, i)) return null
+        return Head(sub, i + MIDDLE.length)
+    }
+}

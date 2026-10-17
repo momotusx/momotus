@@ -35,4 +35,8 @@ dependencies {
     // The generated bindings use androidx.annotation.RequiresApi (android = true).
     implementation(libs.androidx.core.ktx)
     implementation(libs.rustls.platform.verifier)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

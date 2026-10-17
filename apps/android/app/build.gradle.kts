@@ -35,6 +35,17 @@ android {
     packaging {
         jniLibs { useLegacyPackaging = false }
     }
+
+    lint {
+        // Deliberate: arm64 first (plans/m6-android.md D10), targetSdk 36 until 37 is tested,
+        // and the Gradle and AGP pins are decided in the plan.
+        disable += listOf("ChromeOsAbiSupport", "OldTargetApi", "AndroidGradlePluginVersion", "GradleDependency")
+    }
+
+    sourceSets {
+        // The recorded protocol traces double as the bridge benchmark input in debug builds.
+        getByName("debug").assets.directories.add("../core/src/test/resources")
+    }
 }
 
 dependencies {
