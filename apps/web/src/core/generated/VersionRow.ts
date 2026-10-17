@@ -11,7 +11,7 @@ quality: string,
 /**
  * Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux".
  */
-features: Array<string>, sizeBytes: bigint | null, status: VersionStatus, 
+features: Array<string>, sizeBytes: number | null, status: VersionStatus, 
 /**
  * Service ("Real-Debrid") or addon name.
  */

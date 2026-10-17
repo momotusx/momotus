@@ -82,6 +82,7 @@ pub struct TitleHeader {
 pub struct PlayTarget {
     pub video_id: String,
     pub label: String,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub resume_ms: Option<i64>,
 }
 

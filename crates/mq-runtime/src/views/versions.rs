@@ -33,6 +33,7 @@ pub struct VersionRow {
     pub quality: String,
     /// Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux".
     pub features: Vec<String>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub size_bytes: Option<u64>,
     pub status: VersionStatus,
     /// Service ("Real-Debrid") or addon name.
