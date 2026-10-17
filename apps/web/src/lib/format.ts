@@ -1,0 +1,63 @@
+/** Small, pure formatters shared by screens. */
+
+export function bytes(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
+  if (n >= 1e6) return `${Math.round(n / 1e6)} MB`;
+  return `${Math.max(1, Math.round(n / 1e3))} KB`;
+}
+
+/** 161 -> "2:41", 3725 -> "1:02:05". */
+export function clock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
+export interface VideoRef {
+  id: string;
+  season: number;
+  episode: number;
+}
+
+/** Stremio series video ids are `<id>:<season>:<episode>`; anything else is a movie. */
+export function parseVideo(videoId: string): VideoRef | null {
+  const m = /^(.+):(\d+):(\d+)$/.exec(videoId);
+  return m ? { id: m[1] as string, season: Number(m[2]), episode: Number(m[3]) } : null;
+}
+
+export const episodeLabel = (season: number, episode: number) => `S${season}:E${episode}`;
+
+export const titlePath = (kind: string, id: string) => `/title/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`;
+
+/** The title page a video belongs to, used when Back has no history. */
+export function titleOfVideo(videoId: string): string {
+  const ref = parseVideo(videoId);
+  return ref ? titlePath("series", ref.id) : titlePath("movie", videoId);
+}
+
+export const pct = (x: number) => `${Math.round(Math.min(1, Math.max(0, x)) * 1000) / 10}%`;
+
+/** Cinemeta runtimes look like "57 min" or "1h 52min". */
+export function runtimeMinutes(runtime: string | null | undefined): number | null {
+  if (!runtime) return null;
+  const h = /(\d+)\s*h/.exec(runtime);
+  const m = /(\d+)\s*m/.exec(runtime);
+  const total = (h ? Number(h[1]) * 60 : 0) + (m ? Number(m[1]) : 0);
+  return total || null;
+}
+
+/** Release names break between tokens so a focused row never truncates:
+ * after a dot unless a digit follows ("5.1", "H.265", "S02E03.2160p" stay whole), and before
+ * the release group ("-FLUX"). */
+export function releaseParts(name: string): string[] {
+  return name
+    .replace(/\.(?!\d)/g, ".\u0000")
+    .replace(/-(?=[^-.]+$)/, "\u0000-")
+    .split("\u0000");
+}
+
+export function seasonName(season: number): string {
+  return season === 0 ? "Specials" : `Season ${season}`;
+}

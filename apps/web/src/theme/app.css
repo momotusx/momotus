@@ -1,0 +1,131 @@
+/* Base, shell and shared atoms. Sizes are TV points on the 1920x1080 canvas;
+ * desktop scales the canvas, phone overrides under [data-form="phone"]. */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); }
+body { font: 400 var(--type-body) / 1.4 var(--font-text); -webkit-font-smoothing: antialiased; overflow: hidden;
+  text-rendering: optimizeLegibility; }
+button, input { font: inherit; color: inherit; background: none; border: 0; }
+button { cursor: pointer; text-align: inherit; }
+a { color: inherit; text-decoration: none; }
+img { display: block; }
+ul, ol { list-style: none; }
+svg { flex: none; }
+.num { font-variant-numeric: tabular-nums; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Canvas: fixed 1920x1080 on TV, fluid and scaled on desktop, native on phone. */
+.app { position: fixed; left: var(--ox, 0); top: var(--oy, 0); width: var(--cw, 100vw); height: var(--ch, 100vh);
+  transform: scale(var(--k, 1)); transform-origin: 0 0; overflow: clip; background: var(--bg); }
+[data-form="phone"] .app { inset: 0; width: auto; height: auto; transform: none; }
+.screen { position: absolute; inset: 0; }
+
+/* Scrollers we drive with focus never show bars on TV. */
+[data-vscroll], [data-hscroll] { scrollbar-width: none; overscroll-behavior: contain; }
+[data-vscroll]::-webkit-scrollbar, [data-hscroll]::-webkit-scrollbar { display: none; }
+[data-vscroll] { overflow-y: auto; overflow-x: clip; }
+[data-hscroll] { overflow-x: auto; overflow-y: clip; }
+
+/* Focus: a 4 px accent ring, a dark halo that keeps 3:1 on any artwork, and
+ * a small scale. Never color alone. TV always shows it; desktop and phone
+ * show it for keyboard focus only. */
+[data-f] { outline: 0 solid transparent; position: relative;
+  transition: transform var(--motion-focus) var(--ease), box-shadow var(--motion-focus) var(--ease),
+    outline-color var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
+[data-f]:focus-visible, [data-form="tv"] [data-f]:focus {
+  outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+  box-shadow: 0 0 0 calc(var(--focus-ring) * 2 + var(--focus-halo)) var(--halo); z-index: 3; }
+[data-f]:focus:not(:focus-visible) { outline: none; }
+[data-form="tv"] [data-f]:focus { outline: var(--focus-ring) solid var(--accent); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 14px; height: 72px; padding: 0 30px; border-radius: 36px;
+  font: 600 var(--type-body) / 1 var(--font-text); white-space: nowrap; color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 22%, transparent); transform-origin: left center; }
+.btn svg { width: 30px; height: 30px; }
+.btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.btn.primary svg.fill { fill: currentColor; }
+.btn small { font: 500 var(--type-callout) var(--font-text); opacity: .8; margin-left: 4px; }
+.btn.big { height: 84px; padding: 0 36px; border-radius: 42px; font-size: var(--type-headline); }
+.btn:focus-visible, [data-form="tv"] .btn:focus { transform: scale(var(--focus-scale-card)); }
+.btn[aria-disabled="true"] { opacity: .55; }
+@media (hover: hover) {
+  [data-form="desktop"] .btn:hover { background: color-mix(in srgb, var(--text) 20%, transparent); }
+  [data-form="desktop"] .btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); }
+}
+
+/* Status: a dot plus a word, never color alone. */
+.st { display: inline-flex; align-items: center; gap: 12px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 2px var(--muted); }
+.ok .dot, .dot.ok { background: var(--ok); box-shadow: none; }
+.warn .dot, .dot.warn { background: var(--warn); box-shadow: none; }
+.bad .dot, .dot.bad { background: var(--bad); box-shadow: none; }
+
+.kicker { font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+.skel { background: var(--surface); animation: skel 1.6s ease-in-out infinite alternate; }
+@keyframes skel { from { opacity: .55; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+/* Backdrop art fades in once decoded. */
+.fade { opacity: 0; transition: opacity 400ms var(--ease); }
+.fade.in { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+
+/* Left navigation rail (TV and desktop) */
+.rail { position: absolute; left: 0; top: 0; bottom: 0; width: 300px; z-index: 10; display: flex; flex-direction: column;
+  padding: var(--safe-top) 0 var(--safe-bottom) 56px; }
+.brand { font: 600 40px / 1 var(--font-display); letter-spacing: -.01em; padding-left: 24px; }
+.rail ul { margin-top: 64px; display: grid; gap: 6px; }
+.nav { display: flex; align-items: center; gap: 16px; height: 60px; padding: 0 24px 0 24px; border-radius: 30px; width: fit-content;
+  font: 500 var(--type-body) / 1 var(--font-text); color: var(--muted); transform-origin: left center; }
+.nav svg { width: 30px; height: 30px; }
+.nav.on { color: var(--text); font-weight: 650; }
+.nav.on::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 4px; border-radius: 2px; background: var(--text); }
+.nav:focus-visible, [data-form="tv"] .nav:focus { background: var(--raised); color: var(--text); transform: scale(var(--focus-scale-card)); }
+.nav:focus-visible::before, [data-form="tv"] .nav:focus::before { display: none; }
+@media (hover: hover) { [data-form="desktop"] .nav:hover { color: var(--text); } }
+
+/* Phone bottom navigation */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; height: calc(64px + env(safe-area-inset-bottom));
+  padding: 8px 6px env(safe-area-inset-bottom); display: flex; justify-content: space-around;
+  background: var(--bg); box-shadow: 0 -1px 0 var(--line); }
+.tabs a { display: grid; justify-items: center; align-content: center; gap: 4px; min-width: 64px; font: 500 11px / 1 var(--font-text); color: var(--muted); }
+.tabs a.on { color: var(--text); font-weight: 650; }
+.tabs svg { width: 24px; height: 24px; }
+
+/* Connection banner */
+.banner { position: absolute; left: 50%; top: var(--safe-top); transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 14px;
+  padding: 16px 26px; border-radius: 16px; background: var(--raised); box-shadow: inset 0 0 0 2px var(--line);
+  font: 500 var(--type-callout) / 1.3 var(--font-text); }
+[data-form="phone"] .banner { top: 12px; width: calc(100% - 32px); padding: 12px 14px; }
+
+/* Explained empty and failed states */
+.problem { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; max-width: 1100px; }
+.problem h2 { font: 600 var(--type-title2) / 1.1 var(--font-display); }
+.problem p { color: var(--muted); font-size: var(--type-callout); line-height: 1.4; }
+
+/* Stub screens */
+.stub { position: absolute; inset: 0; padding: var(--safe-top) var(--safe-side) var(--safe-bottom) 340px; overflow-y: auto; }
+.stub h1 { font: 600 var(--type-title1) / 1.05 var(--font-display); margin: 88px 0 16px; }
+.stub > p { color: var(--muted); font-size: var(--type-headline); max-width: 1100px; margin-bottom: 40px; line-height: 1.4; }
+.stub section { margin-bottom: 48px; }
+.stub h2 { margin-bottom: 18px; }
+.stub .acts { display: flex; flex-wrap: wrap; gap: 20px; }
+[data-form="phone"] .stub { position: static; padding: 16px 16px 96px; overflow: visible; }
+[data-form="phone"] .stub h1 { margin: 24px 0 8px; }
+[data-form="phone"] .stub > p { font-size: var(--type-body); margin-bottom: 24px; }
+[data-form="phone"] .stub .acts { gap: 10px; }
+
+/* Phone: one scroll per screen, native type scale, thumb sized controls. */
+[data-form="phone"] body { overflow: auto; }
+[data-form="phone"] .app { position: relative; min-height: 100dvh; overflow: visible; }
+[data-form="phone"] .screen { position: relative; inset: auto; }
+[data-form="phone"] .btn { height: 46px; padding: 0 20px; gap: 8px; border-radius: 23px; font-size: var(--type-body); }
+[data-form="phone"] .btn svg { width: 18px; height: 18px; }
+[data-form="phone"] .btn.big { height: 52px; border-radius: 26px; padding: 0 24px; }
+[data-form="phone"] .btn small { font-size: var(--type-callout); }
+[data-form="phone"] .dot { width: 9px; height: 9px; }
+[data-form="phone"] .st { gap: 8px; }
+[data-form="phone"] .problem { gap: 10px; }
