@@ -26,3 +26,7 @@ The accent sits near Plex's amber (`#E5A00D`). Distinctiveness comes from the wa
 - Focus: scale 1.05 on cards (1.025 on large tiles) plus a 4 px accent ring with a dark halo: 14 px soft on the dark theme, where it melts into the background, and a crisp 3 px outer line on the light theme, where a wide halo reads as a gray block (seen on Android P2); never color alone.
 - Motion: 180 ms focus, 320 ms panels, interruptible; reduced motion honored.
 - Every navigation icon has a visible label; no emoji anywhere; one outline icon set (Lucide).
+
+## Control edges (2026-10-17)
+
+`line` (1.4 to 1.5:1 on `surface`) is for dividers only. Input fields, secondary buttons and pills use `control` for their edge: dark `#766A5B` (3.35:1 on `surface`, 3.68:1 on `bg`), light `#8C7D6A` (3.14:1 on `surface`, 3.49:1 on `bg`), measured with the WCAG formula; on `raised` both are about 2.8:1, so controls sit on `surface` or `bg`. Source: `plans/reviews/design-audit-2026-10-17.md` item 8.
