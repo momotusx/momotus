@@ -294,8 +294,16 @@ async fn alldebrid_first_poll_waits_5_s() {
         matches!(login.snapshot(), DebridLoginSnapshot::Code { .. })
     })
     .await;
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    assert_eq!(server.count("POST", "/v4/pin/check"), 0, "polled too early");
+    until("the first check", || {
+        server.count("POST", "/v4/pin/check") == 1
+    })
+    .await;
+    let requests = server.requests();
+    let waited = requests[1].at - requests[0].at;
+    assert!(
+        waited >= Duration::from_secs(5) && waited < Duration::from_secs(6),
+        "first check after {waited:?}"
+    );
 }
 
 const TB_START: &str = r#"{"success":true,"error":null,"detail":"ok","data":{"device_code":"TBDEVICE","code":"123456","interval":1,"expires_in":600,"verification_url":"https://torbox.app/oauth/device?app=Marquee","verification_url_complete":"https://torbox.app/oauth/device?app=Marquee&code=123456"}}"#;
@@ -377,6 +385,19 @@ async fn superseding_login_discards_the_older() {
         newer.snapshot() == DebridLoginSnapshot::Done
     })
     .await;
+    // One request in flight per service: the newer sign-in's first poll
+    // waits for the older one's answer (1.5 s), not just its own second.
+    let polls: Vec<_> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.target == TB_PATH)
+        .map(|r| r.at)
+        .collect();
+    assert!(
+        polls[2] - polls[1] >= Duration::from_millis(1400),
+        "{:?}",
+        polls[2] - polls[1]
+    );
     until("older used", || {
         older.snapshot() == DebridLoginSnapshot::Used
     })
@@ -556,4 +577,75 @@ async fn a_refresh_after_disconnect_is_dropped() {
     core.disconnect_debrid(StoreId::RealDebrid, G1);
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert_eq!(snapshot(&core), DebridSnapshot::default());
+}
+
+#[tokio::test]
+async fn a_token_without_a_lifetime_is_not_refreshed_in_a_loop() {
+    let server = Server::start(vec![route(
+        "POST",
+        "/oauth/v2/token",
+        200,
+        r#"{"access_token":"NEW","expires_in":0,"token_type":"Bearer","refresh_token":"REF"}"#,
+    )])
+    .await;
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&server.base);
+    core.restore_debrid(vec![rd_record(G1, "OLD", now_ms() - 50 * 60_000)], vec![])
+        .unwrap();
+    until("the first refresh", || {
+        server.count("POST", "/oauth/v2/token") == 1
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(server.count("POST", "/oauth/v2/token"), 1);
+}
+
+#[tokio::test]
+async fn slow_down_adds_5_s() {
+    let server = Server::start(vec![
+        route("GET", "/v1/api/user/auth/device/start", 200, TB_START),
+        route(
+            "POST",
+            TB_PATH,
+            429,
+            r#"{"success":false,"error":"COOLDOWN_LIMIT","detail":"slow","data":null}"#,
+        )
+        .then(400, TB_PENDING),
+    ])
+    .await;
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&server.base);
+    let _login = DebridLoginView::open(&core, StoreId::TorBox);
+    until("two polls", || server.count("POST", TB_PATH) == 2).await;
+    let polls: Vec<_> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.target == TB_PATH)
+        .map(|r| r.at)
+        .collect();
+    // The interval was 1 s; after the slow-down it is 6 s.
+    let gap = polls[1] - polls[0];
+    assert!(
+        gap >= Duration::from_secs(6) && gap < Duration::from_secs(7),
+        "{gap:?}"
+    );
+}
+
+#[tokio::test]
+async fn polling_through_network_failures_ends_at_expiry() {
+    let start = TB_START.replace(r#""expires_in":600"#, r#""expires_in":2"#);
+    let server = Server::start(vec![
+        route("GET", "/v1/api/user/auth/device/start", 200, &start),
+        // Not JSON: the answer cannot be read, like a broken connection.
+        route("POST", TB_PATH, 200, "<html>"),
+    ])
+    .await;
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&server.base);
+    let login = DebridLoginView::open(&core, StoreId::TorBox);
+    until("expired", || {
+        login.snapshot() == DebridLoginSnapshot::Expired
+    })
+    .await;
+    assert!(server.count("POST", TB_PATH) >= 1, "kept polling");
 }

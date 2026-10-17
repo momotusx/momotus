@@ -227,6 +227,8 @@ struct State {
     /// Generations disconnected or tombstoned while running.
     gone: HashSet<String>,
     logins: HashMap<StoreId, CancellationToken>,
+    /// One sign-in request in flight per service, across sign-ins.
+    collecting: HashMap<StoreId, Arc<tokio::sync::Mutex<()>>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -276,12 +278,29 @@ pub(crate) fn refresh_wait(issued_at_ms: u64, expires_in_ms: u64, now_ms: u64) -
     if issued_at_ms > now_ms || !(MINUTE_MS..=YEAR_MS).contains(&expires_in_ms) {
         return Duration::ZERO;
     }
-    let due = issued_at_ms.saturating_add(expires_in_ms - expires_in_ms / 4);
-    Duration::from_millis(due.saturating_sub(now_ms))
+    match issued_at_ms.checked_add(expires_in_ms - expires_in_ms / 4) {
+        Some(due) => Duration::from_millis(due.saturating_sub(now_ms)),
+        None => Duration::ZERO,
+    }
 }
 
 pub(crate) fn slow_down(interval: Duration) -> Duration {
     interval.saturating_add(SLOW_DOWN)
+}
+
+/// What a log says about an error: its kind, never a provider's own text.
+fn kind(e: &DebridError) -> &'static str {
+    match e {
+        DebridError::Auth => "refused",
+        DebridError::NotPremium => "not premium",
+        DebridError::NotCached => "not cached",
+        DebridError::RateLimited { .. } => "rate limited",
+        DebridError::Quota => "over quota",
+        DebridError::Provider { .. } => "provider error",
+        DebridError::Http(_) => "network",
+        DebridError::Timeout => "timed out",
+        DebridError::NoPlayableFile => "no playable file",
+    }
 }
 
 /// Network trouble, a busy service or a server fault: worth another try.
@@ -302,6 +321,8 @@ struct Connection {
     /// When the OAuth token is refreshed, on the monotonic clock.
     due: Mutex<Instant>,
     refreshing: tokio::sync::Mutex<()>,
+    /// Wakes the refresh worker when `due` moves.
+    wake: tokio::sync::Notify,
     /// Cancelled when the connection is replaced or disconnected.
     gone: CancellationToken,
     accounts: Weak<Accounts>,
@@ -328,9 +349,16 @@ impl Connection {
             } => refresh_wait(*issued_at_ms, *expires_in_ms, now_ms()),
             DebridCredential::Key { .. } => Duration::MAX,
         };
-        *lock(&self.due) = Instant::now()
-            .checked_add(wait)
-            .unwrap_or_else(|| Instant::now() + YEAR);
+        self.set_due(
+            Instant::now()
+                .checked_add(wait)
+                .unwrap_or_else(|| Instant::now() + YEAR),
+        );
+    }
+
+    fn set_due(&self, due: Instant) {
+        *lock(&self.due) = due;
+        self.wake.notify_one();
     }
 
     /// Trades the refresh token for a new access token, once at a time.
@@ -374,13 +402,24 @@ impl Connection {
         };
         match result {
             Ok(fresh) => accounts.rotated(self, fresh),
+            // Whoever asked (the worker or a refused request), a failure that
+            // may pass is tried again in a minute.
             Err(e) if transient(&e) => {
-                tracing::debug!(service = self.service.name(), "refresh failed: {e}");
+                tracing::debug!(
+                    service = self.service.name(),
+                    "refresh failed: {}",
+                    kind(&e)
+                );
+                self.set_due(Instant::now() + RETRY);
                 self.set_health(AccountState::Failing);
                 None
             }
             Err(e) => {
-                tracing::info!(service = self.service.name(), "refresh refused: {e}");
+                tracing::info!(
+                    service = self.service.name(),
+                    "refresh refused: {}",
+                    kind(&e)
+                );
                 self.set_health(AccountState::Reconnect);
                 None
             }
@@ -424,14 +463,18 @@ async fn keep_fresh(conn: Arc<Connection>) {
             tokio::select! {
                 () = conn.gone.cancelled() => return,
                 () = tokio::time::sleep_until(due) => continue,
+                () = conn.wake.notified() => continue,
             }
         }
         if conn.gone.is_cancelled() || conn.health() == AccountState::Reconnect {
             return;
         }
         let used = conn.token();
-        if conn.refresh(&used).await.is_none() {
-            *lock(&conn.due) = Instant::now() + RETRY;
+        if conn.refresh(&used).await.is_some() {
+            // At most one scheduled refresh a minute, even when the service
+            // hands out a token with no usable lifetime.
+            let due = (*lock(&conn.due)).max(Instant::now() + RETRY);
+            conn.set_due(due);
         }
     }
 }
@@ -479,6 +522,7 @@ impl Accounts {
             health: Mutex::new(AccountState::Ok),
             due: Mutex::new(Instant::now()),
             refreshing: tokio::sync::Mutex::new(()),
+            wake: tokio::sync::Notify::new(),
             gone: CancellationToken::new(),
             accounts: self.me.clone(),
         });
@@ -802,7 +846,8 @@ fn failed(e: &DebridError) -> DebridLoginSnapshot {
         DebridError::Provider { code, .. } if code == "no_code_sign_in" => {
             "This service signs in with a key.".into()
         }
-        e => format!("The service refused the sign-in ({e})."),
+        DebridError::Provider { code, .. } => format!("The service refused the sign-in ({code})."),
+        e => format!("The service refused the sign-in ({}).", kind(e)),
     };
     DebridLoginSnapshot::Failed { reason }
 }
@@ -850,6 +895,21 @@ async fn login(
             () = cancel.cancelled() => return,
             () = tokio::time::sleep(interval) => {}
         }
+        // Single flight per service: an older sign-in's request in flight
+        // finishes first. Once sent, a request completes even if closed.
+        let gate = accounts
+            .lock()
+            .collecting
+            .entry(service)
+            .or_default()
+            .clone();
+        let _turn = tokio::select! {
+            () = cancel.cancelled() => return,
+            turn = gate.lock() => turn,
+        };
+        if cancel.is_cancelled() {
+            return;
+        }
         match login.poll().await {
             Ok(LoginPoll::Pending) => {}
             Ok(LoginPoll::SlowDown) => interval = slow_down(interval),
@@ -864,7 +924,9 @@ async fn login(
             Ok(LoginPoll::Denied) => return set(DebridLoginSnapshot::Denied),
             Ok(LoginPoll::Used) => return set(DebridLoginSnapshot::Used),
             // Polling goes on until the code expires.
-            Err(e) if transient(&e) => tracing::debug!(service = service.name(), "poll: {e}"),
+            Err(e) if transient(&e) => {
+                tracing::debug!(service = service.name(), "poll: {}", kind(&e))
+            }
             Err(e) => return set(failed(&e)),
         }
     }
@@ -1023,10 +1085,9 @@ mod tests {
         // Lifetimes outside 1 minute to 1 year.
         assert_eq!(refresh_wait(now, MINUTE_MS - 1, now), Duration::ZERO);
         assert_eq!(refresh_wait(now, YEAR_MS + 1, now), Duration::ZERO);
-        assert_eq!(
-            refresh_wait(u64::MAX, HOUR_MS, u64::MAX),
-            Duration::from_millis(0)
-        );
+        // A deadline past the end of time.
+        let late = u64::MAX - 10_000;
+        assert_eq!(refresh_wait(late, MINUTE_MS, late), Duration::ZERO);
         assert!(refresh_wait(now, YEAR_MS, now) > Duration::ZERO);
     }
 
@@ -1075,6 +1136,33 @@ mod tests {
         ] {
             assert!(!printed.contains(secret), "{printed}");
         }
+    }
+
+    #[tokio::test]
+    async fn a_failed_refresh_from_a_request_is_retried_in_a_minute() {
+        // Nothing listens there: the refresh meets a network error.
+        let accounts = Accounts::new(HttpClient::new(Default::default()).unwrap());
+        *accounts.origin.write().unwrap() = Some("http://127.0.0.1:9".into());
+        let record = new_record(
+            StoreId::RealDebrid,
+            DebridCredential::Oauth {
+                client_id: "C".into(),
+                client_secret: "S".into(),
+                refresh_token: "R".into(),
+                access_token: "TOKEN".into(),
+                issued_at_ms: now_ms(),
+                expires_in_ms: 60 * MINUTE_MS,
+            },
+        );
+        accounts.install(&mut accounts.lock(), StoreId::RealDebrid, record);
+        let conn = accounts.lock().conns[&StoreId::RealDebrid].clone();
+        // The worker's own refresh is 45 minutes away.
+        assert!(*lock(&conn.due) > Instant::now() + Duration::from_secs(40 * 60));
+        assert_eq!(conn.refused("TOKEN").await, None);
+        assert_eq!(conn.health(), AccountState::Failing);
+        let due = *lock(&conn.due);
+        let now = Instant::now();
+        assert!(due <= now + RETRY && due > now + RETRY - Duration::from_secs(5));
     }
 
     #[tokio::test]
