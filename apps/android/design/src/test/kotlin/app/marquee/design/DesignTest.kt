@@ -38,12 +38,16 @@ class DesignTest {
 
     @Test
     fun `every color token has the contrast the design decision names`() {
-        // design/DECISION.md: text 17.0:1 and accent 11.0:1 on dark; both stay readable on light.
-        assertEquals(true, contrast(Tokens.dark.text, Tokens.dark.bg) > 15f)
-        assertEquals(true, contrast(Tokens.dark.accent, Tokens.dark.bg) > 10f)
-        assertEquals(true, contrast(Tokens.light.text, Tokens.light.bg) > 15f)
-        assertEquals(true, contrast(Tokens.light.muted, Tokens.light.surface) >= 4.5f)
-        assertEquals(true, contrast(Tokens.dark.muted, Tokens.dark.surface) >= 4.5f)
+        // design/DECISION.md v2: text 4.5:1 floors (accent 4.66:1 on bg), control edges 3:1.
+        val dark = Tokens.dark
+        assertEquals(true, contrast(dark.text, dark.bg) > 15f)
+        assertEquals(true, contrast(dark.accent, dark.bg) >= 4.5f)
+        assertEquals(true, contrast(dark.muted, dark.surface) >= 4.5f)
+        assertEquals(true, contrast(dark.dim, dark.bg) >= 4.5f)
+        assertEquals(true, contrast(dark.onPrimary, dark.primary) >= 4.5f)
+        assertEquals(true, contrast(dark.control, dark.bg) >= 3f)
+        // Dark only: the light palette mirrors the dark one.
+        assertEquals(dark, Tokens.light)
     }
 
     private fun contrast(
