@@ -59,4 +59,16 @@ enum Launch {
         let start = info.kp_proc.p_un.__p_starttime
         return Date().timeIntervalSince1970 - (Double(start.tv_sec) + Double(start.tv_usec) / 1_000_000)
     }
+
+    @MainActor private static var framed = false
+
+    /// Logs `first_frame_s` once, on the main queue turn after the root view
+    /// appeared: the first frame has been committed by then.
+    @MainActor static func firstFrame() {
+        guard !framed else { return }
+        framed = true
+        DispatchQueue.main.async {
+            coreLog.notice("metric first_frame_s=\(elapsed(), format: .fixed(precision: 3), privacy: .public)")
+        }
+    }
 }

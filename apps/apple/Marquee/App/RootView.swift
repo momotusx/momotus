@@ -44,6 +44,7 @@ struct RootView: View {
             .tint(Theme.Palette.text)
             // Home stays subscribed for the app's life, so Back lands on the same rows.
             .task(id: home.taskId) { await home.run() }
+            .onAppear(perform: Launch.firstFrame)
             .overlay {
                 if let failure = core.failure {
                     CoreStopped(message: failure, reopen: core.restart)
