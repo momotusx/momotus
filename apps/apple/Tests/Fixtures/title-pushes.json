@@ -150,61 +150,6 @@
   "sub": 3,
   "updates": [
    {
-    "header": {
-     "details": {
-      "background": "https://images.metahub.space/background/medium/tt0903747/img",
-      "cast": [
-       "Bryan Cranston",
-       "Aaron Paul",
-       "Anna Gunn"
-      ],
-      "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
-      "directors": [],
-      "genres": [
-       "Crime",
-       "Drama",
-       "Thriller"
-      ],
-      "id": "tt0903747",
-      "kind": "series",
-      "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
-      "name": "Breaking Bad",
-      "poster": "https://images.metahub.space/poster/small/tt0903747/img",
-      "rating": "9.5",
-      "releaseInfo": "2008–2013",
-      "runtime": "49 min",
-      "source": "Cinemeta",
-      "trailers": [
-       {
-        "title": "Breaking Bad",
-        "url": "https://www.youtube.com/watch?v=VFkjBy2b50Q",
-        "youtubeId": "VFkjBy2b50Q"
-       }
-      ]
-     },
-     "inLibrary": false,
-     "playTarget": {
-      "label": "Play S1:E1",
-      "resumeMs": null,
-      "videoId": "tt0903747:1:1"
-     },
-     "seasons": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5
-     ],
-     "selectedSeason": 2,
-     "state": {
-      "state": "ready"
-     },
-     "watched": false
-    },
-    "kind": "header"
-   },
-   {
     "diffs": [
      {
       "op": "clear"
@@ -359,6 +304,61 @@
      }
     ],
     "kind": "episodes"
+   },
+   {
+    "header": {
+     "details": {
+      "background": "https://images.metahub.space/background/medium/tt0903747/img",
+      "cast": [
+       "Bryan Cranston",
+       "Aaron Paul",
+       "Anna Gunn"
+      ],
+      "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
+      "directors": [],
+      "genres": [
+       "Crime",
+       "Drama",
+       "Thriller"
+      ],
+      "id": "tt0903747",
+      "kind": "series",
+      "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
+      "name": "Breaking Bad",
+      "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+      "rating": "9.5",
+      "releaseInfo": "2008–2013",
+      "runtime": "49 min",
+      "source": "Cinemeta",
+      "trailers": [
+       {
+        "title": "Breaking Bad",
+        "url": "https://www.youtube.com/watch?v=VFkjBy2b50Q",
+        "youtubeId": "VFkjBy2b50Q"
+       }
+      ]
+     },
+     "inLibrary": false,
+     "playTarget": {
+      "label": "Play S1:E1",
+      "resumeMs": null,
+      "videoId": "tt0903747:1:1"
+     },
+     "seasons": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "selectedSeason": 2,
+     "state": {
+      "state": "ready"
+     },
+     "watched": false
+    },
+    "kind": "header"
    }
   ]
  },

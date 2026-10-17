@@ -24,54 +24,39 @@ struct PlayTargetInfo: Hashable, Sendable {
     }
 }
 
-/// Live Versions view for one target. It stays open while a playback view
-/// made from it exists, since the core copies candidates at subscribe time.
+/// Live Versions view for one target. Whoever holds the model keeps the view
+/// open: the title page while it is in the stack, and the player while it
+/// plays, since the core copies candidates when playback subscribes.
 @MainActor @Observable
 final class VersionsModel {
     let target: PlayTargetInfo
-    private(set) var snapshot: VersionsSnapshot?
-    private(set) var failure: String?
-    private(set) var sub: UInt64?
-
-    @ObservationIgnored private let core: CoreClient
+    @ObservationIgnored private let record: LiveRecord<VersionsSnapshot>
     @ObservationIgnored private var frozen = false
 
     init(target: PlayTargetInfo, core: CoreClient) {
         self.target = target
-        self.core = core
-    }
-
-    var taskId: Int { core.generation }
-
-    func run() async {
         var params = DeviceCaps.params()
         params["kind"] = target.kind
         params["videoId"] = target.videoId
         params["title"] = target.title
         if let season = target.season { params["season"] = season }
         if let episode = target.episode { params["episode"] = episode }
-        defer { sub = nil }
-        do {
-            let view = try await core.open("versions", params: params, as: (VersionsSnapshot.self, VersionsSnapshot.self))
-            sub = view.sub
-            frozen = false
-            for await event in view.events {
-                switch event {
-                case .snapshot(let value): snapshot = value
-                case .updates(let values): if let last = values.last { snapshot = last }
-                }
-            }
-        } catch is CancellationError {
-        } catch {
-            failure = error.localizedDescription
-        }
+        record = LiveRecord("versions", params: params, core: core)
+    }
+
+    var snapshot: VersionsSnapshot? { record.snapshot }
+    var failure: String? { record.failure }
+    var sub: UInt64? { record.sub }
+
+    func start() {
+        record.start()
     }
 
     /// Pins the recommended pick so late results never swap it under the user.
     func freeze() {
-        guard let sub, !frozen else { return }
+        guard sub != nil, !frozen else { return }
         frozen = true
-        Task { try? await core.command(sub, ["type": "freeze"]) }
+        record.command(["type": "freeze"])
     }
 
     /// What the player needs to start `key` (the recommended pick by default).

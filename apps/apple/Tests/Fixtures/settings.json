@@ -1,0 +1,11 @@
+{
+ "autoplayNext": true,
+ "streams": {
+  "avoid": [],
+  "languages": [],
+  "maxHeight": null,
+  "maxSizeBytes": null,
+  "quality": "best"
+ },
+ "subtitleLanguages": []
+}

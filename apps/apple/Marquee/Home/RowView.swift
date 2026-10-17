@@ -4,6 +4,8 @@ import SwiftUI
 struct RowView: View {
     let row: HomeRow
     let retry: () -> Void
+    /// Called when a tile is opened (Search remembers the query then).
+    var onOpen: (() -> Void)?
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -59,6 +61,7 @@ struct RowView: View {
                     }
                     .buttonStyle(CardButtonStyle())
                     .accessibilityLabel(tile.name)
+                    .simultaneousGesture(TapGesture().onEnded { onOpen?() })
                 }
             }
             .padding(.horizontal, metrics.gutter)
@@ -76,16 +79,7 @@ struct PosterTile: View {
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        ArtImage(url: tile.poster)
-            .overlay {
-                if tile.poster == nil {
-                    Text(tile.name)
-                        .font(.display(Theme.type.headline))
-                        .foregroundStyle(Theme.Palette.muted)
-                        .multilineTextAlignment(.center)
-                        .padding(Theme.Space.xs)
-                }
-            }
+        ArtImage(url: tile.poster, fallback: tile.name)
             .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
             .accessibilityElement(children: .combine)

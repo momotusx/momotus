@@ -13,40 +13,56 @@ final class TitleModel {
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private var sub: UInt64?
+    @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var generation = -1
 
     init(route: TitleRoute, core: CoreClient) {
         self.route = route
         self.core = core
     }
 
-    /// Restart key for the view's task: a retry or a reopened core.
-    private(set) var retries = 0
-    var taskId: [Int] { [retries, core.generation] }
-
-    func retry() {
-        retries += 1
+    deinit {
+        task?.cancel()
     }
 
-    func run() async {
+    /// Keeps the title view open while the page is in the navigation stack
+    /// (not only while it is on screen), so Versions and the player pushed on
+    /// top do not close it. Calling it again is free.
+    func start() {
+        guard task == nil || generation != core.generation else { return }
+        open()
+    }
+
+    func retry() {
+        open()
+    }
+
+    private func open() {
+        task?.cancel()
+        generation = core.generation
+        let (core, kind, id) = (core, route.kind, route.id)
         let opened = ContinuousClock.now
-        defer { sub = nil }
-        do {
-            let view = try await core.open(
-                "title", params: ["kind": route.kind, "id": route.id], as: (TitleSnapshot.self, TitleUpdate.self))
-            sub = view.sub
-            failure = nil
-            var timed = false
-            for await event in view.events {
-                apply(event)
-                if !timed, header?.details != nil {
-                    timed = true
-                    let ms = (ContinuousClock.now - opened) / .milliseconds(1)
-                    coreLog.notice("metric title_details_ms=\(Int(ms), privacy: .public) id=\(self.route.id, privacy: .public)")
+        // Holds the model only while applying a batch, so releasing it ends the loop.
+        task = Task { [weak self] in
+            do {
+                let view = try await core.open("title", params: ["kind": kind, "id": id], as: (TitleSnapshot.self, TitleUpdate.self))
+                self?.sub = view.sub
+                self?.failure = nil
+                var timed = false
+                for await event in view.events {
+                    guard let self else { return }
+                    apply(event)
+                    if !timed, header?.details != nil {
+                        timed = true
+                        let ms = Int((ContinuousClock.now - opened) / .milliseconds(1))
+                        coreLog.notice("metric title_details_ms=\(ms, privacy: .public) id=\(id, privacy: .public)")
+                    }
                 }
+            } catch is CancellationError {
+            } catch {
+                self?.failure = error.localizedDescription
             }
-        } catch is CancellationError {
-        } catch {
-            failure = error.localizedDescription
+            self?.sub = nil
         }
     }
 

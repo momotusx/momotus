@@ -1,0 +1,39 @@
+{
+ "addons": [
+  {
+   "configurable": false,
+   "description": "The official addon for movie and series catalogs",
+   "enabled": true,
+   "host": "v3-cinemeta.strem.io",
+   "logo": null,
+   "name": "Cinemeta",
+   "provides": [
+    "catalog",
+    "meta",
+    "addon_catalog"
+   ],
+   "types": [
+    "movie",
+    "series"
+   ],
+   "url": "https://v3-cinemeta.strem.io/manifest.json",
+   "version": "3.0.14"
+  },
+  {
+   "configurable": false,
+   "description": "Open movies for checking playback",
+   "enabled": true,
+   "host": "127.0.0.1",
+   "logo": null,
+   "name": "Sample Source",
+   "provides": [
+    "stream"
+   ],
+   "types": [
+    "movie"
+   ],
+   "url": "http://127.0.0.1:7792/manifest.json",
+   "version": "1.0.0"
+  }
+ ]
+}

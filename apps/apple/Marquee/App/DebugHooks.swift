@@ -12,6 +12,9 @@ enum DebugHooks {
         return TitleRoute(kind: parts[0], id: parts[1], name: "")
     }
 
+    /// `-MQTab discover` starts on that tab.
+    static var tab: AppTab? { UserDefaults.standard.string(forKey: "MQTab").flatMap(AppTab.init(rawValue:)) }
+
     /// `-MQAutoPlay YES` presses Play on the title page once a version is picked.
     static var autoPlay: Bool { UserDefaults.standard.bool(forKey: "MQAutoPlay") }
 

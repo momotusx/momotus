@@ -193,9 +193,7 @@ private struct PickCard: View {
             Text(row.releaseName)
                 .font(.mono(Theme.type.caption + 1))
                 .foregroundStyle(Theme.Palette.muted)
-                #if !os(tvOS)
-                .textSelection(.enabled)
-                #endif
+                .selectableText()
             Button(action: play) {
                 Label("Play this version", systemImage: "play.fill")
             }

@@ -54,6 +54,8 @@ struct RootView: View {
         .environment(\.metrics, metrics)
         .environment(immersion)
         .tint(Theme.Palette.accent)
+        // Home stays subscribed for the app's life, so Back lands on the same rows.
+        .task(id: home.taskId) { await home.run() }
         .overlay {
             if let failure = core.failure {
                 CoreStopped(message: failure, reopen: core.restart)
@@ -62,6 +64,7 @@ struct RootView: View {
         #if DEBUG
         .onAppear {
             if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }
+            if let start = DebugHooks.tab { tab = start }
         }
         .task {
             for url in DebugHooks.installAddons {
@@ -86,13 +89,13 @@ struct RootView: View {
                     #endif
             }
         case .search:
-            Placeholder(tab: tab, text: "Search every catalog your addons offer.")
+            NavigationStack { SearchScreen(core: core).withTitleRoutes(core: core) }
         case .discover:
-            Placeholder(tab: tab, text: "Browse by catalog and genre.")
+            NavigationStack { DiscoverScreen(core: core).withTitleRoutes(core: core) }
         case .library:
-            Placeholder(tab: tab, text: "Titles you add show up here.")
+            NavigationStack { LibraryScreen(core: core).withTitleRoutes(core: core) }
         case .settings:
-            Placeholder(tab: tab, text: "Core \(core.version)")
+            NavigationStack { SettingsScreen(core: core) }
         }
     }
 
@@ -209,24 +212,6 @@ extension View {
         #else
         return self
         #endif
-    }
-}
-
-/// A destination that is not built yet, saying what it will hold.
-private struct Placeholder: View {
-    let tab: AppTab
-    let text: String
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(tab.title, systemImage: tab.symbol)
-                .font(.display(Theme.type.title1))
-        } description: {
-            Text(text).font(.text(Theme.type.body))
-        }
-        .foregroundStyle(Theme.Palette.text)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.Palette.bg)
     }
 }
 

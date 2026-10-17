@@ -87,5 +87,20 @@ save("versions-reply.json", versions);
 save("versions-pushes.json", vpushes);
 save("playback-reply.json", playback);
 save("playback-pushes.json", pushesFor(playback.result.sub));
+// Record views: the snapshot on open and the last snapshot pushed after a command.
+async function record(view: string, name: string, command?: object, wait = 3000) {
+  const opened = await request("subscribe", { view, params: {} });
+  if (command) await request("command", { sub: opened.result.sub, command });
+  await sleep(wait);
+  const last = pushesFor(opened.result.sub).at(-1)?.updates.at(-1) ?? opened.result.snapshot;
+  save(`${name}.json`, last);
+  await request("unsubscribe", { sub: opened.result.sub });
+}
+await record("search", "search", { type: "setQuery", query: "thrones" }, 6000);
+await record("discover", "discover", { type: "select", kind: "series" }, 5000);
+await record("library", "library");
+await record("addons", "addons");
+await record("settings", "settings");
+await record("import", "import", undefined, 4000);
 console.log(`home rows ${home.result.snapshot.rows.length}, title pushes ${pushesFor(sub).length}, header ${!!header}, versions pushes ${vpushes.length}`);
 socket.close();

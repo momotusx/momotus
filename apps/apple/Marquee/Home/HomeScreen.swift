@@ -18,7 +18,6 @@ struct HomeScreen: View {
         .background(Theme.Palette.bg)
         .fullBleedTop()
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .task(id: model.taskId) { await model.run() }
     }
 
     @ViewBuilder private var content: some View {

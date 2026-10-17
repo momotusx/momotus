@@ -33,8 +33,11 @@ struct TitleScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .task(id: model.taskId) { await model.run() }
-        .task(id: playTarget?.videoId) { await openVersions() }
+        .task(id: core.generation) {
+            model.start()
+            versions?.start()
+        }
+        .onChange(of: playTarget?.videoId, initial: true) { openVersions() }
         #if DEBUG
         .onChange(of: versions?.snapshot?.recommended?.key) { _, key in
             if DebugHooks.autoPlay, key != nil, playing == nil { playing = versions?.play() }
@@ -64,12 +67,13 @@ struct TitleScreen: View {
             poster: details.poster, resumeMs: target.resumeMs)
     }
 
-    /// One Versions view per play target; it stays open while its playback runs.
-    private func openVersions() async {
+    /// One Versions view per play target. Replacing the model closes the old
+    /// view, unless a player still holds it.
+    private func openVersions() {
         guard let target = playTarget else { versions = nil; return }
         let model = VersionsModel(target: target, core: core)
+        model.start()
         versions = model
-        await model.run()
     }
 
     /// "S2:E3 What Is Dead May Never Die" or the movie's name.

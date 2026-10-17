@@ -47,7 +47,10 @@ struct PlayerScreen: View {
         .task(id: model.taskId) { await model.run() }
         .task { await autoHide() }
         .onAppear { immersion.active = true }
-        .onDisappear { immersion.active = false }
+        .onDisappear {
+            immersion.active = false
+            model.close()
+        }
         .preferredColorScheme(.dark)
         .navigationBarBackButtonHidden()
         #if os(iOS)

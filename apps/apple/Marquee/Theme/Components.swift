@@ -5,7 +5,10 @@ struct ArtImage: View {
     let url: String?
     var mode: ContentMode = .fill
     var maxPixels = ArtSize.poster
+    /// Shown in the display face when there is no art or it cannot load.
+    var fallback: String?
     @State private var art: DecodedArt?
+    @State private var missing = false
 
     var body: some View {
         // The art is an overlay so its natural size never reaches layout: a
@@ -18,13 +21,23 @@ struct ArtImage: View {
                         .resizable()
                         .aspectRatio(contentMode: mode)
                         .transition(.opacity)
+                } else if missing, let fallback {
+                    Text(fallback)
+                        .font(.display(Theme.type.headline))
+                        .foregroundStyle(Theme.Palette.text.opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .padding(Theme.Space.xs)
                 }
             }
             .clipped()
             .task(id: url) {
+                missing = false
                 let start = ContinuousClock.now
                 let loaded = await ArtLoader.shared.image(url, maxPixels: maxPixels)
-                withAnimation(reveal(since: start)) { art = loaded }
+                withAnimation(reveal(since: start)) {
+                    art = loaded
+                    missing = loaded == nil
+                }
             }
     }
 }
@@ -193,6 +206,17 @@ struct FlowRow: Layout {
             line = max(line, size.height)
         }
         return frames
+    }
+}
+
+extension View {
+    /// Lets the user copy a code or release name; tvOS has no text selection.
+    func selectableText() -> some View {
+        #if os(tvOS)
+        self
+        #else
+        textSelection(.enabled)
+        #endif
     }
 }
 

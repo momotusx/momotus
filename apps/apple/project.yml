@@ -77,6 +77,8 @@ targets:
         excludes: ["Fixtures/**"]
       - path: Marquee/Core/Models.swift
       - path: Marquee/Core/PlaybackModels.swift
+      - path: Marquee/Core/ScreenModels.swift
+      - path: Marquee/Core/AccountModels.swift
       - path: Marquee/Core/ListDiff.swift
       - path: Marquee/Player/WebVTT.swift
     settings:

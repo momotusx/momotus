@@ -3,527 +3,24 @@
   "sub": 2,
   "updates": [
    {
-    "diffs": [
-     {
-      "index": 4,
-      "op": "set",
-      "value": {
-       "rowId": "com.linvo.cinemeta:movie:imdbRating",
-       "source": "Cinemeta",
-       "state": {
-        "state": "ready"
-       },
-       "tiles": [
-        {
-         "background": "https://images.metahub.space/background/medium/tt22526100/img",
-         "id": "tt22526100",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt22526100/img",
-         "name": "The Love Hypothesis",
-         "poster": "https://images.metahub.space/poster/small/tt22526100/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt16478058/img",
-         "id": "tt16478058",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt16478058/img",
-         "name": "Best of the Best",
-         "poster": "https://images.metahub.space/poster/small/tt16478058/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt28014327/img",
-         "id": "tt28014327",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt28014327/img",
-         "name": "Mayday",
-         "poster": "https://images.metahub.space/poster/small/tt28014327/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt38267923/img",
-         "id": "tt38267923",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt38267923/img",
-         "name": "Call My Agent! The Movie",
-         "poster": "https://images.metahub.space/poster/small/tt38267923/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt37281055/img",
-         "id": "tt37281055",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt37281055/img",
-         "name": "Buddy",
-         "poster": "https://images.metahub.space/poster/small/tt37281055/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt35519455/img",
-         "id": "tt35519455",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt35519455/img",
-         "name": "It Ends",
-         "poster": "https://images.metahub.space/poster/small/tt35519455/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2025",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt1756855/img",
-         "id": "tt1756855",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt1756855/img",
-         "name": "Coyote vs. Acme",
-         "poster": "https://images.metahub.space/poster/small/tt1756855/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt27706593/img",
-         "id": "tt27706593",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt27706593/img",
-         "name": "The Rivals of Amziah King",
-         "poster": "https://images.metahub.space/poster/small/tt27706593/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt36590417/img",
-         "id": "tt36590417",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt36590417/img",
-         "name": "Don't Say Good Luck",
-         "poster": "https://images.metahub.space/poster/small/tt36590417/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt27165187/img",
-         "id": "tt27165187",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt27165187/img",
-         "name": "The End of Oak Street",
-         "poster": "https://images.metahub.space/poster/small/tt27165187/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt33095251/img",
-         "id": "tt33095251",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt33095251/img",
-         "name": "Tony",
-         "poster": "https://images.metahub.space/poster/small/tt33095251/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt35298123/img",
-         "id": "tt35298123",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt35298123/img",
-         "name": "Teenage Sex and Death at Camp Miasma",
-         "poster": "https://images.metahub.space/poster/small/tt35298123/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt22084616/img",
-         "id": "tt22084616",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
-         "name": "Spider-Man: Brand New Day",
-         "poster": "https://images.metahub.space/poster/small/tt22084616/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt32332915/img",
-         "id": "tt32332915",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt32332915/img",
-         "name": "I Want Your Sex",
-         "poster": "https://images.metahub.space/poster/small/tt32332915/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt18259538/img",
-         "id": "tt18259538",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt18259538/img",
-         "name": "Avatar Aang: The Last Airbender",
-         "poster": "https://images.metahub.space/poster/small/tt18259538/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt36307021/img",
-         "id": "tt36307021",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt36307021/img",
-         "name": "Hadestown: The Musical",
-         "poster": "https://images.metahub.space/poster/small/tt36307021/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt27369017/img",
-         "id": "tt27369017",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt27369017/img",
-         "name": "Hope",
-         "poster": "https://images.metahub.space/poster/small/tt27369017/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt36619926/img",
-         "id": "tt36619926",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt36619926/img",
-         "name": "Heartstopper Forever",
-         "poster": "https://images.metahub.space/poster/small/tt36619926/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt36834010/img",
-         "id": "tt36834010",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt36834010/img",
-         "name": "Gail Daughtry and the Celebrity Sex Pass",
-         "poster": "https://images.metahub.space/poster/small/tt36834010/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt14173636/img",
-         "id": "tt14173636",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt14173636/img",
-         "name": "The Invite",
-         "poster": "https://images.metahub.space/poster/small/tt14173636/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        }
-       ],
-       "title": "Featured Movies"
+    "header": {
+     "hero": {
+      "reason": "#1 in Popular Movies on Cinemeta",
+      "tile": {
+       "background": "https://images.metahub.space/background/medium/tt22084616/img",
+       "id": "tt22084616",
+       "kind": "movie",
+       "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
+       "name": "Spider-Man: Brand New Day",
+       "poster": "https://images.metahub.space/poster/small/tt22084616/img",
+       "posterShape": "poster",
+       "progress": null,
+       "releaseInfo": "2026",
+       "videoId": null
       }
      }
-    ],
-    "kind": "rows"
-   }
-  ]
- },
- {
-  "sub": 2,
-  "updates": [
-   {
-    "diffs": [
-     {
-      "index": 5,
-      "op": "set",
-      "value": {
-       "rowId": "com.linvo.cinemeta:series:imdbRating",
-       "source": "Cinemeta",
-       "state": {
-        "state": "ready"
-       },
-       "tiles": [
-        {
-         "background": "https://images.metahub.space/background/medium/tt16358384/img",
-         "id": "tt16358384",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt16358384/img",
-         "name": "Tulsa King",
-         "poster": "https://images.metahub.space/poster/small/tt16358384/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2022–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt31510819/img",
-         "id": "tt31510819",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt31510819/img",
-         "name": "MobLand",
-         "poster": "https://images.metahub.space/poster/small/tt31510819/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2025–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt35854736/img",
-         "id": "tt35854736",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt35854736/img",
-         "name": "Avatar: Seven Havens",
-         "poster": "https://images.metahub.space/poster/small/tt35854736/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt19231492/img",
-         "id": "tt19231492",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt19231492/img",
-         "name": "Dark Matter",
-         "poster": "https://images.metahub.space/poster/small/tt19231492/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2024–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt0413573/img",
-         "id": "tt0413573",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt0413573/img",
-         "name": "Grey's Anatomy",
-         "poster": "https://images.metahub.space/poster/small/tt0413573/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2005–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt10590066/img",
-         "id": "tt10590066",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt10590066/img",
-         "name": "All Creatures Great & Small",
-         "poster": "https://images.metahub.space/poster/small/tt10590066/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2020–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt33248156/img",
-         "id": "tt33248156",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt33248156/img",
-         "name": "The Celebrity Traitors UK",
-         "poster": "https://images.metahub.space/poster/small/tt33248156/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2025–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt17491088/img",
-         "id": "tt17491088",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt17491088/img",
-         "name": "The Diplomat",
-         "poster": "https://images.metahub.space/poster/small/tt17491088/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2023–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt31289994/img",
-         "id": "tt31289994",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt31289994/img",
-         "name": "The Lowdown",
-         "poster": "https://images.metahub.space/poster/small/tt31289994/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2025–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt5875444/img",
-         "id": "tt5875444",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt5875444/img",
-         "name": "Slow Horses",
-         "poster": "https://images.metahub.space/poster/small/tt5875444/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2022–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt37063558/img",
-         "id": "tt37063558",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt37063558/img",
-         "name": "R.J. Decker",
-         "poster": "https://images.metahub.space/poster/small/tt37063558/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt14466018/img",
-         "id": "tt14466018",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt14466018/img",
-         "name": "Blue Lights",
-         "poster": "https://images.metahub.space/poster/small/tt14466018/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2023–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt0472954/img",
-         "id": "tt0472954",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt0472954/img",
-         "name": "It's Always Sunny in Philadelphia",
-         "poster": "https://images.metahub.space/poster/small/tt0472954/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2005–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt11231226/img",
-         "id": "tt11231226",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt11231226/img",
-         "name": "Reasonable Doubt",
-         "poster": "https://images.metahub.space/poster/small/tt11231226/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2022–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt36885662/img",
-         "id": "tt36885662",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt36885662/img",
-         "name": "Best Medicine",
-         "poster": "https://images.metahub.space/poster/small/tt36885662/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt13138834/img",
-         "id": "tt13138834",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt13138834/img",
-         "name": "Time",
-         "poster": "https://images.metahub.space/poster/small/tt13138834/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2021–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt3530232/img",
-         "id": "tt3530232",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt3530232/img",
-         "name": "Last Week Tonight with John Oliver",
-         "poster": "https://images.metahub.space/poster/small/tt3530232/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2014–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt0096563/img",
-         "id": "tt0096563",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt0096563/img",
-         "name": "Cops",
-         "poster": "https://images.metahub.space/poster/small/tt0096563/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "1989–2025",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt18332852/img",
-         "id": "tt18332852",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt18332852/img",
-         "name": "Outlander: Blood of My Blood",
-         "poster": "https://images.metahub.space/poster/small/tt18332852/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2025–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt32268630/img",
-         "id": "tt32268630",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt32268630/img",
-         "name": "Sheriff Country",
-         "poster": "https://images.metahub.space/poster/small/tt32268630/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2025–",
-         "videoId": null
-        }
-       ],
-       "title": "Featured Series"
-      }
-     }
-    ],
-    "kind": "rows"
+    },
+    "kind": "header"
    },
    {
     "diffs": [
@@ -1034,30 +531,269 @@
        ],
        "title": "Popular Movies"
       }
+     },
+     {
+      "index": 4,
+      "op": "set",
+      "value": {
+       "rowId": "com.linvo.cinemeta:movie:imdbRating",
+       "source": "Cinemeta",
+       "state": {
+        "state": "ready"
+       },
+       "tiles": [
+        {
+         "background": "https://images.metahub.space/background/medium/tt22526100/img",
+         "id": "tt22526100",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt22526100/img",
+         "name": "The Love Hypothesis",
+         "poster": "https://images.metahub.space/poster/small/tt22526100/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt16478058/img",
+         "id": "tt16478058",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt16478058/img",
+         "name": "Best of the Best",
+         "poster": "https://images.metahub.space/poster/small/tt16478058/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt28014327/img",
+         "id": "tt28014327",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt28014327/img",
+         "name": "Mayday",
+         "poster": "https://images.metahub.space/poster/small/tt28014327/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt38267923/img",
+         "id": "tt38267923",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt38267923/img",
+         "name": "Call My Agent! The Movie",
+         "poster": "https://images.metahub.space/poster/small/tt38267923/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt37281055/img",
+         "id": "tt37281055",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt37281055/img",
+         "name": "Buddy",
+         "poster": "https://images.metahub.space/poster/small/tt37281055/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt35519455/img",
+         "id": "tt35519455",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt35519455/img",
+         "name": "It Ends",
+         "poster": "https://images.metahub.space/poster/small/tt35519455/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt1756855/img",
+         "id": "tt1756855",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt1756855/img",
+         "name": "Coyote vs. Acme",
+         "poster": "https://images.metahub.space/poster/small/tt1756855/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt27706593/img",
+         "id": "tt27706593",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt27706593/img",
+         "name": "The Rivals of Amziah King",
+         "poster": "https://images.metahub.space/poster/small/tt27706593/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt36590417/img",
+         "id": "tt36590417",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt36590417/img",
+         "name": "Don't Say Good Luck",
+         "poster": "https://images.metahub.space/poster/small/tt36590417/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt27165187/img",
+         "id": "tt27165187",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt27165187/img",
+         "name": "The End of Oak Street",
+         "poster": "https://images.metahub.space/poster/small/tt27165187/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt33095251/img",
+         "id": "tt33095251",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt33095251/img",
+         "name": "Tony",
+         "poster": "https://images.metahub.space/poster/small/tt33095251/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt35298123/img",
+         "id": "tt35298123",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt35298123/img",
+         "name": "Teenage Sex and Death at Camp Miasma",
+         "poster": "https://images.metahub.space/poster/small/tt35298123/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt22084616/img",
+         "id": "tt22084616",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
+         "name": "Spider-Man: Brand New Day",
+         "poster": "https://images.metahub.space/poster/small/tt22084616/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt32332915/img",
+         "id": "tt32332915",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt32332915/img",
+         "name": "I Want Your Sex",
+         "poster": "https://images.metahub.space/poster/small/tt32332915/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt18259538/img",
+         "id": "tt18259538",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt18259538/img",
+         "name": "Avatar Aang: The Last Airbender",
+         "poster": "https://images.metahub.space/poster/small/tt18259538/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt36307021/img",
+         "id": "tt36307021",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt36307021/img",
+         "name": "Hadestown: The Musical",
+         "poster": "https://images.metahub.space/poster/small/tt36307021/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt27369017/img",
+         "id": "tt27369017",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt27369017/img",
+         "name": "Hope",
+         "poster": "https://images.metahub.space/poster/small/tt27369017/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt36619926/img",
+         "id": "tt36619926",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt36619926/img",
+         "name": "Heartstopper Forever",
+         "poster": "https://images.metahub.space/poster/small/tt36619926/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt36834010/img",
+         "id": "tt36834010",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt36834010/img",
+         "name": "Gail Daughtry and the Celebrity Sex Pass",
+         "poster": "https://images.metahub.space/poster/small/tt36834010/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt14173636/img",
+         "id": "tt14173636",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt14173636/img",
+         "name": "The Invite",
+         "poster": "https://images.metahub.space/poster/small/tt14173636/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        }
+       ],
+       "title": "Featured Movies"
+      }
      }
     ],
     "kind": "rows"
-   },
-   {
-    "header": {
-     "hero": {
-      "reason": "#1 in Popular Movies on Cinemeta",
-      "tile": {
-       "background": "https://images.metahub.space/background/medium/tt22084616/img",
-       "id": "tt22084616",
-       "kind": "movie",
-       "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
-       "name": "Spider-Man: Brand New Day",
-       "poster": "https://images.metahub.space/poster/small/tt22084616/img",
-       "posterShape": "poster",
-       "progress": null,
-       "releaseInfo": "2026",
-       "videoId": null
-      }
-     }
-    },
-    "kind": "header"
-   },
+   }
+  ]
+ },
+ {
+  "sub": 2,
+  "updates": [
    {
     "diffs": [
      {
@@ -1312,6 +1048,270 @@
         }
        ],
        "title": "New Series"
+      }
+     }
+    ],
+    "kind": "rows"
+   }
+  ]
+ },
+ {
+  "sub": 2,
+  "updates": [
+   {
+    "diffs": [
+     {
+      "index": 5,
+      "op": "set",
+      "value": {
+       "rowId": "com.linvo.cinemeta:series:imdbRating",
+       "source": "Cinemeta",
+       "state": {
+        "state": "ready"
+       },
+       "tiles": [
+        {
+         "background": "https://images.metahub.space/background/medium/tt16358384/img",
+         "id": "tt16358384",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt16358384/img",
+         "name": "Tulsa King",
+         "poster": "https://images.metahub.space/poster/small/tt16358384/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2022–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt31510819/img",
+         "id": "tt31510819",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt31510819/img",
+         "name": "MobLand",
+         "poster": "https://images.metahub.space/poster/small/tt31510819/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt35854736/img",
+         "id": "tt35854736",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt35854736/img",
+         "name": "Avatar: Seven Havens",
+         "poster": "https://images.metahub.space/poster/small/tt35854736/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt19231492/img",
+         "id": "tt19231492",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt19231492/img",
+         "name": "Dark Matter",
+         "poster": "https://images.metahub.space/poster/small/tt19231492/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2024–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt0413573/img",
+         "id": "tt0413573",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt0413573/img",
+         "name": "Grey's Anatomy",
+         "poster": "https://images.metahub.space/poster/small/tt0413573/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2005–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt10590066/img",
+         "id": "tt10590066",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt10590066/img",
+         "name": "All Creatures Great & Small",
+         "poster": "https://images.metahub.space/poster/small/tt10590066/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2020–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt33248156/img",
+         "id": "tt33248156",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt33248156/img",
+         "name": "The Celebrity Traitors UK",
+         "poster": "https://images.metahub.space/poster/small/tt33248156/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt17491088/img",
+         "id": "tt17491088",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt17491088/img",
+         "name": "The Diplomat",
+         "poster": "https://images.metahub.space/poster/small/tt17491088/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2023–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt31289994/img",
+         "id": "tt31289994",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt31289994/img",
+         "name": "The Lowdown",
+         "poster": "https://images.metahub.space/poster/small/tt31289994/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt5875444/img",
+         "id": "tt5875444",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt5875444/img",
+         "name": "Slow Horses",
+         "poster": "https://images.metahub.space/poster/small/tt5875444/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2022–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt37063558/img",
+         "id": "tt37063558",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt37063558/img",
+         "name": "R.J. Decker",
+         "poster": "https://images.metahub.space/poster/small/tt37063558/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt14466018/img",
+         "id": "tt14466018",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt14466018/img",
+         "name": "Blue Lights",
+         "poster": "https://images.metahub.space/poster/small/tt14466018/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2023–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt0472954/img",
+         "id": "tt0472954",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt0472954/img",
+         "name": "It's Always Sunny in Philadelphia",
+         "poster": "https://images.metahub.space/poster/small/tt0472954/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2005–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt11231226/img",
+         "id": "tt11231226",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt11231226/img",
+         "name": "Reasonable Doubt",
+         "poster": "https://images.metahub.space/poster/small/tt11231226/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2022–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt36885662/img",
+         "id": "tt36885662",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt36885662/img",
+         "name": "Best Medicine",
+         "poster": "https://images.metahub.space/poster/small/tt36885662/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt13138834/img",
+         "id": "tt13138834",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt13138834/img",
+         "name": "Time",
+         "poster": "https://images.metahub.space/poster/small/tt13138834/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2021–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt3530232/img",
+         "id": "tt3530232",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt3530232/img",
+         "name": "Last Week Tonight with John Oliver",
+         "poster": "https://images.metahub.space/poster/small/tt3530232/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2014–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt0096563/img",
+         "id": "tt0096563",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt0096563/img",
+         "name": "Cops",
+         "poster": "https://images.metahub.space/poster/small/tt0096563/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "1989–2025",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt18332852/img",
+         "id": "tt18332852",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt18332852/img",
+         "name": "Outlander: Blood of My Blood",
+         "poster": "https://images.metahub.space/poster/small/tt18332852/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt32268630/img",
+         "id": "tt32268630",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt32268630/img",
+         "name": "Sheriff Country",
+         "poster": "https://images.metahub.space/poster/small/tt32268630/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025–",
+         "videoId": null
+        }
+       ],
+       "title": "Featured Series"
       }
      }
     ],

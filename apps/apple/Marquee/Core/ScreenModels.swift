@@ -1,0 +1,125 @@
+// Search, Discover, Library, Addons and Settings DTOs from the core,
+// mirroring apps/web/src/core/generated/*.ts.
+
+struct SearchSnapshot: Decodable, Hashable, Sendable {
+    let query: String
+    /// Rows with results, loading or failed; catalogs with no match are left out.
+    let rows: [HomeRow]
+    /// Recent searches, newest first, for the empty state.
+    let recent: [String]
+}
+
+struct DiscoverSnapshot: Decodable, Hashable, Sendable {
+    /// Types with at least one catalog: ("movie", "Movies").
+    let kinds: [KindLabel]
+    let kind: String?
+    /// Catalogs of the selected type, in addon order.
+    let catalogs: [CatalogChoice]
+    let catalog: String?
+    /// Genre options of the selected catalog.
+    let genres: [String]
+    let genre: String?
+    /// The catalog only answers with a genre picked.
+    let genreRequired: Bool
+    let items: [Tile]
+    let state: DiscoverState
+}
+
+/// A type and its label; the core sends each pair as a two-element array.
+struct KindLabel: Decodable, Hashable, Sendable {
+    let id: String
+    let label: String
+
+    init(from decoder: any Decoder) throws {
+        var c = try decoder.unkeyedContainer()
+        id = try c.decode(String.self)
+        label = try c.decode(String.self)
+    }
+}
+
+struct CatalogChoice: Decodable, Hashable, Sendable {
+    /// `addon id|type|catalog id`, the value `select` takes.
+    let id: String
+    let name: String
+    let source: String
+}
+
+enum DiscoverState: Decodable, Hashable, Sendable {
+    case loading
+    case ready
+    case end
+    case failed(reason: String)
+
+    private enum Key: String, CodingKey { case state, reason }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        switch try c.decode(String.self, forKey: .state) {
+        case "loading": self = .loading
+        case "ready": self = .ready
+        case "end": self = .end
+        case "failed": self = .failed(reason: try c.decode(String.self, forKey: .reason))
+        case let state:
+            throw DecodingError.dataCorruptedError(forKey: .state, in: c, debugDescription: "unknown discover state \(state)")
+        }
+    }
+}
+
+struct LibrarySnapshot: Decodable, Hashable, Sendable {
+    /// The type filter, nil for everything.
+    let kind: String?
+    /// "recent", "added" or "name".
+    let sort: String
+    /// Types present in the library, for the filter chips.
+    let kinds: [KindCount]
+    let items: [Tile]
+}
+
+struct KindCount: Decodable, Hashable, Sendable {
+    let kind: String
+    /// "Movies", "Series", ...
+    let label: String
+    let count: Int
+}
+
+struct AddonsSnapshot: Decodable, Hashable, Sendable {
+    let addons: [AddonInfo]
+}
+
+struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
+    /// The key for commands. May hold API keys: never show or log it.
+    let url: String
+    /// What to show instead of the URL.
+    let host: String
+    let name: String
+    let description: String?
+    let logo: String?
+    let version: String
+    let enabled: Bool
+    /// "catalog", "meta", "stream", "subtitles", ...
+    let provides: [String]
+    let types: [String]
+    let configurable: Bool
+
+    var id: String { url }
+}
+
+struct Prefs: Decodable, Hashable, Sendable {
+    let streams: StreamPrefs
+    /// Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first.
+    let subtitleLanguages: [String]
+    /// Start the next episode when one ends.
+    let autoplayNext: Bool
+}
+
+struct StreamPrefs: Decodable, Hashable, Sendable {
+    /// "best", "balanced" or "dataSaver".
+    let quality: String
+    /// Never pick above this many lines (720, 1080, 2160), whatever the screen.
+    let maxHeight: Int?
+    let maxSizeBytes: Int64?
+    /// ISO 639-1 audio language preferences, most wanted first.
+    let languages: [String]
+    /// Lowercase terms that hide a stream when its name contains them.
+    let avoid: [String]
+}

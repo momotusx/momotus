@@ -1,0 +1,25 @@
+{
+ "items": [
+  {
+   "background": null,
+   "id": "tt0903747",
+   "kind": "series",
+   "logo": null,
+   "name": "Breaking Bad",
+   "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+   "posterShape": "poster",
+   "progress": null,
+   "releaseInfo": null,
+   "videoId": null
+  }
+ ],
+ "kind": null,
+ "kinds": [
+  {
+   "count": 1,
+   "kind": "series",
+   "label": "Series"
+  }
+ ],
+ "sort": "recent"
+}
