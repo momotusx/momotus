@@ -17,6 +17,7 @@ hex = "0.4"
 base64 = "0.22"
 url.workspace = true
 hpke = { version = "0.14", default-features = false, features = ["alloc", "getrandom", "x25519", "chacha"] }
+ed25519-dalek = "3"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

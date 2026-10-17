@@ -1,0 +1,1266 @@
+//! The account roster: who may hold the account key, kept as a hash-chained
+//! log of entries that members sign. The relay stores and serves the log but
+//! cannot extend it, so it cannot add a device, a kit or a key. Devices apply
+//! every entry with the rules here; the relay runs the same rules as a first
+//! filter.
+//!
+//! The key of an epoch reaches members in boxes (HPKE to each member's box
+//! key) inside the signed `revoke` entry that starts the epoch. That entry
+//! also carries the previous key sealed under the new one, so the newest key
+//! opens every older epoch and history needs no resealing.
+
+use crate::pair::{Kem, PrivateKey, PublicKey, open_with, seal_to};
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use hkdf::Hkdf;
+use hmac::{Hmac, Mac};
+use hpke::{Deserializable, Kem as _, Serializable};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Every signature names what it is for, so a signature made for one use
+/// can never pass as another.
+const ROSTER: &[u8] = b"marquee/roster/v1\0";
+const SPONSOR: &[u8] = b"marquee/sponsor/v1\0";
+const EPOCH_INFO: &[u8] = b"marquee/epoch/v1";
+const CHAIN_INFO: &[u8] = b"marquee/chain/v1";
+pub const MAX_DEVICES: usize = 32;
+pub const MAX_KITS: usize = 4;
+const NONCE: usize = 24;
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum RosterError {
+    #[error("roster entry refused: {0}")]
+    Invalid(&'static str),
+    #[error("roster entry does not follow the head")]
+    NotNext,
+    #[error("a sealed key does not open")]
+    Open,
+}
+
+use RosterError::Invalid;
+
+/// Fixed-size bytes, written as lowercase hex (one spelling per value).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Hex<const N: usize>(pub [u8; N]);
+
+pub type Id = Hex<16>;
+pub type Digest32 = Hex<32>;
+
+impl<const N: usize> Default for Hex<N> {
+    fn default() -> Self {
+        Self([0; N])
+    }
+}
+
+impl<const N: usize> std::fmt::Debug for Hex<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&hex::encode(self.0))
+    }
+}
+
+impl<const N: usize> Serialize for Hex<N> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&hex::encode(self.0))
+    }
+}
+
+impl<'de, const N: usize> Deserialize<'de> for Hex<N> {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(d)?;
+        let bytes = (!text.bytes().any(|b| b.is_ascii_uppercase()))
+            .then(|| hex::decode(&text).ok())
+            .flatten()
+            .and_then(|b| b.try_into().ok());
+        bytes
+            .map(Hex)
+            .ok_or_else(|| serde::de::Error::custom(format!("expected {N} bytes of lowercase hex")))
+    }
+}
+
+mod b64 {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD as B64;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&B64.encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+        B64.decode(String::deserialize(d)?)
+            .map_err(|_| serde::de::Error::custom("expected base64"))
+    }
+}
+
+fn digest(bytes: &[u8]) -> Digest32 {
+    Hex(Sha256::digest(bytes).into())
+}
+
+fn random<const N: usize>() -> [u8; N] {
+    let mut bytes = [0u8; N];
+    getrandom::fill(&mut bytes).expect("os randomness");
+    bytes
+}
+
+/// A member's public keys, as the roster lists them. They never change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemberKeys {
+    pub sign: Hex<32>,
+    #[serde(rename = "box")]
+    pub boxk: Hex<32>,
+}
+
+impl MemberKeys {
+    /// Derived from the signing key, never taken from a field.
+    pub fn id(&self) -> Id {
+        let hash = Sha256::digest(self.sign.0);
+        Hex(hash[..16].try_into().expect("16 bytes"))
+    }
+
+    fn verifies(&self, purpose: &[u8], bytes: &[u8], sig: &Hex<64>) -> bool {
+        VerifyingKey::from_bytes(&self.sign.0).is_ok_and(|key| {
+            key.verify_strict(&[purpose, bytes].concat(), &Signature::from_bytes(&sig.0))
+                .is_ok()
+        })
+    }
+
+    fn box_key(&self) -> Result<PublicKey, RosterError> {
+        PublicKey::from_bytes(&self.boxk.0).map_err(|_| Invalid("unusable box key"))
+    }
+}
+
+/// A member's private keys, from one 32-byte seed: a device keeps the seed
+/// in its keystore; a kit derives it from its secret.
+pub struct MemberSecret {
+    seed: [u8; 32],
+    sign: SigningKey,
+    boxk: PrivateKey,
+    public: MemberKeys,
+}
+
+impl std::fmt::Debug for MemberSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MemberSecret({:?}, <redacted>)", self.public.id())
+    }
+}
+
+impl MemberSecret {
+    pub fn generate() -> Self {
+        Self::from_seed(random())
+    }
+
+    pub fn from_seed(seed: [u8; 32]) -> Self {
+        let hk = Hkdf::<Sha256>::new(None, &seed);
+        let mut sign_seed = [0u8; 32];
+        let mut box_seed = [0u8; 32];
+        hk.expand(b"marquee/member/sign/v1", &mut sign_seed)
+            .expect("valid length");
+        hk.expand(b"marquee/member/box/v1", &mut box_seed)
+            .expect("valid length");
+        let sign = SigningKey::from_bytes(&sign_seed);
+        let (boxk, box_public) = Kem::derive_keypair(&box_seed);
+        let public = MemberKeys {
+            sign: Hex(sign.verifying_key().to_bytes()),
+            boxk: Hex(box_public.to_bytes().into()),
+        };
+        Self {
+            seed,
+            sign,
+            boxk,
+            public,
+        }
+    }
+
+    pub fn seed(&self) -> [u8; 32] {
+        self.seed
+    }
+
+    pub fn public(&self) -> &MemberKeys {
+        &self.public
+    }
+
+    pub fn id(&self) -> Id {
+        self.public.id()
+    }
+
+    fn sign(&self, purpose: &[u8], bytes: &[u8]) -> Hex<64> {
+        Hex(self.sign.sign(&[purpose, bytes].concat()).to_bytes())
+    }
+}
+
+/// What a member's box holds: everything needed to read and write the
+/// account's records at one epoch.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Bundle {
+    pub v: u8,
+    pub account: Id,
+    pub genesis: Digest32,
+    pub epoch: u32,
+    pub ak: Hex<32>,
+    pub id_key: Hex<32>,
+}
+
+impl std::fmt::Debug for Bundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Bundle({:?}, epoch {}, <redacted>)",
+            self.account, self.epoch
+        )
+    }
+}
+
+/// A signed roster entry: the body bytes exactly as signed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Entry {
+    #[serde(with = "b64")]
+    pub body: Vec<u8>,
+    pub sig: Hex<64>,
+}
+
+impl Entry {
+    pub fn sign(author: &MemberSecret, body: &Body) -> Self {
+        let bytes = serde_json::to_vec(body).expect("roster bodies serialize");
+        Self {
+            sig: author.sign(ROSTER, &bytes),
+            body: bytes,
+        }
+    }
+
+    pub fn hash(&self) -> Digest32 {
+        digest(&self.body)
+    }
+
+    pub fn parse(&self) -> Result<Body, RosterError> {
+        serde_json::from_slice(&self.body).map_err(|_| Invalid("malformed entry"))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Body {
+    pub v: u8,
+    pub account: Id,
+    pub seq: u64,
+    /// The parent entry's hash; zero for genesis.
+    pub prev: Digest32,
+    pub author: Id,
+    /// The author's clock; shown to people, never trusted for ordering.
+    pub at_ms: u64,
+    pub kind: Kind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Kind {
+    Genesis(Genesis),
+    AddDevice(AddDevice),
+    AddKit(AddKit),
+    Revoke(Revoke),
+    Leave(Leave),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Genesis {
+    pub keys: MemberKeys,
+}
+
+/// Authored by the new device itself, which proves it holds both keys.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AddDevice {
+    pub keys: MemberKeys,
+    /// The device's name, sealed for members.
+    pub name: String,
+    pub sponsor: Sponsor,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AddKit {
+    pub keys: MemberKeys,
+    /// `HMAC(kit tag key, idKey || genesis)`: a recovering device checks the
+    /// keys it opens belong to this account.
+    pub id_tag: Hex<32>,
+    pub lookup_hash: Hex<32>,
+    pub auth_hash: Hex<32>,
+    #[serde(rename = "box")]
+    pub boxed: SealedBox,
+}
+
+/// Starts a new epoch: drops members (possibly none, a plain rotation) and
+/// boxes the new key to everyone left.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Revoke {
+    pub dropped: Vec<Id>,
+    pub new_epoch: u32,
+    pub boxes: Vec<SealedBox>,
+    #[serde(with = "b64")]
+    pub prev_blob: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Leave {}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SealedBox {
+    pub to: Id,
+    #[serde(with = "b64")]
+    pub sealed: Vec<u8>,
+}
+
+/// A member's word that these keys may join as the entry right after
+/// `parent`, at that epoch. Any roster change makes it useless, so it needs
+/// no clock.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Sponsor {
+    pub by: Id,
+    pub sig: Hex<64>,
+}
+
+impl Sponsor {
+    pub fn new(by: &MemberSecret, roster: &Roster, keys: &MemberKeys) -> Self {
+        let message = sponsor_message(&roster.account, &roster.parent(), roster.epoch, keys);
+        Self {
+            by: by.id(),
+            sig: by.sign(SPONSOR, &message),
+        }
+    }
+}
+
+fn sponsor_message(account: &Id, parent: &Digest32, epoch: u32, keys: &MemberKeys) -> Vec<u8> {
+    [
+        &account.0[..],
+        &parent.0,
+        &epoch.to_be_bytes(),
+        &keys.sign.0,
+        &keys.boxk.0,
+    ]
+    .concat()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    Device,
+    Kit,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Member {
+    pub role: Role,
+    pub keys: MemberKeys,
+    /// Who vouched for it; never changes, so a lost device's descendants
+    /// can always be found.
+    pub sponsor: Option<Id>,
+    pub added_seq: u64,
+    pub added_ms: u64,
+    pub name: Option<String>,
+}
+
+/// What a rotation brought: the previous key sealed under the new one, and
+/// each member's box.
+type Rotation = (Vec<u8>, BTreeMap<Id, Vec<u8>>);
+
+/// What a new kit puts in the roster, from the kit's derived keys.
+pub struct NewKit {
+    pub keys: MemberKeys,
+    pub tag_key: [u8; 32],
+    pub lookup_hash: [u8; 32],
+    pub auth_hash: [u8; 32],
+}
+
+/// The state the entries so far describe.
+#[derive(Clone, Debug, Default)]
+pub struct Roster {
+    account: Id,
+    genesis: Digest32,
+    head: Option<(u64, Digest32)>,
+    epoch: u32,
+    members: BTreeMap<Id, Member>,
+    /// Every id that was ever a member and is not now; never reused.
+    retired: BTreeSet<Id>,
+    rotation_pending: bool,
+    rotations: BTreeMap<u32, Rotation>,
+    /// A kit's box from `addKit`, with that epoch, and its id tag.
+    kit_boxes: BTreeMap<Id, (u32, Vec<u8>)>,
+    kit_tags: BTreeMap<Id, Hex<32>>,
+}
+
+impl Roster {
+    pub fn account(&self) -> Id {
+        self.account
+    }
+
+    pub fn genesis(&self) -> Digest32 {
+        self.genesis
+    }
+
+    /// `(seq, hash)` of the last applied entry.
+    pub fn head(&self) -> Option<(u64, Digest32)> {
+        self.head
+    }
+
+    pub fn epoch(&self) -> u32 {
+        self.epoch
+    }
+
+    pub fn members(&self) -> &BTreeMap<Id, Member> {
+        &self.members
+    }
+
+    /// A member left; the next device to see it starts a new epoch.
+    pub fn rotation_pending(&self) -> bool {
+        self.rotation_pending
+    }
+
+    /// The hash the next entry must name as `prev`.
+    pub fn parent(&self) -> Digest32 {
+        self.head.map(|(_, hash)| hash).unwrap_or_default()
+    }
+
+    /// 60 bits of the head hash as 12 characters, for people to compare two
+    /// devices' views once both have caught up.
+    pub fn fingerprint(&self) -> String {
+        const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+        let bits = u64::from_be_bytes(self.parent().0[..8].try_into().expect("8 bytes"));
+        (0..12)
+            .map(|i| ALPHABET[((bits >> (59 - 5 * i)) & 31) as usize] as char)
+            .collect()
+    }
+
+    /// Applies the next entry after checking every rule. No rule reads a
+    /// clock, so replaying history to a restored relay passes them again.
+    pub fn apply(&mut self, entry: &Entry) -> Result<(), RosterError> {
+        let body = entry.parse()?;
+        if body.v != 1 {
+            return Err(Invalid("unknown version"));
+        }
+        match self.head {
+            None if body.seq != 0 || !matches!(body.kind, Kind::Genesis(_)) => {
+                return Err(RosterError::NotNext);
+            }
+            Some((seq, hash)) if body.seq != seq + 1 || body.prev != hash => {
+                return Err(RosterError::NotNext);
+            }
+            Some(_) if body.account != self.account => return Err(Invalid("another account")),
+            _ => {}
+        }
+        // The key that must have signed: a new device's own (proof of
+        // possession), otherwise a current device's.
+        let signer = match &body.kind {
+            Kind::Genesis(g) => g.keys,
+            Kind::AddDevice(a) => a.keys,
+            _ => self.device(&body.author)?.keys,
+        };
+        if signer.id() != body.author || !signer.verifies(ROSTER, &entry.body, &entry.sig) {
+            return Err(Invalid("bad signature"));
+        }
+        let mut next = self.clone();
+        next.change(&body)?;
+        next.head = Some((body.seq, entry.hash()));
+        if body.seq == 0 {
+            next.genesis = entry.hash();
+        }
+        *self = next;
+        Ok(())
+    }
+
+    fn device(&self, id: &Id) -> Result<&Member, RosterError> {
+        self.members
+            .get(id)
+            .filter(|m| m.role == Role::Device)
+            .ok_or(Invalid("author is not a device of the account"))
+    }
+
+    fn count(&self, role: Role) -> usize {
+        self.members.values().filter(|m| m.role == role).count()
+    }
+
+    fn admit(&mut self, keys: MemberKeys, member: Member) -> Result<(), RosterError> {
+        let id = keys.id();
+        if self.members.contains_key(&id) || self.retired.contains(&id) {
+            return Err(Invalid("that member id already existed"));
+        }
+        let limit = match member.role {
+            Role::Device => MAX_DEVICES,
+            Role::Kit => MAX_KITS,
+        };
+        if self.count(member.role) >= limit {
+            return Err(Invalid("too many members"));
+        }
+        self.members.insert(id, member);
+        Ok(())
+    }
+
+    fn change(&mut self, body: &Body) -> Result<(), RosterError> {
+        let member = |role, keys, sponsor, name| Member {
+            role,
+            keys,
+            sponsor,
+            added_seq: body.seq,
+            added_ms: body.at_ms,
+            name,
+        };
+        match &body.kind {
+            Kind::Genesis(g) => {
+                self.account = body.account;
+                self.admit(g.keys, member(Role::Device, g.keys, None, None))
+            }
+            Kind::AddDevice(a) => {
+                let sponsor = self
+                    .members
+                    .get(&a.sponsor.by)
+                    .ok_or(Invalid("sponsor is not a member"))?;
+                // Still the head the sponsor saw (`prev` was checked against
+                // it), at the epoch it saw.
+                let message = sponsor_message(&self.account, &body.prev, self.epoch, &a.keys);
+                if !sponsor.keys.verifies(SPONSOR, &message, &a.sponsor.sig) {
+                    return Err(Invalid("sponsor statement is not for this roster"));
+                }
+                let name = Some(a.name.clone());
+                self.admit(
+                    a.keys,
+                    member(Role::Device, a.keys, Some(a.sponsor.by), name),
+                )
+            }
+            Kind::AddKit(k) => {
+                self.device(&body.author)?;
+                if k.boxed.to != k.keys.id() {
+                    return Err(Invalid("kit box is for someone else"));
+                }
+                self.admit(k.keys, member(Role::Kit, k.keys, Some(body.author), None))?;
+                self.kit_boxes
+                    .insert(k.keys.id(), (self.epoch, k.boxed.sealed.clone()));
+                self.kit_tags.insert(k.keys.id(), k.id_tag);
+                Ok(())
+            }
+            Kind::Revoke(r) => {
+                let dropped: BTreeSet<Id> = r.dropped.iter().copied().collect();
+                if dropped.len() != r.dropped.len() || dropped.contains(&body.author) {
+                    return Err(Invalid("bad drop list"));
+                }
+                if !dropped.iter().all(|id| self.members.contains_key(id)) {
+                    return Err(Invalid("dropping someone who is not a member"));
+                }
+                if r.new_epoch != self.epoch + 1 {
+                    return Err(Invalid("epoch must move by one"));
+                }
+                let boxes: BTreeMap<Id, Vec<u8>> =
+                    r.boxes.iter().map(|b| (b.to, b.sealed.clone())).collect();
+                let left: BTreeSet<Id> = self
+                    .members
+                    .keys()
+                    .filter(|id| !dropped.contains(id))
+                    .copied()
+                    .collect();
+                if boxes.len() != r.boxes.len()
+                    || boxes.keys().copied().collect::<BTreeSet<_>>() != left
+                {
+                    return Err(Invalid("boxes must cover exactly the members left"));
+                }
+                for id in &dropped {
+                    self.members.remove(id);
+                    self.kit_boxes.remove(id);
+                    self.kit_tags.remove(id);
+                    self.retired.insert(*id);
+                }
+                self.epoch = r.new_epoch;
+                self.rotation_pending = false;
+                self.rotations
+                    .insert(r.new_epoch, (r.prev_blob.clone(), boxes));
+                Ok(())
+            }
+            Kind::Leave(_) => {
+                self.members.remove(&body.author);
+                self.retired.insert(body.author);
+                self.rotation_pending = true;
+                Ok(())
+            }
+        }
+    }
+
+    /// Reporting `lost`: the devices it sponsored, transitively (also through
+    /// kits it added), for the user to untick what they still hold. Neither
+    /// `lost` nor `author` is listed; `lost` is always dropped.
+    pub fn descendants(&self, lost: &Id, author: &Id) -> Vec<Id> {
+        let mut found = BTreeSet::from([*lost]);
+        loop {
+            let more: Vec<Id> = self
+                .members
+                .iter()
+                .filter(|(id, m)| {
+                    !found.contains(id) && m.sponsor.is_some_and(|s| found.contains(&s))
+                })
+                .map(|(id, _)| *id)
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            found.extend(more);
+        }
+        found
+            .into_iter()
+            .filter(|id| id != lost && id != author && self.members[id].role == Role::Device)
+            .collect()
+    }
+
+    /// The kits added by any of `devices`: dropped with them, always, since
+    /// a kit shown on a stolen device may sit in its screenshots.
+    pub fn kits_of(&self, devices: &[Id]) -> Vec<Id> {
+        self.members
+            .iter()
+            .filter(|(_, m)| m.role == Role::Kit && m.sponsor.is_some_and(|s| devices.contains(&s)))
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    fn body(&self, author: &MemberSecret, kind: Kind, at_ms: u64) -> Body {
+        let (seq, prev) = self
+            .head
+            .map_or((0, Digest32::default()), |(seq, hash)| (seq + 1, hash));
+        Body {
+            v: 1,
+            account: self.account,
+            seq,
+            prev,
+            author: author.id(),
+            at_ms,
+            kind,
+        }
+    }
+
+    /// The first entry of a new account, and the account's first bundle.
+    pub fn genesis_entry(me: &MemberSecret, account: Id, at_ms: u64) -> (Entry, Bundle) {
+        let body = Body {
+            v: 1,
+            account,
+            seq: 0,
+            prev: Digest32::default(),
+            author: me.id(),
+            at_ms,
+            kind: Kind::Genesis(Genesis { keys: me.public }),
+        };
+        let entry = Entry::sign(me, &body);
+        let bundle = Bundle {
+            v: 1,
+            account,
+            genesis: entry.hash(),
+            epoch: 0,
+            ak: Hex(random()),
+            id_key: Hex(random()),
+        };
+        (entry, bundle)
+    }
+
+    /// The new device's own entry, carrying the statement its sponsor made.
+    pub fn add_device(
+        &self,
+        me: &MemberSecret,
+        sponsor: Sponsor,
+        name: String,
+        at_ms: u64,
+    ) -> Entry {
+        let kind = Kind::AddDevice(AddDevice {
+            keys: me.public,
+            name,
+            sponsor,
+        });
+        Entry::sign(me, &self.body(me, kind, at_ms))
+    }
+
+    /// Adds a kit, boxing the current bundle to it.
+    pub fn add_kit(
+        &self,
+        me: &MemberSecret,
+        bundle: &Bundle,
+        kit: &NewKit,
+        at_ms: u64,
+    ) -> Result<Entry, RosterError> {
+        let kind = Kind::AddKit(AddKit {
+            keys: kit.keys,
+            id_tag: id_tag(&kit.tag_key, bundle),
+            lookup_hash: Hex(kit.lookup_hash),
+            auth_hash: Hex(kit.auth_hash),
+            boxed: seal_box(&kit.keys, bundle)?,
+        });
+        Ok(Entry::sign(me, &self.body(me, kind, at_ms)))
+    }
+
+    /// Drops `dropped` (possibly none) and starts a new epoch with a fresh
+    /// key boxed to everyone left. Returns the entry and the new bundle.
+    pub fn revoke(
+        &self,
+        me: &MemberSecret,
+        held: &Bundle,
+        dropped: Vec<Id>,
+        at_ms: u64,
+    ) -> Result<(Entry, Bundle), RosterError> {
+        let next = Bundle {
+            epoch: held.epoch + 1,
+            ak: Hex(random()),
+            ..held.clone()
+        };
+        let boxes = self
+            .members
+            .iter()
+            .filter(|(id, _)| !dropped.contains(id))
+            .map(|(_, m)| seal_box(&m.keys, &next))
+            .collect::<Result<Vec<_>, _>>()?;
+        let kind = Kind::Revoke(Revoke {
+            dropped,
+            new_epoch: next.epoch,
+            boxes,
+            prev_blob: chain_seal(&held.account, next.epoch, &next.ak, &held.ak),
+        });
+        Ok((Entry::sign(me, &self.body(me, kind, at_ms)), next))
+    }
+
+    pub fn leave(&self, me: &MemberSecret, at_ms: u64) -> Entry {
+        Entry::sign(me, &self.body(me, Kind::Leave(Leave {}), at_ms))
+    }
+
+    /// The bundle for the current epoch, given the one a device holds:
+    /// opened from its own box when the roster has moved on, and checked to
+    /// continue the held bundle (same account, genesis and id key, and the
+    /// chain of earlier keys leads back to the held key).
+    pub fn adopt(&self, me: &MemberSecret, held: &Bundle) -> Result<Bundle, RosterError> {
+        if held.account != self.account || held.genesis != self.genesis {
+            return Err(Invalid("the held keys are for another account"));
+        }
+        if held.epoch > self.epoch {
+            return Err(Invalid("the held keys are newer than the roster"));
+        }
+        if held.epoch == self.epoch {
+            return Ok(held.clone());
+        }
+        let sealed = self
+            .rotations
+            .get(&self.epoch)
+            .and_then(|(_, boxes)| boxes.get(&me.id()))
+            .ok_or(Invalid("no key for this member"))?;
+        let newest = open_box(me, &self.account, self.epoch, sealed)?;
+        self.check(&newest, held.id_key)?;
+        if self.key_at(&newest, held.epoch)? != held.ak {
+            return Err(Invalid("the new key does not continue the held one"));
+        }
+        Ok(newest)
+    }
+
+    /// A kit's view of the current bundle, for recovery: the kit must be a
+    /// member now, and the keys must carry the account's id tag.
+    pub fn open_for_kit(
+        &self,
+        kit: &MemberSecret,
+        tag_key: &[u8; 32],
+    ) -> Result<Bundle, RosterError> {
+        let id = kit.id();
+        let tag = match (self.members.get(&id), self.kit_tags.get(&id)) {
+            (Some(m), Some(tag)) if m.role == Role::Kit => *tag,
+            _ => return Err(Invalid("this kit is not a member of the account")),
+        };
+        let sealed = match self
+            .rotations
+            .get(&self.epoch)
+            .and_then(|(_, b)| b.get(&id))
+        {
+            Some(sealed) => sealed,
+            None => match self.kit_boxes.get(&id) {
+                Some((epoch, sealed)) if *epoch == self.epoch => sealed,
+                _ => return Err(Invalid("no key for this kit")),
+            },
+        };
+        let bundle = open_box(kit, &self.account, self.epoch, sealed)?;
+        self.check(&bundle, bundle.id_key)?;
+        if !same(&id_tag(tag_key, &bundle).0, &tag.0) {
+            return Err(Invalid("the keys are not this account's"));
+        }
+        Ok(bundle)
+    }
+
+    fn check(&self, bundle: &Bundle, id_key: Hex<32>) -> Result<(), RosterError> {
+        let same = bundle.v == 1
+            && bundle.account == self.account
+            && bundle.genesis == self.genesis
+            && bundle.epoch == self.epoch
+            && bundle.id_key == id_key;
+        same.then_some(())
+            .ok_or(Invalid("the boxed keys do not match the roster"))
+    }
+
+    /// The key of an older epoch, walking back from `newest`.
+    pub fn key_at(&self, newest: &Bundle, epoch: u32) -> Result<Hex<32>, RosterError> {
+        let mut ak = newest.ak;
+        for e in (epoch + 1..=newest.epoch).rev() {
+            let (prev_blob, _) = self
+                .rotations
+                .get(&e)
+                .ok_or(Invalid("a rotation is missing"))?;
+            ak = chain_open(&self.account, e, &ak, prev_blob)?;
+        }
+        Ok(ak)
+    }
+}
+
+/// Constant-time comparison.
+fn same(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// `HMAC(kit tag key, idKey || genesis)`.
+pub fn id_tag(tag_key: &[u8; 32], bundle: &Bundle) -> Hex<32> {
+    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(tag_key).expect("any key length");
+    mac.update(&bundle.id_key.0);
+    mac.update(&bundle.genesis.0);
+    Hex(mac.finalize().into_bytes().into())
+}
+
+fn box_aad(account: &Id, epoch: u32, to: &Id) -> Vec<u8> {
+    [&account.0[..], &epoch.to_be_bytes(), &to.0].concat()
+}
+
+pub fn seal_box(to: &MemberKeys, bundle: &Bundle) -> Result<SealedBox, RosterError> {
+    let plain = serde_json::to_vec(bundle).expect("bundles serialize");
+    let aad = box_aad(&bundle.account, bundle.epoch, &to.id());
+    let sealed =
+        seal_to(&to.box_key()?, EPOCH_INFO, &aad, &plain).map_err(|_| RosterError::Open)?;
+    Ok(SealedBox {
+        to: to.id(),
+        sealed,
+    })
+}
+
+fn open_box(
+    me: &MemberSecret,
+    account: &Id,
+    epoch: u32,
+    sealed: &[u8],
+) -> Result<Bundle, RosterError> {
+    let aad = box_aad(account, epoch, &me.id());
+    let plain = open_with(&me.boxk, EPOCH_INFO, &aad, sealed).map_err(|_| RosterError::Open)?;
+    serde_json::from_slice(&plain).map_err(|_| Invalid("malformed bundle"))
+}
+
+fn chain_cipher(ak: &Hex<32>) -> XChaCha20Poly1305 {
+    let mut key = [0u8; 32];
+    Hkdf::<Sha256>::new(None, &ak.0)
+        .expand(CHAIN_INFO, &mut key)
+        .expect("valid length");
+    XChaCha20Poly1305::new((&key).into())
+}
+
+fn chain_seal(account: &Id, new_epoch: u32, new_ak: &Hex<32>, prev_ak: &Hex<32>) -> Vec<u8> {
+    let nonce: [u8; NONCE] = random();
+    let aad = [&account.0[..], &new_epoch.to_be_bytes()].concat();
+    let sealed = chain_cipher(new_ak)
+        .encrypt(
+            &XNonce::from(nonce),
+            Payload {
+                msg: &prev_ak.0,
+                aad: &aad,
+            },
+        )
+        .expect("sealing never fails");
+    [&nonce[..], &sealed].concat()
+}
+
+fn chain_open(account: &Id, epoch: u32, ak: &Hex<32>, blob: &[u8]) -> Result<Hex<32>, RosterError> {
+    if blob.len() < NONCE {
+        return Err(RosterError::Open);
+    }
+    let (nonce, sealed) = blob.split_at(NONCE);
+    let aad = [&account.0[..], &epoch.to_be_bytes()].concat();
+    let plain = chain_cipher(ak)
+        .decrypt(
+            &XNonce::try_from(nonce).map_err(|_| RosterError::Open)?,
+            Payload {
+                msg: sealed,
+                aad: &aad,
+            },
+        )
+        .map_err(|_| RosterError::Open)?;
+    plain.try_into().map(Hex).map_err(|_| RosterError::Open)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn account() -> (Roster, Bundle, MemberSecret) {
+        let first = MemberSecret::generate();
+        let (entry, bundle) = Roster::genesis_entry(&first, Hex(random()), 1);
+        let mut roster = Roster::default();
+        roster.apply(&entry).unwrap();
+        (roster, bundle, first)
+    }
+
+    fn join(roster: &mut Roster, sponsor: &MemberSecret) -> MemberSecret {
+        let new = MemberSecret::generate();
+        let statement = Sponsor::new(sponsor, roster, new.public());
+        let entry = roster.add_device(&new, statement, "tv".into(), 2);
+        roster.apply(&entry).unwrap();
+        new
+    }
+
+    pub(super) fn new_kit(kit: &MemberSecret, tag_key: [u8; 32]) -> NewKit {
+        NewKit {
+            keys: *kit.public(),
+            tag_key,
+            lookup_hash: random(),
+            auth_hash: random(),
+        }
+    }
+
+    /// Re-signs `entry` after `edit` changed its body: what a member (or a
+    /// relay holding a member's key) could send.
+    fn tampered(entry: &Entry, author: &MemberSecret, edit: impl FnOnce(&mut Body)) -> Entry {
+        let mut body = entry.parse().unwrap();
+        edit(&mut body);
+        Entry::sign(author, &body)
+    }
+
+    #[test]
+    fn a_revoke_hands_the_new_key_to_everyone_left_and_no_one_else() {
+        let (mut roster, held, phone) = account();
+        let tv = join(&mut roster, &phone);
+        let lost = join(&mut roster, &phone);
+        let (entry, next) = roster.revoke(&phone, &held, vec![lost.id()], 3).unwrap();
+        roster.apply(&entry).unwrap();
+        assert_eq!(roster.epoch(), 1);
+        assert_eq!(roster.adopt(&tv, &held).unwrap(), next);
+        assert!(
+            roster.adopt(&lost, &held).is_err(),
+            "no box for the lost one"
+        );
+        assert!(!roster.members().contains_key(&lost.id()));
+        assert_ne!(next.ak, held.ak);
+        assert_eq!(next.id_key, held.id_key, "the id key never changes");
+    }
+
+    #[test]
+    fn a_device_offline_for_two_revokes_catches_up_with_one_box() {
+        let (mut roster, held, phone) = account();
+        let tv = join(&mut roster, &phone);
+        let (one, two) = (join(&mut roster, &phone), join(&mut roster, &phone));
+        let (entry, mid) = roster.revoke(&phone, &held, vec![one.id()], 3).unwrap();
+        roster.apply(&entry).unwrap();
+        let (entry, newest) = roster.revoke(&phone, &mid, vec![two.id()], 4).unwrap();
+        roster.apply(&entry).unwrap();
+        // The TV still holds epoch 0.
+        assert_eq!(roster.adopt(&tv, &held).unwrap(), newest);
+        assert_eq!(roster.key_at(&newest, 1).unwrap(), mid.ak);
+        assert_eq!(roster.key_at(&newest, 0).unwrap(), held.ak);
+    }
+
+    #[test]
+    fn a_signature_without_the_roster_purpose_does_not_verify() {
+        let (roster, held, phone) = account();
+        let (entry, _) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        // The same bytes signed bare, as a challenge answer would be.
+        let bare = Entry {
+            sig: Hex(phone.sign.sign(&entry.body).to_bytes()),
+            body: entry.body.clone(),
+        };
+        let mut copy = roster.clone();
+        assert_eq!(copy.apply(&bare), Err(Invalid("bad signature")));
+        copy.apply(&entry).unwrap();
+    }
+
+    #[test]
+    fn ids_are_never_reused() {
+        let (mut roster, held, phone) = account();
+        let tv = MemberSecret::generate();
+        let statement = Sponsor::new(&phone, &roster, tv.public());
+        let entry = roster.add_device(&tv, statement, "tv".into(), 2);
+        roster.apply(&entry).unwrap();
+        // Joining again under the same keys, before and after a drop.
+        let again = roster.add_device(
+            &tv,
+            Sponsor::new(&phone, &roster, tv.public()),
+            "tv".into(),
+            3,
+        );
+        assert!(roster.clone().apply(&again).is_err());
+        let (entry, _) = roster.revoke(&phone, &held, vec![tv.id()], 4).unwrap();
+        roster.apply(&entry).unwrap();
+        let back = roster.add_device(
+            &tv,
+            Sponsor::new(&phone, &roster, tv.public()),
+            "tv".into(),
+            5,
+        );
+        assert_eq!(
+            roster.apply(&back),
+            Err(Invalid("that member id already existed"))
+        );
+    }
+
+    #[test]
+    fn boxes_must_cover_exactly_the_members_left() {
+        let (mut roster, held, phone) = account();
+        let tv = join(&mut roster, &phone);
+        let lost = join(&mut roster, &phone);
+        let (entry, next) = roster.revoke(&phone, &held, vec![lost.id()], 3).unwrap();
+        let missing = tampered(&entry, &phone, |b| {
+            if let Kind::Revoke(r) = &mut b.kind {
+                r.boxes.retain(|x| x.to != tv.id());
+            }
+        });
+        assert!(roster.clone().apply(&missing).is_err());
+        let extra = tampered(&entry, &phone, |b| {
+            if let Kind::Revoke(r) = &mut b.kind {
+                r.boxes.push(seal_box(lost.public(), &next).unwrap());
+            }
+        });
+        assert!(roster.clone().apply(&extra).is_err());
+        let twice = tampered(&entry, &phone, |b| {
+            if let Kind::Revoke(r) = &mut b.kind {
+                let first = r.boxes[0].clone();
+                r.boxes.push(first);
+            }
+        });
+        assert!(roster.clone().apply(&twice).is_err());
+        roster.apply(&entry).unwrap();
+    }
+
+    #[test]
+    fn unknown_fields_are_refused() {
+        let (roster, held, phone) = account();
+        let (entry, _) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        let mut json: serde_json::Value = serde_json::from_slice(&entry.body).unwrap();
+        json["kind"]["revoke"]["keepFor"] = serde_json::json!(1);
+        let bytes = serde_json::to_vec(&json).unwrap();
+        let forged = Entry {
+            sig: phone.sign(ROSTER, &bytes),
+            body: bytes,
+        };
+        assert_eq!(
+            roster.clone().apply(&forged),
+            Err(Invalid("malformed entry"))
+        );
+    }
+
+    #[test]
+    fn a_sponsor_statement_works_only_on_the_head_it_was_made_for() {
+        let (mut roster, held, phone) = account();
+        let tv = MemberSecret::generate();
+        let statement = Sponsor::new(&phone, &roster, tv.public());
+        // Anything lands in between: the approval is spent.
+        let (entry, _) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        roster.apply(&entry).unwrap();
+        let late = roster.add_device(&tv, statement, "tv".into(), 4);
+        assert_eq!(
+            roster.apply(&late),
+            Err(Invalid("sponsor statement is not for this roster"))
+        );
+        // A statement for other keys does not cover these.
+        let other = MemberSecret::generate();
+        let statement = Sponsor::new(&phone, &roster, other.public());
+        let swapped = roster.add_device(&tv, statement, "tv".into(), 5);
+        assert!(roster.apply(&swapped).is_err());
+    }
+
+    #[test]
+    fn a_box_with_another_id_key_is_refused_when_opened() {
+        let (mut roster, held, phone) = account();
+        let tv = join(&mut roster, &phone);
+        // A revoker hands out keys that would split the blind ids.
+        let (entry, _) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        let forged = tampered(&entry, &phone, |b| {
+            if let Kind::Revoke(r) = &mut b.kind {
+                let split = Bundle {
+                    epoch: 1,
+                    id_key: Hex(random()),
+                    ak: Hex(random()),
+                    ..held.clone()
+                };
+                r.prev_blob = chain_seal(&held.account, 1, &split.ak, &held.ak);
+                r.boxes = vec![
+                    seal_box(phone.public(), &split).unwrap(),
+                    seal_box(tv.public(), &split).unwrap(),
+                ];
+            }
+        });
+        roster.apply(&forged).unwrap();
+        assert_eq!(
+            roster.adopt(&tv, &held),
+            Err(Invalid("the boxed keys do not match the roster"))
+        );
+    }
+
+    #[test]
+    fn a_new_key_that_does_not_continue_the_held_one_is_refused() {
+        let (mut roster, held, phone) = account();
+        let tv = join(&mut roster, &phone);
+        let (entry, next) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        let forged = tampered(&entry, &phone, |b| {
+            if let Kind::Revoke(r) = &mut b.kind {
+                r.prev_blob = chain_seal(&held.account, 1, &next.ak, &Hex(random()));
+            }
+        });
+        roster.apply(&forged).unwrap();
+        assert_eq!(
+            roster.adopt(&tv, &held),
+            Err(Invalid("the new key does not continue the held one"))
+        );
+    }
+
+    #[test]
+    fn a_kit_opens_the_newest_key_of_its_own_account_only() {
+        let (mut roster, held, phone) = account();
+        let kit = MemberSecret::generate();
+        let tag_key: [u8; 32] = random();
+        let entry = roster
+            .add_kit(&phone, &held, &new_kit(&kit, tag_key), 2)
+            .unwrap();
+        roster.apply(&entry).unwrap();
+        assert_eq!(roster.open_for_kit(&kit, &tag_key).unwrap(), held);
+        assert!(
+            roster.open_for_kit(&kit, &random()).is_err(),
+            "wrong tag key"
+        );
+        let (entry, next) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        roster.apply(&entry).unwrap();
+        assert_eq!(roster.open_for_kit(&kit, &tag_key).unwrap(), next);
+        let (entry, _) = roster.revoke(&phone, &next, vec![kit.id()], 4).unwrap();
+        roster.apply(&entry).unwrap();
+        assert!(roster.open_for_kit(&kit, &tag_key).is_err(), "dropped");
+    }
+
+    #[test]
+    fn only_devices_that_stay_author_entries() {
+        let (mut roster, held, phone) = account();
+        let kit = MemberSecret::generate();
+        let entry = roster
+            .add_kit(&phone, &held, &new_kit(&kit, random()), 2)
+            .unwrap();
+        roster.apply(&entry).unwrap();
+        let (by_kit, _) = roster.revoke(&kit, &held, vec![phone.id()], 3).unwrap();
+        assert!(roster.clone().apply(&by_kit).is_err());
+        let (itself, _) = roster.revoke(&phone, &held, vec![phone.id()], 3).unwrap();
+        assert!(roster.clone().apply(&itself).is_err());
+        let (stranger, _) = roster
+            .revoke(&phone, &held, vec![MemberSecret::generate().id()], 3)
+            .unwrap();
+        assert!(roster.clone().apply(&stranger).is_err());
+        let outsider = MemberSecret::generate();
+        let (by_outsider, _) = roster.revoke(&outsider, &held, vec![], 3).unwrap();
+        assert!(roster.apply(&by_outsider).is_err());
+    }
+
+    #[test]
+    fn a_leave_makes_rotation_pending_until_a_revoke() {
+        let (mut roster, held, phone) = account();
+        let tv = join(&mut roster, &phone);
+        roster.apply(&roster.leave(&tv, 3)).unwrap();
+        assert!(roster.rotation_pending());
+        assert!(!roster.members().contains_key(&tv.id()));
+        let (entry, _) = roster.revoke(&phone, &held, vec![], 4).unwrap();
+        roster.apply(&entry).unwrap();
+        assert!(!roster.rotation_pending());
+    }
+
+    #[test]
+    fn entries_follow_the_head_of_their_own_account() {
+        let (mut roster, held, phone) = account();
+        let (entry, _) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        roster.apply(&entry).unwrap();
+        assert_eq!(
+            roster.apply(&entry),
+            Err(RosterError::NotNext),
+            "applied twice"
+        );
+        let (other, other_bundle, other_phone) = account();
+        let (foreign, _) = other
+            .revoke(&other_phone, &other_bundle, vec![], 3)
+            .unwrap();
+        assert!(roster.apply(&foreign).is_err());
+        let fingerprint = roster.fingerprint();
+        assert_eq!(fingerprint.len(), 12);
+        assert_ne!(fingerprint, other.fingerprint());
+    }
+}
+
+#[cfg(test)]
+mod lost {
+    use super::*;
+
+    fn kit(roster: &mut Roster, by: &MemberSecret, held: &Bundle) -> MemberSecret {
+        let kit = MemberSecret::generate();
+        let entry = roster
+            .add_kit(by, held, &tests::new_kit(&kit, random()), 9)
+            .unwrap();
+        roster.apply(&entry).unwrap();
+        kit
+    }
+
+    fn sponsored(roster: &mut Roster, sponsor: &MemberSecret) -> MemberSecret {
+        let new = MemberSecret::generate();
+        let entry = roster.add_device(
+            &new,
+            Sponsor::new(sponsor, roster, new.public()),
+            "d".into(),
+            9,
+        );
+        roster.apply(&entry).unwrap();
+        new
+    }
+
+    fn report(roster: &Roster, lost: &Id, author: &Id, keep: &[Id]) -> Vec<Id> {
+        let mut devices: Vec<Id> = roster
+            .descendants(lost, author)
+            .into_iter()
+            .filter(|id| !keep.contains(id))
+            .collect();
+        devices.push(*lost);
+        let kits = roster.kits_of(&devices);
+        devices.extend(kits);
+        devices.sort();
+        devices
+    }
+
+    #[test]
+    fn a_thief_device_and_its_kit_go_with_the_stolen_phone() {
+        let first = MemberSecret::generate();
+        let (genesis, held) = Roster::genesis_entry(&first, Hex(random()), 1);
+        let mut roster = Roster::default();
+        roster.apply(&genesis).unwrap();
+        let x = sponsored(&mut roster, &first);
+        let y = sponsored(&mut roster, &x);
+        let k = kit(&mut roster, &y, &held);
+        let mut expected = vec![x.id(), y.id(), k.id()];
+        expected.sort();
+        assert_eq!(report(&roster, &x.id(), &first.id(), &[]), expected);
+    }
+
+    #[test]
+    fn after_a_recovery_the_recovered_device_stays_and_the_kit_goes() {
+        let x = MemberSecret::generate();
+        let (genesis, held) = Roster::genesis_entry(&x, Hex(random()), 1);
+        let mut roster = Roster::default();
+        roster.apply(&genesis).unwrap();
+        let tv = sponsored(&mut roster, &x);
+        let k = kit(&mut roster, &x, &held);
+        // Recovered on Y through K, which X made.
+        let y = sponsored(&mut roster, &k);
+        assert_eq!(roster.descendants(&x.id(), &y.id()), vec![tv.id()]);
+        let dropped = report(&roster, &x.id(), &y.id(), &[tv.id()]);
+        let mut expected = vec![x.id(), k.id()];
+        expected.sort();
+        assert_eq!(dropped, expected, "the TV unticked, Y never listed");
+        let (entry, _) = roster.revoke(&y, &held, dropped, 10).unwrap();
+        roster.apply(&entry).unwrap();
+        assert!(roster.members().contains_key(&y.id()));
+        assert!(roster.members().contains_key(&tv.id()));
+    }
+}

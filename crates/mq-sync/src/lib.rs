@@ -2,6 +2,7 @@
 
 mod engine;
 pub mod pair;
+pub mod roster;
 pub mod seal;
 pub mod wire;
 

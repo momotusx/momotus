@@ -29,9 +29,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::Duration;
 
-type Kem = X25519HkdfSha256;
-type PrivateKey = <Kem as hpke::Kem>::PrivateKey;
-type PublicKey = <Kem as hpke::Kem>::PublicKey;
+pub(crate) type Kem = X25519HkdfSha256;
+pub(crate) type PrivateKey = <Kem as hpke::Kem>::PrivateKey;
+pub(crate) type PublicKey = <Kem as hpke::Kem>::PublicKey;
 const PAIR_INFO: &[u8] = b"marquee/pair/v1";
 const RECOVERY_INFO: &[u8] = b"marquee/recovery/v1";
 /// X25519 encapsulated key length, in front of the HPKE ciphertext.
@@ -100,7 +100,7 @@ fn bad(why: &str) -> SyncError {
     SyncError::Pairing(why.to_owned())
 }
 
-fn seal_to(
+pub(crate) fn seal_to(
     public: &PublicKey,
     info: &[u8],
     aad: &[u8],
@@ -117,7 +117,7 @@ fn seal_to(
     Ok(blob)
 }
 
-fn open_with(
+pub(crate) fn open_with(
     secret: &PrivateKey,
     info: &[u8],
     aad: &[u8],
