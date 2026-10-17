@@ -98,6 +98,7 @@ pub struct TitleView {
     _tasks: JoinSet<()>,
 }
 
+#[derive(Debug, Clone, Serialize)]
 pub struct TitleSnapshot {
     pub header: TitleHeader,
     pub episodes: Vec<Episode>,

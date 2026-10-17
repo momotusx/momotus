@@ -88,6 +88,7 @@ pub struct HomeView {
     _tasks: JoinSet<()>,
 }
 
+#[derive(Debug, Clone, Serialize)]
 pub struct HomeSnapshot {
     pub header: HomeHeader,
     pub rows: Vec<HomeRow>,
