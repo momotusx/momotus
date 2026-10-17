@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +44,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
@@ -64,6 +67,8 @@ import app.marquee.design.TextRole
 import app.marquee.design.dpadExits
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -353,6 +358,7 @@ private fun InstallField(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Playback(
     holder: SettingsHolder,
@@ -364,7 +370,11 @@ private fun Playback(
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             MqText("Quality", role = TextRole.Headline, weight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+            // Wraps on a narrow phone rather than squeezing the last chip.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
                 for ((value, label) in QUALITIES) {
                     Chip(label, selected = prefs.streams.quality == value, onClick = {
                         if (!busy) {
@@ -377,6 +387,49 @@ private fun Playback(
                     })
                 }
             }
+            MqText("Up to", role = TextRole.Headline, weight = FontWeight.Bold)
+            // Wraps on a narrow phone rather than squeezing the last chip.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                for ((value, label) in HEIGHTS) {
+                    Chip(label, selected = prefs.streams.maxHeight == value, onClick = {
+                        if (!busy) {
+                            run("Changing the resolution") {
+                                val height = value?.let(::JsonPrimitive) ?: JsonNull
+                                ops.setPrefs(
+                                    buildJsonObject { put("streams", buildJsonObject { put("maxHeight", height) }) },
+                                )
+                            }
+                        }
+                    })
+                }
+            }
+            // Several may be on; the list keeps the order they were turned on in, the first wins.
+            MqText("Audio", role = TextRole.Headline, weight = FontWeight.Bold)
+            Languages(LANGS.map { it.first }, prefs.streams.languages) { list ->
+                if (!busy) {
+                    run("Changing the audio languages") {
+                        ops.setPrefs(
+                            buildJsonObject { put("streams", buildJsonObject { put("languages", json(list)) }) },
+                        )
+                    }
+                }
+            }
+            MqText("Subtitles", role = TextRole.Headline, weight = FontWeight.Bold)
+            Languages(LANGS.map { it.second }, prefs.subtitleLanguages) { list ->
+                if (!busy) {
+                    run("Changing the subtitle languages") {
+                        ops.setPrefs(buildJsonObject { put("subtitleLanguages", json(list)) })
+                    }
+                }
+            }
+            MqText(
+                "Languages are listed in the order you turn them on; the first one wins.",
+                role = TextRole.Caption,
+                color = Marquee.colors.muted,
+            )
             MqText("Next episode", role = TextRole.Headline, weight = FontWeight.Bold)
             Chip(
                 if (prefs.autoplayNext) "Plays on its own" else "Waits for you",
@@ -400,6 +453,47 @@ private val QUALITIES =
         QualityPref.Balanced to "Balanced",
         QualityPref.DataSaver to "Data saver",
     )
+
+private val HEIGHTS = listOf(null to "Any resolution", 2160 to "4K", 1080 to "1080p", 720 to "720p")
+
+/** The web's languages: the audio code (ISO 639-1) and the subtitle code addons use (ISO 639-2). */
+private val LANGS =
+    listOf(
+        "en" to "eng",
+        "tr" to "tur",
+        "es" to "spa",
+        "fr" to "fre",
+        "de" to "ger",
+        "it" to "ita",
+        "pt" to "por",
+        "ja" to "jpn",
+    )
+
+private fun json(list: List<String>) = JsonArray(list.map(::JsonPrimitive))
+
+/** A chip per language, each on or off on its own; turning one on puts it last, so the order is the user's. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Languages(
+    codes: List<String>,
+    chosen: List<String>,
+    onChange: (List<String>) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        for (code in codes) {
+            val on = code in chosen
+            Chip(
+                VersionsCopy.languageName(code),
+                selected = on,
+                onClick = { onChange(if (on) chosen - code else chosen + code) },
+                switch = true,
+            )
+        }
+    }
+}
 
 /** The wire name of a quality ("dataSaver"). */
 private fun wire(value: QualityPref): String = value.name.replaceFirstChar { it.lowercase() }
