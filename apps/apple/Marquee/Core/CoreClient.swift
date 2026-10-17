@@ -112,6 +112,11 @@ final class CoreClient {
         try await request(op, fields) { _ in }
     }
 
+    /// An op whose `result` decodes as `R`.
+    func call<R: Decodable & Sendable>(_ op: String, _ fields: [String: any Sendable] = [:], as type: R.Type) async throws -> R {
+        try await request(op, fields) { try JSONDecoder().decode(Reply<R>.self, from: $0).result }
+    }
+
     /// Round trip to the core's request loop in milliseconds, or nil when it does not answer.
     func ping() async -> Int? {
         let start = ContinuousClock.now

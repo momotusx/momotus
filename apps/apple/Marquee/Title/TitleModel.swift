@@ -42,6 +42,7 @@ final class TitleModel {
         generation = core.generation
         let (core, kind, id) = (core, route.kind, route.id)
         let opened = ContinuousClock.now
+        var season = route.season
         // Holds the model only while applying a batch, so releasing it ends the loop.
         task = Task { [weak self] in
             do {
@@ -52,6 +53,11 @@ final class TitleModel {
                 for await event in view.events {
                     guard let self else { return }
                     apply(event)
+                    // The route's season, once the header lists it.
+                    if let wanted = season, header?.seasons.contains(wanted) == true {
+                        season = nil
+                        if header?.selectedSeason != wanted { selectSeason(wanted) }
+                    }
                     if !timed, header?.details != nil {
                         timed = true
                         let ms = Int((ContinuousClock.now - opened) / .milliseconds(1))

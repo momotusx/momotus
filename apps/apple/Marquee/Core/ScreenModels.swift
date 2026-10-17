@@ -123,3 +123,48 @@ struct StreamPrefs: Decodable, Hashable, Sendable {
     /// Lowercase terms that hide a stream when its name contains them.
     let avoid: [String]
 }
+
+/// Episodes of library series from a week before to a month after `today`, by date.
+struct CalendarSnapshot: Decodable, Sendable {
+    /// The local date the app gave, "YYYY-MM-DD".
+    let today: String
+    let days: [CalendarDay]
+    /// Series whose details are still loading.
+    let pending: Int
+    /// Series whose details could not be fetched.
+    let failed: [CalendarSeries]
+    /// Series without a dated episode.
+    let noSchedule: [CalendarSeries]
+}
+
+extension CalendarSnapshot {
+    /// Where the screen opens: the first day on or after today (dates compare
+    /// as "YYYY-MM-DD" text), else the last day.
+    var startDay: String? { days.first { $0.date >= today }?.date ?? days.last?.date }
+}
+
+struct CalendarDay: Decodable, Hashable, Sendable {
+    /// "YYYY-MM-DD": a date, never shifted by time zone.
+    let date: String
+    let items: [CalendarItem]
+}
+
+struct CalendarItem: Decodable, Hashable, Sendable {
+    let itemId: String
+    /// The meta's video id: the item's stable key.
+    let videoId: String
+    let name: String
+    let season: Int?
+    let episode: Int?
+    let title: String
+    let date: String
+    let poster: String?
+    let still: String?
+    let watched: Bool
+}
+
+struct CalendarSeries: Decodable, Hashable, Sendable {
+    let itemId: String
+    let name: String
+    let reason: String?
+}

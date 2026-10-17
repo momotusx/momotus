@@ -11,8 +11,14 @@ struct TitleScreen: View {
     @State private var width: CGFloat = 0
     /// Versions for the play target: the line under Play, Play itself, and the Versions page.
     @State private var versions: VersionsModel?
+    /// Versions for an episode picked from the list, when it is not the play target.
+    @State private var episodeVersions: VersionsModel?
     @State private var playing: PlayRoute?
     @State private var showVersions = false
+    @State private var showEpisodeVersions = false
+    /// The episode whose version is being found, and why the last one could not start.
+    @State private var starting: String?
+    @State private var startFailure: (videoId: String, text: String)?
 
     init(route: TitleRoute, core: CoreClient) {
         _model = State(initialValue: TitleModel(route: route, core: core))
@@ -47,11 +53,16 @@ struct TitleScreen: View {
         #endif
         .fullBleedTop()
         .navigationDestination(item: $playing) { route in
-            PlayerScreen(route: route, versions: versions, core: core)
+            PlayerScreen(route: route, versions: [versions, episodeVersions].compactMap { $0 }.first { $0.sub == route.versionsSub }, core: core)
         }
         .navigationDestination(isPresented: $showVersions) {
             if let versions {
-                VersionsScreen(model: versions, heading: versionsHeading, core: core)
+                VersionsScreen(model: versions, heading: heading(versions.target), core: core)
+            }
+        }
+        .navigationDestination(isPresented: $showEpisodeVersions) {
+            if let episodeVersions {
+                VersionsScreen(model: episodeVersions, heading: heading(episodeVersions.target), core: core)
             }
         }
         #if os(iOS)
@@ -78,12 +89,48 @@ struct TitleScreen: View {
     }
 
     /// "S2:E3 What Is Dead May Never Die" or the movie's name.
-    private var versionsHeading: String {
-        guard let target = versions?.target, let season = target.season, let number = target.episode else {
+    private func heading(_ target: PlayTargetInfo) -> String {
+        guard let season = target.season, let number = target.episode else {
             return details?.name ?? model.route.name
         }
         let title = model.episodes.first { $0.videoId == target.videoId }?.title
         return ["S\(season):E\(number)", title].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// The open Versions view for an episode, reusing the play target's.
+    private func versions(for episode: Episode) -> VersionsModel? {
+        guard let details else { return nil }
+        if let versions, versions.target.videoId == episode.videoId { return versions }
+        if let episodeVersions, episodeVersions.target.videoId == episode.videoId { return episodeVersions }
+        let model = VersionsModel(
+            target: PlayTargetInfo(
+                kind: details.kind, itemId: details.id, videoId: episode.videoId, title: details.name,
+                poster: details.poster, resumeMs: nil),
+            core: core)
+        model.start()
+        episodeVersions = model
+        return model
+    }
+
+    /// Plays an episode from the list: its pick once it settles, as Play does.
+    private func play(_ episode: Episode) async {
+        let tapped = ContinuousClock.now
+        guard let model = versions(for: episode) else { return }
+        (starting, startFailure) = (episode.videoId, nil)
+        let route = await model.settledPick(tapped: tapped)
+        guard starting == episode.videoId else { return }
+        starting = nil
+        if let route {
+            playing = route
+        } else {
+            let text = model.snapshot.map { $0.done ? VersionWords.none($0) : nil } ?? nil
+            startFailure = (episode.videoId, text ?? "No version answered yet. Choose a version to keep waiting.")
+        }
+    }
+
+    private func chooseVersion(_ episode: Episode) {
+        guard let model = versions(for: episode) else { return }
+        if model === versions { showVersions = true } else { showEpisodeVersions = true }
     }
 
     private var heroHeight: CGFloat {
@@ -211,7 +258,11 @@ struct TitleScreen: View {
             episodes: model.episodes,
             current: model.header?.playTarget?.videoId,
             runtime: details?.runtime,
+            starting: starting,
+            failure: startFailure,
             select: model.selectSeason,
+            play: { episode in Task { await play(episode) } },
+            chooseVersion: chooseVersion,
             setWatched: { model.setWatched($0, $1); sync.schedule() })
     }
 }
@@ -288,11 +339,7 @@ private struct VersionLine: View {
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityLabel("\(VersionWords.line(best)), \(VersionWords.status(best.status)), via \(best.via)")
         } else if let versions, versions.done {
-            Label(
-                versions.hidden.count > 0
-                    ? "No version plays here: \(VersionWords.hidden(versions.hidden))"
-                    : "No version found: your addons have no source for this",
-                systemImage: "exclamationmark.circle")
+            Label(VersionWords.none(versions), systemImage: "exclamationmark.circle")
                 .foregroundStyle(Theme.Palette.muted)
         } else {
             Label(

@@ -131,9 +131,11 @@ struct TitleRoute: Hashable {
     let kind: String
     let id: String
     let name: String
+    /// The season to show first (from the calendar).
+    var season: Int?
 
-    init(kind: String, id: String, name: String) {
-        (self.kind, self.id, self.name) = (kind, id, name)
+    init(kind: String, id: String, name: String, season: Int? = nil) {
+        (self.kind, self.id, self.name, self.season) = (kind, id, name, season)
     }
 
     init(_ tile: Tile) {

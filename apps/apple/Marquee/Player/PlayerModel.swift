@@ -33,6 +33,9 @@ final class PlayerModel {
     /// Up Next could not find a version of the next episode, in words.
     private(set) var nextFailure: String?
     private(set) var startingNext = false
+    /// Where Skip credits was pressed: Up Next shows from there, and seeking
+    /// back before it hides the card again.
+    private(set) var skippedAt: Int64?
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
@@ -50,9 +53,9 @@ final class PlayerModel {
     /// Counts runs: a route change starts the next run before the last one has
     /// stopped, so only the latest may tear the player down.
     @ObservationIgnored private var runs = 0
-
-    /// Up Next appears this many seconds before the end, as on the web.
-    static let nextAt: Double = 20
+    /// Version keys whose duration the core has heard: it looks up skip
+    /// segments once per version, and a failover is a new key.
+    @ObservationIgnored private var durationSent: Set<String> = []
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         self.route = route
@@ -68,7 +71,23 @@ final class PlayerModel {
 
     /// The card shows near the end of an episode that has a next one.
     var showNext: Bool {
-        next != nil && !nextCancelled && duration > 60 && (ended || duration - position <= Self.nextAt)
+        guard !nextCancelled, let playback else { return false }
+        return playback.offersNext(
+            positionMs: Int64(position * 1000), durationMs: Int64(duration * 1000), ended: ended, skippedAt: skippedAt)
+    }
+
+    /// The segment under the playhead, while Up Next is not on screen.
+    var segment: Segment? {
+        showNext ? nil : playback?.segment(at: Int64(position * 1000))
+    }
+
+    /// Manual only: the viewer presses Skip, the player never jumps by itself.
+    func skip(_ segment: Segment) {
+        if segment.endsFile(durationMs: Int64(duration * 1000)) {
+            if next != nil { skippedAt = segment.startMs } else { seek(to: max(0, duration - 0.05)) }
+        } else {
+            seek(to: Double(segment.endMs) / 1000)
+        }
     }
 
     /// The user's choice in Settings: start the next episode on its own.
@@ -82,7 +101,7 @@ final class PlayerModel {
     }
 
     /// Opens Versions for the next episode with this stream's binge group and
-    /// plays its pick; if none answers within 6 s, says so.
+    /// plays its pick once it settles; if there is none, says so.
     func playNext() async {
         guard let next, !startingNext else { return }
         startingNext = true
@@ -93,26 +112,22 @@ final class PlayerModel {
             kind: current.kind, itemId: current.itemId, videoId: next.videoId, title: current.title,
             poster: current.poster, resumeMs: nil)
         let model = VersionsModel(target: target, core: core, bingeGroup: playback?.bingeGroup)
-        model.start()
-        let deadline = ContinuousClock.now + .seconds(6)
-        while ContinuousClock.now < deadline, model.snapshot?.recommended == nil, model.snapshot?.done != true {
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        guard let pick = model.snapshot?.recommended, let versionsSub = model.sub else {
+        guard let pick = await model.settledPick() else {
             nextFailure = "No version of S\(next.season):E\(next.episode) plays here yet. Pick one from its title page."
             return
         }
         // The new view must exist before the old one goes: the core copies candidates at subscribe.
         versions = model
-        route = PlayRoute(versionsSub: versionsSub, key: pick.key, target: target, tapped: .now)
+        route = pick
         (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure) = (nil, false, nil, nil, false, false, nil)
-        (position, duration) = (0, 0)
+        (position, duration, skippedAt) = (0, 0, nil)
         selectSubtitle(nil)
     }
 
     func run() async {
         runs += 1
         let run = runs
+        durationSent = []
         prefs.start()
         defer { if run == runs { stop() } }
         let target = route.target
@@ -169,9 +184,6 @@ final class PlayerModel {
         let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
         firstFrameMs = ms
         coreLog.notice("metric first_frame_ms=\(ms, privacy: .public) key=\(self.route.key, privacy: .public)")
-        #if DEBUG
-        if let at = DebugHooks.takeSeek() { seek(to: at) }
-        #endif
     }
 
     func selectSubtitle(_ track: SubtitleTrack?) {
@@ -199,8 +211,11 @@ final class PlayerModel {
                 coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public)")
             }
             // The first source starts at the saved position; a failover resumes where the last one stopped.
-            let start = loadedURL == nil ? Double(snapshot.resumeMs ?? 0) / 1000 : position
-            load(url, at: start)
+            var start = loadedURL == nil ? Double(snapshot.resumeMs ?? 0) / 1000 : position
+            #if DEBUG
+            if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
+            #endif
+            load(url, key: snapshot.key ?? route.key, at: start)
         case "failed":
             player.pause()
             notice = nil
@@ -209,7 +224,8 @@ final class PlayerModel {
         }
     }
 
-    private func load(_ url: String, at start: Double) {
+    /// `key`: the version this URL plays, for its `duration`.
+    private func load(_ url: String, key: String, at start: Double) {
         guard let address = URL(string: url) else { return }
         generation += 1
         let generation = generation
@@ -229,6 +245,18 @@ final class PlayerModel {
         item.publisher(for: \.presentationSize)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] size in MainActor.assumeIsolated { self?.videoSize = size } }
+            .store(in: &itemBag)
+        // The core looks up skip segments once it knows this version's length.
+        item.publisher(for: \.duration)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] time in
+                MainActor.assumeIsolated {
+                    guard let self, time.isNumeric, time.seconds > 0, generation == self.generation, let sub = self.sub,
+                          self.durationSent.insert(key).inserted else { return }
+                    let ms = Int(time.seconds * 1000)
+                    Task { try? await self.core.command(sub, ["type": "duration", "key": key, "durationMs": ms]) }
+                }
+            }
             .store(in: &itemBag)
         player.replaceCurrentItem(with: item)
         if start > 1 { player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }

@@ -2,13 +2,21 @@ import SwiftUI
 
 /// Episodes as a table of contents (Folio): number, title, a dotted leader,
 /// runtime or time left; the current episode shows its synopsis and progress.
+/// Selecting an episode plays it; choosing a version, the synopsis and the
+/// watched mark are the secondary actions (long press, right click, or a
+/// long press of select on tvOS).
 struct EpisodeList: View {
     let seasons: [Int]
     let selected: Int?
     let episodes: [Episode]
     let current: String?
     let runtime: String?
+    /// The episode whose version is being found.
+    let starting: String?
+    let failure: (videoId: String, text: String)?
     let select: (Int) -> Void
+    let play: (Episode) -> Void
+    let chooseVersion: (Episode) -> Void
     let setWatched: (String, Bool) -> Void
 
     @State private var opened: Set<String> = []
@@ -23,23 +31,40 @@ struct EpisodeList: View {
             Rectangle().fill(Theme.Palette.line).frame(height: 1)
             LazyVStack(spacing: 0) {
                 ForEach(episodes, id: \.videoId) { episode in
+                    let expanded = episode.videoId == current || opened.contains(episode.videoId)
                     EpisodeRow(
                         episode: episode,
-                        expanded: episode.videoId == current || opened.contains(episode.videoId),
-                        minutes: minutes(runtime)
+                        expanded: expanded,
+                        minutes: minutes(runtime),
+                        status: status(episode)
                     ) {
-                        opened.formSymmetricDifference([episode.videoId])
+                        play(episode)
                     }
                     .contextMenu {
+                        Button("Choose a version", systemImage: "square.stack.3d.up") { chooseVersion(episode) }
+                        if episode.overview?.isEmpty == false, episode.videoId != current {
+                            Button(expanded ? "Hide synopsis" : "Show synopsis", systemImage: "text.alignleft") {
+                                opened.formSymmetricDifference([episode.videoId])
+                            }
+                        }
                         Button(episode.watched ? "Mark as unwatched" : "Mark as watched",
                                systemImage: episode.watched ? "eye.slash" : "checkmark") {
                             setWatched(episode.videoId, !episode.watched)
                         }
                     }
+                    .accessibilityAction(named: "Choose a version") { chooseVersion(episode) }
+                    .accessibilityAction(named: episode.watched ? "Mark as unwatched" : "Mark as watched") {
+                        setWatched(episode.videoId, !episode.watched)
+                    }
                     Rectangle().fill(Theme.Palette.line.opacity(0.6)).frame(height: 1)
                 }
             }
         }
+    }
+
+    private func status(_ episode: Episode) -> String? {
+        if starting == episode.videoId { return "Finding a version" }
+        return failure?.videoId == episode.videoId ? failure?.text : nil
     }
 }
 
@@ -109,10 +134,12 @@ private struct EpisodeRow: View {
     let episode: Episode
     let expanded: Bool
     let minutes: Int?
-    let toggle: () -> Void
+    /// "Finding a version", or why it could not start.
+    let status: String?
+    let play: () -> Void
 
     var body: some View {
-        Button(action: toggle) {
+        Button(action: play) {
             HStack(alignment: .firstTextBaseline, spacing: 18) {
                 Text("\(episode.episode)")
                     .font(.display(Theme.type.title2))
@@ -139,6 +166,13 @@ private struct EpisodeRow: View {
                     if let progress = episode.progress, !episode.watched {
                         ProgressLine(value: progress)
                     }
+                    if let status {
+                        Label(status, systemImage: status == "Finding a version" ? "clock" : "exclamationmark.circle")
+                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .foregroundStyle(Theme.Palette.muted)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .padding(.vertical, 12)
@@ -148,6 +182,7 @@ private struct EpisodeRow: View {
         .buttonStyle(RowButtonStyle())
         .accessibilityElement(children: .combine)
         .accessibilityValue(episode.watched ? "Watched" : "")
+        .accessibilityHint("Plays this episode")
     }
 
     @ViewBuilder private var trailing: some View {

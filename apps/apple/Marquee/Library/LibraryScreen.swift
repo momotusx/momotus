@@ -3,17 +3,28 @@ import SwiftUI
 
 /// The user's library: type filter and sort chips over posters with progress.
 struct LibraryScreen: View {
+    let core: CoreClient
     @State private var library: LiveRecord<LibrarySnapshot>
     @Environment(\.metrics) private var metrics
 
     init(core: CoreClient) {
+        self.core = core
         _library = State(initialValue: LiveRecord("library", core: core))
     }
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: "Library")
+                HStack(alignment: .firstTextBaseline) {
+                    ScreenTitle(text: "Library")
+                    Spacer()
+                    // A value, like the titles pushed from it: a destination link
+                    // under a value push is popped when Library redraws.
+                    NavigationLink(value: CalendarRoute()) {
+                        Label("Calendar", systemImage: "calendar")
+                    }
+                    .buttonStyle(PillButtonStyle())
+                }
                 if let s = library.snapshot {
                     let total = s.kinds.reduce(0) { $0 + $1.count }
                     VStack(alignment: .leading, spacing: 12) {
@@ -44,6 +55,7 @@ struct LibraryScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .navigationDestination(for: CalendarRoute.self) { _ in CalendarScreen(core: core) }
         .task(id: library.taskId) { library.start() }
     }
 

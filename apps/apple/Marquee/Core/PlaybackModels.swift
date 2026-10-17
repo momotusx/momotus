@@ -95,6 +95,45 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let next: NextEpisode?
     /// Pass as `bingeGroup` when opening Versions for the next episode.
     let bingeGroup: String?
+    /// Skip segments of the playing version, after `duration` (optional for older cores).
+    let segments: [Segment]?
+    /// When to offer Up Next (the credits start); nil keeps the app's own timing.
+    let nextAtMs: Int64?
+}
+
+extension PlaybackSnapshot {
+    /// Up Next shows from the release-matched credits start when the core
+    /// knows it, else in the last 20 s; at once after Skip credits, and at the end.
+    func offersNext(positionMs: Int64, durationMs: Int64, ended: Bool, skippedAt: Int64?) -> Bool {
+        guard next != nil, durationMs > 60_000 else { return false }
+        if ended { return true }
+        if let skippedAt, positionMs >= skippedAt { return true }
+        if let nextAtMs { return positionMs >= nextAtMs }
+        return durationMs - positionMs <= 20_000
+    }
+
+    /// The segment under the playhead.
+    func segment(at positionMs: Int64) -> Segment? {
+        segments?.first { positionMs >= $0.startMs && positionMs < $0.endMs }
+    }
+}
+
+/// A stretch a Skip button jumps over, active on `[startMs, endMs)`.
+struct Segment: Decodable, Hashable, Sendable {
+    /// "intro", "recap", "credits" or "preview".
+    let kind: String
+    let startMs: Int64
+    let endMs: Int64
+    /// The database it came from, for attribution.
+    let source: String
+
+    /// "Skip intro", "Skip recap", "Skip credits", "Skip preview".
+    var label: String { "Skip \(kind)" }
+
+    /// Credits that run to the end of the file lead into Up Next, not a seek.
+    func endsFile(durationMs: Int64) -> Bool {
+        kind == "credits" && durationMs > 0 && endMs >= durationMs - 1000
+    }
 }
 
 struct Attempt: Decodable, Hashable, Sendable {

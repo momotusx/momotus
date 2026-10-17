@@ -237,7 +237,8 @@ struct ProgressLine: View {
     }
 }
 
-/// One-line explanation for an empty or failed state, with an optional fix.
+/// A short explanation for an empty or failed state, with an optional fix.
+/// It wraps rather than cut a reason off.
 struct StateLine: View {
     let symbol: String
     let text: String
@@ -248,7 +249,7 @@ struct StateLine: View {
             Label(text, systemImage: symbol)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             if let action {
                 Button(action.title, action: action.run).buttonStyle(PillButtonStyle())
             }

@@ -66,6 +66,13 @@ enum VersionWords {
         .joined(separator: ", ")
     }
 
+    /// Why there is no pick once every addon has answered.
+    static func none(_ snapshot: VersionsSnapshot) -> String {
+        snapshot.hidden.count > 0
+            ? "No version plays here: \(hidden(snapshot.hidden))"
+            : "No version found: your addons have no source for this"
+    }
+
     /// The line under Play: "1080p  HDR10  2.4 GB  Ready on Real-Debrid".
     static func line(_ row: VersionRow) -> String {
         ([row.quality == "Unknown" ? "Quality unknown" : row.quality] + row.features + [size(row.sizeBytes)].compactMap { $0 })

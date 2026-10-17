@@ -37,6 +37,16 @@ struct PlayerScreen: View {
                 PlayerControls(model: model, versions: model.versions, back: close)
                     .transition(.opacity)
             }
+            if let segment = model.segment, model.playback?.phase != "failed" {
+                // Netflix places it bottom right on the controls' top line, and it
+                // stays there whether or not the controls show.
+                SkipButton(segment: segment, showSource: controls) { model.skip(segment) }
+                    .id(segment)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, Theme.Space.m)
+                    .padding(.bottom, 212)
+                    .transition(.opacity)
+            }
             if model.showNext || model.nextFailure != nil {
                 UpNextCard(model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -47,6 +57,7 @@ struct PlayerScreen: View {
             }
         }
         .animation(Theme.Motion.panel, value: model.showNext)
+        .animation(Theme.Motion.panel, value: model.segment)
         .contentShape(Rectangle())
         .onTapGesture { touched(toggle: true) }
         #if !os(tvOS)
@@ -102,6 +113,31 @@ struct PlayerScreen: View {
                 withAnimation(Theme.Motion.panel) { controls = false }
             }
         }
+    }
+}
+
+/// "Skip intro" and the like. It takes focus when it appears, so a remote can
+/// press it without opening the controls; its data source shows on focus or
+/// with the controls.
+private struct SkipButton: View {
+    let segment: Segment
+    let showSource: Bool
+    let skip: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 10) {
+            Button(action: skip) { Label(segment.label, systemImage: "forward.end.fill") }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .focused($focused)
+            Text("Skip data: \(segment.source)")
+                .font(.text(Theme.type.caption, relativeTo: .caption))
+                .foregroundStyle(.white.opacity(0.85))
+                .shadow(color: .black.opacity(0.7), radius: 6)
+                .opacity(focused || showSource ? 1 : 0)
+                .accessibilityHidden(!(focused || showSource))
+        }
+        .onAppear { focused = true }
     }
 }
 

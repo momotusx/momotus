@@ -40,6 +40,12 @@ struct SettingsScreen: View {
                 }
                 .buttonStyle(.plain)
                 NavigationLink {
+                    HomeRowsScreen(core: core)
+                } label: {
+                    SettingsRow(symbol: "rectangle.grid.1x2", title: "Home rows", detail: "Which catalogs Home shows, and in what order.")
+                }
+                .buttonStyle(.plain)
+                NavigationLink {
                     OnboardingScreen(core: core)
                 } label: {
                     SettingsRow(symbol: "checklist", title: "Setup check", detail: "Network, display, catalogs, sources and subtitles at a glance.")

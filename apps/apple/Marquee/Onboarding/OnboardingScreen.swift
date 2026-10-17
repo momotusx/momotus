@@ -52,6 +52,10 @@ struct OnboardingScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        #if os(iOS) || os(tvOS)
+        // A full-screen flow: the floating tab bar would cover the addon list.
+        .toolbar(.hidden, for: .tabBar)
+        #endif
         .task(id: addons.taskId) { addons.start() }
         .task { await pingLoop() }
         .task { await watchNetwork() }
@@ -129,12 +133,15 @@ struct OnboardingScreen: View {
                             .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
                             .foregroundStyle(Theme.Palette.muted)
                             .frame(width: 84, alignment: .leading)
-                        StatusDot(tone: check.tone, text: check.text)
-                        Spacer(minLength: 0)
-                        if let fix = check.fix {
-                            Button(fix.label, action: fix.run)
-                                .buttonStyle(PillButtonStyle())
+                        // The fix sits under its status, so neither squeezes the other.
+                        VStack(alignment: .leading, spacing: 8) {
+                            StatusDot(tone: check.tone, text: check.text)
+                            if let fix = check.fix {
+                                Button(fix.label, action: fix.run)
+                                    .buttonStyle(PillButtonStyle())
+                            }
                         }
+                        Spacer(minLength: 0)
                     }
                 }
             }

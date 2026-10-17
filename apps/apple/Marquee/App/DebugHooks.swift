@@ -18,7 +18,7 @@ enum DebugHooks {
     /// `-MQAutoPlay YES` presses Play on the title page once a version is picked.
     static var autoPlay: Bool { UserDefaults.standard.bool(forKey: "MQAutoPlay") }
 
-    /// `-MQSeekTo 575` seeks the first playback of the process there, once.
+    /// `-MQSeekTo 575` starts the first playback of the process there instead of its resume point, once.
     @MainActor static func takeSeek() -> Double? {
         guard !seekTaken, UserDefaults.standard.object(forKey: "MQSeekTo") != nil else { return nil }
         seekTaken = true

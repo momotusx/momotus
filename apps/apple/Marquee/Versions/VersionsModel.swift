@@ -62,9 +62,27 @@ final class VersionsModel {
     }
 
     /// What the player needs to start `key` (the recommended pick by default).
-    func play(_ key: String? = nil) -> PlayRoute? {
+    func play(_ key: String? = nil, tapped: ContinuousClock.Instant = .now) -> PlayRoute? {
         guard let sub, let key = key ?? snapshot?.recommended?.key else { return nil }
-        return PlayRoute(versionsSub: sub, key: key, target: target, tapped: .now)
+        return PlayRoute(versionsSub: sub, key: key, target: target, tapped: tapped)
+    }
+
+    /// The pick once it settles, as the web waits for it: every addon has
+    /// answered, or 3 s have passed since the first pick. Nil when there is
+    /// none by then or within `limit`.
+    func settledPick(tapped: ContinuousClock.Instant = .now, limit: Duration = .seconds(10)) async -> PlayRoute? {
+        start()
+        let deadline = ContinuousClock.now + limit
+        var firstPick: ContinuousClock.Instant?
+        while ContinuousClock.now < deadline, !Task.isCancelled, snapshot?.done != true {
+            if snapshot?.recommended != nil {
+                let first = firstPick ?? .now
+                firstPick = first
+                if ContinuousClock.now - first >= .seconds(3) { break }
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return play(tapped: tapped)
     }
 }
 
