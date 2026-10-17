@@ -69,7 +69,7 @@ private fun ButtonShell(
                 .background(background)
                 .then(
                     if (kind == ButtonKind.Secondary) {
-                        Modifier.border(2.dp, colors.text.copy(alpha = 0.22f), shape)
+                        Modifier.border(2.dp, colors.control, shape)
                     } else {
                         Modifier
                     },
@@ -142,7 +142,9 @@ fun Chip(
                 .clip(shape)
                 // Opaque when not selected, so the focus halo of a neighbour does not show through.
                 .background(if (selected) colors.raised else colors.bg)
-                .border(2.dp, if (selected) colors.text.copy(alpha = 0.5f) else colors.line, shape)
+                // Selected is the raised fill and the heavier label; the ring is for focus alone. The edge is
+                // the control token (3:1 against the page), so an unselected pill does not vanish.
+                .border(2.dp, colors.control, shape)
                 .padding(horizontal = if (tv) 24.dp else 14.dp),
             contentAlignment = Alignment.Center,
         ) {

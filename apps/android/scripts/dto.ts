@@ -27,10 +27,14 @@ const LONG = new Set([
   "clockGapMs",
   "rotationWaitMs",
   "expiresMs",
+  "startMs",
+  "endMs",
+  "nextAtMs",
 ]);
 const FLOAT = new Set(["progress"]);
 const INT = new Set([
   "epoch",
+  "pending",
   "pushed",
   "stale",
   "refused",

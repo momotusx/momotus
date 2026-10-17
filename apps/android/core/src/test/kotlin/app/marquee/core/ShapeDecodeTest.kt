@@ -13,6 +13,7 @@ import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.RowState
+import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SyncReport
 import app.marquee.core.model.Tuple2
 import app.marquee.core.model.VersionStatus
@@ -84,12 +85,17 @@ class ShapeDecodeTest {
                     "subtitles":[{"url":"https://s/x.srt","lang":"eng","label":null,"source":"OpenSubtitles","forced":false,"hearingImpaired":true}],
                     "subtitlesPending":true,
                     "next":{"videoId":"tt1:1:2","title":"Two","season":1,"episode":2,"thumbnail":null},
-                    "bingeGroup":"torrentio|4k"}""",
+                    "bingeGroup":"torrentio|4k",
+                    "segments":[{"kind":"intro","startMs":30000,"endMs":75000,"source":"TheIntroDB"},
+                                {"kind":"credits","startMs":2400000,"endMs":2520000,"source":"TheIntroDB"}],
+                    "nextAtMs":2400000}""",
             )
         assertEquals(PlaybackPhase.Ready, snapshot.phase)
         assertEquals(5_000_000_000L, snapshot.sizeBytes)
         assertEquals("OpenSubtitles", snapshot.subtitles.single().source)
         assertEquals(2, snapshot.next?.episode)
+        assertEquals(SegmentKind.Credits, snapshot.segments[1].kind)
+        assertEquals(2_400_000L, snapshot.nextAtMs)
     }
 
     @Test

@@ -44,6 +44,46 @@ enum class Blocked {
 }
 
 @Serializable
+data class CalendarDay(
+    val date: String,
+    val items: List<CalendarItem>,
+)
+
+@Serializable
+data class CalendarItem(
+    val itemId: String,
+    /** The meta's own video id: the item's stable key. */
+    val videoId: String,
+    val name: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val title: String,
+    val date: String,
+    val poster: String? = null,
+    val still: String? = null,
+    val watched: Boolean,
+)
+
+@Serializable
+data class CalendarSeries(
+    val itemId: String,
+    val name: String,
+    val reason: String? = null,
+)
+
+@Serializable
+data class CalendarSnapshot(
+    val today: String,
+    val days: List<CalendarDay>,
+    /** Series whose details are still loading. */
+    val pending: Int,
+    /** Series whose details could not be fetched (`reason` set). */
+    val failed: List<CalendarSeries>,
+    /** Series whose details have no dated episode. */
+    val noSchedule: List<CalendarSeries>,
+)
+
+@Serializable
 data class CatalogChoice(
     /** `addon id|type|catalog id`, the value `select` takes. */
     val id: String,
@@ -147,6 +187,15 @@ enum class HideReason {
     @SerialName("unsupportedSource") UnsupportedSource,
 }
 
+/** One catalog as the "Customize Home" screen lists it. */
+@Serializable
+data class HomeCatalog(
+    val rowId: String,
+    val title: String,
+    val source: String,
+    val hidden: Boolean,
+)
+
 @Serializable
 data class HomeHeader(
     val hero: Hero? = null,
@@ -159,6 +208,13 @@ data class HomeRow(
     val source: String,
     val state: RowState,
     val tiles: List<Tile>,
+)
+
+/** Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`). Rows in `order` come first in that order, then the rest in addon order. Ids of catalogs that are gone are kept, so a reinstalled addon gets its place back. */
+@Serializable
+data class HomeRows(
+    val hidden: List<String>,
+    val order: List<String>,
 )
 
 @Serializable
@@ -355,6 +411,10 @@ data class PlaybackSnapshot(
     val next: NextEpisode? = null,
     /** The playing stream's binge group; pass it as `bingeGroup` when opening Versions for the next episode so the same release line is picked. */
     val bingeGroup: String? = null,
+    /** Skip segments of the playing version, once its duration is reported. */
+    val segments: List<Segment>,
+    /** When to offer the Up Next card: the credits start from a source that matched the release; null keeps the app's own timing. */
+    val nextAtMs: Long? = null,
 )
 
 @Serializable
@@ -371,6 +431,8 @@ data class Prefs(
     val subtitleLanguages: List<String>,
     /** Start the next episode when one ends. */
     val autoplayNext: Boolean,
+    /** Which addon catalogs Home shows, and in what order. */
+    val homeRows: HomeRows,
 )
 
 @Serializable
@@ -424,6 +486,24 @@ data class SearchSnapshot(
     /** Recent searches, newest first, for the empty state. */
     val recent: List<String>,
 )
+
+/** A stretch of the file a Skip button can jump over: `[startMs, endMs)`. */
+@Serializable
+data class Segment(
+    val kind: SegmentKind,
+    val startMs: Long,
+    val endMs: Long,
+    /** Display name of the database it came from, for attribution. */
+    val source: String,
+)
+
+@Serializable
+enum class SegmentKind {
+    @SerialName("intro") Intro,
+    @SerialName("recap") Recap,
+    @SerialName("credits") Credits,
+    @SerialName("preview") Preview,
+}
 
 /** The user's profile preferences for picking streams. */
 @Serializable

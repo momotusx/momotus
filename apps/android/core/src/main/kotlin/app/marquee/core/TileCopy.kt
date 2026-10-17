@@ -1,7 +1,6 @@
 package app.marquee.core
 
 import app.marquee.core.model.Tile
-import kotlin.math.roundToInt
 
 /** The words under a tile and in a hero, the same as the web family's `lib/words.ts`. */
 object TileCopy {
@@ -15,22 +14,13 @@ object TileCopy {
     ): String = if (rowId == CONTINUE_ROW) "From your library" else source
 
     /**
-     * Continue Watching says where you are: "Next: S1 E2" for Up Next, else the episode (or
-     * "Movie") and how much is watched. Null for a tile with no progress.
+     * The line under a tile. Only Continue Watching has one, and the core writes it ("S2:E3 · 36 min
+     * left", "36 min left", "Next: S1:E2" in `releaseInfo`): it is shown as it is. Other rows have none.
      */
-    fun caption(tile: Tile): String? {
-        tile.releaseInfo?.takeIf { it.startsWith("Next:") }?.let { return it }
-        val progress = tile.progress ?: return null
-        val ref = tile.videoId?.let(Format::parseVideo)
-        val where =
-            when {
-                ref != null -> Format.episodeLabel(ref.season, ref.episode)
-                tile.kind == "movie" -> "Movie"
-                else -> null
-            }
-        val watched = "${(progress * 100).roundToInt()}% watched"
-        return if (where != null) "$where, $watched" else watched
-    }
+    fun caption(
+        rowId: String,
+        tile: Tile,
+    ): String? = tile.releaseInfo.takeIf { rowId == CONTINUE_ROW }
 
     fun kind(kind: String): String =
         when (kind) {

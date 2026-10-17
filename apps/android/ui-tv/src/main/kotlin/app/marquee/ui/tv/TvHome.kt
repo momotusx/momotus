@@ -331,7 +331,7 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(it) != null } }
+    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(row.rowId, it) != null } }
     LazyRow(
         state = state.rowState(row.rowId),
         modifier =
@@ -370,7 +370,7 @@ private fun TvTile(
         modifier = Modifier.padding(top = Marquee.tiles.pad),
         shape = shape,
         progress = tile.progress,
-        caption = TileCopy.caption(tile),
+        caption = TileCopy.caption(rowId, tile),
         focusRequester = requester,
         onFocusChange = { if (it) state.focus.arrived(rowId, key) else state.focus.lost(key) },
         upNext = if (wide) UpNextArt(tile.logo) else null,

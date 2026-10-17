@@ -283,7 +283,7 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(it) != null } }
+    val captioned = remember(row.tiles) { row.tiles.any { TileCopy.caption(row.rowId, it) != null } }
     val wide = row.rowId == TileCopy.CONTINUE_ROW
     LazyRow(
         modifier = Modifier.height(laneHeight(shape, captioned)),
@@ -298,7 +298,7 @@ private fun TileLane(
                 modifier = Modifier.padding(top = metrics.pad),
                 shape = shape,
                 progress = tile.progress,
-                caption = TileCopy.caption(tile),
+                caption = TileCopy.caption(row.rowId, tile),
                 upNext = if (wide) UpNextArt(tile.logo) else null,
             )
         }

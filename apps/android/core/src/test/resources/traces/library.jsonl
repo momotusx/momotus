@@ -1,9 +1,9 @@
 {"t":0,"dir":"out","msg":{"id":30,"op":"subscribe","view":"library","params":{}}}
-{"t":0,"dir":"in","msg":{"id":30,"ok":true,"result":{"snapshot":{"items":[],"kind":null,"kinds":[],"sort":"recent"},"sub":9}}}
+{"t":1,"dir":"in","msg":{"id":30,"ok":true,"result":{"snapshot":{"items":[],"kind":null,"kinds":[],"sort":"recent"},"sub":9}}}
 {"t":301,"dir":"out","msg":{"id":31,"op":"command","sub":9,"command":{"type":"setFilter","kind":"movie"}}}
-{"t":301,"dir":"in","msg":{"id":31,"ok":true,"result":{}}}
-{"t":301,"dir":"out","msg":{"id":32,"op":"command","sub":9,"command":{"type":"setSort","sort":"name"}}}
-{"t":302,"dir":"in","msg":{"id":32,"ok":true,"result":{}}}
-{"t":319,"dir":"in","msg":{"sub":9,"updates":[{"items":[],"kind":"movie","kinds":[],"sort":"recent"},{"items":[],"kind":"movie","kinds":[],"sort":"name"}]}}
-{"t":604,"dir":"out","msg":{"id":33,"op":"unsubscribe","sub":9}}
-{"t":606,"dir":"in","msg":{"id":33,"ok":true,"result":{}}}
+{"t":302,"dir":"in","msg":{"id":31,"ok":true,"result":{}}}
+{"t":302,"dir":"out","msg":{"id":32,"op":"command","sub":9,"command":{"type":"setSort","sort":"name"}}}
+{"t":303,"dir":"in","msg":{"id":32,"ok":true,"result":{}}}
+{"t":320,"dir":"in","msg":{"sub":9,"updates":[{"items":[],"kind":"movie","kinds":[],"sort":"recent"},{"items":[],"kind":"movie","kinds":[],"sort":"name"}]}}
+{"t":603,"dir":"out","msg":{"id":33,"op":"unsubscribe","sub":9}}
+{"t":603,"dir":"in","msg":{"id":33,"ok":true,"result":{}}}
