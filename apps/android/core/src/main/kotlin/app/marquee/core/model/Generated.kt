@@ -8,6 +8,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonClassDiscriminator
 
 @Serializable
+enum class AccountState {
+    @SerialName("ok") Ok,
+    @SerialName("failing") Failing,
+    @SerialName("reconnect") Reconnect,
+}
+
+@Serializable
 data class AddonInfo(
     /** The key for commands. May hold API keys: never show or log it. */
     val url: String,
@@ -19,14 +26,14 @@ data class AddonInfo(
     val version: String,
     val enabled: Boolean,
     /** "catalog", "meta", "stream", "subtitles", ... */
-    val provides: List<String>,
-    val types: List<String>,
+    val provides: List<String> = emptyList(),
+    val types: List<String> = emptyList(),
     val configurable: Boolean,
 )
 
 @Serializable
 data class AddonsSnapshot(
-    val addons: List<AddonInfo>,
+    val addons: List<AddonInfo> = emptyList(),
 )
 
 @Serializable
@@ -46,7 +53,7 @@ enum class Blocked {
 @Serializable
 data class CalendarDay(
     val date: String,
-    val items: List<CalendarItem>,
+    val items: List<CalendarItem> = emptyList(),
 )
 
 @Serializable
@@ -74,13 +81,13 @@ data class CalendarSeries(
 @Serializable
 data class CalendarSnapshot(
     val today: String,
-    val days: List<CalendarDay>,
+    val days: List<CalendarDay> = emptyList(),
     /** Series whose details are still loading. */
     val pending: Int,
     /** Series whose details could not be fetched (`reason` set). */
-    val failed: List<CalendarSeries>,
+    val failed: List<CalendarSeries> = emptyList(),
     /** Series whose details have no dated episode. */
-    val noSchedule: List<CalendarSeries>,
+    val noSchedule: List<CalendarSeries> = emptyList(),
 )
 
 @Serializable
@@ -91,33 +98,135 @@ data class CatalogChoice(
     val source: String,
 )
 
+@Serializable
+data class DebridAccount(
+    val service: String,
+    /** What `disconnectDebrid` names. */
+    val generation: String,
+    val state: AccountState,
+)
+
+@Serializable
+@JsonClassDiscriminator("kind")
+sealed interface DebridCredential {
+    @Serializable
+    @SerialName("key")
+    data class Key(
+        val key: String,
+    ) : DebridCredential {
+        // Holds keys or a token: never printed.
+        override fun toString() = "Key(key=hidden)"
+    }
+
+    @Serializable
+    @SerialName("oauth")
+    data class Oauth(
+        val clientId: String,
+        val clientSecret: String,
+        val refreshToken: String,
+        val accessToken: String,
+        /** Wall clock when the access token was issued, unix milliseconds. */
+        val issuedAtMs: Long,
+        val expiresInMs: Long,
+    ) : DebridCredential {
+        // Holds keys or a token: never printed.
+        override fun toString() = "Oauth(clientId=hidden, clientSecret=hidden, refreshToken=hidden, accessToken=hidden, issuedAtMs=$issuedAtMs, expiresInMs=$expiresInMs)"
+    }
+}
+
+@Serializable
+@JsonClassDiscriminator("phase")
+sealed interface DebridLoginSnapshot {
+    @Serializable
+    @SerialName("starting")
+    data object Starting : DebridLoginSnapshot
+
+    @Serializable
+    @SerialName("code")
+    data class Code(
+        val userCode: String,
+        val url: String,
+        val qr: String,
+        val expiresMs: Long,
+    ) : DebridLoginSnapshot
+
+    @Serializable
+    @SerialName("done")
+    data object Done : DebridLoginSnapshot
+
+    @Serializable
+    @SerialName("expired")
+    data object Expired : DebridLoginSnapshot
+
+    @Serializable
+    @SerialName("denied")
+    data object Denied : DebridLoginSnapshot
+
+    @Serializable
+    @SerialName("used")
+    data object Used : DebridLoginSnapshot
+
+    @Serializable
+    @SerialName("failed")
+    data class Failed(
+        val reason: String,
+    ) : DebridLoginSnapshot
+}
+
+/** One account connection, as the app's keystore stores it. */
+@Serializable
+data class DebridRecord(
+    /** "realdebrid", "alldebrid", "torbox" or "premiumize". */
+    val service: String,
+    /** 32 hex characters, new for every connection. A string, so JavaScript keeps every bit. */
+    val generation: String,
+    /** 1 for a new connection, one more for each token rotation. */
+    val revision: Long,
+    val credential: DebridCredential,
+)
+
+@Serializable
+data class DebridSnapshot(
+    /** Connected services, the default store first. */
+    val accounts: List<DebridAccount> = emptyList(),
+    /** Per service, the newest record the app has not acknowledged: store it, then `ackDebrid`. */
+    val pending: List<DebridRecord> = emptyList(),
+)
+
+/** Written by the app before it asks to disconnect: a record with this generation is never restored. */
+@Serializable
+data class DebridTombstone(
+    val service: String,
+    val generation: String,
+)
+
 /** The account's members, after catching up. */
 @Serializable
 data class Devices(
-    val members: List<MemberInfo>,
+    val members: List<MemberInfo> = emptyList(),
     val fingerprint: String,
     val epoch: Int,
     val rotationPending: Boolean,
     val record: SyncRecord? = null,
 ) {
-    // The keystore record holds keys and a token: never printed.
+    // Holds keys or a token: never printed.
     override fun toString() = "Devices(members=$members, fingerprint=$fingerprint, epoch=$epoch, rotationPending=$rotationPending, record=${record?.let { "hidden" }})"
 }
 
 @Serializable
 data class DiscoverSnapshot(
     /** Types with at least one catalog: ("movie", "Movies"). */
-    val kinds: List<Tuple2<String, String>>,
+    val kinds: List<Tuple2<String, String>> = emptyList(),
     val kind: String? = null,
     /** Catalogs of the selected type, in addon order. */
-    val catalogs: List<CatalogChoice>,
+    val catalogs: List<CatalogChoice> = emptyList(),
     val catalog: String? = null,
     /** Genre options of the selected catalog. */
-    val genres: List<String>,
+    val genres: List<String> = emptyList(),
     val genre: String? = null,
     /** The catalog only answers with a genre picked. */
     val genreRequired: Boolean,
-    val items: List<Tile>,
+    val items: List<Tile> = emptyList(),
     val state: DiscoverState,
 )
 
@@ -169,12 +278,16 @@ data class Hero(
     val tile: Tile,
     /** One line telling the user why this title is here. */
     val reason: String,
+    val description: String? = null,
+    /** At most three, in the addon's order. */
+    val genres: List<String> = emptyList(),
+    val runtime: String? = null,
 )
 
 @Serializable
 data class HiddenSummary(
     val count: Int,
-    val byReason: List<Tuple2<HideReason, Int>>,
+    val byReason: List<Tuple2<HideReason, Int>> = emptyList(),
 )
 
 @Serializable
@@ -207,20 +320,20 @@ data class HomeRow(
     val title: String,
     val source: String,
     val state: RowState,
-    val tiles: List<Tile>,
+    val tiles: List<Tile> = emptyList(),
 )
 
 /** Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`). Rows in `order` come first in that order, then the rest in addon order. Ids of catalogs that are gone are kept, so a reinstalled addon gets its place back. */
 @Serializable
 data class HomeRows(
-    val hidden: List<String>,
-    val order: List<String>,
+    val hidden: List<String> = emptyList(),
+    val order: List<String> = emptyList(),
 )
 
 @Serializable
 data class HomeSnapshot(
     val header: HomeHeader,
-    val rows: List<HomeRow>,
+    val rows: List<HomeRow> = emptyList(),
 )
 
 @Serializable
@@ -235,7 +348,7 @@ sealed interface HomeUpdate {
     @Serializable
     @SerialName("rows")
     data class Rows(
-        val diffs: List<ListDiff<HomeRow>>,
+        val diffs: List<ListDiff<HomeRow>> = emptyList(),
     ) : HomeUpdate
 }
 
@@ -281,7 +394,7 @@ sealed interface ImportSnapshot {
 data class ImportSummary(
     val addonsImported: Int,
     /** "Name: reason" for each addon that could not be imported. */
-    val addonsSkipped: List<String>,
+    val addonsSkipped: List<String> = emptyList(),
     val titles: Int,
     val inProgress: Int,
     val watched: Int,
@@ -303,8 +416,8 @@ data class LibrarySnapshot(
     val kind: String? = null,
     val sort: LibrarySort,
     /** Types present in the library, for the filter chips. */
-    val kinds: List<KindCount>,
-    val items: List<Tile>,
+    val kinds: List<KindCount> = emptyList(),
+    val items: List<Tile> = emptyList(),
 )
 
 @Serializable
@@ -317,8 +430,8 @@ enum class LibrarySort {
 /** What reporting `lost` drops by default: the devices it vouched for (transitively) for the user to untick, and the kits that always go. */
 @Serializable
 data class LostPreview(
-    val devices: List<String>,
-    val kits: List<String>,
+    val devices: List<String> = emptyList(),
+    val kits: List<String> = emptyList(),
 )
 
 /** A member of the account as the devices screen shows it. */
@@ -368,7 +481,7 @@ sealed interface PairingSnapshot {
     data class Joined(
         val record: SyncRecord,
     ) : PairingSnapshot {
-        // The keystore record holds keys and a token: never printed.
+        // Holds keys or a token: never printed.
         override fun toString() = "Joined(record=hidden)"
     }
 
@@ -402,9 +515,9 @@ data class PlaybackSnapshot(
     /** Where to start, from saved progress. */
     val resumeMs: Long? = null,
     /** Sources that failed, in order, each with a plain reason. */
-    val attempts: List<Attempt>,
+    val attempts: List<Attempt> = emptyList(),
     /** External subtitles: the stream's own, then each subtitles addon's, as they arrive. */
-    val subtitles: List<SubtitleTrack>,
+    val subtitles: List<SubtitleTrack> = emptyList(),
     /** Subtitles addons are still being asked. */
     val subtitlesPending: Boolean,
     /** The next released episode, for an Up Next card. */
@@ -412,7 +525,7 @@ data class PlaybackSnapshot(
     /** The playing stream's binge group; pass it as `bingeGroup` when opening Versions for the next episode so the same release line is picked. */
     val bingeGroup: String? = null,
     /** Skip segments of the playing version, once its duration is reported. */
-    val segments: List<Segment>,
+    val segments: List<Segment> = emptyList(),
     /** When to offer the Up Next card: the credits start from a source that matched the release; null keeps the app's own timing. */
     val nextAtMs: Long? = null,
 )
@@ -428,7 +541,7 @@ data class PlayTarget(
 data class Prefs(
     val streams: StreamPrefs,
     /** Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first. Matching tracks are listed first. */
-    val subtitleLanguages: List<String>,
+    val subtitleLanguages: List<String> = emptyList(),
     /** Start the next episode when one ends. */
     val autoplayNext: Boolean,
     /** Which addon catalogs Home shows, and in what order. */
@@ -451,7 +564,7 @@ data class ProfileInfo(
 
 @Serializable
 data class ProfilesSnapshot(
-    val profiles: List<ProfileInfo>,
+    val profiles: List<ProfileInfo> = emptyList(),
     /** The session's profile (it may be gone: then the session is locked). */
     val active: String,
     /** The session is locked: only the picker and unlocking work. */
@@ -476,6 +589,14 @@ enum class Reason {
     @SerialName("yourLanguage") YourLanguage,
     @SerialName("smallerFaster") SmallerFaster,
 }
+
+@Serializable
+data class RestoreAnswer(
+    /** Generations not restored because they have a tombstone. */
+    val refused: List<String> = emptyList(),
+    /** Tombstones whose record is gone from the keystore: delete them. */
+    val tombstones: List<DebridTombstone> = emptyList(),
+)
 
 @Serializable
 @JsonClassDiscriminator("state")
@@ -507,9 +628,9 @@ sealed interface RowState {
 data class SearchSnapshot(
     val query: String,
     /** Rows with results, loading or failed; catalogs with no match are left out. */
-    val rows: List<HomeRow>,
+    val rows: List<HomeRow> = emptyList(),
     /** Recent searches, newest first, for the empty state. */
-    val recent: List<String>,
+    val recent: List<String> = emptyList(),
 )
 
 /** A stretch of the file a Skip button can jump over: `[startMs, endMs)`. */
@@ -538,9 +659,9 @@ data class StreamPrefs(
     val maxHeight: Int? = null,
     val maxSizeBytes: Long? = null,
     /** ISO 639-1 audio language preferences, most wanted first. */
-    val languages: List<String>,
+    val languages: List<String> = emptyList(),
     /** Lowercase terms that hide a stream when its name contains them. */
-    val avoid: List<String>,
+    val avoid: List<String> = emptyList(),
 )
 
 @Serializable
@@ -588,7 +709,7 @@ data class SyncReport(
     /** Sync again right away (the record changed, nothing was published). */
     val again: Boolean,
 ) {
-    // The keystore record holds keys and a token: never printed.
+    // Holds keys or a token: never printed.
     override fun toString() = "SyncReport(pushed=$pushed, stale=$stale, refused=$refused, waiting=$waiting, pulled=$pulled, applied=$applied, unreadable=$unreadable, newer=$newer, parked=$parked, oldEpochWrites=$oldEpochWrites, clockGapMs=$clockGapMs, rotationWaitMs=$rotationWaitMs, blocked=$blocked, fingerprint=$fingerprint, record=${record?.let { "hidden" }}, again=$again)"
 }
 
@@ -606,6 +727,8 @@ data class Tile(
     val progress: Float? = null,
     /** Video to resume for Continue Watching tiles. */
     val videoId: String? = null,
+    /** The IMDb rating the addon gave, as written ("8.4"). */
+    val rating: String? = null,
 )
 
 @Serializable
@@ -619,13 +742,13 @@ data class TitleDetails(
     val logo: String? = null,
     val releaseInfo: String? = null,
     val runtime: String? = null,
-    val genres: List<String>,
-    val cast: List<String>,
-    val directors: List<String>,
+    val genres: List<String> = emptyList(),
+    val cast: List<String> = emptyList(),
+    val directors: List<String> = emptyList(),
     val rating: String? = null,
     val source: String,
     /** Trailers the metadata names (YouTube), first is the main one. */
-    val trailers: List<Trailer>,
+    val trailers: List<Trailer> = emptyList(),
 )
 
 @Serializable
@@ -633,7 +756,7 @@ data class TitleHeader(
     val state: TitleState,
     val details: TitleDetails? = null,
     val inLibrary: Boolean,
-    val seasons: List<Int>,
+    val seasons: List<Int> = emptyList(),
     val selectedSeason: Int? = null,
     /** Episode (or the movie itself) the primary button resumes or starts. */
     val playTarget: PlayTarget? = null,
@@ -644,7 +767,7 @@ data class TitleHeader(
 @Serializable
 data class TitleSnapshot(
     val header: TitleHeader,
-    val episodes: List<Episode>,
+    val episodes: List<Episode> = emptyList(),
 )
 
 @Serializable
@@ -677,7 +800,7 @@ sealed interface TitleUpdate {
     @Serializable
     @SerialName("episodes")
     data class Episodes(
-        val diffs: List<ListDiff<Episode>>,
+        val diffs: List<ListDiff<Episode>> = emptyList(),
     ) : TitleUpdate
 }
 
@@ -692,17 +815,17 @@ data class Trailer(
 @Serializable
 data class VersionRow(
     val key: String,
-    /** "4K", "1080p", "720p", "SD" or "Unknown". */
+    /** "4K", "1440p", "1080p", "720p" or "SD"; when the release names no resolution, its source ("Blu-ray", "WEB-DL") or "Quality not stated". */
     val quality: String,
     /** Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux". */
-    val features: List<String>,
+    val features: List<String> = emptyList(),
     val sizeBytes: Long? = null,
     val status: VersionStatus,
     /** Service ("Real-Debrid") or addon name. */
     val via: String,
     val releaseName: String,
-    val languages: List<String>,
-    val reasons: List<Reason>,
+    val languages: List<String> = emptyList(),
+    val reasons: List<Reason> = emptyList(),
     val group: Group,
     val failoverCount: Int,
 )
@@ -710,11 +833,11 @@ data class VersionRow(
 @Serializable
 data class VersionsSnapshot(
     val recommended: VersionRow? = null,
-    val rows: List<VersionRow>,
+    val rows: List<VersionRow> = emptyList(),
     val hidden: HiddenSummary,
-    val pendingAddons: List<String>,
-    val slowAddons: List<String>,
-    val failedAddons: List<String>,
+    val pendingAddons: List<String> = emptyList(),
+    val slowAddons: List<String> = emptyList(),
+    val failedAddons: List<String> = emptyList(),
     val done: Boolean,
     val frozen: Boolean,
 )

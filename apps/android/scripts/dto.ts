@@ -21,6 +21,9 @@ const handWritten = new Set(["ListDiff"]);
 
 const LONG = new Set([
   "resumeMs",
+  "issuedAtMs",
+  "expiresInMs",
+  "revision",
   "sizeBytes",
   "maxSizeBytes",
   "addedMs",
@@ -204,11 +207,15 @@ function params(fields: Field[], indent: string): string {
   return fields
     .map((f) => {
       const type = kotlinType(f.type);
-      const nullable = f.type.k === "nullable";
-      return `${kdoc(f.doc, indent)}${indent}val ${f.name}: ${type}${nullable ? " = null" : ""},`;
+      // A field the core leaves out (an older recording, a newer field) is null or empty.
+      const fallback = f.type.k === "nullable" ? " = null" : f.type.k === "array" ? " = emptyList()" : "";
+      return `${kdoc(f.doc, indent)}${indent}val ${f.name}: ${type}${fallback},`;
     })
     .join("\n");
 }
+
+/** Tagged unions whose string fields are keys, tokens or secrets: printed as hidden. */
+const SECRET_UNIONS = new Set(["DebridCredential"]);
 
 const isRecord = (t: TypeIr): boolean =>
   (t.k === "ref" && t.name === "SyncRecord") || (t.k === "nullable" && isRecord(t.of));
@@ -217,14 +224,15 @@ const isRecord = (t: TypeIr): boolean =>
  * A class that carries the keystore record gets a `toString` that never prints it (it holds keys
  * and a token), whatever logs or crash reports a value ends up in. Other fields print as usual.
  */
-function redactingToString(className: string, fields: Field[], indent: string): string | null {
-  if (!fields.some((f) => isRecord(f.type))) return null;
+function redactingToString(className: string, fields: Field[], indent: string, secret = false): string | null {
+  const hidden = (f: Field) => isRecord(f.type) || (secret && f.type.k === "string");
+  if (!fields.some(hidden)) return null;
   const parts = fields.map((f) => {
-    if (!isRecord(f.type)) return `${f.name}=$${f.name}`;
+    if (!hidden(f)) return `${f.name}=$${f.name}`;
     return f.type.k === "nullable" ? `${f.name}=\${${f.name}?.let { "hidden" }}` : `${f.name}=hidden`;
   });
   return (
-    `${indent}// The keystore record holds keys and a token: never printed.\n` +
+    `${indent}// Holds keys or a token: never printed.\n` +
     `${indent}override fun toString() = "${className}(${parts.join(", ")})"`
   );
 }
@@ -246,7 +254,7 @@ function emit(d: Decl): string {
           if (v.fields.length === 0) {
             return `    @Serializable\n    @SerialName("${v.tag}")\n    data object ${cls} : ${d.name}`;
           }
-          const body = redactingToString(cls, v.fields, "        ");
+          const body = redactingToString(cls, v.fields, "        ", SECRET_UNIONS.has(d.name));
           return `    @Serializable\n    @SerialName("${v.tag}")\n    data class ${cls}(\n${params(v.fields, "        ")}\n    ) : ${d.name}${body ? ` {\n${body}\n    }` : ""}`;
         })
         .join("\n\n");
