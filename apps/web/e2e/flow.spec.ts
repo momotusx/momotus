@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
-import { GOT, startIfPaused } from "./core";
-import { BBB_ID } from "./source";
+import { Client, GOT, startIfPaused, watch } from "./core";
+import { BBB_ID, SAMPLE_EPISODE } from "./source";
 
 test.use({ viewport: { width: 1920, height: 1080 } });
 
@@ -204,6 +204,186 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   await page.keyboard.press("Enter");
   await expect(watched).toHaveAttribute("aria-pressed", "false");
   await expect(watched).toHaveText("Mark watched");
+});
+
+test("an episode row plays that episode, not the resume target", async ({ page }) => {
+  await page.goto(`/title/series/${GOT.id}?form=tv`);
+  // The resume target is S2:E3 (seeded); pick S1:E5 instead, by remote.
+  await expect.poll(() => focused(page)).toBe("title:play");
+  await page.locator('[data-f="season:1"]').focus();
+  await page.keyboard.press("Enter");
+  const row = page.locator(`[data-f="ep:${SAMPLE_EPISODE}"]`);
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  const toTitle = async () => {
+    for (let i = 0; i < 3 && !/\/title\/series\/tt0944947(\?|$)/.test(page.url()); i++) await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(/\/title\/series\/tt0944947(\?|$)/);
+  };
+  try {
+    // Primary action: play this episode with the core's pick for it (the
+    // Sample Source's file for S1:E5), not the S2:E3 resume target.
+    await row.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/play\/series\/tt0944947\/tt0944947(:|%3A)1(:|%3A)5/);
+    await expect(page.locator(".ptitle p")).toContainText("S1:E5 The Wolf and the Lion");
+    await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await startIfPaused(page);
+    const time = () => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
+    await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(3);
+    await toTitle();
+    // Back lands on the season being browsed, and the saved progress is S1:E5's.
+    await expect(page.locator('[data-f="season:1"]')).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("li.ep.now", { has: row })).toHaveCount(1, { timeout: 15_000 });
+
+    // Secondary action: this episode's Versions, to choose another release.
+    await row.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => focused(page)).toBe(`epv:${SAMPLE_EPISODE}`);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/versions\/tt0944947(:|%3A)1(:|%3A)5/);
+    await expect(page.locator("h1")).toContainText("S1:E5 The Wolf and the Lion");
+    await expect.poll(() => focused(page), { timeout: 30_000 }).toBe("versions:play");
+    await toTitle();
+
+    // Secondary action: Mark watched, both ways, by remote.
+    await row.focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(() => focused(page)).toBe(`mark:${SAMPLE_EPISODE}`);
+    const mark = page.locator(`[data-f="mark:${SAMPLE_EPISODE}"]`);
+    await page.keyboard.press("Enter");
+    await expect(mark).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Enter");
+    await expect(mark).toHaveAttribute("aria-pressed", "false");
+
+    // Back lands on the season being browsed even when it holds neither the
+    // resume target nor anything watched (season 3 here).
+    await page.locator('[data-f="season:3"]').focus();
+    await page.keyboard.press("Enter");
+    const s3 = page.locator('[data-f="ep:tt0944947:3:1"]');
+    await expect(s3).toBeVisible({ timeout: 30_000 });
+    await s3.focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/versions\/tt0944947(:|%3A)3(:|%3A)1/);
+    await toTitle();
+    await expect(page.locator('[data-f="season:3"]')).toHaveAttribute("aria-selected", "true");
+    await expect(s3).toBeVisible();
+  } finally {
+    // Put the seeded order back: S2:E3 resumes Game of Thrones, BBB leads.
+    const c = new Client();
+    await watch(c, { kind: "series", itemId: GOT.id, videoId: GOT.resume, title: "Game of Thrones", season: 2, episode: 3 }, 21 * 60_000, 57 * 60_000);
+    await watch(c, { kind: "movie", itemId: BBB_ID, videoId: BBB_ID, title: "Big Buck Bunny", via: "Sample Source" }, 150_000, 596_000);
+    c.close();
+  }
+});
+
+test("Home rows: move by remote, Back drops, hide one, Home follows", async ({ page }) => {
+  const titles = () => page.locator(".hrow-text b").allTextContents();
+  const homeRows = async () => {
+    await page.goto("/?form=tv");
+    await expect(page.locator(".row").first()).toHaveAttribute("aria-label", "Continue Watching", { timeout: 30_000 });
+    return (await page.locator(".row").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).filter((t) => t !== "Continue Watching");
+  };
+  try {
+    await page.goto("/home-rows?form=tv");
+    await expect(page.locator(".hrow-main").first()).toBeVisible({ timeout: 30_000 });
+    const before = await titles();
+    expect(before.length).toBeGreaterThan(3);
+    expect((await homeRows()).slice(0, 3)).toEqual(before.slice(0, 3));
+    await page.goto("/home-rows?form=tv");
+    await expect(page.locator(".hrow-main").first()).toBeVisible({ timeout: 30_000 });
+
+    // Select picks the first row up; down twice moves it; select drops it.
+    await expect.poll(() => focused(page)).toMatch(/^hrow:/);
+    const picked = await focused(page);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".hrow.moving")).toHaveCount(1);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(titles).toEqual([before[1], before[2], before[0], ...before.slice(3)]);
+    await expect.poll(() => focused(page)).toBe(picked);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".hrow.moving")).toHaveCount(0);
+
+    // Back drops a picked-up row and stays on the screen.
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("ArrowUp");
+    await expect.poll(titles).toEqual([before[1], before[0], before[2], ...before.slice(3)]);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".hrow.moving")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/home-rows/);
+
+    // Right reaches the row's switch; select hides the row.
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => focused(page)).toBe(`${picked}:shown`);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(`[data-f="${picked}:shown"]`)).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".hrow.off")).toHaveCount(1);
+
+    // Home follows: the hidden row is gone, the order is the new one.
+    const now = await homeRows();
+    expect(now).not.toContain(before[0]);
+    expect(now.slice(0, 2)).toEqual([before[1], before[2]]);
+  } finally {
+    const c = new Client();
+    await c.req("setPrefs", { patch: { homeRows: { order: [], hidden: [] } } });
+    c.close();
+  }
+});
+
+test("Calendar: days in order, today's day first, an episode opens its season", async ({ page }) => {
+  const sent: string[] = [];
+  page.on("websocket", (ws) => ws.on("framesent", (f) => String(f.payload).includes("setToday") && sent.push(String(f.payload))));
+  await page.goto("/calendar?form=tv");
+  await expect(page.locator(".cal-card").first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".cal-head .st.warn")).toHaveCount(0, { timeout: 60_000 });
+
+  const days = await page.locator(".cal-day").evaluateAll((els) => els.map((e) => e.getAttribute("data-day") ?? ""));
+  expect(days.length).toBeGreaterThan(0);
+  expect([...days].sort()).toEqual(days);
+  const today = await page.evaluate(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const first = days.find((d) => d >= today);
+  expect(first).toBeTruthy();
+  // The first day on or after today has focus and sits at the top.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.closest(".cal-day")?.getAttribute("data-day"))).toBe(first);
+  const top = await page.locator(`.cal-day[data-day="${first}"]`).evaluate((el) => el.getBoundingClientRect().top);
+  expect(top).toBeLessThan(400);
+
+  // Every item reads series, episode and title.
+  const card = page.locator(".cal-card:focus");
+  await expect(card.locator(".cal-text b")).not.toHaveText("");
+  await expect(card.locator(".cal-ep .num")).toHaveText(/^S\d+:E\d+$/);
+
+  // Foreground sends the local date again.
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect.poll(() => sent.some((t) => t.includes(`"today":"${today}"`))).toBe(true);
+
+  // Selecting opens the title on that episode's season.
+  const season = await card.evaluate((a) => /season=(\d+)/.exec(a.getAttribute("href") ?? "")?.[1] ?? "");
+  expect(season).not.toBe("");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/title/series/[^?]+\\?season=${season}`));
+  await expect(page.locator(`[data-f="season:${season}"]`)).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
+});
+
+test("Calendar sends the new date at local midnight", async ({ page }) => {
+  const now = new Date();
+  await page.clock.install({ time: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 55) });
+  const sent: string[] = [];
+  page.on("websocket", (ws) => ws.on("framesent", (f) => String(f.payload).includes("setToday") && sent.push(String(f.payload))));
+  await page.goto("/calendar?form=tv");
+  const lede = page.locator(".cal .lede");
+  await expect(page.locator(".cal-day").first()).toBeVisible({ timeout: 60_000 });
+  const was = await lede.textContent();
+  await page.clock.fastForward("00:10");
+  const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const tomorrow = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  await expect.poll(() => sent.some((s) => s.includes(`"today":"${tomorrow}"`))).toBe(true);
+  // The core answers with the new window: the date span moves by a day.
+  await expect(lede).not.toHaveText(was ?? "");
 });
 
 const FORMS = { tv: [1920, 1080, 1], desktop: [1440, 900, 1], phone: [390, 844, 2] } as const;

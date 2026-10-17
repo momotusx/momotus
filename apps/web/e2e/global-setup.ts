@@ -37,10 +37,13 @@ export default async function globalSetup() {
     // Big Buck Bunny watched last, so it leads Continue Watching.
     await watch(c, { kind: "movie", itemId: BBB_ID, videoId: BBB_ID, title: "Big Buck Bunny", via: "Sample Source" }, 150_000, 596_000);
 
-    // Both titles in the library, through the title view as a user would.
+    // Both titles in the library, through the title view as a user would,
+    // plus two series on the air (The Simpsons, South Park) for Calendar.
     for (const [kind, id] of [
       ["series", GOT.id],
       ["movie", BBB_ID],
+      ["series", "tt0096697"],
+      ["series", "tt0121955"],
     ] as const) {
       type Header = { state: { state: string } };
       const title = await c.subscribe<{ header?: Header }>("title", { kind, id });

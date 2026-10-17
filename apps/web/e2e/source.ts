@@ -16,6 +16,9 @@ const BBB_REMOTE =
 const CACHE = fileURLToPath(new URL("./.cache/", import.meta.url));
 export const BBB_FILE = `${CACHE}bbb-240p-vp9.webm`;
 const NAME = "Big.Buck.Bunny.2008.240p.WEB.VP9.webm";
+// A real addon names the release it serves; the stand-in film carries the
+// episode's name so the core's title and episode checks accept it.
+const EPISODE_NAME = "Game.of.Thrones.S01E05.Sample.240p.WEB.VP9.webm";
 
 /** Downloads the test film once (about 30 MB). */
 export async function ensureMedia(): Promise<void> {
@@ -28,13 +31,18 @@ export async function ensureMedia(): Promise<void> {
   renameSync(part, BBB_FILE);
 }
 
+/** The one episode the harness can play: the same open film stands in for
+ * it, so a test can pick an episode that is not the resume target and see
+ * playback and progress land on that episode. */
+export const SAMPLE_EPISODE = "tt0944947:1:5";
+
 const manifest = {
   id: "dev.marquee.sample-source",
   version: "1.0.0",
   name: "Sample Source",
   description: "Open movies for testing playback",
   resources: ["stream"],
-  types: ["movie"],
+  types: ["movie", "series"],
   idPrefixes: ["tt"],
   catalogs: [],
 };
@@ -45,21 +53,23 @@ export function startSource(port: number): Promise<Server> {
       res.writeHead(status, { "content-type": "application/json", "access-control-allow-origin": "*" });
       res.end(JSON.stringify(body));
     };
-    if (req.url === "/manifest.json") return json(200, manifest);
-    if (req.url === `/stream/movie/${BBB_ID}.json`) {
+    const path = decodeURIComponent(req.url ?? "");
+    if (path === "/manifest.json") return json(200, manifest);
+    const file = path === `/stream/movie/${BBB_ID}.json` ? NAME : path === `/stream/series/${SAMPLE_EPISODE}.json` ? EPISODE_NAME : null;
+    if (file) {
       const size = statSync(BBB_FILE).size;
       return json(200, {
         streams: [
           {
             name: "Sample Source\n240p",
-            title: NAME,
-            url: `http://127.0.0.1:${port}/media/${NAME}`,
-            behaviorHints: { filename: NAME, videoSize: size },
+            title: file,
+            url: `http://127.0.0.1:${port}/media/${file}`,
+            behaviorHints: { filename: file, videoSize: size },
           },
         ],
       });
     }
-    if (req.url === `/media/${NAME}`) {
+    if (req.url === `/media/${NAME}` || req.url === `/media/${EPISODE_NAME}`) {
       const size = statSync(BBB_FILE).size;
       const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? "");
       const start = m?.[1] ? Number(m[1]) : 0;

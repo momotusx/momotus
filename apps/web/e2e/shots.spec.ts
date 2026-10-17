@@ -68,6 +68,17 @@ const SCREENS: Screen[] = [
       await expect(watched).toHaveAttribute("aria-pressed", "false");
     },
   },
+  {
+    // An episode row with focus shows its secondary actions (phone: always).
+    name: "title-episode",
+    path: `/title/series/${GOT.id}?season=1`,
+    ready: async (page, form) => {
+      const row = page.locator('[data-f="ep:tt0944947:1:5"]');
+      await expect(row).toBeVisible({ timeout: 30_000 });
+      if (form !== "phone") await row.focus();
+      else await row.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    },
+  },
   // A movie whose metadata lists no trailer: no Trailer action at all.
   { name: "title-no-trailer", path: "/title/movie/tt43718175", ready: visible('[data-f="title:watched"]') },
   {
@@ -127,6 +138,41 @@ const SCREENS: Screen[] = [
   { name: "library", path: "/library", ready: visible(".grid .tile img.in") },
   { name: "addons", path: "/addons", ready: visible(".addon") },
   {
+    // TV and desktop: the first row picked up for moving.
+    name: "home-rows",
+    path: "/home-rows",
+    ready: async (page, form) => {
+      await visible(".hrow-main")(page);
+      if (form === "phone") return;
+      await page.locator(".hrow-main").first().focus();
+      await page.keyboard.press("Enter");
+      await visible(".hrow.moving")(page);
+    },
+    after: async (page) => {
+      if (await page.locator(".hrow.moving").count()) await page.keyboard.press("Enter");
+    },
+  },
+  {
+    name: "calendar",
+    path: "/calendar",
+    ready: async (page) => {
+      await visible(".cal-card")(page);
+      await expect(page.locator(".cal-head .st.warn")).toHaveCount(0, { timeout: 60_000 });
+      // Stills on screen have decoded (a missing one keeps its plain frame).
+      await page
+        .waitForFunction(
+          () =>
+            [...document.querySelectorAll<HTMLImageElement>(".cal-card img.fade")].every((img) => {
+              const r = img.getBoundingClientRect();
+              return img.classList.contains("in") || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth;
+            }),
+          null,
+          { timeout: 15_000 },
+        )
+        .catch(() => undefined);
+    },
+  },
+  {
     // Playback (prefs) and the addons line come from live views; "This
     // device" renders at once, so it cannot stand for the whole screen.
     name: "settings",
@@ -141,8 +187,8 @@ const SCREENS: Screen[] = [
   { name: "pairing", path: "/pair", ready: visible(".install") },
 ];
 
-const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer", "versions", "player-skip", "discover", "settings"]);
-const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer", "player-skip"]);
+const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "versions", "player-skip", "discover", "settings", "home-rows", "calendar"]);
+const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "player-skip", "home-rows", "calendar"]);
 
 // Each shot opens a fresh context, so artwork is fetched once here and
 // served to every context after that, instead of asking the image CDN for
@@ -184,7 +230,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
         const page = await context.newPage();
         const errors: string[] = [];
         page.on("pageerror", (e) => errors.push(e.message));
-        await page.goto(`${screen.path}?form=${form}${form === "tv" && scheme === "light" ? "&theme=light" : ""}`);
+        const join = screen.path.includes("?") ? "&" : "?";
+        await page.goto(`${screen.path}${join}form=${form}${form === "tv" && scheme === "light" ? "&theme=light" : ""}`);
         await screen.ready(page, form);
         // Give on-screen art up to 15 s to decode; a tile still loading shows
         // its name card, which is a valid state, so this never fails.
