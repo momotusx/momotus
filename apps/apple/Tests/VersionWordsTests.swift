@@ -1,0 +1,80 @@
+import Foundation
+import Testing
+
+// The Versions words match the web's lib/words.ts and Android's VersionsCopy.
+
+private func row(
+    quality: String = "1080p", features: [String] = [], size: Int64? = nil, status: VersionStatus = .direct,
+    languages: [String] = [], reasons: [String] = [], failover: Int = 0
+) -> VersionRow {
+    VersionRow(
+        key: "k", quality: quality, features: features, sizeBytes: size, status: status, via: "Torrentio",
+        releaseName: "Name.mp4", languages: languages, reasons: reasons, group: "best", failoverCount: failover)
+}
+
+private func snapshot(
+    pick: VersionRow? = nil, rows: [VersionRow] = [], pending: [String] = [], slow: [String] = [],
+    failed: [String] = [], done: Bool = true, hidden: HiddenSummary = HiddenSummary(count: 0, byReason: [])
+) -> VersionsSnapshot {
+    VersionsSnapshot(
+        recommended: pick, rows: rows, hidden: hidden, pendingAddons: pending, slowAddons: slow,
+        failedAddons: failed, done: done, frozen: false)
+}
+
+@Test func theHeaderSaysWhoIsAskedSlowOrSilentBeforeTheCount() {
+    #expect(VersionWords.progress(nil) == ("Opening", .idle))
+    #expect(VersionWords.progress(snapshot(pending: ["A", "B"], slow: ["C"])) == ("Asking A, B", .warn))
+    #expect(VersionWords.progress(snapshot(slow: ["C"], failed: ["D"])) == ("C is slow, still waiting", .warn))
+    #expect(VersionWords.progress(snapshot(rows: [row()], failed: ["D"])) == ("D did not answer", .bad))
+    #expect(VersionWords.progress(snapshot(pick: row(), rows: [row(), row()])) == ("3 versions", .ok))
+    #expect(VersionWords.progress(snapshot(pick: row())) == ("1 version", .ok))
+}
+
+@Test func theDeviceLineNamesTheScreenCodecsAndContainers() {
+    let line = VersionWords.device(screen: "1080p", decoders: ["h264", "h265", "av1"], containers: ["mp4", "m4v", "webm"])
+    #expect(line == "This screen: 1080p, plays H.264, HEVC, AV1 in MP4, M4V, WebM")
+}
+
+@Test func thePickHasItsFactsInTheWebsOrder() {
+    let bare = row()
+    #expect(VersionWords.facts(bare).map(\.key) == ["Size", "Status", "Via"])
+    #expect(VersionWords.facts(bare)[0].value == "Unknown")
+    let full = row(features: ["HDR10", "Atmos"], size: 1_500_000_000, languages: ["eng", "tur"])
+    #expect(VersionWords.facts(full).map(\.key) == ["Size", "Status", "Via", "Features", "Languages"])
+    #expect(VersionWords.facts(full)[4].value == "English, Turkish")
+    // One feature is in the heading, not repeated as a fact.
+    #expect(VersionWords.facts(row(features: ["HDR10"])).map(\.key) == ["Size", "Status", "Via"])
+    #expect(VersionWords.pickHeading(row(quality: "4K", features: ["Dolby Vision", "Atmos"])) == "4K Dolby Vision")
+}
+
+@Test func reasonsAndFailoverSayWhatTheWebSays() {
+    #expect(VersionWords.reason("readyNow", status: .ready(service: "Real-Debrid")) == "Ready now, cached on Real-Debrid")
+    #expect(VersionWords.reason("readyNow", status: .direct) == "Ready now")
+    #expect(VersionWords.reason("smallerFaster") == "Smaller and faster to start")
+    #expect(VersionWords.failover(row()) == "One source for this release.")
+    #expect(VersionWords.failover(row(failover: 1)) == "2 sources. If one fails, the next starts on its own.")
+    #expect(VersionWords.failover(row(failover: 2)) == "3 sources. If one fails, the next starts on its own.")
+    #expect(VersionWords.status(.needsDownload(service: "TorBox")) == "Needs download on TorBox")
+}
+
+@Test func withoutAPickTheReasonComesBeforeTheFailedAddon() {
+    let waiting = snapshot(rows: [row(status: .needsDownload(service: nil))], failed: ["Sample Source"])
+    #expect(VersionWords.waitingTitle(waiting) == "Nothing is ready to play yet")
+    #expect(VersionWords.waitingBody(waiting) == "Choose a version to start it. No answer from Sample Source.")
+    let none = snapshot(failed: ["Sample Source"])
+    #expect(VersionWords.waitingTitle(none) == "No playable version found")
+    #expect(
+        VersionWords.waitingBody(none)
+            == "None of your addons returned a stream for this video. A source addon finds playable streams. No answer from Sample Source.")
+}
+
+@Test func everyHiddenResultIsSaidWhenNothingIsLeft() throws {
+    let hidden = try JSONDecoder().decode(HiddenSummary.self, from: Data(#"{"count":3,"byReason":[["wrongTitle",2],["tooLarge",1]]}"#.utf8))
+    #expect(VersionWords.waitingBody(snapshot(hidden: hidden)) == "Every result was hidden: 2 are for other titles, 1 is over your size limit.")
+}
+
+@Test func languageCodesBecomeEnglishNames() {
+    #expect(VersionWords.languageName("eng") == "English")
+    #expect(VersionWords.languageName("fr") == "French")
+    #expect(VersionWords.languageName("qqq") == "QQQ")
+}

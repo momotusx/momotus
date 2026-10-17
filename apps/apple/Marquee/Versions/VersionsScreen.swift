@@ -55,24 +55,15 @@ struct VersionsScreen: View {
                     .lineLimit(1)
             }
             .foregroundStyle(Theme.Palette.text)
-            if let progress = progressLine {
-                Label(progress, glyph: snapshot?.done == true ? "circle-check" : "clock")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
-                    .foregroundStyle(Theme.Palette.muted)
-            }
+            let progress = VersionWords.progress(snapshot)
+            DotLine(text: progress.text, tone: progress.tone)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.text)
+            Label(DeviceCaps.line, glyph: "monitor-check")
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+                .padding(.top, 4)
         }
-    }
-
-    /// Which addons are still answering, slow, or failed.
-    private var progressLine: String? {
-        guard let s = snapshot else { return "Asking your addons" }
-        var parts: [String] = []
-        let count = s.rows.count + (s.recommended == nil ? 0 : 1)
-        parts.append(count == 1 ? "1 version" : "\(count) versions")
-        if !s.pendingAddons.isEmpty { parts.append("still asking \(s.pendingAddons.joined(separator: ", "))") }
-        if !s.slowAddons.isEmpty { parts.append("\(s.slowAddons.joined(separator: ", ")) is slow") }
-        if !s.failedAddons.isEmpty { parts.append("\(s.failedAddons.joined(separator: ", ")) did not answer") }
-        return parts.joined(separator: "  ·  ")
     }
 
     @ViewBuilder private var pick: some View {
@@ -80,27 +71,37 @@ struct VersionsScreen: View {
             PickCard(row: best) {
                 playing = model.play(best.key)
             }
-        } else if snapshot?.done == true {
+        } else {
             VStack(alignment: .leading, spacing: 10) {
-                Text("No version to play")
-                    .display(Theme.type.title2)
-                    .foregroundStyle(Theme.Palette.text)
-                Text(snapshot.map { $0.hidden.count > 0 ? VersionWords.hidden($0.hidden) : "None of your addons had a source for this." } ?? "")
-                    .font(.text(Theme.type.body))
-                    .foregroundStyle(Theme.Palette.muted)
-                // Never the end of the road: a source is the way on.
-                Button { addSource = true } label: { Label("Add a source", glyph: "plus") }
-                    .buttonStyle(PillButtonStyle(prominent: true))
-                    .padding(.top, 6)
+                if let snapshot, snapshot.done {
+                    Label(VersionWords.waitingTitle(snapshot), glyph: "circle-alert")
+                        .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        .foregroundStyle(Theme.Palette.text)
+                    Text(VersionWords.waitingBody(snapshot))
+                        .font(.text(Theme.type.body))
+                        .foregroundStyle(Theme.Palette.muted)
+                    // With no version at all a source is the way on; with some, choosing one is.
+                    if snapshot.rows.isEmpty {
+                        Button { addSource = true } label: { Label("Add a source", glyph: "plus") }
+                            .buttonStyle(PillButtonStyle(prominent: true))
+                            .padding(.top, 6)
+                    }
+                } else {
+                    // The pick's shape while the addons answer, as on the web.
+                    VStack(alignment: .leading, spacing: 10) {
+                        PickCard.kicker
+                        ForEach([(160.0, 36.0), (240, 20), (200, 20)], id: \.0) { width, height in
+                            RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.Palette.surface).frame(width: width, height: height)
+                        }
+                        Capsule().fill(Theme.Palette.surface).frame(height: 48)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Finding versions")
+                }
             }
             .padding(Theme.Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
-        } else {
-            RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous)
-                .fill(Theme.Palette.surface)
-                .frame(height: 280)
-                .accessibilityLabel("Finding versions")
         }
     }
 
@@ -126,11 +127,16 @@ struct VersionsScreen: View {
                         }
                         Rectangle().fill(Theme.Palette.line.opacity(0.6)).frame(height: 1)
                     }
-                    if rows.count > 3 && !expanded.contains(group) {
+                    if rows.count > 3 {
+                        let open = expanded.contains(group)
                         Button {
-                            expanded.insert(group)
+                            if open { expanded.remove(group) } else { expanded.insert(group) }
                         } label: {
-                            Label("Show all \(rows.count)", glyph: "chevron-down")
+                            Label {
+                                Text(open ? "Show the best 3" : "Show all \(rows.count)")
+                            } icon: {
+                                Glyph("chevron-down").rotationEffect(.degrees(open ? 180 : 0))
+                            }
                         }
                         .buttonStyle(.plain)
                         .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
@@ -174,27 +180,33 @@ private struct PickCard: View {
     let row: VersionRow
     let play: () -> Void
 
+    static var kicker: some View {
+        Text("RECOMMENDED FOR THIS SCREEN")
+            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+            .tracking(1.6)
+            .foregroundStyle(Theme.Palette.muted)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("RECOMMENDED FOR THIS SCREEN")
-                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
-                .tracking(1.6)
-                .foregroundStyle(Theme.Palette.muted)
-            Text(row.quality)
+            Self.kicker
+            Text(VersionWords.pickHeading(row))
                 .display(Theme.type.title1 + 6)
                 .foregroundStyle(Theme.Palette.text)
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
-                if !row.features.isEmpty { fact("Features", row.features.joined(separator: ", ")) }
-                if let size = VersionWords.size(row.sizeBytes) { fact("Size", size) }
-                fact("Status", VersionWords.status(row.status), dot: VersionWords.statusColor(row.status))
-                fact("Via", row.via)
-                if !row.languages.isEmpty { fact("Audio", row.languages.joined(separator: ", ")) }
+                ForEach(VersionWords.facts(row), id: \.key) { fact in
+                    self.fact(fact.key, fact.value, dot: fact.key == "Status" ? VersionWords.tone(row.status).color : nil)
+                }
             }
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(row.reasons, id: \.self) { reason in
-                    Label(VersionWords.reason(reason), glyph: "check")
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
-                        .foregroundStyle(Theme.Palette.text)
+                ForEach(row.reasons.prefix(3), id: \.self) { reason in
+                    Label {
+                        Text(VersionWords.reason(reason, status: row.status))
+                    } icon: {
+                        Glyph("check").foregroundStyle(Theme.Palette.ok)
+                    }
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
                 }
             }
             // Wraps at the dots between tokens, never inside one ("mp" / "4"). Not
@@ -203,10 +215,13 @@ private struct PickCard: View {
                 .font(.mono(Theme.type.caption + 1))
                 .foregroundStyle(Theme.Palette.muted)
             Button(action: play) {
-                Label("Play this version", glyph: "play-fill")
+                Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .padding(.top, 6)
+            Label(VersionWords.failover(row), glyph: "refresh-cw")
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
         }
         .padding(Theme.Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -259,7 +274,7 @@ private struct VersionRowView: View {
                         .joined(separator: " \u{B7} "))
                         .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                     HStack(spacing: 6) {
-                        Circle().fill(VersionWords.statusColor(row.status)).frame(width: 8, height: 8)
+                        Circle().fill(VersionWords.tone(row.status).color).frame(width: 8, height: 8)
                         Text("\(VersionWords.status(row.status)) \u{B7} \(row.via)")
                     }
                 }
@@ -288,8 +303,32 @@ private struct VersionRowView: View {
 
     private var status: some View {
         HStack(spacing: 6) {
-            Circle().fill(VersionWords.statusColor(row.status)).frame(width: 8, height: 8)
+            Circle().fill(VersionWords.tone(row.status).color).frame(width: 8, height: 8)
             Text(VersionWords.status(row.status))
+        }
+    }
+}
+
+/// A line led by a dot in its tone: "6 versions", "Asking Torrentio".
+private struct DotLine: View {
+    let text: String
+    let tone: VersionWords.Tone
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle().fill(tone.color).frame(width: 8, height: 8)
+            Text(text)
+        }
+    }
+}
+
+extension VersionWords.Tone {
+    var color: Color {
+        switch self {
+        case .idle: Theme.Palette.dim
+        case .ok: Theme.Palette.ok
+        case .warn: Theme.Palette.warn
+        case .bad: Theme.Palette.bad
         }
     }
 }

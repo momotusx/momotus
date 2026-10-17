@@ -7,9 +7,7 @@ import VideoToolbox
 /// opens MP4 and MOV, not MKV, and there is no fallback engine yet.
 enum DeviceCaps {
     @MainActor static func params() -> [String: any Sendable] {
-        var decoders = ["h264"]
-        if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) { decoders.append("h265") }
-        if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) { decoders.append("av1") }
+        let decoders = Self.decoders
         var hdr: [String] = []
         if AVPlayer.eligibleForHDRPlayback { hdr += ["hdr10", "hlg"] }
         return [
@@ -18,10 +16,24 @@ enum DeviceCaps {
             "decoders": decoders,
             "tenBitHevc": decoders.contains("h265"),
             "audioDecoders": ["aac", "ac3", "eac3", "atmos", "flac", "mp3", "pcm"],
-            "containers": ["mp4", "m4v", "mov"],
+            "containers": containers,
             "hasFallbackEngine": false,
             "language": Locale.current.language.languageCode?.identifier ?? "en",
         ]
+    }
+
+    private static let containers = ["mp4", "m4v", "mov"]
+
+    private static var decoders: [String] {
+        var decoders = ["h264"]
+        if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) { decoders.append("h265") }
+        if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) { decoders.append("av1") }
+        return decoders
+    }
+
+    /// "This screen: 1080p, plays H.264, HEVC in MP4, M4V, MOV": what Versions ranks for.
+    @MainActor static var line: String {
+        VersionWords.device(screen: displayWords, decoders: decoders, containers: containers)
     }
 
     /// "4K, HDR", "1080p": the display as the setup check names it.

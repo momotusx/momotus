@@ -48,7 +48,7 @@ struct PlayerScreen: View {
                 .animation(Theme.Motion.panel, value: controls)
             }
             StatusOverlay(model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true })
-            if controls, model.playback?.phase != "failed", !model.showEndCard {
+            if controlsShown {
                 PlayerControls(model: model, versions: model.versions, back: close) { open in
                     menuOpen = open
                     lastTouch = .now
@@ -116,7 +116,18 @@ struct PlayerScreen: View {
         .onKeyPress(.leftArrow) { model.skip(-10); return .handled }
         .onKeyPress(.rightArrow) { model.skip(10); return .handled }
         .onKeyPress(.escape) { close(); return .handled }
+        #elseif os(tvOS)
+        // Back one step at a time, as Leanback and the Android TV app do: an
+        // open menu closes itself first, then the controls hide, then the player leaves.
+        .onExitCommand {
+            if controlsShown { withAnimation(Theme.Motion.panel) { controls = false } } else { close() }
+        }
         #endif
+    }
+
+    /// The OSD is on screen: not hidden, and no failure or end card in its place.
+    private var controlsShown: Bool {
+        controls && model.playback?.phase != "failed" && !model.showEndCard
     }
 
     /// Height of the picture fitted into `size`, or the full height before it is known.

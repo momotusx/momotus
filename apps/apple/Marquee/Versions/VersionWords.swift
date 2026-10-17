@@ -1,7 +1,11 @@
-import SwiftUI
+import Foundation
 
-/// Plain words for what the core says about a version. Never emoji, never codes.
+/// Plain words for what the core says about a version, equal to the web's
+/// `lib/words.ts` and Android's `VersionsCopy`. Never emoji, never codes.
 enum VersionWords {
+    /// The tone of a line drawn with a dot.
+    enum Tone { case idle, ok, warn, bad }
+
     static func size(_ bytes: Int64?) -> String? {
         bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
     }
@@ -10,27 +14,29 @@ enum VersionWords {
         switch status {
         case .ready(let service): service.map { "Ready on \($0)" } ?? "Ready"
         case .torrent(let seeds): seeds.map { "Torrent, \($0) seeds" } ?? "Torrent"
-        case .needsDownload(let service): service.map { "Downloads on \($0)" } ?? "Needs download"
+        case .needsDownload(let service): service.map { "Needs download on \($0)" } ?? "Needs download"
         case .direct: "Direct link"
         }
     }
 
-    static func statusColor(_ status: VersionStatus) -> Color {
+    /// Good when it can play now; a torrent or a download has to start first.
+    static func tone(_ status: VersionStatus) -> Tone {
         switch status {
-        case .ready, .direct: Theme.Palette.ok
-        case .torrent: Theme.Palette.warn
-        case .needsDownload: Theme.Palette.muted
+        case .ready, .direct: .ok
+        case .torrent, .needsDownload: .warn
         }
     }
 
-    static func reason(_ reason: String) -> String {
+    /// Why a version is recommended; "cached on X" when the status names the service.
+    static func reason(_ reason: String, status: VersionStatus? = nil) -> String {
         switch reason {
-        case "readyNow": "Ready now"
+        case "readyNow":
+            if case .ready(let service?)? = status { "Ready now, cached on \(service)" } else { "Ready now" }
         case "playsDirectly": "Plays directly on this device"
         case "matchesScreen": "Matches your screen"
-        case "sameReleaseAsLast": "Same release as last time"
+        case "sameReleaseAsLast": "Same release as the last episode"
         case "yourLanguage": "In your language"
-        case "smallerFaster": "Smaller and faster"
+        case "smallerFaster": "Smaller and faster to start"
         default: reason
         }
     }
@@ -47,18 +53,18 @@ enum VersionWords {
 
     static let groupOrder = ["best", "smallerFaster", "otherLanguages", "needsDownload"]
 
-    /// "10 are for other titles, 32 cannot play on this device"
+    /// "19 are for other titles, 1 is another episode"
     static func hidden(_ summary: HiddenSummary) -> String {
         summary.byReason.map { item in
             let one = item.count == 1
             let what: String
             switch item.reason {
             case "wrongTitle": what = one ? "is for another title" : "are for other titles"
-            case "wrongEpisode": what = one ? "is for another episode" : "are for other episodes"
-            case "excluded": what = one ? "is excluded by your settings" : "are excluded by your settings"
-            case "tooLarge": what = one ? "is too large" : "are too large"
+            case "wrongEpisode": what = one ? "is another episode" : "are other episodes"
+            case "excluded": what = one ? "matches your avoid list" : "match your avoid list"
+            case "tooLarge": what = one ? "is over your size limit" : "are over your size limit"
             case "unplayable": what = "cannot play on this device"
-            case "unsupportedSource": what = one ? "needs a source this app cannot open yet" : "need a source this app cannot open yet"
+            case "unsupportedSource": what = one ? "uses a source this app cannot open yet" : "use a source this app cannot open yet"
             default: what = item.reason
             }
             return "\(item.count) \(what)"
@@ -73,6 +79,96 @@ enum VersionWords {
             : "No version found: your addons have no source for this"
     }
 
+    /// The Versions header: who is still asked, slow or silent, else how many versions there are.
+    static func progress(_ snapshot: VersionsSnapshot?) -> (text: String, tone: Tone) {
+        guard let s = snapshot else { return ("Opening", .idle) }
+        if !s.pendingAddons.isEmpty { return ("Asking \(s.pendingAddons.joined(separator: ", "))", .warn) }
+        if !s.slowAddons.isEmpty { return ("\(s.slowAddons.joined(separator: ", ")) is slow, still waiting", .warn) }
+        if !s.failedAddons.isEmpty { return ("\(s.failedAddons.joined(separator: ", ")) did not answer", .bad) }
+        let count = s.rows.count + (s.recommended == nil ? 0 : 1)
+        return (count == 1 ? "1 version" : "\(count) versions", .ok)
+    }
+
+    /// "This screen: 1080p, HDR, plays H.264, HEVC in MP4, MOV": what the ranking was made for.
+    static func device(screen: String, decoders: [String], containers: [String]) -> String {
+        let codecs = ["h264": "H.264", "h265": "HEVC", "av1": "AV1", "vp9": "VP9"]
+        let plays = decoders.map { codecs[$0] ?? $0.uppercased() }.joined(separator: ", ")
+        let boxes = containers.map { $0 == "webm" ? "WebM" : $0.uppercased() }.joined(separator: ", ")
+        return "This screen: \(screen), plays \(plays) in \(boxes)"
+    }
+
+    /// The pick's heading, the quality and its first feature: "4K Dolby Vision".
+    static func pickHeading(_ row: VersionRow) -> String {
+        ([row.quality] + row.features.prefix(1)).joined(separator: " ")
+    }
+
+    /// The pick's facts in the web's order: size, status, where from, more features, languages.
+    static func facts(_ row: VersionRow) -> [(key: String, value: String)] {
+        var facts = [
+            (key: "Size", value: size(row.sizeBytes) ?? "Unknown"),
+            (key: "Status", value: status(row.status)),
+            (key: "Via", value: row.via),
+        ]
+        if row.features.count > 1 { facts.append((key: "Features", value: row.features.joined(separator: ", "))) }
+        if !row.languages.isEmpty { facts.append((key: "Languages", value: languages(row))) }
+        return facts
+    }
+
+    /// The line under Play: how many sources back this release up.
+    static func failover(_ row: VersionRow) -> String {
+        row.failoverCount > 0
+            ? "\(row.failoverCount + 1) sources. If one fails, the next starts on its own."
+            : "One source for this release."
+    }
+
+    /// The card's heading while there is no pick, once every addon has answered.
+    static func waitingTitle(_ snapshot: VersionsSnapshot) -> String {
+        snapshot.rows.isEmpty ? "No playable version found" : "Nothing is ready to play yet"
+    }
+
+    /// Why nothing is picked first, then any addon that failed.
+    static func waitingBody(_ snapshot: VersionsSnapshot) -> String {
+        let why = if !snapshot.rows.isEmpty {
+            "Choose a version to start it."
+        } else if snapshot.hidden.count > 0 {
+            "Every result was hidden: \(hidden(snapshot.hidden))."
+        } else {
+            "None of your addons returned a stream for this video. A source addon finds playable streams."
+        }
+        return [why, addons(snapshot).map { "\($0)." }].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// Addons still answering, slow or failed, as one line, or nil.
+    static func addons(_ snapshot: VersionsSnapshot) -> String? {
+        let parts = [
+            snapshot.pendingAddons.isEmpty ? nil : "Waiting for \(snapshot.pendingAddons.joined(separator: ", "))",
+            snapshot.slowAddons.isEmpty ? nil : "Slow: \(snapshot.slowAddons.joined(separator: ", "))",
+            snapshot.failedAddons.isEmpty ? nil : "No answer from \(snapshot.failedAddons.joined(separator: ", "))",
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ". ")
+    }
+
+    /// "English, Turkish" from the release's codes.
+    static func languages(_ row: VersionRow) -> String {
+        row.languages.map(languageName).joined(separator: ", ")
+    }
+
+    /// "fr" or "fre" to "French"; an unknown code stays as given, in capitals.
+    static func languageName(_ code: String) -> String {
+        let lower = code.lowercased()
+        let name = Locale(identifier: "en").localizedString(forIdentifier: iso1[lower] ?? lower)
+        if let name, name.lowercased() != lower { return name }
+        return code.uppercased()
+    }
+
+    // The bibliographic three-letter codes Locale does not take, as on the web.
+    private static let iso1 = [
+        "eng": "en", "tur": "tr", "fre": "fr", "fra": "fr", "ger": "de", "deu": "de", "spa": "es", "ita": "it",
+        "por": "pt", "rus": "ru", "jpn": "ja", "kor": "ko", "chi": "zh", "zho": "zh", "ara": "ar", "dut": "nl",
+        "nld": "nl", "pol": "pl", "swe": "sv", "hin": "hi", "gre": "el", "ell": "el", "rum": "ro", "ron": "ro",
+        "hun": "hu", "cze": "cs", "ces": "cs", "heb": "he", "per": "fa", "fas": "fa", "pob": "pt-BR",
+    ]
+
     /// The line under Play: "1080p  HDR10  2.4 GB  Ready on Real-Debrid".
     /// The quality is the core's headline as is ("Quality not stated" at worst).
     static func line(_ row: VersionRow) -> String {
@@ -81,6 +177,6 @@ enum VersionWords {
 
     /// A short cell (a table column, an OSD value) says "Unknown", one word.
     static func cell(_ quality: String) -> String {
-        quality == "Quality not stated" ? "Unknown" : quality
+        quality == "Quality not stated" || quality == "Unknown" ? "Unknown" : quality
     }
 }

@@ -432,7 +432,7 @@ private struct VersionLine: View {
 
     var body: some View {
         if let best = versions?.recommended {
-            let dot = Text("\u{25CF}").font(.system(size: 9)).foregroundStyle(VersionWords.statusColor(best.status))
+            let dot = Text("\u{25CF}").font(.system(size: 9)).foregroundStyle(VersionWords.tone(best.status).color)
             let via = Text("via \(best.via)").foregroundStyle(Theme.Palette.muted)
             Text("\(VersionWords.line(best))   \(dot) \(VersionWords.status(best.status))   \(via)")
                 .foregroundStyle(Theme.Palette.text)

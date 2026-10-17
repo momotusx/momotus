@@ -92,6 +92,7 @@ targets:
       - path: Marquee/Core/ListDiff.swift
       - path: Marquee/Title/TitleWords.swift
       - path: Marquee/App/TabBarRule.swift
+      - path: Marquee/Versions/VersionWords.swift
       - path: Marquee/Core/DebridModels.swift
       - path: Marquee/Core/DebridStore.swift
       - path: Marquee/Player/WebVTT.swift
