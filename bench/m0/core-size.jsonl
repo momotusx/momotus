@@ -1,0 +1,1 @@
+{"date":"2026-10-17","target":"aarch64-apple-ios","artifact":"libmarquee_core.dylib","profile":"release lto=thin opt=s strip","bytes":5795472,"includes":["stremio-core","reqwest+rustls(ring)","rusqlite+sqlite3.54","mq-runtime","mq-bridge","uniffi"],"excludes":["torrent engine","media probe","debrid","import"]}

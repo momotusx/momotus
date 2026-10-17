@@ -1,0 +1,26 @@
+[package]
+name = "mq-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+name = "marquee_core"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+mq-runtime = { path = "../mq-runtime" }
+mq-bridge = { path = "../mq-bridge" }
+uniffi = "0.32"
+tokio = { workspace = true }
+serde_json.workspace = true
+thiserror.workspace = true
