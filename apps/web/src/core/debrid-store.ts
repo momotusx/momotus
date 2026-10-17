@@ -42,6 +42,7 @@ export class DebridStore {
   private readonly gone = new Set<string>();
   /** Tombstones whose record delete failed; retried with the next push. */
   private readonly unfinished = new Map<string, DebridTombstone>();
+  private readonly disconnecting = new Map<string, Promise<void>>();
 
   constructor(
     private readonly keystore: DebridKeystore,
@@ -83,6 +84,16 @@ export class DebridStore {
    * account stays connected.
    */
   disconnect(service: string, generation: string): Promise<void> {
+    // One disconnect per generation at a time: a second request shares the
+    // first, so a failure cannot reopen the generation under a later one.
+    const running = this.disconnecting.get(generation);
+    if (running) return running;
+    const done = this.disconnectNow(service, generation).finally(() => this.disconnecting.delete(generation));
+    this.disconnecting.set(generation, done);
+    return done;
+  }
+
+  private disconnectNow(service: string, generation: string): Promise<void> {
     this.gone.add(generation);
     for (const job of this.queues.get(service) ?? []) {
       if (job.write && job.generation === generation) job.dropped = true;

@@ -15,17 +15,17 @@ class FakeKeystore implements DebridKeystore {
   release: () => void = () => undefined;
 
   private async gate(call: Call): Promise<void> {
-    const left = this.failing.get(call) ?? 0;
-    if (left > 0) {
-      this.failing.set(call, left - 1);
-      this.log.push(`${call} failed`);
-      throw new Error(call);
-    }
     if (this.holding === call) {
       this.holding = null;
       await new Promise<void>((resolve) => {
         this.release = resolve;
       });
+    }
+    const left = this.failing.get(call) ?? 0;
+    if (left > 0) {
+      this.failing.set(call, left - 1);
+      this.log.push(`${call} failed`);
+      throw new Error(call);
     }
   }
 

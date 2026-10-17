@@ -1,6 +1,29 @@
 {
-  "about": "Cases for the debrid storage helper every app builds (plans/c10-handoff.md section A1, plans/core-protocol.md Debrid). Each case starts a helper over a fake keystore holding `keystore`, runs `steps` in order and checks every `expect`. Ops: `pending` (a debrid view push), `disconnect` (started, not awaited; a failure lands in `errors`), `hold` (the next keystore call of that kind starts and waits for `release`), `release`, `fail` (the next `times` calls of that kind fail), `settle` (wait until every queue is idle), `restart` (a new helper over the same keystore runs its start). The keystore keeps one record per service; `deleteRecord` removes the service's record only when it has that generation. `log` lists finished keystore calls, `failed` ones included.",
+  "about": "Cases for the debrid storage helper every app builds (plans/c10-handoff.md section A1, plans/core-protocol.md Debrid). Each case starts a helper over a fake keystore holding `keystore`, runs `steps` in order and checks every `expect`. Ops: `pending` (a debrid view push), `disconnect` (started, not awaited; a failure lands in `errors`), `hold` (the next keystore call of that kind starts and waits for `release`; a `fail` set for it applies after the release), `release`, `fail` (the next `times` calls of that kind fail), `settle` (wait until every queue is idle), `restart` (a new helper over the same keystore runs its start). The keystore keeps one record per service; `deleteRecord` removes the service's record only when it has that generation. `log` lists finished keystore calls, `failed` ones included.",
   "cases": [
+    {
+      "name": "a second disconnect of one generation shares the first, so its failure cannot be undone by the second",
+      "keystore": { "records": [{ "service": "torbox", "generation": "g1", "revision": 1, "credential": { "kind": "key", "key": "k1" } }], "tombstones": [] },
+      "steps": [
+        { "op": "hold", "call": "writeTombstone" },
+        { "op": "fail", "call": "writeTombstone", "times": 1 },
+        { "op": "disconnect", "service": "torbox", "generation": "g1" },
+        { "op": "disconnect", "service": "torbox", "generation": "g1" },
+        { "op": "release" },
+        { "op": "settle" },
+        {
+          "op": "expect",
+          "log": ["writeTombstone failed"],
+          "records": ["torbox g1 1"],
+          "tombstones": [],
+          "disconnects": [],
+          "errors": ["torbox g1", "torbox g1"]
+        },
+        { "op": "pending", "records": [{ "service": "torbox", "generation": "g1", "revision": 2, "credential": { "kind": "key", "key": "k2" } }] },
+        { "op": "settle" },
+        { "op": "expect", "log": ["writeTombstone failed", "writeRecord g1 2"], "records": ["torbox g1 2"], "acks": ["torbox g1 2"] }
+      ]
+    },
     {
       "name": "a queued record write is dropped when its tombstone arrives; the write in progress finishes first",
       "keystore": { "records": [], "tombstones": [] },
