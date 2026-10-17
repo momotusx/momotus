@@ -578,3 +578,97 @@ async fn meta_keeps_tvdb_ids() {
     let (decoded, _) = core.fetch_meta("series", "tt7").await.unwrap();
     assert_eq!(decoded.videos.len(), 3);
 }
+
+/// Hiding and moving Home rows is a preference; Home follows it live, a
+/// moved row keeps its tiles, and the ids of catalogs that are gone survive
+/// every edit.
+#[tokio::test]
+async fn home_rows_hide_and_move_live() {
+    let core = Core::temporary("p").unwrap();
+    let mut a = catalog_addon("a", Duration::ZERO, 200, METAS).await;
+    let mut b = catalog_addon("b", Duration::ZERO, 200, METAS).await;
+    a.position = 0;
+    b.position = 1;
+    core.library()
+        .set_addons("p", &[a, b], &core.hlc())
+        .unwrap();
+    let all: Vec<String> = core.home_catalogs().into_iter().map(|c| c.row_id).collect();
+    assert_eq!(all.len(), 2);
+    let (ra, rb) = (all[0].clone(), all[1].clone());
+    assert!(ra.starts_with("a@") && rb.starts_with("b@"), "{all:?}");
+
+    let view = HomeView::open(&core);
+    let wait = |want: Vec<String>| {
+        let view = &view;
+        async move {
+            for _ in 0..300 {
+                let s = view.snapshot();
+                let got: Vec<String> = s.rows.iter().map(|r| r.row_id.clone()).collect();
+                if got == want && s.rows.iter().all(|r| r.state == RowState::Ready) {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("wanted {want:?}, got {:?}", view.snapshot().rows);
+        }
+    };
+    wait(vec![ra.clone(), rb.clone()]).await;
+
+    let listed = core.set_home_row_hidden(&ra, true).unwrap();
+    wait(vec![rb.clone()]).await;
+    assert_eq!(
+        listed
+            .iter()
+            .map(|c| (c.row_id.clone(), c.hidden))
+            .collect::<Vec<_>>(),
+        [(ra.clone(), true), (rb.clone(), false)]
+    );
+
+    // An id from an addon that is gone stays through edits.
+    core.set_prefs(&serde_json::json!({"homeRows": {"order": ["gone@00000000:movie:top"]}}))
+        .unwrap();
+    core.set_home_row_hidden(&ra, false).unwrap();
+    core.move_home_row(&rb, -1).unwrap();
+    wait(vec![rb.clone(), ra.clone()]).await;
+    // The moved row kept its tiles: it never went back to loading.
+    assert!(!view.snapshot().rows[0].tiles.is_empty());
+    assert_eq!(
+        core.prefs().home_rows.order,
+        [rb.clone(), ra.clone(), "gone@00000000:movie:top".into()]
+    );
+}
+
+/// Two configurations of one addon (same manifest id) are two rows, and
+/// each catalog lands in its own row.
+#[tokio::test]
+async fn two_installations_of_one_addon_are_two_rows() {
+    let core = Core::temporary("p").unwrap();
+    let mut first = catalog_addon("same", Duration::ZERO, 200, METAS).await;
+    let mut second = catalog_addon("same", Duration::ZERO, 200, METAS).await;
+    first.position = 0;
+    second.position = 1;
+    core.library()
+        .set_addons("p", &[first, second], &core.hlc())
+        .unwrap();
+    let ids: Vec<String> = core.home_catalogs().into_iter().map(|c| c.row_id).collect();
+    assert_eq!(ids.len(), 2);
+    assert_ne!(ids[0], ids[1]);
+    let view = HomeView::open(&core);
+    for _ in 0..300 {
+        if view
+            .snapshot()
+            .rows
+            .iter()
+            .all(|r| r.state == RowState::Ready)
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        view.snapshot()
+            .rows
+            .iter()
+            .all(|r| r.state == RowState::Ready && !r.tiles.is_empty())
+    );
+}

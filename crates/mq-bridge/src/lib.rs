@@ -156,6 +156,25 @@ enum Request {
     Ping {
         id: u64,
     },
+    /// Every Home catalog in Home's order, hidden ones included, for the
+    /// "Customize Home" screen.
+    HomeCatalogs {
+        id: u64,
+    },
+    /// Hides or shows one Home row; replies with the new list.
+    SetHomeRow {
+        id: u64,
+        #[serde(rename = "rowId")]
+        row_id: String,
+        hidden: bool,
+    },
+    /// Moves one Home row `by` places (negative is up); replies with the new list.
+    MoveHomeRow {
+        id: u64,
+        #[serde(rename = "rowId")]
+        row_id: String,
+        by: i64,
+    },
     /// The app's life as the OS reports it: `foreground`, `background`,
     /// `memoryPressure` (frees caches) or `networkChanged`.
     Lifecycle {
@@ -355,6 +374,26 @@ impl Session {
                 });
             }
             Request::Ping { id } => self.reply(json!(id), Ok(json!({}))),
+            Request::HomeCatalogs { id } => {
+                let catalogs = self.core.home_catalogs();
+                self.reply(json!(id), Ok(json!(catalogs)))
+            }
+            Request::SetHomeRow { id, row_id, hidden } => {
+                let result = self
+                    .core
+                    .set_home_row_hidden(&row_id, hidden)
+                    .map(|list| json!(list))
+                    .map_err(|e| e.to_string());
+                self.reply(json!(id), result)
+            }
+            Request::MoveHomeRow { id, row_id, by } => {
+                let result = self
+                    .core
+                    .move_home_row(&row_id, by)
+                    .map(|list| json!(list))
+                    .map_err(|e| e.to_string());
+                self.reply(json!(id), result)
+            }
             Request::Lifecycle { id, event } => {
                 let result = match event.as_str() {
                     "memoryPressure" => {

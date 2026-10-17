@@ -2,10 +2,10 @@
 //! user's addon order. Row positions are fixed at open so focus never jumps
 //! while catalogs arrive; empty and failed rows stay as explained states.
 
-use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
-use crate::views::addons_changed;
 use crate::views::playback::{NextEpisode, next_after};
+use crate::views::settings::HomeRows;
+use crate::{Core, CoreError};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
@@ -141,7 +141,7 @@ impl HomeView {
         // Subscribed before reading, so no addon change falls in between.
         let changes = core.library().subscribe();
         let addons = core.installed_addons().unwrap_or_default();
-        let slots = catalog_slots(&addons);
+        let slots = shown(arrange(catalog_slots(&addons), &core.prefs().home_rows));
         let ids = slots.iter().map(|s| s.row_id.clone()).collect();
         let mut initial = ObservableVector::new();
         for slot in &slots {
@@ -222,7 +222,13 @@ fn catalog_slots(addons: &[InstalledAddon]) -> Vec<CatalogSlot> {
                 continue;
             };
             slots.push(CatalogSlot {
-                row_id: format!("{}:{}:{}", addon.id(), catalog.r#type, catalog.id),
+                row_id: format!(
+                    "{}@{}:{}:{}",
+                    addon.id(),
+                    install_tag(addon.transport_url.as_str()),
+                    catalog.r#type,
+                    catalog.id
+                ),
                 addon: addon.clone(),
                 path: ResourcePath {
                     resource: "catalog".into(),
@@ -234,6 +240,131 @@ fn catalog_slots(addons: &[InstalledAddon]) -> Vec<CatalogSlot> {
         }
     }
     slots
+}
+
+/// The user's order first (ids that still exist, first mention wins), then
+/// every other catalog in addon order; each with whether it is hidden.
+fn arrange(slots: Vec<CatalogSlot>, prefs: &HomeRows) -> Vec<(CatalogSlot, bool)> {
+    let rank = |id: &str| prefs.order.iter().position(|o| o == id);
+    let mut slots: Vec<(usize, CatalogSlot)> = slots.into_iter().enumerate().collect();
+    // Stable: unordered rows keep addon order after all ordered ones.
+    slots.sort_by_key(|(i, s)| (rank(&s.row_id).unwrap_or(usize::MAX), *i));
+    slots
+        .into_iter()
+        .map(|(_, s)| {
+            let hidden = prefs.hidden.contains(&s.row_id);
+            (s, hidden)
+        })
+        .collect()
+}
+
+fn shown(arranged: Vec<(CatalogSlot, bool)>) -> Vec<CatalogSlot> {
+    arranged
+        .into_iter()
+        .filter_map(|(s, hidden)| (!hidden).then_some(s))
+        .collect()
+}
+
+/// One catalog as the "Customize Home" screen lists it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeCatalog {
+    pub row_id: String,
+    pub title: String,
+    pub source: String,
+    pub hidden: bool,
+}
+
+impl Core {
+    /// Hides or shows one Home row. Only `homeRows.hidden` is written, and
+    /// ids of catalogs that are gone stay in it.
+    pub fn set_home_row_hidden(
+        &self,
+        row_id: &str,
+        hidden: bool,
+    ) -> Result<Vec<HomeCatalog>, CoreError> {
+        let mut list = self.prefs().home_rows.hidden;
+        list.retain(|id| id != row_id);
+        if hidden {
+            list.push(row_id.to_owned());
+        }
+        self.set_prefs(&serde_json::json!({"homeRows": {"hidden": list}}))?;
+        Ok(self.home_catalogs())
+    }
+
+    /// Moves one Home row `by` places (negative is up) among all Home rows,
+    /// hidden ones included. Only `homeRows.order` is written; ids of
+    /// catalogs that are gone are kept after the rest. Two devices moving
+    /// rows at once: the later order wins as a whole.
+    pub fn move_home_row(&self, row_id: &str, by: i64) -> Result<Vec<HomeCatalog>, CoreError> {
+        let mut ids: Vec<String> = self.home_catalogs().into_iter().map(|c| c.row_id).collect();
+        let Some(from) = ids.iter().position(|id| id == row_id) else {
+            return Err(CoreError::BadPrefs(format!("no Home row {row_id}")));
+        };
+        let to = (from as i64 + by).clamp(0, ids.len() as i64 - 1) as usize;
+        let moved = ids.remove(from);
+        ids.insert(to, moved);
+        let gone = self
+            .prefs()
+            .home_rows
+            .order
+            .into_iter()
+            .filter(|id| !ids.contains(id));
+        let order: Vec<String> = ids.iter().cloned().chain(gone).collect();
+        self.set_prefs(&serde_json::json!({"homeRows": {"order": order}}))?;
+        Ok(self.home_catalogs())
+    }
+
+    /// Every Home catalog in the order Home uses, hidden ones included where
+    /// they would sit.
+    pub fn home_catalogs(&self) -> Vec<HomeCatalog> {
+        let slots = catalog_slots(&self.installed_addons().unwrap_or_default());
+        arrange(slots, &self.prefs().home_rows)
+            .into_iter()
+            .map(|(slot, hidden)| HomeCatalog {
+                title: row_title(&slot),
+                source: slot.addon.manifest.name.clone(),
+                row_id: slot.row_id,
+                hidden,
+            })
+            .collect()
+    }
+}
+
+/// Home follows addon changes and the user's row choices (a preference).
+async fn home_changed(changes: &mut tokio::sync::broadcast::Receiver<Vec<Table>>) -> bool {
+    use tokio::sync::broadcast::error::RecvError;
+    loop {
+        match changes.recv().await {
+            Ok(tables)
+                if tables
+                    .iter()
+                    .any(|t| matches!(t, Table::Addons | Table::Settings)) =>
+            {
+                return true;
+            }
+            Ok(_) => {}
+            Err(RecvError::Lagged(_)) => return true,
+            Err(RecvError::Closed) => return false,
+        }
+    }
+}
+
+/// Tells installations of the same addon apart (two configurations share a
+/// manifest id) without putting the URL, which can hold keys, in the row id.
+fn install_tag(transport_url: &str) -> String {
+    // FNV-1a, 64 bit: stable across versions and platforms.
+    let hash = transport_url
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+        });
+    format!("{:08x}", hash >> 32)
 }
 
 fn loading_row(slot: &CatalogSlot) -> HomeRow {
@@ -257,8 +388,11 @@ async fn watch_addons(
     header: SharedObservable<HomeHeader>,
 ) {
     let mut loads = JoinSet::new();
-    while addons_changed(&mut changes).await {
-        let slots = catalog_slots(&core.installed_addons().unwrap_or_default());
+    while home_changed(&mut changes).await {
+        let slots = shown(arrange(
+            catalog_slots(&core.installed_addons().unwrap_or_default()),
+            &core.prefs().home_rows,
+        ));
         let next: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
         if next == ids {
             continue;
@@ -348,6 +482,7 @@ async fn load_catalogs(
     header: SharedObservable<HomeHeader>,
 ) {
     let mut calls = JoinSet::new();
+    let mine: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
     for slot in slots {
         let client = core.addons().clone();
         calls.spawn(async move {
@@ -370,7 +505,7 @@ async fn load_catalogs(
                 soft_fired = true;
                 let mut rows = lock(&rows);
                 let slow: Vec<usize> = rows.iter().enumerate()
-                    .filter(|(_, r)| r.state == RowState::Loading)
+                    .filter(|(_, r)| r.state == RowState::Loading && mine.contains(&r.row_id))
                     .map(|(i, _)| i)
                     .collect();
                 for index in slow {
@@ -392,25 +527,32 @@ fn apply_catalog(
         serde_json::from_slice::<ResourceResponse>(&f.body)
             .map_err(|e| format!("unreadable catalog: {e}"))
     });
-    update_row(rows, row_id, |row| match outcome {
-        Ok(ResourceResponse::Metas { metas }) => {
-            row.tiles = metas
-                .into_iter()
-                .take(ROW_TILES)
-                .map(tile_from_preview)
-                .collect();
-            row.state = if row.tiles.is_empty() {
-                RowState::Empty
-            } else {
-                RowState::Ready
-            };
+    update_row(rows, row_id, |row| {
+        // A row shown again loads again; whichever load answers first wins,
+        // so an older answer never replaces a newer one.
+        if !matches!(row.state, RowState::Loading | RowState::Slow) {
+            return;
         }
-        Ok(_) => {
-            row.state = RowState::Failed {
-                reason: "addon returned no catalog items".into(),
+        match outcome {
+            Ok(ResourceResponse::Metas { metas }) => {
+                row.tiles = metas
+                    .into_iter()
+                    .take(ROW_TILES)
+                    .map(tile_from_preview)
+                    .collect();
+                row.state = if row.tiles.is_empty() {
+                    RowState::Empty
+                } else {
+                    RowState::Ready
+                };
             }
+            Ok(_) => {
+                row.state = RowState::Failed {
+                    reason: "addon returned no catalog items".into(),
+                }
+            }
+            Err(reason) => row.state = RowState::Failed { reason },
         }
-        Err(reason) => row.state = RowState::Failed { reason },
     });
 }
 

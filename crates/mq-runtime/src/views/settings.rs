@@ -28,6 +28,24 @@ pub struct Prefs {
     pub subtitle_languages: Vec<String>,
     /// Start the next episode when one ends.
     pub autoplay_next: bool,
+    /// Which addon catalogs Home shows, and in what order.
+    pub home_rows: HomeRows,
+}
+
+/// Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`).
+/// Rows in `order` come first in that order, then the rest in addon order.
+/// Ids of catalogs that are gone are kept, so a reinstalled addon gets its
+/// place back.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase", default)]
+pub struct HomeRows {
+    pub hidden: Vec<String>,
+    pub order: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -36,6 +54,7 @@ impl Default for Prefs {
             streams: StreamPrefs::default(),
             subtitle_languages: Vec::new(),
             autoplay_next: true,
+            home_rows: HomeRows::default(),
         }
     }
 }

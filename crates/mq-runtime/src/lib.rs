@@ -13,7 +13,7 @@ pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;
 pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
 pub use views::discover::{CatalogChoice, DiscoverSnapshot, DiscoverState, DiscoverView};
-pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
+pub use views::home::{HomeCatalog, HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
 pub use views::library::{KindCount, LibrarySnapshot, LibrarySort, LibraryView};
 pub use views::pairing::{PairingSnapshot, PairingView};
@@ -21,6 +21,6 @@ pub use views::playback::{
     Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
 };
 pub use views::search::{SearchSnapshot, SearchView};
-pub use views::settings::{Prefs, SettingsView};
+pub use views::settings::{HomeRows, Prefs, SettingsView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{VersionRow, VersionsParams, VersionsSnapshot, VersionsView};
