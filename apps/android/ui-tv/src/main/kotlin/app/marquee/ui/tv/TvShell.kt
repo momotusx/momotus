@@ -126,6 +126,7 @@ private val places =
         Route.Home to Place("Home", Icons.House),
         Route.Discover to Place("Discover", Icons.Compass),
         Route.Library to Place("Library", Icons.LibraryBig),
+        Route.Calendar to Place("Calendar", Icons.CalendarDays),
         Route.Settings to Place("Settings", Icons.Settings),
     )
 

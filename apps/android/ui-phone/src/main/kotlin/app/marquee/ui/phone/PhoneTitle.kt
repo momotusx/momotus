@@ -57,6 +57,7 @@ import app.marquee.design.Chip
 import app.marquee.design.ChosenVersion
 import app.marquee.design.FactsTable
 import app.marquee.design.Icons
+import app.marquee.design.KeepInView
 import app.marquee.design.LightStatusBarIcons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
@@ -171,7 +172,12 @@ fun PhoneTitle(
                 if (header.seasons.isNotEmpty()) {
                     item(key = "seasons") {
                         val compact = TitleCopy.compactSeasons(header.seasons)
+                        val order = TitleCopy.seasonOrder(header.seasons)
+                        val seasons = rememberLazyListState()
+                        val selected = order.indexOf(header.selectedSeason)
+                        KeepInView(seasons, if (selected < 0 || !compact) selected else selected + 1)
                         LazyRow(
+                            state = seasons,
                             contentPadding = PaddingValues(horizontal = side),
                             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                             verticalAlignment = Alignment.CenterVertically,
@@ -181,7 +187,7 @@ fun PhoneTitle(
                                     key = "label",
                                 ) { MqText("Season", role = TextRole.Callout, color = Marquee.colors.muted) }
                             }
-                            items(TitleCopy.seasonOrder(header.seasons), key = { it }) { season ->
+                            items(order, key = { it }) { season ->
                                 Chip(
                                     label = TitleCopy.seasonLabel(season, compact),
                                     selected = season == header.selectedSeason,

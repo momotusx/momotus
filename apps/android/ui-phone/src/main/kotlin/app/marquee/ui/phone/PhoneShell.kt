@@ -95,11 +95,13 @@ private val places =
         Route.Home to Place("Home", Icons.House),
         Route.Discover to Place("Discover", Icons.Compass),
         Route.Library to Place("Library", Icons.LibraryBig),
+        Route.Calendar to Place("Calendar", Icons.CalendarDays),
         Route.Settings to Place("Settings", Icons.Settings),
     )
 
 /** Browsing places first, then the tools, as on the web and Apple. */
-private val order = listOf(Route.Home, Route.Discover, Route.Library, Route.Search, Route.Settings)
+private val order =
+    listOf(Route.Home, Route.Discover, Route.Library, Route.Calendar, Route.Search, Route.Settings)
 
 @Composable
 private fun PhoneBar(

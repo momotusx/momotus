@@ -74,10 +74,14 @@ fun PosterTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     shape: TileShape = TileShape.Poster,
+    /** Shown when [imageUrl] cannot load. */
+    fallbackImageUrl: String? = null,
     progress: Float? = null,
     caption: String? = null,
     /** The addon's IMDb rating as written ("8.4"); shown in a chip on the art. */
     rating: String? = null,
+    /** A Watched chip at the top left of the art, as on episode cards. */
+    watched: Boolean = false,
     focusRequester: FocusRequester? = null,
     forceFocus: Boolean = false,
     onFocusChange: ((Boolean) -> Unit)? = null,
@@ -90,8 +94,12 @@ fun PosterTile(
     val corner = Marquee.radius.m
     val lift = remember { mutableStateOf(forceFocus) }
     val focused = lift.value
-    // What a screen reader says after the title: the caption, or the watched share.
-    val state = caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }
+    // What a screen reader says after the title: the caption, or the watched share; and Watched.
+    val state =
+        listOfNotNull(
+            caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" },
+            "Watched".takeIf { watched },
+        ).joinToString(", ").ifEmpty { null }
     Column(
         // First in the chain: the focused tile draws above its neighbours in the row.
         modifier = Modifier.lifted(lift).then(modifier).width(size.width),
@@ -111,7 +119,8 @@ fun PosterTile(
                     if (state != null) stateDescription = state
                 }.focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
         ) {
-            RemoteImage(imageUrl, size.width, size.height, fallbackText = title) {
+            RemoteImage(imageUrl, size.width, size.height, fallbackText = title, fallbackUrl = fallbackImageUrl) {
+                if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
                 if (rating != null) RatingChip(rating, Modifier.align(Alignment.TopEnd))
                 if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
             }

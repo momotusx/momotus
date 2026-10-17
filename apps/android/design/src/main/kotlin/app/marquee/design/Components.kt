@@ -20,13 +20,16 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -53,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import kotlinx.coroutines.flow.first
 
 private enum class ButtonKind { Primary, Secondary }
 
@@ -216,6 +220,26 @@ fun Chip(
                 )
             }
         }
+    }
+}
+
+/**
+ * Scrolls [state] so item [index] is wholly on screen, at first layout and whenever [index] changes:
+ * a selected chip far along a row (season 38, opened from Calendar) is never off screen.
+ */
+@Composable
+fun KeepInView(
+    state: LazyListState,
+    index: Int,
+) {
+    LaunchedEffect(state, index) {
+        if (index < 0) return@LaunchedEffect
+        val info = snapshotFlow { state.layoutInfo }.first { it.totalItemsCount > index }
+        val item = info.visibleItemsInfo.firstOrNull { it.index == index }
+        val shown =
+            item != null && item.offset >= 0 &&
+                item.offset + item.size <= info.viewportEndOffset - info.afterContentPadding
+        if (!shown) state.scrollToItem(index)
     }
 }
 

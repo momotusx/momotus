@@ -17,6 +17,7 @@ import app.marquee.core.secrets.DeviceId
 import app.marquee.core.secrets.KeystoreKeySource
 import app.marquee.core.secrets.SecretStore
 import app.marquee.core.views.AddonsView
+import app.marquee.core.views.CalendarView
 import app.marquee.core.views.DiscoverView
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ImportView
@@ -200,6 +201,9 @@ class CoreSession(
     fun discover() = DiscoverView(client, scope).also { it.open() }
 
     fun library() = LibraryView(client, scope).also { it.open() }
+
+    /** [today] is the local date, `YYYY-MM-DD`. */
+    fun calendar(today: String) = CalendarView(client, scope, today).also { it.open() }
 
     fun addons() = AddonsView(client, scope).also { it.open() }
 

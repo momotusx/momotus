@@ -26,12 +26,17 @@ sealed interface Route : NavKey {
     data object Library : Route
 
     @Serializable
+    data object Calendar : Route
+
+    @Serializable
     data object Settings : Route
 
     @Serializable
     data class Title(
         val kind: String,
         val id: String,
+        /** The season to open on (a Calendar episode); applied once, when the seasons arrive. */
+        val season: Int? = null,
     ) : Route
 
     /** The ranked sources of one video (a movie, or one episode) of a title. */
@@ -63,8 +68,9 @@ sealed interface Route : NavKey {
     ) : Route
 }
 
-/** The five places the rail or the tab bar leads to, in display order. */
-val TOP_LEVEL: List<Route> = listOf(Route.Search, Route.Home, Route.Discover, Route.Library, Route.Settings)
+/** The six places the pill or the tab bar leads to. Each shell orders them itself. */
+val TOP_LEVEL: List<Route> =
+    listOf(Route.Search, Route.Home, Route.Discover, Route.Library, Route.Calendar, Route.Settings)
 
 val Route.isTopLevel: Boolean get() = this in TOP_LEVEL
 

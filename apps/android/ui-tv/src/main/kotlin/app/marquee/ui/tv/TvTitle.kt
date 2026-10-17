@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +54,7 @@ import app.marquee.design.ChosenVersion
 import app.marquee.design.EpisodeCard
 import app.marquee.design.FactsTable
 import app.marquee.design.Icons
+import app.marquee.design.KeepInView
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MenuAction
@@ -347,17 +349,27 @@ private fun Seasons(
     focus: FocusMemory,
 ) {
     val header = checkNotNull(title.header)
+    val compact = TitleCopy.compactSeasons(header.seasons)
+    val order = TitleCopy.seasonOrder(header.seasons)
+    val list = rememberLazyListState()
+    KeepInView(list, order.indexOf(header.selectedSeason).let { if (it < 0 || !compact) it else it + 1 })
     LazyRow(
+        state = list,
         modifier =
             Modifier
-                .focusProperties { enter = { focus.rowEntry(SEASONS) ?: FocusRequester.Default } }
-                .focusGroup(),
+                // First entry lands on the selected season, which may be far along the row.
+                .focusProperties {
+                    enter = {
+                        focus.rowEntry(SEASONS)
+                            ?: focus.requester("season:${header.selectedSeason}")
+                            ?: FocusRequester.Default
+                    }
+                }.focusGroup(),
         contentPadding = PaddingValues(horizontal = Marquee.safe.side, vertical = Marquee.space.xs),
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
-        val compact = TitleCopy.compactSeasons(header.seasons)
         if (compact) item(key = "label") { MqText("Season", role = TextRole.Callout, color = Marquee.colors.muted) }
-        items(TitleCopy.seasonOrder(header.seasons), key = { it }) { season ->
+        items(order, key = { it }) { season ->
             val key = "season:$season"
             Chip(
                 label = TitleCopy.seasonLabel(season, compact),

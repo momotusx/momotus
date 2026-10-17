@@ -2,7 +2,9 @@ package app.marquee.android
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -19,15 +21,35 @@ import app.marquee.ui.phone.PhoneVersions
 import app.marquee.ui.tv.FocusMemory
 import app.marquee.ui.tv.TvTitle
 import app.marquee.ui.tv.TvVersions
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
-/** A title's core view and its TV focus memory; both live as long as the page is on the back stack. */
+/**
+ * A title's core view and its TV focus memory; both live as long as the page is on the back stack.
+ * [season] (from a Calendar episode) is selected once, when the seasons arrive: a season picked
+ * on the page after that is never undone.
+ */
 class TitleHolder(
     session: CoreSession,
     kind: String,
     id: String,
+    season: Int?,
 ) : ViewModel() {
     val view: TitleView = session.title(kind, id)
     val focus = FocusMemory()
+
+    init {
+        if (season != null) {
+            viewModelScope.launch {
+                val header = snapshotFlow { view.header }.first { !it?.seasons.isNullOrEmpty() }
+                if (header != null && season in header.seasons &&
+                    header.selectedSeason != season
+                ) {
+                    view.selectSeason(season)
+                }
+            }
+        }
+    }
 
     override fun onCleared() = view.close()
 }
@@ -61,7 +83,7 @@ fun TitleScreen(
     val holder =
         viewModel<TitleHolder>(
             key = "title:${route.kind}:${route.id}",
-            factory = viewModelFactory { initializer { TitleHolder(session, route.kind, route.id) } },
+            factory = viewModelFactory { initializer { TitleHolder(session, route.kind, route.id, route.season) } },
         )
     val header = holder.view.header
     val name = header?.details?.name

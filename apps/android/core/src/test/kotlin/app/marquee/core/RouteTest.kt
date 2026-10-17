@@ -35,8 +35,9 @@ class RouteTest {
     }
 
     @Test
-    fun `only the five places are top level`() {
+    fun `only the six places are top level`() {
         assertTrue(Route.Home.isTopLevel)
+        assertTrue(Route.Calendar.isTopLevel)
         assertTrue(Route.Settings.isTopLevel)
         assertFalse(title.isTopLevel)
         assertFalse(Route.Onboarding.isTopLevel)

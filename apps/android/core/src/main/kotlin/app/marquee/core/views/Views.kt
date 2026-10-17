@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import app.marquee.core.client.CoreClient
 import app.marquee.core.model.AddonsSnapshot
+import app.marquee.core.model.CalendarSnapshot
 import app.marquee.core.model.DiscoverSnapshot
 import app.marquee.core.model.Episode
 import app.marquee.core.model.Hero
@@ -189,6 +190,22 @@ class LibraryView(
 
     fun setSort(sort: LibrarySort) =
         post(command("setSort") { put("sort", sort.name.replaceFirstChar { it.lowercase() }) })
+}
+
+/** Episodes of the library's series around [today], the local date (`YYYY-MM-DD`). */
+class CalendarView(
+    client: CoreClient,
+    scope: CoroutineScope,
+    today: String,
+) : RecordView<CalendarSnapshot>(
+        client,
+        scope,
+        "calendar",
+        JsonObject(mapOf("today" to JsonPrimitive(today))),
+        CalendarSnapshot.serializer(),
+    ) {
+    /** Sent at local midnight and on every return to the app, so the window follows the date. */
+    fun setToday(today: String) = post(command("setToday") { put("today", today) })
 }
 
 class AddonsView(

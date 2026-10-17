@@ -16,6 +16,7 @@ export const ICONS = [
   "bookmark",
   "bookmark-check",
   "bookmark-plus",
+  "calendar-days",
   "captions",
   "check",
   "chevron-down",

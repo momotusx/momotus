@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -99,6 +100,7 @@ internal object HttpsUpgrade : Interceptor {
 /**
  * A picture at an exact size, with the title text behind it: while the image loads, or if it
  * cannot (no network, a host without TLS), the text stays readable.
+ * [fallbackUrl] is tried when [url] cannot load (an episode still not made yet: the poster).
  */
 @Composable
 fun RemoteImage(
@@ -107,13 +109,16 @@ fun RemoteImage(
     height: Dp,
     fallbackText: String,
     modifier: Modifier = Modifier,
+    fallbackUrl: String? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val widthPx = with(density) { width.roundToPx() }
     val heightPx = with(density) { height.roundToPx() }
-    var failed by remember(url) { mutableStateOf(url == null) }
+    var tried by remember(url, fallbackUrl) { mutableIntStateOf(0) }
+    val current = listOfNotNull(url, fallbackUrl).getOrNull(tried)
+    val failed = current == null
     // The surface fill is what a tile shows while the picture loads; the title takes over when
     // there is no picture or it cannot load.
     Box(modifier.size(width, height).background(Marquee.colors.surface)) {
@@ -126,21 +131,21 @@ fun RemoteImage(
                 maxLines = 4,
             )
         }
-        if (url != null) {
+        if (current != null) {
             val request =
-                remember(url, widthPx, heightPx) {
+                remember(current, widthPx, heightPx) {
                     ImageRequest
                         .Builder(context)
-                        .data(url)
+                        .data(current)
                         .size(Size(widthPx, heightPx))
-                        .memoryCacheKey(imageKey(url, widthPx, heightPx))
+                        .memoryCacheKey(imageKey(current, widthPx, heightPx))
                         .build()
                 }
             AsyncImage(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                onError = { failed = true },
+                onError = { tried++ },
                 modifier = Modifier.size(width, height),
             )
         }

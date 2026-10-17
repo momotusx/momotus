@@ -121,8 +121,11 @@ private fun AppNav(
         ) {
             backStack.removeAt(backStack.lastIndex)
         }
-        val title = Route.Title(current.kind, current.id)
-        if (backStack.lastOrNull() != title) backStack.add(title)
+        // A title page opened from Calendar carries its season: it is the same page.
+        val below = backStack.lastOrNull()
+        if (below !is Route.Title || below.kind != current.kind || below.id != current.id) {
+            backStack.add(Route.Title(current.kind, current.id))
+        }
     }
 
     // The shared Versions views fan out to the addons while open: close them when no screen that
@@ -183,6 +186,13 @@ private fun AppNav(
                     entry<Route.Search> { SearchScreen(session, ::open) }
                     entry<Route.Discover> { DiscoverScreen(session, ::open) }
                     entry<Route.Library> { LibraryScreen(session, ::open) }
+                    entry<Route.Calendar> {
+                        CalendarScreen(
+                            session,
+                            onOpen = { backStack.add(Route.Title("series", it.itemId, it.season)) },
+                            onDiscover = { choose(Route.Discover) },
+                        )
+                    }
                     entry<Route.Settings> { SettingsScreen(session) }
                     entry<Route.Title> { route ->
                         TitleScreen(
