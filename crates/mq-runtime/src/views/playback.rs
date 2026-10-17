@@ -7,6 +7,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
+use crate::segments::{self, Segment, Target};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines};
@@ -30,6 +31,8 @@ const SAVE_EVERY: Duration = Duration::from_secs(5);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 /// The subtitle hash reads two 64 KiB ranges; past this, ask without it.
 const HASH_TIMEOUT: Duration = Duration::from_secs(4);
+/// One skip segment lookup, queueing, mapping and the gap filler included.
+const SEGMENTS_DEADLINE: Duration = Duration::from_secs(6);
 /// A torrent's swarm must send its metadata within this...
 #[cfg(feature = "torrent")]
 const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
@@ -69,6 +72,12 @@ pub struct PlaybackSnapshot {
     /// The playing stream's binge group; pass it as `bingeGroup` when opening
     /// Versions for the next episode so the same release line is picked.
     pub binge_group: Option<String>,
+    /// Skip segments of the playing version, once its duration is reported.
+    pub segments: Vec<Segment>,
+    /// When to offer the Up Next card: the credits start from a source that
+    /// matched the release; null keeps the app's own timing.
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub next_at_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -150,6 +159,11 @@ struct State {
     last: Option<(u64, u64)>,
     saved_at: Option<Instant>,
     dirty: bool,
+    /// Bumped whenever the playing source changes, so a skip lookup for an
+    /// earlier source never lands on this one.
+    source: u64,
+    /// The source and duration the current skip lookup is for.
+    lookup: Option<(u64, u64)>,
 }
 
 pub struct PlaybackView {
@@ -158,6 +172,7 @@ pub struct PlaybackView {
     snapshot: SharedObservable<PlaybackSnapshot>,
     state: Arc<Mutex<State>>,
     task: Mutex<Option<JoinHandle<()>>>,
+    segments_task: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl PlaybackView {
@@ -183,6 +198,8 @@ impl PlaybackView {
             subtitles_pending: false,
             next: None,
             binge_group: None,
+            segments: Vec::new(),
+            next_at_ms: None,
         };
         let view = Self {
             core: core.clone(),
@@ -196,8 +213,11 @@ impl PlaybackView {
                 last: None,
                 saved_at: None,
                 dirty: false,
+                source: 0,
+                lookup: None,
             })),
             task: Mutex::new(None),
+            segments_task: Mutex::new(None),
         };
         view.spawn_resolve();
         view
@@ -236,9 +256,57 @@ impl PlaybackView {
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
             s.snapshot.subtitles_pending = false;
+            clear_segments(&mut s);
             self.snapshot.set(s.snapshot.clone());
         }
+        if let Some(task) = lock(&self.segments_task).take() {
+            task.abort();
+        }
         self.spawn_resolve();
+    }
+
+    /// The player knows the duration of the version `key`: look its skip
+    /// segments up. Reports for another version, durations under a minute or
+    /// over six hours, and repeats within 2 percent are ignored; a larger
+    /// correction looks up again.
+    pub fn report_duration(&self, key: &str, duration_ms: u64) {
+        if !(60_000..=6 * 3_600_000).contains(&duration_ms) {
+            return;
+        }
+        let t = &self.target;
+        let Some(target) = Target::from_ids(&t.kind, &t.item_id, &t.video_id) else {
+            return;
+        };
+        let lookup = {
+            let mut s = lock(&self.state);
+            if s.snapshot.phase != PlaybackPhase::Ready || s.snapshot.key.as_deref() != Some(key) {
+                return;
+            }
+            if let Some((source, known)) = s.lookup
+                && source == s.source
+                && known.abs_diff(duration_ms) * 50 <= known
+            {
+                return;
+            }
+            let lookup = (s.source, duration_ms);
+            s.lookup = Some(lookup);
+            if !s.snapshot.segments.is_empty() || s.snapshot.next_at_ms.is_some() {
+                s.snapshot.segments.clear();
+                s.snapshot.next_at_ms = None;
+                self.snapshot.set(s.snapshot.clone());
+            }
+            lookup
+        };
+        let task = tokio::spawn(find_segments(
+            self.core.clone(),
+            self.state.clone(),
+            self.snapshot.clone(),
+            target,
+            lookup,
+        ));
+        if let Some(old) = lock(&self.segments_task).replace(task) {
+            old.abort();
+        }
     }
 
     /// Player position report. Saved at most every few seconds; the last
@@ -286,12 +354,57 @@ impl PlaybackView {
 
 impl Drop for PlaybackView {
     fn drop(&mut self) {
-        if let Some(task) = lock(&self.task).take() {
-            task.abort();
+        for task in [&self.task, &self.segments_task] {
+            if let Some(task) = lock(task).take() {
+                task.abort();
+            }
         }
         self.save();
         release_all(&mut lock(&self.state));
     }
+}
+
+/// A new source: the old one's skip segments do not apply to it.
+fn clear_segments(s: &mut State) {
+    s.source += 1;
+    s.lookup = None;
+    s.snapshot.segments.clear();
+    s.snapshot.next_at_ms = None;
+}
+
+/// Finds skip segments for one source and duration: the release-matched
+/// source first, published at once, then the gap filler. Results for a
+/// source or duration that is no longer current are dropped.
+async fn find_segments(
+    core: Core,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<PlaybackSnapshot>,
+    target: Target,
+    lookup: (u64, u64),
+) {
+    let publish = |change: &dyn Fn(&mut PlaybackSnapshot)| {
+        let mut s = lock(&state);
+        if s.lookup == Some(lookup) {
+            change(&mut s.snapshot);
+            snapshot.set(s.snapshot.clone());
+        }
+    };
+    let duration_ms = lookup.1;
+    let find = async {
+        let finder = core.segments();
+        let found = finder.primary(&target, duration_ms).await;
+        if !found.segments.is_empty() {
+            publish(&|s| {
+                s.segments = found.segments.clone();
+                s.next_at_ms = found.next_at_ms;
+            });
+        }
+        let extra = finder.fill(&target, duration_ms, &found.segments).await;
+        if !extra.is_empty() {
+            publish(&|s| s.segments = segments::merge(&s.segments, extra.clone()));
+        }
+    };
+    let _ = tokio::time::timeout(SEGMENTS_DEADLINE, find).await;
 }
 
 /// Ends the stream's and the subtitles' loopback URLs; they stop working.
@@ -411,6 +524,7 @@ async fn resolve_next(
                 let allow_private = addon_allows_private(&core, &stream.addon_id);
                 {
                     let mut s = lock(&state);
+                    clear_segments(&mut s);
                     s.snapshot.phase = PlaybackPhase::Ready;
                     s.snapshot.url = Some(url);
                     s.snapshot.key = Some(stream.key.clone());

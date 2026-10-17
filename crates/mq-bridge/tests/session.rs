@@ -178,6 +178,18 @@ async fn versions_then_playback_then_progress() {
             "command": {"type": "progress", "positionMs": 30000, "durationMs": 888000}})))
         .await;
     assert_eq!(next(&mut rx).await["ok"], true);
+    // `duration` needs its number; a report for another version is accepted
+    // and ignored (no lookup starts, so no network in this test).
+    session
+        .handle_text(&request(json!({"id": 41, "op": "command", "sub": playback,
+            "command": {"type": "duration", "key": key}})))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], false);
+    session
+        .handle_text(&request(json!({"id": 42, "op": "command", "sub": playback,
+            "command": {"type": "duration", "key": "another-version", "durationMs": 888000}})))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
     session
         .handle_text(&request(
             json!({"id": 5, "op": "unsubscribe", "sub": playback}),

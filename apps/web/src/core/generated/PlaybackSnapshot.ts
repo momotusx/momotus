@@ -2,6 +2,7 @@
 import type { Attempt } from "./Attempt";
 import type { NextEpisode } from "./NextEpisode";
 import type { PlaybackPhase } from "./PlaybackPhase";
+import type { Segment } from "./Segment";
 import type { SubtitleTrack } from "./SubtitleTrack";
 
 export type PlaybackSnapshot = { phase: PlaybackPhase, 
@@ -38,4 +39,13 @@ next: NextEpisode | null,
  * The playing stream's binge group; pass it as `bingeGroup` when opening
  * Versions for the next episode so the same release line is picked.
  */
-bingeGroup: string | null, };
+bingeGroup: string | null, 
+/**
+ * Skip segments of the playing version, once its duration is reported.
+ */
+segments: Array<Segment>, 
+/**
+ * When to offer the Up Next card: the credits start from a source that
+ * matched the release; null keeps the app's own timing.
+ */
+nextAtMs: number | null, };

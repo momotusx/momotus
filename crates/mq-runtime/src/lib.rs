@@ -5,6 +5,7 @@
 
 mod core;
 pub mod live;
+pub mod segments;
 pub mod views;
 
 pub use crate::core::{Core, CoreConfig, CoreError};

@@ -591,6 +591,13 @@ impl Session {
                 };
                 playback.report_progress(ms("positionMs")?, ms("durationMs")?);
             }
+            (View::Playback(playback), "duration") => {
+                let duration_ms = command
+                    .get("durationMs")
+                    .and_then(Value::as_u64)
+                    .ok_or("durationMs missing")?;
+                playback.report_duration(&param(command, "key")?, duration_ms);
+            }
             (View::Playback(playback), "failOver") => {
                 playback
                     .fail_over(&param(command, "error").unwrap_or_else(|_| "player error".into()));

@@ -67,6 +67,8 @@ struct Inner {
     profile: String,
     /// One sync or roster operation at a time, across every session.
     sync_gate: Arc<Mutex<()>>,
+    /// Skip segment lookups and their session cache.
+    segments: crate::segments::Finder,
 }
 
 impl Core {
@@ -110,7 +112,7 @@ impl Core {
         library.ensure_profile(&profile, &profile, &Hlc::zero(device_id).encode())?;
         Ok(Self {
             inner: Arc::new(Inner {
-                http,
+                http: http.clone(),
                 addons,
                 server: OnceCell::new(),
                 torrent_dir,
@@ -121,12 +123,17 @@ impl Core {
                 clock,
                 profile,
                 sync_gate: Arc::default(),
+                segments: crate::segments::Finder::new(http.clone()),
             }),
         })
     }
 
     pub fn http(&self) -> &HttpClient {
         &self.inner.http
+    }
+
+    pub fn segments(&self) -> &crate::segments::Finder {
+        &self.inner.segments
     }
 
     pub fn addons(&self) -> &AddonClient {
