@@ -8,15 +8,12 @@ use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_library::{LibraryItemRow, Table};
-use mq_protocol::{MetaItem, ResourcePath, ResourceResponse};
+use mq_protocol::MetaItem;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::task::JoinSet;
-
-const META_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -268,45 +265,23 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 async fn load_meta(ctx: Ctx) {
-    let path = ResourcePath {
-        resource: "meta".into(),
-        r#type: ctx.kind.clone(),
-        id: ctx.id.clone(),
-        extra: vec![],
-    };
-    let addons: Vec<_> = ctx
-        .core
-        .installed_addons()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|a| a.supports(&path))
-        .collect();
-    let mut last_error = "no installed addon provides details for this title".to_owned();
-    // First answer in addon order wins, as in Stremio; later addons are only
-    // asked when earlier ones fail.
-    for addon in addons {
-        match ctx.core.addons().fetch(&addon, &path, META_TIMEOUT).await {
-            Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
-                Ok(ResourceResponse::Meta { meta }) => {
-                    lock(&ctx.state).meta = Some(meta);
-                    ctx.render_with_source(&addon.manifest.name);
-                    return;
-                }
-                Ok(_) => last_error = format!("{} returned no details", addon.manifest.name),
-                Err(e) => {
-                    last_error = format!("{} returned unreadable details: {e}", addon.manifest.name)
-                }
-            },
-            Err(e) => last_error = format!("{}: {e}", addon.manifest.name),
+    match ctx.core.fetch_meta(&ctx.kind, &ctx.id).await {
+        Ok((meta, source)) => {
+            lock(&ctx.state).meta = Some(meta);
+            ctx.render_with_source(&source);
+        }
+        Err(reason) => {
+            let mut header = ctx.header.get();
+            header.state = TitleState::Failed { reason };
+            ctx.header.set(header);
         }
     }
-    let mut header = ctx.header.get();
-    header.state = TitleState::Failed { reason: last_error };
-    ctx.header.set(header);
 }
 
 async fn watch_library(ctx: Ctx) {
     let mut changes = ctx.core.library().subscribe();
+    // Catch writes made between open and this subscription.
+    ctx.render();
     while let Ok(tables) = changes.recv().await {
         if tables
             .iter()

@@ -189,3 +189,47 @@ async fn versions_then_playback_then_progress() {
         Some((30000, 888000))
     );
 }
+
+#[tokio::test]
+async fn addons_view_follows_disable_and_remove() {
+    let base = local_addon().await;
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let mut session = Session::new(core, tx);
+    let url = format!("{base}/manifest.json");
+    session
+        .handle_text(&json!({"id": 1, "op": "installAddon", "url": url}).to_string())
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    session
+        .handle_text(&json!({"id": 2, "op": "subscribe", "view": "addons"}).to_string())
+        .await;
+    let reply = next(&mut rx).await;
+    let sub = reply["result"]["sub"].as_u64().unwrap();
+    assert_eq!(
+        reply["result"]["snapshot"]["addons"][0]["provides"],
+        json!(["stream"])
+    );
+
+    session
+        .handle_text(
+            &json!({"id": 3, "op": "setAddonEnabled", "url": url, "enabled": false}).to_string(),
+        )
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    let s = push_until(&mut rx, sub, |s| s["addons"][0]["enabled"] == false).await;
+    assert_eq!(s["addons"][0]["host"], "127.0.0.1");
+
+    session
+        .handle_text(&json!({"id": 4, "op": "removeAddon", "url": url}).to_string())
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    push_until(&mut rx, sub, |s| {
+        s["addons"].as_array().is_some_and(Vec::is_empty)
+    })
+    .await;
+    session
+        .handle_text(&json!({"id": 5, "op": "removeAddon", "url": url}).to_string())
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], false);
+}

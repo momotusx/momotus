@@ -183,3 +183,56 @@ async fn real_cinemeta_home() {
     }
     assert!(rows.iter().filter(|r| r.state == RowState::Ready).count() >= 2);
 }
+
+#[tokio::test]
+async fn addons_move_disable_remove_and_the_view_follows() {
+    use mq_runtime::AddonsView;
+    let core = Core::temporary("p").unwrap();
+    let row = |name: &str, i: i64| mq_library::AddonRow {
+        transport_url: format!(
+            "https://{name}.example/realdebrid=0123456789abcdefghij0123456789/manifest.json"
+        ),
+        manifest_json:
+            serde_json::json!({"id": name, "version": "1.0.0", "name": name, "types": ["movie"],
+            "resources": ["stream"], "catalogs": []})
+            .to_string(),
+        position: i,
+        enabled: true,
+        allow_private: false,
+    };
+    core.library()
+        .set_addons("p", &[row("a", 0), row("b", 1), row("c", 2)], &core.hlc())
+        .unwrap();
+    let view = AddonsView::open(&core);
+    let names = |v: &AddonsView| -> Vec<String> {
+        v.snapshot().addons.iter().map(|a| a.name.clone()).collect()
+    };
+    assert_eq!(names(&view), ["a", "b", "c"]);
+    let urls: Vec<String> = view
+        .snapshot()
+        .addons
+        .iter()
+        .map(|a| a.url.clone())
+        .collect();
+    let (url_a, url_c) = (&urls[0], &urls[2]);
+
+    core.move_addon(url_c, 0).unwrap();
+    core.set_addon_enabled(url_c, false).unwrap();
+    core.remove_addon(url_a).unwrap();
+    for _ in 0..100 {
+        if names(&view) == ["c", "b"] {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(names(&view), ["c", "b"]);
+    assert!(!view.snapshot().addons[0].enabled);
+    // Disabled addons are not asked for anything.
+    assert_eq!(core.installed_addons().unwrap().len(), 1);
+
+    // Errors never carry the key in the URL.
+    let err = core
+        .remove_addon("https://x.example/realdebrid=0123456789abcdefghij0123456789/manifest.json");
+    let text = err.unwrap_err().to_string();
+    assert!(!text.contains("0123456789abcdef"), "{text}");
+}

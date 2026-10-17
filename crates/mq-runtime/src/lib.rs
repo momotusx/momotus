@@ -9,7 +9,10 @@ pub mod views;
 
 pub use crate::core::{Core, CoreConfig, CoreError};
 pub use mq_debrid::StoreId;
+pub use mq_import::Endpoints as StremioEndpoints;
+pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
 pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
+pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
 pub use views::playback::{Attempt, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView};
 pub use views::search::{SearchSnapshot, SearchView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};

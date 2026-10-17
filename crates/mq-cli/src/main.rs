@@ -6,8 +6,9 @@ use futures_util::StreamExt;
 use mq_addons::{AddonEvent, Deadlines};
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_runtime::{
-    Core, CoreConfig, HomeView, PlayTarget, PlaybackPhase, PlaybackView, RowState, SearchView,
-    StoreId, TitleView, VersionsParams, VersionsView,
+    Core, CoreConfig, HomeView, ImportSnapshot, ImportView, PlayTarget, PlaybackPhase,
+    PlaybackView, RowState, SearchView, StoreId, StremioEndpoints, TitleView, VersionsParams,
+    VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde_json::json;
@@ -42,6 +43,12 @@ enum Command {
     },
     /// Query every stream addon for a title, e.g. `movie tt0111161` or `series tt0944947:1:1`.
     Streams { kind: String, id: String },
+    /// Import a Stremio account: prints a code to enter at the link page, then
+    /// imports addons, library, progress and watched marks.
+    Import {
+        #[arg(long, default_value_t = 600)]
+        timeout_secs: u64,
+    },
     /// Search every addon catalog that supports it and print the rows.
     Search { query: String },
     /// Pick the recommended version of a title and play it in mpv, e.g.
@@ -82,6 +89,7 @@ async fn main() {
         Command::Home { timeout_secs } => home(&core, Duration::from_secs(timeout_secs)).await,
         Command::Streams { kind, id } => streams(&core, kind, id).await,
         Command::Search { query } => search(&core, &query).await,
+        Command::Import { timeout_secs } => import(&core, Duration::from_secs(timeout_secs)).await,
         Command::Play {
             kind,
             id,
@@ -371,4 +379,25 @@ async fn search(core: &Core, query: &str) -> Result<(), String> {
     }
     emit(json!({ "event": "search_done", "ms": ms(started.elapsed()), "debounce_ms": 250 }));
     Ok(())
+}
+
+async fn import(core: &Core, timeout: Duration) -> Result<(), String> {
+    let started = Instant::now();
+    let view = ImportView::open(core, StremioEndpoints::default());
+    let (_, mut updates) = view.subscribe();
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let state = view.snapshot();
+        emit(json!({ "event": "import", "state": state, "ms": ms(started.elapsed()) }));
+        match state {
+            ImportSnapshot::Done { .. } => return Ok(()),
+            ImportSnapshot::Failed { reason } => return Err(reason),
+            ImportSnapshot::Expired => return Err("the code expired".into()),
+            _ => {}
+        }
+        match tokio::time::timeout_at(deadline, updates.next()).await {
+            Ok(Some(_)) => {}
+            _ => return Err("import timed out".into()),
+        }
+    }
 }

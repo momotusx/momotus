@@ -368,6 +368,17 @@ impl Library {
             Ok(c.last_insert_rowid())
         })
     }
+
+    pub fn raw_import(&self, id: i64) -> Result<Option<String>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT payload FROM import_raw WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()
+        })
+    }
 }
 
 fn open_connection(target: &str) -> Result<Connection, LibraryError> {

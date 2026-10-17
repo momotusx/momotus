@@ -1859,6 +1859,7 @@ dependencies = [
  "mq-addons",
  "mq-debrid",
  "mq-http",
+ "mq-import",
  "mq-library",
  "mq-protocol",
  "mq-relparse",

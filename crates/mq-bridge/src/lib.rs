@@ -3,13 +3,14 @@
 //! IPC channel.
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
-//! "setDebridKeys", ...}`. Views: home, search, title, versions, playback.
+//! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setDebridKeys", ...}`.
+//! Views: home, search, title, versions, playback, addons, import.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
 use mq_runtime::{
-    Core, HomeView, PlayTarget, PlaybackView, SearchView, StoreId, TitleView, VersionsParams,
-    VersionsView,
+    AddonsView, Core, HomeView, ImportView, PlayTarget, PlaybackView, SearchView, StoreId,
+    StremioEndpoints, TitleView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
@@ -40,6 +41,20 @@ enum Request {
         id: u64,
         url: String,
     },
+    RemoveAddon {
+        id: u64,
+        url: String,
+    },
+    MoveAddon {
+        id: u64,
+        url: String,
+        to: usize,
+    },
+    SetAddonEnabled {
+        id: u64,
+        url: String,
+        enabled: bool,
+    },
     /// Debrid accounts from the platform keystore, by service name
     /// ("realdebrid", "torbox", "alldebrid", "premiumize"). Replaces the set.
     SetDebridKeys {
@@ -55,6 +70,8 @@ enum View {
     Versions(VersionsView),
     Playback(PlaybackView),
     Search(SearchView),
+    Addons { _view: AddonsView },
+    Import { _view: ImportView },
 }
 
 struct Subscription {
@@ -117,6 +134,18 @@ impl Session {
                 let result = self.command(sub, &command);
                 self.reply(json!(id), result);
             }
+            Request::RemoveAddon { id, url } => {
+                let result = self.core.remove_addon(&url);
+                self.reply(json!(id), done(result));
+            }
+            Request::MoveAddon { id, url, to } => {
+                let result = self.core.move_addon(&url, to);
+                self.reply(json!(id), done(result));
+            }
+            Request::SetAddonEnabled { id, url, enabled } => {
+                let result = self.core.set_addon_enabled(&url, enabled);
+                self.reply(json!(id), done(result));
+            }
             Request::SetDebridKeys { id, keys } => {
                 let result = keys
                     .into_iter()
@@ -176,6 +205,26 @@ impl Session {
                 let (snapshot, updates) = versions.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (View::Versions(versions), to_value(&snapshot)?, forward)
+            }
+            "addons" => {
+                let addons = AddonsView::open(&self.core);
+                let (snapshot, updates) = addons.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (
+                    View::Addons { _view: addons },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
+            "import" => {
+                let import = ImportView::open(&self.core, StremioEndpoints::default());
+                let (snapshot, updates) = import.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (
+                    View::Import { _view: import },
+                    to_value(&snapshot)?,
+                    forward,
+                )
             }
             "search" => {
                 let search = SearchView::open(&self.core);
@@ -283,6 +332,10 @@ impl Session {
         };
         Ok(PlaybackView::open(&self.core, candidates, target))
     }
+}
+
+fn done(result: Result<(), mq_runtime::CoreError>) -> Result<Value, String> {
+    result.map(|()| json!({})).map_err(|e| e.to_string())
 }
 
 fn param(params: &Value, key: &str) -> Result<String, String> {

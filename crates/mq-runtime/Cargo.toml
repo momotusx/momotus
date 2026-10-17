@@ -18,6 +18,7 @@ mq-streams = { path = "../mq-streams" }
 mq-relparse = { path = "../mq-relparse" }
 mq-server = { path = "../mq-server" }
 mq-debrid = { path = "../mq-debrid" }
+mq-import = { path = "../mq-import" }
 stremio-core.workspace = true
 eyeball = "0.8"
 eyeball-im = "0.9"

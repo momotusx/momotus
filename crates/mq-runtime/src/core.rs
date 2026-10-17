@@ -5,11 +5,14 @@ use mq_debrid::{AllDebrid, Premiumize, RealDebrid, Resolver, ResolverConfig, Sto
 use mq_http::{ClientConfig, HttpClient};
 use mq_library::hlc::now_ms;
 use mq_library::{AddonRow, HlcClock, Library};
-use mq_protocol::Manifest;
+use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tokio::sync::OnceCell;
+
+const META_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
@@ -23,6 +26,8 @@ pub enum CoreError {
     Io(#[from] std::io::Error),
     #[error("addon already installed: {0}")]
     AlreadyInstalled(String),
+    #[error("addon is not installed: {0}")]
+    NotInstalled(String),
     #[error("stored manifest is invalid: {0}")]
     BadManifest(String),
 }
@@ -169,28 +174,108 @@ impl Core {
             .collect())
     }
 
+    /// Details for one title: the first answer in addon order wins, as in
+    /// Stremio; later addons are asked only when earlier ones fail. Returns the
+    /// meta and the name of the addon that gave it.
+    pub async fn fetch_meta(&self, kind: &str, id: &str) -> Result<(MetaItem, String), String> {
+        let path = ResourcePath {
+            resource: "meta".into(),
+            r#type: kind.to_owned(),
+            id: id.to_owned(),
+            extra: vec![],
+        };
+        let addons = self.installed_addons().map_err(|e| e.to_string())?;
+        let mut last_error = "no installed addon provides details for this title".to_owned();
+        for addon in addons.iter().filter(|a| a.supports(&path)) {
+            let name = &addon.manifest.name;
+            match self.addons().fetch(addon, &path, META_TIMEOUT).await {
+                Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
+                    Ok(ResourceResponse::Meta { meta }) => return Ok((meta, name.clone())),
+                    Ok(_) => last_error = format!("{name} returned no details"),
+                    Err(e) => last_error = format!("{name} returned unreadable details: {e}"),
+                },
+                Err(e) => last_error = format!("{name}: {e}"),
+            }
+        }
+        Err(last_error)
+    }
+
     /// Fetches the manifest and appends the addon to the profile's list.
     pub async fn install_addon(&self, transport_url: &str) -> Result<InstalledAddon, CoreError> {
         let addon = self.addons().fetch_manifest(transport_url).await?;
-        let mut rows = self.library().addons(self.profile())?;
-        if rows
-            .iter()
-            .any(|r| r.transport_url == addon.transport_url.as_str())
-        {
-            return Err(CoreError::AlreadyInstalled(addon.transport_url.to_string()));
-        }
-        rows.push(AddonRow {
-            transport_url: addon.transport_url.to_string(),
-            manifest_json: serde_json::to_string(&addon.manifest)
-                .map_err(|e| CoreError::BadManifest(e.to_string()))?,
-            position: rows.len() as i64,
-            enabled: true,
-            allow_private: addon.allow_private,
-        });
-        self.library()
-            .set_addons(self.profile(), &rows, &self.hlc())?;
+        let manifest_json = serde_json::to_string(&addon.manifest)
+            .map_err(|e| CoreError::BadManifest(e.to_string()))?;
+        let url = addon.transport_url.to_string();
+        self.edit_addons(|rows| {
+            if rows.iter().any(|r| r.transport_url == url) {
+                return Err(CoreError::AlreadyInstalled(redact(&url)));
+            }
+            rows.push(AddonRow {
+                transport_url: url.clone(),
+                manifest_json,
+                position: 0,
+                enabled: true,
+                allow_private: addon.allow_private,
+            });
+            Ok(())
+        })?;
         Ok(addon)
     }
+
+    pub fn remove_addon(&self, transport_url: &str) -> Result<(), CoreError> {
+        self.edit_addons(|rows| {
+            let at = position(rows, transport_url)?;
+            rows.remove(at);
+            Ok(())
+        })
+    }
+
+    /// Moves an addon to `to` in the list (clamped); order decides which
+    /// addon answers first.
+    pub fn move_addon(&self, transport_url: &str, to: usize) -> Result<(), CoreError> {
+        self.edit_addons(|rows| {
+            let row = rows.remove(position(rows, transport_url)?);
+            rows.insert(to.min(rows.len()), row);
+            Ok(())
+        })
+    }
+
+    pub fn set_addon_enabled(&self, transport_url: &str, enabled: bool) -> Result<(), CoreError> {
+        self.edit_addons(|rows| {
+            let at = position(rows, transport_url)?;
+            rows[at].enabled = enabled;
+            Ok(())
+        })
+    }
+
+    /// One write of the whole ordered list; positions follow the new order.
+    fn edit_addons(
+        &self,
+        f: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), CoreError>,
+    ) -> Result<(), CoreError> {
+        let mut rows = self.library().addons(self.profile())?;
+        f(&mut rows)?;
+        for (i, row) in rows.iter_mut().enumerate() {
+            row.position = i as i64;
+        }
+        self.library()
+            .set_addons(self.profile(), &rows, &self.hlc())?;
+        Ok(())
+    }
+}
+
+fn position(rows: &[AddonRow], transport_url: &str) -> Result<usize, CoreError> {
+    rows.iter()
+        .position(|r| r.transport_url == transport_url)
+        .ok_or_else(|| CoreError::NotInstalled(redact(transport_url)))
+}
+
+/// Transport URLs often carry API keys (debrid tokens in Torrentio configs), so
+/// errors that reach a UI or a log show only the redacted form.
+fn redact(transport_url: &str) -> String {
+    url::Url::parse(transport_url)
+        .map(|u| mq_http::redact_url(&u))
+        .unwrap_or_else(|_| "<invalid url>".into())
 }
 
 /// Persists addon responses in the library database so Home can render from
