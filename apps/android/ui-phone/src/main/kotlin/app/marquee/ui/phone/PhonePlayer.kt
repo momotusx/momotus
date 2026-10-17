@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,8 +61,10 @@ import app.marquee.player.UpNextCard
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.nextSpeed
+import app.marquee.player.scrubTo
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.ceil
 
 private const val HIDE_MS = 4_000L
@@ -100,7 +103,9 @@ fun PhonePlayer(
         var osd by remember { mutableStateOf(true) }
         var wake by remember { mutableIntStateOf(0) }
         var panel by remember { mutableStateOf<Panel?>(null) }
-        var hint by remember { mutableStateOf<Int?>(null) }
+        // The side of the last double tap (1 right, -1 left) and how many there were, so the same side twice restarts the hint.
+        var hint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+        var taps by remember { mutableIntStateOf(0) }
         val ended = stage == Stage.Ended
         val showControls = osd && live && !ended && !inPip
         val next = controller.next
@@ -113,10 +118,19 @@ fun PhonePlayer(
             }
         }
 
-        LaunchedEffect(osd, wake, stage, panel, showNext) {
+        // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
+        val secondsLeft by remember(controller) {
+            derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
+        }
+
+        // The controls hide four seconds after the last touch while playing; `wake` is read here and not in
+        // composition, so a touch recomposes nothing.
+        LaunchedEffect(osd, stage, panel, showNext) {
             if (osd && stage == Stage.Playing && panel == null && !showNext) {
-                kotlinx.coroutines.delay(HIDE_MS)
-                osd = false
+                snapshotFlow { wake }.collectLatest {
+                    kotlinx.coroutines.delay(HIDE_MS)
+                    osd = false
+                }
             }
         }
         LaunchedEffect(hint) {
@@ -140,13 +154,18 @@ fun PhonePlayer(
                     if (!live) return@pointerInput
                     detectTapGestures(
                         onTap = {
-                            osd = !osd
+                            // A tap on the picture while a list is open closes the list, nothing else.
+                            if (panel != null) {
+                                panel = null
+                            } else {
+                                osd = !osd
+                            }
                             wake++
                         },
                         onDoubleTap = { at ->
                             val forward = at.x > size.width / 2
                             controller.seekBy(if (forward) SEEK_MS else -SEEK_MS)
-                            hint = if (forward) 1 else -1
+                            hint = (if (forward) 1 else -1) to ++taps
                         },
                     )
                 },
@@ -154,7 +173,7 @@ fun PhonePlayer(
             PlayerVideo(controller.player, Modifier.fillMaxSize())
 
             if (!inPip) {
-                hint?.let { side ->
+                hint?.let { (side, _) ->
                     SeekHint(
                         forward = side > 0,
                         modifier =
@@ -190,7 +209,7 @@ fun PhonePlayer(
                 exit = fadeOut(),
             ) {
                 Box(Modifier.fillMaxSize()) {
-                    Scrim(top = true, height = 120.dp, alpha = 0.6f)
+                    Scrim(top = true, height = 120.dp, peak = 0.85f)
                     Row(
                         Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -200,7 +219,7 @@ fun PhonePlayer(
                         Column(Modifier.weight(1f)) {
                             MqText(controller.title, role = TextRole.Title3, maxLines = 1)
                             controller.episode?.let {
-                                MqText(it, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 1)
+                                MqText(it, role = TextRole.Callout, maxLines = 1)
                             }
                         }
                         if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
@@ -216,8 +235,8 @@ fun PhonePlayer(
                 Box {
                     Scrim(
                         top = false,
-                        height = 200.dp,
-                        alpha = 0.72f,
+                        height = 240.dp,
+                        peak = 0.85f,
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
                     Controls(
@@ -239,6 +258,8 @@ fun PhonePlayer(
                         .windowInsetsPadding(WindowInsets.displayCutout)
                         .padding(16.dp)
                         .width(480.dp)
+                        // Touches on the sheet stay on the sheet: they must not reach the controls under it.
+                        .pointerInput(Unit) { detectTapGestures { } }
                 when (panel) {
                     Panel.Audio -> {
                         TrackPanel("Audio", controller.audio, onPick = {
@@ -265,13 +286,9 @@ fun PhonePlayer(
                     }
                 }
                 if (showNext && !ended && next != null) {
-                    val remaining =
-                        ceil(
-                            (controller.durationMs - controller.positionMs) / 1000.0,
-                        ).toInt().coerceAtLeast(0)
                     UpNextCard(
                         next = next,
-                        countdown = remaining.takeIf { autoplayNext },
+                        countdown = secondsLeft.takeIf { autoplayNext },
                         onPlay = { onNext(next, controller.bingeGroup) },
                         modifier =
                             Modifier
@@ -378,25 +395,23 @@ private fun Controls(
                 buffered = { controller.bufferedMs },
                 preview = { dragging },
                 emphasized = dragging != null,
+                onSeek = controller::seekTo,
                 modifier =
                     Modifier
                         .weight(1f)
-                        .height(40.dp)
+                        .height(48.dp)
                         .pointerInput(Unit) {
                             detectTapGestures { at ->
                                 onTouch()
-                                controller.seekTo((at.x / size.width * controller.durationMs).toLong())
+                                // No length yet (the first moments, or a source being set again): nothing to seek in.
+                                scrubTo(at.x, size.width, controller.durationMs)?.let(controller::seekTo)
                             }
                         }.pointerInput(Unit) {
                             detectHorizontalDragGestures(
-                                onDragStart = { at -> dragging = (at.x / size.width * controller.durationMs).toLong() },
+                                onDragStart = { at -> dragging = scrubTo(at.x, size.width, controller.durationMs) },
                                 onHorizontalDrag = { change, _ ->
                                     onTouch()
-                                    dragging =
-                                        (change.position.x / size.width * controller.durationMs).toLong().coerceIn(
-                                            0L,
-                                            controller.durationMs,
-                                        )
+                                    dragging = scrubTo(change.position.x, size.width, controller.durationMs) ?: dragging
                                 },
                                 onDragEnd = {
                                     dragging?.let(controller::seekTo)
@@ -411,7 +426,7 @@ private fun Controls(
                 role = TextRole.Caption,
             )
         }
-        // Audio, Subtitles, Versions, Speed, then Episodes: the same order on every platform.
+        // Audio, Subtitles, Versions, Speed, then Episodes (the design audit's order for every platform).
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             if (controller.audio.isNotEmpty()) {
                 ActionButton(Icons.Volume2, "Audio", controller.audioDetail(), onAudio)

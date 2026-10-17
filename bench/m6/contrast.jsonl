@@ -4,3 +4,15 @@
 {"date":"2026-10-17","phase":"P4","check":"hero_text_contrast_worst_case_white_art","where":"phone hero, meta line (scrim 0.91 at 79% of the card)","ratio":6.98}
 {"date":"2026-10-17","phase":"P4","check":"hero_text_contrast_worst_case_white_art","where":"tv hero, widest point of the text column (scrim 0.88)","ratio":12.53}
 {"date":"2026-10-17","phase":"P4","check":"hero_text_contrast_worst_case_white_art","where":"tv hero, meta line at the same point (scrim 0.88)","ratio":6.36}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"tv position bar clocks","scrimAlpha":0.72,"ratio":7.96}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"tv action label","scrimAlpha":0.78,"ratio":10.39}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"tv action detail line","scrimAlpha":0.81,"ratio":5.74}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"tv skip buttons (14% fill)","scrimAlpha":0.78,"ratio":6.83}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"tv title","scrimAlpha":0.68,"ratio":6.96}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"tv ends at","scrimAlpha":0.7,"ratio":7.38}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"phone action detail line","scrimAlpha":0.83,"ratio":6.16}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"phone action label","scrimAlpha":0.8,"ratio":11.27}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"phone position bar clocks","scrimAlpha":0.75,"ratio":9.26}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"phone skip buttons (14% fill)","scrimAlpha":0.7,"ratio":5.22}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"phone title","scrimAlpha":0.76,"ratio":9.45}
+{"date":"2026-10-17","phase":"P5","check":"player_text_contrast_worst_case_white_art","where":"phone episode label","scrimAlpha":0.68,"ratio":6.89}

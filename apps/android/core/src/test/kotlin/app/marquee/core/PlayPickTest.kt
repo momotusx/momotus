@@ -70,6 +70,19 @@ class PlayPickTest {
     }
 
     @Test
+    fun `sources with no recommendation do not leave the player waiting for ever`() {
+        assertEquals(
+            PlayPick.None("No version is ready to play yet"),
+            pickVersion(snapshot(rows = listOf(row("a")), done = true), null, settled = true),
+        )
+    }
+
+    @Test
+    fun `the recommended row is found by its key too`() {
+        assertEquals(PlayPick.Use(row("a")), pickVersion(snapshot(best = row("a")), "a", settled = false))
+    }
+
+    @Test
     fun `no version at all says so, and waiting names who is asked`() {
         assertEquals(
             PlayPick.None("No playable version found"),

@@ -211,7 +211,9 @@ private fun AppNav(
                             session,
                             app,
                             form,
-                            onBack = { backStack.removeAt(backStack.lastIndex) },
+                            // Only this entry pops itself: a held or double Back reaches the leaving entry
+                            // again during its fade, and must not pop the screen under it.
+                            onBack = { if (backStack.lastOrNull() == route) backStack.removeAt(backStack.lastIndex) },
                             onVersions = {
                                 replacePlayer(route, Route.Versions(route.kind, route.id, route.videoId, route.title))
                             },

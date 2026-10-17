@@ -37,6 +37,16 @@ fun seekStepMs(repeat: Int): Long =
         else -> 60_000L
     }
 
+/**
+ * The position a touch at [x] on a bar [width] px wide stands for, or null while there is no length to
+ * seek in (the first moments, or while a source is set again), where 0 would throw the resume point away.
+ */
+fun scrubTo(
+    x: Float,
+    width: Int,
+    durationMs: Long,
+): Long? = if (width <= 0 || durationMs <= 0) null else (x.coerceIn(0f, width.toFloat()) / width * durationMs).toLong()
+
 enum class FailureKind { Network, Source, Decoder, Audio }
 
 /** A playback error in a plain sentence, and which part failed (the core only needs the sentence). */

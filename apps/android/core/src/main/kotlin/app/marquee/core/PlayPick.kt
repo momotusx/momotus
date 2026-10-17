@@ -46,8 +46,11 @@ fun pickVersion(
             PlayPick.Use(best)
         }
 
-        best == null && snapshot.done && snapshot.rows.isEmpty() -> {
-            PlayPick.None("No playable version found")
+        // Every add-on answered and nothing is recommended: sources that need a download first, or none at all.
+        best == null && snapshot.done -> {
+            PlayPick.None(
+                if (snapshot.rows.isEmpty()) "No playable version found" else "No version is ready to play yet",
+            )
         }
 
         snapshot.pendingAddons.isNotEmpty() -> {

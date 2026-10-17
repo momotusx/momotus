@@ -103,7 +103,8 @@ fun textChoice(
     val detail =
         listOfNotNull(
             format.label?.takeIf { it != name },
-            codecName(format.sampleMimeType),
+            // Media3 parses subtitles while extracting and then says "cues": the real type is in `codecs`.
+            codecName(format.sampleMimeType) ?: codecName(format.codecs),
             "forced".takeIf { format.selectionFlags and C.SELECTION_FLAG_FORCED != 0 },
             "for the hard of hearing".takeIf { format.roleFlags and C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND != 0 },
         ).joinToString(", ")

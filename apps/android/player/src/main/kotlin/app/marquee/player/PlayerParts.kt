@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -43,10 +45,17 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -138,12 +147,30 @@ fun Scrubber(
     modifier: Modifier = Modifier,
     preview: () -> Long? = { null },
     emphasized: Boolean = false,
+    /** What a screen reader's "set progress" does; null leaves the bar read-only to it. */
+    onSeek: ((Long) -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val track = if (tv) 8.dp else 4.dp
     val knob = (if (tv) 11.dp else 7.dp) * (if (emphasized) 1.4f else 1f)
-    Canvas(modifier.height(knob * 2)) {
+    Canvas(
+        modifier
+            .height(knob * 2)
+            .semantics {
+                // Read when a screen reader asks, so the clock does not recompose this.
+                contentDescription = "Position"
+                stateDescription = "${clockText(position())} of ${clockText(duration())}"
+                progressBarRangeInfo =
+                    ProgressBarRangeInfo(position().toFloat(), 0f..duration().coerceAtLeast(1L).toFloat())
+                if (onSeek != null) {
+                    setProgress {
+                        onSeek(it.toLong())
+                        true
+                    }
+                }
+            },
+    ) {
         val total = duration().coerceAtLeast(1L).toFloat()
 
         fun at(ms: Long) = size.width * (ms / total).coerceIn(0f, 1f)
@@ -175,10 +202,15 @@ fun TrackPanel(
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val requesters = remember(rows.size) { List(rows.size) { FocusRequester() } }
+    val chosen = rows.indexOfFirst { it.selected }.coerceAtLeast(0)
+    // The list starts at the chosen row, so its node exists to take focus (a list of 40 subtitle tracks
+    // composes only the rows in view).
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = (chosen - 1).coerceAtLeast(0))
     if (tv) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
-            runCatching { requesters.getOrNull(rows.indexOfFirst { it.selected }.coerceAtLeast(0))?.requestFocus() }
+            withFrameNanos { }
+            runCatching { requesters.getOrNull(chosen)?.requestFocus() }
         }
     }
     Column(
@@ -187,12 +219,22 @@ fun TrackPanel(
             .clip(RoundedCornerShape(Marquee.radius.l))
             .background(colors.surface)
             .border(2.dp, colors.line, RoundedCornerShape(Marquee.radius.l))
-            .padding(vertical = if (tv) 24.dp else 12.dp, horizontal = if (tv) 20.dp else 8.dp),
+            .padding(vertical = if (tv) 24.dp else 12.dp, horizontal = if (tv) 20.dp else 8.dp)
+            // The panel is its own pane for a screen reader, with its name.
+            .semantics { paneTitle = title },
         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
     ) {
-        MqText(title, role = TextRole.Headline, modifier = Modifier.padding(horizontal = 12.dp), maxLines = 1)
+        MqText(
+            title,
+            role = TextRole.Headline,
+            modifier = Modifier.padding(horizontal = 12.dp).semantics { heading() },
+            maxLines = 1,
+        )
         LazyColumn(
             Modifier.heightIn(max = if (tv) 520.dp else 230.dp),
+            state = state,
+            // Room for the focus ring and its halo, which the list would otherwise clip at both ends.
+            contentPadding = PaddingValues(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
@@ -215,6 +257,7 @@ fun TrackPanel(
                             selected = row.selected
                             contentDescription = listOfNotNull(row.name, row.detail).joinToString(", ")
                         }.focusClickable({ onPick(row.id) }, Role.RadioButton)
+                        .heightIn(min = 48.dp)
                         .padding(horizontal = 16.dp, vertical = if (tv) 12.dp else 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -363,7 +406,14 @@ fun RoundButton(
     ) {
         MqIcon(icon, tint = if (main) colors.bg else colors.text, size = glyph)
         if (badge != null) {
-            MqText(badge, role = TextRole.Caption, weight = FontWeight.Bold, color = colors.text)
+            // The button's label already says the seconds; the badge is only for the eye.
+            MqText(
+                badge,
+                modifier = Modifier.clearAndSetSemantics { },
+                role = TextRole.Caption,
+                weight = FontWeight.Bold,
+                color = colors.text,
+            )
         }
     }
 }
@@ -420,28 +470,51 @@ fun EndCard(
     }
 }
 
-/** A scrim from one edge: transparent to [alpha] black over [height], full width, so there is no box edge to see. */
+/**
+ * The stops of a scrim as (position, black alpha) from the top of the scrim to its bottom. A scrim
+ * is not a straight ramp: it reaches 80% of its [peak] a quarter of the way in from the far end
+ * (the foot) or 70% of it 70% of the way down (the top), so the words that sit well away from the screen
+ * edge (the position bar) are already on a dark ground, and a white picture behind them still gives
+ * 4.5:1 (measured by scripts/player-contrast.ts).
+ */
+fun scrimStops(
+    top: Boolean,
+    peak: Float,
+): List<Pair<Float, Float>> =
+    if (top) {
+        listOf(0f to peak, 0.7f to peak * 0.7f, 1f to 0f)
+    } else {
+        listOf(0f to 0f, 0.25f to peak * 0.8f, 1f to peak)
+    }
+
+/** The black alpha of a scrim [at] (0 at its top, 1 at its bottom), between its stops. */
+fun scrimAlpha(
+    top: Boolean,
+    peak: Float,
+    at: Float,
+): Float {
+    val stops = scrimStops(top, peak)
+    val x = at.coerceIn(0f, 1f)
+    val upper = stops.indexOfFirst { it.first >= x }.coerceAtLeast(1)
+    val (x0, a0) = stops[upper - 1]
+    val (x1, a1) = stops[upper]
+    return a0 + (a1 - a0) * ((x - x0) / (x1 - x0))
+}
+
+/** A scrim from one edge, full width, so there is no box edge to see; [peak] is the black alpha at the edge. */
 @Composable
 fun Scrim(
     top: Boolean,
     height: Dp,
-    alpha: Float,
+    peak: Float,
     modifier: Modifier = Modifier,
 ) {
-    val stops =
-        if (top) {
-            listOf(
-                Color.Black.copy(alpha = alpha),
-                Color.Transparent,
-            )
-        } else {
-            listOf(Color.Transparent, Color.Black.copy(alpha = alpha))
-        }
+    val colors = scrimStops(top, peak).map { (at, alpha) -> at to Color.Black.copy(alpha = alpha) }.toTypedArray()
     Box(
         modifier
             .fillMaxWidth()
             .height(height)
-            .background(Brush.verticalGradient(stops)),
+            .background(Brush.verticalGradient(colorStops = colors)),
     )
 }
 
@@ -480,7 +553,8 @@ fun ActionButton(
             .clip(RoundedCornerShape(Marquee.radius.m))
             .semantics { contentDescription = listOfNotNull(label, detail).joinToString(", ") }
             .focusClickable(onClick, Role.Button)
-            .widthIn(min = if (tv) 128.dp else 0.dp, max = if (tv) 240.dp else 150.dp)
+            // Wide enough to touch (48 dp on a phone), and short enough that five fit beside the transport on TV.
+            .widthIn(min = if (tv) 128.dp else 48.dp, max = if (tv) 190.dp else 150.dp)
             .padding(horizontal = if (tv) 8.dp else 2.dp, vertical = if (tv) 10.dp else 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),

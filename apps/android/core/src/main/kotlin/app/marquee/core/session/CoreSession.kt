@@ -265,7 +265,14 @@ class CoreSession(
         // Versions without its unsubscribe overtaking this subscribe.
         return PlaybackView(client, scope, JsonObject(params)).also {
             it.open()
-            it.opened.await()
+            try {
+                it.opened.await()
+            } catch (e: Throwable) {
+                // The caller left (or the core said no) while the subscribe was in flight: nobody holds this
+                // view, so close it here or the core keeps resolving a source for no one.
+                it.close()
+                throw e
+            }
         }
     }
 }

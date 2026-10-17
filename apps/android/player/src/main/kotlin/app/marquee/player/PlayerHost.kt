@@ -65,7 +65,14 @@ class PlayerHost(
                 .setWakeMode(C.WAKE_MODE_NETWORK)
                 .build()
         // Media keys and the system's now-playing card; no service, so nothing plays in the background.
-        session = MediaSession.Builder(context, player).setId("marquee").build()
+        // The id is unique per host: a new player can start while the old one is still being cleared.
+        session =
+            try {
+                MediaSession.Builder(context, player).setId("marquee-${ids.incrementAndGet()}").build()
+            } catch (e: RuntimeException) {
+                player.release()
+                throw e
+            }
     }
 
     fun release() {
@@ -74,6 +81,9 @@ class PlayerHost(
     }
 
     private companion object {
+        val ids =
+            java.util.concurrent.atomic
+                .AtomicInteger()
         const val START_BUFFER_MS = 1_000
         const val REBUFFER_MS = 3_000
     }

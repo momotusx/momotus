@@ -26,6 +26,7 @@ import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.SubtitleTrack
 import app.marquee.core.views.PlaybackView
+import app.marquee.core.views.ViewStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -138,10 +139,14 @@ class PlaybackController(
     private var noticeJob: Job? = null
     private val marks = LinkedHashMap<String, Long>()
 
-    /** A subtitle the viewer chose, found again by language after the media item changes. */
+    /**
+     * A subtitle the viewer chose. After the media item changes it is found again by its address
+     * (an add-on's file), else by language, so the right track is on even when several share a language.
+     */
     private data class TextPick(
         val language: String,
         val external: Boolean,
+        val url: String? = null,
     )
 
     private val listener =
@@ -187,6 +192,18 @@ class PlaybackController(
         view = playback
         mark("playback open")
         scope.launch { snapshotFlow { playback.snapshot }.filterNotNull().collect(::snapshotChanged) }
+        // The core going away takes the view with it (a restart subscribes again with ids that no longer
+        // mean anything): say so instead of leaving a spinner or a player that nobody is listening to.
+        scope.launch {
+            snapshotFlow { playback.status }.collect { status ->
+                if (status is ViewStatus.Failed && stage != Stage.Failed) {
+                    player.stop()
+                    player.clearMediaItems()
+                    loadedUrl = null
+                    fail(status.reason)
+                }
+            }
+        }
     }
 
     fun showStatus(line: String?) {
@@ -207,6 +224,7 @@ class PlaybackController(
     // The core
 
     private fun snapshotChanged(s: PlaybackSnapshot) {
+        if (released) return
         attempts = s.attempts
         next = s.next
         bingeGroup = s.bingeGroup
@@ -248,6 +266,7 @@ class PlaybackController(
         loadedUrl = url
         loadedSubs = s.subtitles
         playingKey = s.key
+        durationMs = 0L
         handlingFailure = false
         raised = false
         seekPending = false
@@ -324,7 +343,7 @@ class PlaybackController(
             }
 
             Player.STATE_ENDED -> {
-                report(ended = true)
+                report()
                 stage = Stage.Ended
             }
 
@@ -375,7 +394,8 @@ class PlaybackController(
             delay(TICK_MS)
             if (loadedUrl == null || handlingFailure) continue
             positionMs = player.currentPosition.coerceAtLeast(0L)
-            durationMs = player.duration.takeIf { it > 0 } ?: 0L
+            // Unknown while a source is being set again: keep the last length so the bar does not flicker.
+            durationMs = player.duration.takeIf { it > 0 } ?: durationMs
             bufferedMs = player.bufferedPosition.coerceAtLeast(0L)
             if (player.isPlaying) {
                 sinceReport += TICK_MS
@@ -389,12 +409,12 @@ class PlaybackController(
         }
     }
 
-    private fun report(ended: Boolean = false) {
+    private fun report() {
         val playback = view ?: return
         if (loadedUrl == null || handlingFailure) return
-        val duration = player.duration
-        val position = if (ended) duration else player.currentPosition
-        progressReport(firstFrame, position, duration)?.let {
+        // The real position, also at the end: ExoPlayer can reach ENDED early on a truncated file, and
+        // reporting the duration then would mark a part-watched film as finished.
+        progressReport(firstFrame, player.currentPosition, player.duration)?.let {
             CoreLog.d("progress ${it.positionMs} of ${it.durationMs} ms")
             playback.progress(it.positionMs, it.durationMs)
         }
@@ -453,13 +473,26 @@ class PlaybackController(
 
             id.startsWith(LATE) -> {
                 val late = snapshotSubs.firstOrNull { it.url == id.removePrefix(LATE) } ?: return
-                pick = TextPick(late.lang, external = true)
+                pick = TextPick(late.lang, external = true, url = late.url)
+                // The override of an earlier pick would still match after the reload and keep the old track on.
+                player.trackSelectionParameters =
+                    params
+                        .clearOverridesOfType(
+                            C.TRACK_TYPE_TEXT,
+                        ).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        .build()
                 reloadWith(loadedSubs + late)
             }
 
             else -> {
                 val (group, index) = find(C.TRACK_TYPE_TEXT, id) ?: return
-                pick = group.getTrackFormat(index).language?.let { TextPick(it, id.startsWith(EXTERNAL)) }
+                val format = group.getTrackFormat(index)
+                pick =
+                    TextPick(
+                        language = format.language.orEmpty(),
+                        external = id.startsWith(EXTERNAL),
+                        url = id.takeIf { it.startsWith(EXTERNAL) }?.let { externalUrl(format.id) },
+                    )
                 player.trackSelectionParameters =
                     params
                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
@@ -476,11 +509,13 @@ class PlaybackController(
      */
     private fun reloadWith(subs: List<SubtitleTrack>) {
         val url = loadedUrl ?: return
+        // A source that was given up on or a player that was let go is not set again (the next
+        // `ready` carries the whole list anyway).
+        if (handlingFailure || released) return
         val ended = stage == Stage.Ended
         val at = if (ended) 0L else player.currentPosition.coerceAtLeast(0L)
         reloadedAt = SystemClock.elapsedRealtime()
         loadedSubs = subs
-        raised = true
         player.setMediaItem(item(url, subs), at)
         if (ended) pause()
         player.prepare()
@@ -573,38 +608,64 @@ class PlaybackController(
         return row.copy(detail = detail)
     }
 
-    /** After a new media item (a failover or a reload) the viewer's subtitle language is found again. */
+    /** The address of the add-on subtitle file behind a loaded track's `ext:N` id, or null. */
+    private fun externalUrl(formatId: String?): String? =
+        formatId
+            ?.takeIf { it.startsWith(EXTERNAL) }
+            ?.removePrefix(EXTERNAL)
+            ?.toIntOrNull()
+            ?.let { loadedSubs.getOrNull(it)?.url }
+
+    /** One text track of the current media item. */
+    private class TextTrack(
+        val group: Tracks.Group,
+        val index: Int,
+        val external: Boolean,
+        val url: String?,
+        val language: String?,
+        val selected: Boolean,
+    )
+
+    /**
+     * After a new media item (a failover or a reload) the viewer's subtitle is found again: first by
+     * the address of the add-on file they chose, else by language (an add-on's file before an
+     * embedded track when that is what they had). Does nothing when it is already the one on.
+     */
     private fun applyPick(tracks: Tracks) {
         val wanted = pick ?: return
-        if (text.any { it.selected && it.id != TRACK_OFF }) return
-        val candidates = ArrayList<Triple<Tracks.Group, Int, Boolean>>()
+        val found = ArrayList<TextTrack>()
         tracks.groups.forEach { group ->
             if (group.type != C.TRACK_TYPE_TEXT) return@forEach
             for (ti in 0 until group.length) {
+                if (!group.isTrackSupported(ti)) continue
                 val format = group.getTrackFormat(ti)
-                val sameLanguage =
-                    format.language?.let {
-                        Util.normalizeLanguageCode(
-                            it,
-                        ) == Util.normalizeLanguageCode(wanted.language)
-                    } ==
-                        true
-                if (group.isTrackSupported(ti) && sameLanguage) {
-                    candidates += Triple(group, ti, format.id?.startsWith(EXTERNAL) == true)
-                }
+                found +=
+                    TextTrack(
+                        group,
+                        ti,
+                        external = format.id?.startsWith(EXTERNAL) == true,
+                        url = externalUrl(format.id),
+                        language = format.language,
+                        selected = group.isTrackSelected(ti),
+                    )
             }
         }
-        val (group, index) =
-            (candidates.firstOrNull { it.third == wanted.external } ?: candidates.firstOrNull())?.let {
-                it.first to
-                    it.second
-            }
+        val same = { t: TextTrack ->
+            wanted.language.isNotEmpty() &&
+                t.language?.let { Util.normalizeLanguageCode(it) == Util.normalizeLanguageCode(wanted.language) } ==
+                true
+        }
+        val target =
+            found.firstOrNull { wanted.url != null && it.url == wanted.url }
+                ?: found.firstOrNull { same(it) && it.external == wanted.external }
+                ?: found.firstOrNull(same)
                 ?: return
+        if (target.selected) return
         player.trackSelectionParameters =
             player.trackSelectionParameters
                 .buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
+                .setOverrideForType(TrackSelectionOverride(target.group.mediaTrackGroup, target.index))
                 .build()
     }
 

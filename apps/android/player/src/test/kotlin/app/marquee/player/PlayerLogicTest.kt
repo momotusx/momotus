@@ -5,6 +5,7 @@ import androidx.media3.common.PlaybackException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PlayerLogicTest {
     @Test
@@ -19,6 +20,36 @@ class PlayerLogicTest {
     fun `a report keeps the position inside the video`() {
         assertEquals(ProgressReport(5_000, 60_000), progressReport(true, 5_000, 60_000))
         assertEquals(ProgressReport(60_000, 60_000), progressReport(true, 61_500, 60_000))
+    }
+
+    @Test
+    fun `a touch on the bar maps to a position, and to none while the length is unknown`() {
+        assertEquals(30_000L, scrubTo(500f, 1000, 60_000))
+        assertEquals(60_000L, scrubTo(1500f, 1000, 60_000))
+        assertEquals(0L, scrubTo(-20f, 1000, 60_000))
+        assertNull(scrubTo(500f, 1000, 0))
+        assertNull(scrubTo(500f, 0, 60_000))
+    }
+
+    @Test
+    fun `a scrim is dark near its edge and holds the dark away from it`() {
+        assertEquals(0.85f, scrimAlpha(top = false, peak = 0.85f, at = 1f), 0.001f)
+        assertEquals(0f, scrimAlpha(top = false, peak = 0.85f, at = 0f), 0.001f)
+        assertEquals(0.85f, scrimAlpha(top = true, peak = 0.85f, at = 0f), 0.001f)
+        assertEquals(0f, scrimAlpha(top = true, peak = 0.85f, at = 1f), 0.001f)
+        // A quarter of the way up from the foot it is already at 80% of its peak, which is what keeps
+        // the position bar readable over a white picture (scripts/player-contrast.ts).
+        assertEquals(0.68f, scrimAlpha(top = false, peak = 0.85f, at = 0.25f), 0.001f)
+        assertTrue(scrimAlpha(top = false, peak = 0.85f, at = 0.5f) > scrimAlpha(top = false, peak = 0.85f, at = 0.25f))
+    }
+
+    @Test
+    fun `source failures are put plainly`() {
+        assertEquals("The link no longer exists (404)", attemptReason("source did not answer: http status 404"))
+        assertEquals("The source refused the request (503)", attemptReason("source did not answer: http status 503"))
+        assertEquals("No answer in 8 seconds", attemptReason("source did not answer: timed out after 8s"))
+        assertEquals("No answer in time", attemptReason("source did not answer in time"))
+        assertEquals("something else", attemptReason("something else"))
     }
 
     @Test

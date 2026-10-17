@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -70,6 +71,7 @@ import app.marquee.player.nextSpeed
 import app.marquee.player.seekStepMs
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
+import kotlinx.coroutines.flow.collectLatest
 import java.util.Date
 import kotlin.math.ceil
 
@@ -129,11 +131,19 @@ fun TvPlayer(
             }
         }
 
-        // Controls hide while playing, once nothing is open and nothing is asking for an answer.
-        LaunchedEffect(osd, wake, stage, panel, showNext) {
+        // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
+        val secondsLeft by remember(controller) {
+            derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
+        }
+
+        // Controls hide while playing, once nothing is open and nothing is asking for an answer. Every key
+        // starts the wait again; `wake` is read here and not in composition, so a key press recomposes nothing.
+        LaunchedEffect(osd, stage, panel, showNext) {
             if (osd && stage == Stage.Playing && panel == null && !showNext) {
-                kotlinx.coroutines.delay(HIDE_MS)
-                osd = false
+                snapshotFlow { wake }.collectLatest {
+                    kotlinx.coroutines.delay(HIDE_MS)
+                    osd = false
+                }
             }
         }
         // Focus follows what is on screen: play and pause when the controls appear, the page itself
@@ -148,13 +158,20 @@ fun TvPlayer(
                 runCatching { failFocus.requestFocus() }
             }
         }
+        // The card takes focus when it appears, unless a list is open (choosing audio near the end must not be
+        // interrupted); when it goes (a rewind), focus goes back to play and pause instead of being lost.
         LaunchedEffect(showNext) {
-            if (showNext) {
+            if (showNext && panel == null) {
                 osd = true
                 withFrameNanos { }
                 runCatching { nextFocus.requestFocus() }
+            } else if (!showNext && panel == null && showControls) {
+                withFrameNanos { }
+                runCatching { play.requestFocus() }
             }
         }
+        // A list does not stay open over a failure or any state without controls.
+        LaunchedEffect(live) { if (!live) panel = null }
         // A list that was open when the film ended closes: the end card is the only thing to answer.
         LaunchedEffect(ended) { if (ended) panel = null }
         LaunchedEffect(showEnd) {
@@ -233,7 +250,10 @@ fun TvPlayer(
                             // Handled here while focus is in the player: on the emulator a Back that came
                             // after a D-pad press never reached the BackHandler below (it still covers
                             // the moments when no node has focus).
-                            if (panel != null) closePanel() else onBack()
+                            // A held Back repeats: only the first press acts, the rest are eaten.
+                            if (event.nativeKeyEvent.repeatCount == 0) {
+                                if (panel != null) closePanel() else onBack()
+                            }
                             true
                         }
 
@@ -261,11 +281,11 @@ fun TvPlayer(
                 enter = fadeIn(),
                 exit = fadeOut(),
             ) {
-                Scrim(top = false, height = 320.dp, alpha = 0.72f)
+                Scrim(top = false, height = 380.dp, peak = 0.85f)
             }
             AnimatedVisibility(visible = (osd && !ended) || !live, enter = fadeIn(), exit = fadeOut()) {
                 Box(Modifier.fillMaxSize()) {
-                    Scrim(top = true, height = 200.dp, alpha = 0.6f)
+                    Scrim(top = true, height = 200.dp, peak = 0.85f)
                     Header(controller, Modifier.padding(start = safe.side, top = safe.top))
                     EndsAt(controller, Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 70.dp))
                 }
@@ -349,10 +369,9 @@ fun TvPlayer(
             }
 
             if (showNext && !ended && next != null) {
-                val remaining = ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0)
                 UpNextCard(
                     next = next,
-                    countdown = remaining.takeIf { autoplayNext },
+                    countdown = secondsLeft.takeIf { autoplayNext },
                     onPlay = { onNext(next, controller.bingeGroup) },
                     focus = nextFocus,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 330.dp),
@@ -370,7 +389,7 @@ private fun Header(
     Column(modifier.fillMaxWidth(0.7f)) {
         MqText(controller.title, role = TextRole.Title2, maxLines = 2)
         controller.episode?.let {
-            MqText(it, role = TextRole.Body, color = Marquee.colors.muted, modifier = Modifier.padding(top = 8.dp))
+            MqText(it, role = TextRole.Body, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
@@ -388,7 +407,7 @@ private fun EndsAt(
         "Ends at ${DateFormat.getTimeFormat(context).format(Date(at))}",
         modifier = modifier,
         role = TextRole.Callout,
-        color = Marquee.colors.muted,
+        color = Marquee.colors.text,
     )
 }
 
@@ -417,6 +436,7 @@ private fun Controls(
                     buffered = { controller.bufferedMs },
                     preview = { scrubTarget },
                     emphasized = scrubFocused,
+                    onSeek = controller::seekTo,
                     modifier =
                         Modifier
                             .weight(1f)
@@ -451,7 +471,7 @@ private fun Controls(
                     RoundButton(Icons.RotateCw, "Forward 10 seconds", { controller.seekBy(SEEK_MS) }, badge = "10")
                 }
                 Row(Modifier.align(Alignment.CenterEnd), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // The same order on every platform: Audio, Subtitles, Versions, Speed, Episodes.
+                    // Audio, Subtitles, Versions, Speed, then Episodes: the design audit's order for every platform.
                     if (controller.audio.isNotEmpty()) {
                         ActionButton(
                             Icons.Volume2,
