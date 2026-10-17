@@ -28,6 +28,9 @@ const EPOCH_INFO: &[u8] = b"marquee/epoch/v1";
 const CHAIN_INFO: &[u8] = b"marquee/chain/v1";
 pub const MAX_DEVICES: usize = 32;
 pub const MAX_KITS: usize = 4;
+/// The largest entry body, checked before parsing: 32 boxes and a name fit
+/// many times over.
+pub const MAX_ENTRY: usize = 64 * 1024;
 const NONCE: usize = 24;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -238,6 +241,9 @@ impl Entry {
     }
 
     pub fn parse(&self) -> Result<Body, RosterError> {
+        if self.body.len() > MAX_ENTRY {
+            return Err(Invalid("entry too large"));
+        }
         serde_json::from_slice(&self.body).map_err(|_| Invalid("malformed entry"))
     }
 }
@@ -388,8 +394,10 @@ pub struct Roster {
     head: Option<(u64, Digest32)>,
     epoch: u32,
     members: BTreeMap<Id, Member>,
-    /// Every id that was ever a member and is not now; never reused.
-    retired: BTreeSet<Id>,
+    /// Every id ever admitted, with its role and sponsor, dropped or not:
+    /// ids are never reused, and a lost device's descendants are found
+    /// even through members that are gone.
+    ancestry: BTreeMap<Id, (Role, Option<Id>)>,
     rotation_pending: bool,
     rotations: BTreeMap<u32, Rotation>,
     /// A kit's box from `addKit`, with that epoch, and its id tag.
@@ -446,10 +454,12 @@ impl Roster {
         if body.v != 1 {
             return Err(Invalid("unknown version"));
         }
+        let genesis = matches!(body.kind, Kind::Genesis(_));
         match self.head {
-            None if body.seq != 0 || !matches!(body.kind, Kind::Genesis(_)) => {
+            None if body.seq != 0 || !genesis || body.prev != Digest32::default() => {
                 return Err(RosterError::NotNext);
             }
+            Some(_) if genesis => return Err(Invalid("an account has one genesis")),
             Some((seq, hash)) if body.seq != seq + 1 || body.prev != hash => {
                 return Err(RosterError::NotNext);
             }
@@ -489,7 +499,7 @@ impl Roster {
 
     fn admit(&mut self, keys: MemberKeys, member: Member) -> Result<(), RosterError> {
         let id = keys.id();
-        if self.members.contains_key(&id) || self.retired.contains(&id) {
+        if self.ancestry.contains_key(&id) {
             return Err(Invalid("that member id already existed"));
         }
         let limit = match member.role {
@@ -499,6 +509,7 @@ impl Roster {
         if self.count(member.role) >= limit {
             return Err(Invalid("too many members"));
         }
+        self.ancestry.insert(id, (member.role, member.sponsor));
         self.members.insert(id, member);
         Ok(())
     }
@@ -569,11 +580,18 @@ impl Roster {
                 {
                     return Err(Invalid("boxes must cover exactly the members left"));
                 }
+                // A kit goes with the device that added it (dropped or gone).
+                let orphan = left.iter().any(|id| {
+                    let m = &self.members[id];
+                    m.role == Role::Kit && !m.sponsor.is_some_and(|s| left.contains(&s))
+                });
+                if orphan {
+                    return Err(Invalid("a kit outlives the device that added it"));
+                }
                 for id in &dropped {
                     self.members.remove(id);
                     self.kit_boxes.remove(id);
                     self.kit_tags.remove(id);
-                    self.retired.insert(*id);
                 }
                 self.epoch = r.new_epoch;
                 self.rotation_pending = false;
@@ -583,24 +601,24 @@ impl Roster {
             }
             Kind::Leave(_) => {
                 self.members.remove(&body.author);
-                self.retired.insert(body.author);
                 self.rotation_pending = true;
                 Ok(())
             }
         }
     }
 
-    /// Reporting `lost`: the devices it sponsored, transitively (also through
-    /// kits it added), for the user to untick what they still hold. Neither
-    /// `lost` nor `author` is listed; `lost` is always dropped.
+    /// Reporting `lost`: the current devices it sponsored, transitively
+    /// (through kits it added, and through members already gone), for the
+    /// user to untick what they still hold. Neither `lost` nor `author` is
+    /// listed; `lost` is always dropped.
     pub fn descendants(&self, lost: &Id, author: &Id) -> Vec<Id> {
         let mut found = BTreeSet::from([*lost]);
         loop {
             let more: Vec<Id> = self
-                .members
+                .ancestry
                 .iter()
-                .filter(|(id, m)| {
-                    !found.contains(id) && m.sponsor.is_some_and(|s| found.contains(&s))
+                .filter(|(id, (_, sponsor))| {
+                    !found.contains(id) && sponsor.is_some_and(|s| found.contains(&s))
                 })
                 .map(|(id, _)| *id)
                 .collect();
@@ -611,16 +629,22 @@ impl Roster {
         }
         found
             .into_iter()
-            .filter(|id| id != lost && id != author && self.members[id].role == Role::Device)
+            .filter(|id| {
+                id != lost
+                    && id != author
+                    && self.members.get(id).is_some_and(|m| m.role == Role::Device)
+            })
             .collect()
     }
 
-    /// The kits added by any of `devices`: dropped with them, always, since
-    /// a kit shown on a stolen device may sit in its screenshots.
+    /// The kits that must go when `devices` are dropped: every kit whose
+    /// device is among them or already gone (a kit shown on a stolen device
+    /// may sit in its screenshots). A revoke that keeps one is refused.
     pub fn kits_of(&self, devices: &[Id]) -> Vec<Id> {
+        let stays = |s: &Id| self.members.contains_key(s) && !devices.contains(s);
         self.members
             .iter()
-            .filter(|(_, m)| m.role == Role::Kit && m.sponsor.is_some_and(|s| devices.contains(&s)))
+            .filter(|(_, m)| m.role == Role::Kit && !m.sponsor.is_some_and(|s| stays(&s)))
             .map(|(id, _)| *id)
             .collect()
     }
@@ -735,13 +759,16 @@ impl Roster {
     /// continue the held bundle (same account, genesis and id key, and the
     /// chain of earlier keys leads back to the held key).
     pub fn adopt(&self, me: &MemberSecret, held: &Bundle) -> Result<Bundle, RosterError> {
-        if held.account != self.account || held.genesis != self.genesis {
-            return Err(Invalid("the held keys are for another account"));
-        }
+        self.check(held, held.epoch, held.id_key)
+            .map_err(|_| Invalid("the held keys are not for this roster"))?;
         if held.epoch > self.epoch {
             return Err(Invalid("the held keys are newer than the roster"));
         }
         if held.epoch == self.epoch {
+            // The key the rotation was made with opens its chain link.
+            if held.epoch > 0 {
+                self.key_at(held, held.epoch - 1)?;
+            }
             return Ok(held.clone());
         }
         let sealed = self
@@ -749,50 +776,62 @@ impl Roster {
             .get(&self.epoch)
             .and_then(|(_, boxes)| boxes.get(&me.id()))
             .ok_or(Invalid("no key for this member"))?;
+        self.continued(me, sealed, held)
+    }
+
+    /// Opens a box of the current epoch and checks it continues `base`.
+    fn continued(
+        &self,
+        me: &MemberSecret,
+        sealed: &[u8],
+        base: &Bundle,
+    ) -> Result<Bundle, RosterError> {
         let newest = open_box(me, &self.account, self.epoch, sealed)?;
-        self.check(&newest, held.id_key)?;
-        if self.key_at(&newest, held.epoch)? != held.ak {
+        self.check(&newest, self.epoch, base.id_key)?;
+        if self.key_at(&newest, base.epoch)? != base.ak {
             return Err(Invalid("the new key does not continue the held one"));
         }
         Ok(newest)
     }
 
     /// A kit's view of the current bundle, for recovery: the kit must be a
-    /// member now, and the keys must carry the account's id tag.
+    /// member now, its first box (from `addKit`) must carry the account's id
+    /// tag, and the newest key must continue that first one.
     pub fn open_for_kit(
         &self,
         kit: &MemberSecret,
         tag_key: &[u8; 32],
     ) -> Result<Bundle, RosterError> {
         let id = kit.id();
-        let tag = match (self.members.get(&id), self.kit_tags.get(&id)) {
-            (Some(m), Some(tag)) if m.role == Role::Kit => *tag,
+        let (tag, (first_epoch, first_box)) = match (
+            self.members.get(&id),
+            self.kit_tags.get(&id),
+            self.kit_boxes.get(&id),
+        ) {
+            (Some(m), Some(tag), Some(first)) if m.role == Role::Kit => (*tag, first),
             _ => return Err(Invalid("this kit is not a member of the account")),
         };
-        let sealed = match self
-            .rotations
-            .get(&self.epoch)
-            .and_then(|(_, b)| b.get(&id))
-        {
-            Some(sealed) => sealed,
-            None => match self.kit_boxes.get(&id) {
-                Some((epoch, sealed)) if *epoch == self.epoch => sealed,
-                _ => return Err(Invalid("no key for this kit")),
-            },
-        };
-        let bundle = open_box(kit, &self.account, self.epoch, sealed)?;
-        self.check(&bundle, bundle.id_key)?;
-        if !same(&id_tag(tag_key, &bundle).0, &tag.0) {
+        let first = open_box(kit, &self.account, *first_epoch, first_box)?;
+        self.check(&first, *first_epoch, first.id_key)?;
+        if !same(&id_tag(tag_key, &first).0, &tag.0) {
             return Err(Invalid("the keys are not this account's"));
         }
-        Ok(bundle)
+        if *first_epoch == self.epoch {
+            return Ok(first);
+        }
+        let sealed = self
+            .rotations
+            .get(&self.epoch)
+            .and_then(|(_, boxes)| boxes.get(&id))
+            .ok_or(Invalid("no key for this kit"))?;
+        self.continued(kit, sealed, &first)
     }
 
-    fn check(&self, bundle: &Bundle, id_key: Hex<32>) -> Result<(), RosterError> {
+    fn check(&self, bundle: &Bundle, epoch: u32, id_key: Hex<32>) -> Result<(), RosterError> {
         let same = bundle.v == 1
             && bundle.account == self.account
             && bundle.genesis == self.genesis
-            && bundle.epoch == self.epoch
+            && bundle.epoch == epoch
             && bundle.id_key == id_key;
         same.then_some(())
             .ok_or(Invalid("the boxed keys do not match the roster"))
@@ -800,6 +839,10 @@ impl Roster {
 
     /// The key of an older epoch, walking back from `newest`.
     pub fn key_at(&self, newest: &Bundle, epoch: u32) -> Result<Hex<32>, RosterError> {
+        self.check(newest, newest.epoch, newest.id_key)?;
+        if epoch > newest.epoch || newest.epoch > self.epoch {
+            return Err(Invalid("no such epoch"));
+        }
         let mut ak = newest.ak;
         for e in (epoch + 1..=newest.epoch).rev() {
             let (prev_blob, _) = self
@@ -923,7 +966,11 @@ mod tests {
 
     /// Re-signs `entry` after `edit` changed its body: what a member (or a
     /// relay holding a member's key) could send.
-    fn tampered(entry: &Entry, author: &MemberSecret, edit: impl FnOnce(&mut Body)) -> Entry {
+    pub(super) fn tampered(
+        entry: &Entry,
+        author: &MemberSecret,
+        edit: impl FnOnce(&mut Body),
+    ) -> Entry {
         let mut body = entry.parse().unwrap();
         edit(&mut body);
         Entry::sign(author, &body)
@@ -1262,5 +1309,146 @@ mod lost {
         roster.apply(&entry).unwrap();
         assert!(roster.members().contains_key(&y.id()));
         assert!(roster.members().contains_key(&tv.id()));
+    }
+}
+
+#[cfg(test)]
+mod round4 {
+    use super::tests::{new_kit, tampered};
+    use super::*;
+
+    fn account() -> (Roster, Bundle, MemberSecret) {
+        let first = MemberSecret::generate();
+        let (entry, bundle) = Roster::genesis_entry(&first, Hex(random()), 1);
+        let mut roster = Roster::default();
+        roster.apply(&entry).unwrap();
+        (roster, bundle, first)
+    }
+
+    fn join(roster: &mut Roster, sponsor: &MemberSecret) -> MemberSecret {
+        let new = MemberSecret::generate();
+        let statement = Sponsor::new(sponsor, roster, new.public());
+        let entry = roster.add_device(&new, statement, "d".into(), 2);
+        roster.apply(&entry).unwrap();
+        new
+    }
+
+    #[test]
+    fn an_account_has_one_genesis_with_no_parent() {
+        let (mut roster, _, _) = account();
+        let outsider = MemberSecret::generate();
+        let (entry, _) = Roster::genesis_entry(&outsider, roster.account(), 2);
+        let mut body = entry.parse().unwrap();
+        body.seq = 1;
+        body.prev = roster.parent();
+        let second = Entry::sign(&outsider, &body);
+        assert_eq!(
+            roster.apply(&second),
+            Err(Invalid("an account has one genesis"))
+        );
+        let (entry, _) = Roster::genesis_entry(&outsider, Hex(random()), 1);
+        let mut first = entry.parse().unwrap();
+        first.prev = Hex([7; 32]);
+        let with_parent = Entry::sign(&outsider, &first);
+        assert_eq!(
+            Roster::default().apply(&with_parent),
+            Err(RosterError::NotNext)
+        );
+    }
+
+    #[test]
+    fn descendants_are_found_through_members_already_gone() {
+        let (mut roster, held, phone) = account();
+        let x = join(&mut roster, &phone);
+        let y = join(&mut roster, &x);
+        let z = join(&mut roster, &y);
+        let (entry, _) = roster.revoke(&phone, &held, vec![y.id()], 3).unwrap();
+        roster.apply(&entry).unwrap();
+        assert_eq!(roster.descendants(&x.id(), &phone.id()), vec![z.id()]);
+    }
+
+    #[test]
+    fn a_kit_refuses_a_newest_key_that_does_not_continue_its_first() {
+        let (mut roster, held, phone) = account();
+        let kit = MemberSecret::generate();
+        let tag_key: [u8; 32] = random();
+        let entry = roster
+            .add_kit(&phone, &held, &new_kit(&kit, tag_key), 2)
+            .unwrap();
+        roster.apply(&entry).unwrap();
+        let (entry, _) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        let forged = tampered(&entry, &phone, |b| {
+            if let Kind::Revoke(r) = &mut b.kind {
+                let unrelated = Bundle {
+                    epoch: 1,
+                    ak: Hex(random()),
+                    ..held.clone()
+                };
+                for x in r.boxes.iter_mut().filter(|x| x.to == kit.id()) {
+                    *x = seal_box(kit.public(), &unrelated).unwrap();
+                }
+            }
+        });
+        roster.apply(&forged).unwrap();
+        assert!(roster.open_for_kit(&kit, &tag_key).is_err());
+    }
+
+    #[test]
+    fn helpers_refuse_epochs_and_versions_they_cannot_vouch_for() {
+        let (mut roster, held, phone) = account();
+        let (entry, next) = roster.revoke(&phone, &held, vec![], 3).unwrap();
+        roster.apply(&entry).unwrap();
+        assert!(roster.key_at(&next, 2).is_err(), "a future epoch");
+        let v2 = Bundle {
+            v: 2,
+            ..next.clone()
+        };
+        assert!(roster.adopt(&phone, &v2).is_err());
+        let wrong = Bundle {
+            ak: Hex(random()),
+            ..next.clone()
+        };
+        assert!(
+            roster.adopt(&phone, &wrong).is_err(),
+            "not the rotation's key"
+        );
+        assert_eq!(roster.adopt(&phone, &next).unwrap(), next);
+    }
+
+    #[test]
+    fn a_kit_goes_with_the_device_that_added_it() {
+        let (mut roster, held, phone) = account();
+        let tv = join(&mut roster, &phone);
+        let kit = MemberSecret::generate();
+        let entry = roster
+            .add_kit(&tv, &held, &new_kit(&kit, random()), 3)
+            .unwrap();
+        roster.apply(&entry).unwrap();
+        let (keeps, _) = roster.revoke(&phone, &held, vec![tv.id()], 4).unwrap();
+        assert_eq!(
+            roster.clone().apply(&keeps),
+            Err(Invalid("a kit outlives the device that added it"))
+        );
+        // After the TV leaves, the rotation must drop its kit as well.
+        roster.apply(&roster.leave(&tv, 5)).unwrap();
+        assert_eq!(roster.kits_of(&[]), vec![kit.id()]);
+        let (without, _) = roster.revoke(&phone, &held, vec![], 6).unwrap();
+        assert!(roster.clone().apply(&without).is_err());
+        let (with, _) = roster
+            .revoke(&phone, &held, roster.kits_of(&[]), 6)
+            .unwrap();
+        roster.apply(&with).unwrap();
+    }
+
+    #[test]
+    fn an_oversized_entry_is_refused_before_parsing() {
+        let (roster, _, phone) = account();
+        let tv = MemberSecret::generate();
+        let sponsor = Sponsor::new(&phone, &roster, tv.public());
+        let entry = roster.add_device(&tv, sponsor, "x".repeat(MAX_ENTRY), 2);
+        assert_eq!(
+            roster.clone().apply(&entry),
+            Err(Invalid("entry too large"))
+        );
     }
 }
