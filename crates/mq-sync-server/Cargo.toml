@@ -1,0 +1,28 @@
+[package]
+name = "mq-sync-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "mq-sync-server"
+path = "src/main.rs"
+
+[dependencies]
+mq-sync = { path = "../mq-sync" }
+mq-library = { path = "../mq-library" }
+axum = "0.8"
+rusqlite = { version = "0.40", features = ["bundled"] }
+tokio = { workspace = true, features = ["net", "signal"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+hex = "0.4"
+base64 = "0.22"
+getrandom = "0.3"
+tracing.workspace = true
+
+[dev-dependencies]
+mq-http = { path = "../mq-http" }
+proptest = "1"

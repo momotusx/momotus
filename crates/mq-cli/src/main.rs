@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 mod play;
+mod sync;
 
 #[derive(Parser)]
 #[command(name = "mq", about = "Marquee core driver")]
@@ -43,6 +44,11 @@ enum Command {
     },
     /// Query every stream addon for a title, e.g. `movie tt0111161` or `series tt0944947:1:1`.
     Streams { kind: String, id: String },
+    /// End-to-end encrypted sync with a relay (development flow).
+    Sync {
+        #[command(subcommand)]
+        action: SyncAction,
+    },
     /// Import a Stremio account: prints a code to enter at the link page, then
     /// imports addons, library, progress and watched marks.
     Import {
@@ -72,13 +78,27 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum SyncAction {
+    /// Create an account on the relay and a key for it.
+    Init {
+        server: String,
+        #[arg(long)]
+        invite: Option<String>,
+    },
+    /// Use the account of another data dir (phase 1 stand-in for QR pairing).
+    Join { from: PathBuf },
+    /// Push local changes, pull and apply remote ones.
+    Now,
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
     let core = match Core::open(CoreConfig {
         data_dir: cli.data.clone(),
         profile_id: cli.profile.clone(),
-        device_id: 1,
+        device_id: 0,
     }) {
         Ok(core) => core,
         Err(e) => fail(&format!("cannot open core: {e}")),
@@ -89,6 +109,13 @@ async fn main() {
         Command::Home { timeout_secs } => home(&core, Duration::from_secs(timeout_secs)).await,
         Command::Streams { kind, id } => streams(&core, kind, id).await,
         Command::Search { query } => search(&core, &query).await,
+        Command::Sync { action } => match action {
+            SyncAction::Init { server, invite } => {
+                sync::init(&cli.data, &server, invite.as_deref()).await
+            }
+            SyncAction::Join { from } => sync::join(&cli.data, &from),
+            SyncAction::Now => sync::now(&core, &cli.data).await,
+        },
         Command::Import { timeout_secs } => import(&core, Duration::from_secs(timeout_secs)).await,
         Command::Play {
             kind,

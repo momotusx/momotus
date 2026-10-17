@@ -1,7 +1,7 @@
 use rusqlite_migration::{M, Migrations};
 
 pub(crate) fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V1), M::up(V2), M::up(V3)])
+    Migrations::new(vec![M::up(V1), M::up(V2), M::up(V3), M::up(V4)])
 }
 
 const V1: &str = r#"
@@ -106,4 +106,18 @@ CREATE INDEX http_cache_age ON http_cache (stored_ms);
 /// Newest progress per title (Continue Watching, Library) without a scan.
 const V3: &str = r#"
 CREATE INDEX progress_by_item ON progress (profile_id, item_id, updated_ms);
+"#;
+
+/// Sync: the addon list is one register, so its HLC lives here and survives
+/// an empty list; `sync_state` holds this device's cursors (never synced).
+const V4: &str = r#"
+CREATE TABLE addon_list (
+    profile_id  TEXT PRIMARY KEY,
+    hlc         TEXT NOT NULL
+);
+INSERT INTO addon_list (profile_id, hlc) SELECT profile_id, MAX(hlc) FROM addons GROUP BY profile_id;
+CREATE TABLE sync_state (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
 "#;

@@ -1,0 +1,7 @@
+{"event":"setup","date":"2026-10-17","note":"mq-sync-server on 127.0.0.1, device A = data dir with 4 addons and Sintel progress, device B = empty data dir joined with the dev key file; debug builds"}
+{"event":"synced","device":"A","ms":8,"report":{"applied":0,"pulled":4,"pushed":4,"stale":0,"unreadable":0}}
+{"event":"synced","device":"B","ms":4,"report":{"applied":3,"pulled":4,"pushed":1,"stale":0,"unreadable":0},"check":"B lists the same 4 addons and shows Sintel in Continue Watching"}
+{"event":"synced","device":"B","ms":5,"report":{"applied":0,"pulled":1,"pushed":1,"stale":0,"unreadable":0},"after":"B installed WatchHub"}
+{"event":"synced","device":"A","ms":3,"report":{"applied":2,"pulled":2,"pushed":0,"stale":0,"unreadable":0},"check":"A lists WatchHub fifth"}
+{"event":"relay_scan","records":4,"plaintext_hits":{"Sintel":0,"tt1727587":0,"Cinemeta":0,"torrentio":0,"watchhub":0,"default":0}}
+{"event":"property_test","devices":3,"cases":256,"max_ops":39,"seconds":6.5,"mutations_caught":["client progress guard removed","server upsert guard removed","addon list guard removed"]}

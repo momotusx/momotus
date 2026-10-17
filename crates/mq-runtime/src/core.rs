@@ -4,7 +4,7 @@ use mq_addons::{
 use mq_debrid::{AllDebrid, Premiumize, RealDebrid, Resolver, ResolverConfig, StoreId, TorBox};
 use mq_http::{ClientConfig, HttpClient};
 use mq_library::hlc::now_ms;
-use mq_library::{AddonRow, HlcClock, Library};
+use mq_library::{AddonRow, Hlc, HlcClock, Library};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::path::PathBuf;
@@ -38,6 +38,8 @@ pub enum CoreError {
 pub struct CoreConfig {
     pub data_dir: PathBuf,
     pub profile_id: String,
+    /// 0 means the random id this data dir generated on first open; sync
+    /// needs every device to have its own.
     pub device_id: u64,
 }
 
@@ -74,7 +76,14 @@ impl Core {
         // stream list does not pay for it.
         std::thread::spawn(mq_relparse::warm_up);
         let http = HttpClient::new(ClientConfig::default())?;
+        let device_id = match device_id {
+            0 => stored_device_id(&library)?,
+            id => id,
+        };
         let clock = HlcClock::new(device_id);
+        if let Some(newest) = library.newest_hlc()?.as_deref().and_then(Hlc::decode) {
+            clock.observe(newest, now_ms());
+        }
         let library = Arc::new(library);
         let store = Arc::new(LibraryCache(library.clone()));
         let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
@@ -110,6 +119,15 @@ impl Core {
 
     pub fn hlc(&self) -> String {
         self.inner.clock.tick(now_ms()).encode()
+    }
+
+    /// One sync round with the relay: push local changes, pull and apply
+    /// remote ones. Views refresh through the usual change notifications.
+    pub async fn sync(
+        &self,
+        config: &mq_sync::SyncConfig,
+    ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
+        mq_sync::sync_once(self.library(), self.http(), config, &self.inner.clock).await
     }
 
     /// The loopback stream server, started on first use.
@@ -270,6 +288,22 @@ fn position(rows: &[AddonRow], transport_url: &str) -> Result<usize, CoreError> 
     rows.iter()
         .position(|r| r.transport_url == transport_url)
         .ok_or_else(|| CoreError::NotInstalled(redact(transport_url)))
+}
+
+/// A random device id kept in the library on first open.
+fn stored_device_id(library: &Library) -> Result<u64, CoreError> {
+    if let Some(id) = library
+        .sync_state("device_id")?
+        .and_then(|s| s.parse().ok())
+    {
+        return Ok(id);
+    }
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).expect("os randomness");
+    // Small ids are left for tests and the Stremio import.
+    let id = u64::from_le_bytes(bytes) | (1 << 63);
+    library.set_sync_state("device_id", &id.to_string())?;
+    Ok(id)
 }
 
 /// Transport URLs often carry API keys (debrid tokens in Torrentio configs), so

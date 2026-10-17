@@ -25,7 +25,7 @@ async fn main() {
     let core = Core::open(CoreConfig {
         data_dir: data,
         profile_id: std::env::var("MQ_PROFILE").unwrap_or_else(|_| "default".into()),
-        device_id: 1,
+        device_id: 0,
     })
     .expect("open core");
     core.set_debrid_keys(&StoreId::keys_from_env());

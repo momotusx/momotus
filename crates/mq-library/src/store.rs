@@ -1,4 +1,5 @@
 use crate::schema::migrations;
+use crate::sync::sql;
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -147,7 +148,7 @@ impl Library {
         self.changes.subscribe()
     }
 
-    fn write<T>(
+    pub(crate) fn write<T>(
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
     ) -> Result<T, LibraryError> {
@@ -158,7 +159,7 @@ impl Library {
         Ok(out)
     }
 
-    fn read<T>(
+    pub(crate) fn read<T>(
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
     ) -> Result<T, LibraryError> {
@@ -180,31 +181,14 @@ impl Library {
     }
 
     /// Replaces the profile's addon list in one transaction, keeping order.
+    /// A local edit always wins: its HLC is the newest this device has seen.
     pub fn set_addons(
         &self,
         profile: &str,
         addons: &[AddonRow],
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute("DELETE FROM addons WHERE profile_id = ?1", params![profile])?;
-            let mut insert = c.prepare(
-                "INSERT INTO addons (profile_id, transport_url, manifest_json, position, enabled, allow_private, hlc)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            )?;
-            for (position, a) in addons.iter().enumerate() {
-                insert.execute(params![
-                    profile,
-                    a.transport_url,
-                    a.manifest_json,
-                    position as i64,
-                    a.enabled,
-                    a.allow_private,
-                    hlc
-                ])?;
-            }
-            Ok(())
-        })
+        self.write(|c| sql::set_addons(c, profile, addons, hlc, false).map(drop))
     }
 
     pub fn addons(&self, profile: &str) -> Result<Vec<AddonRow>, LibraryError> {
@@ -233,28 +217,7 @@ impl Library {
         in_library: bool,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute(
-                "INSERT INTO library_items (profile_id, item_id, kind, name, poster, poster_shape, in_library, added_ms, hlc)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-                 ON CONFLICT(profile_id, item_id) DO UPDATE SET
-                   kind = excluded.kind, name = excluded.name, poster = excluded.poster,
-                   poster_shape = excluded.poster_shape, in_library = excluded.in_library, hlc = excluded.hlc
-                 WHERE excluded.hlc > library_items.hlc",
-                params![
-                    profile,
-                    item.item_id,
-                    item.kind,
-                    item.name,
-                    item.poster,
-                    item.poster_shape,
-                    in_library,
-                    item.added_ms,
-                    hlc
-                ],
-            )
-            .map(drop)
-        })
+        self.write(|c| sql::upsert_item(c, profile, item, in_library, hlc).map(drop))
     }
 
     /// Records playback progress. Older HLCs never overwrite newer ones.
@@ -264,18 +227,7 @@ impl Library {
         p: ProgressRow<'_>,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute(
-                "INSERT INTO progress (profile_id, video_id, item_id, position_ms, duration_ms, updated_ms, hlc)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                 ON CONFLICT(profile_id, video_id) DO UPDATE SET
-                   item_id = excluded.item_id, position_ms = excluded.position_ms,
-                   duration_ms = excluded.duration_ms, updated_ms = excluded.updated_ms, hlc = excluded.hlc
-                 WHERE excluded.hlc > progress.hlc",
-                params![profile, p.video_id, p.item_id, p.position_ms, p.duration_ms, p.updated_ms, hlc],
-            )
-            .map(drop)
-        })
+        self.write(|c| sql::set_progress(c, profile, &p, hlc).map(drop))
     }
 
     pub fn progress(
@@ -301,15 +253,7 @@ impl Library {
         watched: bool,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute(
-                "INSERT INTO watched (profile_id, video_id, item_id, watched, hlc) VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT(profile_id, video_id) DO UPDATE SET watched = excluded.watched, hlc = excluded.hlc
-                 WHERE excluded.hlc > watched.hlc",
-                params![profile, video_id, item_id, watched, hlc],
-            )
-            .map(drop)
-        })
+        self.write(|c| sql::set_watched(c, profile, item_id, video_id, watched, hlc).map(drop))
     }
 
     pub fn watched_videos(
@@ -574,15 +518,7 @@ impl Library {
         value_json: &str,
         hlc: &str,
     ) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute(
-                "INSERT INTO settings (profile_id, key, value_json, hlc) VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(profile_id, key) DO UPDATE SET value_json = excluded.value_json, hlc = excluded.hlc
-                 WHERE excluded.hlc > settings.hlc",
-                params![profile, key, value_json, hlc],
-            )
-            .map(drop)
-        })
+        self.write(|c| sql::set_setting(c, profile, key, value_json, hlc).map(drop))
     }
 
     /// Remembers a search the user acted on; keeps the newest 50.

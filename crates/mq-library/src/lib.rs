@@ -8,6 +8,7 @@
 pub mod hlc;
 mod schema;
 mod store;
+mod sync;
 
 pub use hlc::{Hlc, HlcClock};
 
@@ -15,3 +16,4 @@ pub use store::{
     AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryEntry, LibraryError,
     LibraryItemRow, ProgressRow, Table,
 };
+pub use sync::{SyncCursor, SyncRecord, coll};

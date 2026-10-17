@@ -20,6 +20,8 @@ mq-server = { path = "../mq-server" }
 mq-debrid = { path = "../mq-debrid" }
 mq-import = { path = "../mq-import" }
 mq-media = { path = "../mq-media" }
+mq-sync = { path = "../mq-sync" }
+getrandom = "0.3"
 stremio-core.workspace = true
 eyeball = "0.8"
 eyeball-im = "0.9"
