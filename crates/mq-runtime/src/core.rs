@@ -31,6 +31,8 @@ pub enum CoreError {
     BadPrefs(String),
     #[error("stored manifest is invalid: {0}")]
     BadManifest(String),
+    #[error("torrent engine: {0}")]
+    Torrent(String),
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +56,11 @@ struct Inner {
     http: HttpClient,
     addons: AddonClient,
     server: OnceCell<Arc<StreamServer>>,
+    /// Torrent data and DHT state (full builds start the engine on first use).
+    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+    torrent_dir: PathBuf,
+    #[cfg(feature = "torrent")]
+    engine: OnceCell<mq_engine::Engine>,
     debrid: RwLock<Option<Resolver>>,
     library: Arc<Library>,
     clock: HlcClock,
@@ -66,15 +73,22 @@ impl Core {
     pub fn open(config: CoreConfig) -> Result<Self, CoreError> {
         std::fs::create_dir_all(&config.data_dir)?;
         let library = Library::open(config.data_dir.join("library.sqlite"))?;
-        Self::with_library(library, config.profile_id, config.device_id)
+        let torrents = config.data_dir.join("torrents");
+        Self::with_library(library, config.profile_id, config.device_id, torrents)
     }
 
     /// A core over a throwaway database, for tests and the CLI.
     pub fn temporary(profile: &str) -> Result<Self, CoreError> {
-        Self::with_library(Library::temporary()?, profile.to_owned(), 1)
+        let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
+        Self::with_library(Library::temporary()?, profile.to_owned(), 1, torrents)
     }
 
-    fn with_library(library: Library, profile: String, device_id: u64) -> Result<Self, CoreError> {
+    fn with_library(
+        library: Library,
+        profile: String,
+        device_id: u64,
+        torrent_dir: PathBuf,
+    ) -> Result<Self, CoreError> {
         // Build the release-name rule table off the UI path, so the first
         // stream list does not pay for it.
         std::thread::spawn(mq_relparse::warm_up);
@@ -99,6 +113,9 @@ impl Core {
                 http,
                 addons,
                 server: OnceCell::new(),
+                torrent_dir,
+                #[cfg(feature = "torrent")]
+                engine: OnceCell::new(),
                 debrid: RwLock::new(None),
                 library,
                 clock,
@@ -171,6 +188,22 @@ impl Core {
             })
             .await?;
         Ok(server.clone())
+    }
+
+    /// The embedded torrent engine, started on first use (full builds only).
+    #[cfg(feature = "torrent")]
+    pub async fn torrent_engine(&self) -> Result<mq_engine::Engine, CoreError> {
+        let engine = self
+            .inner
+            .engine
+            .get_or_try_init(|| async {
+                let config = mq_engine::EngineConfig::new(&self.inner.torrent_dir);
+                mq_engine::Engine::start(config)
+                    .await
+                    .map_err(|e| CoreError::Torrent(e.to_string()))
+            })
+            .await?;
+        Ok(engine.clone())
     }
 
     /// Replaces the debrid accounts. Keys come from the platform keystore and

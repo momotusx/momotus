@@ -30,6 +30,13 @@ const SAVE_EVERY: Duration = Duration::from_secs(5);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 /// The subtitle hash reads two 64 KiB ranges; past this, ask without it.
 const HASH_TIMEOUT: Duration = Duration::from_secs(4);
+/// A torrent's swarm must send its metadata within this...
+#[cfg(feature = "torrent")]
+const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
+/// ...and the head plus the container tail within this, before the player
+/// gets the URL (players give up on a silent body after a few seconds).
+#[cfg(feature = "torrent")]
+const TORRENT_READY_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -468,23 +475,50 @@ async fn open_source(
             stream.filename.clone(),
             stream.size_bytes,
         ),
-        Source::ClientResolve(_) | Source::Torrent { .. } => {
-            if matches!(stream.source, Source::Torrent { .. }) && core.debrid().is_none() {
-                // ponytail: until the torrent engine lands, torrents play only
-                // through a debrid account.
-                return Err(
-                    "torrents need a debrid account until the built-in engine ships".into(),
-                );
+        Source::Torrent {
+            info_hash,
+            file_idx,
+            trackers,
+            ..
+        } if core.debrid().is_none() => {
+            // Full builds play torrents with the built-in engine; store
+            // builds have none and need a debrid account.
+            #[cfg(feature = "torrent")]
+            return open_torrent(core, stream, target, info_hash, *file_idx, trackers).await;
+            #[cfg(not(feature = "torrent"))]
+            {
+                let _ = (info_hash, file_idx, trackers);
+                return Err("torrents need a debrid account in this version".into());
             }
+        }
+        Source::ClientResolve(_) | Source::Torrent { .. } => {
             let (service, request) = debrid_request(stream, target.season, target.episode)
                 .ok_or("the addon did not say which torrent to resolve")?;
             let resolver = core
                 .debrid()
                 .ok_or("this version needs a debrid account; add one in Settings")?;
-            let link = resolver
+            let resolved = resolver
                 .resolve(with_store(&resolver, service.as_deref(), request))
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| e.to_string());
+            // Hybrid: a torrent the debrid store cannot give plays peer to
+            // peer in full builds.
+            #[cfg(feature = "torrent")]
+            if let (
+                Err(e),
+                Source::Torrent {
+                    info_hash,
+                    file_idx,
+                    trackers,
+                    ..
+                },
+            ) = (&resolved, &stream.source)
+            {
+                return open_torrent(core, stream, target, info_hash, *file_idx, trackers)
+                    .await
+                    .map_err(|p2p| format!("{e}; peer to peer: {p2p}"));
+            }
+            let link = resolved?;
             (link.url, Vec::new(), Some(link.filename), link.size)
         }
         other => return Err(format!("{} streams cannot play here", source_word(other))),
@@ -516,6 +550,98 @@ async fn open_source(
         filename,
         size,
     ))
+}
+
+/// Plays a torrent with the built-in engine: metadata, file choice (the
+/// addon's `fileIdx`, else its filename, else the episode, else the largest
+/// video), then the head and container tail verified before the player gets
+/// the URL.
+#[cfg(feature = "torrent")]
+async fn open_torrent(
+    core: &Core,
+    stream: &ParsedStream,
+    target: &PlayTarget,
+    info_hash: &str,
+    file_idx: Option<u32>,
+    trackers: &[String],
+) -> Result<Opened, String> {
+    use mq_engine::FileHint;
+    let engine = core.torrent_engine().await.map_err(|e| e.to_string())?;
+    let torrent = tokio::time::timeout(
+        METADATA_TIMEOUT,
+        engine.add_magnet(info_hash, trackers, &[]),
+    )
+    .await
+    .map_err(|_| "no peer sent the torrent's metadata in time".to_owned())?
+    .map_err(|e| e.to_string())?;
+    let hint = match (file_idx, &stream.filename, target.season, target.episode) {
+        (Some(i), ..) => FileHint::Index(i as usize),
+        (None, Some(name), ..) => FileHint::Name(name.clone()),
+        (None, None, Some(season), Some(episode)) => FileHint::Episode { season, episode },
+        _ => FileHint::Largest,
+    };
+    let started = async {
+        let file = engine.select_file(torrent, &hint).await?;
+        let reader = engine.open_reader(torrent, file).await?;
+        let mut head = reader.range(0, None).await?;
+        let ready = tokio::time::timeout(TORRENT_READY_TIMEOUT, head.ready()).await;
+        Ok::<_, mq_engine::EngineError>((file, reader.file().clone(), ready))
+    };
+    let failed = match started.await {
+        Ok((file, info, Ok(Ok(())))) => {
+            let name = info
+                .path
+                .rsplit('/')
+                .next()
+                .unwrap_or(&info.path)
+                .to_owned();
+            let upstream = Upstream::Torrent {
+                engine,
+                torrent,
+                file,
+            };
+            return Ok((upstream, Some(name), Some(info.len)));
+        }
+        Ok((_, _, Err(_))) => "the swarm did not send the start of the video in time".to_owned(),
+        Ok((_, _, Ok(Err(e)))) | Err(e) => e.to_string(),
+    };
+    // The next candidate plays instead: stop downloading this one.
+    let _ = engine.remove(torrent, false).await;
+    Err(failed)
+}
+
+/// Verified torrent bytes for the subtitle hash.
+#[cfg(feature = "torrent")]
+struct TorrentBytes(mq_engine::StreamReader);
+
+#[cfg(feature = "torrent")]
+impl mq_media::RangeReader for TorrentBytes {
+    fn len(&self) -> futures_util::future::BoxFuture<'_, Result<u64, mq_media::ProbeError>> {
+        let len = self.0.len();
+        Box::pin(async move { Ok(len) })
+    }
+
+    fn read_at(
+        &self,
+        offset: u64,
+        len: u64,
+    ) -> futures_util::future::BoxFuture<'_, Result<bytes::Bytes, mq_media::ProbeError>> {
+        Box::pin(async move {
+            use tokio::io::AsyncReadExt;
+            let err = |e: String| mq_media::ProbeError::Http(e);
+            let mut range = self
+                .0
+                .range(offset, Some(offset.saturating_add(len)))
+                .await
+                .map_err(|e| err(e.to_string()))?;
+            let mut out = Vec::new();
+            range
+                .read_to_end(&mut out)
+                .await
+                .map_err(|e| err(e.to_string()))?;
+            Ok(out.into())
+        })
+    }
 }
 
 /// What to ask a debrid store for this stream, with the service the addon
@@ -635,22 +761,37 @@ async fn find_subtitles(
     state: &Mutex<State>,
     snapshot: &SharedObservable<PlaybackSnapshot>,
 ) {
-    let Upstream::Http {
-        url,
-        headers,
-        allow_private,
-    } = upstream;
-    let reader = HttpRangeReader::new(
-        core.http().clone(),
-        url,
-        headers.clone(),
-        Arc::new(ByteCache::new(512 * 1024)),
-    )
-    .allow_private(*allow_private);
+    let reader: Box<dyn mq_media::RangeReader> = match upstream {
+        Upstream::Http {
+            url,
+            headers,
+            allow_private,
+        } => Box::new(
+            HttpRangeReader::new(
+                core.http().clone(),
+                url,
+                headers.clone(),
+                Arc::new(ByteCache::new(512 * 1024)),
+            )
+            .allow_private(*allow_private),
+        ),
+        #[cfg(feature = "torrent")]
+        Upstream::Torrent {
+            engine,
+            torrent,
+            file,
+        } => match engine.open_reader(*torrent, *file).await {
+            Ok(reader) => Box::new(TorrentBytes(reader)),
+            Err(e) => {
+                tracing::warn!("torrent reader for the subtitle hash: {e}");
+                return;
+            }
+        },
+    };
     let mut extra = Vec::new();
     // Origins that ignore Range give no hash; filename and id still match.
     if let Ok(Ok((hash, size))) =
-        tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(&reader)).await
+        tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(&*reader)).await
     {
         extra.push(extra_value("videoHash", hash));
         extra.push(extra_value("videoSize", size.to_string()));

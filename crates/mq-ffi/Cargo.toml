@@ -16,6 +16,8 @@ required-features = ["bindgen"]
 
 [features]
 bindgen = ["uniffi/cli"]
+# Built-in torrent engine: `full` (sideload) builds only, never store builds.
+torrent = ["mq-runtime/torrent"]
 
 [dependencies]
 mq-runtime = { path = "../mq-runtime" }

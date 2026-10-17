@@ -7,6 +7,9 @@ publish.workspace = true
 
 [features]
 ts = ["dep:ts-rs", "mq-streams/ts", "mq-sync/ts"]
+# Built-in torrent engine (full builds; store builds play torrents only
+# through debrid).
+torrent = ["dep:mq-engine", "dep:bytes", "mq-server/torrent"]
 
 [dependencies]
 ts-rs = { version = "12", optional = true, features = ["serde-compat"] }
@@ -21,6 +24,8 @@ mq-debrid = { path = "../mq-debrid" }
 mq-import = { path = "../mq-import" }
 mq-media = { path = "../mq-media" }
 mq-sync = { path = "../mq-sync" }
+mq-engine = { path = "../mq-engine", optional = true }
+bytes = { version = "1", optional = true }
 getrandom = "0.3"
 stremio-core.workspace = true
 eyeball = "0.8"

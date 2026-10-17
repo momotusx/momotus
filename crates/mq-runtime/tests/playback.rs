@@ -95,9 +95,15 @@ async fn settled(view: &PlaybackView) -> PlaybackSnapshot {
 async fn falls_over_to_the_first_source_that_answers() {
     let base = origin().await;
     let core = Core::temporary("p").unwrap();
+    // Without debrid, a store build fails a torrent at once. A full build
+    // (feature `torrent`) would ask the real DHT for it, so it is left out.
+    let torrent = if cfg!(feature = "torrent") {
+        ""
+    } else {
+        r#"{"name":"Torrent","title":"Sintel.2010.1080p","infoHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"#
+    };
     let streams = format!(
-        r#"{{"streams":[
-          {{"name":"Torrent","title":"Sintel.2010.1080p","infoHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+        r#"{{"streams":[{torrent}
           {{"name":"Dead","url":"{base}/dead.mkv"}},
           {{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"filename":"Sintel.2010.mkv","proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}
         ]}}"#
@@ -105,10 +111,12 @@ async fn falls_over_to_the_first_source_that_answers() {
     let view = PlaybackView::open(&core, setup(&core, &streams), target());
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
-    let errors: Vec<_> = s.attempts.iter().map(|a| a.error.as_str()).collect();
-    assert_eq!(errors.len(), 2, "{errors:?}");
-    assert!(errors[0].contains("debrid account"), "{errors:?}");
-    assert!(errors[1].contains("404"), "{errors:?}");
+    let mut errors: Vec<_> = s.attempts.iter().map(|a| a.error.as_str()).collect();
+    if !torrent.is_empty() {
+        assert!(errors.remove(0).contains("debrid account"), "{errors:?}");
+    }
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("404"), "{errors:?}");
 
     // The player gets a loopback URL; the origin's header is injected for it.
     let url = s.url.unwrap();
