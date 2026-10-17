@@ -3,7 +3,8 @@
 //! IPC channel.
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
-//! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys", ...}`.
+//! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
+//! "createSyncAccount" | "syncNow", ...}`.
 //! Views: home, search, library, title, versions, playback, addons, import, settings.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
@@ -60,6 +61,22 @@ enum Request {
     SetDebridKeys {
         id: u64,
         keys: Vec<(String, String)>,
+    },
+    /// Creates a relay account. The reply carries the device token and a new
+    /// account key (hex); the platform stores both in its keystore.
+    CreateSyncAccount {
+        id: u64,
+        server: String,
+        #[serde(default)]
+        invite: Option<String>,
+    },
+    /// One sync round with secrets read from the keystore by the platform.
+    #[serde(rename_all = "camelCase")]
+    SyncNow {
+        id: u64,
+        server: String,
+        device_token: String,
+        account_key: String,
     },
     /// Merges `patch` into the profile preferences (see `Core::set_prefs`).
     SetPrefs {
@@ -152,6 +169,44 @@ impl Session {
             Request::SetAddonEnabled { id, url, enabled } => {
                 let result = self.core.set_addon_enabled(&url, enabled);
                 self.reply(json!(id), done(result));
+            }
+            Request::CreateSyncAccount { id, server, invite } => {
+                let result = mq_sync::create_account(self.core.http(), &server, invite.as_deref())
+                    .await
+                    .map(|a| {
+                        let key = mq_sync::seal::AccountKey::generate();
+                        json!({
+                            "account": a.account,
+                            "deviceToken": a.device_token,
+                            "accountKey": hex::encode(key),
+                        })
+                    })
+                    .map_err(|e| e.to_string());
+                self.reply(json!(id), result);
+            }
+            Request::SyncNow {
+                id,
+                server,
+                device_token,
+                account_key,
+            } => {
+                let result = match hex::decode(&account_key)
+                    .ok()
+                    .and_then(|k| k.try_into().ok())
+                {
+                    Some(account_key) => self
+                        .core
+                        .sync(&mq_sync::SyncConfig {
+                            server,
+                            device_token,
+                            account_key,
+                        })
+                        .await
+                        .map_err(|e| e.to_string())
+                        .and_then(|r| to_value(&r)),
+                    None => Err("accountKey must be 64 hex digits".into()),
+                };
+                self.reply(json!(id), result);
             }
             Request::SetPrefs { id, patch } => {
                 let result = self

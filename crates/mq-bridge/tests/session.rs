@@ -233,3 +233,52 @@ async fn addons_view_follows_disable_and_remove() {
         .await;
     assert_eq!(next(&mut rx).await["ok"], false);
 }
+
+#[tokio::test]
+async fn sync_account_then_two_devices_share_preferences() {
+    let dir = std::env::temp_dir().join(format!("mq-bridge-sync-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let (tx_a, mut rx_a) = mpsc::unbounded_channel();
+    let mut a = Session::new(Core::temporary("p").unwrap(), tx_a);
+    a.handle_text(&json!({"id": 1, "op": "createSyncAccount", "server": server}).to_string())
+        .await;
+    let account = next(&mut rx_a).await["result"].clone();
+    assert_eq!(account["accountKey"].as_str().unwrap().len(), 64);
+    let sync = json!({"op": "syncNow", "server": server,
+        "deviceToken": account["deviceToken"], "accountKey": account["accountKey"]});
+
+    a.handle_text(
+        &json!({"id": 2, "op": "setPrefs", "patch": {"subtitleLanguages": ["tur"]}}).to_string(),
+    )
+    .await;
+    assert_eq!(next(&mut rx_a).await["ok"], true);
+    let mut push = sync.clone();
+    push["id"] = json!(3);
+    a.handle_text(&push.to_string()).await;
+    let report = next(&mut rx_a).await;
+    assert!(
+        report["result"]["pushed"].as_u64().unwrap() >= 1,
+        "{report}"
+    );
+
+    let (tx_b, mut rx_b) = mpsc::unbounded_channel();
+    let core_b = Core::temporary("p").unwrap();
+    let mut b = Session::new(core_b.clone(), tx_b);
+    let mut pull = sync.clone();
+    pull["id"] = json!(4);
+    b.handle_text(&pull.to_string()).await;
+    assert_eq!(next(&mut rx_b).await["ok"], true);
+    assert_eq!(core_b.prefs().subtitle_languages, ["tur"]);
+
+    let mut bad = sync;
+    bad["id"] = json!(5);
+    bad["accountKey"] = json!("zz");
+    b.handle_text(&bad.to_string()).await;
+    assert_eq!(next(&mut rx_b).await["ok"], false);
+    let _ = std::fs::remove_dir_all(&dir);
+}
