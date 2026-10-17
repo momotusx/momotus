@@ -436,6 +436,31 @@ data class Prefs(
 )
 
 @Serializable
+data class ProfileInfo(
+    val id: String,
+    val name: String,
+    /** A bundled avatar id and colour token, as the app stored it. */
+    val avatar: String,
+    /** Order in the picker (the list is already sorted by it). */
+    val position: Int,
+    val hasPin: Boolean,
+    val isOwner: Boolean,
+    /** Its PIN record has not arrived from another device yet: show it, but it cannot be opened. */
+    val syncing: Boolean,
+)
+
+@Serializable
+data class ProfilesSnapshot(
+    val profiles: List<ProfileInfo>,
+    /** The session's profile (it may be gone: then the session is locked). */
+    val active: String,
+    /** The session is locked: only the picker and unlocking work. */
+    val locked: Boolean,
+    /** How many profiles `createProfile` allows. */
+    val max: Int,
+)
+
+@Serializable
 enum class QualityPref {
     @SerialName("best") Best,
     @SerialName("balanced") Balanced,
