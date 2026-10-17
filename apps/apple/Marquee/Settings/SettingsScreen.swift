@@ -9,6 +9,9 @@ struct SettingsScreen: View {
     @State private var addons: LiveRecord<AddonsSnapshot>
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
+    #if DEBUG
+    @State private var previewPairing = false
+    #endif
 
     init(core: CoreClient) {
         self.core = core
@@ -94,6 +97,10 @@ struct SettingsScreen: View {
         .topScrim()
         .task(id: prefs.taskId) { prefs.start() }
         .task(id: addons.taskId) { addons.start() }
+        #if DEBUG
+        .navigationDestination(isPresented: $previewPairing) { PairingScreen(core: core) }
+        .task { if DebugHooks.takePairedPreview() { previewPairing = true } }
+        #endif
     }
 
     private func section(_ title: String) -> some View {

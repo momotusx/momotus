@@ -36,6 +36,19 @@ enum DebugHooks {
 
     @MainActor private static var onboardingTaken = false
 
+    /// `-MQPairedPreview YES` opens the pairing page once from Settings, in its
+    /// joined state over this device's real library and addons. Nothing is
+    /// stored and no sync starts: a live join needs a second device and a relay.
+    static var pairedPreview: Bool { UserDefaults.standard.bool(forKey: "MQPairedPreview") }
+
+    @MainActor static func takePairedPreview() -> Bool {
+        guard !pairedPreviewTaken, pairedPreview else { return false }
+        pairedPreviewTaken = true
+        return true
+    }
+
+    @MainActor private static var pairedPreviewTaken = false
+
     /// `-MQShowVersions YES` opens the Versions page once versions are in.
     static var showVersions: Bool { UserDefaults.standard.bool(forKey: "MQShowVersions") }
 
