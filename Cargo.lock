@@ -1513,6 +1513,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-import"
+version = "0.1.0"
+dependencies = [
+ "mq-http",
+ "mq-library",
+ "mq-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "stremio-core",
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "mq-library"
 version = "0.1.0"
 dependencies = [

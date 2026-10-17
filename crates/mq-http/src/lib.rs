@@ -195,6 +195,18 @@ impl HttpClient {
         self.send(Method::GET, url, None, opts, None).await
     }
 
+    /// POSTs `body` as JSON. Same budgets, caps and redaction as `get`.
+    pub async fn post_json<B: serde::Serialize>(
+        &self,
+        url: &str,
+        body: &B,
+        opts: &RequestOptions,
+    ) -> Result<Response, HttpError> {
+        let value = serde_json::to_value(body).map_err(|e| HttpError::Decode(e.to_string()))?;
+        self.request(Method::POST, url, Some(Body::Json(value)), opts)
+            .await
+    }
+
     /// Any method with an optional body (POST, PUT, DELETE for provider APIs).
     pub async fn request(
         &self,

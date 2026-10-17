@@ -100,6 +100,29 @@ async fn reports_status_and_blocks_private_by_default() {
 }
 
 #[tokio::test]
+async fn posts_json_body() {
+    let (base, head) = serve(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nContent-Type: application/json\r\n\r\n{\"ok\":true}",
+        Duration::ZERO,
+    )
+    .await;
+    let client = HttpClient::new(ClientConfig::default()).unwrap();
+    let resp = client
+        .post_json(
+            &format!("{base}/api/getUser"),
+            &serde_json::json!({"authKey": "k"}),
+            &local_opts(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.json::<serde_json::Value>().unwrap()["ok"], true);
+    let head = head.await.unwrap().to_ascii_lowercase();
+    assert!(head.starts_with("post /api/getuser"), "{head}");
+    assert!(head.contains("content-type: application/json"), "{head}");
+    assert!(head.ends_with("{\"authkey\":\"k\"}"), "{head}");
+}
+
+#[tokio::test]
 #[ignore = "network"]
 async fn fetches_real_cinemeta_manifest() {
     let client = HttpClient::new(ClientConfig::default()).unwrap();
