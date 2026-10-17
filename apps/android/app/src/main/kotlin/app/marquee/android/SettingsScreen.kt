@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -40,6 +42,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
 import app.marquee.core.model.QualityPref
@@ -55,6 +58,8 @@ import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RoundButton
+import app.marquee.design.Status
+import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.dpadExits
 import kotlinx.coroutines.CancellationException
@@ -78,6 +83,28 @@ class SettingsHolder(
     }
 }
 
+/** The parts of the page an operation can come from. */
+private enum class Place { Addons, Install, Playback }
+
+/** What an operation ended with, shown under the part of the page it came from. */
+private class Said(
+    val place: Place,
+    val text: String,
+    val failed: Boolean,
+)
+
+@Composable
+private fun SaidLine(said: Said) {
+    if (said.failed) {
+        Note(
+            said.text,
+            failed = true,
+        )
+    } else {
+        StatusWord(said.text, Status.Ok, Modifier.padding(horizontal = Marquee.safe.side))
+    }
+}
+
 @Composable
 fun SettingsScreen(session: CoreSession) {
     val holder =
@@ -86,20 +113,22 @@ fun SettingsScreen(session: CoreSession) {
             factory = viewModelFactory { initializer { SettingsHolder(session) } },
         )
     val scope = rememberCoroutineScope()
-    // One operation at a time; its failure stays on screen in plain words.
+    // One operation at a time; what it ends with stays on screen in plain words, under the part of
+    // the page it came from (the top of the page is out of sight from the install field).
     var busy by remember { mutableStateOf<String?>(null) }
-    var problem by remember { mutableStateOf<String?>(null) }
+    var said by remember { mutableStateOf<Said?>(null) }
     val requesters = remember { mutableStateMapOf<String, FocusRequester>() }
     val installFocus = remember { FocusRequester() }
 
     fun run(
         what: String,
+        place: Place,
         then: () -> Unit = {},
         op: suspend () -> Unit,
     ) {
         if (busy != null) return
         busy = what
-        problem = null
+        said = null
         scope.launch {
             try {
                 op()
@@ -107,7 +136,12 @@ fun SettingsScreen(session: CoreSession) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                problem = "$what did not work: ${CoreLog.describe(e)}"
+                said =
+                    Said(
+                        place,
+                        "$what did not work: ${(e as? CoreError)?.message ?: CoreLog.describe(e)}",
+                        failed = true,
+                    )
             } finally {
                 busy = null
             }
@@ -124,7 +158,6 @@ fun SettingsScreen(session: CoreSession) {
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         item(key = "head") { BrowseHeader("Settings", "Your Marquee") }
-        problem?.let { item(key = "problem") { Note(it, failed = true) } }
         item(key = "addons-head") { Kicker("Addons") }
         when {
             holder.addons.status is ViewStatus.Failed -> {
@@ -144,16 +177,19 @@ fun SettingsScreen(session: CoreSession) {
                 busy = busy != null,
                 focusRequester = requester,
                 onToggle = {
-                    run(if (addon.enabled) "Turning ${addon.name} off" else "Turning ${addon.name} on") {
+                    run(if (addon.enabled) "Turning ${addon.name} off" else "Turning ${addon.name} on", Place.Addons) {
                         session.ops.setAddonEnabled(addon.url, !addon.enabled)
                     }
                 },
-                onMove = { by -> run("Moving ${addon.name}") { session.ops.moveAddon(addon.url, index + by) } },
+                onMove = { by ->
+                    run("Moving ${addon.name}", Place.Addons) { session.ops.moveAddon(addon.url, index + by) }
+                },
                 onRemove = {
                     // Focus falls to the next addon, or to the link field when this was the last.
                     val next = addons.getOrNull(index + 1) ?: addons.getOrNull(index - 1)
                     run(
                         "Removing ${addon.name}",
+                        Place.Addons,
                         then = {
                             val target = next?.let { requesters[it.url] } ?: installFocus
                             runCatching { target.requestFocus() }
@@ -162,13 +198,18 @@ fun SettingsScreen(session: CoreSession) {
                 },
             )
         }
+        said?.takeIf { it.place == Place.Addons }?.let { item(key = "addons-said") { SaidLine(it) } }
         item(key = "install") {
-            InstallField(busy != null, installFocus) { url, clear ->
-                run("Adding the addon", then = clear) { session.ops.installAddon(url) }
+            InstallField(busy != null, installFocus, said?.takeIf { it.place == Place.Install }) { url, clear ->
+                run("Adding the addon", Place.Install, then = clear) {
+                    val added = session.ops.installAddon(url)
+                    said = Said(Place.Install, "Added ${added.name}", failed = false)
+                }
             }
         }
         item(key = "playback-head") { Kicker("Playback") }
-        item(key = "playback") { Playback(holder, busy != null) { what, op -> run(what, op = op) } }
+        item(key = "playback") { Playback(holder, busy != null) { what, op -> run(what, Place.Playback, op = op) } }
+        said?.takeIf { it.place == Place.Playback }?.let { item(key = "playback-said") { SaidLine(it) } }
         item(key = "about-head") { Kicker("About") }
         item(key = "about") { About() }
     }
@@ -241,6 +282,8 @@ private fun AddonRow(
 private fun InstallField(
     busy: Boolean,
     focusRequester: FocusRequester,
+    /** How the last add went, shown under the button. */
+    status: Said?,
     /** The link, and what clears the field once it is added. */
     onInstall: (String, () -> Unit) -> Unit,
 ) {
@@ -249,6 +292,14 @@ private fun InstallField(
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.pill)
+    val keyboard = LocalSoftwareKeyboardController.current
+    // The keyboard goes, so how it went (under the button) is in sight.
+    val add = {
+        if (!busy && text.isNotBlank()) {
+            keyboard?.hide()
+            onInstall(text.trim()) { text = "" }
+        }
+    }
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             MqText("Add an addon", role = TextRole.Headline, weight = FontWeight.Bold)
@@ -273,7 +324,9 @@ private fun InstallField(
                             fontFamily = MarqueeFonts.text,
                         ),
                     cursorBrush = SolidColor(colors.accent),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                    // The keyboard's Go adds it, as the button does.
+                    keyboardActions = KeyboardActions(onGo = { add() }),
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -290,9 +343,12 @@ private fun InstallField(
                 label = "Add",
                 icon = Icons.Plus,
                 enabled = !busy && text.isNotBlank(),
-                onClick = { onInstall(text.trim()) { text = "" } },
+                onClick = add,
                 focusRequester = focusRequester,
             )
+            if (status != null) {
+                if (status.failed) Note(status.text, failed = true, side = 0.dp) else StatusWord(status.text, Status.Ok)
+            }
         }
     }
 }
