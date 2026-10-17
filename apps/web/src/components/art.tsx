@@ -36,11 +36,13 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
 /** A poster over a name card: the title's name sits centered in the surface
  * until the picture has decoded, and stays when there is none, so a tile is
  * never a blank box. */
-export function Poster(props: { src: string | null; name: string; w: number; h: number; eager?: boolean }) {
+export function Poster(props: { src: string | null; name: string; w: number; h: number; eager?: boolean; nameCard?: boolean }) {
   const [broken, setBroken] = createSignal(false);
   return (
     <>
-      <span class="pic-name">{props.name}</span>
+      <Show when={props.nameCard !== false}>
+        <span class="pic-name">{props.name}</span>
+      </Show>
       <Show when={props.src && !broken()}>
         <img
           src={props.src as string}

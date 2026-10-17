@@ -30,7 +30,7 @@ interface Metrics {
 }
 
 const TV: Metrics = { poster: [240, 360], landscape: [384, 216], square: [300, 300], gap: 32, pad: 34, inset: 34, peek: 140, caption: 52 };
-const PHONE: Metrics = { poster: [112, 168], landscape: [200, 112], square: [140, 140], gap: 12, pad: 8, inset: 16, peek: 40, caption: 40 };
+const PHONE: Metrics = { poster: [112, 168], landscape: [240, 135], square: [140, 140], gap: 12, pad: 8, inset: 16, peek: 40, caption: 40 };
 export const metrics = () => (form() === "phone" ? PHONE : TV);
 
 const sizeOf = (m: Metrics, shape: string | undefined) =>
@@ -52,12 +52,16 @@ export function TileCard(props: {
   // Rows mount only tiles near the viewport, so those load at once; native
   // lazy loading would wait until a nested scroller shows them.
   eager?: boolean;
+  /** Continue Watching: a 16:9 still with the logo, Apple TV Up Next style. */
+  wide?: boolean;
 }) {
   const cap = () => (props.captions === false ? null : caption(props.tile));
+  const [logoBroken, setLogoBroken] = createSignal(false);
   return (
     <A
       href={titlePath(props.tile.kind, props.tile.id)}
       class="tile"
+      classList={{ wide: props.wide }}
       data-f={props.fkey}
       data-index={props.index}
       data-autofocus={props.autofocus ? "" : undefined}
@@ -66,7 +70,25 @@ export function TileCard(props: {
       onClick={() => props.onOpen?.()}
     >
       <div class="pic" style={{ height: `${props.h}px` }}>
-        <Poster src={props.tile.poster} name={props.tile.name} w={props.w} h={props.h} eager={props.eager} />
+        <Show
+          when={props.wide}
+          fallback={<Poster src={props.tile.poster} name={props.tile.name} w={props.w} h={props.h} eager={props.eager} />}
+        >
+          <Poster
+            src={props.tile.background ?? props.tile.poster}
+            name={props.tile.name}
+            w={props.w}
+            h={props.h}
+            eager={props.eager}
+            nameCard={false}
+          />
+          <div class="art-scrim" />
+          <div class="art-brand">
+            <Show when={props.tile.logo && !logoBroken()} fallback={<span class="art-name">{props.tile.name}</span>}>
+              <img class="art-logo" src={props.tile.logo as string} alt="" decoding="async" onError={() => setLogoBroken(true)} />
+            </Show>
+          </div>
+        </Show>
         <Show when={props.tile.progress !== null}>
           <div class="bar">
             <i style={{ width: pct(props.tile.progress ?? 0) }} />
@@ -86,7 +108,9 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
   const m = metrics;
   // Search shows the same catalogs as Home: keep their offsets and keys apart.
   const id = () => `${props.scope ?? "home"}:${props.row.rowId}`;
-  const size = () => sizeOf(m(), props.row.tiles[0]?.posterShape);
+  // Continue Watching is a row of 16:9 stills; catalogs keep their shape.
+  const wide = () => props.row.rowId === CONTINUE_ROW;
+  const size = () => (wide() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
   const stride = () => size()[0] + m().gap;
   const withCaption = () => props.row.tiles.some((t) => t.progress !== null);
   const bodyHeight = () => size()[1] + m().pad * 2 + (withCaption() ? m().caption : 0);
@@ -198,6 +222,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                           autofocus={props.autofocus && i === 0}
                           onOpen={props.onOpen}
                           eager
+                          wide={wide()}
                         />
                       )}
                     </Show>

@@ -2,15 +2,19 @@ import { A, useParams } from "@solidjs/router";
 import BookmarkCheck from "lucide-solid/icons/bookmark-check";
 import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
 import Check from "lucide-solid/icons/check";
+import Circle from "lucide-solid/icons/circle";
 import CircleAlert from "lucide-solid/icons/circle-alert";
+import CircleCheck from "lucide-solid/icons/circle-check";
+import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
-import { createEffect, createMemo, For, type JSX, Match, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { TrailerOverlay } from "../components/trailer";
 import { type TitleView, titleView, versionsView } from "../core/client";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
-import { remember } from "../focus/dom";
+import { focusEl, remember } from "../focus/dom";
 import { bytes, clock, decoded, episodeLabel, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { kindLabel, qualityText, statusText } from "../lib/words";
 import "./title.css";
@@ -32,6 +36,15 @@ function TitlePage(props: { kind: string; id: string }) {
   const d = () => header()?.details ?? null;
   const target = () => header()?.playTarget ?? null;
   const series = () => props.kind !== "movie" && (header()?.seasons.length ?? 0) > 0;
+  const [trailerOpen, setTrailerOpen] = createSignal(false);
+  // Closing returns focus to the button that opened it.
+  const closeTrailer = () => {
+    setTrailerOpen(false);
+    queueMicrotask(() => {
+      const button = document.querySelector<HTMLElement>('[data-f="title:trailer"]');
+      if (button) focusEl(button);
+    });
+  };
 
   // Open Versions for the play target as soon as the name is known: the
   // line under Play shows the pick, and the core warms it before Play.
@@ -65,6 +78,10 @@ function TitlePage(props: { kind: string; id: string }) {
   return (
     <div class="title-scr" classList={{ movie: !series() }}>
       <Backdrop src={d()?.background} class="title-bd" />
+      <Show when={trailerOpen() && d()?.trailers.length}>
+        <TrailerOverlay trailers={d()?.trailers ?? []} onClose={closeTrailer} />
+      </Show>
+      <div class="title-main" inert={trailerOpen() || undefined}>
       <Switch>
         <Match when={view.state.status.state === "failed" || header()?.state.state === "failed"}>
           <section class="info">
@@ -126,6 +143,12 @@ function TitlePage(props: { kind: string; id: string }) {
                       </A>
                     )}
                   </Show>
+                  <Show when={x().trailers.length > 0}>
+                    <button class="btn" data-f="title:trailer" onClick={() => setTrailerOpen(true)}>
+                      <Film aria-hidden />
+                      Trailer
+                    </button>
+                  </Show>
                   <button
                     class="btn"
                     data-f="title:library"
@@ -137,6 +160,19 @@ function TitlePage(props: { kind: string; id: string }) {
                     </Show>
                     {header()?.inLibrary ? "In Library" : "Add to Library"}
                   </button>
+                  <Show when={props.kind === "movie"}>
+                    <button
+                      class="btn"
+                      data-f="title:watched"
+                      aria-pressed={header()?.watched ?? false}
+                      onClick={() => view.command({ type: "setWatched", videoId: props.id, value: !header()?.watched })}
+                    >
+                      <Show when={header()?.watched} fallback={<Circle aria-hidden />}>
+                        <CircleCheck aria-hidden />
+                      </Show>
+                      {header()?.watched ? "Watched" : "Mark watched"}
+                    </button>
+                  </Show>
                 </div>
                 <dl class="facts">
                   <Fact label="Starring" value={x().cast.slice(0, 3).join(", ")} />
@@ -161,6 +197,7 @@ function TitlePage(props: { kind: string; id: string }) {
           </section>
         </Match>
       </Switch>
+      </div>
     </div>
   );
 }
