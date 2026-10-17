@@ -3,7 +3,7 @@
 
 use crate::model::*;
 use mq_protocol::Source;
-use mq_relparse::{Audio, Hdr, Quality, Resolution, VideoCodec};
+use mq_relparse::{Audio, Hdr, Quality, VideoCodec};
 use std::collections::HashMap;
 
 pub struct RankInput<'a> {
@@ -229,7 +229,19 @@ fn within(s: &ParsedStream, input: &RankInput<'_>) -> u16 {
     };
     score += language_score(s, input.prefs);
     score += size_score(s, input.prefs);
+    score -= over_resolution_penalty(s, input.caps);
     score.clamp(0, 1000) as u16
+}
+
+/// Resolution the screen cannot show costs bandwidth and start time for
+/// nothing: a 4K remux on a 1080p stick must not beat a 1080p release.
+fn over_resolution_penalty(s: &ParsedStream, caps: &DeviceCaps) -> i32 {
+    let height = s.release.resolution.height();
+    if height == 0 || height <= caps.display_height {
+        return 0;
+    }
+    let steps = (height / caps.display_height.max(1)).max(1) as i32;
+    350 * steps
 }
 
 fn surround(channels: Option<&str>) -> bool {
@@ -300,6 +312,10 @@ fn release_identity(s: &ParsedStream) -> String {
 
 fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
     let best_size = rows.first().and_then(|r| r.stream.size_bytes);
+    // "Needs download" only means something next to a ready alternative.
+    let any_ready = rows
+        .iter()
+        .any(|r| r.stream.cached == Some(true) || matches!(r.stream.source, Source::Http { .. }));
     for row in rows.iter_mut() {
         let s = &row.stream;
         let wants_lang = !input.prefs.languages.is_empty() && !s.release.languages.is_empty();
@@ -308,7 +324,8 @@ fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
             .languages
             .iter()
             .any(|l| s.release.languages.contains(l));
-        row.group = if row.key.tier <= 2
+        row.group = if any_ready
+            && row.key.tier <= 2
             && s.cached != Some(true)
             && !matches!(s.source, Source::Http { .. })
         {
@@ -330,9 +347,7 @@ fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
         if row.key.playability == Playability::Native {
             reasons.push(Reason::PlaysDirectly);
         }
-        if s.release.resolution != Resolution::Unknown
-            && row.key.effective_height == input.caps.display_height
-        {
+        if s.release.resolution.height() == input.caps.display_height {
             reasons.push(Reason::MatchesScreen);
         }
         if wants_lang && lang_match {

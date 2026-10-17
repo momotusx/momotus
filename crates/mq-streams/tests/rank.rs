@@ -182,3 +182,45 @@ fn title_similarity_tolerates_tags_but_rejects_other_works() {
     assert!(title_similarity("last us", "last us") > 0.99);
     assert!(title_similarity("another show", "last us") < 0.5);
 }
+
+#[test]
+fn a_4k_remux_does_not_win_on_a_1080p_screen() {
+    let all = streams(
+        "torrentio",
+        0,
+        json!({ "streams": [
+            { "name": "Torrentio\n4k", "title": "The.Last.of.Us.S02E03.2160p.BluRay.REMUX.HEVC.DTS-HD.MA.TrueHD.7.1.Atmos-FGT\n👤 40 💾 33.4 GB",
+              "infoHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "fileIdx": 0 },
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.BluRay.x264-DEMAND\n👤 300 💾 3.1 GB",
+              "infoHash": "ffffffffffffffffffffffffffffffffffffffff", "fileIdx": 0 }
+        ]}),
+    );
+    let prefs = StreamPrefs::default();
+    let caps = DeviceCaps::basic_1080p();
+    let ranked = rank(
+        all,
+        &RankInput {
+            caps: &caps,
+            prefs: &prefs,
+            target: &target(),
+            last_binge_group: None,
+        },
+    );
+    let best = ranked.best().unwrap();
+    assert!(
+        best.stream.raw_description.contains("1080p"),
+        "{}",
+        best.stream.raw_description
+    );
+    assert!(best.reasons.contains(&Reason::MatchesScreen));
+    let remux = ranked
+        .rows
+        .iter()
+        .find(|r| r.stream.raw_description.contains("2160p"))
+        .unwrap();
+    assert!(!remux.reasons.contains(&Reason::MatchesScreen));
+    assert!(
+        ranked.rows.iter().all(|r| r.group != Group::NeedsDownload),
+        "no ready alternative exists"
+    );
+}

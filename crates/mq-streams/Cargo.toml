@@ -5,7 +5,11 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+ts = ["dep:ts-rs"]
+
 [dependencies]
+ts-rs = { version = "12", optional = true, features = ["serde-compat"] }
 mq-protocol = { path = "../mq-protocol" }
 mq-relparse = { path = "../mq-relparse" }
 serde.workspace = true
