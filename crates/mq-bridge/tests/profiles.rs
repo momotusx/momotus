@@ -404,6 +404,8 @@ async fn switching_is_refused_while_views_other_than_the_picker_are_open() {
     let home = c.subscribe("home").await;
     let addons = c.subscribe("addons").await;
     let picker = c.subscribe("profiles").await;
+    // The device's debrid accounts are not in the way: a switch keeps them.
+    c.subscribe("debrid").await;
     let reply = c.call(json!({"op": "switchProfile", "profile": kid})).await;
     assert_eq!(reply["code"], "viewsOpen", "{reply}");
     let mut views: Vec<&str> = reply["views"]
@@ -427,6 +429,21 @@ async fn switching_is_refused_while_views_other_than_the_picker_are_open() {
     // The device remembers it: the next session opens there.
     let mut again = Client::new(core);
     assert_eq!(picker_snapshot(&mut again).await["active"], kid.as_str());
+}
+
+#[tokio::test]
+async fn the_owner_pin_resets_without_it_even_while_locked() {
+    let core = Core::temporary("default").unwrap();
+    let mut c = Client::new(core.clone());
+    assert_eq!(c.set_pin("default", Some("2580"), None).await, "ok");
+    c.ok(json!({"op": "lockSession"})).await;
+    // Locked: the PIN is forgotten, and the reset still answers.
+    let snapshot = c.ok(json!({"op": "resetOwnerPin"})).await;
+    assert_eq!(profile(&snapshot, "default")["hasPin"], false, "{snapshot}");
+    c.ok(json!({"op": "unlockProfile"})).await;
+    // The next cold start opens unlocked.
+    let mut again = Client::new(core);
+    assert_eq!(picker_snapshot(&mut again).await["locked"], false);
 }
 
 /// An addon host that holds each request a moment, then hangs up.

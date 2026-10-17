@@ -229,6 +229,14 @@ impl Core {
         self.forgive(id)
     }
 
+    /// Clears the owner's PIN without it, from any session (section 4): the
+    /// apps call it only after the device's own lock (an OS prompt), which
+    /// the core cannot see, so it has the trust of removing a device.
+    pub fn reset_owner_pin(&self) -> Result<(), ProfileError> {
+        self.library().set_pin_hash(OWNER, None, &self.hlc())?;
+        self.forgive(OWNER)
+    }
+
     /// A PIN set, changed or cleared by someone allowed to: earlier wrong
     /// tries were against another PIN, so their count and wait go.
     fn forgive(&self, id: &str) -> Result<(), ProfileError> {

@@ -267,6 +267,11 @@ enum Request {
     LockSession {
         id: u64,
     },
+    /// Clears the owner's PIN without it. Apps send it only after the
+    /// device's own lock prompt (section 4 of plans/m11-profiles.md).
+    ResetOwnerPin {
+        id: u64,
+    },
 }
 
 impl Request {
@@ -281,6 +286,7 @@ impl Request {
             Request::Unsubscribe { .. }
             | Request::UnlockProfile { .. }
             | Request::SwitchProfile { .. }
+            | Request::ResetOwnerPin { .. }
             | Request::SyncNow { .. }
             // Debrid accounts are the device's: an app hands them over at
             // start, locked or not.
@@ -728,6 +734,10 @@ impl Session {
                 drop(closed);
                 self.reply_profiles(id, Ok(()));
             }
+            Request::ResetOwnerPin { id } => {
+                let result = core.reset_owner_pin();
+                self.reply_profiles(id, result);
+            }
         }
     }
 
@@ -752,7 +762,9 @@ impl Session {
             .subs
             .values()
             .map(|s| s.view.name())
-            .filter(|name| *name != "profiles")
+            // The device's debrid accounts stay open across a switch, as
+            // `transition` keeps them.
+            .filter(|name| *name != "profiles" && *name != "debrid")
             .collect();
         if !open.is_empty() {
             return Err(Failure::coded("viewsOpen", "close the open views first")
