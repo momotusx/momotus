@@ -19,6 +19,7 @@ use crate::seal::KeyBundle;
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
 use hkdf::Hkdf;
+use hmac::{Hmac, KeyInit, Mac};
 use hpke::aead::ChaCha20Poly1305;
 use hpke::kdf::HkdfSha256;
 use hpke::kem::X25519HkdfSha256;
@@ -63,12 +64,12 @@ impl Joined {
     }
 }
 
-/// A pairing a device of the account approved: save `joined` only after
-/// the user confirms `code` matches the one on that device.
+/// A pairing a device of the account approved. Show `code`; only when the
+/// user confirms it matches the other device, `claim` it for a token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
-    pub joined: Joined,
     pub code: String,
+    keys: KeyBundle,
 }
 
 /// Sealed inside a pairing blob.
@@ -188,9 +189,13 @@ pub async fn start_pairing(http: &HttpClient, server: &str) -> Result<PairingReq
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Taken {
     sealed: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Claimed {
     device_token: String,
 }
 
@@ -200,7 +205,7 @@ impl PairingRequest {
         let response = http
             .post_json(
                 &format!("{}/v1/pairings/{}/take", self.server, self.pairing),
-                &serde_json::json!({ "take": self.take }),
+                &serde_json::json!({ "take": self.take, "claim": false }),
                 &options(&self.server, None),
             )
             .await?;
@@ -218,13 +223,26 @@ impl PairingRequest {
             return Err(bad("the reply names another sync server"));
         }
         Ok(Some(Offer {
-            joined: Joined {
-                server: self.server.clone(),
-                device_token: taken.device_token,
-                keys: payload.keys,
-            },
             code: payload.code,
+            keys: payload.keys,
         }))
+    }
+
+    /// After the user confirmed the codes match: the token for this device.
+    pub async fn claim(&self, http: &HttpClient, offer: Offer) -> Result<Joined, SyncError> {
+        let claimed: Claimed = http
+            .post_json(
+                &format!("{}/v1/pairings/{}/take", self.server, self.pairing),
+                &serde_json::json!({ "take": self.take, "claim": true }),
+                &options(&self.server, None),
+            )
+            .await?
+            .json()?;
+        Ok(Joined {
+            server: self.server.clone(),
+            device_token: claimed.device_token,
+            keys: offer.keys,
+        })
     }
 }
 
@@ -272,9 +290,12 @@ pub async fn approve_pairing(
         .await;
     match filled {
         Ok(_) => Ok(code),
-        Err(mq_http::HttpError::Status { status: 409, .. }) => {
-            Err(bad("this pairing code was already used or has expired"))
-        }
+        Err(mq_http::HttpError::Status { status: 409, .. }) => Err(bad(
+            "someone else already answered this code; reject it on the new device",
+        )),
+        Err(mq_http::HttpError::Status { status: 410, .. }) => Err(bad(
+            "this pairing code expired; start again on the new device",
+        )),
         Err(e) => Err(e.into()),
     }
 }
@@ -298,10 +319,11 @@ pub fn new_recovery_kit() -> String {
         .join("-")
 }
 
-/// What a kit derives: lookup id (hex), redeem secret and key pair.
+/// What a kit derives: lookup id (hex), redeem secret, tag key and key pair.
 struct KitKeys {
     lookup: String,
     auth: [u8; 32],
+    tag: [u8; 32],
     secret: PrivateKey,
     public: PublicKey,
 }
@@ -313,10 +335,13 @@ fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
     let hk = Hkdf::<Sha256>::new(None, &secret);
     let mut lookup = [0u8; 16];
     let mut auth = [0u8; 32];
+    let mut tag = [0u8; 32];
     let mut ikm = [0u8; 32];
     hk.expand(b"marquee/recovery/lookup/v1", &mut lookup)
         .expect("valid length");
     hk.expand(b"marquee/recovery/auth/v1", &mut auth)
+        .expect("valid length");
+    hk.expand(b"marquee/recovery/tag/v1", &mut tag)
         .expect("valid length");
     hk.expand(b"marquee/recovery/key/v1", &mut ikm)
         .expect("valid length");
@@ -324,6 +349,7 @@ fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
     Ok(KitKeys {
         lookup: hex::encode(lookup),
         auth,
+        tag,
         secret,
         public,
     })
@@ -344,6 +370,7 @@ pub async fn store_recovery(
             "lookup": keys.lookup,
             "authHash": hex::encode(Sha256::digest(keys.auth)),
             "pk": B64.encode(keys.public.to_bytes()),
+            "idTag": hex::encode(id_tag(&keys.tag, &config.keys.id_key)),
             "sealed": B64.encode(sealed),
         }),
         &options(&config.server, Some(&config.device_token)),
@@ -402,6 +429,15 @@ pub async fn reseal_recovery(http: &HttpClient, config: &SyncConfig) -> Result<u
 struct Redeemed {
     device_token: String,
     sealed: String,
+    id_tag: String,
+}
+
+/// Binds a kit to the account: only a holder of the account's id key (an
+/// account device) can produce a bundle the kit accepts.
+fn id_tag(tag_key: &[u8; 32], id_key: &[u8; 32]) -> [u8; 32] {
+    let mut mac = Hmac::<Sha256>::new_from_slice(tag_key).expect("any key length");
+    mac.update(id_key);
+    mac.finalize().into_bytes().into()
 }
 
 /// Joins the account a recovery kit belongs to, as a new device.
@@ -422,6 +458,14 @@ pub async fn recover(http: &HttpClient, server: &str, kit: &str) -> Result<Joine
     let plain = open_with(&keys.secret, RECOVERY_INFO, keys.lookup.as_bytes(), &blob)?;
     let bundle: KeyBundle =
         serde_json::from_slice(&plain).map_err(|_| bad("recovery data is malformed"))?;
+    // The relay, or anyone with a device token, can seal any bundle to the
+    // kit's public key; only the account's own matches the tag set when the
+    // kit was made.
+    let expected = hex::decode(&redeemed.id_tag).map_err(|_| bad("recovery tag is malformed"))?;
+    let mut mac = Hmac::<Sha256>::new_from_slice(&keys.tag).expect("any key length");
+    mac.update(&bundle.id_key);
+    mac.verify_slice(&expected)
+        .map_err(|_| bad("the recovered keys are not this account's; do not use them"))?;
     Ok(Joined {
         server: server.to_owned(),
         device_token: redeemed.device_token,

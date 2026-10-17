@@ -28,7 +28,7 @@ async fn relay(config: Config) -> Relay {
     let app = router(&dir.join("relay.sqlite"), config).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
     Relay {
         base,
         http: HttpClient::new(ClientConfig::default()).unwrap(),

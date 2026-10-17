@@ -14,7 +14,7 @@
 // them to spawn_blocking when one relay serves many busy accounts.
 
 use axum::extract::Path as UrlPath;
-use axum::extract::{DefaultBodyLimit, Query, State};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
@@ -30,6 +30,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -58,6 +60,8 @@ pub struct Config {
     /// Added to the relay's idea of the time (tests of a relay with a
     /// wrong clock).
     pub clock_offset_ms: i64,
+    /// Take the client address from `X-Forwarded-For` (behind a trusted proxy).
+    pub trust_proxy: bool,
 }
 
 impl Default for Config {
@@ -67,6 +71,7 @@ impl Default for Config {
             quota_bytes: 50 * 1024 * 1024,
             new_generation: false,
             clock_offset_ms: 0,
+            trust_proxy: false,
         }
     }
 }
@@ -77,7 +82,8 @@ struct AppState {
     config: Arc<Config>,
     generation: Arc<String>,
     /// Rate limits for opening pairings and redeeming kits.
-    limits: Arc<Mutex<[Limiter; 2]>>,
+    limits: Arc<Mutex<Limits>>,
+    clock: Arc<Mutex<ClockWatch>>,
 }
 
 pub fn router(db: &Path, config: Config) -> rusqlite::Result<Router> {
@@ -105,6 +111,7 @@ pub fn router(db: &Path, config: Config) -> rusqlite::Result<Router> {
         config: Arc::new(config),
         generation: Arc::new(generation),
         limits: Arc::default(),
+        clock: Arc::default(),
     };
     Ok(Router::new()
         .route("/v1/accounts", post(create_account))
@@ -164,6 +171,8 @@ CREATE TABLE IF NOT EXISTS recovery (
     lookup_hash  BLOB PRIMARY KEY,
     lookup       TEXT NOT NULL,
     account      TEXT NOT NULL,
+    added_by     BLOB NOT NULL,
+    id_tag       BLOB NOT NULL,
     auth_hash    BLOB NOT NULL,
     pk           BLOB NOT NULL,
     sealed       BLOB NOT NULL,
@@ -367,7 +376,7 @@ async fn push(
     }
     let server_ms = state.now_ms();
     let mut db = lock(&state);
-    let Some((account, _)) = authorize(&db, &headers) else {
+    let Some((account, device)) = authorize(&db, &headers) else {
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
     };
     let result = (|| -> rusqlite::Result<Result<PushResponse, Response>> {
@@ -460,7 +469,21 @@ async fn push(
         Ok(Ok(response))
     })();
     match result {
-        Ok(Ok(response)) => Json(response).into_response(),
+        Ok(Ok(response)) => {
+            if response
+                .rejected
+                .iter()
+                .any(|r| r.code == Refusal::ClockAhead)
+            {
+                let mut clock = state.clock.lock().unwrap_or_else(|p| p.into_inner());
+                if let Some(devices) = clock.ahead(device, server_ms) {
+                    tracing::warn!(
+                        "{devices} devices pushed versions more than 10 minutes ahead of this relay's clock in the last 10 minutes: the relay clock is probably behind; check its time sync"
+                    );
+                }
+            }
+            Json(response).into_response()
+        }
         Ok(Err(refusal)) => refusal,
         Err(e) => storage_error("push", e),
     }
@@ -529,28 +552,103 @@ async fn pull(
     }
 }
 
-/// Requests allowed per minute across the relay for an unauthenticated
-/// endpoint; enough for real use, too few for a script to block it.
+/// Devices whose pushes came back clock-ahead lately. Several at once means
+/// this relay's clock is behind, not theirs: their edits get restamped at
+/// relay time, and last-writer-wins falls back to push order.
 #[derive(Default)]
-pub(crate) struct Limiter {
-    window_ms: u64,
-    used: u32,
+struct ClockWatch {
+    ahead: HashMap<Vec<u8>, u64>,
+    warned_ms: Option<u64>,
 }
 
-impl Limiter {
-    fn allow(&mut self, per_minute: u32) -> bool {
-        let now = now_ms();
-        if now >= self.window_ms + 60_000 {
-            self.window_ms = now;
-            self.used = 0;
-        }
-        self.used += 1;
-        self.used <= per_minute
+const CLOCK_WATCH_MS: u64 = 10 * 60 * 1000;
+
+impl ClockWatch {
+    /// Notes a device refused as clock-ahead; returns how many devices were,
+    /// when it is time to warn (at most once per window).
+    fn ahead(&mut self, device: Vec<u8>, now: u64) -> Option<usize> {
+        self.ahead.insert(device, now);
+        self.ahead
+            .retain(|_, at| now.saturating_sub(*at) < CLOCK_WATCH_MS);
+        let quiet = self
+            .warned_ms
+            .is_none_or(|at| now.saturating_sub(at) >= CLOCK_WATCH_MS);
+        (self.ahead.len() >= 2 && quiet).then(|| {
+            self.warned_ms = Some(now);
+            self.ahead.len()
+        })
     }
 }
 
-fn limited(state: &AppState, which: usize, per_minute: u32) -> bool {
-    !state.limits.lock().unwrap_or_else(|p| p.into_inner())[which].allow(per_minute)
+/// Request budgets for the unauthenticated endpoints, per client address and
+/// relay-wide, so one script can neither flood the relay nor block everyone
+/// else. Windows are one minute: (window start, requests).
+#[derive(Default)]
+pub(crate) struct Limits {
+    per_client: HashMap<(usize, IpAddr), (u64, u32)>,
+    global: [(u64, u32); 2],
+}
+
+const OPEN_PAIRING: (usize, u32, u32) = (0, 20, 2000);
+const REDEEM_KIT: (usize, u32, u32) = (1, 10, 600);
+
+fn spend(slot: &mut (u64, u32), now: u64, cap: u32) -> bool {
+    if now >= slot.0 + 60_000 {
+        *slot = (now, 0);
+    }
+    slot.1 += 1;
+    slot.1 > cap
+}
+
+/// Whether `client` is over its budget (or the relay over its own).
+fn limited(
+    state: &AppState,
+    client: IpAddr,
+    (which, per_client, global): (usize, u32, u32),
+) -> bool {
+    let now = now_ms();
+    let mut limits = state.limits.lock().unwrap_or_else(|p| p.into_inner());
+    if limits.per_client.len() > 50_000 {
+        limits
+            .per_client
+            .retain(|_, (start, _)| now < *start + 60_000);
+    }
+    let mine = spend(
+        limits.per_client.entry((which, client)).or_default(),
+        now,
+        per_client,
+    );
+    let all = spend(&mut limits.global[which], now, global);
+    mine || all
+}
+
+/// The caller's address: the peer, or the first `X-Forwarded-For` hop when
+/// the relay sits behind a proxy it trusts.
+fn client(state: &AppState, peer: SocketAddr, headers: &HeaderMap) -> IpAddr {
+    let forwarded = || {
+        headers
+            .get("x-forwarded-for")?
+            .to_str()
+            .ok()?
+            .split(',')
+            .next()?
+            .trim()
+            .parse()
+            .ok()
+    };
+    match state.config.trust_proxy {
+        true => forwarded().unwrap_or(peer.ip()),
+        false => peer.ip(),
+    }
+}
+
+/// Serves the relay with peer addresses available to the rate limits.
+pub async fn serve(listener: tokio::net::TcpListener, app: Router) -> std::io::Result<()> {
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
 }
 
 #[derive(Deserialize)]
@@ -591,8 +689,12 @@ fn mint_device(db: &Connection, account: &str, minted_by: &[u8]) -> Result<Strin
 /// A one-time slot a new device shows as a QR. The QR carries the slot id
 /// (for the device that fills it); collecting needs the `take` secret, which
 /// stays on the new device.
-async fn open_pairing(State(state): State<AppState>) -> Response {
-    if limited(&state, 0, 120) {
+async fn open_pairing(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Response {
+    if limited(&state, client(&state, peer, &headers), OPEN_PAIRING) {
         return error(StatusCode::TOO_MANY_REQUESTS, "too many pairings started");
     }
     let now = state.now_ms();
@@ -650,10 +752,23 @@ async fn fill_pairing(
         params![id, sealed, account, filler, state.now_ms() as i64],
     ) {
         Ok(1) => Json(json!({})).into_response(),
-        Ok(_) => error(
-            StatusCode::CONFLICT,
-            "this pairing code was already used or expired",
-        ),
+        // Tell "someone else answered" apart from "expired": the first means
+        // the code on the new device belongs to someone else.
+        Ok(_) => match db
+            .query_row(
+                "SELECT 1 FROM pairing WHERE id = ?1 AND sealed IS NOT NULL",
+                params![id],
+                |_| Ok(()),
+            )
+            .optional()
+        {
+            Ok(Some(())) => error(
+                StatusCode::CONFLICT,
+                "someone else already answered this code; reject it on the new device",
+            ),
+            Ok(None) => error(StatusCode::GONE, "this pairing code expired"),
+            Err(e) => storage_error("fill pairing", e),
+        },
         Err(e) => storage_error("fill pairing", e),
     }
 }
@@ -661,6 +776,9 @@ async fn fill_pairing(
 #[derive(Deserialize)]
 struct Take {
     take: String,
+    /// Collect the token too (the user confirmed); otherwise only the blob.
+    #[serde(default)]
+    claim: bool,
 }
 
 /// take hash, sealed blob, account, minting device, expiry
@@ -673,12 +791,13 @@ type PairingRow = (
 );
 
 /// The new device collects the blob with its take secret: 204 while
-/// waiting, then once (with a token for it, minted for the account that
-/// filled the slot), then 404.
+/// waiting, then the blob (as often as asked), then, with `claim` once the
+/// user confirmed the codes, a token minted for the account that filled
+/// the slot; after that 404.
 async fn take_pairing(
     State(state): State<AppState>,
     UrlPath(id): UrlPath<String>,
-    Json(take): Json<Take>,
+    Json(claim): Json<Take>,
 ) -> Response {
     let db = lock(&state);
     let row: rusqlite::Result<Option<PairingRow>> = db
@@ -693,7 +812,7 @@ async fn take_pairing(
         Ok(None) => return error(StatusCode::NOT_FOUND, "no pairing with that code"),
         Err(e) => return storage_error("take pairing", e),
     };
-    if !same(&take_hash, &token_hash(&take.take)) {
+    if !same(&take_hash, &token_hash(&claim.take)) {
         return error(StatusCode::NOT_FOUND, "no pairing with that code");
     }
     if expires as u64 <= state.now_ms() {
@@ -702,15 +821,19 @@ async fn take_pairing(
     let (Some(sealed), Some(account), Some(filler)) = (sealed, account, filler) else {
         return StatusCode::NO_CONTENT.into_response();
     };
+    if !claim.claim {
+        return Json(json!({ "sealed": B64.encode(sealed) })).into_response();
+    }
+    // The user confirmed the codes match: now, and only now, the new
+    // device gets a token.
     let token = match mint_device(&db, &account, &filler) {
         Ok(token) => token,
         Err(refusal) => return *refusal,
     };
     if let Err(e) = db.execute("DELETE FROM pairing WHERE id = ?1", params![id]) {
-        return storage_error("take pairing", e);
+        return storage_error("claim pairing", e);
     }
-    Json(json!({ "sealed": B64.encode(sealed), "deviceToken": token, "account": account }))
-        .into_response()
+    Json(json!({ "deviceToken": token, "account": account })).into_response()
 }
 
 fn lookup_hash(lookup: &str) -> Option<Vec<u8>> {
@@ -728,6 +851,9 @@ struct NewKit {
     auth_hash: String,
     /// The kit's X25519 public key, base64; devices seal new bundles to it.
     pk: String,
+    /// HMAC of the account's id key under a kit-derived key, hex: lets the
+    /// kit holder check a recovered bundle is the account's own.
+    id_tag: String,
     sealed: String,
 }
 
@@ -740,10 +866,13 @@ async fn add_kit(
     Json(kit): Json<NewKit>,
 ) -> Response {
     let mut db = lock(&state);
-    let Some((account, _)) = authorize(&db, &headers) else {
+    let Some((account, added_by)) = authorize(&db, &headers) else {
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
     };
     let auth_hash = hex::decode(&kit.auth_hash).ok().filter(|h| h.len() == 32);
+    let Some(id_tag) = hex::decode(&kit.id_tag).ok().filter(|t| t.len() == 32) else {
+        return error(StatusCode::BAD_REQUEST, "bad recovery kit fields");
+    };
     let pk = B64.decode(&kit.pk).ok().filter(|k| k.len() == 32);
     let (Some(hash), Some(auth_hash), Some(pk), Some(sealed)) = (
         lookup_hash(&kit.lookup),
@@ -753,35 +882,34 @@ async fn add_kit(
     ) else {
         return error(StatusCode::BAD_REQUEST, "bad recovery kit fields");
     };
-    let added =
-        (|| -> rusqlite::Result<Result<(), Response>> {
-            let tx = db.transaction()?;
-            let kits: i64 = tx.query_row(
-                "SELECT COUNT(*) FROM recovery WHERE account = ?1",
-                params![account],
-                |r| r.get(0),
-            )?;
-            if kits >= MAX_KITS {
-                return Ok(Err(error(
-                    StatusCode::FORBIDDEN,
-                    "this account has enough recovery kits",
-                )));
-            }
-            let inserted = tx.execute(
-            "INSERT INTO recovery (lookup_hash, lookup, account, auth_hash, pk, sealed, updated_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(lookup_hash) DO NOTHING",
-            params![hash, kit.lookup, account, auth_hash, pk, sealed, now_ms() as i64],
+    let added = (|| -> rusqlite::Result<Result<(), Response>> {
+        let tx = db.transaction()?;
+        let kits: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM recovery WHERE account = ?1",
+            params![account],
+            |r| r.get(0),
         )?;
-            tx.commit()?;
-            Ok(if inserted == 1 {
-                Ok(())
-            } else {
-                Err(error(
-                    StatusCode::CONFLICT,
-                    "this kit is already registered",
-                ))
-            })
-        })();
+        if kits >= MAX_KITS {
+            return Ok(Err(error(
+                StatusCode::FORBIDDEN,
+                "this account has enough recovery kits",
+            )));
+        }
+        let inserted = tx.execute(
+            "INSERT INTO recovery (lookup_hash, lookup, account, added_by, id_tag, auth_hash, pk, sealed, updated_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ON CONFLICT(lookup_hash) DO NOTHING",
+            params![hash, kit.lookup, account, added_by, id_tag, auth_hash, pk, sealed, now_ms() as i64],
+        )?;
+        tx.commit()?;
+        Ok(if inserted == 1 {
+            Ok(())
+        } else {
+            Err(error(
+                StatusCode::CONFLICT,
+                "this kit is already registered",
+            ))
+        })
+    })();
     match added {
         Ok(Ok(())) => Json(json!({})).into_response(),
         Ok(Err(refusal)) => refusal,
@@ -847,14 +975,19 @@ struct Redeem {
     auth: String,
 }
 
-/// account, redeem secret hash, sealed bundle
-type KitRow = (String, Vec<u8>, Vec<u8>);
+/// account, redeem secret hash, sealed bundle, id tag, device that added it
+type KitRow = (String, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
 
 /// Joins the account of a kit as a new device: needs the kit's redeem
 /// secret, which no device keeps, so a revoked device holding the bundle
 /// cannot come back this way.
-async fn redeem_kit(State(state): State<AppState>, Json(redeem): Json<Redeem>) -> Response {
-    if limited(&state, 1, 60) {
+async fn redeem_kit(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(redeem): Json<Redeem>,
+) -> Response {
+    if limited(&state, client(&state, peer, &headers), REDEEM_KIT) {
         return error(StatusCode::TOO_MANY_REQUESTS, "too many recovery attempts");
     }
     let not_found = || error(StatusCode::NOT_FOUND, "no recovery data for that kit");
@@ -865,12 +998,12 @@ async fn redeem_kit(State(state): State<AppState>, Json(redeem): Json<Redeem>) -
     let db = lock(&state);
     let found: rusqlite::Result<Option<KitRow>> = db
         .query_row(
-            "SELECT account, auth_hash, sealed FROM recovery WHERE lookup_hash = ?1",
+            "SELECT account, auth_hash, sealed, id_tag, added_by FROM recovery WHERE lookup_hash = ?1",
             params![hash],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
         )
         .optional();
-    let (account, auth_hash, sealed) = match found {
+    let (account, auth_hash, sealed, id_tag, added_by) = match found {
         Ok(Some(found)) => found,
         Ok(None) => return not_found(),
         Err(e) => return storage_error("redeem kit", e),
@@ -878,13 +1011,38 @@ async fn redeem_kit(State(state): State<AppState>, Json(redeem): Json<Redeem>) -
     if !same(&auth_hash, &Sha256::digest(&auth)) {
         return not_found();
     }
-    match mint_device(&db, &account, b"recovery") {
+    // Minted as by the device that added the kit, so revoking that device
+    // can take these tokens (and its kits) with it.
+    match mint_device(&db, &account, &added_by) {
         Ok(token) => Json(json!({
             "account": account,
             "deviceToken": token,
             "sealed": B64.encode(sealed),
+            "idTag": hex::encode(id_tag),
         }))
         .into_response(),
         Err(refusal) => *refusal,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn several_devices_ahead_warn_once_per_window() {
+        let mut watch = ClockWatch::default();
+        assert_eq!(
+            watch.ahead(vec![1], 1_000),
+            None,
+            "one device: its own clock"
+        );
+        assert_eq!(watch.ahead(vec![1], 2_000), None);
+        assert_eq!(watch.ahead(vec![2], 3_000), Some(2));
+        assert_eq!(watch.ahead(vec![3], 4_000), None, "already warned");
+        // A device seen long ago no longer counts.
+        let later = 3_000 + CLOCK_WATCH_MS;
+        assert_eq!(watch.ahead(vec![4], later), Some(2), "devices 3 and 4");
+        assert_eq!(watch.ahead(vec![5], later + 2 * CLOCK_WATCH_MS), None);
     }
 }

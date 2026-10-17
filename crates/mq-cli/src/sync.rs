@@ -124,7 +124,10 @@ pub async fn pair(data: &Path, server: &str) -> Result<(), String> {
             if !answer.trim().eq_ignore_ascii_case("y") {
                 return Err("the codes did not match; nothing was kept".into());
             }
-            let joined = offer.joined;
+            let joined = request
+                .claim(&http, offer)
+                .await
+                .map_err(|e| e.to_string())?;
             std::fs::create_dir_all(data).map_err(|e| e.to_string())?;
             write(
                 &data.join(KEY_FILE),

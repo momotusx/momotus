@@ -35,7 +35,7 @@ async fn main() {
     let app = router(&db, config).expect("open database");
     let listener = tokio::net::TcpListener::bind(listen).await.expect("bind");
     println!("{{\"event\":\"sync_server_ready\",\"url\":\"http://{listen}\"}}");
-    axum::serve(listener, app).await.expect("serve");
+    mq_sync_server::serve(listener, app).await.expect("serve");
 }
 
 fn usage(flag: &str) -> ! {

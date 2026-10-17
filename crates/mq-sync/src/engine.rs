@@ -69,6 +69,10 @@ pub struct SyncReport {
     /// Pulled records written by a newer app version, kept for after the
     /// update.
     pub newer: u32,
+    /// This device's clock minus the relay's. Beyond 10 minutes either way
+    /// one of them is wrong: the UI should say so (pushes get stamped at
+    /// the relay's time, and last-writer-wins falls back to push order).
+    pub clock_gap_ms: i64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -275,6 +279,7 @@ async fn push(
             .await?
             .json()?;
         observe_server(clock, response.server_ms);
+        report.clock_gap_ms = clock.wall_now() as i64 - response.server_ms as i64;
         report.pushed += response.accepted;
         report.stale += response.stale;
         // The relay holds a newer version of these, which this device may
@@ -300,12 +305,15 @@ async fn push(
                 // Written while this device's clock ran ahead. Nobody else
                 // ever accepted that version, so it is stamped again at the
                 // relay's time, once per round.
-                // A version stamped by another device (queued when this device
-                // moved to a new relay) is not this device's to re-assert.
+                // A version stamped by another device (an import, or one queued
+                // after moving to a new relay) is never re-stamped: it must not
+                // jump above a real edit. It waits, queued, until the relay's
+                // clock reaches it.
                 Refusal::ClockAhead
                     if Hlc::decode(&record.hlc).is_none_or(|h| h.device != clock.device()) =>
                 {
-                    report.refused += 1;
+                    library.requeue(record.coll, &record.key)?;
+                    stuck = Some(refusal.reason.clone());
                 }
                 Refusal::ClockAhead if restamped.insert((record.coll, record.key.clone())) => {
                     // Just above what the relay holds for this register (and no
@@ -370,6 +378,7 @@ async fn pull(
             .await?
             .json()?;
         observe_server(clock, page.server_ms);
+        report.clock_gap_ms = clock.wall_now() as i64 - page.server_ms as i64;
         let known = library.sync_state(GENERATION)?.unwrap_or_default();
         let restored = page.head < after || (!known.is_empty() && known != page.generation);
         if restored && !started_over {

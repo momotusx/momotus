@@ -30,7 +30,7 @@ async fn serve(db: &Path, config: Config) -> String {
     let app = router(db, config).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
     base
 }
 
@@ -234,7 +234,7 @@ async fn lying_relay() -> String {
         );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
     base
 }
 
@@ -312,10 +312,106 @@ async fn another_devices_version_is_never_restamped() {
         device: 99,
     };
     progress(&lib, "v1", &foreign.encode());
-    let report = sync_once(&lib, &http(), &config, &HlcClock::new(1))
+    let err = sync_once(&lib, &http(), &config, &HlcClock::new(1))
         .await
-        .unwrap();
-    assert_eq!((report.refused, report.pushed), (1, 0), "{report:?}");
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Rejected(_)), "{err:?}");
     let stored = lib.changed_since(&SyncCursor::default(), 10).unwrap();
     assert_eq!(stored[0].hlc, foreign.encode(), "left as it was");
+    assert!(lib.outbox(10).unwrap().last_id.is_some(), "kept for later");
+}
+
+#[tokio::test]
+async fn a_fresh_import_waits_for_a_slow_relay_instead_of_vanishing() {
+    let dir = dir();
+    let db = dir.0.join("relay.sqlite");
+    let slow = Config {
+        clock_offset_ms: -30 * 60 * 1000,
+        ..Config::default()
+    };
+    let config = account(&serve(&db, slow).await).await;
+    let a = Library::temporary().unwrap();
+    // What the user watched five minutes ago, imported from Stremio
+    // (device 0 stamps it with Stremio's time).
+    let imported = Hlc {
+        wall_ms: now_ms() - 5 * 60 * 1000,
+        counter: 0,
+        device: 0,
+    };
+    progress(&a, "v1", &imported.encode());
+    let clock = HlcClock::new(1);
+    let err = sync_once(&a, &http(), &config, &clock).await.unwrap_err();
+    assert!(matches!(err, SyncError::Rejected(_)), "{err:?}");
+    assert!(
+        a.outbox(10).unwrap().last_id.is_some(),
+        "still queued, not dropped"
+    );
+
+    // Once the relay's clock is right, the import goes through untouched.
+    let fixed = serve(&db, Config::default()).await;
+    let config = SyncConfig {
+        server: fixed,
+        ..config
+    };
+    let report = sync_once(&a, &http(), &config, &clock).await.unwrap();
+    assert_eq!(report.pushed, 1, "{report:?}");
+    let b = Library::temporary().unwrap();
+    sync_once(&b, &http(), &config, &HlcClock::new(2))
+        .await
+        .unwrap();
+    let stored = b.changed_since(&SyncCursor::default(), 10).unwrap();
+    assert_eq!(stored[0].hlc, imported.encode(), "never restamped");
+}
+
+/// Documents the limit of a relay whose clock is more than 10 minutes slow:
+/// fresh edits are stamped at the relay's time, so an older edit made
+/// offline can win. Devices see the clock gap and can say so.
+#[tokio::test]
+async fn with_a_slow_relay_last_writer_falls_back_to_push_order() {
+    let dir = dir();
+    let server = serve(
+        &dir.0.join("relay.sqlite"),
+        Config {
+            clock_offset_ms: -30 * 60 * 1000,
+            ..Config::default()
+        },
+    )
+    .await;
+    let config = account(&server).await;
+    let (phone, tv) = (Library::temporary().unwrap(), Library::temporary().unwrap());
+    let (phone_clock, tv_clock) = (HlcClock::new(1), HlcClock::new(2));
+    // The TV edited offline 25 minutes ago; the phone edits now and syncs
+    // first.
+    let offline = Hlc {
+        wall_ms: now_ms() - 25 * 60 * 1000,
+        counter: 0,
+        device: 2,
+    };
+    let row = |pos| ProgressRow {
+        video_id: "v1",
+        item_id: "tt1",
+        position_ms: pos,
+        duration_ms: 10,
+        updated_ms: pos,
+    };
+    tv.set_progress("p", row(3), &offline.encode()).unwrap();
+    phone
+        .set_progress(
+            "p",
+            row(8),
+            &phone_clock.tick(phone_clock.wall_now()).encode(),
+        )
+        .unwrap();
+    let report = sync_once(&phone, &http(), &config, &phone_clock)
+        .await
+        .unwrap();
+    assert!(report.clock_gap_ms > 25 * 60 * 1000, "{report:?}");
+    sync_once(&tv, &http(), &config, &tv_clock).await.unwrap();
+    sync_once(&phone, &http(), &config, &phone_clock)
+        .await
+        .unwrap();
+    // Both agree, on the TV's older edit: the phone's was stamped at the
+    // relay's (slow) time.
+    assert_eq!(registers(&phone), registers(&tv));
+    assert_eq!(phone.progress("p", "v1").unwrap(), Some((3, 10)));
 }

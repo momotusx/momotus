@@ -241,7 +241,7 @@ async fn sync_account_then_two_devices_share_preferences() {
     let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
 
     let (tx_a, mut rx_a) = mpsc::unbounded_channel();
     let mut a = Session::new(Core::temporary("p").unwrap(), tx_a);

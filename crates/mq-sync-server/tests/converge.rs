@@ -63,6 +63,14 @@ enum Op {
         item: u8,
         group: u8,
     },
+    /// Another app's history imported on this device: device 0, stamped
+    /// with when it happened there.
+    Import {
+        device: usize,
+        video: u8,
+        position: i64,
+        age_s: u64,
+    },
     Sync {
         device: usize,
     },
@@ -118,6 +126,14 @@ fn op() -> impl Strategy<Value = Op> {
         }),
         (device.clone(), -7200..540i64)
             .prop_map(|(device, skew_s)| Op::ClockJump { device, skew_s }),
+        (device.clone(), 0..2u8, 0..1000i64, 1800..7200u64).prop_map(
+            |(device, video, position, age_s)| Op::Import {
+                device,
+                video,
+                position,
+                age_s,
+            }
+        ),
         device.clone().prop_map(|device| Op::Push { device }),
         device.prop_map(|device| Op::Pull { device }),
     ]
@@ -205,7 +221,8 @@ impl Device {
             | Op::Pull { .. }
             | Op::Restart { .. }
             | Op::ClockJump { .. }
-            | Op::StalePullWrite { .. } => {
+            | Op::StalePullWrite { .. }
+            | Op::Import { .. } => {
                 unreachable!("handled by the runner")
             }
         }
@@ -233,17 +250,20 @@ fn written(op: &Op, value: &serde_json::Value) -> bool {
     }
 }
 
-async fn relay() -> String {
+async fn relay(clock_offset_ms: i64) -> String {
     let dir = std::env::temp_dir().join(format!("mq-converge-{}-{}", std::process::id(), now_ms()));
     std::fs::create_dir_all(&dir).unwrap();
     let app = mq_sync_server::router(
         &dir.join(format!("{}.sqlite", rand_suffix())),
-        Default::default(),
+        mq_sync_server::Config {
+            clock_offset_ms,
+            ..Default::default()
+        },
     )
     .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
     base
 }
 
@@ -258,8 +278,9 @@ fn registers(lib: &Library) -> Vec<mq_library::SyncRecord> {
         .unwrap()
 }
 
-async fn run(ops: Vec<Op>) {
-    let server = relay().await;
+/// `slow`: the relay's clock is 30 minutes behind every device.
+async fn run(ops: Vec<Op>, slow: bool) {
+    let server = relay(if slow { -30 * 60 * 1000 } else { 0 }).await;
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let local = RequestOptions {
         allow_private: true,
@@ -356,6 +377,37 @@ async fn run(ops: Vec<Op>) {
                     *slot = stored.hlc;
                 }
             }
+            Op::Import {
+                device,
+                video,
+                position,
+                age_s,
+            } => {
+                let hlc = mq_library::Hlc {
+                    wall_ms: now_ms() - age_s * 1000,
+                    counter: 0,
+                    device: 0,
+                }
+                .encode();
+                let video_id = format!("tt1:1:{video}");
+                let row = ProgressRow {
+                    video_id: &video_id,
+                    item_id: "tt1",
+                    position_ms: *position,
+                    duration_ms: 1000,
+                    updated_ms: *position,
+                };
+                let d = &devices[*device];
+                d.library.set_progress(PROFILE, row, &hlc).unwrap();
+                // An import never overrides a newer edit, so only the newest
+                // version is checked.
+                let key = [PROFILE, &video_id].join("\u{1f}");
+                let stored = d.library.register(coll::PROGRESS, &key).unwrap().unwrap();
+                let slot = newest.entry((coll::PROGRESS, key)).or_default();
+                if stored.hlc > *slot {
+                    *slot = stored.hlc;
+                }
+            }
             Op::Sync { device } => {
                 let d = &devices[*device];
                 sync_once(&d.library, &http, &configs[*device], &d.clock)
@@ -414,9 +466,11 @@ async fn run(ops: Vec<Op>) {
             "devices diverged after {ops:?}"
         );
     }
-    // Equal is not enough: every register must hold its newest write.
+    // Equal is not enough: every register must hold its newest write. (A
+    // relay with a slow clock restamps fresh edits at its own time, so there
+    // last-writer-wins falls back to push order; equality still holds.)
     let synced: Vec<_> = first.iter().filter(|r| r.coll != coll::PROFILES).collect();
-    for r in &synced {
+    for r in synced.iter().filter(|_| !slow) {
         assert_eq!(
             Some(&r.hlc),
             newest.get(&(r.coll, r.key.clone())),
@@ -441,8 +495,8 @@ async fn run(ops: Vec<Op>) {
 proptest! {
     #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
     #[test]
-    fn three_devices_converge(ops in proptest::collection::vec(op(), 1..40)) {
-        tokio::runtime::Runtime::new().unwrap().block_on(run(ops));
+    fn three_devices_converge(ops in proptest::collection::vec(op(), 1..40), slow in any::<bool>()) {
+        tokio::runtime::Runtime::new().unwrap().block_on(run(ops, slow));
     }
 }
 
@@ -450,19 +504,22 @@ proptest! {
 /// not pushed yet must keep its own change.
 #[tokio::test]
 async fn pulling_an_older_version_keeps_the_unpushed_newer_write() {
-    run(vec![
-        Op::Progress {
-            device: 0,
-            video: 0,
-            position: 10,
-        },
-        Op::Push { device: 0 },
-        Op::Progress {
-            device: 2,
-            video: 0,
-            position: 20,
-        },
-        Op::Pull { device: 2 },
-    ])
+    run(
+        vec![
+            Op::Progress {
+                device: 0,
+                video: 0,
+                position: 10,
+            },
+            Op::Push { device: 0 },
+            Op::Progress {
+                device: 2,
+                video: 0,
+                position: 20,
+            },
+            Op::Pull { device: 2 },
+        ],
+        false,
+    )
     .await;
 }
