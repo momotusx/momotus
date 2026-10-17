@@ -45,18 +45,24 @@ fn is_private_v6(ip: Ipv6Addr) -> bool {
 }
 
 /// Removes credentials, query values and every path segment that is not a
-/// Stremio resource word or a content id, keeping enough to identify the
-/// endpoint in logs. An allow list, since a key can be short and look like
-/// anything: an addon's config (`realdebrid=KEY`), a debrid download token,
-/// a file name.
+/// Stremio request's own, keeping enough to identify the endpoint in logs.
+/// What is kept comes from position, not from what a segment looks like (a
+/// key can be short and look like an id or a word): the trailing
+/// `manifest.json`, or the trailing `{resource}/{type}/{id}.json` of a
+/// resource request. Everything before them is the addon's config, which
+/// often carries a key (`realdebrid=KEY`), and an extra segment after the id
+/// carries search terms; both are redacted, as is the whole path of any other
+/// URL (a debrid download token, a file name).
 pub fn redact_url(url: &Url) -> String {
     let mut out = format!("{}://{}", url.scheme(), url.host_str().unwrap_or(""));
     if let Some(port) = url.port() {
         out.push_str(&format!(":{port}"));
     }
-    for segment in url.path_segments().into_iter().flatten() {
+    let segments: Vec<&str> = url.path_segments().into_iter().flatten().collect();
+    let kept = stremio_request(&segments);
+    for (at, segment) in segments.iter().enumerate() {
         out.push('/');
-        if is_structural(segment) {
+        if kept.contains(&at) {
             out.push_str(segment);
         } else {
             out.push_str("<redacted>");
@@ -68,34 +74,24 @@ pub fn redact_url(url: &Url) -> String {
     out
 }
 
-/// A Stremio resource word ("manifest.json", "stream", "movie") or a content
-/// id ("tt1254207", "tt0944947:1:5", "kitsu:46474:1"), with or without `.json`.
-fn is_structural(segment: &str) -> bool {
-    const WORDS: [&str; 12] = [
-        "manifest",
-        "stream",
-        "meta",
-        "catalog",
-        "subtitles",
-        "addon_catalog",
-        "movie",
-        "series",
-        "channel",
-        "tv",
-        "anime",
-        "other",
-    ];
-    let segment = segment.replace("%3A", ":").replace("%3a", ":");
-    let s = segment.strip_suffix(".json").unwrap_or(&segment);
-    if s.is_empty() || WORDS.contains(&s) {
-        return true;
+/// The positions of a Stremio request's own segments in `segments`: the last
+/// one when it is `manifest.json`; `{resource}/{type}/{id}.json` at the end,
+/// or before a last `{extra}.json`, when `resource` is a Stremio resource.
+fn stremio_request(segments: &[&str]) -> std::ops::Range<usize> {
+    const RESOURCES: [&str; 5] = ["catalog", "meta", "stream", "subtitles", "addon_catalog"];
+    let n = segments.len();
+    let resource_at =
+        |at: usize, id: &str| RESOURCES.contains(&segments[at]) && id.ends_with(".json");
+    if segments.last() == Some(&"manifest.json") {
+        n - 1..n
+    } else if n >= 3 && resource_at(n - 3, segments[n - 1]) {
+        n - 3..n
+    } else if n >= 4 && resource_at(n - 4, segments[n - 1]) {
+        // `{resource}/{type}/{id}/{extra}.json`: the extra (search terms, paging) is not kept.
+        n - 4..n - 1
+    } else {
+        0..0
     }
-    let mut parts = s.split(':');
-    let id = parts.next().unwrap_or_default();
-    let numbered = |p: &str, at: usize| p.len() > at && p[at..].bytes().all(|b| b.is_ascii_digit());
-    let known = (id.starts_with("tt") && numbered(id, 2))
-        || (id == "kitsu" && parts.next().is_some_and(|n| numbered(n, 0)));
-    known && parts.all(|n| numbered(n, 0))
 }
 
 #[cfg(test)]
@@ -144,8 +140,22 @@ mod tests {
     }
 
     #[test]
-    fn keeps_only_resource_words_and_content_ids() {
+    fn keeps_only_the_stremio_request_by_position() {
         for (raw, want) in [
+            // Tokens that look like an id or a word stay hidden in the config position.
+            (
+                "https://a.example/tt1234567/manifest.json",
+                "https://a.example/<redacted>/manifest.json",
+            ),
+            (
+                "https://a.example/stream/manifest.json",
+                "https://a.example/<redacted>/manifest.json",
+            ),
+            // Search terms in the extra segment are not kept.
+            (
+                "https://c.example/cfg/catalog/movie/top/search=secret.json",
+                "https://c.example/<redacted>/catalog/movie/top/<redacted>",
+            ),
             // A short key, an addon config with a key in it, a debrid token and file name.
             (
                 "https://a.example/k3y9Zq/manifest.json",
