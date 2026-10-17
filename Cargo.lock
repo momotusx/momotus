@@ -2662,8 +2662,10 @@ dependencies = [
 name = "mq-ffi"
 version = "0.1.0"
 dependencies = [
+ "jni",
  "mq-bridge",
  "mq-runtime",
+ "rustls-platform-verifier",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",

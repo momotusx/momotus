@@ -1,0 +1,10 @@
+# Global UniFFI config (0.32 ignores the old flat format).
+[defaults.bindings.kotlin]
+package_name = "app.marquee.core.ffi"
+android = true
+generate_immutable_records = true
+
+# A Kotlin exception already has a `message`; the Rust error variant field of the
+# same name makes the generated class fail to compile.
+[defaults.bindings.kotlin.rename]
+"FfiError.Open.message" = "reason"

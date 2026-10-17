@@ -19,6 +19,29 @@ use tokio::sync::mpsc;
 
 uniffi::setup_scaffolding!();
 
+/// reqwest verifies TLS through `rustls-platform-verifier`, which on Android
+/// calls into the JVM and panics at the first handshake unless it was
+/// initialized. The app loads this library, then calls
+/// `app.marquee.core.PlatformVerifier.init(applicationContext)` once, before
+/// `MarqueeCore::open`.
+#[cfg(target_os = "android")]
+mod android {
+    use jni::EnvUnowned;
+    use jni::errors::ThrowRuntimeExAndDefault;
+    use jni::jni_mangle;
+    use jni::objects::{JClass, JObject};
+
+    #[jni_mangle("app.marquee.core.PlatformVerifier")]
+    pub fn init<'caller>(
+        mut env: EnvUnowned<'caller>,
+        _class: JClass<'caller>,
+        context: JObject<'caller>,
+    ) {
+        env.with_env(|env| rustls_platform_verifier::android::init_with_env(env, context))
+            .resolve::<ThrowRuntimeExAndDefault>();
+    }
+}
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiError {
     #[error("{message}")]

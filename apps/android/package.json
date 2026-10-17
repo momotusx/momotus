@@ -1,0 +1,14 @@
+{
+  "name": "@marquee/android",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "nsc": "bun scripts/nsc.ts",
+    "test": "bun test scripts"
+  },
+  "devDependencies": {
+    "bun-types": "1.3.13"
+  }
+}
