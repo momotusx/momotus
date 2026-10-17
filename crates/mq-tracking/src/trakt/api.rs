@@ -33,7 +33,7 @@ impl Default for Hosts {
 }
 
 /// One reading of a Trakt answer.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Answer {
     /// 2xx with JSON, or `Value::Null` for an empty body.
     Ok { status: u16, body: Value },
@@ -45,6 +45,37 @@ pub enum Answer {
         reason: String,
         retry_after: Option<Duration>,
     },
+}
+
+impl std::fmt::Debug for Answer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // A token answer is an `Ok`; only its field names are shown.
+            Answer::Ok { status, body } => {
+                let keys: Vec<&String> = body
+                    .as_object()
+                    .map(|o| o.keys().collect())
+                    .unwrap_or_default();
+                f.debug_struct("Ok")
+                    .field("status", status)
+                    .field("keys", &keys)
+                    .finish()
+            }
+            Answer::Refused { status, error } => f
+                .debug_struct("Refused")
+                .field("status", status)
+                .field("error", error)
+                .finish(),
+            Answer::Transient {
+                reason,
+                retry_after,
+            } => f
+                .debug_struct("Transient")
+                .field("reason", reason)
+                .field("retry_after", retry_after)
+                .finish(),
+        }
+    }
 }
 
 /// Pacing for one Trakt account: writes and reads each keep their gap.
@@ -64,6 +95,7 @@ impl Gate {
     }
 }
 
+#[derive(Clone)]
 pub struct Api {
     http: HttpClient,
     hosts: Hosts,

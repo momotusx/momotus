@@ -434,3 +434,58 @@ async fn a_late_acknowledgement_never_signs_back_in() {
     assert!(!auth.set(Some(record)).await);
     assert_eq!(auth.status().await, Err(AuthError::Off));
 }
+
+/// A caller that goes away mid-refresh does not lose the rotated token:
+/// Trakt already burned the old refresh token.
+#[tokio::test]
+async fn a_dropped_caller_keeps_the_rotated_token() {
+    let mock = Mock::default();
+    mock.on(
+        "/oauth/token",
+        vec![Reply(
+            200,
+            "application/json",
+            tokens_body("new-access", "new-refresh"),
+            Duration::from_millis(300),
+        )],
+    );
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    auth.set(Some(aging_record())).await;
+    let dropped = tokio::time::timeout(Duration::from_millis(50), auth.token(&api)).await;
+    assert!(dropped.is_err(), "the caller gave up");
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let rotated = auth
+        .unacked()
+        .await
+        .expect("the refresh finished on its own");
+    assert_eq!(rotated.revision, 1);
+    assert_eq!(rotated.access_token, "new-access");
+}
+
+/// With Trakt unreachable, one refresh is tried; calls then fail at once
+/// for a while, and signing out never waits for the network.
+#[tokio::test]
+async fn an_unanswered_refresh_backs_off_and_never_blocks_sign_out() {
+    let mock = Mock::default();
+    mock.on("/oauth/token", vec![json(503, ""), json(503, "")]);
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    auth.set(Some(aging_record())).await;
+    assert!(matches!(
+        auth.token(&api).await,
+        Err(AuthError::Transient(_))
+    ));
+    let started = std::time::Instant::now();
+    assert!(matches!(
+        auth.token(&api).await,
+        Err(AuthError::Transient(_))
+    ));
+    assert!(
+        started.elapsed() < Duration::from_millis(100),
+        "no second refresh"
+    );
+    assert_eq!(mock.seen("/oauth/token").len(), 1);
+    assert!(auth.set(None).await);
+    assert_eq!(auth.status().await, Err(AuthError::Off));
+}

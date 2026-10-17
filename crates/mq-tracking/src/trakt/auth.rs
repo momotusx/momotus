@@ -7,8 +7,12 @@ use super::api::{Answer, Api};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fmt;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::Mutex;
+use tokio::time::Instant;
+
+/// After a refresh Trakt did not answer, calls fail fast for this long.
+const RETRY_AFTER: Duration = Duration::from_secs(30);
 
 /// What the app keeps in its keystore, opaque to it.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,13 +42,23 @@ impl fmt::Debug for TraktRecord {
 }
 
 /// The code a user types (or scans) at trakt.tv/activate.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct DeviceCode {
     pub device_code: String,
     pub user_code: String,
     pub verification_url: String,
     pub expires_in: Duration,
     pub interval: Duration,
+}
+
+impl fmt::Debug for DeviceCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The device code polls for tokens; it never goes to a log.
+        f.debug_struct("DeviceCode")
+            .field("user_code", &self.user_code)
+            .field("verification_url", &self.verification_url)
+            .finish_non_exhaustive()
+    }
 }
 
 /// One poll of a device code.
@@ -174,8 +188,8 @@ fn tokens(body: &Value) -> Option<Tokens> {
     Some(Tokens {
         access_token: body["access_token"].as_str()?.to_owned(),
         refresh_token: body["refresh_token"].as_str()?.to_owned(),
-        created_at_ms: created_s * 1000,
-        expires_at_ms: (created_s + expires_s) * 1000,
+        created_at_ms: created_s.checked_mul(1000)?,
+        expires_at_ms: created_s.checked_add(expires_s)?.checked_mul(1000)?,
         scope: body["scope"].as_str().unwrap_or_default().to_owned(),
     })
 }
@@ -200,19 +214,25 @@ struct State {
     acked: bool,
     dead: Option<String>,
     generation: u64,
+    /// After a refresh that got no answer, no new refresh before this.
+    retry_at: Option<Instant>,
 }
 
-/// The tokens of one profile, refreshed one at a time.
+/// The tokens of one profile. The state sits behind a short lock that is
+/// never held across a network call; refreshes run one at a time in their
+/// own task, so a caller that goes away cannot lose a rotated token.
 pub struct Auth {
     redirect_uri: String,
-    state: Mutex<State>,
+    state: Arc<Mutex<State>>,
+    refreshing: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Auth {
     pub fn new(redirect_uri: &str) -> Self {
         Self {
             redirect_uri: redirect_uri.to_owned(),
-            state: Mutex::default(),
+            state: Arc::default(),
+            refreshing: Arc::default(),
         }
     }
 
@@ -220,12 +240,12 @@ impl Auth {
     /// the acknowledgement), or `None` to sign out. Returns whether it was
     /// taken: an acknowledgement for an older revision or connection is not.
     pub async fn set(&self, record: Option<TraktRecord>) -> bool {
-        let mut s = self.state.lock().await;
+        let mut s = lock(&self.state);
         match (record, &s.record) {
             (None, _) => {
-                s.generation += 1;
+                let generation = s.generation + 1;
                 *s = State {
-                    generation: s.generation,
+                    generation,
                     ..State::default()
                 };
                 true
@@ -247,6 +267,7 @@ impl Auth {
                 s.record = Some(r);
                 s.acked = true;
                 s.dead = None;
+                s.retry_at = None;
                 true
             }
         }
@@ -254,7 +275,7 @@ impl Auth {
 
     /// A new sign-in: a new connection generation, held until acknowledged.
     pub async fn adopt(&self, tokens: Tokens, account: &str) -> TraktRecord {
-        let mut s = self.state.lock().await;
+        let mut s = lock(&self.state);
         s.generation += 1;
         let record = TraktRecord {
             access_token: tokens.access_token,
@@ -269,84 +290,128 @@ impl Auth {
         s.record = Some(record.clone());
         s.acked = false;
         s.dead = None;
+        s.retry_at = None;
         record
     }
 
     /// The record the app has not stored yet.
     pub async fn unacked(&self) -> Option<TraktRecord> {
-        let s = self.state.lock().await;
+        let s = lock(&self.state);
         s.record.clone().filter(|_| !s.acked)
     }
 
     pub async fn account(&self) -> Option<String> {
-        self.state
-            .lock()
-            .await
-            .record
-            .as_ref()
-            .map(|r| r.account.clone())
+        lock(&self.state).record.as_ref().map(|r| r.account.clone())
     }
 
     /// A token to call with, refreshed first when under a quarter of its
     /// lifetime is left.
     pub async fn token(&self, api: &Api) -> Result<String, AuthError> {
-        let mut s = self.state.lock().await;
-        let record = usable(&s)?;
-        let lifetime = record.expires_at_ms.saturating_sub(record.created_at_ms);
-        if now_ms() + lifetime / 4 < record.expires_at_ms {
-            return Ok(record.access_token.clone());
+        {
+            let s = lock(&self.state);
+            let record = usable(&s)?;
+            if fresh(record) {
+                return Ok(record.access_token.clone());
+            }
         }
-        self.rotate(api, &mut s).await
+        self.rotate(api, None).await
     }
 
     /// After a 401 with `used`: refresh once, unless another caller already
     /// did (then the newer token is the answer). A second 401 for a token
     /// that came from a refresh is terminal.
     pub async fn after_401(&self, api: &Api, used: &str) -> Result<String, AuthError> {
-        let mut s = self.state.lock().await;
-        let record = usable(&s)?;
-        if record.access_token != used {
-            return Ok(record.access_token.clone());
+        {
+            let mut s = lock(&self.state);
+            let record = usable(&s)?;
+            if record.access_token != used {
+                return Ok(record.access_token.clone());
+            }
+            if record.revision > 0 && record.created_at_ms + 60_000 > now_ms() {
+                s.dead = Some("Trakt refused a fresh token".into());
+                return Err(AuthError::Reconnect("Trakt refused a fresh token".into()));
+            }
         }
-        if record.revision > 0 && record.created_at_ms + 60_000 > now_ms() {
-            s.dead = Some("Trakt refused a fresh token".into());
-            return Err(AuthError::Reconnect("Trakt refused a fresh token".into()));
-        }
-        self.rotate(api, &mut s).await
+        self.rotate(api, Some(used)).await
     }
 
-    async fn rotate(&self, api: &Api, s: &mut State) -> Result<String, AuthError> {
-        let Some(old) = s.record.clone() else {
-            return Err(AuthError::Off);
+    async fn rotate(&self, api: &Api, used: Option<&str>) -> Result<String, AuthError> {
+        // One refresh at a time; the guard moves into the refresh task, so
+        // it is held until the refresh finishes even if this caller goes.
+        let guard = self.refreshing.clone().lock_owned().await;
+        let (old, generation) = {
+            let s = lock(&self.state);
+            let record = usable(&s)?;
+            // Another caller may have rotated while this one waited.
+            let rotated = match used {
+                Some(used) => record.access_token != used,
+                None => fresh(record),
+            };
+            if rotated {
+                return Ok(record.access_token.clone());
+            }
+            if s.retry_at.is_some_and(|at| Instant::now() < at) {
+                return Err(AuthError::Transient(
+                    "waiting to retry the token refresh".into(),
+                ));
+            }
+            (record.clone(), s.generation)
         };
-        match refresh(api, &self.redirect_uri, &old.refresh_token).await {
-            Ok(t) => {
-                let record = TraktRecord {
-                    access_token: t.access_token,
-                    refresh_token: t.refresh_token,
-                    created_at_ms: t.created_at_ms,
-                    expires_at_ms: t.expires_at_ms,
-                    scope: t.scope,
-                    revision: old.revision + 1,
-                    ..old
-                };
-                let token = record.access_token.clone();
-                s.record = Some(record);
-                s.acked = false;
-                Ok(token)
+        let (api, state, redirect) = (api.clone(), self.state.clone(), self.redirect_uri.clone());
+        let task = tokio::spawn(async move {
+            let _guard = guard;
+            let result = refresh(&api, &redirect, &old.refresh_token).await;
+            let mut s = lock(&state);
+            if s.generation != generation {
+                // Signed out or signed in again meanwhile: the result is moot.
+                return Err(AuthError::Off);
             }
-            Err(AuthError::Reconnect(reason)) => {
-                s.dead = Some(reason.clone());
-                Err(AuthError::Reconnect(reason))
+            match result {
+                Ok(t) => {
+                    let record = TraktRecord {
+                        access_token: t.access_token,
+                        refresh_token: t.refresh_token,
+                        created_at_ms: t.created_at_ms,
+                        expires_at_ms: t.expires_at_ms,
+                        scope: t.scope,
+                        revision: old.revision + 1,
+                        ..old
+                    };
+                    let token = record.access_token.clone();
+                    s.record = Some(record);
+                    s.acked = false;
+                    s.retry_at = None;
+                    Ok(token)
+                }
+                Err(AuthError::Reconnect(reason)) => {
+                    s.dead = Some(reason.clone());
+                    Err(AuthError::Reconnect(reason))
+                }
+                Err(AuthError::Transient(reason)) => {
+                    s.retry_at = Instant::now().checked_add(RETRY_AFTER);
+                    Err(AuthError::Transient(reason))
+                }
+                Err(AuthError::Off) => Err(AuthError::Off),
             }
-            Err(e) => Err(e),
-        }
+        });
+        task.await
+            .unwrap_or_else(|e| Err(AuthError::Transient(format!("refresh task: {e}"))))
     }
 
     /// Why calls cannot be made, if they cannot.
     pub async fn status(&self) -> Result<(), AuthError> {
-        usable(&*self.state.lock().await).map(|_| ())
+        usable(&lock(&self.state)).map(|_| ())
     }
+}
+
+/// More than a quarter of the token's lifetime is left.
+fn fresh(record: &TraktRecord) -> bool {
+    let lifetime = record.expires_at_ms.saturating_sub(record.created_at_ms);
+    now_ms() + lifetime / 4 < record.expires_at_ms
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 fn usable(s: &State) -> Result<&TraktRecord, AuthError> {
