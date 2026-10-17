@@ -6,7 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -30,28 +32,26 @@ import kotlinx.coroutines.launch
 
 /**
  * A title's core view and its TV focus memory; both live as long as the page is on the back stack.
- * [season] (from a Calendar episode) is selected once, when the seasons arrive: a season picked
- * on the page after that is never undone.
+ * The season to open on is selected once, when the seasons arrive: the one shown before the process
+ * died (kept in [saved]), else [season] (a Calendar episode). From then on the season shown is
+ * kept, so a restore brings back the user's pick rather than the route's.
  */
 class TitleHolder(
     session: CoreSession,
     kind: String,
     id: String,
     season: Int?,
+    saved: SavedStateHandle,
 ) : ViewModel() {
     val view: TitleView = session.title(kind, id)
     val focus = FocusMemory()
 
     init {
-        if (season != null) {
-            viewModelScope.launch {
-                val header = snapshotFlow { view.header }.first { !it?.seasons.isNullOrEmpty() }
-                if (header != null && season in header.seasons &&
-                    header.selectedSeason != season
-                ) {
-                    view.selectSeason(season)
-                }
-            }
+        val want = saved.get<Int>(SEASON) ?: season
+        viewModelScope.launch {
+            val header = snapshotFlow { view.header }.first { !it?.seasons.isNullOrEmpty() } ?: return@launch
+            if (want != null && want in header.seasons && header.selectedSeason != want) view.selectSeason(want)
+            snapshotFlow { view.header?.selectedSeason }.collect { if (it != null) saved[SEASON] = it }
         }
     }
 
@@ -87,7 +87,10 @@ fun TitleScreen(
     val holder =
         viewModel<TitleHolder>(
             key = "title:${route.kind}:${route.id}",
-            factory = viewModelFactory { initializer { TitleHolder(session, route.kind, route.id, route.season) } },
+            factory =
+                viewModelFactory {
+                    initializer { TitleHolder(session, route.kind, route.id, route.season, createSavedStateHandle()) }
+                },
         )
     val header = holder.view.header
     val name = header?.details?.name
@@ -154,3 +157,5 @@ fun VersionsScreen(
         PhoneVersions(heading, device, view, onPlay, onAddSource)
     }
 }
+
+private const val SEASON = "season"

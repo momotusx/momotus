@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -96,17 +98,18 @@ private class Said(
     val place: Place,
     val text: String,
     val failed: Boolean,
+    /** Still running: the line says what is under way, as the web's "Installing". */
+    val pending: Boolean = false,
 )
 
 @Composable
-private fun SaidLine(said: Said) {
-    if (said.failed) {
-        Note(
-            said.text,
-            failed = true,
-        )
-    } else {
-        StatusWord(said.text, Status.Ok, Modifier.padding(horizontal = Marquee.safe.side))
+private fun SaidLine(
+    said: Said,
+    side: Dp = Marquee.safe.side,
+) {
+    when {
+        said.failed -> Note(said.text, failed = true, side = side)
+        else -> StatusWord(said.text, if (said.pending) Status.Warn else Status.Ok, Modifier.padding(horizontal = side))
     }
 }
 
@@ -133,10 +136,12 @@ fun SettingsScreen(session: CoreSession) {
     ) {
         if (busy != null) return
         busy = what
-        said = null
+        said = Said(place, what, failed = false, pending = true)
         scope.launch {
             try {
                 op()
+                // An operation that says nothing on success (all but an install) leaves no line.
+                if (said?.pending == true) said = null
                 then()
             } catch (e: CancellationException) {
                 throw e
@@ -158,7 +163,8 @@ fun SettingsScreen(session: CoreSession) {
             ?.addons
             .orEmpty()
     LazyColumn(
-        Modifier.fillMaxSize(),
+        // Down from the TV pill comes back to what had focus (plans 2.1).
+        Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
@@ -264,10 +270,12 @@ private fun AddonRow(
                         maxLines = 1,
                     )
                 }
+                // Named for its addon, so TalkBack moving between switches says which one it is.
                 Chip(
                     if (addon.enabled) "On" else "Off",
                     selected = addon.enabled,
                     onClick = onToggle,
+                    modifier = Modifier.semantics { contentDescription = addon.name },
                     focusRequester = focusRequester,
                     switch = true,
                 )
@@ -351,9 +359,7 @@ private fun InstallField(
                 onClick = add,
                 focusRequester = focusRequester,
             )
-            if (status != null) {
-                if (status.failed) Note(status.text, failed = true, side = 0.dp) else StatusWord(status.text, Status.Ok)
-            }
+            if (status != null) SaidLine(status, side = 0.dp)
         }
     }
 }

@@ -233,6 +233,11 @@ class VersionsCopyTest {
         assertTrue(VersionsCopy.waitingBody(none).startsWith("None of your addons returned a stream"))
         val hidden = none.copy(hidden = HiddenSummary(2, listOf(Tuple2(HideReason.Unplayable, 2))))
         assertEquals("Every result was hidden: 2 cannot play on this device.", VersionsCopy.waitingBody(hidden))
+        // Done: why nothing plays comes first, then the addon that did not answer.
+        assertEquals(
+            "Every result was hidden: 2 cannot play on this device. No answer from Torrentio.",
+            VersionsCopy.waitingBody(hidden.copy(failedAddons = listOf("Torrentio"))),
+        )
         val unready = none.copy(rows = listOf(row().copy(status = VersionStatus.NeedsDownload("Real-Debrid"))))
         assertEquals(
             "Nothing is ready to play yet" to "Choose a version to start it.",

@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -91,6 +92,8 @@ fun CalendarScreen(
     LazyColumn(
         Modifier
             .fillMaxSize()
+            // Down from the TV pill comes back to the episode that had focus (plans 2.1).
+            .focusRestorer()
             .onPreviewKeyEvent {
                 holder.acted = true
                 false
@@ -172,7 +175,7 @@ private fun Day(
             Modifier.padding(horizontal = Marquee.safe.side),
         )
         LazyRow(
-            Modifier.height(metrics.laneHeight(TileShape.Landscape)),
+            Modifier.height(metrics.laneHeight(TileShape.Landscape)).focusRestorer(),
             contentPadding = PaddingValues(horizontal = Marquee.safe.side),
             horizontalArrangement = Arrangement.spacedBy(metrics.gap),
         ) {

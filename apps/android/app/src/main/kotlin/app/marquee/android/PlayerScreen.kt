@@ -197,6 +197,7 @@ fun PlayerScreen(
     session: CoreSession,
     app: AppState,
     form: Form,
+    active: Boolean,
     onBack: () -> Unit,
     onVersions: () -> Unit,
     onTitle: (() -> Unit)?,
@@ -220,7 +221,7 @@ fun PlayerScreen(
         onNext(episode, binge)
     }
     if (form == Form.Tv) {
-        TvPlayer(controller, holder.autoplayNext, onVersions, onTitle, next, leave)
+        TvPlayer(controller, holder.autoplayNext, onVersions, onTitle, next, leave, active = active)
     } else {
         PhonePlayer(controller, holder.autoplayNext, window.inPip, onVersions, onTitle, next, window::enterPip, leave)
     }

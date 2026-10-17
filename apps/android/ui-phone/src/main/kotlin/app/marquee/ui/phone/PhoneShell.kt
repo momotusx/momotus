@@ -67,6 +67,8 @@ fun PhoneShell(
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
+    // Under 360 dp the bar gives up some margin, so six places keep 48 dp each (320 dp: 50).
+    val narrow = LocalConfiguration.current.screenWidthDp < 360
     val inset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val space: Dp = if (showBar) BAR_HEIGHT + BAR_MARGIN * 2 + inset else 0.dp
     Box(modifier.fillMaxSize()) {
@@ -78,7 +80,11 @@ fun PhoneShell(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(start = 16.dp, end = 16.dp, bottom = BAR_MARGIN),
+                    .padding(
+                        start = if (narrow) 8.dp else 16.dp,
+                        end = if (narrow) 8.dp else 16.dp,
+                        bottom = BAR_MARGIN,
+                    ),
             )
         }
     }
@@ -122,7 +128,7 @@ private fun PhoneBar(
             // text under the bar show through it (seen on the emulator).
             .background(colors.glassStrong.compositeOver(colors.bg))
             .border(1.dp, colors.control, shape)
-            .padding(6.dp),
+            .padding(if (compact) 2.dp else 6.dp),
     ) {
         for (route in order.filter { it in TOP_LEVEL }) {
             val place = places.getValue(route)

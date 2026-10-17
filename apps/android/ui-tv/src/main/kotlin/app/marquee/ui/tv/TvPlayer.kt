@@ -106,6 +106,8 @@ fun TvPlayer(
     onNext: (NextEpisode, String?) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** False while the player fades out after leaving: Back and keys go to the page coming in. */
+    active: Boolean = true,
 ) {
     val safe = Marquee.safe
     val stage = controller.stage
@@ -222,6 +224,9 @@ fun TvPlayer(
         wake++
     }
 
+    // When the last Back step was taken (event time), so a held Back steps at a steady pace.
+    val lastBack = remember { longArrayOf(0L) }
+
     // Back, one step at a time (plans/android-design-v2.md 2.2, as Leanback does): an open panel
     // closes, then the controls hide, then the player leaves.
     fun back() {
@@ -232,7 +237,7 @@ fun TvPlayer(
         }
     }
     // One handler that is always on (turning it on and off with the panel left Back ignored after a key press).
-    BackHandler { back() }
+    BackHandler(enabled = active) { back() }
     LaunchedEffect(returnTo) {
         val target = returnTo ?: return@LaunchedEffect
         withFrameNanos { }
@@ -246,7 +251,7 @@ fun TvPlayer(
             .background(Color.Black)
             .focusRequester(root)
             .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (!active || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
                     Key.MediaPlayPause -> {
                         controller.togglePlay()
@@ -287,8 +292,13 @@ fun TvPlayer(
                         // Handled here while focus is in the player: on the emulator a Back that came
                         // after a D-pad press never reached the BackHandler below (it still covers
                         // the moments when no node has focus).
-                        // A held Back repeats: only the first press acts, the rest are eaten.
-                        if (event.nativeKeyEvent.repeatCount == 0) back()
+                        // A held Back takes the steps one at a time (2.2): a repeat acts once the last step is
+                        // BACK_REPEAT_MS old, the rest are eaten.
+                        val native = event.nativeKeyEvent
+                        if (native.repeatCount == 0 || native.eventTime - lastBack[0] >= BACK_REPEAT_MS) {
+                            lastBack[0] = native.eventTime
+                            back()
+                        }
                         true
                     }
 
@@ -596,3 +606,6 @@ private fun scrubKey(
         }
     }
 }
+
+/** How often a held Back takes its next step. */
+private const val BACK_REPEAT_MS = 400L

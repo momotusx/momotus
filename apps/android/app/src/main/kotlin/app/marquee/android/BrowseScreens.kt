@@ -38,6 +38,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
@@ -158,6 +159,7 @@ internal fun <T> ChipRow(
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         Kicker(label, side)
         LazyRow(
+            Modifier.focusRestorer(),
             contentPadding = PaddingValues(horizontal = side),
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
@@ -203,7 +205,8 @@ fun SearchScreen(
     val searching = holder.query.isNotBlank()
     val loading = snapshot?.rows.orEmpty().any { it.notice() is RowNotice.Waiting }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        // Down from the TV pill comes back to what had focus (plans 2.1).
+        Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
@@ -224,6 +227,7 @@ fun SearchScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                             Kicker("Recent searches")
                             LazyRow(
+                                Modifier.focusRestorer(),
                                 contentPadding = PaddingValues(horizontal = Marquee.safe.side),
                                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                             ) {
@@ -329,7 +333,7 @@ private fun ResultRow(
             null -> {
                 val keys = remember(row.tiles) { row.tileKeys() }
                 LazyRow(
-                    Modifier.height(metrics.laneHeight(TileShape.Poster)),
+                    Modifier.height(metrics.laneHeight(TileShape.Poster)).focusRestorer(),
                     contentPadding = PaddingValues(horizontal = Marquee.safe.side),
                     horizontalArrangement = Arrangement.spacedBy(metrics.gap),
                 ) {
@@ -388,7 +392,7 @@ fun DiscoverScreen(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(metrics.poster.width),
         state = grid,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().focusRestorer(),
         contentPadding =
             pagePadding().let {
                 PaddingValues(
@@ -533,7 +537,7 @@ fun LibraryScreen(
     val side = Marquee.safe.side
     LazyVerticalGrid(
         columns = GridCells.Adaptive(metrics.poster.width),
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().focusRestorer(),
         contentPadding =
             pagePadding().let {
                 PaddingValues(

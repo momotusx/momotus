@@ -229,6 +229,8 @@ private fun AppNav(
                             session,
                             app,
                             form,
+                            // Leaving (fading out) it lets Back through to the page that is coming.
+                            active = backStack.lastOrNull() == route,
                             // Only this entry pops itself: a held or double Back reaches the leaving entry
                             // again during its fade, and must not pop the screen under it.
                             onBack = { if (backStack.lastOrNull() == route) backStack.removeAt(backStack.lastIndex) },

@@ -159,15 +159,20 @@ object VersionsCopy {
             else -> "Nothing is ready to play yet"
         }
 
-    /** What the card says while there is no recommendation: who is slow or failed, else why. */
-    fun waitingBody(snapshot: VersionsSnapshot): String =
-        addons(snapshot)
-            ?: when {
-                !snapshot.done -> "Your addons are answering."
+    /**
+     * What the card says while there is no recommendation: while looking, who is slow or failed; once
+     * done, why nothing is ready first, then any addon that failed.
+     */
+    fun waitingBody(snapshot: VersionsSnapshot): String {
+        if (!snapshot.done) return addons(snapshot) ?: "Your addons are answering."
+        val why =
+            when {
                 snapshot.rows.isNotEmpty() -> "Choose a version to start it."
                 snapshot.hidden.count > 0 -> "Every result was hidden: ${hiddenDetail(snapshot.hidden)}."
                 else -> "None of your addons returned a stream for this video. A source addon finds playable streams."
             }
+        return listOfNotNull(why, addons(snapshot)?.let { "$it." }).joinToString(" ")
+    }
 
     private fun hideText(
         reason: HideReason,
