@@ -236,3 +236,118 @@ async fn addons_move_disable_remove_and_the_view_follows() {
     let text = err.unwrap_err().to_string();
     assert!(!text.contains("0123456789abcdef"), "{text}");
 }
+
+const SERIES_META: &str = r#"{"meta":{"id":"tt9","type":"series","name":"Show",
+  "background":"https://images.example/tt9-bg.jpg","videos":[
+  {"id":"tt9:1:1","title":"Pilot","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
+  {"id":"tt9:1:2","title":"Second","season":1,"episode":2,"released":"2020-01-08T00:00:00Z"}]}}"#;
+
+#[tokio::test]
+async fn a_finished_episode_leaves_its_next_one_in_continue_watching() {
+    let core = Core::temporary("p").unwrap();
+    let mut meta = catalog_addon("meta", Duration::ZERO, 200, SERIES_META).await;
+    meta.manifest_json = serde_json::json!({
+        "id": "meta", "version": "1.0.0", "name": "Meta",
+        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    })
+    .to_string();
+    core.library()
+        .set_addons("p", &[meta], &core.hlc())
+        .unwrap();
+    let show = LibraryItemRow {
+        item_id: "tt9".into(),
+        kind: "series".into(),
+        name: "Show".into(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    core.library()
+        .upsert_item("p", &show, true, &core.hlc())
+        .unwrap();
+    core.library()
+        .set_progress(
+            "p",
+            ProgressRow {
+                video_id: "tt9:1:1",
+                item_id: "tt9",
+                position_ms: 990,
+                duration_ms: 1000,
+                updated_ms: 5,
+            },
+            &core.hlc(),
+        )
+        .unwrap();
+
+    let view = HomeView::open(&core);
+    let mut tile = None;
+    for _ in 0..200 {
+        tile = view
+            .snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == CONTINUE_ROW_ID)
+            .and_then(|r| r.tiles.into_iter().next());
+        if tile.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let tile = tile.expect("Next Up tile");
+    assert_eq!(tile.video_id.as_deref(), Some("tt9:1:2"));
+    assert_eq!(tile.release_info.as_deref(), Some("Next: S1 E2"));
+    assert_eq!(tile.progress, None);
+    // It has artwork, so it can lead the Home hero.
+    let hero = view.snapshot().header.hero.expect("hero");
+    assert_eq!(hero.reason, "Pick up where you left off");
+}
+
+#[tokio::test]
+#[ignore = "network"]
+async fn real_cinemeta_next_up() {
+    let core = Core::temporary("p").unwrap();
+    core.install_addon("https://v3-cinemeta.strem.io/manifest.json")
+        .await
+        .unwrap();
+    let got = LibraryItemRow {
+        item_id: "tt0944947".into(),
+        kind: "series".into(),
+        name: "Game of Thrones".into(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    core.library()
+        .upsert_item("p", &got, true, &core.hlc())
+        .unwrap();
+    let done = ProgressRow {
+        video_id: "tt0944947:1:1",
+        item_id: "tt0944947",
+        position_ms: 3_500_000,
+        duration_ms: 3_600_000,
+        updated_ms: 5,
+    };
+    core.library().set_progress("p", done, &core.hlc()).unwrap();
+    let started = std::time::Instant::now();
+    let view = HomeView::open(&core);
+    for _ in 0..1000 {
+        let tile = view
+            .snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == CONTINUE_ROW_ID)
+            .and_then(|r| r.tiles.into_iter().next());
+        if let Some(tile) = tile {
+            eprintln!(
+                "next up: {:?} {:?} after {} ms",
+                tile.video_id,
+                tile.release_info,
+                started.elapsed().as_millis()
+            );
+            assert_eq!(tile.video_id.as_deref(), Some("tt0944947:1:2"));
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("no Next Up tile");
+}

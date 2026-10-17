@@ -275,22 +275,47 @@ impl Library {
         profile: &str,
         limit: usize,
     ) -> Result<Vec<ContinueItem>, LibraryError> {
+        self.latest_per_title(profile, limit, false)
+    }
+
+    /// Series whose most recent video was finished, newest first: the
+    /// candidates for Next Up.
+    pub fn finished_series(
+        &self,
+        profile: &str,
+        limit: usize,
+    ) -> Result<Vec<ContinueItem>, LibraryError> {
+        self.latest_per_title(profile, limit, true)
+    }
+
+    fn latest_per_title(
+        &self,
+        profile: &str,
+        limit: usize,
+        finished: bool,
+    ) -> Result<Vec<ContinueItem>, LibraryError> {
+        let condition = if finished {
+            "COALESCE(i.kind, 'movie') = 'series'
+                   AND ((p.duration_ms > 0 AND p.position_ms >= p.duration_ms * ?2) OR COALESCE(w.watched, 0) = 1)"
+        } else {
+            "p.position_ms > 0
+                   AND (p.duration_ms = 0 OR p.position_ms < p.duration_ms * ?2)
+                   AND COALESCE(w.watched, 0) = 0"
+        };
         self.read(|c| {
-            let mut stmt = c.prepare(
+            let mut stmt = c.prepare(&format!(
                 "SELECT p.item_id, p.video_id, COALESCE(i.name, p.item_id), i.poster, COALESCE(i.kind, 'movie'),
                         p.position_ms, p.duration_ms, p.updated_ms
                  FROM progress p
                  LEFT JOIN library_items i ON i.profile_id = p.profile_id AND i.item_id = p.item_id
                  LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
                  WHERE p.profile_id = ?1
-                   AND p.position_ms > 0
-                   AND (p.duration_ms = 0 OR p.position_ms < p.duration_ms * ?2)
-                   AND COALESCE(w.watched, 0) = 0
+                   AND {condition}
                    AND p.updated_ms = (SELECT MAX(q.updated_ms) FROM progress q
                                        WHERE q.profile_id = p.profile_id AND q.item_id = p.item_id)
                  ORDER BY p.updated_ms DESC
                  LIMIT ?3",
-            )?;
+            ))?;
             stmt.query_map(params![profile, FINISHED_RATIO, limit as i64], |r| {
                 Ok(ContinueItem {
                     item_id: r.get(0)?,

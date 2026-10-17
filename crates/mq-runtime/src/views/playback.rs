@@ -677,10 +677,16 @@ fn order_subtitles(tracks: &mut [SubtitleTrack], wanted: &[String]) {
 async fn next_episode(core: &Core, target: &PlayTarget) -> Option<NextEpisode> {
     target.season?;
     let (meta, _) = core.fetch_meta(&target.kind, &target.item_id).await.ok()?;
+    next_after(&meta, &target.video_id)
+}
+
+/// The released episode after `video_id` in `meta`, shared with Home's
+/// Next Up.
+pub(crate) fn next_after(meta: &mq_protocol::MetaItem, video_id: &str) -> Option<NextEpisode> {
     let current = meta
         .videos
         .iter()
-        .find(|v| v.id == target.video_id)?
+        .find(|v| v.id == video_id)?
         .series_info
         .clone()?;
     let now = mq_library::hlc::now_ms() as i64;

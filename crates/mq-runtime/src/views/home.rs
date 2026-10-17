@@ -4,6 +4,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
+use crate::views::playback::{NextEpisode, next_after};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
@@ -405,27 +406,44 @@ async fn watch_continue(
     header: SharedObservable<HomeHeader>,
 ) {
     let mut changes = core.library().subscribe();
-    refresh_continue(&core, &rows);
+    refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
     while let Ok(tables) = changes.recv().await {
         if tables
             .iter()
             .any(|t| matches!(t, Table::Progress | Table::Watched | Table::LibraryItems))
         {
-            refresh_continue(&core, &rows);
+            refresh_continue(&core, &rows).await;
             maybe_pick_hero(&rows, &header);
         }
     }
 }
 
-// ponytail: runs the indexed query on the async thread; it is a single
+/// Continue Watching: unfinished videos plus Next Up (the released episode
+/// after a finished one), newest activity first.
+// ponytail: runs the indexed queries on the async thread; each is a single
 // LIMIT 20 read, move to spawn_blocking if traces show it on the hot path.
-fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
-    let items = core
-        .library()
+async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
+    let library = core.library();
+    let mut items: Vec<(i64, Tile)> = library
         .continue_watching(core.profile(), ROW_TILES)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| (item.updated_ms, tile_from_continue(item)))
+        .collect();
+    let finished = library
+        .finished_series(core.profile(), ROW_TILES)
         .unwrap_or_default();
-    let tiles: Vec<Tile> = items.into_iter().map(tile_from_continue).collect();
+    // Metas come from the addon cache after the first look.
+    let next_up = futures_util::future::join_all(finished.into_iter().map(|done| async move {
+        let (meta, _) = core.fetch_meta("series", &done.item_id).await.ok()?;
+        let next = next_after(&meta, &done.video_id)?;
+        Some((done.updated_ms, tile_for_next(&meta, next)))
+    }))
+    .await;
+    items.extend(next_up.into_iter().flatten());
+    items.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+    let tiles: Vec<Tile> = items.into_iter().take(ROW_TILES).map(|(_, t)| t).collect();
     let mut rows = lock(rows);
     let existing = find_row(&rows, CONTINUE_ROW_ID);
     match (existing, tiles.is_empty()) {
@@ -447,6 +465,25 @@ fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
             tiles,
         }),
         (None, true) => {}
+    }
+}
+
+fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode) -> Tile {
+    let p = &meta.preview;
+    Tile {
+        id: p.id.clone(),
+        kind: p.r#type.clone(),
+        name: p.name.clone(),
+        poster: p.poster.as_ref().map(|u| u.to_string()),
+        background: next
+            .thumbnail
+            .clone()
+            .or_else(|| p.background.as_ref().map(|u| u.to_string())),
+        logo: p.logo.as_ref().map(|u| u.to_string()),
+        poster_shape: "poster".into(),
+        release_info: Some(format!("Next: S{} E{}", next.season, next.episode)),
+        progress: None,
+        video_id: Some(next.video_id),
     }
 }
 
