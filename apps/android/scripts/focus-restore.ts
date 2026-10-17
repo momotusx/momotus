@@ -38,6 +38,7 @@ async function until<T>(what: string, ms: number, probe: () => T | null | false)
 }
 
 const results: { ok: boolean }[] = [];
+let skipped = 0;
 for (let run = 1; run <= runs; run++) {
   adb("shell", "am", "force-stop", "app.marquee.android");
   adb("logcat", "-c");
@@ -48,7 +49,8 @@ for (let run = 1; run <= runs; run++) {
   adb("shell", "am", "start", "-n", "app.marquee.android/.MainActivity", "--es", "form", "tv");
   const first = await until("Home focus", 40_000, () => focused(dump()));
 
-  const downs = run % 3;
+  // From the hero (or the first Continue Watching card) down into the lanes, then right.
+  const downs = 1 + (run % 3);
   // Even runs go well past the visible tiles, so the lane has scrolled when Back restores focus.
   const rights = 1 + (run % 4) + (run % 2 === 0 ? 7 : 0);
   for (let i = 0; i < downs; i++) {
@@ -63,7 +65,18 @@ for (let run = 1; run <= runs; run++) {
   const before = await until("a focused tile", 5_000, () => focused(dump()));
 
   key("KEYCODE_DPAD_CENTER");
-  await until("the title page", 8_000, () => dump().includes("Title page"));
+  // The title page needs Cinemeta, which the emulator can fail to reach in time when the host is
+  // loaded. That is the network, not focus: the run is recorded as skipped and tried again.
+  const page = await until("the title page", 15_000, () => /(Add to library|In library|could not load)/.exec(dump())?.[1]);
+  if (page === "could not load") {
+    const line = { date: new Date().toISOString().slice(0, 10), run, skipped: "the title did not load (network)" };
+    appendFileSync(out, `${JSON.stringify(line)}\n`);
+    console.log("skip", JSON.stringify(line));
+    skipped++;
+    if (skipped > 5) throw new Error("too many title loads failed, the network is not usable");
+    run--;
+    continue;
+  }
   adb("logcat", "-c");
   key("KEYCODE_BACK");
   const after = await until("focus back on Home", 8_000, () => focused(dump())).catch(() => null);

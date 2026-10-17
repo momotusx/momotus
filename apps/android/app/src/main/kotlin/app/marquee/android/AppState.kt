@@ -6,14 +6,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.ui.tv.TvHomeState
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -27,7 +25,7 @@ enum class Start { Loading, Onboarding, Home }
  */
 class AppState(
     private val session: CoreSession,
-    caps: Deferred<DeviceCapsParams>,
+    caps: CapsSource,
 ) : ViewModel() {
     var start: Start by mutableStateOf(Start.Loading)
         private set
@@ -64,7 +62,7 @@ class AppState(
     }
 
     override fun onCleared() {
-        versions.close()
+        versions.closeAll()
         homeView?.close()
     }
 }

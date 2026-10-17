@@ -29,8 +29,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
@@ -134,7 +137,12 @@ private fun PhoneHero(
             .fillMaxWidth()
             .aspectRatio(HERO_RATIO)
             .clip(RoundedCornerShape(Marquee.radius.l))
-            .clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}", onClick = { onOpen(tile) }),
+            .semantics {
+                // The buttons on the card are hidden from screen readers, so Play is an action of the card.
+                if (tile.playable()) {
+                    customActions = listOf(CustomAccessibilityAction("Play ${tile.name}") { onPlay(tile).let { true } })
+                }
+            }.clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}", onClick = { onOpen(tile) }),
     ) {
         Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
         Box(

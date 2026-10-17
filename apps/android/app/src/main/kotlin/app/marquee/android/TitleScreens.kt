@@ -12,6 +12,7 @@ import app.marquee.core.model.VersionRow
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.TitleView
+import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
 import app.marquee.ui.phone.PhoneTitle
 import app.marquee.ui.phone.PhoneVersions
@@ -36,13 +37,14 @@ class VersionsFocus : ViewModel() {
     val focus = FocusMemory()
 }
 
-private fun keyFor(
+internal fun keyFor(
     kind: String,
     videoId: String,
     title: String,
+    bingeGroup: String? = null,
 ): VersionsKey {
     val ref = Format.parseVideo(videoId)
-    return VersionsKey(kind, videoId, title, season = ref?.season, episode = ref?.episode)
+    return VersionsKey(kind, videoId, title, season = ref?.season, episode = ref?.episode, bingeGroup = bingeGroup)
 }
 
 @Composable
@@ -51,7 +53,7 @@ fun TitleScreen(
     session: CoreSession,
     app: AppState,
     form: Form,
-    onPlay: (key: String, videoId: String) -> Unit,
+    onPlay: (key: String, videoId: String, title: String) -> Unit,
     onVersions: (videoId: String, title: String) -> Unit,
 ) {
     val holder =
@@ -63,23 +65,33 @@ fun TitleScreen(
     val name = header?.details?.name
     val videoId = header?.playTarget?.videoId
     // The line under Play is the recommended version of what Play starts, so open it early.
-    LaunchedEffect(videoId, name) {
-        if (videoId != null && name != null) app.versions.use(keyFor(route.kind, videoId, name))
-    }
-    val snapshot = if (app.versions.key?.videoId == videoId) app.versions.view?.snapshot else null
+    val playKey = if (videoId != null && name != null) keyFor(route.kind, videoId, name) else null
+    LaunchedEffect(playKey) { playKey?.let(app.versions::use) }
+    val versions = playKey?.let(app.versions::view)
+    val snapshot = versions?.snapshot
+    val failed = versions?.status is ViewStatus.Failed
     val title = name.orEmpty()
     val episode: (Episode) -> Unit = { onVersions(it.videoId, title) }
+    val play: (String, String) -> Unit = { key, id -> onPlay(key, id, title) }
     if (form == Form.Tv) {
         TvTitle(
             holder.view,
             snapshot,
             holder.focus,
-            onPlay,
+            play,
             onVersions = { onVersions(it, title) },
             onEpisode = episode,
+            versionsFailed = failed,
         )
     } else {
-        PhoneTitle(holder.view, snapshot, onPlay, onVersions = { onVersions(it, title) }, onEpisode = episode)
+        PhoneTitle(
+            holder.view,
+            snapshot,
+            play,
+            onVersions = { onVersions(it, title) },
+            onEpisode = episode,
+            versionsFailed = failed,
+        )
     }
 }
 
@@ -92,7 +104,7 @@ fun VersionsScreen(
 ) {
     val key = keyFor(route.kind, route.videoId, route.title)
     LaunchedEffect(key) { app.versions.use(key) }
-    val view = if (app.versions.key == key) app.versions.view else null
+    val view = app.versions.view(key)
     val heading =
         key.episode?.let { "${route.title}, ${Format.episodeLabel(key.season ?: 0, it)}" } ?: route.title
     if (form == Form.Tv) {

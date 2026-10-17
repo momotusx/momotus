@@ -64,6 +64,7 @@ private fun BoxScope.UpNextOverlay(
         modifier = Modifier.align(Alignment.BottomStart).padding(start = 14.dp, bottom = bar + 12.dp),
         role = if (tv) TextRole.Headline else TextRole.Callout,
         color = Tokens.dark.text,
+        decorative = true,
     )
     if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
 }

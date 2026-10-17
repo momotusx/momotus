@@ -51,6 +51,7 @@ export const ICONS = [
   "qr-code",
   "refresh-cw",
   "rotate-ccw",
+  "rotate-cw",
   "scan-line",
   "search",
   "settings",

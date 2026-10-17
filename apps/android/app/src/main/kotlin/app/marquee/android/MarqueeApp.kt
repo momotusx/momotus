@@ -10,8 +10,13 @@ import app.marquee.design.createImageLoader
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
+
+/** What this device can play right now (see [MarqueeApp.deviceCaps]). */
+typealias CapsSource = suspend () -> DeviceCapsParams
 
 class MarqueeApp :
     Application(),
@@ -20,8 +25,12 @@ class MarqueeApp :
         private set
     private lateinit var lifecycle: AppLifecycle
 
-    /** What this device can play, probed once off the main thread; a failed probe means a plain 1080p stick. */
-    lateinit var deviceCaps: Deferred<DeviceCapsParams>
+    /**
+     * What this device can play, read for each Versions view: the codec list is scanned once off the
+     * main thread, the display, receiver and language are read fresh. A failed read means a plain
+     * 1080p stick.
+     */
+    lateinit var deviceCaps: CapsSource
         private set
 
     override fun onTrimMemory(level: Int) {
@@ -45,13 +54,18 @@ class MarqueeApp :
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
         lifecycle = AppLifecycle(this, session).also { it.register() }
-        deviceCaps =
-            session.scope.async {
-                runCatching { DeviceCaps.probe(this@MarqueeApp) }.getOrElse {
-                    CoreLog.w("device capabilities could not be read: ${CoreLog.describe(it)}")
-                    DeviceCapsParams(displayHeight = 1080, hdr = emptyList())
-                }
+        val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }
+        deviceCaps = {
+            runCatching {
+                withContext(
+                    Dispatchers.Default,
+                ) { DeviceCaps.read(this@MarqueeApp, scan.await()) }
+            }.getOrElse {
+                if (it is CancellationException) throw it
+                CoreLog.w("device capabilities could not be read: ${CoreLog.describe(it)}")
+                DeviceCaps.baseline()
             }
+        }
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = createImageLoader(context)

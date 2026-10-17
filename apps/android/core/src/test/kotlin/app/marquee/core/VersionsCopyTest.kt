@@ -62,6 +62,7 @@ class VersionsCopyTest {
         assertEquals("Looking for sources", VersionsCopy.chosen(snapshot()))
         assertEquals("No playable source found", VersionsCopy.chosen(snapshot(done = true)))
         assertEquals("4K, HDR10, 1.3 GB, Real-Debrid", VersionsCopy.chosen(snapshot(recommended = row())))
+        assertEquals("Sources could not load", VersionsCopy.chosen(null, failed = true))
     }
 
     @Test

@@ -35,6 +35,7 @@ import app.marquee.core.model.Group
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
+import app.marquee.core.views.ViewStatus
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
@@ -64,10 +65,13 @@ fun PhoneVersions(
     val side = Marquee.safe.side
     val colors = Marquee.colors
     val snapshot = versions?.snapshot
+    val failure = (versions?.status as? ViewStatus.Failed)?.reason
     val listState = rememberLazyListState()
-    LaunchedEffect(versions) {
-        if (versions != null) {
-            snapshotFlow { listState.isScrollInProgress }.first { it }
+    // The first scroll pins the recommendation, once there is one: a pin before that would keep the
+    // card empty while sources stream in. The flag comes from the core, so a restarted core is pinned again.
+    LaunchedEffect(versions, snapshot?.frozen) {
+        if (versions != null && snapshot?.frozen != true) {
+            snapshotFlow { listState.isScrollInProgress && versions.snapshot?.recommended != null }.first { it }
             versions.freeze()
         }
     }
@@ -84,7 +88,15 @@ fun PhoneVersions(
                 MqText(heading, role = TextRole.Callout, color = colors.muted, maxLines = 2)
             }
         }
-        item(key = "best") { Recommendation(snapshot, onPlay, Modifier.padding(vertical = Marquee.space.s)) }
+        item(key = "best") {
+            Recommendation(
+                snapshot,
+                failure,
+                { versions?.retry() },
+                onPlay,
+                Modifier.padding(vertical = Marquee.space.s),
+            )
+        }
         for (group in Group.entries) {
             val rows = groups[group].orEmpty()
             if (rows.isEmpty()) continue
@@ -115,6 +127,8 @@ fun PhoneVersions(
 @Composable
 private fun Recommendation(
     snapshot: VersionsSnapshot?,
+    failure: String?,
+    onRetry: () -> Unit,
     onPlay: (VersionRow) -> Unit,
     modifier: Modifier,
 ) {
@@ -129,6 +143,17 @@ private fun Recommendation(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
     ) {
         when {
+            failure != null -> {
+                StateMessage(
+                    title = "Sources could not load",
+                    body = failure,
+                    icon = Icons.CircleAlert,
+                    actionLabel = "Try again",
+                    onAction = onRetry,
+                    modifier = Modifier.padding(0.dp),
+                )
+            }
+
             snapshot == null -> {
                 Skeleton(Modifier.size(180.dp, 28.dp))
                 Skeleton(Modifier.size(240.dp, 20.dp))
@@ -199,7 +224,7 @@ private fun SourceRow(
             maxLines = 2,
         )
         MqText(
-            Format.releaseParts(row.releaseName).joinToString("​"),
+            Format.releaseWrapped(row.releaseName),
             role = TextRole.Caption,
             color = colors.muted,
             maxLines = 2,

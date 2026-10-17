@@ -24,6 +24,8 @@ android {
 dependencies {
     api(project(":core"))
     api(project(":design"))
+    api(project(":player"))
+    implementation(libs.androidx.activity.compose)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)

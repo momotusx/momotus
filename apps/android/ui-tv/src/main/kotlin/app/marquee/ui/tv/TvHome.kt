@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.first
 
 private const val HERO_PLAY = "hero:play"
 private const val HERO_DETAILS = "hero:details"
+private const val HERO_ROW = "hero"
 private val HERO_HEIGHT = 560.dp
 private const val FOCUS_WAIT_MS = 15_000L
 
@@ -95,7 +96,7 @@ fun TvHome(
     val safe = Marquee.safe
     val metrics = Marquee.tiles
     SideEffect {
-        state.focus.firstRow = home.rows.firstOrNull()?.rowId
+        state.focus.firstRow = startRow(home.rows.toList(), home.hero)
         state.focus.refresh()
     }
     LaunchedEffect(state) { restoreFocus(home, state, state.focus.focusedKey) }
@@ -214,7 +215,7 @@ private fun TvHero(
                         onClick = { onPlay(tile) },
                         modifier = Modifier.describe("Play ${tile.name}"),
                         focusRequester = playRequester,
-                        onFocusChange = state.focus.watch(null, HERO_PLAY),
+                        onFocusChange = state.focus.watch(HERO_ROW, HERO_PLAY),
                     )
                 }
                 SecondaryButton(
@@ -223,7 +224,7 @@ private fun TvHero(
                     onClick = { onOpen(tile) },
                     modifier = Modifier.describe("Details of ${tile.name}"),
                     focusRequester = detailsRequester,
-                    onFocusChange = state.focus.watch(null, HERO_DETAILS),
+                    onFocusChange = state.focus.watch(HERO_ROW, HERO_DETAILS),
                 )
             }
         }
@@ -446,6 +447,21 @@ fun firstTarget(
     return null
 }
 
+/**
+ * The row where the first visit starts and where Back returns focus to: Continue Watching when it
+ * leads, else the hero (focus starts on its Play), else the first lane. Focus on it means the
+ * next Back leaves.
+ */
+internal fun startRow(
+    rows: List<HomeRow>,
+    hero: Hero?,
+): String? =
+    when {
+        rows.firstOrNull()?.rowId == TileCopy.CONTINUE_ROW -> TileCopy.CONTINUE_ROW
+        hero != null -> HERO_ROW
+        else -> rows.firstOrNull()?.rowId
+    }
+
 private const val PATIENCE_MS = 3_000L
 
 /** Scrolls the page and the key's lane until the key's node is composed. False when the key is not in the data (yet). */
@@ -476,11 +492,11 @@ private suspend fun reveal(
     return false
 }
 
-/** Back from anywhere on Home: focus the first tile of the first lane. */
+/** Back from anywhere on Home: focus where the first visit started (Continue Watching, else the hero, else the first lane). */
 suspend fun focusFirstRow(
     home: HomeView,
     state: TvHomeState,
 ) {
-    val key = firstTarget(home.rows.toList(), hero = null, patient = false) ?: return
+    val key = firstTarget(home.rows.toList(), home.hero, patient = false) ?: return
     restoreFocus(home, state, key, waitMs = 1_500)
 }

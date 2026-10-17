@@ -3,6 +3,7 @@
  * core's own live tests use, plus one dead URL to exercise failover.
  *
  * Run: bun scripts/sintel-addon.ts [port]   (default 7780, listens on all interfaces)
+ * FAILOVER=1 bun scripts/sintel-addon.ts   adds two broken mirrors ahead of the 1080p trailer
  * Install in the emulator: `adb reverse tcp:7780 tcp:7780`, then http://127.0.0.1:7780/manifest.json
  * Install on the host bridge: http://127.0.0.1:7780/manifest.json */
 
@@ -46,13 +47,27 @@ const streams = [
     url: `${BLENDER}/trailer/sintel_trailer-480p.mp4`,
     behaviorHints: { filename: "Sintel.2010.480p.mp4" },
   },
-  {
-    name: "Local Test",
-    title: "Sintel.2010.1080p.missing.mkv\nDead mirror (404), for failover",
-    url: `${BLENDER}/movies/Sintel.2010.1080p.missing.mkv`,
-    behaviorHints: { filename: "Sintel.2010.1080p.missing.mkv" },
-  },
 ];
+
+// FAILOVER=1 lists two broken mirrors of the 1080p trailer ahead of the real one, under the same
+// release name and size so the core treats them as one version with a failover chain: the first
+// answers 200 with a page instead of a video (the player cannot read it and asks for the next
+// source), the second is a dead URL (HTTP 404, rejected by the core and named in the attempts).
+if (process.env.FAILOVER === "1") {
+  const release = "Sintel.2010.1080p.mp4";
+  const title = `${release}\nH.264 and AAC, 14.6 MB (the trailer)`;
+  streams.splice(
+    1,
+    0,
+    { name: "Local Test", title, url: `${BLENDER}/trailer/`, behaviorHints: { filename: release } },
+    {
+      name: "Local Test",
+      title,
+      url: `${BLENDER}/trailer/sintel_trailer-1080p-dead-mirror.mp4`,
+      behaviorHints: { filename: release },
+    },
+  );
+}
 
 const headers = { "content-type": "application/json", "access-control-allow-origin": "*" };
 

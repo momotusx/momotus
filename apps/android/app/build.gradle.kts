@@ -51,6 +51,7 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(project(":design"))
+    implementation(project(":player"))
     implementation(project(":ui-phone"))
     implementation(project(":ui-tv"))
     implementation(platform(libs.compose.bom))
@@ -59,6 +60,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.androidx.navigation3.ui)

@@ -64,6 +64,15 @@ class FirstTargetTest {
     }
 
     @Test
+    fun `the row Back returns to is where the first visit starts`() {
+        val withContinue = listOf(row(TileCopy.CONTINUE_ROW, RowState.Ready, "c"), row("b", RowState.Ready, "z"))
+        assertEquals(TileCopy.CONTINUE_ROW, startRow(withContinue, movieHero))
+        assertEquals("hero", startRow(listOf(row("b", RowState.Ready, "z")), movieHero))
+        assertEquals("b", startRow(listOf(row("b", RowState.Ready, "z")), hero = null))
+        assertNull(startRow(emptyList(), hero = null))
+    }
+
+    @Test
     fun `a series hero has no single video to play, so its Details takes the focus`() {
         assertEquals("hero:details", firstTarget(listOf(row("b", RowState.Ready, "z")), seriesHero, patient = true))
     }

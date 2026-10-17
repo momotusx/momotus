@@ -10,6 +10,7 @@ import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.os.Build
 import android.view.Display
+import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
 import java.util.Locale
 
@@ -17,14 +18,28 @@ import java.util.Locale
 data class DecoderInfo(
     val mimes: List<String>,
     val hardware: Boolean,
+    /** Takes ten-bit HEVC (Main 10, with or without HDR10 metadata). */
+    val tenBitHevc: Boolean = false,
+)
+
+/** The codec list reduced to what the ranking asks about. A device's codecs never change. */
+data class CodecScan(
+    val video: List<String>,
+    val audio: List<String>,
+    val tenBitHevc: Boolean,
+    /** Any decoder for `video/dolby-vision`: without one a Dolby Vision file is not native here. */
+    val dolbyVision: Boolean,
 )
 
 /**
  * What this device can play, for the `versions` view (plans/core-protocol.md): screen height and
  * HDR types, hardware video decoders, ten-bit HEVC, audio decoders, audio the receiver takes as
  * passthrough, container formats, and the device language. The ranking uses it to put releases
- * that play directly first and to hide ones that cannot play. Probing walks the codec list, so
- * call it off the main thread, once.
+ * that play directly first and to hide ones that cannot play.
+ *
+ * Walking the codec list is slow, so [scanCodecs] runs once, off the main thread; [read] is cheap
+ * and runs for every Versions view, because the display mode, the receiver and the language can
+ * change while a TV process stays cached for days.
  */
 object DeviceCaps {
     private val videoMimes =
@@ -49,11 +64,8 @@ object DeviceCaps {
             "audio/raw" to "pcm",
         )
 
-    /**
-     * Containers the player's extractors read. Checked against Media3's extractor list when the
-     * player lands (P5); anything else needs the fallback engine.
-     */
-    private val containers = listOf("mkv", "mp4", "m4v", "webm", "ts", "mov")
+    /** Containers Media3's extractors read (MKV, MP4 and fragmented MP4, WebM, MPEG-TS, MOV); anything else needs the fallback engine. */
+    private val containers = listOf("mkv", "mp4", "m4v", "webm", "ts", "m2ts", "mov")
 
     private val hdrTypes =
         mapOf(
@@ -73,33 +85,82 @@ object DeviceCaps {
             AudioFormat.ENCODING_E_AC3_JOC to "atmos",
         )
 
-    fun probe(context: Context): DeviceCapsParams {
-        val decoders = decoders()
-        val display = context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+    /** Walks the codec list once. A platform that throws on it leaves the baseline: H.264 and PCM. */
+    fun scanCodecs(): CodecScan {
+        val decoders =
+            runCatching { decoders() }
+                .onFailure { CoreLog.w("the codec list could not be read: ${CoreLog.describe(it)}") }
+                .getOrDefault(emptyList())
+        return scan(decoders)
+    }
+
+    internal fun scan(decoders: List<DecoderInfo>) =
+        CodecScan(
+            video = videoDecoders(decoders),
+            audio = audioDecoders(decoders),
+            tenBitHevc = decoders.any { it.hardware && it.tenBitHevc },
+            dolbyVision = decoders.any { "video/dolby-vision" in it.mimes },
+        )
+
+    fun read(
+        context: Context,
+        scan: CodecScan,
+    ): DeviceCapsParams {
+        val display =
+            runCatching {
+                context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+            }.getOrNull()
+        val mode = display?.mode
         return DeviceCapsParams(
-            displayHeight = display?.mode?.physicalHeight ?: 1080,
-            hdr = hdrNames(display),
-            decoders = videoDecoders(decoders),
-            tenBitHevc = tenBitHevc(),
-            passthrough = passthrough(context),
-            audioDecoders = audioDecoders(decoders),
+            // The shorter side: a phone held upright reports its long edge as the "height".
+            displayHeight = mode?.let { minOf(it.physicalWidth, it.physicalHeight) } ?: 1080,
+            hdr = withDolbyVision(runCatching { hdrNames(display) }.getOrDefault(emptyList()), scan.dolbyVision),
+            decoders = scan.video,
+            tenBitHevc = scan.tenBitHevc,
+            passthrough = runCatching { passthrough(context) }.getOrNull(),
+            audioDecoders = scan.audio,
             containers = containers,
             language = deviceLanguage(Locale.getDefault()),
             hasFallbackEngine = false,
         )
     }
 
-    /** Video codecs with a hardware decoder: software decoding of 4K on a stick is not playing. */
+    /** When even the scan failed: a 1080p SDR screen, H.264 and PCM, no fallback engine. */
+    fun baseline() =
+        DeviceCapsParams(
+            displayHeight = 1080,
+            hdr = emptyList(),
+            decoders = listOf("h264"),
+            audioDecoders = listOf("aac", "pcm"),
+            containers = containers,
+            hasFallbackEngine = false,
+        )
+
+    /**
+     * Video codecs with a hardware decoder: software decoding of 4K on a stick is not playing.
+     * H.264 is always listed, because every device plays it and an empty list would hide everything.
+     */
     internal fun videoDecoders(all: List<DecoderInfo>): List<String> =
-        videoMimes.filterKeys { mime -> all.any { it.hardware && mime in it.mimes } }.values.toList()
+        (videoMimes.filterKeys { mime -> all.any { it.hardware && mime in it.mimes } }.values + "h264").distinct()
 
     /** Audio codecs with any decoder: software audio decoding is cheap. PCM always plays. */
     internal fun audioDecoders(all: List<DecoderInfo>): List<String> =
         (audioMimes.filterKeys { mime -> all.any { mime in it.mimes } }.values + "pcm").distinct()
 
-    internal fun deviceLanguage(locale: Locale): String? = locale.language.takeIf { it.length == 2 }
+    /** A two letter ISO 639-1 code; `iw`, `in` and `ji` (the old Java codes) are mapped to what the core reads. */
+    internal fun deviceLanguage(locale: Locale): String? =
+        locale
+            .toLanguageTag()
+            .substringBefore('-')
+            .takeIf { it.length == 2 }
 
     internal fun hdrNames(types: IntArray): List<String> = types.toList().mapNotNull { hdrTypes[it] }.distinct()
+
+    /** The display's HDR types, with Dolby Vision only when a decoder for it exists too. */
+    internal fun withDolbyVision(
+        names: List<String>,
+        dolbyVisionDecoder: Boolean,
+    ): List<String> = if (dolbyVisionDecoder) names else names - "dolby_vision"
 
     internal fun passthroughNames(encodings: Collection<Int>): List<String> =
         encodings.mapNotNull { passthroughEncodings[it] }.distinct()
@@ -117,8 +178,9 @@ object DeviceCaps {
     }
 
     private fun decoders(): List<DecoderInfo> =
-        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }.map {
-            DecoderInfo(it.supportedTypes.map(String::lowercase), isHardware(it))
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder }.map { info ->
+            val mimes = info.supportedTypes.map(String::lowercase)
+            DecoderInfo(mimes, isHardware(info), tenBitHevc = "video/hevc" in mimes && takesTenBit(info))
         }
 
     private fun isHardware(info: MediaCodecInfo): Boolean =
@@ -129,16 +191,14 @@ object DeviceCaps {
             !name.startsWith("omx.google.") && !name.startsWith("c2.android.") && !name.startsWith("omx.ffmpeg.")
         }
 
-    private fun tenBitHevc(): Boolean =
-        MediaCodecList(MediaCodecList.REGULAR_CODECS)
-            .codecInfos
-            .filter { !it.isEncoder && isHardware(it) && "video/hevc" in it.supportedTypes.map(String::lowercase) }
-            .any { info ->
-                info
-                    .getCapabilitiesForType("video/hevc")
-                    .profileLevels
-                    .any { it.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 }
+    private fun takesTenBit(info: MediaCodecInfo): Boolean =
+        runCatching {
+            info.getCapabilitiesForType("video/hevc").profileLevels.any {
+                it.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
+                    it.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ||
+                    it.profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
             }
+        }.getOrDefault(false)
 
     private fun passthrough(context: Context): List<String> {
         val audio = context.getSystemService(AudioManager::class.java) ?: return emptyList()

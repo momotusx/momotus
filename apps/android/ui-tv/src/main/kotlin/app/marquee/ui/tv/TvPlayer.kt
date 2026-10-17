@@ -1,0 +1,523 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
+package app.marquee.ui.tv
+
+import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import app.marquee.core.model.NextEpisode
+import app.marquee.design.Icons
+import app.marquee.design.Marquee
+import app.marquee.design.MqText
+import app.marquee.design.TextRole
+import app.marquee.design.marqueeFocus
+import app.marquee.player.ActionButton
+import app.marquee.player.EndCard
+import app.marquee.player.PlaybackController
+import app.marquee.player.PlaybackController.Stage
+import app.marquee.player.PlayerStatus
+import app.marquee.player.PlayerTheme
+import app.marquee.player.PlayerVideo
+import app.marquee.player.RoundButton
+import app.marquee.player.Scrim
+import app.marquee.player.Scrubber
+import app.marquee.player.Spinner
+import app.marquee.player.TrackPanel
+import app.marquee.player.UpNextCard
+import app.marquee.player.audioDetail
+import app.marquee.player.clockText
+import app.marquee.player.endsAt
+import app.marquee.player.nextSpeed
+import app.marquee.player.seekStepMs
+import app.marquee.player.speedText
+import app.marquee.player.subtitlesDetail
+import java.util.Date
+import kotlin.math.ceil
+
+private const val HIDE_MS = 4_000L
+private const val NEXT_AT_MS = 20_000L
+private const val NEXT_MIN_LENGTH_MS = 60_000L
+private const val SEEK_MS = 10_000L
+
+private enum class Panel { Audio, Subtitles }
+
+/**
+ * The player on TV: the picture, and over it the title top left, the position bar and the
+ * transport in the middle, and the actions (audio, subtitles, versions, episodes, speed) at the
+ * right. The controls hide after four seconds of playing; while they are hidden the first key only
+ * brings them back, with focus on play and pause. Left and right on the position bar step 10 s,
+ * and a held key steps further (20, 30, 60 s) and lands when it is let go. Back closes a panel
+ * first, then leaves.
+ *
+ * @param onNext the next episode was chosen (or it starts by itself when [autoplayNext] is on).
+ * @param onEpisodes the title page of a series; null for a movie.
+ */
+@Composable
+fun TvPlayer(
+    controller: PlaybackController,
+    autoplayNext: Boolean,
+    onVersions: () -> Unit,
+    onEpisodes: (() -> Unit)?,
+    onNext: (NextEpisode, String?) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    PlayerTheme {
+        val safe = Marquee.safe
+        val stage = controller.stage
+        val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
+        var osd by remember { mutableStateOf(true) }
+        var wake by remember { mutableIntStateOf(0) }
+        var panel by remember { mutableStateOf<Panel?>(null) }
+        val ended = stage == Stage.Ended
+        val showControls = osd && live && !ended
+        val showEnd = ended && !(autoplayNext && controller.next != null)
+
+        val root = remember { FocusRequester() }
+        val play = remember { FocusRequester() }
+        val audioAction = remember { FocusRequester() }
+        val subtitlesAction = remember { FocusRequester() }
+        val failFocus = remember { FocusRequester() }
+        val nextFocus = remember { FocusRequester() }
+        val endFocus = remember { FocusRequester() }
+
+        val next = controller.next
+        val showNext by remember(controller) {
+            derivedStateOf {
+                val duration = controller.durationMs
+                controller.next != null && duration > NEXT_MIN_LENGTH_MS &&
+                    duration - controller.positionMs <= NEXT_AT_MS
+            }
+        }
+
+        // Controls hide while playing, once nothing is open and nothing is asking for an answer.
+        LaunchedEffect(osd, wake, stage, panel, showNext) {
+            if (osd && stage == Stage.Playing && panel == null && !showNext) {
+                kotlinx.coroutines.delay(HIDE_MS)
+                osd = false
+            }
+        }
+        // Focus follows what is on screen: play and pause when the controls appear, the page itself
+        // when they are gone (so keys still arrive), the way on when nothing plays.
+        LaunchedEffect(showControls) {
+            withFrameNanos { }
+            runCatching { if (showControls) play.requestFocus() else root.requestFocus() }
+        }
+        LaunchedEffect(stage == Stage.Failed) {
+            if (stage == Stage.Failed) {
+                withFrameNanos { }
+                runCatching { failFocus.requestFocus() }
+            }
+        }
+        LaunchedEffect(showNext) {
+            if (showNext) {
+                osd = true
+                withFrameNanos { }
+                runCatching { nextFocus.requestFocus() }
+            }
+        }
+        // A list that was open when the film ended closes: the end card is the only thing to answer.
+        LaunchedEffect(ended) { if (ended) panel = null }
+        LaunchedEffect(showEnd) {
+            if (showEnd) {
+                withFrameNanos { }
+                runCatching { endFocus.requestFocus() }
+            }
+        }
+        // The end of an episode starts the next one when the viewer wants that.
+        LaunchedEffect(stage) {
+            if (stage == Stage.Ended && autoplayNext && next != null) onNext(next, controller.bingeGroup)
+            if (stage == Stage.Ended) osd = true
+        }
+
+        // Closing a panel (Back, or a row chosen) returns focus to the action that opened it.
+        var returnTo by remember { mutableStateOf<FocusRequester?>(null) }
+
+        fun closePanel() {
+            returnTo = if (panel == Panel.Audio) audioAction else subtitlesAction
+            panel = null
+            wake++
+        }
+        // One handler that is always on (turning it on and off with the panel left Back ignored after a key press).
+        BackHandler { if (panel != null) closePanel() else onBack() }
+        LaunchedEffect(returnTo) {
+            val target = returnTo ?: return@LaunchedEffect
+            withFrameNanos { }
+            runCatching { target.requestFocus() }
+            returnTo = null
+        }
+
+        Box(
+            modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .focusRequester(root)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.MediaPlayPause -> {
+                            controller.togglePlay()
+                            osd = true
+                            wake++
+                            true
+                        }
+
+                        Key.MediaPlay -> {
+                            controller.play()
+                            osd = true
+                            wake++
+                            true
+                        }
+
+                        Key.MediaPause -> {
+                            controller.pause()
+                            osd = true
+                            wake++
+                            true
+                        }
+
+                        Key.MediaRewind -> {
+                            controller.seekBy(-SEEK_MS)
+                            osd = true
+                            wake++
+                            true
+                        }
+
+                        Key.MediaFastForward -> {
+                            controller.seekBy(SEEK_MS)
+                            osd = true
+                            wake++
+                            true
+                        }
+
+                        Key.Back -> {
+                            // Handled here while focus is in the player: on the emulator a Back that came
+                            // after a D-pad press never reached the BackHandler below (it still covers
+                            // the moments when no node has focus).
+                            if (panel != null) closePanel() else onBack()
+                            true
+                        }
+
+                        else -> {
+                            wake++
+                            // While the controls are hidden the first key only brings them back.
+                            if (live && !osd) {
+                                osd = true
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                    }
+                }.focusProperties { exit = { FocusRequester.Cancel } }
+                .focusable(),
+        ) {
+            PlayerVideo(controller.player, Modifier.fillMaxSize())
+
+            // Scrims run edge to edge (no box with an edge to see): 320 dp at the foot to 72% black,
+            // 200 dp at the top to 60%, so the words over bright pictures hold their contrast.
+            AnimatedVisibility(
+                visible = showControls,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                Scrim(top = false, height = 320.dp, alpha = 0.72f)
+            }
+            AnimatedVisibility(visible = (osd && !ended) || !live, enter = fadeIn(), exit = fadeOut()) {
+                Box(Modifier.fillMaxSize()) {
+                    Scrim(top = true, height = 200.dp, alpha = 0.6f)
+                    Header(controller, Modifier.padding(start = safe.side, top = safe.top))
+                    EndsAt(controller, Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 70.dp))
+                }
+            }
+
+            if (stage == Stage.Opening || stage == Stage.Failed || controller.status != null) {
+                PlayerStatus(
+                    stage = stage,
+                    status = controller.status,
+                    problem = controller.problem,
+                    attempts = controller.attempts,
+                    onVersions = onVersions,
+                    onBack = onBack,
+                    focus = failFocus,
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = 360.dp),
+                )
+            } else if (stage == Stage.Buffering) {
+                Spinner(Modifier.align(Alignment.Center))
+            }
+
+            AnimatedVisibility(
+                visible = showControls,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                Controls(
+                    controller = controller,
+                    play = play,
+                    audioAction = audioAction,
+                    subtitlesAction = subtitlesAction,
+                    onAudio = { panel = Panel.Audio },
+                    onSubtitles = { panel = Panel.Subtitles },
+                    onVersions = onVersions,
+                    onEpisodes = onEpisodes,
+                    modifier = Modifier.padding(start = safe.side, end = safe.side, bottom = safe.bottom),
+                )
+            }
+
+            when (panel) {
+                Panel.Audio -> {
+                    TrackPanel(
+                        title = "Audio",
+                        rows = controller.audio,
+                        onPick = {
+                            controller.selectAudio(it)
+                            closePanel()
+                        },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
+                    )
+                }
+
+                Panel.Subtitles -> {
+                    TrackPanel(
+                        title = "Subtitles",
+                        rows = controller.text,
+                        note = if (controller.subtitlesPending) "Still asking subtitle add-ons" else null,
+                        onPick = {
+                            controller.selectText(it)
+                            closePanel()
+                        },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
+                    )
+                }
+
+                null -> {
+                    Unit
+                }
+            }
+
+            if (showEnd) {
+                EndCard(
+                    title = controller.title,
+                    next = next,
+                    onNext = { next?.let { onNext(it, controller.bingeGroup) } },
+                    onAgain = controller::play,
+                    onBack = onBack,
+                    focus = endFocus,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            if (showNext && !ended && next != null) {
+                val remaining = ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0)
+                UpNextCard(
+                    next = next,
+                    countdown = remaining.takeIf { autoplayNext },
+                    onPlay = { onNext(next, controller.bingeGroup) },
+                    focus = nextFocus,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 330.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Header(
+    controller: PlaybackController,
+    modifier: Modifier,
+) {
+    Column(modifier.fillMaxWidth(0.7f)) {
+        MqText(controller.title, role = TextRole.Title2, maxLines = 2)
+        controller.episode?.let {
+            MqText(it, role = TextRole.Body, color = Marquee.colors.muted, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+/** "Ends at 9:41 PM", at the current speed; nothing until the length is known. */
+@Composable
+private fun EndsAt(
+    controller: PlaybackController,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current
+    val at =
+        endsAt(System.currentTimeMillis(), controller.positionMs, controller.durationMs, controller.speed) ?: return
+    MqText(
+        "Ends at ${DateFormat.getTimeFormat(context).format(Date(at))}",
+        modifier = modifier,
+        role = TextRole.Callout,
+        color = Marquee.colors.muted,
+    )
+}
+
+@Composable
+private fun Controls(
+    controller: PlaybackController,
+    play: FocusRequester,
+    audioAction: FocusRequester,
+    subtitlesAction: FocusRequester,
+    onAudio: () -> Unit,
+    onSubtitles: () -> Unit,
+    onVersions: () -> Unit,
+    onEpisodes: (() -> Unit)?,
+    modifier: Modifier,
+) {
+    var scrubTarget by remember { mutableStateOf<Long?>(null) }
+    var scrubFocused by remember { mutableStateOf(false) }
+    val playing = controller.offersPause
+    Box(modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.CenterVertically) {
+                MqText(clockText(scrubTarget ?: controller.positionMs), role = TextRole.Callout)
+                Scrubber(
+                    position = { controller.positionMs },
+                    duration = { controller.durationMs },
+                    buffered = { controller.bufferedMs },
+                    preview = { scrubTarget },
+                    emphasized = scrubFocused,
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .marqueeFocus(8.dp, scale = 1f)
+                            .onFocusChanged {
+                                scrubFocused = it.isFocused
+                                if (!it.isFocused) scrubTarget = null
+                            }.onKeyEvent { event ->
+                                scrubKey(event, controller, scrubTarget) { scrubTarget = it }
+                            }.focusable(),
+                )
+                MqText(
+                    "-" + clockText((controller.durationMs - controller.positionMs).coerceAtLeast(0)),
+                    role = TextRole.Callout,
+                )
+            }
+            Spacer(Modifier.height(34.dp))
+            Box(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(26.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RoundButton(Icons.RotateCcw, "Back 10 seconds", { controller.seekBy(-SEEK_MS) }, badge = "10")
+                    RoundButton(
+                        icon = if (playing) Icons.Pause else Icons.Play,
+                        label = if (playing) "Pause" else "Play",
+                        onClick = controller::togglePlay,
+                        main = true,
+                        focusRequester = play,
+                    )
+                    RoundButton(Icons.RotateCw, "Forward 10 seconds", { controller.seekBy(SEEK_MS) }, badge = "10")
+                }
+                Row(Modifier.align(Alignment.CenterEnd), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // The same order on every platform: Audio, Subtitles, Versions, Speed, Episodes.
+                    if (controller.audio.isNotEmpty()) {
+                        ActionButton(
+                            Icons.Volume2,
+                            "Audio",
+                            controller.audioDetail(),
+                            onAudio,
+                            focusRequester = audioAction,
+                        )
+                    }
+                    ActionButton(
+                        Icons.Captions,
+                        "Subtitles",
+                        controller.subtitlesDetail(),
+                        onSubtitles,
+                        focusRequester = subtitlesAction,
+                    )
+                    ActionButton(Icons.Layers, "Versions", null, onVersions)
+                    ActionButton(
+                        Icons.Gauge,
+                        "Speed",
+                        speedText(controller.speed),
+                        { controller.changeSpeed(nextSpeed(controller.speed)) },
+                    )
+                    onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
+                }
+            }
+        }
+    }
+}
+
+/** Left and right on the position bar: steps that grow while the key is held, committed when it is let go. */
+private fun scrubKey(
+    event: androidx.compose.ui.input.key.KeyEvent,
+    controller: PlaybackController,
+    target: Long?,
+    set: (Long?) -> Unit,
+): Boolean {
+    val direction =
+        when (event.key) {
+            Key.DirectionLeft -> -1
+            Key.DirectionRight -> 1
+            else -> 0
+        }
+    if (direction == 0) {
+        if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionCenter || event.key == Key.Enter)) {
+            controller.togglePlay()
+            return true
+        }
+        return false
+    }
+    return when (event.type) {
+        KeyEventType.KeyDown -> {
+            val step = seekStepMs(event.nativeKeyEvent.repeatCount)
+            val end = controller.durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE
+            set(((target ?: controller.positionMs) + direction * step).coerceIn(0L, end))
+            true
+        }
+
+        KeyEventType.KeyUp -> {
+            target?.let(controller::seekTo)
+            set(null)
+            true
+        }
+
+        else -> {
+            false
+        }
+    }
+}

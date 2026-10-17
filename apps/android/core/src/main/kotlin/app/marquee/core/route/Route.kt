@@ -44,13 +44,22 @@ sealed interface Route : NavKey {
         val title: String,
     ) : Route
 
-    /** Playing the version [key] of a video. Not restorable after the process dies: it pops to the title. */
+    /**
+     * Playing a video. It asks for the ranked versions itself (the view is shared, so this costs
+     * nothing when the title page or Versions already opened it), which also lets a restored stack
+     * start playing again after the process died.
+     */
     @Serializable
     data class Player(
         val kind: String,
         val id: String,
         val videoId: String,
-        val key: String,
+        /** The movie or series name: Versions needs it, and the OSD shows it. */
+        val title: String,
+        /** The version chosen on Versions or the title page; null plays the recommended one once it settles. */
+        val key: String? = null,
+        /** The release line of the episode that just played, so the next one comes from the same line. */
+        val binge: String? = null,
     ) : Route
 }
 

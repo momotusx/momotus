@@ -4,6 +4,7 @@ import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -74,6 +75,13 @@ class MainActivity : ComponentActivity() {
         val forced = forcedDark
         val style = SystemBarStyle.auto(bars, bars, detectDarkMode = { forced ?: it.isNight() })
         enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+    }
+
+    // Before Android 12 the activity enters picture-in-picture itself when the viewer leaves while
+    // a video plays; from Android 12 the player screen has told the system to do it.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < 31) PipHooks.enter?.invoke()
     }
 
     override fun onDestroy() {

@@ -23,6 +23,8 @@ class FormatTest {
     fun `series video ids carry season and episode, movies do not`() {
         assertEquals(Format.VideoRef("tt0944947", 2, 1), Format.parseVideo("tt0944947:2:1"))
         assertNull(Format.parseVideo("tt1727587"))
+        // A digit run that does not fit an Int is not a season or an episode, and must not throw.
+        assertNull(Format.parseVideo("x:99999999999999999999:1"))
         assertEquals("S2:E1", Format.episodeLabel(2, 1))
         assertEquals("Specials", Format.seasonName(0))
     }

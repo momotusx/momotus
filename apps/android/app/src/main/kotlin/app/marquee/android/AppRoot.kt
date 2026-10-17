@@ -7,6 +7,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -21,6 +22,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import app.marquee.core.Format
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
 import app.marquee.core.route.Route
@@ -71,7 +73,7 @@ private fun HomeBackHandler(
     if (!active) return
     val scope = rememberCoroutineScope()
     val running = remember { arrayOfNulls<Job>(1) }
-    val reachable = firstTarget(app.home.rows.toList(), hero = null, patient = false) != null
+    val reachable = firstTarget(app.home.rows.toList(), app.home.hero, patient = false) != null
     BackHandler(enabled = reachable && !app.tvHome.focus.onFirstRow.value) {
         // A held Back repeats: one move of focus at a time, then the next press leaves.
         if (running[0]?.isActive != true) running[0] = scope.launch { focusFirstRow(app.home, app.tvHome) }
@@ -94,10 +96,38 @@ private fun AppNav(
         backStack.add(Route.Title(tile.kind, tile.id))
     }
 
-    // The hero's Play: the ranked versions of what it starts, until playback resolves them itself.
+    // The hero's Play: straight to the player, which picks the recommended version once it settles.
     fun playTile(tile: Tile) {
-        backStack.add(Route.Versions(tile.kind, tile.id, tile.playVideoId(), tile.name))
+        backStack.add(Route.Player(tile.kind, tile.id, tile.playVideoId(), tile.name))
     }
+
+    // The player's own ways out. Versions and the next episode replace it (Back should not return to
+    // a finished or abandoned player); Episodes goes back to the title page, below or new.
+    fun replacePlayer(
+        current: Route.Player,
+        with: Route,
+    ) {
+        if (backStack.lastOrNull() != current) return
+        backStack.removeAt(backStack.lastIndex)
+        backStack.add(with)
+    }
+
+    fun toTitle(current: Route.Player) {
+        if (backStack.lastOrNull() != current) return
+        while (backStack.lastOrNull().let {
+                it is Route.Player || it is Route.Versions
+            }
+        ) {
+            backStack.removeAt(backStack.lastIndex)
+        }
+        val title = Route.Title(current.kind, current.id)
+        if (backStack.lastOrNull() != title) backStack.add(title)
+    }
+
+    // The shared Versions views fan out to the add-ons while open: close them when no screen that
+    // needs one is left (the title page, Versions, the player).
+    val needsVersions = routes.any { it is Route.Title || it is Route.Versions || it is Route.Player }
+    LaunchedEffect(needsVersions) { if (!needsVersions) app.versions.closeAll() }
 
     fun choose(place: Route) {
         val next = switchedTo(routes, place)
@@ -157,11 +187,8 @@ private fun AppNav(
                             session,
                             app,
                             form,
-                            onPlay = {
-                                key,
-                                videoId,
-                                ->
-                                backStack.add(Route.Player(route.kind, route.id, videoId, key))
+                            onPlay = { key, videoId, title ->
+                                backStack.add(Route.Player(route.kind, route.id, videoId, title, key))
                             },
                             onVersions = { videoId, name ->
                                 backStack.add(Route.Versions(route.kind, route.id, videoId, name))
@@ -174,11 +201,36 @@ private fun AppNav(
                             app,
                             form,
                             onPlay = { row ->
-                                backStack.add(Route.Player(route.kind, route.id, route.videoId, row.key))
+                                backStack.add(Route.Player(route.kind, route.id, route.videoId, route.title, row.key))
                             },
                         )
                     }
-                    entry<Route.Player> { ComingSoonScreen("Player") }
+                    entry<Route.Player> { route ->
+                        PlayerScreen(
+                            route,
+                            session,
+                            app,
+                            form,
+                            onBack = { backStack.removeAt(backStack.lastIndex) },
+                            onVersions = {
+                                replacePlayer(route, Route.Versions(route.kind, route.id, route.videoId, route.title))
+                            },
+                            onTitle = if (Format.parseVideo(route.videoId) != null) ({ toTitle(route) }) else null,
+                            onNext = { next, binge ->
+                                replacePlayer(
+                                    route,
+                                    Route.Player(
+                                        route.kind,
+                                        route.id,
+                                        next.videoId,
+                                        route.title,
+                                        key = null,
+                                        binge = binge,
+                                    ),
+                                )
+                            },
+                        )
+                    }
                 },
         )
     }

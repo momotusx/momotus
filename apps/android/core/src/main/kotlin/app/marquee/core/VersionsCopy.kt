@@ -46,8 +46,12 @@ object VersionsCopy {
     fun source(row: VersionRow): String = listOfNotNull(row.sizeBytes?.let(Format::bytes), row.via).joinToString(", ")
 
     /** The line under the Play button: what will play, or why nothing is ready yet. */
-    fun chosen(snapshot: VersionsSnapshot?): String =
+    fun chosen(
+        snapshot: VersionsSnapshot?,
+        failed: Boolean = false,
+    ): String =
         when {
+            failed -> "Sources could not load"
             snapshot == null -> "Looking for sources"
             snapshot.recommended != null -> "${headline(snapshot.recommended)}, ${source(snapshot.recommended)}"
             snapshot.done -> "No playable source found"

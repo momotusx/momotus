@@ -25,6 +25,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.TitleCopy
@@ -52,6 +55,7 @@ private const val PLAY = "play"
 private const val EPISODES = "episodes"
 private const val SEASONS = "seasons"
 private const val ACTIONS = "actions"
+private const val RETRY = "retry"
 
 /**
  * A title on TV: artwork behind the facts, then Play (with the version it will play under it),
@@ -72,14 +76,30 @@ fun TvTitle(
     onVersions: (videoId: String) -> Unit,
     onEpisode: (Episode) -> Unit,
     modifier: Modifier = Modifier,
+    versionsFailed: Boolean = false,
 ) {
     val safe = Marquee.safe
     val header = title.header
     val details = header?.details
     val scrim = Marquee.colors.bg
-    LaunchedEffect(focus) { focus.focusWhenReady(focus.focusedKey ?: PLAY, waitMs = 10_000) }
+    val failed = header?.state is TitleState.Failed
+    // Focus goes to Play once the page has loaded (or to Try again when it could not), not before:
+    // the buttons do not exist while the skeleton shows.
+    LaunchedEffect(focus, details != null, failed) {
+        if (failed) {
+            focus.focusWhenReady(RETRY, waitMs = 10_000)
+        } else if (details != null) {
+            val wanted = focus.focusedKey?.takeIf { focus.requester(it) != null } ?: PLAY
+            focus.focusWhenReady(wanted, waitMs = 10_000)
+        }
+    }
 
-    Box(modifier.fillMaxSize()) {
+    Box(
+        modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown) focus.interacted()
+            false
+        },
+    ) {
         Backdrop(details?.background ?: details?.poster, Modifier.fillMaxSize())
         Box(
             Modifier
@@ -103,6 +123,7 @@ fun TvTitle(
                     icon = Icons.CircleAlert,
                     actionLabel = "Try again",
                     onAction = title::retry,
+                    actionFocus = focus.requesterFor(RETRY),
                     modifier = Modifier.padding(start = safe.side, top = safe.top),
                 )
             }
@@ -121,11 +142,16 @@ fun TvTitle(
             else -> {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding =
-                        PaddingValues(start = safe.side, end = safe.side, top = safe.top, bottom = safe.bottom),
+                    // The lanes run to the screen edge (their own padding is the side margin), so the
+                    // focus ring and halo of the first tile are not clipped.
+                    contentPadding = PaddingValues(top = safe.top, bottom = safe.bottom),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 ) {
-                    item(key = "info") { Info(title, versions, focus, onPlay, onVersions) }
+                    item(key = "info") {
+                        Box(
+                            Modifier.padding(horizontal = safe.side),
+                        ) { Info(title, versions, versionsFailed, focus, onPlay, onVersions) }
+                    }
                     if (header.seasons.isNotEmpty()) item(key = "seasons") { Seasons(title, focus) }
                     if (title.episodes.isNotEmpty()) item(key = "episodes") { Episodes(title, focus, onEpisode) }
                 }
@@ -138,6 +164,7 @@ fun TvTitle(
 private fun Info(
     title: TitleView,
     versions: VersionsSnapshot?,
+    versionsFailed: Boolean,
     focus: FocusMemory,
     onPlay: (String, String) -> Unit,
     onVersions: (String) -> Unit,
@@ -153,7 +180,8 @@ private fun Info(
         details.description?.let {
             MqText(
                 it,
-                modifier = Modifier.widthIn(max = 1000.dp),
+                // As wide as the hero's text column: the scrim is dark enough for it only that far.
+                modifier = Modifier.widthIn(max = 820.dp),
                 role = TextRole.Body,
                 maxLines = 5,
             )
@@ -168,6 +196,7 @@ private fun Info(
             PrimaryButton(
                 label = target?.let(TitleCopy::playLabel) ?: "Play",
                 icon = Icons.Play,
+                enabled = target != null,
                 onClick = {
                     when {
                         target != null && recommended != null -> onPlay(recommended.key, target.videoId)
@@ -203,7 +232,12 @@ private fun Info(
                 )
             }
         }
-        MqText(VersionsCopy.chosen(versions), role = TextRole.Callout, color = colors.muted, maxLines = 1)
+        MqText(
+            VersionsCopy.chosen(versions, versionsFailed),
+            role = TextRole.Callout,
+            color = colors.muted,
+            maxLines = 1,
+        )
     }
 }
 
@@ -218,7 +252,7 @@ private fun Seasons(
             Modifier
                 .focusProperties { enter = { focus.rowEntry(SEASONS) ?: FocusRequester.Default } }
                 .focusGroup(),
-        contentPadding = PaddingValues(vertical = Marquee.space.xs),
+        contentPadding = PaddingValues(horizontal = Marquee.safe.side, vertical = Marquee.space.xs),
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         items(header.seasons, key = { it }) { season ->
@@ -249,6 +283,7 @@ private fun Episodes(
                     .height(laneHeight)
                     .focusProperties { enter = { focus.rowEntry(EPISODES) ?: FocusRequester.Default } }
                     .focusGroup(),
+            contentPadding = PaddingValues(horizontal = Marquee.safe.side),
             horizontalArrangement = Arrangement.spacedBy(metrics.gap),
         ) {
             items(title.episodes, key = { it.videoId }) { episode ->
@@ -272,6 +307,7 @@ private fun Episodes(
             "Hold select on an episode to mark it watched or not watched.",
             role = TextRole.Callout,
             color = Marquee.colors.muted,
+            modifier = Modifier.padding(horizontal = Marquee.safe.side),
         )
     }
 }

@@ -49,6 +49,7 @@ import app.marquee.core.model.Group
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
+import app.marquee.core.views.ViewStatus
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
@@ -82,20 +83,32 @@ fun TvVersions(
 ) {
     val safe = Marquee.safe
     val snapshot = versions?.snapshot
+    val failure = (versions?.status as? ViewStatus.Failed)?.reason
     var focusedRow by remember { mutableStateOf<VersionRow?>(null) }
-    var frozen by remember(versions) { mutableStateOf(false) }
-    // The target exists once there is something to focus: the card's Play, else the first row.
-    val target = if (snapshot?.recommended != null) PLAY else snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
-    LaunchedEffect(target) { if (target != null) focus.focusWhenReady(focus.focusedKey ?: target, waitMs = 10_000) }
+    // The target exists once there is something to focus: the card's Play (or Try again), else the first row.
+    val target =
+        if (failure != null ||
+            snapshot?.recommended != null
+        ) {
+            PLAY
+        } else {
+            snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
+        }
+    LaunchedEffect(target) {
+        // A remembered row that is no longer in the list (it moved into the card) is not a target.
+        val wanted = focus.focusedKey?.takeIf { focus.requester(it) != null } ?: target
+        if (wanted != null) focus.focusWhenReady(wanted, waitMs = 10_000)
+    }
 
     Row(
         modifier
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
-                // First move of any kind: pin the recommendation.
-                if (!frozen && event.type == KeyEventType.KeyDown && event.key in arrows) {
-                    frozen = true
-                    versions?.freeze()
+                if (event.type == KeyEventType.KeyDown) {
+                    focus.interacted()
+                    // First move of any kind pins the recommendation, once there is one to pin: a pin
+                    // before that would keep the card empty while sources stream in.
+                    if (event.key in arrows && snapshot?.recommended != null && !snapshot.frozen) versions?.freeze()
                 }
                 false
             }.padding(start = safe.side, end = safe.side, top = safe.top, bottom = safe.bottom),
@@ -104,7 +117,7 @@ fun TvVersions(
         Column(Modifier.width(640.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             MqText("Choose a version", role = TextRole.Title2, maxLines = 1)
             MqText(heading, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 2)
-            Recommendation(snapshot, focus, onPlay)
+            Recommendation(snapshot, failure, { versions?.retry() }, focus, onPlay)
         }
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             Sources(snapshot, focus, onPlay, onFocusedRow = { focusedRow = it }, modifier = Modifier.weight(1f))
@@ -120,6 +133,8 @@ private fun rowKey(row: VersionRow) = "row:${row.key}"
 @Composable
 private fun Recommendation(
     snapshot: VersionsSnapshot?,
+    failure: String?,
+    onRetry: () -> Unit,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
 ) {
@@ -134,6 +149,18 @@ private fun Recommendation(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         when {
+            failure != null -> {
+                StateMessage(
+                    title = "Sources could not load",
+                    body = failure,
+                    icon = Icons.CircleAlert,
+                    actionLabel = "Try again",
+                    onAction = onRetry,
+                    actionFocus = focus.requesterFor(PLAY),
+                    modifier = Modifier.padding(0.dp),
+                )
+            }
+
             snapshot == null -> {
                 Skeleton(Modifier.size(300.dp, 40.dp))
                 Skeleton(Modifier.size(420.dp, 28.dp))
@@ -285,7 +312,7 @@ private fun Footer(
 ) {
     if (row == null || snapshot == null) return
     MqText(
-        Format.releaseParts(row.releaseName).joinToString("\u200B"),
+        Format.releaseWrapped(row.releaseName),
         role = TextRole.Caption,
         color = Marquee.colors.muted,
         maxLines = 3,

@@ -15,9 +15,36 @@ class DeviceCapsTest {
     private val aacAndOpus = DecoderInfo(listOf("audio/mp4a-latm", "audio/opus"), hardware = false)
 
     @Test
-    fun `only video codecs with a hardware decoder count`() {
+    fun `only video codecs with a hardware decoder count, and H264 always plays`() {
         assertEquals(listOf("h264"), DeviceCaps.videoDecoders(listOf(hardwareAvc, softwareHevc)))
-        assertEquals(emptyList(), DeviceCaps.videoDecoders(listOf(softwareHevc)))
+        // No decoder flagged as hardware must not hide every release.
+        assertEquals(listOf("h264"), DeviceCaps.videoDecoders(listOf(softwareHevc)))
+        assertEquals(listOf("h264"), DeviceCaps.videoDecoders(emptyList()))
+    }
+
+    @Test
+    fun `Dolby Vision needs a decoder for it, not only a display that shows it`() {
+        val display = listOf("dolby_vision", "hdr10")
+        assertEquals(listOf("hdr10"), DeviceCaps.withDolbyVision(display, dolbyVisionDecoder = false))
+        assertEquals(display, DeviceCaps.withDolbyVision(display, dolbyVisionDecoder = true))
+        val scan = DeviceCaps.scan(listOf(hardwareAvc, DecoderInfo(listOf("video/dolby-vision"), hardware = true)))
+        assertEquals(true, scan.dolbyVision)
+        assertEquals(false, DeviceCaps.scan(listOf(hardwareAvc)).dolbyVision)
+    }
+
+    @Test
+    fun `ten bit HEVC needs a hardware decoder that takes Main 10`() {
+        val main10 = DecoderInfo(listOf("video/hevc"), hardware = true, tenBitHevc = true)
+        assertEquals(true, DeviceCaps.scan(listOf(main10)).tenBitHevc)
+        assertEquals(false, DeviceCaps.scan(listOf(main10.copy(hardware = false))).tenBitHevc)
+        assertEquals(false, DeviceCaps.scan(listOf(DecoderInfo(listOf("video/hevc"), hardware = true))).tenBitHevc)
+    }
+
+    @Test
+    fun `the baseline is a plain stick with no fallback engine`() {
+        val baseline = DeviceCaps.baseline()
+        assertEquals(listOf("h264"), baseline.decoders)
+        assertEquals(false, baseline.hasFallbackEngine)
     }
 
     @Test
@@ -42,6 +69,9 @@ class DeviceCapsTest {
     fun `the device language is sent only as a two letter code`() {
         assertEquals("tr", DeviceCaps.deviceLanguage(Locale.forLanguageTag("tr-TR")))
         assertNull(DeviceCaps.deviceLanguage(Locale.forLanguageTag("fil-PH")))
+        // The old Java codes for Hebrew and Indonesian become what the core reads.
+        assertEquals("he", DeviceCaps.deviceLanguage(Locale("iw", "IL")))
+        assertEquals("id", DeviceCaps.deviceLanguage(Locale("in", "ID")))
     }
 
     @Test

@@ -63,6 +63,7 @@ fun PhoneTitle(
     onVersions: (videoId: String) -> Unit,
     onEpisode: (Episode) -> Unit,
     modifier: Modifier = Modifier,
+    versionsFailed: Boolean = false,
 ) {
     val header = title.header
     val details = header?.details
@@ -103,7 +104,13 @@ fun PhoneTitle(
                         Box(
                             Modifier
                                 .matchParentSize()
-                                .background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Marquee.colors.bg)),
+                                // Dark in both themes: the logo is light, and a light fade would hide it.
+                                .background(
+                                    Brush.verticalGradient(
+                                        0.35f to Color.Transparent,
+                                        1f to Tokens.dark.bg.copy(alpha = 0.92f),
+                                    ),
+                                ),
                         )
                         Logo(
                             details.logo,
@@ -120,7 +127,7 @@ fun PhoneTitle(
                         )
                     }
                 }
-                item(key = "info") { Info(title, versions, onPlay, onVersions) }
+                item(key = "info") { Info(title, versions, versionsFailed, onPlay, onVersions) }
                 if (header.seasons.isNotEmpty()) {
                     item(key = "seasons") {
                         LazyRow(
@@ -153,6 +160,7 @@ private const val HERO_RATIO = 1.6f
 private fun Info(
     title: TitleView,
     versions: VersionsSnapshot?,
+    versionsFailed: Boolean,
     onPlay: (String, String) -> Unit,
     onVersions: (String) -> Unit,
 ) {
@@ -171,6 +179,7 @@ private fun Info(
             label = target?.let(TitleCopy::playLabel) ?: "Play",
             icon = Icons.Play,
             modifier = Modifier.fillMaxWidth(),
+            enabled = target != null,
             onClick = {
                 when {
                     target != null && recommended != null -> onPlay(recommended.key, target.videoId)
@@ -178,7 +187,7 @@ private fun Info(
                 }
             },
         )
-        MqText(VersionsCopy.chosen(versions), role = TextRole.Callout, color = colors.muted)
+        MqText(VersionsCopy.chosen(versions, versionsFailed), role = TextRole.Callout, color = colors.muted)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),

@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
@@ -171,6 +172,9 @@ fun Backdrop(
 /**
  * A title's logo, left aligned in a box of [height] and at most [maxWidth] wide; the name as text
  * (in [role]) when there is no logo or it cannot load.
+ *
+ * @param decorative the name is already spoken by what the logo sits in (a tile), so a screen
+ * reader skips the logo.
  */
 @Composable
 fun Logo(
@@ -181,14 +185,16 @@ fun Logo(
     modifier: Modifier = Modifier,
     role: TextRole = TextRole.Hero,
     color: Color = Marquee.colors.text,
+    decorative: Boolean = false,
 ) {
     var failed by remember(url) { mutableStateOf(url == null) }
     if (failed) {
-        MqText(name, modifier = modifier.widthIn(max = maxWidth), role = role, color = color, maxLines = 2)
+        val spoken = if (decorative) Modifier.clearAndSetSemantics { } else Modifier
+        MqText(name, modifier = modifier.then(spoken).widthIn(max = maxWidth), role = role, color = color, maxLines = 2)
     } else {
         AsyncImage(
             model = url,
-            contentDescription = name,
+            contentDescription = if (decorative) null else name,
             contentScale = ContentScale.Fit,
             alignment = Alignment.CenterStart,
             onError = { failed = true },

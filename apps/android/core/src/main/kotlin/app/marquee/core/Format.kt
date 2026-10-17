@@ -32,7 +32,10 @@ object Format {
     /** Stremio series video ids are `<id>:<season>:<episode>`; anything else is a movie. */
     fun parseVideo(videoId: String): VideoRef? {
         val m = this.videoId.matchEntire(videoId) ?: return null
-        return VideoRef(m.groupValues[1], m.groupValues[2].toInt(), m.groupValues[3].toInt())
+        // A very long digit run is not a season or an episode.
+        val season = m.groupValues[2].toIntOrNull() ?: return null
+        val episode = m.groupValues[3].toIntOrNull() ?: return null
+        return VideoRef(m.groupValues[1], season, episode)
     }
 
     fun episodeLabel(
@@ -72,4 +75,7 @@ object Format {
             .replace(Regex("\\.(?!\\d)"), ".\u0000")
             .replace(Regex("-(?=[^-.]+$)"), "\u0000-")
             .split('\u0000')
+
+    /** [releaseParts] joined with zero-width spaces: one string a text view may break between tokens. */
+    fun releaseWrapped(name: String): String = releaseParts(name).joinToString("​")
 }
