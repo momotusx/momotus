@@ -15,17 +15,22 @@ export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 const targetDir = process.env.CARGO_TARGET_DIR ?? join(homedir(), ".cargo-targets/marquee-web");
 
+/** The bridge to test. MQ_BRIDGE_BIN names one explicitly; otherwise this
+ * checkout's sources are always built first (a no-op build takes about a
+ * second), so a stale binary is never what the tests run against. */
 export function bridgeBinary(): string {
-  const bin = process.env.MQ_BRIDGE_BIN ?? join(targetDir, "debug/mq-bridge");
-  if (!existsSync(bin)) {
-    const r = spawnSync("cargo", ["build", "-p", "mq-bridge", "-j", "4"], {
-      cwd: repo,
-      stdio: "inherit",
-      env: { ...process.env, CARGO_TARGET_DIR: targetDir, CARGO_INCREMENTAL: "0" },
-    });
-    if (r.status !== 0) throw new Error("cargo build -p mq-bridge failed");
+  const explicit = process.env.MQ_BRIDGE_BIN;
+  if (explicit) {
+    if (!existsSync(explicit)) throw new Error(`MQ_BRIDGE_BIN does not exist: ${explicit}`);
+    return explicit;
   }
-  return bin;
+  const r = spawnSync("cargo", ["build", "-p", "mq-bridge", "-j", "4"], {
+    cwd: repo,
+    stdio: "inherit",
+    env: { ...process.env, CARGO_TARGET_DIR: targetDir, CARGO_INCREMENTAL: "0" },
+  });
+  if (r.status !== 0) throw new Error("cargo build -p mq-bridge failed");
+  return join(targetDir, "debug/mq-bridge");
 }
 
 export function startBridge(): Promise<{ proc: ChildProcess; data: string }> {

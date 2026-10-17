@@ -16,6 +16,8 @@ interface Screen {
   name: string;
   path: string;
   ready: (page: Page, form: Form) => Promise<void>;
+  /** Puts shared core state back after the shot. */
+  after?: (page: Page) => Promise<void>;
 }
 
 const visible = (sel: string, timeout = 30_000) => async (page: Page) => {
@@ -32,10 +34,39 @@ const SCREENS: Screen[] = [
         await expect(page.locator(".row").nth(row).locator(".tile img.in").first()).toBeVisible({ timeout: 30_000 });
       }
       // Every mounted poster in Continue Watching has decoded.
-      await expect.poll(() => page.locator(".row").first().locator(".tile img:not(.in)").count()).toBe(0);
+      await expect.poll(() => page.locator(".row").first().locator(".tile img.fade:not(.in)").count()).toBe(0);
     },
   },
   { name: "title", path: `/title/series/${GOT.id}`, ready: visible(".ep-t") },
+  {
+    name: "title-trailer",
+    path: `/title/movie/${BBB_ID}`,
+    ready: async (page) => {
+      await visible('[data-f="title:trailer"]')(page);
+      await page.locator('[data-f="title:trailer"]').focus();
+      await page.keyboard.press("Enter");
+      await visible(".trailer iframe")(page);
+      // Let the embedded player paint its first frame.
+      await page.waitForTimeout(5000);
+    },
+  },
+  {
+    name: "title-watched",
+    path: `/title/movie/${BBB_ID}`,
+    ready: async (page) => {
+      const watched = page.locator('[data-f="title:watched"]');
+      await expect(watched).toBeVisible({ timeout: 30_000 });
+      if ((await watched.getAttribute("aria-pressed")) !== "true") await watched.click();
+      await expect(watched).toHaveAttribute("aria-pressed", "true");
+      await watched.focus();
+    },
+    // Watched movies leave Continue Watching; later shots need it back.
+    after: async (page) => {
+      const watched = page.locator('[data-f="title:watched"]');
+      await watched.click();
+      await expect(watched).toHaveAttribute("aria-pressed", "false");
+    },
+  },
   {
     name: "versions",
     path: `/title/series/${GOT.id}/versions/${GOT.resume}`,
@@ -72,7 +103,8 @@ const SCREENS: Screen[] = [
   { name: "pairing", path: "/pair", ready: visible(".install") },
 ];
 
-const LIGHT = new Set(["home", "title", "versions", "discover", "settings"]);
+const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "versions", "discover", "settings"]);
+const TV_LIGHT = new Set(["home", "title-trailer", "title-watched"]);
 
 // Each shot opens a fresh context, so artwork is fetched once here and
 // served to every context after that, instead of asking the image CDN for
@@ -99,7 +131,8 @@ async function cacheArt(context: BrowserContext) {
 for (const form of Object.keys(FORMS) as Form[]) {
   for (const screen of SCREENS) {
     for (const scheme of ["dark", "light"] as const) {
-      if (scheme === "light" && (form === "tv" || !LIGHT.has(screen.name))) continue;
+      // TV stays dark unless chosen; these screens are also shot with light chosen.
+      if (scheme === "light" && !(form === "tv" ? TV_LIGHT : LIGHT).has(screen.name)) continue;
       test(`${screen.name} ${form} ${scheme}`, async ({ browser }) => {
         const f = FORMS[form];
         const context = await browser.newContext({
@@ -113,17 +146,17 @@ for (const form of Object.keys(FORMS) as Form[]) {
         const page = await context.newPage();
         const errors: string[] = [];
         page.on("pageerror", (e) => errors.push(e.message));
-        await page.goto(`${screen.path}?form=${form}`);
+        await page.goto(`${screen.path}?form=${form}${form === "tv" && scheme === "light" ? "&theme=light" : ""}`);
         await screen.ready(page, form);
         // Give on-screen art up to 15 s to decode; a tile still loading shows
         // its name card, which is a valid state, so this never fails.
         await page
           .waitForFunction(
             () =>
-              [...document.querySelectorAll<HTMLImageElement>(".tile img:not(.in)")].every((img) => {
+              [...document.querySelectorAll<HTMLImageElement>(".tile img.fade:not(.in)")].every((img) => {
                 const r = img.getBoundingClientRect();
                 return r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth;
-              }),
+              }) && [...document.querySelectorAll<HTMLImageElement>("img.logo, img.art-logo")].every((img) => img.complete),
             null,
             { timeout: 15_000 },
           )
@@ -132,6 +165,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
         await page.waitForTimeout(700);
         const suffix = scheme === "light" ? "-light" : "";
         await page.screenshot({ path: `e2e/shots/${screen.name}-${form}${suffix}.jpg`, type: "jpeg", quality: 80 });
+        await screen.after?.(page);
         expect(errors).toEqual([]);
         await context.unrouteAll({ behavior: "ignoreErrors" });
         await context.close();

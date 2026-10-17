@@ -99,3 +99,36 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(new RegExp(`/title/movie/${BBB_ID}`));
 });
+
+test("movie page: trailer overlay and Mark watched by remote", async ({ page }) => {
+  await page.goto(`/title/movie/${BBB_ID}?form=tv`);
+  await expect.poll(() => focused(page)).toBe("title:play");
+
+  // The trailer comes from the meta's trailer list and plays over the page.
+  await page.locator('[data-f="title:trailer"]').focus();
+  await page.keyboard.press("Enter");
+  const frame = page.locator(".trailer iframe");
+  await expect(frame).toHaveAttribute("src", /^https:\/\/www\.youtube-nocookie\.com\/embed\/yUQM7H4Swgw\?autoplay=1/);
+  await expect.poll(() => focused(page)).toBe("trailer:close");
+  // The page behind is out of reach while the trailer is open.
+  await expect(page.locator(".title-main")).toHaveAttribute("inert", /.*/);
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => focused(page)).toBe("trailer:close");
+  // Back closes it and focus returns to the button.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".trailer")).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/title/movie/${BBB_ID}`));
+  await expect.poll(() => focused(page)).toBe("title:trailer");
+
+  // Mark watched toggles the movie's own flag in the core, both ways.
+  const watched = page.locator('[data-f="title:watched"]');
+  await expect(watched).toHaveAttribute("aria-pressed", "false");
+  await watched.focus();
+  await page.keyboard.press("Enter");
+  await expect(watched).toHaveAttribute("aria-pressed", "true");
+  await expect(watched).toHaveText("Watched");
+  await page.keyboard.press("Enter");
+  await expect(watched).toHaveAttribute("aria-pressed", "false");
+  await expect(watched).toHaveText("Mark watched");
+});
