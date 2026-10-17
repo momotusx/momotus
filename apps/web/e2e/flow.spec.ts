@@ -17,7 +17,8 @@ test("remote flow: Home, Title, seasons, Versions and Back restore focus", async
 
   // Down into the next row, Up back (the row remembers its tile), Right, Enter.
   await page.keyboard.press("ArrowDown");
-  await expect.poll(() => focused(page)).toMatch(/^tile:home:com\.linvo\.cinemeta:/);
+  // Row ids are opaque; the installation tag after the addon id varies.
+  await expect.poll(() => focused(page)).toMatch(/^tile:home:com\.linvo\.cinemeta[@:]/);
   await page.keyboard.press("ArrowUp");
   await expect.poll(() => focused(page)).toBe(cw(BBB_ID));
   await page.keyboard.press("ArrowRight");
