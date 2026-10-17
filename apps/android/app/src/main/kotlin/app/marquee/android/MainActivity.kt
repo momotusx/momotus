@@ -2,6 +2,7 @@ package app.marquee.android
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,10 +29,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // The bars are transparent; the icon colour follows the theme.
+        val dark = intent.getStringExtra("theme") != "light"
+        val bars = Color.Transparent.toArgb()
+        val barStyle = if (dark) SystemBarStyle.dark(bars) else SystemBarStyle.light(bars, bars)
+        enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
         if (intent.getStringExtra("screen") == "gallery") {
             val form = if (intent.getStringExtra("form") == "tv") Form.Tv else Form.Phone
-            val dark = intent.getStringExtra("theme") != "light"
             setContent { GalleryHost(form, dark) }
             return
         }

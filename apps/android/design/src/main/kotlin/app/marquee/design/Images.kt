@@ -2,6 +2,7 @@ package app.marquee.design
 
 import android.app.ActivityManager
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -95,7 +96,8 @@ fun RemoteImage(
     val density = LocalDensity.current
     val widthPx = with(density) { width.roundToPx() }
     val heightPx = with(density) { height.roundToPx() }
-    Box(modifier.size(width, height)) {
+    // The surface fill is what a tile shows while the picture loads and when it never comes.
+    Box(modifier.size(width, height).background(Marquee.colors.surface)) {
         MqText(
             fallbackText,
             role = TextRole.Callout,

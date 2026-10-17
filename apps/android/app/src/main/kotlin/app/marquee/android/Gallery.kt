@@ -2,6 +2,7 @@ package app.marquee.android
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -225,16 +227,14 @@ private fun Swatch(
     color: Color,
 ) {
     val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(Marquee.radius.s)
     Column(Modifier.width(if (tv) 160.dp else 88.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(if (tv) 64.dp else 40.dp)
-                .background(
-                    color,
-                    androidx.compose.foundation.shape
-                        .RoundedCornerShape(Marquee.radius.s),
-                ),
+                .border(1.dp, Marquee.colors.muted.copy(alpha = 0.4f), shape)
+                .background(color, shape),
         )
         MqText(name, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
     }
