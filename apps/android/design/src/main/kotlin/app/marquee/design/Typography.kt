@@ -4,6 +4,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -70,11 +71,14 @@ fun MqText(
     textAlign: TextAlign? = null,
     /** The display serif in its italic, for a hero's reason line. */
     italic: Boolean = false,
+    /** Told after layout whether [maxLines] cut the text, so a screen can offer "More". */
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     val size = Marquee.type.size(role)
     BasicText(
         text = text,
         modifier = modifier,
+        onTextLayout = onTextLayout,
         style =
             TextStyle(
                 color = color,

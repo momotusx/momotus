@@ -2,6 +2,8 @@ package app.marquee.player
 
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
+import app.marquee.core.model.Segment
+import app.marquee.core.model.SegmentKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -41,15 +43,6 @@ class PlayerLogicTest {
         // the position bar readable over a white picture (scripts/player-contrast.ts).
         assertEquals(0.68f, scrimAlpha(top = false, peak = 0.85f, at = 0.25f), 0.001f)
         assertTrue(scrimAlpha(top = false, peak = 0.85f, at = 0.5f) > scrimAlpha(top = false, peak = 0.85f, at = 0.25f))
-    }
-
-    @Test
-    fun `source failures are put plainly`() {
-        assertEquals("The link no longer exists (404)", attemptReason("source did not answer: http status 404"))
-        assertEquals("The source refused the request (503)", attemptReason("source did not answer: http status 503"))
-        assertEquals("No answer in 8 seconds", attemptReason("source did not answer: timed out after 8s"))
-        assertEquals("No answer in time", attemptReason("source did not answer in time"))
-        assertEquals("something else", attemptReason("something else"))
     }
 
     @Test
@@ -112,6 +105,53 @@ class PlayerLogicTest {
         assertEquals(1f, nextSpeed(0.75f))
         assertEquals("1x", speedText(1f))
         assertEquals("1.25x", speedText(1.25f))
+    }
+
+    private val intro = Segment(SegmentKind.Intro, 30_000, 75_000, "TheIntroDB")
+    private val credits = Segment(SegmentKind.Credits, 2_400_000, 2_520_000, "TheIntroDB")
+
+    @Test
+    fun `a segment is active from its start up to but not including its end`() {
+        val all = listOf(intro, credits)
+        assertNull(activeSegment(all, 29_999))
+        assertEquals(intro, activeSegment(all, 30_000))
+        assertEquals(intro, activeSegment(all, 74_999))
+        assertNull(activeSegment(all, 75_000))
+        assertEquals(credits, activeSegment(all, 2_450_000))
+        assertNull(activeSegment(emptyList(), 40_000))
+    }
+
+    @Test
+    fun `the skip buttons are named after what they skip`() {
+        assertEquals("Skip intro", skipLabel(SegmentKind.Intro))
+        assertEquals("Skip recap", skipLabel(SegmentKind.Recap))
+        assertEquals("Skip credits", skipLabel(SegmentKind.Credits))
+        assertEquals("Skip preview", skipLabel(SegmentKind.Preview))
+    }
+
+    @Test
+    fun `credits that reach the end of the file lead into Up Next`() {
+        assertEquals(true, creditsToEnd(credits, 2_520_500))
+        assertEquals(false, creditsToEnd(credits, 3_000_000))
+        assertEquals(false, creditsToEnd(intro, 100_000))
+        assertEquals(false, creditsToEnd(credits, 0))
+    }
+
+    @Test
+    fun `Up Next is due at the matched credits start, else in the last twenty seconds, or after Skip credits`() {
+        val hour = 3_600_000L
+        // The core knows where the credits start: due from there, not before.
+        assertEquals(false, upNextDue(true, 3_400_000, 3_399_999, hour))
+        assertEquals(true, upNextDue(true, 3_400_000, 3_400_000, hour))
+        // The core does not know: the last 20 s.
+        assertEquals(false, upNextDue(true, null, hour - 21_000, hour))
+        assertEquals(true, upNextDue(true, null, hour - 20_000, hour))
+        // Skip credits at 3,400 s: due at once, and not any more after seeking back before it.
+        assertEquals(true, upNextDue(true, null, 3_401_000, hour, skippedAtMs = 3_400_000))
+        assertEquals(false, upNextDue(true, null, 3_000_000, hour, skippedAtMs = 3_400_000))
+        // No next episode, or a trailer: never.
+        assertEquals(false, upNextDue(false, 3_400_000, hour - 1_000, hour))
+        assertEquals(false, upNextDue(true, null, 55_000, 60_000))
     }
 
     @Test

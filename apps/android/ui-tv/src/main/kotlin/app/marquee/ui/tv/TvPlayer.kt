@@ -49,6 +49,7 @@ import app.marquee.core.model.NextEpisode
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
+import app.marquee.design.Spinner
 import app.marquee.design.TextRole
 import app.marquee.design.marqueeFocus
 import app.marquee.player.ActionButton
@@ -61,9 +62,10 @@ import app.marquee.player.PlayerVideo
 import app.marquee.player.RoundButton
 import app.marquee.player.Scrim
 import app.marquee.player.Scrubber
-import app.marquee.player.Spinner
+import app.marquee.player.SkipButton
 import app.marquee.player.TrackPanel
 import app.marquee.player.UpNextCard
+import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.endsAt
@@ -71,16 +73,17 @@ import app.marquee.player.nextSpeed
 import app.marquee.player.seekStepMs
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
+import app.marquee.player.upNextDue
 import kotlinx.coroutines.flow.collectLatest
 import java.util.Date
 import kotlin.math.ceil
 
 private const val HIDE_MS = 4_000L
-private const val NEXT_AT_MS = 20_000L
-private const val NEXT_MIN_LENGTH_MS = 60_000L
 private const val SEEK_MS = 10_000L
 
 private enum class Panel { Audio, Subtitles }
+
+private val selectKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
 /**
  * The player on TV: the picture, and over it the title top left, the position bar and the
@@ -125,11 +128,21 @@ fun TvPlayer(
         val next = controller.next
         val showNext by remember(controller) {
             derivedStateOf {
-                val duration = controller.durationMs
-                controller.next != null && duration > NEXT_MIN_LENGTH_MS &&
-                    duration - controller.positionMs <= NEXT_AT_MS
+                upNextDue(
+                    controller.next != null,
+                    controller.nextAtMs,
+                    controller.positionMs,
+                    controller.durationMs,
+                    controller.skippedAtMs,
+                )
             }
         }
+        // The skippable part under the playhead (an intro, a recap), unless Up Next has taken the corner.
+        val segment by remember(controller) {
+            derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
+        }
+        val showSkip = segment != null && !showNext && panel == null && !ended
+        val skipFocus = remember { FocusRequester() }
 
         // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
         val secondsLeft by remember(controller) {
@@ -168,6 +181,17 @@ fun TvPlayer(
             } else if (!showNext && panel == null && showControls) {
                 withFrameNanos { }
                 runCatching { play.requestFocus() }
+            }
+        }
+        // Skip takes focus when it appears with the controls up; when it goes, focus goes back to play and pause.
+        LaunchedEffect(showSkip) {
+            withFrameNanos { }
+            runCatching {
+                if (showSkip && showControls) {
+                    skipFocus.requestFocus()
+                } else if (!showSkip && showControls && panel == null && !showNext) {
+                    play.requestFocus()
+                }
             }
         }
         // A list does not stay open over a failure or any state without controls.
@@ -259,9 +283,15 @@ fun TvPlayer(
 
                         else -> {
                             wake++
-                            // While the controls are hidden the first key only brings them back.
+                            // While the controls are hidden the first key only brings them back, except select
+                            // while a Skip button shows: that presses it.
                             if (live && !osd) {
-                                osd = true
+                                val skip = segment
+                                if (showSkip && skip != null && event.key in selectKeys) {
+                                    controller.skip(skip)
+                                } else {
+                                    osd = true
+                                }
                                 true
                             } else {
                                 false
@@ -342,7 +372,7 @@ fun TvPlayer(
                     TrackPanel(
                         title = "Subtitles",
                         rows = controller.text,
-                        note = if (controller.subtitlesPending) "Still asking subtitle add-ons" else null,
+                        note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
                         onPick = {
                             controller.selectText(it)
                             closePanel()
@@ -366,6 +396,20 @@ fun TvPlayer(
                     focus = endFocus,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+
+            if (showSkip) {
+                segment?.let { skip ->
+                    SkipButton(
+                        segment = skip,
+                        onSkip = { controller.skip(skip) },
+                        focus = skipFocus,
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = safe.side, bottom = if (showControls) 330.dp else 96.dp),
+                    )
+                }
             }
 
             if (showNext && !ended && next != null) {

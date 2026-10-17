@@ -24,6 +24,7 @@ import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
+import app.marquee.core.model.Segment
 import app.marquee.core.model.SubtitleTrack
 import app.marquee.core.views.PlaybackView
 import app.marquee.core.views.ViewStatus
@@ -105,6 +106,18 @@ class PlaybackController(
     var bingeGroup: String? = null
         private set
 
+    /** Skip segments the core found for the playing version (intro, recap, credits, preview); empty while unknown. */
+    var segments: List<Segment> by mutableStateOf(emptyList())
+        private set
+
+    /** The position the core says the Up Next card is due (the credits start); null means the last seconds. */
+    var nextAtMs: Long? by mutableStateOf(null)
+        private set
+
+    /** Where Skip credits was pressed: Up Next shows at once from there, until the viewer seeks back before it. */
+    var skippedAtMs: Long? by mutableStateOf(null)
+        private set
+
     /** Width over height of the picture once known; 0 before. */
     var videoRatio by mutableFloatStateOf(0f)
         private set
@@ -134,6 +147,7 @@ class PlaybackController(
     private var lastPositionMs = 0L
     private var pick: TextPick? = null
     private var released = false
+    private var durationSentFor: String? = null
     private var reloadedAt = 0L
     private var ticker: Job? = null
     private var noticeJob: Job? = null
@@ -141,7 +155,7 @@ class PlaybackController(
 
     /**
      * A subtitle the viewer chose. After the media item changes it is found again by its address
-     * (an add-on's file), else by language, so the right track is on even when several share a language.
+     * (an addon's file), else by language, so the right track is on even when several share a language.
      */
     private data class TextPick(
         val language: String,
@@ -228,6 +242,8 @@ class PlaybackController(
         attempts = s.attempts
         next = s.next
         bingeGroup = s.bingeGroup
+        segments = s.segments
+        nextAtMs = s.nextAtMs
         subtitlesPending = s.subtitlesPending
         snapshotSubs = s.subtitles
         when (s.phase) {
@@ -267,6 +283,7 @@ class PlaybackController(
         loadedSubs = s.subtitles
         playingKey = s.key
         durationMs = 0L
+        skippedAtMs = null
         handlingFailure = false
         raised = false
         seekPending = false
@@ -396,6 +413,7 @@ class PlaybackController(
             positionMs = player.currentPosition.coerceAtLeast(0L)
             // Unknown while a source is being set again: keep the last length so the bar does not flicker.
             durationMs = player.duration.takeIf { it > 0 } ?: durationMs
+            sendDuration()
             bufferedMs = player.bufferedPosition.coerceAtLeast(0L)
             if (player.isPlaying) {
                 sinceReport += TICK_MS
@@ -407,6 +425,15 @@ class PlaybackController(
                 sinceReport = 0
             }
         }
+    }
+
+    /** The core looks skip segments up by the length of the version that plays: tell it once per version. */
+    private fun sendDuration() {
+        val key = playingKey ?: return
+        val length = player.duration
+        if (length <= 0 || durationSentFor == key) return
+        durationSentFor = key
+        view?.duration(key, length)
     }
 
     private fun report() {
@@ -451,6 +478,20 @@ class PlaybackController(
     }
 
     fun seekBy(deltaMs: Long) = seekTo(player.currentPosition + deltaMs)
+
+    /**
+     * The Skip button: seek to the end of the [segment]. Never automatic. Credits that run to the end of the
+     * file lead into Up Next when there is a next episode, and otherwise to the end.
+     */
+    fun skip(segment: Segment) {
+        if (!creditsToEnd(segment, durationMs)) {
+            seekTo(segment.endMs)
+        } else if (next != null) {
+            skippedAtMs = segment.startMs
+        } else {
+            seekTo(durationMs - 50)
+        }
+    }
 
     fun changeSpeed(value: Float) = player.setPlaybackSpeed(value)
 
@@ -589,7 +630,7 @@ class PlaybackController(
         applyPick(tracks)
     }
 
-    /** An external row says whose it is (the add-on) instead of a codec the viewer cannot act on. */
+    /** An external row says whose it is (the addon) instead of a codec the viewer cannot act on. */
     private fun externalDetail(
         row: TrackChoice,
         formatId: String?,
@@ -608,7 +649,7 @@ class PlaybackController(
         return row.copy(detail = detail)
     }
 
-    /** The address of the add-on subtitle file behind a loaded track's `ext:N` id, or null. */
+    /** The address of the addon subtitle file behind a loaded track's `ext:N` id, or null. */
     private fun externalUrl(formatId: String?): String? =
         formatId
             ?.takeIf { it.startsWith(EXTERNAL) }
@@ -628,7 +669,7 @@ class PlaybackController(
 
     /**
      * After a new media item (a failover or a reload) the viewer's subtitle is found again: first by
-     * the address of the add-on file they chose, else by language (an add-on's file before an
+     * the address of the addon file they chose, else by language (an addon's file before an
      * embedded track when that is what they had). Does nothing when it is already the one on.
      */
     private fun applyPick(tracks: Tracks) {

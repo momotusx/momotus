@@ -1,6 +1,8 @@
 package app.marquee.player
 
 import androidx.media3.common.PlaybackException
+import app.marquee.core.model.Segment
+import app.marquee.core.model.SegmentKind
 
 /** A position the core can store: both numbers are known and the position is inside the video. */
 data class ProgressReport(
@@ -46,6 +48,50 @@ fun scrubTo(
     width: Int,
     durationMs: Long,
 ): Long? = if (width <= 0 || durationMs <= 0) null else (x.coerceIn(0f, width.toFloat()) / width * durationMs).toLong()
+
+/** How long before the end the Up Next card appears when the core does not know where the credits start. */
+const val NEXT_AT_MS = 20_000L
+
+/** A video this short (a trailer) never offers a next episode. */
+const val NEXT_MIN_LENGTH_MS = 60_000L
+
+/** The skip segment under the playhead: segments are active on `[startMs, endMs)`. */
+fun activeSegment(
+    segments: List<Segment>,
+    positionMs: Long,
+): Segment? = segments.firstOrNull { positionMs >= it.startMs && positionMs < it.endMs }
+
+/** "Skip intro", "Skip recap", "Skip credits", "Skip preview". */
+fun skipLabel(kind: SegmentKind): String =
+    when (kind) {
+        SegmentKind.Intro -> "Skip intro"
+        SegmentKind.Recap -> "Skip recap"
+        SegmentKind.Credits -> "Skip credits"
+        SegmentKind.Preview -> "Skip preview"
+    }
+
+/** Credits that run to the end of the file lead into Up Next (or the end) instead of a seek. */
+fun creditsToEnd(
+    segment: Segment,
+    durationMs: Long,
+): Boolean = segment.kind == SegmentKind.Credits && durationMs > 0 && segment.endMs >= durationMs - 1_000L
+
+/**
+ * Whether the Up Next card shows. It needs a next episode and a video longer than a trailer; then it is due
+ * from the credits start the core matched to this release ([nextAtMs]), else for the last [NEXT_AT_MS], and
+ * at once after Skip credits was pressed at [skippedAtMs] (until the viewer seeks back before it).
+ */
+fun upNextDue(
+    hasNext: Boolean,
+    nextAtMs: Long?,
+    positionMs: Long,
+    durationMs: Long,
+    skippedAtMs: Long? = null,
+): Boolean {
+    if (!hasNext || durationMs <= NEXT_MIN_LENGTH_MS) return false
+    if (skippedAtMs != null && positionMs >= skippedAtMs) return true
+    return if (nextAtMs != null) positionMs >= nextAtMs else durationMs - positionMs <= NEXT_AT_MS
+}
 
 enum class FailureKind { Network, Source, Decoder, Audio }
 

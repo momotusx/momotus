@@ -239,6 +239,24 @@ class PlaybackView(
     }
 
     fun failOver(error: String) = post(command("failOver") { put("error", error) })
+
+    /**
+     * Tell the core how long the version that plays is, as soon as the player knows: it looks up
+     * skip segments by it. [key] is the playing version's key from the snapshot; a report for another
+     * key is ignored, and a repeat is harmless.
+     */
+    fun duration(
+        key: String,
+        durationMs: Long,
+    ) {
+        if (durationMs <= 0) return
+        post(
+            command("duration") {
+                put("key", key)
+                put("durationMs", durationMs)
+            },
+        )
+    }
 }
 
 /** `name` is how the account's other devices will show this one. */

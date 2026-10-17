@@ -24,7 +24,7 @@ sealed interface PlayPick {
 /**
  * Chooses the version to play, like the web player does. A version [chosen] on Versions or the
  * title page plays as soon as it is in the list. Otherwise the recommendation plays once it has
- * settled: every add-on answered, or the viewer pinned it, or [settled] (it stood unchanged for a
+ * settled: every addon answered, or the viewer pinned it, or [settled] (it stood unchanged for a
  * few seconds), so a late better source does not start the film twice.
  *
  * @param snapshot the versions so far; null while the view is opening.
@@ -41,12 +41,12 @@ fun pickVersion(
     val best = snapshot.recommended
     val ready = snapshot.done || snapshot.frozen || settled
     return when {
-        // The chosen one is not in this list (a new view after the app restarted): wait for the add-ons, then the best.
+        // The chosen one is not in this list (a new view after the app restarted): wait for the addons, then the best.
         best != null && ready -> {
             PlayPick.Use(best)
         }
 
-        // Every add-on answered and nothing is recommended: sources that need a download first, or none at all.
+        // Every addon answered and nothing is recommended: sources that need a download first, or none at all.
         best == null && snapshot.done -> {
             PlayPick.None(
                 if (snapshot.rows.isEmpty()) "No playable version found" else "No version is ready to play yet",

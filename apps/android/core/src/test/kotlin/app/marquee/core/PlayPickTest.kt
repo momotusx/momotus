@@ -44,14 +44,14 @@ class PlayPickTest {
     )
 
     @Test
-    fun `the version chosen on Versions plays at once, even while add-ons still answer`() {
+    fun `the version chosen on Versions plays at once, even while addons still answer`() {
         val pick =
             pickVersion(snapshot(best = row("a"), rows = listOf(row("b")), pending = listOf("X")), "b", settled = false)
         assertEquals(PlayPick.Use(row("b")), pick)
     }
 
     @Test
-    fun `a recommendation plays once every add-on answered, it was pinned, or it stood still`() {
+    fun `a recommendation plays once every addon answered, it was pinned, or it stood still`() {
         val best = row("a")
         assertIs<PlayPick.Wait>(pickVersion(snapshot(best = best, pending = listOf("X")), null, settled = false))
         assertEquals(PlayPick.Use(best), pickVersion(snapshot(best = best, done = true), null, settled = false))

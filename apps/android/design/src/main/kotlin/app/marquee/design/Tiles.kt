@@ -83,6 +83,15 @@ fun TileMetrics.sizeOf(shape: TileShape): TileSize =
 fun TileMetrics.heightOf(shape: TileShape): Dp = sizeOf(shape).height
 
 /**
+ * The height of a row of [shape] tiles: room for the focus scale above and below the cards, and
+ * when [captioned] the gap and the lines of a caption under them.
+ */
+fun TileMetrics.laneHeight(
+    shape: TileShape,
+    captioned: Boolean = true,
+): Dp = pad * 2 + heightOf(shape) + if (captioned) Marquee.space.s + caption else 0.dp
+
+/**
  * A title in a row or grid: the picture with the focus look, a watched bar for items in
  * progress, and an optional caption such as "S1:E2, 40% watched". Everything is a plain value,
  * so the design module knows nothing of the core.
@@ -112,7 +121,8 @@ fun PosterTile(
     Column(
         // First in the chain: the focused tile draws above its neighbours in the row.
         modifier = Modifier.lifted(lift).then(modifier).width(size.width),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        // The caption starts a full step under the unscaled card, so a focused card's ring never covers it.
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         Box(
             Modifier

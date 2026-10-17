@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.Segment
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LocalForm
@@ -73,6 +74,7 @@ import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RemoteImage
 import app.marquee.design.SecondaryButton
+import app.marquee.design.Spinner
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
@@ -100,37 +102,6 @@ fun endsAt(
     } else {
         nowMs + ((durationMs - positionMs).coerceAtLeast(0) / speed.coerceAtLeast(0.1f)).toLong()
     }
-
-/** A turning arc: the player waits for something (a source, the buffer). Still when animations are off. */
-@Composable
-fun Spinner(
-    modifier: Modifier = Modifier,
-    size: Dp = if (LocalForm.current == Form.Tv) 40.dp else 28.dp,
-) {
-    val color = Marquee.colors.text
-    val turn =
-        rememberInfiniteTransition(label = "spinner").animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
-            label = "turn",
-        )
-    val reduced = LocalReducedMotion.current
-    Canvas(modifier.size(size)) {
-        val stroke = size.toPx() / 9f
-        rotate(if (reduced) 0f else turn.value) {
-            drawArc(
-                color = color,
-                startAngle = 0f,
-                sweepAngle = 270f,
-                useCenter = false,
-                topLeft = Offset(stroke / 2, stroke / 2),
-                size = Size(this.size.width - stroke, this.size.height - stroke),
-                style = Stroke(width = stroke, cap = StrokeCap.Round),
-            )
-        }
-    }
-}
 
 /**
  * The position bar: what is buffered, what is played, and a knob. The values are read while
@@ -309,7 +280,8 @@ fun PlayerStatus(
             for (attempt in attempts) {
                 Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                     MqText(attempt.via, role = TextRole.Callout, weight = FontWeight.SemiBold)
-                    MqText(attemptReason(attempt.error), role = TextRole.Callout, color = colors.muted)
+                    // The core words the reason in plain sentences ("The link no longer exists (404)").
+                    MqText(attempt.error, role = TextRole.Callout, color = colors.muted)
                 }
             }
             Row(
@@ -367,9 +339,30 @@ fun UpNextCard(
                 maxLines = 2,
                 modifier = Modifier.widthIn(max = if (tv) 420.dp else 200.dp),
             )
-            if (countdown != null) MqText("Starts in $countdown", role = TextRole.Callout, color = colors.muted)
+            if (countdown != null) MqText("Starts in $countdown s", role = TextRole.Callout, color = colors.muted)
             PrimaryButton("Play now", onPlay, icon = Icons.SkipForward, focusRequester = focus)
         }
+    }
+}
+
+/**
+ * The button over the picture while a skippable part plays ("Skip intro"), with where the timing came from
+ * above it ("Skip data: TheIntroDB"). It seeks only when pressed, never by itself.
+ */
+@Composable
+fun SkipButton(
+    segment: Segment,
+    onSkip: () -> Unit,
+    modifier: Modifier = Modifier,
+    focus: FocusRequester? = null,
+) {
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        MqText("Skip data: ${segment.source}", role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
+        PrimaryButton(skipLabel(segment.kind), onSkip, icon = Icons.SkipForward, focusRequester = focus)
     }
 }
 
@@ -516,22 +509,6 @@ fun Scrim(
             .height(height)
             .background(Brush.verticalGradient(colorStops = colors)),
     )
-}
-
-/**
- * The reason a source failed, in words a viewer can use. The core says it in its own terms ("source
- * did not answer: http status 404"); the two shapes it uses most are put plainly, the rest is shown as is.
- */
-fun attemptReason(error: String): String {
-    val status = Regex("http status (\\d{3})").find(error)?.groupValues?.get(1)
-    val seconds = Regex("timed out after (\\d+)\\s*s").find(error)?.groupValues?.get(1)
-    return when {
-        status == "404" || status == "410" -> "The link no longer exists ($status)"
-        status != null -> "The source refused the request ($status)"
-        seconds != null -> "No answer in $seconds seconds"
-        error.contains("did not answer in time") -> "No answer in time"
-        else -> error
-    }
 }
 
 /** An action of the OSD: icon, bold name, and a small line under it (what is chosen now). */

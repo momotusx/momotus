@@ -44,6 +44,7 @@ import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.Spinner
 import app.marquee.design.TextRole
 import app.marquee.player.ActionButton
 import app.marquee.player.EndCard
@@ -55,21 +56,21 @@ import app.marquee.player.PlayerVideo
 import app.marquee.player.RoundButton
 import app.marquee.player.Scrim
 import app.marquee.player.Scrubber
-import app.marquee.player.Spinner
+import app.marquee.player.SkipButton
 import app.marquee.player.TrackPanel
 import app.marquee.player.UpNextCard
+import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.nextSpeed
 import app.marquee.player.scrubTo
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
+import app.marquee.player.upNextDue
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.ceil
 
 private const val HIDE_MS = 4_000L
-private const val NEXT_AT_MS = 20_000L
-private const val NEXT_MIN_LENGTH_MS = 60_000L
 private const val SEEK_MS = 10_000L
 private const val HINT_MS = 700L
 
@@ -112,11 +113,20 @@ fun PhonePlayer(
         val showEnd = ended && !(autoplayNext && next != null)
         val showNext by remember(controller) {
             derivedStateOf {
-                val duration = controller.durationMs
-                controller.next != null && duration > NEXT_MIN_LENGTH_MS &&
-                    duration - controller.positionMs <= NEXT_AT_MS
+                upNextDue(
+                    controller.next != null,
+                    controller.nextAtMs,
+                    controller.positionMs,
+                    controller.durationMs,
+                    controller.skippedAtMs,
+                )
             }
         }
+        // The skippable part under the playhead (an intro, a recap), unless Up Next has taken the corner.
+        val segment by remember(controller) {
+            derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
+        }
+        val showSkip = segment != null && !showNext && panel == null && !ended && !inPip
 
         // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
         val secondsLeft by remember(controller) {
@@ -277,12 +287,28 @@ fun PhonePlayer(
                                 panel = null
                             },
                             modifier = sheet,
-                            note = if (controller.subtitlesPending) "Still asking subtitle add-ons" else null,
+                            note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
                         )
                     }
 
                     null -> {
                         Unit
+                    }
+                }
+                if (showSkip) {
+                    segment?.let { skip ->
+                        SkipButton(
+                            segment = skip,
+                            onSkip = {
+                                controller.skip(skip)
+                                wake++
+                            },
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .windowInsetsPadding(WindowInsets.displayCutout)
+                                    .padding(end = 16.dp, bottom = if (showControls) 200.dp else 24.dp),
+                        )
                     }
                 }
                 if (showNext && !ended && next != null) {

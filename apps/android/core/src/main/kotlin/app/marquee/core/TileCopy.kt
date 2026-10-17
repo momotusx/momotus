@@ -7,7 +7,7 @@ object TileCopy {
     /** Id of the Continue Watching row: its tiles are 16:9 stills with the logo on them. */
     const val CONTINUE_ROW = "continue-watching"
 
-    /** What a row's source label says: the library for Continue Watching, else the add-on's name. */
+    /** What a row's source label says: the library for Continue Watching, else the addon's name. */
     fun source(
         rowId: String,
         source: String,

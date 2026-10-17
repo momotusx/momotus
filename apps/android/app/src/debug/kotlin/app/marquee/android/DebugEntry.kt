@@ -53,7 +53,7 @@ object DebugEntry {
     }
 
     /**
-     * `install_addon=<manifest url>` installs an add-on at launch: the local test add-on
+     * `install_addon=<manifest url>` installs an addon at launch: the local test addon
      * (scripts/sintel-addon.ts over `adb reverse`) before there is a screen to do it from.
      */
     fun launched(activity: ComponentActivity) {
@@ -61,8 +61,8 @@ object DebugEntry {
         val session = (activity.application as MarqueeApp).session
         session.scope.launch {
             runCatching { session.ops.installAddon(url) }
-                .onSuccess { CoreLog.d("debug: installed add-on ${it.name}") }
-                .onFailure { CoreLog.w("debug: add-on install failed: ${it.message}") }
+                .onSuccess { CoreLog.d("debug: installed addon ${it.name}") }
+                .onFailure { CoreLog.w("debug: addon install failed: ${it.message}") }
         }
     }
 

@@ -43,7 +43,7 @@ class AppState(
         viewModelScope.launch { start = decide() }
     }
 
-    /** Looks at the installed add-ons once the core runs: none means this is a new user. */
+    /** Looks at the installed addons once the core runs: none means this is a new user. */
     private suspend fun decide(): Start {
         snapshotFlow { session.health }.first { it == CoreHealth.Running }
         val addons = session.addons()

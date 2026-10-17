@@ -1,20 +1,25 @@
 package app.marquee.design
 
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,13 +29,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 private enum class ButtonKind { Primary, Secondary }
@@ -44,6 +57,7 @@ private fun ButtonShell(
     kind: ButtonKind,
     big: Boolean,
     enabled: Boolean,
+    selected: Boolean,
     focusRequester: FocusRequester?,
     onFocusChange: ((Boolean) -> Unit)?,
 ) {
@@ -54,7 +68,13 @@ private fun ButtonShell(
     val gap = if (tv) 14.dp else 8.dp
     val corner = height / 2
     val shape = RoundedCornerShape(corner)
-    val background = if (kind == ButtonKind.Primary) colors.accent else colors.text.copy(alpha = 0.12f)
+    // A selected toggle (Watched, In Library) is the raised fill; the ring stays for focus alone.
+    val background =
+        when {
+            kind == ButtonKind.Primary -> colors.accent
+            selected -> colors.raised
+            else -> colors.text.copy(alpha = 0.12f)
+        }
     val content = if (kind == ButtonKind.Primary) colors.onAccent else colors.text
     Row(
         modifier =
@@ -94,8 +114,9 @@ fun PrimaryButton(
     enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
-) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, focusRequester, onFocusChange)
+) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, false, focusRequester, onFocusChange)
 
+/** @param selected a toggle that is on (Watched, In Library): drawn with the raised fill. */
 @Composable
 fun SecondaryButton(
     label: String,
@@ -104,9 +125,21 @@ fun SecondaryButton(
     icon: ImageVector? = null,
     big: Boolean = false,
     enabled: Boolean = true,
+    selected: Boolean = false,
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
-) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Secondary, big, enabled, focusRequester, onFocusChange)
+) = ButtonShell(
+    label,
+    onClick,
+    modifier,
+    icon,
+    ButtonKind.Secondary,
+    big,
+    enabled,
+    selected,
+    focusRequester,
+    onFocusChange,
+)
 
 /** A pill for filters and choices. Selected is shown by fill and weight, not by the accent color. */
 @Composable
@@ -259,3 +292,116 @@ fun Skeleton(modifier: Modifier = Modifier) {
 
 /** Gives a node a spoken label. */
 fun Modifier.describe(text: String): Modifier = semantics { contentDescription = text }
+
+/** A turning arc: something is being waited for (a source, the buffer). Still when animations are off. */
+@Composable
+fun Spinner(
+    modifier: Modifier = Modifier,
+    size: Dp = if (LocalForm.current == Form.Tv) 40.dp else 28.dp,
+) {
+    val color = Marquee.colors.text
+    val turn =
+        rememberInfiniteTransition(label = "spinner").animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
+            label = "turn",
+        )
+    val reduced = LocalReducedMotion.current
+    Canvas(modifier.size(size)) {
+        val stroke = size.toPx() / 9f
+        rotate(if (reduced) 0f else turn.value) {
+            drawArc(
+                color = color,
+                startAngle = 0f,
+                sweepAngle = 270f,
+                useCenter = false,
+                topLeft = Offset(stroke / 2, stroke / 2),
+                size = Size(this.size.width - stroke, this.size.height - stroke),
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+        }
+    }
+}
+
+private val Status.tint: Color
+    @Composable get() =
+        when (this) {
+            Status.Ok -> Marquee.colors.ok
+            Status.Warn -> Marquee.colors.warn
+            Status.Bad -> Marquee.colors.bad
+            Status.Idle -> Marquee.colors.muted
+        }
+
+@Composable
+private fun StatusDot(tone: Status) {
+    val size = if (Marquee.form == Form.Tv) 12.dp else 8.dp
+    Box(Modifier.size(size).clip(CircleShape).background(tone.tint))
+}
+
+/** A status as a word with a dot in front (the word always carries the meaning; the dot only tints it). */
+@Composable
+fun StatusWord(
+    text: String,
+    tone: Status,
+    modifier: Modifier = Modifier,
+    color: Color = Marquee.colors.text,
+) {
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(if (Marquee.form == Form.Tv) 10.dp else 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusDot(tone)
+        MqText(text, role = TextRole.Callout, color = color, maxLines = 1)
+    }
+}
+
+/**
+ * The version a title will play, under its Play button, as the web writes it: the facts, then a status
+ * with a dot, then the source ("1080p  1.6 GB  ● Torrent, 10 seeds  via Torrentio"). It wraps at
+ * the gaps and never inside a fact. Screen readers get [spoken] as one sentence.
+ */
+@Composable
+fun ChosenVersion(
+    facts: List<String>,
+    status: String,
+    tone: Status,
+    via: String,
+    spoken: String,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    FlowRow(
+        modifier.clearAndSetSemantics { contentDescription = spoken },
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (fact in facts) MqText(fact, role = TextRole.Callout, maxLines = 1)
+        StatusWord(status, tone)
+        MqText("via $via", role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 1)
+    }
+}
+
+/**
+ * A status line: a spinner and [text] while [busy] (16 dp, 24 dp on TV), else a dot in [tone]. The
+ * text wraps to two lines.
+ */
+@Composable
+fun StatusNote(
+    text: String,
+    modifier: Modifier = Modifier,
+    tone: Status = Status.Idle,
+    busy: Boolean = false,
+) {
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (busy) Spinner(size = if (tv) 24.dp else 16.dp) else StatusDot(tone)
+        MqText(text, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 2)
+    }
+}

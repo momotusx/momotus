@@ -24,7 +24,7 @@ data class VersionsKey(
 /**
  * The open `versions` views, shared by the title page (for its play target, so the line under
  * Play is ready), the Versions screen and the player, which keeps the core to one fan-out over
- * the add-ons per video. At most [MAX_OPEN] stay open, the least recently asked for is closed
+ * the addons per video. At most [MAX_OPEN] stay open, the least recently asked for is closed
  * first, so a title page's own view survives a visit to the Versions screen of an episode and
  * Back finds it still full. [closeAll] runs when no screen that needs one is left. Main thread only.
  */

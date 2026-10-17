@@ -57,11 +57,14 @@ import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
+import app.marquee.design.Status
+import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 
 private const val PLAY = "play"
+private const val ADD = "add"
 private const val ROWS = "rows"
 
 /**
@@ -72,6 +75,7 @@ private const val ROWS = "rows"
  *
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
  * @param onPlay a version was chosen.
+ * @param onAddSource no addon gave a version: go where one is added.
  */
 @Composable
 fun TvVersions(
@@ -79,20 +83,20 @@ fun TvVersions(
     versions: VersionsView?,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
+    onAddSource: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safe = Marquee.safe
     val snapshot = versions?.snapshot
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
     var focusedRow by remember { mutableStateOf<VersionRow?>(null) }
-    // The target exists once there is something to focus: the card's Play (or Try again), else the first row.
+    val nothing = snapshot != null && snapshot.done && snapshot.recommended == null && snapshot.rows.isEmpty()
+    // The target exists once there is something to focus: the card's Play (or Try again, or Add a source), else the first row.
     val target =
-        if (failure != null ||
-            snapshot?.recommended != null
-        ) {
-            PLAY
-        } else {
-            snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
+        when {
+            failure != null || snapshot?.recommended != null -> PLAY
+            nothing -> ADD
+            else -> snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
         }
     LaunchedEffect(target) {
         // A remembered row that is no longer in the list (it moved into the card) is not a target.
@@ -115,9 +119,9 @@ fun TvVersions(
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
         Column(Modifier.width(640.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            MqText("Choose a version", role = TextRole.Title2, maxLines = 1)
+            MqText("Versions", role = TextRole.Title2, maxLines = 1)
             MqText(heading, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 2)
-            Recommendation(snapshot, failure, { versions?.retry() }, focus, onPlay)
+            Recommendation(snapshot, failure, { versions?.retry() }, onAddSource, focus, onPlay)
         }
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             Sources(snapshot, focus, onPlay, onFocusedRow = { focusedRow = it }, modifier = Modifier.weight(1f))
@@ -135,6 +139,7 @@ private fun Recommendation(
     snapshot: VersionsSnapshot?,
     failure: String?,
     onRetry: () -> Unit,
+    onAddSource: () -> Unit,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
 ) {
@@ -168,7 +173,7 @@ private fun Recommendation(
             }
 
             best != null -> {
-                MqText("Recommended", role = TextRole.Caption, color = colors.muted)
+                MqText("Recommended for this screen", role = TextRole.Callout, color = colors.muted)
                 MqText(VersionsCopy.headline(best), role = TextRole.Title2, maxLines = 2)
                 MqText(VersionsCopy.source(best), role = TextRole.Callout, color = colors.muted, maxLines = 1)
                 for (reason in best.reasons.take(3)) {
@@ -177,7 +182,7 @@ private fun Recommendation(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         MqIcon(Icons.Check, tint = colors.ok)
-                        MqText(VersionsCopy.reason(reason), role = TextRole.Callout, maxLines = 2)
+                        MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
                     }
                 }
                 PrimaryButton(
@@ -190,10 +195,14 @@ private fun Recommendation(
             }
 
             else -> {
+                val nothing = snapshot.done && snapshot.rows.isEmpty()
                 StateMessage(
                     title = VersionsCopy.waitingTitle(snapshot),
                     body = VersionsCopy.waitingBody(snapshot),
                     icon = if (snapshot.done) Icons.CircleAlert else null,
+                    actionLabel = "Add a source".takeIf { nothing },
+                    onAction = onAddSource.takeIf { nothing },
+                    actionFocus = focus.requesterFor(ADD).takeIf { nothing },
                     modifier = Modifier.padding(0.dp),
                 )
             }
@@ -224,24 +233,26 @@ private fun Sources(
             val rows = groups[group].orEmpty()
             if (rows.isEmpty()) continue
             item(key = "group:$group") {
+                // Group headers are the one place that is set in capitals, with the count of rows in them.
                 MqText(
-                    VersionsCopy.group(group),
+                    "${VersionsCopy.group(group).uppercase()}  ${rows.size}",
                     role = TextRole.Caption,
                     color = colors.muted,
+                    weight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = Marquee.space.s, start = 4.dp),
                 )
             }
             items(rows, key = { rowKey(it) }) { row -> SourceRow(row, focus, onPlay, onFocusedRow) }
         }
         val addons = snapshot?.let(VersionsCopy::addons)
-        val hidden = snapshot?.hidden?.let(VersionsCopy::hidden)
+        val hidden = snapshot?.hidden?.takeIf { it.count > 0 }
         if (hidden != null || addons != null) {
             item(key = "notes") {
                 Column(
                     Modifier.padding(top = Marquee.space.m),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                 ) {
-                    hidden?.let { MqText(it, role = TextRole.Callout, color = colors.muted) }
+                    hidden?.let { HiddenRow(VersionsCopy.hiddenTitle(it), VersionsCopy.hiddenDetail(it)) }
                     addons?.let { MqText(it, role = TextRole.Callout, color = colors.muted) }
                 }
             }
@@ -279,7 +290,12 @@ private fun SourceRow(
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MqText(row.quality, weight = FontWeight.SemiBold, modifier = Modifier.width(110.dp), maxLines = 1)
+        MqText(
+            VersionsCopy.cell(row.quality),
+            weight = FontWeight.SemiBold,
+            modifier = Modifier.width(110.dp),
+            maxLines = 1,
+        )
         MqText(
             row.features.joinToString(", "),
             role = TextRole.Callout,
@@ -288,18 +304,41 @@ private fun SourceRow(
             maxLines = 1,
         )
         MqText(
-            row.sizeBytes?.let(Format::bytes).orEmpty(),
+            row.sizeBytes?.let(Format::bytes) ?: "Size unknown",
             role = TextRole.Callout,
-            modifier = Modifier.width(110.dp),
+            color = if (row.sizeBytes == null) colors.muted else colors.text,
+            modifier = Modifier.width(130.dp),
             maxLines = 1,
         )
         MqText(row.via, role = TextRole.Callout, modifier = Modifier.width(170.dp), maxLines = 1)
-        MqText(
+        StatusWord(
             VersionsCopy.status(row.status),
+            if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn,
+            Modifier.width(260.dp),
+        )
+    }
+}
+
+/** What is hidden and why, as a row with the eye-off icon: "Hidden (64)  10 are for other titles, 54 cannot play on this device". */
+@Composable
+private fun HiddenRow(
+    title: String,
+    detail: String,
+) {
+    val colors = Marquee.colors
+    Row(
+        Modifier.padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(Icons.EyeOff, tint = colors.muted)
+        MqText(title, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
+        MqText(
+            detail,
             role = TextRole.Callout,
             color = colors.muted,
-            modifier = Modifier.width(240.dp),
-            maxLines = 1,
+            maxLines = 2,
+            modifier = Modifier.weight(1f, fill = false),
         )
     }
 }

@@ -55,6 +55,8 @@ fun TitleScreen(
     form: Form,
     onPlay: (key: String, videoId: String, title: String) -> Unit,
     onVersions: (videoId: String, title: String) -> Unit,
+    onPlayEpisode: (videoId: String, title: String) -> Unit,
+    onAddSource: () -> Unit,
 ) {
     val holder =
         viewModel<TitleHolder>(
@@ -71,7 +73,9 @@ fun TitleScreen(
     val snapshot = versions?.snapshot
     val failed = versions?.status is ViewStatus.Failed
     val title = name.orEmpty()
-    val episode: (Episode) -> Unit = { onVersions(it.videoId, title) }
+    // A tap on an episode plays it (the player picks its version); its versions are in the hold menu.
+    val episode: (Episode) -> Unit = { onPlayEpisode(it.videoId, title) }
+    val episodeVersions: (Episode) -> Unit = { onVersions(it.videoId, title) }
     val play: (String, String) -> Unit = { key, id -> onPlay(key, id, title) }
     if (form == Form.Tv) {
         TvTitle(
@@ -80,7 +84,9 @@ fun TitleScreen(
             holder.focus,
             play,
             onVersions = { onVersions(it, title) },
+            onAddSource = onAddSource,
             onEpisode = episode,
+            onEpisodeVersions = episodeVersions,
             versionsFailed = failed,
         )
     } else {
@@ -89,7 +95,9 @@ fun TitleScreen(
             snapshot,
             play,
             onVersions = { onVersions(it, title) },
+            onAddSource = onAddSource,
             onEpisode = episode,
+            onEpisodeVersions = episodeVersions,
             versionsFailed = failed,
         )
     }
@@ -101,6 +109,7 @@ fun VersionsScreen(
     app: AppState,
     form: Form,
     onPlay: (VersionRow) -> Unit,
+    onAddSource: () -> Unit,
 ) {
     val key = keyFor(route.kind, route.videoId, route.title)
     LaunchedEffect(key) { app.versions.use(key) }
@@ -109,8 +118,8 @@ fun VersionsScreen(
         key.episode?.let { "${route.title}, ${Format.episodeLabel(key.season ?: 0, it)}" } ?: route.title
     if (form == Form.Tv) {
         val focus = viewModel<VersionsFocus>(key = "versions:${route.videoId}").focus
-        TvVersions(heading, view, focus, onPlay)
+        TvVersions(heading, view, focus, onPlay, onAddSource)
     } else {
-        PhoneVersions(heading, view, onPlay)
+        PhoneVersions(heading, view, onPlay, onAddSource)
     }
 }

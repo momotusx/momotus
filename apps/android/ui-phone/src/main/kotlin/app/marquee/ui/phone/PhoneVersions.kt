@@ -43,6 +43,8 @@ import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
+import app.marquee.design.Status
+import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import kotlinx.coroutines.flow.first
@@ -54,12 +56,14 @@ import kotlinx.coroutines.flow.first
  *
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
  * @param onPlay a version was chosen.
+ * @param onAddSource no addon gave a version: go where one is added.
  */
 @Composable
 fun PhoneVersions(
     heading: String,
     versions: VersionsView?,
     onPlay: (VersionRow) -> Unit,
+    onAddSource: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val side = Marquee.safe.side
@@ -84,7 +88,7 @@ fun PhoneVersions(
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-                MqText("Choose a version", role = TextRole.Title2)
+                MqText("Versions", role = TextRole.Title2)
                 MqText(heading, role = TextRole.Callout, color = colors.muted, maxLines = 2)
             }
         }
@@ -93,6 +97,7 @@ fun PhoneVersions(
                 snapshot,
                 failure,
                 { versions?.retry() },
+                onAddSource,
                 onPlay,
                 Modifier.padding(vertical = Marquee.space.s),
             )
@@ -101,23 +106,27 @@ fun PhoneVersions(
             val rows = groups[group].orEmpty()
             if (rows.isEmpty()) continue
             item(key = "group:$group") {
+                // Group headers are the one place that is set in capitals, with the count of rows in them.
                 MqText(
-                    VersionsCopy.group(group),
+                    "${VersionsCopy.group(group).uppercase()}  ${rows.size}",
                     role = TextRole.Caption,
                     color = colors.muted,
+                    weight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = Marquee.space.s),
                 )
             }
             items(rows, key = { "row:${it.key}" }) { row -> SourceRow(row, onPlay) }
         }
-        val notes = listOfNotNull(snapshot?.hidden?.let(VersionsCopy::hidden), snapshot?.let(VersionsCopy::addons))
-        if (notes.isNotEmpty()) {
+        val hidden = snapshot?.hidden?.takeIf { it.count > 0 }
+        val addons = snapshot?.let(VersionsCopy::addons)
+        if (hidden != null || addons != null) {
             item(key = "notes") {
                 Column(
                     Modifier.padding(top = Marquee.space.s),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                 ) {
-                    for (note in notes) MqText(note, role = TextRole.Callout, color = colors.muted)
+                    hidden?.let { HiddenRow(VersionsCopy.hiddenTitle(it), VersionsCopy.hiddenDetail(it)) }
+                    addons?.let { MqText(it, role = TextRole.Callout, color = colors.muted) }
                 }
             }
         }
@@ -129,6 +138,7 @@ private fun Recommendation(
     snapshot: VersionsSnapshot?,
     failure: String?,
     onRetry: () -> Unit,
+    onAddSource: () -> Unit,
     onPlay: (VersionRow) -> Unit,
     modifier: Modifier,
 ) {
@@ -161,7 +171,7 @@ private fun Recommendation(
             }
 
             best != null -> {
-                MqText("Recommended", role = TextRole.Caption, color = colors.muted)
+                MqText("Recommended for this screen", role = TextRole.Callout, color = colors.muted)
                 MqText(VersionsCopy.headline(best), role = TextRole.Title3, maxLines = 2)
                 MqText(VersionsCopy.source(best), role = TextRole.Callout, color = colors.muted)
                 for (reason in best.reasons.take(3)) {
@@ -170,7 +180,7 @@ private fun Recommendation(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         MqIcon(Icons.Check, tint = colors.ok)
-                        MqText(VersionsCopy.reason(reason), role = TextRole.Callout, maxLines = 2)
+                        MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
                     }
                 }
                 PrimaryButton(
@@ -182,10 +192,13 @@ private fun Recommendation(
             }
 
             else -> {
+                val nothing = snapshot.done && snapshot.rows.isEmpty()
                 StateMessage(
                     title = VersionsCopy.waitingTitle(snapshot),
                     body = VersionsCopy.waitingBody(snapshot),
                     icon = if (snapshot.done) Icons.CircleAlert else null,
+                    actionLabel = "Add a source".takeIf { nothing },
+                    onAction = onAddSource.takeIf { nothing },
                     modifier = Modifier.padding(0.dp),
                 )
             }
@@ -212,22 +225,46 @@ private fun SourceRow(
             .padding(Marquee.space.s),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        MqText(VersionsCopy.headline(row), weight = FontWeight.SemiBold, maxLines = 1)
+        // Line 1: "720p, HDR10 · 1.2 GB". Line 2: the status with its dot and where it comes from. Line 3: the release.
         MqText(
-            listOf(
+            listOfNotNull(
+                (listOf(VersionsCopy.cell(row.quality)) + row.features).joinToString(", "),
                 row.sizeBytes?.let(Format::bytes),
-                row.via,
-                VersionsCopy.status(row.status),
-            ).filterNotNull().joinToString(", "),
-            role = TextRole.Callout,
-            color = colors.muted,
-            maxLines = 2,
+            ).joinToString(" · "),
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
         )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StatusWord(VersionsCopy.status(row.status), if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn)
+            MqText("· ${row.via}", role = TextRole.Callout, color = colors.muted, maxLines = 1)
+        }
         MqText(
             Format.releaseWrapped(row.releaseName),
             role = TextRole.Caption,
             color = colors.muted,
             maxLines = 2,
+        )
+    }
+}
+
+/** What is hidden and why, as a row with the eye-off icon. */
+@Composable
+private fun HiddenRow(
+    title: String,
+    detail: String,
+) {
+    val colors = Marquee.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs), verticalAlignment = Alignment.Top) {
+        MqIcon(Icons.EyeOff, tint = colors.muted)
+        MqText(
+            "$title  $detail",
+            role = TextRole.Callout,
+            color = colors.muted,
+            maxLines = 3,
+            modifier = Modifier.weight(1f),
         )
     }
 }

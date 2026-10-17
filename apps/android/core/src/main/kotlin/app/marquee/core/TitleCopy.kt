@@ -3,32 +3,157 @@ package app.marquee.core
 import app.marquee.core.model.Episode
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.TitleDetails
+import app.marquee.core.model.VersionsSnapshot
+import kotlin.math.roundToInt
 
-/** The words of the title page, shared by both UI trees. */
+/** What a title page's primary button is for. */
+sealed interface PrimaryAction {
+    /** Play (or Resume): [label] says which. */
+    data class Play(
+        val label: String,
+    ) : PrimaryAction
+
+    /** Every addon answered and some versions exist, but none is ready to play: pick one. */
+    data object ChooseVersion : PrimaryAction
+
+    /** Every addon answered and none gave a version: the only useful step is adding a source. */
+    data object AddSource : PrimaryAction
+}
+
+/** The words of the title page, shared by both UI trees and equal to the web family's. */
 object TitleCopy {
-    /** "Play", "Play S1:E1", "Resume S1:E2 from 41:12". */
-    fun playLabel(target: PlayTarget): String {
-        val at = target.resumeMs?.takeIf { it > 0 }?.let { Format.clock(it / 1000) }
-        return if (at == null) target.label else "${target.label} from $at"
+    private const val NBSP = ' '
+
+    /**
+     * "Play", "Play S1:E1", "Resume S1:E2 · 36 min left" (from the runtime when the metadata has one),
+     * else "Resume S1:E2 from 41:12".
+     */
+    fun playLabel(
+        target: PlayTarget,
+        runtime: String? = null,
+    ): String {
+        val resumed = target.resumeMs?.takeIf { it > 0 } ?: return target.label
+        val total = Format.runtimeMinutes(runtime)
+        return if (total != null) {
+            "${target.label} · ${minutesLeft(total, resumed / 60_000.0)}"
+        } else {
+            "${target.label} from ${Format.clock(resumed / 1000)}"
+        }
     }
 
-    /** "2010 · 52 min · Rated 7.8 · Animation, Short": what the metadata gives, nothing invented. */
-    fun meta(details: TitleDetails): String =
+    private fun minutesLeft(
+        total: Int,
+        playedMinutes: Double,
+    ) = "${(total - playedMinutes).roundToInt().coerceAtLeast(1)} min left"
+
+    /**
+     * What the primary button does. Play stays while versions are still arriving (the line under it
+     * says so); once every addon has answered and nothing plays, it is "Add a source" (no versions at
+     * all) or "Choose a version" (some, none ready), never a Play that can only fail.
+     */
+    fun primary(
+        target: PlayTarget?,
+        versions: VersionsSnapshot?,
+        runtime: String? = null,
+    ): PrimaryAction =
+        when {
+            versions != null && versions.done && versions.recommended == null -> {
+                if (versions.rows.isEmpty()) PrimaryAction.AddSource else PrimaryAction.ChooseVersion
+            }
+
+            else -> {
+                PrimaryAction.Play(target?.let { playLabel(it, runtime) } ?: "Play")
+            }
+        }
+
+    /** How many real seasons there are (Specials do not count). */
+    fun seasonCount(seasons: List<Int>): Int = seasons.count { it > 0 }
+
+    /** The seasons in the order they are shown: 1, 2, 3 and so on, then Specials (season 0) last. */
+    fun seasonOrder(seasons: List<Int>): List<Int> = seasons.filter { it > 0 }.sorted() + seasons.filter { it == 0 }
+
+    /** With more than five seasons the selector shows bare numbers under a "Season" label. */
+    fun compactSeasons(seasons: List<Int>): Boolean = seasons.size > 5
+
+    fun seasonLabel(
+        season: Int,
+        compact: Boolean,
+    ): String =
+        when {
+            season == 0 -> "Specials"
+            compact -> "$season"
+            else -> "Season $season"
+        }
+
+    /**
+     * "7.8 IMDb · 2010 · Animation, Short · 52 min" (a series says "2 seasons" instead of a runtime):
+     * what the metadata gives, nothing invented. Each item is one unit that never breaks inside, so a
+     * long line wraps only after a dot.
+     */
+    fun meta(
+        details: TitleDetails,
+        seasons: Int = 0,
+    ): String =
         listOfNotNull(
+            details.rating?.let { "$it IMDb" },
             details.releaseInfo,
-            details.runtime,
-            details.rating?.let { "Rated $it" },
             details.genres
                 .take(3)
                 .takeIf { it.isNotEmpty() }
                 ?.joinToString(", "),
-        ).joinToString(" · ")
+            seasons.takeIf { it > 0 }?.let { "$it ${if (it == 1) "season" else "seasons"}" }
+                ?: details.runtime.takeIf { details.kind == "movie" },
+        ).joinToString("$NBSP· ") { it.replace(' ', NBSP) }
 
-    /** "Watched, S1:E2, The Kingsroad": what a screen reader says after the tile, and the line under it. */
+    /** The Details block under the actions: label and value, in the web's words, left out when empty. */
+    fun facts(details: TitleDetails): List<Pair<String, String>> =
+        listOf(
+            "Starring" to details.cast.take(3).joinToString(", "),
+            "Directed by" to details.directors.take(2).joinToString(", "),
+            "Runtime" to (details.runtime?.let { if (details.kind == "movie") it else "$it an episode" } ?: ""),
+            "Details from" to details.source,
+        ).filter { it.second.isNotBlank() }
+
+    /** "Watched, S1:E2, The Kingsroad": what a screen reader says for an episode. */
     fun episode(episode: Episode): String =
         listOfNotNull(
             "Watched".takeIf { episode.watched },
             Format.episodeLabel(episode.season, episode.episode),
             episode.title.takeIf { it.isNotBlank() },
         ).joinToString(", ")
+
+    /** "Watched", "36 min left", "52 min" (the runtime is the episode's), or null when nothing is known. */
+    fun episodeNote(
+        episode: Episode,
+        runtime: String?,
+    ): String? {
+        val total = Format.runtimeMinutes(runtime)
+        return when {
+            episode.watched -> {
+                "Watched"
+            }
+
+            episode.progress != null -> {
+                total?.let { minutesLeft(it, it * episode.progress.toDouble()) }
+                    ?: "${(episode.progress * 100).roundToInt()}% watched"
+            }
+
+            else -> {
+                total?.let { "$it min" }
+            }
+        }
+    }
+
+    /** The caption of an episode tile: "S1:E2 · 36 min left", and the episode's title under it. */
+    fun episodeCaption(
+        episode: Episode,
+        runtime: String?,
+    ): String {
+        val first =
+            listOfNotNull(
+                Format.episodeLabel(episode.season, episode.episode),
+                episodeNote(episode, runtime),
+            ).joinToString(" · ")
+        return listOf(first, episode.title).filter { it.isNotBlank() }.joinToString("\n")
+    }
 }

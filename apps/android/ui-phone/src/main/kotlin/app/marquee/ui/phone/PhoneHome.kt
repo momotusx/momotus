@@ -59,7 +59,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
 import app.marquee.design.UpNextArt
-import app.marquee.design.heightOf
+import app.marquee.design.laneHeight
 
 /** Home on a phone: a hero card, then one swipeable lane per catalog. */
 @Composable
@@ -113,7 +113,7 @@ private fun HomeState(home: HomeView) {
         ViewStatus.Open -> {
             StateMessage(
                 title = "Nothing to show yet",
-                body = "Home fills up as your add-ons answer.",
+                body = "Home fills up as your addons answer.",
                 modifier = Modifier.padding(horizontal = side),
             )
         }
@@ -250,7 +250,7 @@ private fun PhoneRow(
 private fun laneHeight(
     shape: TileShape,
     captioned: Boolean,
-) = Marquee.tiles.pad * 2 + Marquee.tiles.heightOf(shape) + (if (captioned) Marquee.tiles.caption else 0.dp)
+) = Marquee.tiles.laneHeight(shape, captioned)
 
 @Composable
 private fun SkeletonLane(shape: TileShape) {

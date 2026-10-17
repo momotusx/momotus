@@ -124,7 +124,7 @@ private fun AppNav(
         if (backStack.lastOrNull() != title) backStack.add(title)
     }
 
-    // The shared Versions views fan out to the add-ons while open: close them when no screen that
+    // The shared Versions views fan out to the addons while open: close them when no screen that
     // needs one is left (the title page, Versions, the player).
     val needsVersions = routes.any { it is Route.Title || it is Route.Versions || it is Route.Player }
     LaunchedEffect(needsVersions) { if (!needsVersions) app.versions.closeAll() }
@@ -193,6 +193,10 @@ private fun AppNav(
                             onVersions = { videoId, name ->
                                 backStack.add(Route.Versions(route.kind, route.id, videoId, name))
                             },
+                            onPlayEpisode = { videoId, name ->
+                                backStack.add(Route.Player(route.kind, route.id, videoId, name))
+                            },
+                            onAddSource = { choose(Route.Settings) },
                         )
                     }
                     entry<Route.Versions> { route ->
@@ -203,6 +207,7 @@ private fun AppNav(
                             onPlay = { row ->
                                 backStack.add(Route.Player(route.kind, route.id, route.videoId, route.title, row.key))
                             },
+                            onAddSource = { choose(Route.Settings) },
                         )
                     }
                     entry<Route.Player> { route ->

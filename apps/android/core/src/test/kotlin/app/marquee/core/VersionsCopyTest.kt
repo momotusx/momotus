@@ -57,27 +57,50 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `the line under Play says what will play or why nothing is ready`() {
-        assertEquals("Looking for sources", VersionsCopy.chosen(null))
-        assertEquals("Looking for sources", VersionsCopy.chosen(snapshot()))
-        assertEquals("No playable source found", VersionsCopy.chosen(snapshot(done = true)))
-        assertEquals("4K, HDR10, 1.3 GB, Real-Debrid", VersionsCopy.chosen(snapshot(recommended = row())))
-        assertEquals("Sources could not load", VersionsCopy.chosen(null, failed = true))
-    }
-
-    @Test
-    fun `hidden releases are counted by reason`() {
-        assertNull(VersionsCopy.hidden(HiddenSummary(0, emptyList())))
+    fun `the line under the primary button says what will play, that it is looking, or why nothing plays`() {
+        assertEquals(VersionLine.Finding, VersionsCopy.line(null))
+        assertEquals(VersionLine.Finding, VersionsCopy.line(snapshot()))
+        assertEquals(VersionLine.Problem("Sources could not load"), VersionsCopy.line(null, failed = true))
+        val none = VersionsCopy.line(snapshot(done = true))
+        assertEquals(true, none is VersionLine.Problem && none.text.startsWith("No playable version found."))
+        val chosen = VersionsCopy.line(snapshot(recommended = row())) as VersionLine.Chosen
+        assertEquals(listOf("4K", "HDR10", "1.3 GB"), chosen.facts)
+        assertEquals("Ready on Real-Debrid", chosen.status)
+        assertEquals(true, chosen.good)
+        assertEquals("4K, HDR10, 1.3 GB, Ready on Real-Debrid, via Real-Debrid", chosen.spoken)
+        val torrent =
+            row().copy(
+                status = VersionStatus.Torrent(10),
+                sizeBytes = null,
+                features = emptyList(),
+                via = "Torrentio",
+            )
         assertEquals(
-            "5 hidden: 3 wrong title, 2 too large",
-            VersionsCopy.hidden(
-                HiddenSummary(5, listOf(Tuple2(HideReason.WrongTitle, 3), Tuple2(HideReason.TooLarge, 2))),
-            ),
+            VersionLine.Chosen(listOf("4K"), "Torrent, 10 seeds", good = false, via = "Torrentio"),
+            VersionsCopy.line(snapshot(recommended = torrent)),
         )
     }
 
     @Test
-    fun `add-ons that are slow or failed are named`() {
+    fun `an unstated quality is one word in a cell`() {
+        assertEquals("Unknown", VersionsCopy.cell("Quality not stated"))
+        assertEquals("720p", VersionsCopy.cell("720p"))
+        assertEquals("WEB-DL", VersionsCopy.cell("WEB-DL"))
+    }
+
+    @Test
+    fun `hidden releases are counted, with the reasons in the web's words`() {
+        val hidden =
+            HiddenSummary(
+                4,
+                listOf(Tuple2(HideReason.WrongTitle, 3), Tuple2(HideReason.TooLarge, 1)),
+            )
+        assertEquals("Hidden (4)", VersionsCopy.hiddenTitle(hidden))
+        assertEquals("3 are for other titles, 1 is over your size limit", VersionsCopy.hiddenDetail(hidden))
+    }
+
+    @Test
+    fun `addons that are slow or failed are named`() {
         assertNull(VersionsCopy.addons(snapshot()))
         assertEquals(
             "Waiting for A. Slow: B. No answer from C, D",
@@ -86,11 +109,25 @@ class VersionsCopyTest {
     }
 
     @Test
+    fun `the reasons, groups and status words match the web table`() {
+        assertEquals(
+            "Ready now, cached on Real-Debrid",
+            VersionsCopy.reason(Reason.ReadyNow, VersionStatus.Ready("Real-Debrid")),
+        )
+        assertEquals("Ready now", VersionsCopy.reason(Reason.ReadyNow))
+        assertEquals(
+            listOf("Best quality", "Smaller and faster", "Other languages", "Needs download"),
+            Group.entries.map(VersionsCopy::group),
+        )
+        assertEquals("Needs download on Real-Debrid", VersionsCopy.status(VersionStatus.NeedsDownload("Real-Debrid")))
+    }
+
+    @Test
     fun `every status, reason and group has words and no emoji`() {
         val words =
-            Reason.entries.map(VersionsCopy::reason) +
+            Reason.entries.map { VersionsCopy.reason(it) } +
                 Group.entries.map(VersionsCopy::group) +
-                HideReason.entries.map(VersionsCopy::hiddenReason) +
+                HideReason.entries.map { VersionsCopy.hiddenDetail(HiddenSummary(2, listOf(Tuple2(it, 2)))) } +
                 listOf(
                     VersionsCopy.status(VersionStatus.Ready(null)),
                     VersionsCopy.status(VersionStatus.Torrent(12)),

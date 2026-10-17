@@ -66,7 +66,7 @@ fun HomeRow.notice(): RowNotice? =
             if (tiles.isEmpty()) {
                 RowNotice.Explained(
                     "$title could not load",
-                    "$source did not give a list: ${s.reason}. Check the network, then check the add-on.",
+                    "$source did not give a list: ${s.reason}. Check the network, then check the addon.",
                     failed = true,
                 )
             } else {
