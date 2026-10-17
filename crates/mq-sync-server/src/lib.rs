@@ -43,6 +43,8 @@ const MAX_PAIRINGS: i64 = 1000;
 const PAIRING_MS: u64 = 10 * 60 * 1000;
 /// Largest sealed pairing or recovery blob.
 const MAX_SMALL_BLOB: usize = 64 * 1024;
+/// Recovery kits one account may register.
+const MAX_KITS: i64 = 4;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -53,6 +55,9 @@ pub struct Config {
     /// Start a new generation: use after restoring the database from a
     /// backup, so devices send back what the backup lost.
     pub new_generation: bool,
+    /// Added to the relay's idea of the time (tests of a relay with a
+    /// wrong clock).
+    pub clock_offset_ms: i64,
 }
 
 impl Default for Config {
@@ -61,6 +66,7 @@ impl Default for Config {
             invite: None,
             quota_bytes: 50 * 1024 * 1024,
             new_generation: false,
+            clock_offset_ms: 0,
         }
     }
 }
@@ -70,6 +76,8 @@ struct AppState {
     db: Arc<Mutex<Connection>>,
     config: Arc<Config>,
     generation: Arc<String>,
+    /// Rate limits for opening pairings and redeeming kits.
+    limits: Arc<Mutex<[Limiter; 2]>>,
 }
 
 pub fn router(db: &Path, config: Config) -> rusqlite::Result<Router> {
@@ -96,6 +104,7 @@ pub fn router(db: &Path, config: Config) -> rusqlite::Result<Router> {
         db: Arc::new(Mutex::new(conn)),
         config: Arc::new(config),
         generation: Arc::new(generation),
+        limits: Arc::default(),
     };
     Ok(Router::new()
         .route("/v1/accounts", post(create_account))
@@ -103,9 +112,11 @@ pub fn router(db: &Path, config: Config) -> rusqlite::Result<Router> {
         .route("/v1/push", post(push))
         .route("/v1/pull", get(pull))
         .route("/v1/pairings", post(open_pairing))
-        .route("/v1/pairings/{id}", get(take_pairing).put(fill_pairing))
-        .route("/v1/recovery", put(store_recovery))
-        .route("/v1/recovery/{lookup}", post(recover))
+        .route("/v1/pairings/{id}", put(fill_pairing))
+        .route("/v1/pairings/{id}/take", post(take_pairing))
+        .route("/v1/recovery", post(add_kit).get(list_kits))
+        .route("/v1/recovery/reseal", put(reseal_kit))
+        .route("/v1/recovery/redeem", post(redeem_kit))
         .layer(DefaultBodyLimit::max(MAX_REQUEST))
         .with_state(state))
 }
@@ -143,17 +154,29 @@ CREATE TABLE IF NOT EXISTS record (
 CREATE INDEX IF NOT EXISTS record_pull ON record (account, seq);
 CREATE TABLE IF NOT EXISTS pairing (
     id          TEXT PRIMARY KEY,
+    take_hash   BLOB NOT NULL,
     sealed      BLOB,
     account     TEXT,
+    minted_by   BLOB,
     expires_ms  INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS recovery (
     lookup_hash  BLOB PRIMARY KEY,
-    account      TEXT NOT NULL UNIQUE,
+    lookup       TEXT NOT NULL,
+    account      TEXT NOT NULL,
+    auth_hash    BLOB NOT NULL,
+    pk           BLOB NOT NULL,
     sealed       BLOB NOT NULL,
     updated_ms   INTEGER NOT NULL
 );
 ";
+
+impl AppState {
+    /// The relay's time: what clock rules and pairing expiry go by.
+    fn now_ms(&self) -> u64 {
+        (now_ms() as i64 + self.config.clock_offset_ms).max(0) as u64
+    }
+}
 
 fn lock(state: &AppState) -> std::sync::MutexGuard<'_, Connection> {
     state.db.lock().unwrap_or_else(|p| p.into_inner())
@@ -342,7 +365,7 @@ async fn push(
     if request.records.len() > PAGE {
         return error(StatusCode::BAD_REQUEST, "too many records in one push");
     }
-    let server_ms = now_ms();
+    let server_ms = state.now_ms();
     let mut db = lock(&state);
     let Some((account, _)) = authorize(&db, &headers) else {
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
@@ -365,10 +388,23 @@ async fn push(
             let r = match check(record, server_ms, epoch) {
                 Ok(r) => r,
                 Err((code, reason)) => {
+                    // For a clock refusal, the version the relay holds now, so the
+                    // device can stamp its edit just above it.
+                    let current = match (code, hex::decode(&record.key_id)) {
+                        (Refusal::ClockAhead, Ok(key_id)) => tx
+                            .query_row(
+                                "SELECT hlc FROM record WHERE account = ?1 AND coll = ?2 AND key_id = ?3",
+                                params![account, record.coll, key_id],
+                                |row| row.get(0),
+                            )
+                            .optional()?,
+                        _ => None,
+                    };
                     response.rejected.push(Rejected {
                         key_id: record.key_id.clone(),
                         reason,
                         code,
+                        current,
                     });
                     continue;
                 }
@@ -403,14 +439,17 @@ async fn push(
                 response.accepted += 1;
             } else {
                 response.stale += 1;
-                let current: Option<i64> = tx
+                // Only a strictly newer version is worth pulling again; an
+                // equal one is this device's own, pushed twice.
+                let newer: Option<i64> = tx
                     .query_row(
-                        "SELECT seq FROM record WHERE account = ?1 AND coll = ?2 AND key_id = ?3",
-                        params![account, r.coll, r.key_id],
+                        "SELECT seq FROM record WHERE account = ?1 AND coll = ?2 AND key_id = ?3
+                         AND (hlc, epoch) > (?4, ?5)",
+                        params![account, r.coll, r.key_id, r.hlc, r.epoch],
                         |row| row.get(0),
                     )
                     .optional()?;
-                response.stale_at.extend(current.map(|s| s as u64));
+                response.stale_at.extend(newer.map(|s| s as u64));
             }
         }
         tx.execute(
@@ -439,7 +478,7 @@ async fn pull(
     headers: HeaderMap,
     Query(query): Query<PullQuery>,
 ) -> Response {
-    let server_ms = now_ms();
+    let server_ms = state.now_ms();
     let db = lock(&state);
     let Some((account, _)) = authorize(&db, &headers) else {
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
@@ -490,6 +529,30 @@ async fn pull(
     }
 }
 
+/// Requests allowed per minute across the relay for an unauthenticated
+/// endpoint; enough for real use, too few for a script to block it.
+#[derive(Default)]
+pub(crate) struct Limiter {
+    window_ms: u64,
+    used: u32,
+}
+
+impl Limiter {
+    fn allow(&mut self, per_minute: u32) -> bool {
+        let now = now_ms();
+        if now >= self.window_ms + 60_000 {
+            self.window_ms = now;
+            self.used = 0;
+        }
+        self.used += 1;
+        self.used <= per_minute
+    }
+}
+
+fn limited(state: &AppState, which: usize, per_minute: u32) -> bool {
+    !state.limits.lock().unwrap_or_else(|p| p.into_inner())[which].allow(per_minute)
+}
+
 #[derive(Deserialize)]
 struct SealedBlob {
     sealed: String,
@@ -501,10 +564,38 @@ fn small_blob(text: &str) -> Option<Vec<u8>> {
         .filter(|b| (MIN_BODY..=MAX_SMALL_BLOB).contains(&b.len()))
 }
 
-/// A one-time slot a new device shows as a QR. No auth: the slot only ever
-/// holds a blob sealed to a key the relay never sees.
+/// Mints a device token for `account`, recording what created it.
+fn mint_device(db: &Connection, account: &str, minted_by: &[u8]) -> Result<String, Box<Response>> {
+    let devices: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM device WHERE account = ?1 AND revoked = 0",
+            params![account],
+            |r| r.get(0),
+        )
+        .map_err(|e| Box::new(storage_error("count devices", e)))?;
+    if devices >= MAX_DEVICES {
+        return Err(Box::new(error(
+            StatusCode::FORBIDDEN,
+            "this account has too many devices",
+        )));
+    }
+    let token = random_hex(32);
+    db.execute(
+        "INSERT INTO device (token_hash, account, minted_by, created_ms) VALUES (?1, ?2, ?3, ?4)",
+        params![token_hash(&token), account, minted_by, now_ms() as i64],
+    )
+    .map_err(|e| Box::new(storage_error("mint device", e)))?;
+    Ok(token)
+}
+
+/// A one-time slot a new device shows as a QR. The QR carries the slot id
+/// (for the device that fills it); collecting needs the `take` secret, which
+/// stays on the new device.
 async fn open_pairing(State(state): State<AppState>) -> Response {
-    let now = now_ms();
+    if limited(&state, 0, 120) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "too many pairings started");
+    }
+    let now = state.now_ms();
     let db = lock(&state);
     let open = (|| -> rusqlite::Result<i64> {
         db.execute(
@@ -523,13 +614,15 @@ async fn open_pairing(State(state): State<AppState>) -> Response {
         Ok(_) => {}
         Err(e) => return storage_error("open pairing", e),
     }
-    let id = random_hex(16);
+    let (id, take) = (random_hex(16), random_hex(16));
     let expires_ms = now + PAIRING_MS;
     match db.execute(
-        "INSERT INTO pairing (id, expires_ms) VALUES (?1, ?2)",
-        params![id, expires_ms as i64],
+        "INSERT INTO pairing (id, take_hash, expires_ms) VALUES (?1, ?2, ?3)",
+        params![id, token_hash(&take), expires_ms as i64],
     ) {
-        Ok(_) => Json(json!({ "pairing": id, "expiresMs": expires_ms })).into_response(),
+        Ok(_) => {
+            Json(json!({ "pairing": id, "take": take, "expiresMs": expires_ms })).into_response()
+        }
         Err(e) => storage_error("open pairing", e),
     }
 }
@@ -542,7 +635,7 @@ async fn fill_pairing(
     Json(blob): Json<SealedBlob>,
 ) -> Response {
     let db = lock(&state);
-    let Some((account, _)) = authorize(&db, &headers) else {
+    let Some((account, filler)) = authorize(&db, &headers) else {
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
     };
     let Some(sealed) = small_blob(&blob.sealed) else {
@@ -552,46 +645,72 @@ async fn fill_pairing(
         );
     };
     match db.execute(
-        "UPDATE pairing SET sealed = ?2, account = ?3
-         WHERE id = ?1 AND sealed IS NULL AND expires_ms > ?4",
-        params![id, sealed, account, now_ms() as i64],
+        "UPDATE pairing SET sealed = ?2, account = ?3, minted_by = ?4
+         WHERE id = ?1 AND sealed IS NULL AND expires_ms > ?5",
+        params![id, sealed, account, filler, state.now_ms() as i64],
     ) {
         Ok(1) => Json(json!({})).into_response(),
-        Ok(_) => error(StatusCode::NOT_FOUND, "no open pairing with that code"),
+        Ok(_) => error(
+            StatusCode::CONFLICT,
+            "this pairing code was already used or expired",
+        ),
         Err(e) => storage_error("fill pairing", e),
     }
 }
 
-/// The new device collects the blob: 204 while waiting, then once, then 404.
-async fn take_pairing(State(state): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
-    let db = lock(&state);
-    let row: rusqlite::Result<Option<(Option<Vec<u8>>, i64)>> = db
-        .query_row(
-            "SELECT sealed, expires_ms FROM pairing WHERE id = ?1",
-            params![id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional();
-    match row {
-        Ok(Some((_, expires))) if expires as u64 <= now_ms() => {
-            error(StatusCode::NOT_FOUND, "pairing expired")
-        }
-        Ok(Some((None, _))) => StatusCode::NO_CONTENT.into_response(),
-        Ok(Some((Some(sealed), _))) => {
-            if let Err(e) = db.execute("DELETE FROM pairing WHERE id = ?1", params![id]) {
-                return storage_error("take pairing", e);
-            }
-            Json(json!({ "sealed": B64.encode(sealed) })).into_response()
-        }
-        Ok(None) => error(StatusCode::NOT_FOUND, "no pairing with that code"),
-        Err(e) => storage_error("take pairing", e),
-    }
+#[derive(Deserialize)]
+struct Take {
+    take: String,
 }
 
-#[derive(Deserialize)]
-struct RecoveryBlob {
-    lookup: String,
-    sealed: String,
+/// take hash, sealed blob, account, minting device, expiry
+type PairingRow = (
+    Vec<u8>,
+    Option<Vec<u8>>,
+    Option<String>,
+    Option<Vec<u8>>,
+    i64,
+);
+
+/// The new device collects the blob with its take secret: 204 while
+/// waiting, then once (with a token for it, minted for the account that
+/// filled the slot), then 404.
+async fn take_pairing(
+    State(state): State<AppState>,
+    UrlPath(id): UrlPath<String>,
+    Json(take): Json<Take>,
+) -> Response {
+    let db = lock(&state);
+    let row: rusqlite::Result<Option<PairingRow>> = db
+        .query_row(
+            "SELECT take_hash, sealed, account, minted_by, expires_ms FROM pairing WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .optional();
+    let (take_hash, sealed, account, filler, expires) = match row {
+        Ok(Some(row)) => row,
+        Ok(None) => return error(StatusCode::NOT_FOUND, "no pairing with that code"),
+        Err(e) => return storage_error("take pairing", e),
+    };
+    if !same(&take_hash, &token_hash(&take.take)) {
+        return error(StatusCode::NOT_FOUND, "no pairing with that code");
+    }
+    if expires as u64 <= state.now_ms() {
+        return error(StatusCode::NOT_FOUND, "pairing expired");
+    }
+    let (Some(sealed), Some(account), Some(filler)) = (sealed, account, filler) else {
+        return StatusCode::NO_CONTENT.into_response();
+    };
+    let token = match mint_device(&db, &account, &filler) {
+        Ok(token) => token,
+        Err(refusal) => return *refusal,
+    };
+    if let Err(e) = db.execute("DELETE FROM pairing WHERE id = ?1", params![id]) {
+        return storage_error("take pairing", e);
+    }
+    Json(json!({ "sealed": B64.encode(sealed), "deviceToken": token, "account": account }))
+        .into_response()
 }
 
 fn lookup_hash(lookup: &str) -> Option<Vec<u8>> {
@@ -601,77 +720,171 @@ fn lookup_hash(lookup: &str) -> Option<Vec<u8>> {
         .map(|l| Sha256::digest(l).to_vec())
 }
 
-/// Keeps the account's key bundle sealed under its recovery kit; one per
-/// account, replaced on every store.
-async fn store_recovery(
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NewKit {
+    lookup: String,
+    /// SHA-256 of the kit's redeem secret, hex.
+    auth_hash: String,
+    /// The kit's X25519 public key, base64; devices seal new bundles to it.
+    pk: String,
+    sealed: String,
+}
+
+/// Registers a recovery kit for the account: its lookup id, the hash of its
+/// redeem secret, its public key and the bundle sealed to that key. A kit
+/// is written once; later bundles are resealed to the same public key.
+async fn add_kit(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(blob): Json<RecoveryBlob>,
+    Json(kit): Json<NewKit>,
+) -> Response {
+    let mut db = lock(&state);
+    let Some((account, _)) = authorize(&db, &headers) else {
+        return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
+    };
+    let auth_hash = hex::decode(&kit.auth_hash).ok().filter(|h| h.len() == 32);
+    let pk = B64.decode(&kit.pk).ok().filter(|k| k.len() == 32);
+    let (Some(hash), Some(auth_hash), Some(pk), Some(sealed)) = (
+        lookup_hash(&kit.lookup),
+        auth_hash,
+        pk,
+        small_blob(&kit.sealed),
+    ) else {
+        return error(StatusCode::BAD_REQUEST, "bad recovery kit fields");
+    };
+    let added =
+        (|| -> rusqlite::Result<Result<(), Response>> {
+            let tx = db.transaction()?;
+            let kits: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM recovery WHERE account = ?1",
+                params![account],
+                |r| r.get(0),
+            )?;
+            if kits >= MAX_KITS {
+                return Ok(Err(error(
+                    StatusCode::FORBIDDEN,
+                    "this account has enough recovery kits",
+                )));
+            }
+            let inserted = tx.execute(
+            "INSERT INTO recovery (lookup_hash, lookup, account, auth_hash, pk, sealed, updated_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(lookup_hash) DO NOTHING",
+            params![hash, kit.lookup, account, auth_hash, pk, sealed, now_ms() as i64],
+        )?;
+            tx.commit()?;
+            Ok(if inserted == 1 {
+                Ok(())
+            } else {
+                Err(error(
+                    StatusCode::CONFLICT,
+                    "this kit is already registered",
+                ))
+            })
+        })();
+    match added {
+        Ok(Ok(())) => Json(json!({})).into_response(),
+        Ok(Err(refusal)) => refusal,
+        Err(e) => storage_error("add kit", e),
+    }
+}
+
+/// The account's kits as (lookup, public key), so a device can reseal a new
+/// bundle to each after a key rotation without knowing any kit.
+async fn list_kits(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let db = lock(&state);
+    let Some((account, _)) = authorize(&db, &headers) else {
+        return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
+    };
+    let kits = (|| -> rusqlite::Result<Vec<serde_json::Value>> {
+        let mut stmt = db.prepare("SELECT lookup, pk FROM recovery WHERE account = ?1")?;
+        stmt.query_map(params![account], |r| {
+            let (lookup, pk): (String, Vec<u8>) = (r.get(0)?, r.get(1)?);
+            Ok(json!({ "lookup": lookup, "pk": B64.encode(pk) }))
+        })?
+        .collect()
+    })();
+    match kits {
+        Ok(kits) => Json(json!({ "kits": kits })).into_response(),
+        Err(e) => storage_error("list kits", e),
+    }
+}
+
+#[derive(Deserialize)]
+struct Reseal {
+    lookup: String,
+    sealed: String,
+}
+
+/// Replaces the sealed bundle of one of the account's kits.
+async fn reseal_kit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(reseal): Json<Reseal>,
 ) -> Response {
     let db = lock(&state);
     let Some((account, _)) = authorize(&db, &headers) else {
         return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
     };
-    let (Some(hash), Some(sealed)) = (lookup_hash(&blob.lookup), small_blob(&blob.sealed)) else {
+    let (Some(hash), Some(sealed)) = (lookup_hash(&reseal.lookup), small_blob(&reseal.sealed))
+    else {
         return error(StatusCode::BAD_REQUEST, "bad lookup id or sealed blob");
     };
-    let stored = (|| -> rusqlite::Result<()> {
-        db.execute("DELETE FROM recovery WHERE account = ?1", params![account])?;
-        db.execute(
-            "INSERT INTO recovery (lookup_hash, account, sealed, updated_ms) VALUES (?1, ?2, ?3, ?4)",
-            params![hash, account, sealed, now_ms() as i64],
-        )
-        .map(drop)
-    })();
-    match stored {
-        Ok(()) => Json(json!({})).into_response(),
-        Err(e) => storage_error("store recovery", e),
+    match db.execute(
+        "UPDATE recovery SET sealed = ?3, updated_ms = ?4 WHERE lookup_hash = ?1 AND account = ?2",
+        params![hash, account, sealed, now_ms() as i64],
+    ) {
+        Ok(1) => Json(json!({})).into_response(),
+        Ok(_) => error(StatusCode::NOT_FOUND, "no such kit on this account"),
+        Err(e) => storage_error("reseal kit", e),
     }
 }
 
-/// Hands the sealed bundle and a new device token to whoever holds the
-/// lookup id. The id is 128 bits derived from the kit, so it cannot be
-/// guessed; the relay keeps only its hash.
-async fn recover(State(state): State<AppState>, UrlPath(lookup): UrlPath<String>) -> Response {
-    let Some(hash) = lookup_hash(&lookup) else {
-        return error(StatusCode::NOT_FOUND, "no recovery data for that kit");
+#[derive(Deserialize)]
+struct Redeem {
+    lookup: String,
+    /// The kit's redeem secret, hex. Only its hash is stored.
+    auth: String,
+}
+
+/// account, redeem secret hash, sealed bundle
+type KitRow = (String, Vec<u8>, Vec<u8>);
+
+/// Joins the account of a kit as a new device: needs the kit's redeem
+/// secret, which no device keeps, so a revoked device holding the bundle
+/// cannot come back this way.
+async fn redeem_kit(State(state): State<AppState>, Json(redeem): Json<Redeem>) -> Response {
+    if limited(&state, 1, 60) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "too many recovery attempts");
+    }
+    let not_found = || error(StatusCode::NOT_FOUND, "no recovery data for that kit");
+    let (Some(hash), Some(auth)) = (lookup_hash(&redeem.lookup), hex::decode(&redeem.auth).ok())
+    else {
+        return not_found();
     };
     let db = lock(&state);
-    let found: rusqlite::Result<Option<(String, Vec<u8>)>> = db
+    let found: rusqlite::Result<Option<KitRow>> = db
         .query_row(
-            "SELECT account, sealed FROM recovery WHERE lookup_hash = ?1",
+            "SELECT account, auth_hash, sealed FROM recovery WHERE lookup_hash = ?1",
             params![hash],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional();
-    let (account, sealed) = match found {
+    let (account, auth_hash, sealed) = match found {
         Ok(Some(found)) => found,
-        Ok(None) => return error(StatusCode::NOT_FOUND, "no recovery data for that kit"),
-        Err(e) => return storage_error("recover", e),
+        Ok(None) => return not_found(),
+        Err(e) => return storage_error("redeem kit", e),
     };
-    let devices: rusqlite::Result<i64> = db.query_row(
-        "SELECT COUNT(*) FROM device WHERE account = ?1 AND revoked = 0",
-        params![account],
-        |r| r.get(0),
-    );
-    match devices {
-        Ok(n) if n >= MAX_DEVICES => {
-            return error(StatusCode::FORBIDDEN, "this account has too many devices");
-        }
-        Ok(_) => {}
-        Err(e) => return storage_error("recover", e),
+    if !same(&auth_hash, &Sha256::digest(&auth)) {
+        return not_found();
     }
-    let token = random_hex(32);
-    match db.execute(
-        "INSERT INTO device (token_hash, account, created_ms) VALUES (?1, ?2, ?3)",
-        params![token_hash(&token), account, now_ms() as i64],
-    ) {
-        Ok(_) => Json(json!({
+    match mint_device(&db, &account, b"recovery") {
+        Ok(token) => Json(json!({
             "account": account,
             "deviceToken": token,
             "sealed": B64.encode(sealed),
         }))
         .into_response(),
-        Err(e) => storage_error("recover", e),
+        Err(refusal) => *refusal,
     }
 }

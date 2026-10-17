@@ -1,14 +1,16 @@
 //! Pairing on the new device: shows the QR, waits for a device of the
-//! account to approve it, then hands the joined secrets to the platform for
-//! its keystore.
+//! account to approve it, asks the user to confirm both screens show the
+//! same code, then hands the joined secrets to the platform for its
+//! keystore. Nothing is kept before the user confirms.
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
-use mq_sync::pair::{Joined, start_pairing};
+use mq_sync::pair::{Joined, Offer, start_pairing};
 use serde::Serialize;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::task::JoinHandle;
 
@@ -24,6 +26,10 @@ pub enum PairingSnapshot {
         qr: String,
         expires_ms: u64,
     },
+    /// Ask: does the other device show this code? Then `confirm` or `reject`.
+    Confirm {
+        code: String,
+    },
     /// Store these in the keystore; sync can start.
     Joined {
         joined: Joined,
@@ -36,14 +42,49 @@ pub enum PairingSnapshot {
 
 pub struct PairingView {
     snapshot: SharedObservable<PairingSnapshot>,
+    offer: Arc<Mutex<Option<Offer>>>,
     task: JoinHandle<()>,
 }
 
 impl PairingView {
     pub fn open(core: &Core, server: &str) -> Self {
         let snapshot = SharedObservable::new(PairingSnapshot::Starting);
-        let task = tokio::spawn(run(core.clone(), server.to_owned(), snapshot.clone()));
-        Self { snapshot, task }
+        let offer = Arc::new(Mutex::new(None));
+        let task = tokio::spawn(run(
+            core.clone(),
+            server.to_owned(),
+            snapshot.clone(),
+            offer.clone(),
+        ));
+        Self {
+            snapshot,
+            offer,
+            task,
+        }
+    }
+
+    /// The user saw the same code on both devices.
+    pub fn confirm(&self) {
+        if let Some(offer) = self.offer.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            self.snapshot.set(PairingSnapshot::Joined {
+                joined: offer.joined,
+            });
+        }
+    }
+
+    /// The codes differ: someone else answered the QR. Nothing was kept.
+    pub fn reject(&self) {
+        if self
+            .offer
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+            .is_some()
+        {
+            self.snapshot.set(PairingSnapshot::Failed {
+                reason: "the codes did not match; nothing was kept".into(),
+            });
+        }
     }
 
     pub fn snapshot(&self) -> PairingSnapshot {
@@ -70,7 +111,12 @@ impl Drop for PairingView {
     }
 }
 
-async fn run(core: Core, server: String, snapshot: SharedObservable<PairingSnapshot>) {
+async fn run(
+    core: Core,
+    server: String,
+    snapshot: SharedObservable<PairingSnapshot>,
+    offer: Arc<Mutex<Option<Offer>>>,
+) {
     let request = match start_pairing(core.http(), &server).await {
         Ok(request) => request,
         Err(e) => {
@@ -91,8 +137,10 @@ async fn run(core: Core, server: String, snapshot: SharedObservable<PairingSnaps
             return;
         }
         match request.poll(core.http()).await {
-            Ok(Some(joined)) => {
-                snapshot.set(PairingSnapshot::Joined { joined });
+            Ok(Some(received)) => {
+                let code = received.code.clone();
+                *offer.lock().unwrap_or_else(|p| p.into_inner()) = Some(received);
+                snapshot.set(PairingSnapshot::Confirm { code });
                 return;
             }
             Ok(None) => {}

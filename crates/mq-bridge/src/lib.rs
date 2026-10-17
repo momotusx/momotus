@@ -122,7 +122,7 @@ enum View {
     Search(SearchView),
     Library(LibraryView),
     Discover(DiscoverView),
-    Pairing { _view: PairingView },
+    Pairing(PairingView),
     Settings { _view: SettingsView },
     Addons { _view: AddonsView },
     Import { _view: ImportView },
@@ -246,7 +246,7 @@ impl Session {
                 };
                 let result = mq_sync::pair::approve_pairing(self.core.http(), &config, &qr)
                     .await
-                    .map(|()| json!({}))
+                    .map(|code| json!({ "code": code }))
                     .map_err(|e| e.to_string());
                 self.reply(json!(id), result);
             }
@@ -380,11 +380,7 @@ impl Session {
                 let pairing = PairingView::open(&self.core, &param(params, "server")?);
                 let (snapshot, updates) = pairing.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out));
-                (
-                    View::Pairing { _view: pairing },
-                    to_value(&snapshot)?,
-                    forward,
-                )
+                (View::Pairing(pairing), to_value(&snapshot)?, forward)
             }
             "discover" => {
                 let discover = DiscoverView::open(&self.core);
@@ -458,6 +454,8 @@ impl Session {
                 discover.select(text("kind"), text("catalog"), genre);
             }
             (View::Discover(discover), "loadMore") => discover.load_more(),
+            (View::Pairing(pairing), "confirm") => pairing.confirm(),
+            (View::Pairing(pairing), "reject") => pairing.reject(),
             (View::Library(library), "setFilter") => {
                 library.set_filter(
                     command

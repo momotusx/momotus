@@ -4,7 +4,7 @@
 use mq_http::{ClientConfig, HttpClient, RequestOptions};
 use mq_library::hlc::{HlcClock, now_ms};
 use mq_library::{AddonRow, Library, LibraryItemRow, ProgressRow, SyncCursor, coll};
-use mq_sync::wire::AccountResponse;
+use mq_sync::wire::{AccountResponse, MAX_CLOCK_AHEAD_MS};
 use mq_sync::{SyncConfig, pull_changes, push_changes, sync_once};
 use proptest::prelude::*;
 use std::collections::HashMap;
@@ -50,6 +50,13 @@ enum Op {
     ClockJump {
         device: usize,
         skew_s: i64,
+    },
+    /// Takes a timestamp, pulls, then writes with it: a pull that lands
+    /// between an edit's clock and its write.
+    StalePullWrite {
+        device: usize,
+        video: u8,
+        position: i64,
     },
     Memory {
         device: usize,
@@ -102,6 +109,13 @@ fn op() -> impl Strategy<Value = Op> {
         }),
         device.clone().prop_map(|device| Op::Sync { device }),
         device.clone().prop_map(|device| Op::Restart { device }),
+        (device.clone(), 0..2u8, 0..1000i64).prop_map(|(device, video, position)| {
+            Op::StalePullWrite {
+                device,
+                video,
+                position,
+            }
+        }),
         (device.clone(), -7200..540i64)
             .prop_map(|(device, skew_s)| Op::ClockJump { device, skew_s }),
         device.clone().prop_map(|device| Op::Push { device }),
@@ -190,7 +204,8 @@ impl Device {
             | Op::Push { .. }
             | Op::Pull { .. }
             | Op::Restart { .. }
-            | Op::ClockJump { .. } => {
+            | Op::ClockJump { .. }
+            | Op::StalePullWrite { .. } => {
                 unreachable!("handled by the runner")
             }
         }
@@ -213,6 +228,7 @@ fn written(op: &Op, value: &serde_json::Value) -> bool {
             urls == stored
         }
         Op::Memory { group, .. } => value["bingeGroup"] == format!("g{group}"),
+        Op::StalePullWrite { position, .. } => value["positionMs"] == *position,
         _ => true,
     }
 }
@@ -303,12 +319,42 @@ async fn run(ops: Vec<Op>) {
                     .as_deref()
                     .and_then(mq_library::Hlc::decode)
                 {
-                    d.clock.observe(newest, now_ms());
+                    d.clock.observe(newest, d.clock.wall_now());
                 }
             }
             Op::ClockJump { device, skew_s } => {
                 devices[*device].skew_ms = skew_s * 1000;
                 devices[*device].clock.set_offset_ms(skew_s * 1000);
+            }
+            Op::StalePullWrite {
+                device,
+                video,
+                position,
+            } => {
+                let d = &devices[*device];
+                let early = d.hlc();
+                pull_changes(&d.library, &http, &configs[*device], &d.clock)
+                    .await
+                    .unwrap();
+                let video_id = format!("tt1:1:{video}");
+                let row = ProgressRow {
+                    video_id: &video_id,
+                    item_id: "tt1",
+                    position_ms: *position,
+                    duration_ms: 1000,
+                    updated_ms: *position,
+                };
+                d.library.set_progress(PROFILE, row, &early).unwrap();
+                let key = [PROFILE, &video_id].join("\u{1f}");
+                let stored = d.library.register(coll::PROGRESS, &key).unwrap().unwrap();
+                assert!(
+                    written(op, &stored.value),
+                    "edit lost: {op:?} left {stored:?}"
+                );
+                let slot = newest.entry((coll::PROGRESS, key)).or_default();
+                if stored.hlc > *slot {
+                    *slot = stored.hlc;
+                }
             }
             Op::Sync { device } => {
                 let d = &devices[*device];
@@ -384,6 +430,12 @@ async fn run(ops: Vec<Op>) {
         newest.len(),
         "registers missing after {ops:?}"
     );
+    // Syncing never drags a device's clock past the relay's 10 minutes.
+    let ceiling = now_ms() + MAX_CLOCK_AHEAD_MS + 1000;
+    for d in devices.iter().filter(|d| d.skew_ms <= 0) {
+        let wall = d.clock.tick(d.clock.wall_now()).wall_ms;
+        assert!(wall <= ceiling, "clock {wall} past {ceiling} after {ops:?}");
+    }
 }
 
 proptest! {

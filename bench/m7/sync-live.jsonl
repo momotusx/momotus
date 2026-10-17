@@ -15,3 +15,7 @@
 {"event":"paired","device":"B","then_synced":{"applied":4,"pulled":4,"pushed":0,"stale":1},"check":"B lists the same 5 addons"}
 {"event":"recovered","device":"C","then_synced":{"applied":4,"pulled":4,"pushed":0,"stale":1},"check":"C lists the same 5 addons"}
 {"event":"relay_scan","devices":3,"open_pairings":0,"recovery_rows":1}
+{"event":"setup","date":"2026-10-17","note":"after review round 4: pairing with a confirmation code and take secret, recovery kit sealed to a kit-derived X25519 key"}
+{"event":"paired","codes":{"phone":"121199","tv":"121199"},"then_synced":{"applied":4,"pulled":4,"pushed":0,"stale":1},"check":"B lists the same 5 addons"}
+{"event":"recovered","then_synced":{"applied":4,"pulled":4,"pushed":0,"stale":1}}
+{"event":"relay_scan","devices":3,"devices_with_minted_by":2,"recovery_kits":1}

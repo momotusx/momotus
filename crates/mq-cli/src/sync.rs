@@ -113,7 +113,18 @@ pub async fn pair(data: &Path, server: &str) -> Result<(), String> {
         if mq_library::hlc::now_ms() >= request.expires_ms {
             return Err("the pairing code expired".into());
         }
-        if let Some(joined) = request.poll(&http).await.map_err(|e| e.to_string())? {
+        if let Some(offer) = request.poll(&http).await.map_err(|e| e.to_string())? {
+            // Nothing is kept until the user confirms the other device shows
+            // the same code.
+            super::emit(json!({ "event": "confirm", "code": offer.code }));
+            let mut answer = String::new();
+            std::io::stdin()
+                .read_line(&mut answer)
+                .map_err(|e| e.to_string())?;
+            if !answer.trim().eq_ignore_ascii_case("y") {
+                return Err("the codes did not match; nothing was kept".into());
+            }
+            let joined = offer.joined;
             std::fs::create_dir_all(data).map_err(|e| e.to_string())?;
             write(
                 &data.join(KEY_FILE),
@@ -132,10 +143,10 @@ pub async fn pair(data: &Path, server: &str) -> Result<(), String> {
 /// Device that syncs: approves the device showing `qr`.
 pub async fn approve(data: &Path, qr: &str) -> Result<(), String> {
     let config = config(data)?;
-    mq_sync::pair::approve_pairing(&http()?, &config, qr)
+    let code = mq_sync::pair::approve_pairing(&http()?, &config, qr)
         .await
         .map_err(|e| e.to_string())?;
-    super::emit(json!({ "event": "approved" }));
+    super::emit(json!({ "event": "approved", "code": code }));
     Ok(())
 }
 

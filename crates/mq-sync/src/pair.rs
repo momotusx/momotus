@@ -1,21 +1,23 @@
 //! Adding a device and recovering an account, with no password and nothing
 //! the relay can read or forge (plan: "Phase 2: pairing and recovery").
 //!
-//! Pairing: the new device shows a QR with a one-time slot and its X25519
-//! public key; a device that already syncs seals `{server, token, keys}` to
-//! that key with HPKE (RFC 9180) and drops it in the slot. The key never
-//! passes through the relay, so the relay cannot seal a substitute.
+//! Pairing: the new device opens a slot and shows a QR with the slot id and
+//! its X25519 public key; a device of the account seals the key bundle and a
+//! six-digit code to that key with HPKE (RFC 9180) and shows the code. The
+//! new device collects the blob with a take secret that never left it, and
+//! saves nothing until the user confirms both screens show the same code, so
+//! someone else who saw the QR cannot slip in their own account.
 //!
-//! Recovery: a 160-bit kit derives a lookup id and a wrap key; the relay
-//! keeps the bundle sealed under the wrap key and hands it back, with a new
-//! device token, to whoever presents the lookup id.
+//! Recovery: a 160-bit kit derives a lookup id, a redeem secret and an
+//! X25519 key pair. The relay keeps the bundle sealed to the kit's public
+//! key, so any device can reseal a new bundle after a key rotation, and
+//! hands it back (with a new device token) only for the redeem secret,
+//! which no device keeps.
 
-use crate::engine::{SyncConfig, SyncError, add_device, require_secure};
+use crate::engine::{SyncConfig, SyncError, require_secure};
 use crate::seal::KeyBundle;
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
-use chacha20poly1305::aead::{Aead, KeyInit, Payload};
-use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use hkdf::Hkdf;
 use hpke::aead::ChaCha20Poly1305;
 use hpke::kdf::HkdfSha256;
@@ -23,15 +25,18 @@ use hpke::kem::X25519HkdfSha256;
 use hpke::{Deserializable, Kem as _, OpModeR, OpModeS, Serializable};
 use mq_http::{HttpClient, Priority, RequestOptions};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use std::time::Duration;
 
 type Kem = X25519HkdfSha256;
-const INFO: &[u8] = b"marquee/pair/v1";
+type PrivateKey = <Kem as hpke::Kem>::PrivateKey;
+type PublicKey = <Kem as hpke::Kem>::PublicKey;
+const PAIR_INFO: &[u8] = b"marquee/pair/v1";
+const RECOVERY_INFO: &[u8] = b"marquee/recovery/v1";
 /// X25519 encapsulated key length, in front of the HPKE ciphertext.
 const ENC: usize = 32;
 
-/// What a new device needs to join an account; goes to the keystore.
+/// What a device needs to sync with an account; goes to the keystore.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Joined {
@@ -58,26 +63,20 @@ impl Joined {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Slot {
-    pairing: String,
-    expires_ms: u64,
+/// A pairing a device of the account approved: save `joined` only after
+/// the user confirms `code` matches the one on that device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Offer {
+    pub joined: Joined,
+    pub code: String,
 }
 
+/// Sealed inside a pairing blob.
 #[derive(Serialize, Deserialize)]
-struct Sealed {
-    sealed: String,
-}
-
-/// A pairing in progress on the new device.
-pub struct PairingRequest {
-    /// Text for the QR code.
-    pub qr: String,
-    pub expires_ms: u64,
+struct PairPayload {
     server: String,
-    pairing: String,
-    secret: <Kem as hpke::Kem>::PrivateKey,
+    keys: KeyBundle,
+    code: String,
 }
 
 fn options(server: &str, token: Option<&str>) -> RequestOptions {
@@ -98,6 +97,66 @@ fn options(server: &str, token: Option<&str>) -> RequestOptions {
 
 fn bad(why: &str) -> SyncError {
     SyncError::Pairing(why.to_owned())
+}
+
+fn seal_to(
+    public: &PublicKey,
+    info: &[u8],
+    aad: &[u8],
+    plain: &[u8],
+) -> Result<Vec<u8>, SyncError> {
+    let (enc, mut context) =
+        hpke::setup_sender::<ChaCha20Poly1305, HkdfSha256, Kem>(&OpModeS::Base, public, info)
+            .map_err(|_| bad("the key is not usable"))?;
+    let ciphertext = context
+        .seal(plain, aad)
+        .map_err(|_| bad("sealing failed"))?;
+    let mut blob = enc.to_bytes().to_vec();
+    blob.extend_from_slice(&ciphertext);
+    Ok(blob)
+}
+
+fn open_with(
+    secret: &PrivateKey,
+    info: &[u8],
+    aad: &[u8],
+    blob: &[u8],
+) -> Result<Vec<u8>, SyncError> {
+    if blob.len() < ENC {
+        return Err(bad("sealed data is too short"));
+    }
+    let (enc, ciphertext) = blob.split_at(ENC);
+    let enc =
+        <Kem as hpke::Kem>::EncappedKey::from_bytes(enc).map_err(|_| bad("bad sealed key"))?;
+    let mut context = hpke::setup_receiver::<ChaCha20Poly1305, HkdfSha256, Kem>(
+        &OpModeR::Base,
+        secret,
+        &enc,
+        info,
+    )
+    .map_err(|_| bad("sealed data does not open"))?;
+    context
+        .open(ciphertext, aad)
+        .map_err(|_| bad("sealed data does not open"))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Slot {
+    pairing: String,
+    take: String,
+    expires_ms: u64,
+}
+
+/// A pairing in progress on the new device.
+pub struct PairingRequest {
+    /// Text for the QR code.
+    pub qr: String,
+    pub expires_ms: u64,
+    server: String,
+    pairing: String,
+    take: String,
+    secret: PrivateKey,
 }
 
 /// Opens a pairing slot on the relay and returns the QR to show.
@@ -123,55 +182,59 @@ pub async fn start_pairing(http: &HttpClient, server: &str) -> Result<PairingReq
         expires_ms: slot.expires_ms,
         server: server.to_owned(),
         pairing: slot.pairing,
+        take: slot.take,
         secret,
     })
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Taken {
+    sealed: String,
+    device_token: String,
+}
+
 impl PairingRequest {
-    /// `None` while the other device has not approved yet.
-    pub async fn poll(&self, http: &HttpClient) -> Result<Option<Joined>, SyncError> {
+    /// `None` while no device has approved yet.
+    pub async fn poll(&self, http: &HttpClient) -> Result<Option<Offer>, SyncError> {
         let response = http
-            .get(
-                &format!("{}/v1/pairings/{}", self.server, self.pairing),
+            .post_json(
+                &format!("{}/v1/pairings/{}/take", self.server, self.pairing),
+                &serde_json::json!({ "take": self.take }),
                 &options(&self.server, None),
             )
             .await?;
         if response.status == 204 {
             return Ok(None);
         }
-        let sealed: Sealed = response.json()?;
+        let taken: Taken = response.json()?;
         let blob = B64
-            .decode(&sealed.sealed)
+            .decode(&taken.sealed)
             .map_err(|_| bad("pairing reply is not base64"))?;
-        if blob.len() < ENC {
-            return Err(bad("pairing reply is too short"));
+        let plain = open_with(&self.secret, PAIR_INFO, self.pairing.as_bytes(), &blob)?;
+        let payload: PairPayload =
+            serde_json::from_slice(&plain).map_err(|_| bad("pairing reply is malformed"))?;
+        if payload.server != self.server {
+            return Err(bad("the reply names another sync server"));
         }
-        let (enc, ciphertext) = blob.split_at(ENC);
-        let enc = <Kem as hpke::Kem>::EncappedKey::from_bytes(enc)
-            .map_err(|_| bad("pairing reply has a bad key"))?;
-        let mut context = hpke::setup_receiver::<ChaCha20Poly1305, HkdfSha256, Kem>(
-            &OpModeR::Base,
-            &self.secret,
-            &enc,
-            INFO,
-        )
-        .map_err(|_| bad("pairing reply does not open"))?;
-        let plain = context
-            .open(ciphertext, self.pairing.as_bytes())
-            .map_err(|_| bad("pairing reply does not open"))?;
-        serde_json::from_slice(&plain)
-            .map(Some)
-            .map_err(|_| bad("pairing reply is malformed"))
+        Ok(Some(Offer {
+            joined: Joined {
+                server: self.server.clone(),
+                device_token: taken.device_token,
+                keys: payload.keys,
+            },
+            code: payload.code,
+        }))
     }
 }
 
 /// On a device that already syncs: hands the account to the device whose QR
-/// was scanned.
+/// was scanned. Returns the code to show, which the new device must match.
 pub async fn approve_pairing(
     http: &HttpClient,
     config: &SyncConfig,
     qr: &str,
-) -> Result<(), SyncError> {
+) -> Result<String, SyncError> {
     let url = url::Url::parse(qr).map_err(|_| bad("not a pairing code"))?;
     let field = |name: &str| {
         url.query_pairs()
@@ -187,33 +250,39 @@ pub async fn approve_pairing(
     }
     let public = field("k")
         .and_then(|k| B64URL.decode(k).ok())
-        .and_then(|k| <Kem as hpke::Kem>::PublicKey::from_bytes(&k).ok())
+        .and_then(|k| PublicKey::from_bytes(&k).ok())
         .ok_or_else(|| bad("pairing code has no valid key"))?;
-    let device = add_device(http, &config.server, &config.device_token).await?;
-    let joined = Joined {
+    let code = six_digits();
+    let payload = PairPayload {
         server: config.server.clone(),
-        device_token: device.device_token,
         keys: config.keys.clone(),
+        code: code.clone(),
     };
-    let plain = serde_json::to_vec(&joined).expect("plain struct");
-    let (enc, mut context) =
-        hpke::setup_sender::<ChaCha20Poly1305, HkdfSha256, Kem>(&OpModeS::Base, &public, INFO)
-            .map_err(|_| bad("pairing key is not usable"))?;
-    let ciphertext = context
-        .seal(&plain, pairing.as_bytes())
-        .map_err(|_| bad("sealing failed"))?;
-    let mut blob = enc.to_bytes().to_vec();
-    blob.extend_from_slice(&ciphertext);
-    http.request(
-        mq_http::Method::PUT,
-        &format!("{}/v1/pairings/{pairing}", config.server),
-        Some(mq_http::Body::Json(
-            serde_json::json!({ "sealed": B64.encode(blob) }),
-        )),
-        &options(&config.server, Some(&config.device_token)),
-    )
-    .await?;
-    Ok(())
+    let plain = serde_json::to_vec(&payload).expect("plain struct");
+    let blob = seal_to(&public, PAIR_INFO, pairing.as_bytes(), &plain)?;
+    let filled = http
+        .request(
+            mq_http::Method::PUT,
+            &format!("{}/v1/pairings/{pairing}", config.server),
+            Some(mq_http::Body::Json(
+                serde_json::json!({ "sealed": B64.encode(blob) }),
+            )),
+            &options(&config.server, Some(&config.device_token)),
+        )
+        .await;
+    match filled {
+        Ok(_) => Ok(code),
+        Err(mq_http::HttpError::Status { status: 409, .. }) => {
+            Err(bad("this pairing code was already used or has expired"))
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn six_digits() -> String {
+    let mut b = [0u8; 4];
+    getrandom::fill(&mut b).expect("os randomness");
+    format!("{:06}", u32::from_le_bytes(b) % 1_000_000)
 }
 
 /// A fresh recovery kit: 160 random bits as 32 base32 characters in groups
@@ -229,50 +298,54 @@ pub fn new_recovery_kit() -> String {
         .join("-")
 }
 
-/// Lookup id (hex) and wrap key of a kit.
-fn kit_keys(kit: &str) -> Result<(String, [u8; 32]), SyncError> {
+/// What a kit derives: lookup id (hex), redeem secret and key pair.
+struct KitKeys {
+    lookup: String,
+    auth: [u8; 32],
+    secret: PrivateKey,
+    public: PublicKey,
+}
+
+fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
     let secret = unbase32(kit)
         .filter(|s| s.len() == 20)
         .ok_or_else(|| bad("not a recovery kit"))?;
     let hk = Hkdf::<Sha256>::new(None, &secret);
     let mut lookup = [0u8; 16];
-    let mut wrap = [0u8; 32];
+    let mut auth = [0u8; 32];
+    let mut ikm = [0u8; 32];
     hk.expand(b"marquee/recovery/lookup/v1", &mut lookup)
         .expect("valid length");
-    hk.expand(b"marquee/recovery/wrap/v1", &mut wrap)
+    hk.expand(b"marquee/recovery/auth/v1", &mut auth)
         .expect("valid length");
-    Ok((hex::encode(lookup), wrap))
+    hk.expand(b"marquee/recovery/key/v1", &mut ikm)
+        .expect("valid length");
+    let (secret, public) = Kem::derive_keypair(&ikm);
+    Ok(KitKeys {
+        lookup: hex::encode(lookup),
+        auth,
+        secret,
+        public,
+    })
 }
 
-/// Keeps the key bundle on the relay, sealed under the kit. Run again
-/// whenever the bundle changes.
+/// Registers a new kit for the account with the bundle sealed to it.
 pub async fn store_recovery(
     http: &HttpClient,
     config: &SyncConfig,
     kit: &str,
 ) -> Result<(), SyncError> {
-    let (lookup, wrap) = kit_keys(kit)?;
-    let mut nonce = [0u8; 24];
-    getrandom::fill(&mut nonce).expect("os randomness");
+    let keys = kit_keys(kit)?;
     let plain = serde_json::to_vec(&config.keys).expect("plain struct");
-    let sealed = XChaCha20Poly1305::new_from_slice(&wrap)
-        .expect("32-byte key")
-        .encrypt(
-            &XNonce::from(nonce),
-            Payload {
-                msg: &plain,
-                aad: lookup.as_bytes(),
-            },
-        )
-        .expect("bounded buffer");
-    let mut blob = nonce.to_vec();
-    blob.extend_from_slice(&sealed);
-    http.request(
-        mq_http::Method::PUT,
+    let sealed = seal_to(&keys.public, RECOVERY_INFO, keys.lookup.as_bytes(), &plain)?;
+    http.post_json(
         &format!("{}/v1/recovery", config.server),
-        Some(mq_http::Body::Json(
-            serde_json::json!({ "lookup": lookup, "sealed": B64.encode(blob) }),
-        )),
+        &serde_json::json!({
+            "lookup": keys.lookup,
+            "authHash": hex::encode(Sha256::digest(keys.auth)),
+            "pk": B64.encode(keys.public.to_bytes()),
+            "sealed": B64.encode(sealed),
+        }),
         &options(&config.server, Some(&config.device_token)),
     )
     .await?;
@@ -280,8 +353,53 @@ pub async fn store_recovery(
 }
 
 #[derive(Deserialize)]
+struct KitList {
+    kits: Vec<KitRef>,
+}
+
+#[derive(Deserialize)]
+struct KitRef {
+    lookup: String,
+    pk: String,
+}
+
+/// Seals the current bundle to every kit of the account (after a key
+/// rotation); needs no kit, only the public keys the relay lists.
+pub async fn reseal_recovery(http: &HttpClient, config: &SyncConfig) -> Result<u32, SyncError> {
+    let list: KitList = http
+        .get(
+            &format!("{}/v1/recovery", config.server),
+            &options(&config.server, Some(&config.device_token)),
+        )
+        .await?
+        .json()?;
+    let plain = serde_json::to_vec(&config.keys).expect("plain struct");
+    let mut resealed = 0;
+    for kit in list.kits {
+        let public = B64
+            .decode(&kit.pk)
+            .ok()
+            .and_then(|k| PublicKey::from_bytes(&k).ok())
+            .ok_or_else(|| bad("the relay listed a bad kit key"))?;
+        let sealed = seal_to(&public, RECOVERY_INFO, kit.lookup.as_bytes(), &plain)?;
+        http.request(
+            mq_http::Method::PUT,
+            &format!("{}/v1/recovery/reseal", config.server),
+            Some(mq_http::Body::Json(serde_json::json!({
+                "lookup": kit.lookup,
+                "sealed": B64.encode(sealed),
+            }))),
+            &options(&config.server, Some(&config.device_token)),
+        )
+        .await?;
+        resealed += 1;
+    }
+    Ok(resealed)
+}
+
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Recovered {
+struct Redeemed {
     device_token: String,
     sealed: String,
 }
@@ -289,38 +407,25 @@ struct Recovered {
 /// Joins the account a recovery kit belongs to, as a new device.
 pub async fn recover(http: &HttpClient, server: &str, kit: &str) -> Result<Joined, SyncError> {
     require_secure(server)?;
-    let (lookup, wrap) = kit_keys(kit)?;
-    let found: Recovered = http
+    let keys = kit_keys(kit)?;
+    let redeemed: Redeemed = http
         .post_json(
-            &format!("{server}/v1/recovery/{lookup}"),
-            &serde_json::json!({}),
+            &format!("{server}/v1/recovery/redeem"),
+            &serde_json::json!({ "lookup": keys.lookup, "auth": hex::encode(keys.auth) }),
             &options(server, None),
         )
         .await?
         .json()?;
     let blob = B64
-        .decode(&found.sealed)
+        .decode(&redeemed.sealed)
         .map_err(|_| bad("recovery data is not base64"))?;
-    if blob.len() < 24 {
-        return Err(bad("recovery data is too short"));
-    }
-    let (nonce, sealed) = blob.split_at(24);
-    let plain = XChaCha20Poly1305::new_from_slice(&wrap)
-        .expect("32-byte key")
-        .decrypt(
-            &XNonce::try_from(nonce).map_err(|_| bad("recovery data is malformed"))?,
-            Payload {
-                msg: sealed,
-                aad: lookup.as_bytes(),
-            },
-        )
-        .map_err(|_| bad("the kit does not open the recovery data"))?;
-    let keys: KeyBundle =
+    let plain = open_with(&keys.secret, RECOVERY_INFO, keys.lookup.as_bytes(), &blob)?;
+    let bundle: KeyBundle =
         serde_json::from_slice(&plain).map_err(|_| bad("recovery data is malformed"))?;
     Ok(Joined {
         server: server.to_owned(),
-        device_token: found.device_token,
-        keys,
+        device_token: redeemed.device_token,
+        keys: bundle,
     })
 }
 
@@ -367,14 +472,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn kits_round_trip_however_they_are_typed() {
+    fn kits_derive_the_same_keys_however_they_are_typed() {
         let kit = new_recovery_kit();
         assert_eq!(kit.len(), 32 + 7, "{kit}");
-        let (lookup, wrap) = kit_keys(&kit).unwrap();
-        let typed = kit.to_lowercase().replace('-', " ");
-        assert_eq!(kit_keys(&typed).unwrap(), (lookup, wrap));
+        let a = kit_keys(&kit).unwrap();
+        let b = kit_keys(&kit.to_lowercase().replace('-', " ")).unwrap();
+        assert_eq!((a.lookup, a.auth), (b.lookup, b.auth));
+        assert_eq!(a.public.to_bytes(), b.public.to_bytes());
         assert!(kit_keys("ABCD-EFGH").is_err());
         assert_eq!(base32(b"foobar"), "MZXW6YTBOI");
         assert_eq!(unbase32("MZXW6YTBOI").unwrap(), b"foobar");
+        assert_eq!(six_digits().len(), 6);
     }
 }

@@ -300,16 +300,30 @@ async fn push(
                 // Written while this device's clock ran ahead. Nobody else
                 // ever accepted that version, so it is stamped again at the
                 // relay's time, once per round.
+                // A version stamped by another device (queued when this device
+                // moved to a new relay) is not this device's to re-assert.
+                Refusal::ClockAhead
+                    if Hlc::decode(&record.hlc).is_none_or(|h| h.device != clock.device()) =>
+                {
+                    report.refused += 1;
+                }
                 Refusal::ClockAhead if restamped.insert((record.coll, record.key.clone())) => {
-                    // At the edge of what the relay accepts, so above any version
-                    // it took earlier from this fast clock.
-                    let now = clock.wall_now();
-                    let at = Hlc {
-                        wall_ms: (response.server_ms + MAX_CLOCK_AHEAD_MS).min(MAX_WALL_MS),
+                    // Just above what the relay holds for this register (and no
+                    // earlier than its time), so the edit still wins without
+                    // pushing every device's clock to the 10-minute edge.
+                    let device = clock.device();
+                    let floor = Hlc {
+                        wall_ms: response.server_ms.min(MAX_WALL_MS),
                         counter: 0,
-                        device: clock.device(),
+                        device,
                     };
-                    clock.observe(at, now);
+                    let above = refusal
+                        .current
+                        .as_deref()
+                        .and_then(Hlc::decode)
+                        .map(|current| current.next_for(device));
+                    let at = above.map_or(floor, |above| above.max(floor));
+                    clock.observe(at, clock.wall_now());
                     library.restamp(record.coll, &record.key, &at.encode())?;
                 }
                 Refusal::ClockAhead => {

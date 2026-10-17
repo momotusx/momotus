@@ -212,6 +212,7 @@ async fn lying_relay() -> String {
                             key_id: r.key_id.clone(),
                             reason: "ahead".into(),
                             code: Refusal::ClockAhead,
+                            current: None,
                         })
                         .collect(),
                     server_ms: FAR,
@@ -257,4 +258,64 @@ async fn a_lying_relay_cannot_break_clocks_or_drop_writes() {
     assert!(next > stored[0].hlc);
     // The refused write is still queued for an honest relay.
     assert!(lib.outbox(10).unwrap().last_id.is_some());
+}
+
+#[tokio::test]
+async fn a_relay_with_a_slow_clock_loses_no_edits() {
+    let dir = dir();
+    // A Pi whose clock has not synced yet: 30 minutes behind every device.
+    let server = serve(
+        &dir.0.join("relay.sqlite"),
+        Config {
+            clock_offset_ms: -30 * 60 * 1000,
+            ..Config::default()
+        },
+    )
+    .await;
+    let config = account(&server).await;
+    let (a, b) = (Library::temporary().unwrap(), Library::temporary().unwrap());
+    let (clock_a, clock_b) = (HlcClock::new(1), HlcClock::new(2));
+    progress(&a, "v1", &clock_a.tick(clock_a.wall_now()).encode());
+    let report = sync_once(&a, &http(), &config, &clock_a).await.unwrap();
+    assert_eq!(report.pushed, 1, "restamped and accepted: {report:?}");
+    sync_once(&b, &http(), &config, &clock_b).await.unwrap();
+    assert_eq!(b.progress("p", "v1").unwrap(), Some((5, 10)));
+
+    // B edits the same register later; its edit must win everywhere.
+    let row = ProgressRow {
+        video_id: "v1",
+        item_id: "tt1",
+        position_ms: 7,
+        duration_ms: 10,
+        updated_ms: 2,
+    };
+    b.set_progress("p", row, &clock_b.tick(clock_b.wall_now()).encode())
+        .unwrap();
+    let report = sync_once(&b, &http(), &config, &clock_b).await.unwrap();
+    assert_eq!(report.pushed, 1, "{report:?}");
+    sync_once(&a, &http(), &config, &clock_a).await.unwrap();
+    assert_eq!(a.progress("p", "v1").unwrap(), Some((7, 10)));
+    assert_eq!(registers(&a), registers(&b));
+}
+
+#[tokio::test]
+async fn another_devices_version_is_never_restamped() {
+    let dir = dir();
+    let server = serve(&dir.0.join("relay.sqlite"), Config::default()).await;
+    let config = account(&server).await;
+    let lib = Library::temporary().unwrap();
+    // Pulled from a fast device (99) on an earlier relay, then queued for
+    // this one: the relay refuses its clock.
+    let foreign = Hlc {
+        wall_ms: now_ms() + 3_600_000,
+        counter: 0,
+        device: 99,
+    };
+    progress(&lib, "v1", &foreign.encode());
+    let report = sync_once(&lib, &http(), &config, &HlcClock::new(1))
+        .await
+        .unwrap();
+    assert_eq!((report.refused, report.pushed), (1, 0), "{report:?}");
+    let stored = lib.changed_since(&SyncCursor::default(), 10).unwrap();
+    assert_eq!(stored[0].hlc, foreign.encode(), "left as it was");
 }

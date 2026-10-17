@@ -55,6 +55,9 @@ pub struct Rejected {
     pub reason: String,
     #[serde(default)]
     pub code: Refusal,
+    /// For a clock refusal: the hlc of the version the relay holds now.
+    #[serde(default)]
+    pub current: Option<String>,
 }
 
 /// Why the relay refused a record, so a device knows whether to retry.
