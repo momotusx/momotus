@@ -13,6 +13,7 @@ path = "src/main.rs"
 mq-runtime = { path = "../mq-runtime" }
 mq-streams = { path = "../mq-streams" }
 mq-sync = { path = "../mq-sync" }
+mq-library = { path = "../mq-library" }
 mq-addons = { path = "../mq-addons" }
 mq-protocol = { path = "../mq-protocol" }
 mq-http = { path = "../mq-http" }

@@ -90,6 +90,14 @@ enum SyncAction {
     Join { from: PathBuf },
     /// Push local changes, pull and apply remote ones.
     Now,
+    /// Join an account from another device: prints a pairing code to approve.
+    Pair { server: String },
+    /// Approve a device showing this pairing code.
+    Approve { qr: String },
+    /// Make a recovery kit (shown once).
+    Kit,
+    /// Join the account of a recovery kit.
+    Recover { server: String, kit: String },
 }
 
 #[tokio::main]
@@ -115,6 +123,10 @@ async fn main() {
             }
             SyncAction::Join { from } => sync::join(&cli.data, &from).await,
             SyncAction::Now => sync::now(&core, &cli.data).await,
+            SyncAction::Pair { server } => sync::pair(&cli.data, &server).await,
+            SyncAction::Approve { qr } => sync::approve(&cli.data, &qr).await,
+            SyncAction::Kit => sync::kit(&cli.data).await,
+            SyncAction::Recover { server, kit } => sync::recover(&cli.data, &server, &kit).await,
         },
         Command::Import { timeout_secs } => import(&core, Duration::from_secs(timeout_secs)).await,
         Command::Play {

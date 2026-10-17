@@ -102,7 +102,7 @@ fn op() -> impl Strategy<Value = Op> {
         }),
         device.clone().prop_map(|device| Op::Sync { device }),
         device.clone().prop_map(|device| Op::Restart { device }),
-        (device.clone(), -300..300i64)
+        (device.clone(), -7200..540i64)
             .prop_map(|(device, skew_s)| Op::ClockJump { device, skew_s }),
         device.clone().prop_map(|device| Op::Push { device }),
         device.prop_map(|device| Op::Pull { device }),
@@ -118,8 +118,7 @@ struct Device {
 
 impl Device {
     fn hlc(&self) -> String {
-        let now = (now_ms() as i64 + self.skew_ms) as u64;
-        self.clock.tick(now).encode()
+        self.clock.tick(self.clock.wall_now()).encode()
     }
 
     /// Applies a local edit and returns the register it wrote and its hlc.
@@ -198,6 +197,26 @@ impl Device {
     }
 }
 
+/// Whether a register value holds what `op` wrote.
+fn written(op: &Op, value: &serde_json::Value) -> bool {
+    match op {
+        Op::Progress { position, .. } => value["positionMs"] == *position,
+        Op::Watched { watched, .. } => value["watched"] == *watched,
+        Op::InLibrary { added, .. } => value["inLibrary"] == *added,
+        Op::Setting { value: v, .. } => value["valueJson"].as_str() == Some(v.to_string().as_str()),
+        Op::Addons { order, .. } => {
+            let urls: Vec<&str> = order.iter().map(|&i| URLS[i]).collect();
+            let stored: Vec<&str> = value["addons"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|x| x["url"].as_str()).collect())
+                .unwrap_or_default();
+            urls == stored
+        }
+        Op::Memory { group, .. } => value["bingeGroup"] == format!("g{group}"),
+        _ => true,
+    }
+}
+
 async fn relay() -> String {
     let dir = std::env::temp_dir().join(format!("mq-converge-{}-{}", std::process::id(), now_ms()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -233,7 +252,9 @@ async fn run(ops: Vec<Op>) {
     let keys = mq_sync::seal::KeyBundle::generate();
     let mut configs = Vec::new();
     let mut devices = Vec::new();
-    for (i, skew) in [0i64, -40_000, 25_000].into_iter().enumerate() {
+    // One device runs two hours slow; the fast one stays inside the relay's
+    // 10 minutes (restamping is covered in tests/engine.rs).
+    for (i, skew) in [0i64, -7_200_000, 540_000].into_iter().enumerate() {
         // phase 1: each device is its own device token on one account; the
         // account is created by the first and the token reused by the rest.
         if i == 0 {
@@ -257,6 +278,7 @@ async fn run(ops: Vec<Op>) {
         }
         let library = Library::temporary().unwrap();
         let clock = HlcClock::new(i as u64 + 1);
+        clock.set_offset_ms(skew);
         library
             .ensure_profile(PROFILE, PROFILE, &clock.tick(now_ms()).encode())
             .unwrap();
@@ -273,6 +295,7 @@ async fn run(ops: Vec<Op>) {
             Op::Restart { device } => {
                 let d = &mut devices[*device];
                 d.clock = HlcClock::new(*device as u64 + 1);
+                d.clock.set_offset_ms(d.skew_ms);
                 if let Some(newest) = d
                     .library
                     .newest_hlc()
@@ -283,7 +306,10 @@ async fn run(ops: Vec<Op>) {
                     d.clock.observe(newest, now_ms());
                 }
             }
-            Op::ClockJump { device, skew_s } => devices[*device].skew_ms = skew_s * 1000,
+            Op::ClockJump { device, skew_s } => {
+                devices[*device].skew_ms = skew_s * 1000;
+                devices[*device].clock.set_offset_ms(skew_s * 1000);
+            }
             Op::Sync { device } => {
                 let d = &devices[*device];
                 sync_once(&d.library, &http, &configs[*device], &d.clock)
@@ -308,10 +334,21 @@ async fn run(ops: Vec<Op>) {
             | Op::Setting { device, .. }
             | Op::Addons { device, .. }
             | Op::Memory { device, .. } => {
-                let (register, hlc) = devices[*device].apply(op);
+                let (register, _) = devices[*device].apply(op);
+                // Read your own write: a local edit always lands, even over a
+                // version pulled from a device whose clock is far ahead.
+                let stored = devices[*device]
+                    .library
+                    .register(register.0, &register.1)
+                    .unwrap()
+                    .expect("the register exists after writing it");
+                assert!(
+                    written(op, &stored.value),
+                    "edit lost: {op:?} left {stored:?}"
+                );
                 let slot = newest.entry(register).or_default();
-                if hlc > *slot {
-                    *slot = hlc;
+                if stored.hlc > *slot {
+                    *slot = stored.hlc;
                 }
             }
         }

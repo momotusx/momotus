@@ -100,3 +100,79 @@ fn write(path: &Path, file: &KeyFile) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     std::fs::rename(&temp, path).map_err(|e| e.to_string())
 }
+
+/// New device: prints the pairing code, waits for approval, keeps the keys.
+pub async fn pair(data: &Path, server: &str) -> Result<(), String> {
+    let http = http()?;
+    let request = mq_sync::pair::start_pairing(&http, server)
+        .await
+        .map_err(|e| e.to_string())?;
+    super::emit(json!({ "event": "pairing", "qr": request.qr, "expiresMs": request.expires_ms }));
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        if mq_library::hlc::now_ms() >= request.expires_ms {
+            return Err("the pairing code expired".into());
+        }
+        if let Some(joined) = request.poll(&http).await.map_err(|e| e.to_string())? {
+            std::fs::create_dir_all(data).map_err(|e| e.to_string())?;
+            write(
+                &data.join(KEY_FILE),
+                &KeyFile {
+                    server: joined.server,
+                    device_token: joined.device_token,
+                    keys: joined.keys,
+                },
+            )?;
+            super::emit(json!({ "event": "paired" }));
+            return Ok(());
+        }
+    }
+}
+
+/// Device that syncs: approves the device showing `qr`.
+pub async fn approve(data: &Path, qr: &str) -> Result<(), String> {
+    let config = config(data)?;
+    mq_sync::pair::approve_pairing(&http()?, &config, qr)
+        .await
+        .map_err(|e| e.to_string())?;
+    super::emit(json!({ "event": "approved" }));
+    Ok(())
+}
+
+/// Makes a recovery kit and prints it once.
+pub async fn kit(data: &Path) -> Result<(), String> {
+    let config = config(data)?;
+    let kit = mq_sync::pair::new_recovery_kit();
+    mq_sync::pair::store_recovery(&http()?, &config, &kit)
+        .await
+        .map_err(|e| e.to_string())?;
+    super::emit(json!({ "event": "recovery_kit", "kit": kit }));
+    Ok(())
+}
+
+/// Joins the account of a recovery kit as a new device.
+pub async fn recover(data: &Path, server: &str, kit: &str) -> Result<(), String> {
+    let joined = mq_sync::pair::recover(&http()?, server, kit)
+        .await
+        .map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(data).map_err(|e| e.to_string())?;
+    write(
+        &data.join(KEY_FILE),
+        &KeyFile {
+            server: joined.server,
+            device_token: joined.device_token,
+            keys: joined.keys,
+        },
+    )?;
+    super::emit(json!({ "event": "recovered" }));
+    Ok(())
+}
+
+fn config(data: &Path) -> Result<SyncConfig, String> {
+    let file = read(&data.join(KEY_FILE))?;
+    Ok(SyncConfig {
+        server: file.server,
+        device_token: file.device_token,
+        keys: file.keys,
+    })
+}

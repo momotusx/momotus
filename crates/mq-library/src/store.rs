@@ -1,5 +1,5 @@
 use crate::schema::migrations;
-use crate::sync::{coll, queue, sql};
+use crate::sync::{coll, local, queue, sql};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -190,8 +190,9 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            let n = sql::set_addons(c, profile, addons, hlc)?;
-            queue(c, n, coll::ADDONS, &[profile])
+            local(c, coll::ADDONS, &[profile], hlc, |h| {
+                sql::set_addons(c, profile, addons, h)
+            })
         })
     }
 
@@ -222,8 +223,9 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            let n = sql::upsert_item(c, profile, item, in_library, hlc)?;
-            queue(c, n, coll::ITEMS, &[profile, &item.item_id])
+            local(c, coll::ITEMS, &[profile, &item.item_id], hlc, |h| {
+                sql::upsert_item(c, profile, item, in_library, h)
+            })
         })
     }
 
@@ -235,8 +237,9 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            let n = sql::set_progress(c, profile, &p, hlc)?;
-            queue(c, n, coll::PROGRESS, &[profile, p.video_id])
+            local(c, coll::PROGRESS, &[profile, p.video_id], hlc, |h| {
+                sql::set_progress(c, profile, &p, h)
+            })
         })
     }
 
@@ -264,8 +267,9 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            let n = sql::set_watched(c, profile, item_id, video_id, watched, hlc)?;
-            queue(c, n, coll::WATCHED, &[profile, video_id])
+            local(c, coll::WATCHED, &[profile, video_id], hlc, |h| {
+                sql::set_watched(c, profile, item_id, video_id, watched, h)
+            })
         })
     }
 
@@ -549,8 +553,9 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            let n = sql::set_stream_memory(c, profile, item_id, binge_group, stream_json, hlc)?;
-            queue(c, n, coll::STREAM_MEMORY, &[profile, item_id])
+            local(c, coll::STREAM_MEMORY, &[profile, item_id], hlc, |h| {
+                sql::set_stream_memory(c, profile, item_id, binge_group, stream_json, h)
+            })
         })
     }
 
@@ -592,8 +597,9 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            let n = sql::set_setting(c, profile, key, value_json, hlc)?;
-            queue(c, n, coll::SETTINGS, &[profile, key])
+            local(c, coll::SETTINGS, &[profile, key], hlc, |h| {
+                sql::set_setting(c, profile, key, value_json, h)
+            })
         })
     }
 

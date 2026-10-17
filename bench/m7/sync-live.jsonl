@@ -10,3 +10,8 @@
 {"event":"synced","device":"B","ms":4,"report":{"applied":4,"pulled":4,"pushed":0,"stale":1,"unreadable":0},"check":"B lists Cinemeta, Torrentio, Local Test, OpenSubtitles v3, WatchHub"}
 {"event":"relay_scan","devices":2,"accounts":1,"records":4,"distinct_device_tokens":true}
 {"event":"property_test","devices":3,"cases":256,"ops":["progress","watched","library","setting","addons incl. empty","stream memory","sync","push","pull","restart","clock jump"],"seconds":5.7,"mutations_caught":["progress write not queued","client progress guard removed"]}
+{"event":"setup","date":"2026-10-17","note":"phase 2 through the CLI: A creates the account, B pairs by QR code that A approves, C joins with A's recovery kit"}
+{"event":"synced","device":"A","report":{"applied":0,"pulled":4,"pushed":4,"refused":0,"stale":0,"unreadable":0}}
+{"event":"paired","device":"B","then_synced":{"applied":4,"pulled":4,"pushed":0,"stale":1},"check":"B lists the same 5 addons"}
+{"event":"recovered","device":"C","then_synced":{"applied":4,"pulled":4,"pushed":0,"stale":1},"check":"C lists the same 5 addons"}
+{"event":"relay_scan","devices":3,"open_pairings":0,"recovery_rows":1}

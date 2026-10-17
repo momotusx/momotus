@@ -3,6 +3,7 @@
 //! never skips rows that share an HLC (an import writes thousands with one),
 //! and apply runs the same upsert-if-newer SQL as local writes.
 
+use crate::hlc::Hlc;
 use crate::store::{AddonRow, Library, LibraryError, LibraryItemRow, ProgressRow};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -261,18 +262,8 @@ impl Library {
     /// a version stamped by a clock that ran ahead, which no other device
     /// ever accepted.
     pub fn restamp(&self, coll: u8, key: &str, hlc: &str) -> Result<(), LibraryError> {
-        let tables: &[(&str, &str)] = match coll {
-            coll::PROFILES => &[("profiles", "id")],
-            coll::ADDONS => &[("addon_list", "profile_id"), ("addons", "profile_id")],
-            coll::ITEMS => &[("library_items", "profile_id || char(31) || item_id")],
-            coll::PROGRESS => &[("progress", "profile_id || char(31) || video_id")],
-            coll::WATCHED => &[("watched", "profile_id || char(31) || video_id")],
-            coll::SETTINGS => &[("settings", "profile_id || char(31) || key")],
-            coll::STREAM_MEMORY => &[("stream_memory", "profile_id || char(31) || item_id")],
-            _ => return Ok(()),
-        };
         self.write(|c| {
-            for (table, key_expr) in tables {
+            for (table, key_expr) in tables(coll) {
                 c.execute(
                     &format!("UPDATE {table} SET hlc = ?1 WHERE {key_expr} = ?2"),
                     params![hlc, key],
@@ -284,6 +275,22 @@ impl Library {
             )
             .map(drop)
         })
+    }
+
+    /// Queues a register again (one the relay could not take yet).
+    pub fn requeue(&self, coll: u8, key: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO sync_outbox (coll, key) VALUES (?1, ?2)",
+                params![coll, key],
+            )
+            .map(drop)
+        })
+    }
+
+    /// One register as a sync record.
+    pub fn register(&self, coll: u8, key: &str) -> Result<Option<SyncRecord>, LibraryError> {
+        self.read(|c| Ok(export(c, coll, Filter::Key(key))?.into_iter().next()))
     }
 
     /// Drops queue entries up to `id` once the relay has them.
@@ -591,6 +598,60 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         // A collection from a newer app version.
         _ => 0,
     })
+}
+
+/// Tables holding a collection's registers, with the key expression; the
+/// first one holds the register's hlc.
+fn tables(coll: u8) -> &'static [(&'static str, &'static str)] {
+    match coll {
+        coll::PROFILES => &[("profiles", "id")],
+        coll::ADDONS => &[("addon_list", "profile_id"), ("addons", "profile_id")],
+        coll::ITEMS => &[("library_items", "profile_id || char(31) || item_id")],
+        coll::PROGRESS => &[("progress", "profile_id || char(31) || video_id")],
+        coll::WATCHED => &[("watched", "profile_id || char(31) || video_id")],
+        coll::SETTINGS => &[("settings", "profile_id || char(31) || key")],
+        coll::STREAM_MEMORY => &[("stream_memory", "profile_id || char(31) || item_id")],
+        _ => &[],
+    }
+}
+
+fn stored_hlc(c: &Connection, coll: u8, key: &str) -> rusqlite::Result<Option<String>> {
+    let Some((table, key_expr)) = tables(coll).first() else {
+        return Ok(None);
+    };
+    c.query_row(
+        &format!("SELECT hlc FROM {table} WHERE {key_expr} = ?1"),
+        params![key],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+/// A local register write, queued for push when it changed something.
+///
+/// When the stored version wins by clock (pulled from a device whose clock
+/// runs ahead of this one), the user still acted after seeing it, so the
+/// write goes in once more just above it. Writes that only cache what the
+/// device saw (a zero hlc) or import another app's state (device 0) never
+/// do this, so they never override a real edit.
+pub(crate) fn local(
+    c: &Connection,
+    coll: u8,
+    parts: &[&str],
+    hlc: &str,
+    write: impl Fn(&str) -> rusqlite::Result<usize>,
+) -> rusqlite::Result<()> {
+    let mut changed = write(hlc)?;
+    if changed == 0
+        && let Some(mine) = Hlc::decode(hlc).filter(|h| h.wall_ms > 0 && h.device != 0)
+        && let Some(stored) = stored_hlc(c, coll, &key(parts))?
+            .as_deref()
+            .and_then(Hlc::decode)
+        && stored > mine
+    {
+        changed = write(&stored.next_for(mine.device).encode())?;
+    }
+    queue(c, changed, coll, parts)
 }
 
 /// Queues a register for push when a local write changed it.

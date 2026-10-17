@@ -41,6 +41,9 @@ pub struct PushResponse {
     pub accepted: u32,
     /// The relay already holds a newer or equal version.
     pub stale: u32,
+    /// Relay seq of each stale register's current version.
+    #[serde(default)]
+    pub stale_at: Vec<u64>,
     pub rejected: Vec<Rejected>,
     pub server_ms: u64,
 }

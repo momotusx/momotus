@@ -5,7 +5,7 @@ use mq_http::{ClientConfig, HttpClient, RequestOptions};
 use mq_library::hlc::{Hlc, HlcClock, now_ms};
 use mq_library::{Library, ProgressRow, SyncCursor};
 use mq_sync::seal::KeyBundle;
-use mq_sync::wire::AccountResponse;
+use mq_sync::wire::{AccountResponse, MAX_CLOCK_AHEAD_MS};
 use mq_sync::{SyncConfig, SyncError, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::{Path, PathBuf};
@@ -164,7 +164,10 @@ async fn a_write_from_a_clock_far_ahead_is_restamped_and_delivered() {
     assert_eq!(report.pushed, 1, "{report:?}");
     let stored = a.changed_since(&SyncCursor::default(), 10).unwrap();
     let hlc = Hlc::decode(&stored[0].hlc).unwrap();
-    assert!(hlc.wall_ms <= now_ms() + 1000, "restamped near relay time");
+    assert!(
+        hlc.wall_ms <= now_ms() + MAX_CLOCK_AHEAD_MS + 1000,
+        "restamped at the edge of what the relay takes"
+    );
 
     let b = Library::temporary().unwrap();
     sync_once(&b, &http(), &config, &HlcClock::new(2))
@@ -185,4 +188,73 @@ async fn bearer_tokens_never_go_to_a_public_relay_in_clear_text() {
         .await
         .unwrap_err();
     assert!(matches!(err, SyncError::Insecure), "{err:?}");
+}
+
+/// A relay that refuses every record as "clock ahead" and claims a time near
+/// the end of what 48 bits hold.
+async fn lying_relay() -> String {
+    use axum::Json;
+    use axum::routing::{get, post};
+    use mq_sync::wire::{PullResponse, PushRequest, PushResponse, Refusal, Rejected};
+    const FAR: u64 = 0xffff_ffff_fff0;
+    let app = axum::Router::new()
+        .route(
+            "/v1/push",
+            post(|Json(request): Json<PushRequest>| async move {
+                Json(PushResponse {
+                    accepted: 0,
+                    stale: 0,
+                    stale_at: vec![],
+                    rejected: request
+                        .records
+                        .iter()
+                        .map(|r| Rejected {
+                            key_id: r.key_id.clone(),
+                            reason: "ahead".into(),
+                            code: Refusal::ClockAhead,
+                        })
+                        .collect(),
+                    server_ms: FAR,
+                })
+            }),
+        )
+        .route(
+            "/v1/pull",
+            get(|| async {
+                Json(PullResponse {
+                    records: vec![],
+                    last: 0,
+                    head: 0,
+                    generation: "g".into(),
+                    more: false,
+                    server_ms: FAR,
+                })
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    base
+}
+
+#[tokio::test]
+async fn a_lying_relay_cannot_break_clocks_or_drop_writes() {
+    let config = SyncConfig {
+        server: lying_relay().await,
+        device_token: "t".into(),
+        keys: KeyBundle::generate(),
+    };
+    let lib = Library::temporary().unwrap();
+    let clock = HlcClock::new(1);
+    progress(&lib, "v1", &clock.tick(now_ms()).encode());
+    let err = sync_once(&lib, &http(), &config, &clock).await.unwrap_err();
+    assert!(matches!(err, SyncError::Rejected(_)), "{err:?}");
+    // Every stored and new timestamp still has 32 lowercase hex digits.
+    let stored = lib.changed_since(&SyncCursor::default(), 10).unwrap();
+    assert!(Hlc::decode(&stored[0].hlc).is_some(), "{:?}", stored[0].hlc);
+    let next = clock.tick(now_ms()).encode();
+    assert_eq!(next.len(), 32);
+    assert!(next > stored[0].hlc);
+    // The refused write is still queued for an honest relay.
+    assert!(lib.outbox(10).unwrap().last_id.is_some());
 }

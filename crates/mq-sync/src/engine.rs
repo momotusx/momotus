@@ -13,7 +13,7 @@ use crate::wire::{
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions};
-use mq_library::hlc::{Hlc, HlcClock, now_ms};
+use mq_library::hlc::{Hlc, HlcClock, MAX_WALL_MS};
 use mq_library::{Library, LibraryError, SyncRecord};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -81,6 +81,8 @@ pub enum SyncError {
     Rejected(String),
     #[error("the relay must use https unless it is on this network")]
     Insecure,
+    #[error("pairing: {0}")]
+    Pairing(String),
 }
 
 /// The plaintext inside a sealed body. The key travels inside so the reader
@@ -178,9 +180,18 @@ pub async fn add_device(
 }
 
 /// Bearer tokens never cross the internet in clear text.
-fn require_secure(server: &str) -> Result<(), SyncError> {
+pub(crate) fn require_secure(server: &str) -> Result<(), SyncError> {
     let url = url::Url::parse(server).map_err(|_| SyncError::Insecure)?;
-    let local = url.host_str().is_some_and(mq_http::is_private_host);
+    // Loopback, private ranges and link-local only: carrier NAT (100.64/10)
+    // and names that may resolve anywhere still cross other networks.
+    let local = match url.host() {
+        Some(url::Host::Domain(name)) => name == "localhost",
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Some(url::Host::Ipv6(ip)) => {
+            ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local()
+        }
+        None => false,
+    };
     if url.scheme() == "https" || (url.scheme() == "http" && local) {
         Ok(())
     } else {
@@ -266,6 +277,17 @@ async fn push(
         observe_server(clock, response.server_ms);
         report.pushed += response.accepted;
         report.stale += response.stale;
+        // The relay holds a newer version of these, which this device may
+        // have passed already: read from just before the oldest of them.
+        if let Some(oldest) = response.stale_at.iter().min() {
+            let cursor: u64 = library
+                .sync_state(PULL_SEQ)?
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            if oldest.saturating_sub(1) < cursor {
+                library.set_sync_state(PULL_SEQ, &oldest.saturating_sub(1).to_string())?;
+            }
+        }
         let mut stuck = None;
         for refusal in &response.rejected {
             let Some(record) = sent
@@ -279,14 +301,22 @@ async fn push(
                 // ever accepted that version, so it is stamped again at the
                 // relay's time, once per round.
                 Refusal::ClockAhead if restamped.insert((record.coll, record.key.clone())) => {
+                    // At the edge of what the relay accepts, so above any version
+                    // it took earlier from this fast clock.
+                    let now = clock.wall_now();
                     let at = Hlc {
-                        wall_ms: response.server_ms,
+                        wall_ms: (response.server_ms + MAX_CLOCK_AHEAD_MS).min(MAX_WALL_MS),
                         counter: 0,
                         device: clock.device(),
                     };
+                    clock.observe(at, now);
                     library.restamp(record.coll, &record.key, &at.encode())?;
                 }
-                Refusal::ClockAhead => stuck = Some(refusal.reason.clone()),
+                Refusal::ClockAhead => {
+                    // Still ahead after a restamp: keep it queued for a later round.
+                    library.requeue(record.coll, &record.key)?;
+                    stuck = Some(refusal.reason.clone());
+                }
                 _ => {
                     tracing::warn!("relay refused a register for good: {}", refusal.reason);
                     report.refused += 1;
@@ -308,8 +338,9 @@ async fn pull(
     clock: &HlcClock,
     report: &mut SyncReport,
 ) -> Result<(), SyncError> {
+    let reader = format!("{READER}.{SHAPES}");
     let mut after: u64 = match library.sync_state(READER_SEEN)? {
-        Some(seen) if seen == READER => library
+        Some(seen) if seen == reader => library
             .sync_state(PULL_SEQ)?
             .and_then(|s| s.parse().ok())
             .unwrap_or(0),
@@ -343,6 +374,8 @@ async fn pull(
         for wire in &page.records {
             match open(key, wire) {
                 Ok((_, shape)) if shape > SHAPES => report.newer += 1,
+                // The relay refuses clocks this far ahead, so such a record
+                // comes from a key holder that should not be believed.
                 Ok((record, _)) => records.push(record),
                 Err(e) => {
                     tracing::warn!("sync record {} did not open: {e}", wire.seq);
@@ -350,36 +383,38 @@ async fn pull(
                 }
             }
         }
+        // The relay refused anything more than 10 minutes ahead of its own
+        // time when it was pushed; the clock's absolute ceiling covers a relay
+        // that lies about both.
         if let Some(newest) = records.iter().filter_map(|r| Hlc::decode(&r.hlc)).max() {
-            // Devices may not push more than 10 minutes ahead; a record past
-            // that came from a relay that should not be believed.
-            let now = now_ms();
             let capped = Hlc {
-                wall_ms: newest.wall_ms.min(now + MAX_CLOCK_AHEAD_MS),
+                wall_ms: newest.wall_ms.min(page.server_ms + MAX_CLOCK_AHEAD_MS),
                 ..newest
             };
-            clock.observe(capped, now);
+            clock.observe(capped, clock.wall_now());
         }
         report.pulled += page.records.len() as u32;
         report.applied += library.apply(&records)? as u32;
         library.set_sync_state(PULL_SEQ, &page.last.to_string())?;
+        // A relay that says "more" without moving forward is not followed.
+        let stalled = page.last <= after;
         after = page.last;
-        if !page.more {
-            library.set_sync_state(READER_SEEN, READER)?;
+        if !page.more || stalled {
+            library.set_sync_state(READER_SEEN, &reader)?;
             return Ok(());
         }
     }
 }
 
-/// Lifts a slow local clock to the relay's time so new writes sort after
-/// what other devices already pushed. The relay is not trusted with more
-/// than the 10 minutes it allows devices: a time far in the future would
-/// pin this clock there.
+/// Lifts a slow local clock to the relay's time (like NTP) so new writes
+/// sort after what other devices already pushed; a TV box that booted with
+/// its clock in 1970 needs exactly this. The clock's absolute ceiling keeps
+/// a lying relay from breaking the encoding.
 fn observe_server(clock: &HlcClock, server_ms: u64) {
-    let now = now_ms();
+    let now = clock.wall_now();
     clock.observe(
         Hlc {
-            wall_ms: server_ms.min(now + MAX_CLOCK_AHEAD_MS),
+            wall_ms: server_ms,
             counter: 0,
             device: 0,
         },

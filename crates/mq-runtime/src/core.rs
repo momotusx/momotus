@@ -3,7 +3,6 @@ use mq_addons::{
 };
 use mq_debrid::{AllDebrid, Premiumize, RealDebrid, Resolver, ResolverConfig, StoreId, TorBox};
 use mq_http::{ClientConfig, HttpClient};
-use mq_library::hlc::now_ms;
 use mq_library::{AddonRow, Hlc, HlcClock, Library};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
@@ -84,11 +83,9 @@ impl Core {
         };
         let clock = HlcClock::new(device_id);
         if let Some(newest) = library.newest_hlc()?.as_deref().and_then(Hlc::decode) {
-            // Never more than the 10 minutes the relay allows: a row stamped
-            // by a clock far ahead must not pin this one there.
-            let now = now_ms();
-            let wall_ms = newest.wall_ms.min(now + mq_sync::wire::MAX_CLOCK_AHEAD_MS);
-            clock.observe(Hlc { wall_ms, ..newest }, now);
+            // Never below what this library holds; the clock's own ceiling
+            // bounds a row stamped by a lying relay.
+            clock.observe(newest, clock.wall_now());
         }
         let library = Arc::new(library);
         let store = Arc::new(LibraryCache(library.clone()));
@@ -125,7 +122,7 @@ impl Core {
     }
 
     pub fn hlc(&self) -> String {
-        self.inner.clock.tick(now_ms()).encode()
+        self.inner.clock.tick(self.inner.clock.wall_now()).encode()
     }
 
     /// The lowest hlc of this device, for rows that only cache what it saw.

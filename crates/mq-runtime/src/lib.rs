@@ -15,6 +15,7 @@ pub use views::discover::{CatalogChoice, DiscoverSnapshot, DiscoverState, Discov
 pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
 pub use views::library::{KindCount, LibrarySnapshot, LibrarySort, LibraryView};
+pub use views::pairing::{PairingSnapshot, PairingView};
 pub use views::playback::{
     Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
 };

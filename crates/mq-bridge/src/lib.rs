@@ -4,16 +4,17 @@
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
 //! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
-//! "createSyncAccount" | "syncNow", ...}`.
+//! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover",
+//! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, import,
-//! settings.
+//! settings, pairing.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
 use mq_runtime::{
-    AddonsView, Core, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView, PlayTarget,
-    PlaybackView, SearchView, SettingsView, StoreId, StremioEndpoints, TitleView, VersionsParams,
-    VersionsView,
+    AddonsView, Core, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView, PairingView,
+    PlayTarget, PlaybackView, SearchView, SettingsView, StoreId, StremioEndpoints, TitleView,
+    VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
@@ -80,6 +81,31 @@ enum Request {
         device_token: String,
         keys: mq_sync::seal::KeyBundle,
     },
+    /// On a device that syncs: hands the account to the device showing `qr`.
+    #[serde(rename_all = "camelCase")]
+    ApprovePairing {
+        id: u64,
+        server: String,
+        device_token: String,
+        keys: mq_sync::seal::KeyBundle,
+        qr: String,
+    },
+    /// Makes a new recovery kit, stores the sealed keys on the relay and
+    /// returns the kit to show once.
+    #[serde(rename_all = "camelCase")]
+    CreateRecoveryKit {
+        id: u64,
+        server: String,
+        device_token: String,
+        keys: mq_sync::seal::KeyBundle,
+    },
+    /// Joins the account a recovery kit belongs to; the reply goes to the
+    /// keystore.
+    Recover {
+        id: u64,
+        server: String,
+        kit: String,
+    },
     /// Merges `patch` into the profile preferences (see `Core::set_prefs`).
     SetPrefs {
         id: u64,
@@ -96,6 +122,7 @@ enum View {
     Search(SearchView),
     Library(LibraryView),
     Discover(DiscoverView),
+    Pairing { _view: PairingView },
     Settings { _view: SettingsView },
     Addons { _view: AddonsView },
     Import { _view: ImportView },
@@ -205,6 +232,49 @@ impl Session {
                     .and_then(|r| to_value(&r));
                 self.reply(json!(id), result);
             }
+            Request::ApprovePairing {
+                id,
+                server,
+                device_token,
+                keys,
+                qr,
+            } => {
+                let config = mq_sync::SyncConfig {
+                    server,
+                    device_token,
+                    keys,
+                };
+                let result = mq_sync::pair::approve_pairing(self.core.http(), &config, &qr)
+                    .await
+                    .map(|()| json!({}))
+                    .map_err(|e| e.to_string());
+                self.reply(json!(id), result);
+            }
+            Request::CreateRecoveryKit {
+                id,
+                server,
+                device_token,
+                keys,
+            } => {
+                let config = mq_sync::SyncConfig {
+                    server,
+                    device_token,
+                    keys,
+                };
+                let kit = mq_sync::pair::new_recovery_kit();
+                let result = mq_sync::pair::store_recovery(self.core.http(), &config, &kit)
+                    .await
+                    .map(|()| json!({ "kit": kit }))
+                    .map_err(|e| e.to_string());
+                self.reply(json!(id), result);
+            }
+            Request::Recover { id, server, kit } => {
+                let result = mq_sync::pair::recover(self.core.http(), &server, &kit)
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|joined| to_value(&joined));
+                self.reply(json!(id), result);
+            }
             Request::SetPrefs { id, patch } => {
                 let result = self
                     .core
@@ -302,6 +372,16 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (
                     View::Settings { _view: settings },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
+            "pairing" => {
+                let pairing = PairingView::open(&self.core, &param(params, "server")?);
+                let (snapshot, updates) = pairing.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (
+                    View::Pairing { _view: pairing },
                     to_value(&snapshot)?,
                     forward,
                 )

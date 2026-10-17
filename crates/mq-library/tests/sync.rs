@@ -154,7 +154,7 @@ fn a_write_landing_during_a_push_stays_queued() {
 }
 
 #[test]
-fn a_local_addon_edit_older_than_a_pulled_list_does_not_replace_it() {
+fn a_local_addon_edit_lands_above_a_newer_pulled_list_and_is_queued() {
     let a = Library::temporary().unwrap();
     let b = Library::temporary().unwrap();
     let row = |url: &str| AddonRow {
@@ -165,18 +165,42 @@ fn a_local_addon_edit_older_than_a_pulled_list_does_not_replace_it() {
         allow_private: false,
     };
     // The edit on B took its hlc (L), then a pull applied A's newer list (R).
+    // The user made the edit after seeing a list, so it goes in just above R
+    // and is queued, and A takes it on its next pull: no divergence.
     let l = hlc(5, 2);
     a.set_addons("p", &[row("https://a/manifest.json")], &hlc(9, 1))
         .unwrap();
     b.apply(&all(&a)).unwrap();
     b.set_addons("p", &[row("https://b/manifest.json")], &l)
         .unwrap();
-    let urls: Vec<_> = b
-        .addons("p")
-        .unwrap()
-        .into_iter()
-        .map(|r| r.transport_url)
-        .collect();
-    assert_eq!(urls, ["https://a/manifest.json"]);
+    let urls = |lib: &Library| -> Vec<String> {
+        lib.addons("p")
+            .unwrap()
+            .into_iter()
+            .map(|r| r.transport_url)
+            .collect()
+    };
+    assert_eq!(urls(&b), ["https://b/manifest.json"]);
+    assert_eq!(b.outbox(10).unwrap().records.len(), 1);
+    a.apply(&all(&b)).unwrap();
+    assert_eq!(urls(&a), ["https://b/manifest.json"]);
     assert_eq!(all(&b), all(&a));
+}
+
+#[test]
+fn cache_and_import_writes_never_override_a_real_edit() {
+    let lib = Library::temporary().unwrap();
+    lib.upsert_item("p", &item("tt1"), true, &hlc(50, 7))
+        .unwrap();
+    // A played title cached at the device's zero hlc, and a Stremio import
+    // (device 0) with an older time, both lose to the edit.
+    let zero = mq_library::Hlc::zero(9).encode();
+    lib.upsert_item("p", &item("tt1"), false, &zero).unwrap();
+    lib.upsert_item("p", &item("tt1"), false, &hlc(10, 0))
+        .unwrap();
+    assert!(lib.is_in_library("p", "tt1").unwrap());
+    // A real local edit from a slow clock still goes in above it.
+    lib.upsert_item("p", &item("tt1"), false, &hlc(10, 9))
+        .unwrap();
+    assert!(!lib.is_in_library("p", "tt1").unwrap());
 }

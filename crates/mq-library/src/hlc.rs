@@ -50,10 +50,17 @@ impl fmt::Display for Hlc {
     }
 }
 
+/// Highest wall time a clock takes (year 6429). Far beyond any real clock,
+/// and low enough that bumping it never needs a 13th hex digit, so a relay
+/// that reports an absurd time cannot break text ordering.
+pub const MAX_WALL_MS: u64 = 0x7fff_ffff_ffff;
+
 /// Clock for one device. Wall time is injected so tests are deterministic.
 pub struct HlcClock {
     device: u64,
     last: Mutex<Hlc>,
+    /// Added to the system time; tests use it to give devices skewed clocks.
+    offset_ms: std::sync::atomic::AtomicI64,
 }
 
 impl HlcClock {
@@ -65,7 +72,20 @@ impl HlcClock {
                 counter: 0,
                 device,
             }),
+            offset_ms: Default::default(),
         }
+    }
+
+    /// This device's wall time: the system time, plus the test offset.
+    pub fn wall_now(&self) -> u64 {
+        let offset = self.offset_ms.load(std::sync::atomic::Ordering::Relaxed);
+        (now_ms() as i64 + offset).max(0) as u64
+    }
+
+    /// Skews this clock's wall time (tests).
+    pub fn set_offset_ms(&self, offset: i64) {
+        self.offset_ms
+            .store(offset, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn device(&self) -> u64 {
@@ -74,6 +94,7 @@ impl HlcClock {
 
     /// Timestamp for a local event.
     pub fn tick(&self, now_ms: u64) -> Hlc {
+        let now_ms = now_ms.min(MAX_WALL_MS);
         let mut last = self.last.lock().unwrap_or_else(|p| p.into_inner());
         let next = if now_ms > last.wall_ms {
             Hlc {
@@ -91,8 +112,9 @@ impl HlcClock {
     /// Merges a timestamp received from another device or the server.
     pub fn observe(&self, remote: Hlc, now_ms: u64) -> Hlc {
         let mut last = self.last.lock().unwrap_or_else(|p| p.into_inner());
-        let wall = now_ms.max(last.wall_ms).max(remote.wall_ms);
-        let next = match (wall == last.wall_ms, wall == remote.wall_ms) {
+        let remote_wall = remote.wall_ms.min(MAX_WALL_MS);
+        let wall = now_ms.min(MAX_WALL_MS).max(last.wall_ms).max(remote_wall);
+        let next = match (wall == last.wall_ms, wall == remote_wall) {
             (true, true) => bump(wall, last.counter.max(remote.counter), self.device),
             (true, false) => bump(wall, last.counter, self.device),
             (false, true) => bump(wall, remote.counter, self.device),
@@ -104,6 +126,13 @@ impl HlcClock {
         };
         *last = next;
         next
+    }
+}
+
+impl Hlc {
+    /// The first timestamp of `device` that sorts after this one.
+    pub fn next_for(&self, device: u64) -> Hlc {
+        bump(self.wall_ms, self.counter, device)
     }
 }
 

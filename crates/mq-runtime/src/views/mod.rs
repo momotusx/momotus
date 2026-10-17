@@ -3,6 +3,7 @@ pub mod discover;
 pub mod home;
 pub mod import;
 pub mod library;
+pub mod pairing;
 pub mod playback;
 pub mod search;
 pub mod settings;

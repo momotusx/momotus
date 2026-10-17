@@ -13,10 +13,11 @@
 // ponytail: database calls run on the async workers under one lock; move
 // them to spawn_blocking when one relay serves many busy accounts.
 
+use axum::extract::Path as UrlPath;
 use axum::extract::{DefaultBodyLimit, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -37,6 +38,11 @@ const MAX_REQUEST: usize = 8 * 1024 * 1024;
 const RECORD_OVERHEAD: i64 = 96;
 /// Devices one account may have at once.
 const MAX_DEVICES: i64 = 32;
+/// Pairing slots open at once across the relay, and how long one lives.
+const MAX_PAIRINGS: i64 = 1000;
+const PAIRING_MS: u64 = 10 * 60 * 1000;
+/// Largest sealed pairing or recovery blob.
+const MAX_SMALL_BLOB: usize = 64 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -96,6 +102,10 @@ pub fn router(db: &Path, config: Config) -> rusqlite::Result<Router> {
         .route("/v1/devices", post(add_device))
         .route("/v1/push", post(push))
         .route("/v1/pull", get(pull))
+        .route("/v1/pairings", post(open_pairing))
+        .route("/v1/pairings/{id}", get(take_pairing).put(fill_pairing))
+        .route("/v1/recovery", put(store_recovery))
+        .route("/v1/recovery/{lookup}", post(recover))
         .layer(DefaultBodyLimit::max(MAX_REQUEST))
         .with_state(state))
 }
@@ -131,6 +141,18 @@ CREATE TABLE IF NOT EXISTS record (
     PRIMARY KEY (account, coll, key_id)
 );
 CREATE INDEX IF NOT EXISTS record_pull ON record (account, seq);
+CREATE TABLE IF NOT EXISTS pairing (
+    id          TEXT PRIMARY KEY,
+    sealed      BLOB,
+    account     TEXT,
+    expires_ms  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recovery (
+    lookup_hash  BLOB PRIMARY KEY,
+    account      TEXT NOT NULL UNIQUE,
+    sealed       BLOB NOT NULL,
+    updated_ms   INTEGER NOT NULL
+);
 ";
 
 fn lock(state: &AppState) -> std::sync::MutexGuard<'_, Connection> {
@@ -335,6 +357,7 @@ async fn push(
         let mut response = PushResponse {
             accepted: 0,
             stale: 0,
+            stale_at: Vec::new(),
             rejected: Vec::new(),
             server_ms,
         };
@@ -380,6 +403,14 @@ async fn push(
                 response.accepted += 1;
             } else {
                 response.stale += 1;
+                let current: Option<i64> = tx
+                    .query_row(
+                        "SELECT seq FROM record WHERE account = ?1 AND coll = ?2 AND key_id = ?3",
+                        params![account, r.coll, r.key_id],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                response.stale_at.extend(current.map(|s| s as u64));
             }
         }
         tx.execute(
@@ -456,5 +487,191 @@ async fn pull(
             .into_response()
         }
         Err(e) => storage_error("pull", e),
+    }
+}
+
+#[derive(Deserialize)]
+struct SealedBlob {
+    sealed: String,
+}
+
+fn small_blob(text: &str) -> Option<Vec<u8>> {
+    B64.decode(text)
+        .ok()
+        .filter(|b| (MIN_BODY..=MAX_SMALL_BLOB).contains(&b.len()))
+}
+
+/// A one-time slot a new device shows as a QR. No auth: the slot only ever
+/// holds a blob sealed to a key the relay never sees.
+async fn open_pairing(State(state): State<AppState>) -> Response {
+    let now = now_ms();
+    let db = lock(&state);
+    let open = (|| -> rusqlite::Result<i64> {
+        db.execute(
+            "DELETE FROM pairing WHERE expires_ms <= ?1",
+            params![now as i64],
+        )?;
+        db.query_row("SELECT COUNT(*) FROM pairing", [], |r| r.get(0))
+    })();
+    match open {
+        Ok(n) if n >= MAX_PAIRINGS => {
+            return error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "too many pairings in progress",
+            );
+        }
+        Ok(_) => {}
+        Err(e) => return storage_error("open pairing", e),
+    }
+    let id = random_hex(16);
+    let expires_ms = now + PAIRING_MS;
+    match db.execute(
+        "INSERT INTO pairing (id, expires_ms) VALUES (?1, ?2)",
+        params![id, expires_ms as i64],
+    ) {
+        Ok(_) => Json(json!({ "pairing": id, "expiresMs": expires_ms })).into_response(),
+        Err(e) => storage_error("open pairing", e),
+    }
+}
+
+/// A device of the account drops the sealed bundle into the slot, once.
+async fn fill_pairing(
+    State(state): State<AppState>,
+    UrlPath(id): UrlPath<String>,
+    headers: HeaderMap,
+    Json(blob): Json<SealedBlob>,
+) -> Response {
+    let db = lock(&state);
+    let Some((account, _)) = authorize(&db, &headers) else {
+        return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
+    };
+    let Some(sealed) = small_blob(&blob.sealed) else {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "sealed blob has a bad size or encoding",
+        );
+    };
+    match db.execute(
+        "UPDATE pairing SET sealed = ?2, account = ?3
+         WHERE id = ?1 AND sealed IS NULL AND expires_ms > ?4",
+        params![id, sealed, account, now_ms() as i64],
+    ) {
+        Ok(1) => Json(json!({})).into_response(),
+        Ok(_) => error(StatusCode::NOT_FOUND, "no open pairing with that code"),
+        Err(e) => storage_error("fill pairing", e),
+    }
+}
+
+/// The new device collects the blob: 204 while waiting, then once, then 404.
+async fn take_pairing(State(state): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let db = lock(&state);
+    let row: rusqlite::Result<Option<(Option<Vec<u8>>, i64)>> = db
+        .query_row(
+            "SELECT sealed, expires_ms FROM pairing WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional();
+    match row {
+        Ok(Some((_, expires))) if expires as u64 <= now_ms() => {
+            error(StatusCode::NOT_FOUND, "pairing expired")
+        }
+        Ok(Some((None, _))) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Some((Some(sealed), _))) => {
+            if let Err(e) = db.execute("DELETE FROM pairing WHERE id = ?1", params![id]) {
+                return storage_error("take pairing", e);
+            }
+            Json(json!({ "sealed": B64.encode(sealed) })).into_response()
+        }
+        Ok(None) => error(StatusCode::NOT_FOUND, "no pairing with that code"),
+        Err(e) => storage_error("take pairing", e),
+    }
+}
+
+#[derive(Deserialize)]
+struct RecoveryBlob {
+    lookup: String,
+    sealed: String,
+}
+
+fn lookup_hash(lookup: &str) -> Option<Vec<u8>> {
+    hex::decode(lookup)
+        .ok()
+        .filter(|l| l.len() == 16)
+        .map(|l| Sha256::digest(l).to_vec())
+}
+
+/// Keeps the account's key bundle sealed under its recovery kit; one per
+/// account, replaced on every store.
+async fn store_recovery(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(blob): Json<RecoveryBlob>,
+) -> Response {
+    let db = lock(&state);
+    let Some((account, _)) = authorize(&db, &headers) else {
+        return error(StatusCode::UNAUTHORIZED, "unknown or revoked device");
+    };
+    let (Some(hash), Some(sealed)) = (lookup_hash(&blob.lookup), small_blob(&blob.sealed)) else {
+        return error(StatusCode::BAD_REQUEST, "bad lookup id or sealed blob");
+    };
+    let stored = (|| -> rusqlite::Result<()> {
+        db.execute("DELETE FROM recovery WHERE account = ?1", params![account])?;
+        db.execute(
+            "INSERT INTO recovery (lookup_hash, account, sealed, updated_ms) VALUES (?1, ?2, ?3, ?4)",
+            params![hash, account, sealed, now_ms() as i64],
+        )
+        .map(drop)
+    })();
+    match stored {
+        Ok(()) => Json(json!({})).into_response(),
+        Err(e) => storage_error("store recovery", e),
+    }
+}
+
+/// Hands the sealed bundle and a new device token to whoever holds the
+/// lookup id. The id is 128 bits derived from the kit, so it cannot be
+/// guessed; the relay keeps only its hash.
+async fn recover(State(state): State<AppState>, UrlPath(lookup): UrlPath<String>) -> Response {
+    let Some(hash) = lookup_hash(&lookup) else {
+        return error(StatusCode::NOT_FOUND, "no recovery data for that kit");
+    };
+    let db = lock(&state);
+    let found: rusqlite::Result<Option<(String, Vec<u8>)>> = db
+        .query_row(
+            "SELECT account, sealed FROM recovery WHERE lookup_hash = ?1",
+            params![hash],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional();
+    let (account, sealed) = match found {
+        Ok(Some(found)) => found,
+        Ok(None) => return error(StatusCode::NOT_FOUND, "no recovery data for that kit"),
+        Err(e) => return storage_error("recover", e),
+    };
+    let devices: rusqlite::Result<i64> = db.query_row(
+        "SELECT COUNT(*) FROM device WHERE account = ?1 AND revoked = 0",
+        params![account],
+        |r| r.get(0),
+    );
+    match devices {
+        Ok(n) if n >= MAX_DEVICES => {
+            return error(StatusCode::FORBIDDEN, "this account has too many devices");
+        }
+        Ok(_) => {}
+        Err(e) => return storage_error("recover", e),
+    }
+    let token = random_hex(32);
+    match db.execute(
+        "INSERT INTO device (token_hash, account, created_ms) VALUES (?1, ?2, ?3)",
+        params![token_hash(&token), account, now_ms() as i64],
+    ) {
+        Ok(_) => Json(json!({
+            "account": account,
+            "deviceToken": token,
+            "sealed": B64.encode(sealed),
+        }))
+        .into_response(),
+        Err(e) => storage_error("recover", e),
     }
 }
