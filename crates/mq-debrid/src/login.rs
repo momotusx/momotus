@@ -101,8 +101,12 @@ impl Login {
             }
             StoreId::Premiumize => return Err(no_code_sign_in()),
         };
+        // A lifetime the clock cannot hold is a malformed answer, not a panic.
+        let deadline = Instant::now()
+            .checked_add(code.expires_in)
+            .ok_or_else(|| DebridError::provider("bad_answer", "the code's lifetime is out of range"))?;
         Ok(Self {
-            deadline: Instant::now() + code.expires_in,
+            deadline,
             flow,
             code,
         })

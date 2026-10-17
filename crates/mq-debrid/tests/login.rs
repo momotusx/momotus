@@ -173,3 +173,26 @@ async fn a_poll_error_never_carries_the_pin_secret() {
     let printed = format!("{err} {err:?}");
     assert!(!printed.contains("c0ffee"), "{printed}");
 }
+
+#[tokio::test]
+async fn a_lifetime_out_of_range_is_an_error_not_a_panic() {
+    let start = TB_START.replace(
+        r#""expires_in":600"#,
+        r#""expires_in":18446744073709551615"#,
+    );
+    let server = Server::start(vec![route(
+        "GET",
+        "/v1/api/user/auth/device/start",
+        200,
+        &start,
+    )])
+    .await;
+    let err = Login::start_at(&client(), StoreId::TorBox, &server.base)
+        .await
+        .err()
+        .expect("an error");
+    assert!(
+        matches!(&err, mq_debrid::DebridError::Provider { code, .. } if code == "bad_answer"),
+        "{err:?}"
+    );
+}
