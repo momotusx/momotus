@@ -151,7 +151,7 @@ impl Library {
             return Err(LibraryError::OwnerProfile);
         }
         self.write(|c| {
-            self.count_removal();
+            self.mark_removal();
             let changed = sql::set_gone(c, id, hlc)?;
             queue(c, changed, coll::PROFILE_GONE, &[id])
         })?;

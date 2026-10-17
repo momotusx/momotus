@@ -292,7 +292,7 @@ impl Library {
         let removal = records.iter().any(|r| r.coll == coll::PROFILE_GONE);
         let changed = self.write(|c| {
             if removal {
-                self.count_removal();
+                self.mark_removal();
             }
             let mut changed = 0;
             for r in records {

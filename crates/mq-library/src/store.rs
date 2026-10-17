@@ -134,12 +134,18 @@ pub struct Library {
     readers: Vec<Mutex<Connection>>,
     next_reader: AtomicUsize,
     changes: broadcast::Sender<Vec<Table>>,
+    /// Tables the open write transaction touched, announced once it has
+    /// committed (a listener reading at once must see the change).
+    touched: Arc<Mutex<Vec<Table>>>,
     temp_path: Option<PathBuf>,
     /// Bumped (under the writer) whenever a profile is removed. Cached addon
     /// answers carry the count they were fetched under, and only the
     /// current count may be stored or served: a fetch begun before a
     /// removal never puts the removed profile's URLs back.
     removals: AtomicU64,
+    /// The open write transaction removes a profile; the count moves once
+    /// it has committed, so no reader sees the new count with the old rows.
+    removing: AtomicBool,
     /// A removal's log could not be emptied (a reader was in the middle of
     /// a read); the next read or write tries again.
     scrub_pending: AtomicBool,
@@ -167,8 +173,8 @@ impl Library {
         let mut writer = open_connection(&target)?;
         migrations().to_latest(&mut writer)?;
         let (changes, _) = broadcast::channel(64);
-        let pending = Arc::new(Mutex::new(Vec::new()));
-        install_hooks(&writer, pending, changes.clone())?;
+        let touched = Arc::new(Mutex::new(Vec::new()));
+        install_hooks(&writer, touched.clone())?;
         let readers = (0..readers)
             .map(|_| open_connection(&target).map(Mutex::new))
             .collect::<Result<_, _>>()?;
@@ -177,8 +183,10 @@ impl Library {
             readers,
             next_reader: AtomicUsize::new(0),
             changes,
+            touched,
             temp_path: None,
             removals: AtomicU64::new(0),
+            removing: AtomicBool::new(false),
             scrub_pending: AtomicBool::new(false),
         };
         // Rows a migration dropped, or a removal whose scrub a crash cut
@@ -198,10 +206,19 @@ impl Library {
     ) -> Result<T, LibraryError> {
         let out = {
             let mut conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
-            let tx = conn.transaction()?;
-            let out = f(&tx)?;
-            tx.commit()?;
-            out
+            let committed = commit(&mut conn, f);
+            let touched = std::mem::take(&mut *lock(&self.touched));
+            let removing = self.removing.swap(false, Ordering::SeqCst);
+            // Still under the writer, so announcements keep commit order.
+            if committed.is_ok() {
+                if removing {
+                    self.removals.fetch_add(1, Ordering::SeqCst);
+                }
+                if !touched.is_empty() {
+                    let _ = self.changes.send(touched);
+                }
+            }
+            committed?
         };
         self.scrub_if_pending();
         Ok(out)
@@ -235,9 +252,10 @@ impl Library {
         }
     }
 
-    /// Counts a profile removal; called inside its write transaction.
-    pub(crate) fn count_removal(&self) {
-        self.removals.fetch_add(1, Ordering::SeqCst);
+    /// Marks the open write transaction as removing a profile: the count
+    /// moves when it commits.
+    pub(crate) fn mark_removal(&self) {
+        self.removing.store(true, Ordering::SeqCst);
     }
 
     /// How many profiles were removed while this library was open: cached
@@ -523,31 +541,36 @@ fn open_connection(target: &str) -> Result<Connection, LibraryError> {
 }
 
 /// Collects touched tables during a transaction and broadcasts them on commit.
-fn install_hooks(
-    conn: &Connection,
-    pending: Arc<Mutex<Vec<Table>>>,
-    tx: broadcast::Sender<Vec<Table>>,
-) -> rusqlite::Result<()> {
-    let on_update = pending.clone();
+/// One write transaction: committed when `f` succeeds, rolled back (on
+/// drop) otherwise.
+fn commit<T>(
+    conn: &mut Connection,
+    f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
+) -> Result<T, LibraryError> {
+    let tx = conn.transaction()?;
+    let out = f(&tx)?;
+    tx.commit()?;
+    Ok(out)
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// Collects the tables a transaction touches; `Library::write` announces
+/// them after the commit. SQLite's commit hook runs before the commit is
+/// visible, so a listener woken from it could read the old rows.
+fn install_hooks(conn: &Connection, touched: Arc<Mutex<Vec<Table>>>) -> rusqlite::Result<()> {
+    let on_update = touched.clone();
     conn.update_hook(Some(move |_: Action, _db: &str, table: &str, _row: i64| {
         if let Some(t) = Table::from_name(table) {
-            let mut tables = on_update.lock().unwrap_or_else(|p| p.into_inner());
+            let mut tables = lock(&on_update);
             if !tables.contains(&t) {
                 tables.push(t);
             }
         }
     }))?;
-    let on_commit = pending.clone();
-    conn.commit_hook(Some(move || {
-        let tables = std::mem::take(&mut *on_commit.lock().unwrap_or_else(|p| p.into_inner()));
-        if !tables.is_empty() {
-            let _ = tx.send(tables);
-        }
-        false
-    }))?;
-    conn.rollback_hook(Some(move || {
-        pending.lock().unwrap_or_else(|p| p.into_inner()).clear();
-    }))?;
+    conn.rollback_hook(Some(move || lock(&touched).clear()))?;
     Ok(())
 }
 
