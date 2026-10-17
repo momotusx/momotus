@@ -196,16 +196,23 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   await expect(page).toHaveURL(new RegExp(`/title/movie/${BBB_ID}`));
   await expect.poll(() => focused(page)).toBe("title:trailer");
 
-  // Mark watched toggles the movie's own flag in the core, both ways.
+  // Mark watched toggles the movie's own flag in the core, both ways, and
+  // Play says what it will do: the core's play target label, shown as is.
   const watched = page.locator('[data-f="title:watched"]');
+  const play = page.locator('[data-f="title:play"]');
   await expect(watched).toHaveAttribute("aria-pressed", "false");
+  await expect(play).toContainText("Resume");
+  await expect(play).toContainText("min left");
   await watched.focus();
   await page.keyboard.press("Enter");
   await expect(watched).toHaveAttribute("aria-pressed", "true");
   await expect(watched).toHaveText("Watched");
+  // Watched: start over, with no resume point beside it.
+  await expect(play).toHaveText("Play again");
   await page.keyboard.press("Enter");
   await expect(watched).toHaveAttribute("aria-pressed", "false");
   await expect(watched).toHaveText("Mark as watched");
+  await expect(play).toContainText("Resume");
 });
 
 test("onboarding: one decision per step, Back walks the steps", async ({ page }) => {
