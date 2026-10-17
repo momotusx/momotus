@@ -2,7 +2,11 @@
  * Headless Chromium renders in software, so the bounds are loose; the
  * printed percentiles are the numbers to watch. */
 
+import { appendFileSync, mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+
+const BENCH = fileURLToPath(new URL("../../../bench/m3", import.meta.url));
 
 test.use({ viewport: { width: 1920, height: 1080 } });
 
@@ -61,6 +65,10 @@ test("Home scrolls at frame rate under remote key repeat", async ({ page }) => {
     mountedTiles: tiles,
   };
   console.log(`perf ${JSON.stringify(result)}`);
+  // Live checks are kept with their date (repo rule: bench/<milestone>/*.jsonl).
+  const line = { date: new Date().toISOString(), check: "web-home-remote-scroll", browser: page.context().browser()?.version(), canvas: "tv 1920x1080", ...result };
+  mkdirSync(BENCH, { recursive: true });
+  appendFileSync(`${BENCH}/web-perf.jsonl`, `${JSON.stringify(line)}\n`);
   test.info().annotations.push({ type: "perf", description: JSON.stringify(result) });
   expect(result.frameMs.p50).toBeLessThan(20);
   expect(result.keyToFrameMs.p95).toBeLessThan(50);

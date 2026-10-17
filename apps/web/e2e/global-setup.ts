@@ -15,7 +15,15 @@ export default async function globalSetup() {
       "https://torrentio.strem.fun/manifest.json",
       `http://127.0.0.1:${PORTS.source}/manifest.json`,
     ]) {
-      await c.req("installAddon", { url });
+      // Public addons sometimes miss the core's 10 s fetch limit; try thrice.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await c.req("installAddon", { url });
+          break;
+        } catch (e) {
+          if (attempt === 3) throw e;
+        }
+      }
     }
 
     // Game of Thrones S2:E3, 21 of 57 minutes (the pick is a Torrentio torrent).

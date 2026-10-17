@@ -1,0 +1,1 @@
+{"date":"2026-10-17T09:04:19.623Z","check":"web-home-remote-scroll","browser":"153.0.8010.12","canvas":"tv 1920x1080","firstFocusMs":219,"frames":319,"frameMs":{"p50":16.7,"p95":16.7,"p99":16.8},"over33ms":1,"keyToFrameMs":{"p50":8.5,"p95":15.8,"max":16.9},"mountedTiles":32}
