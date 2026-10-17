@@ -13,10 +13,7 @@ use anyhow::Context;
 use dashmap::DashMap;
 
 use librqbit_core::lengths::{CurrentPiece, Lengths, ValidPieceIndex};
-use tokio::{
-    io::{AsyncRead, AsyncSeek},
-    sync::OwnedSemaphorePermit,
-};
+use tokio::io::{AsyncRead, AsyncSeek};
 use tracing::{debug, trace};
 
 use crate::{ManagedTorrent, file_info::FileInfo, storage::TorrentStorage};
@@ -141,8 +138,6 @@ pub struct FileStream {
     // file params
     file_len: u64,
     file_torrent_abs_offset: u64,
-
-    _blocking_permit: OwnedSemaphorePermit,
 }
 
 macro_rules! map_io_err {
@@ -345,7 +340,9 @@ impl ManagedTorrent {
             &metadata,
         )?;
         let streams = self.streams()?;
-        let blocking_permit = self.shared().spawner.semaphore().acquire_owned().await?;
+        // Marquee fork: no blocking permit per stream. Each open stream held one
+        // of the spawner's permits for its lifetime, so as many open streams as
+        // permits starved disk writes and every stream waited forever.
         let s = FileStream {
             stream_id: streams.next_id(),
             streams: streams.clone(),
@@ -354,7 +351,6 @@ impl ManagedTorrent {
 
             file_len: fd_len,
             file_torrent_abs_offset: fd_offset,
-            _blocking_permit: blocking_permit,
             torrent: self,
             metadata,
         };

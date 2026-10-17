@@ -351,6 +351,28 @@ impl LivePeerState {
         }
     }
 
+    // Marquee fork (ext_sched): cancel one request if still outstanding.
+    pub fn cancel_inflight_request(&mut self, chunk: &ChunkInfo) {
+        if self.inflight_requests.remove(chunk) {
+            let _ = self
+                .tx
+                .send(WriterRequest::Message(Message::Cancel(Request {
+                    index: chunk.piece_index.get(),
+                    begin: chunk.offset,
+                    length: chunk.size,
+                })));
+            self.late_cancelled_request_tolerance += 1;
+            self.request_slots_changed.notify_waiters();
+        }
+    }
+
+    // Marquee fork (ext_sched): a choke drops every request (no BEP 6), but
+    // blocks already on the wire may still arrive.
+    pub fn forget_inflight_requests(&mut self) {
+        self.late_cancelled_request_tolerance += self.inflight_requests.len() as u32;
+        self.inflight_requests.clear();
+    }
+
     pub fn inflight_requests(&self) -> impl Iterator<Item = &InflightRequest> {
         self.inflight_requests.iter()
     }

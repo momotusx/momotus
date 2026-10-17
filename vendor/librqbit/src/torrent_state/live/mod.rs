@@ -39,6 +39,7 @@
 // > so don't lock them both at the same time at all, or at the worst lock them in the
 // > same order (peers one first, then the global one).
 
+pub mod ext;
 pub mod peer;
 pub mod peers;
 pub mod stats;
@@ -100,6 +101,7 @@ use crate::{
 };
 
 use self::{
+    ext::ExtEvent,
     peer::{
         PeerRx, PeerState, PeerTx, RemoveInflightRequestResult,
         stats::{
@@ -1049,10 +1051,15 @@ impl PeerConnectionHandler for &'_ PeerHandler {
     async fn on_received_message(&self, message: Message<'_>) -> anyhow::Result<()> {
         // The first message must be "bitfield", but if it's not sent,
         // assume the bitfield is all zeroes and was sent.
-        if !matches!(&message, Message::Bitfield(..))
-            && !self.first_message_received.swap(true, Ordering::Relaxed)
-        {
+        // Marquee fork (ext_sched): a bitfield counts as the first message too,
+        // so `PeerConnected` is reported exactly once.
+        let is_bitfield = matches!(&message, Message::Bitfield(..));
+        if !self.first_message_received.swap(true, Ordering::Relaxed) && !is_bitfield {
             self.on_bitfield_notify.notify_waiters();
+            self.state.ext_emit(ExtEvent::PeerConnected {
+                peer: self.addr,
+                bitfield: Vec::new(),
+            });
         }
 
         match message {
@@ -1161,6 +1168,12 @@ impl PeerConnectionHandler for &'_ PeerHandler {
                 });
         }
 
+        if let Some(reqq) = hs.reqq.filter(|r| *r > 0) {
+            self.state.ext_emit(ExtEvent::PeerReqq {
+                peer: self.addr,
+                reqq,
+            });
+        }
         if let Some(reqq) = hs.reqq.and_then(|reqq| usize::try_from(reqq).ok())
             && reqq > 0
         {
@@ -1271,6 +1284,7 @@ impl PeerHandler {
         match prev {
             PeerState::Connecting(_) => {}
             PeerState::Live(live) => {
+                self.state.ext_emit(ExtEvent::PeerGone { peer: self.addr });
                 let mut g = self.state.lock_write("mark_chunk_requests_canceled");
 
                 // Release all pieces owned by this peer (fixes the bug where pieces
@@ -1543,6 +1557,10 @@ impl PeerHandler {
                     }
                 };
                 trace!("updated bitfield with have={}", have);
+                self.state.ext_emit(ExtEvent::PeerHave {
+                    peer: self.addr,
+                    piece: have,
+                });
                 if let Some(true) = live
                     .bitfield
                     .get(..self.state.lengths.total_pieces() as usize)
@@ -1562,6 +1580,10 @@ impl PeerHandler {
                 self.state.lengths.piece_bitfield_bytes(),
             );
         }
+        self.state.ext_emit(ExtEvent::PeerConnected {
+            peer: self.addr,
+            bitfield: bitfield.0.to_vec(),
+        });
         let bf = BF::from_boxed_slice(bitfield.0.to_vec().into_boxed_slice());
         if let Some(true) = bf
             .get(..self.state.lengths.total_pieces() as usize)
@@ -1614,6 +1636,16 @@ impl PeerHandler {
     async fn task_peer_chunk_requester(&self) -> crate::Result<()> {
         let handle = self.addr;
         self.wait_for_bitfield().await;
+
+        // Marquee fork (ext_sched): the owner sends every request; keep the
+        // connection open and interested until the torrent stops.
+        if self.state.ext_drives() {
+            self.tx
+                .send(WriterRequest::Message(Message::Interested))
+                .ok()
+                .ok_or(Error::PeerTaskDead)?;
+            return std::future::pending().await;
+        }
 
         let mut update_interest = {
             let mut current = false;
@@ -1747,6 +1779,13 @@ impl PeerHandler {
 
     fn on_i_am_choked(&self) {
         self.lock_flow_control("i_am_choked = true").i_am_choked = true;
+        if self.state.ext_drives() {
+            self.state
+                .peers
+                .with_live_mut(self.addr, "ext_choke", |l| l.forget_inflight_requests());
+        }
+        self.state
+            .ext_emit(ExtEvent::PeerChoked { peer: self.addr });
         self.notify_request_slots_changed();
     }
 
@@ -1758,6 +1797,8 @@ impl PeerHandler {
     fn on_i_am_unchoked(&self) {
         trace!("we are unchoked");
         self.lock_flow_control("i_am_choked = false").i_am_choked = false;
+        self.state
+            .ext_emit(ExtEvent::PeerUnchoked { peer: self.addr });
         self.notify_request_slots_changed();
     }
 
@@ -1803,7 +1844,14 @@ impl PeerHandler {
             })
             .context("peer not found")??;
 
-        if !should_process {
+        self.state.ext_emit(ExtEvent::Block {
+            peer: self.addr,
+            piece: piece.index,
+            begin: piece.begin,
+        });
+        // Marquee fork (ext_sched): in drive mode a late block (after a
+        // cancel) is still useful when nobody else delivered it.
+        if !should_process && !self.state.ext_drives() {
             return Ok(());
         }
 
@@ -1832,6 +1880,7 @@ impl PeerHandler {
             // So that by the time we are done writing AND if it was the last piece,
             // we can actually checksum etc.
             // Otherwise it might get into some weird state.
+            let ext_drive = state.ext_drives();
             let ppl_guard = {
                 let g = state.lock_read("check_steal");
 
@@ -1841,6 +1890,13 @@ impl PeerHandler {
                     .map(|l| l.read());
 
                 match g.get_pieces()?.get_inflight(chunk_info.piece_index) {
+                    // Marquee fork (ext_sched): blocks of one piece come from many
+                    // peers; first arrival wins, verified data is never rewritten.
+                    _ if ext_drive => {
+                        if g.get_chunks()?.is_chunk_have(chunk_info) {
+                            return Ok(());
+                        }
+                    }
                     Some(inflight) if inflight.peer == addr => {}
                     Some(inflight) => {
                         debug!(
@@ -1889,7 +1945,10 @@ impl PeerHandler {
                     Some(ChunkMarkingResult::Completed) => {
                         trace!("piece={} done, will write and checksum", piece.index);
                         // Remove from inflight to prevent others from stealing it during hash check.
-                        g.get_pieces_mut()?.take_inflight(chunk_info.piece_index)
+                        g.get_pieces_mut()?
+                            .take_inflight(chunk_info.piece_index)
+                            // Marquee fork (ext_sched): no piece ownership in drive mode.
+                            .or(ext_drive.then_some(Duration::ZERO))
                     }
                     Some(ChunkMarkingResult::PreviouslyCompleted) => {
                         // TODO: we might need to send cancellations here.
@@ -1960,6 +2019,10 @@ impl PeerHandler {
                     state.on_piece_completed(chunk_info.piece_index)?;
 
                     state.transmit_haves(chunk_info.piece_index);
+                    state.ext_emit(ExtEvent::PieceChecked {
+                        piece: piece.index,
+                        ok: true,
+                    });
                 }
                 false => {
                     warn!(
@@ -1972,6 +2035,10 @@ impl PeerHandler {
                         .lock_write("mark_piece_broken")
                         .get_pieces_mut()?
                         .mark_piece_hash_failed(chunk_info.piece_index);
+                    state.ext_emit(ExtEvent::PieceChecked {
+                        piece: piece.index,
+                        ok: false,
+                    });
                     state.new_pieces_notify.notify_waiters();
                     anyhow::bail!("i am probably a bogus peer. dying.")
                 }

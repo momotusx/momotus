@@ -117,6 +117,7 @@ pub(crate) struct ManagedTorrentOptions {
     pub ratelimits: LimitsConfig,
     pub initial_peers: Vec<SocketAddr>,
     pub peer_limit: Option<usize>,
+    pub ext_sched: Option<live::ext::ExtSched>,
     #[cfg(feature = "disable-upload")]
     pub _disable_upload: bool,
 }

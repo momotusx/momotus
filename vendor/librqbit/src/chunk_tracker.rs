@@ -289,6 +289,13 @@ impl ChunkTracker {
             .unwrap_or(false)
     }
 
+    // Marquee fork (ext_sched): the block is written (not necessarily verified).
+    pub fn is_chunk_have(&self, chunk: &ChunkInfo) -> bool {
+        self.chunk_status
+            .get(chunk.absolute_index as usize)
+            .is_some_and(|b| *b)
+    }
+
     pub fn get_remaining_bytes(&self) -> u64 {
         self.hns.needed_bytes
     }

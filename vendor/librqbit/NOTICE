@@ -11,3 +11,24 @@ tag. Cargo.toml is the manifest published to crates.io for librqbit 9.0.1
 not vendored; it is only built with the `webui` feature, which Marquee never
 enables. Sibling crates (librqbit-core, -dht, -peer-protocol, -utp, -upnp and
 the rest) come unmodified from crates.io at 9.0.1.
+
+Marquee changes (each changed spot carries a "Marquee fork" comment):
+
+- src/torrent_state/live/ext.rs (new): the external scheduler hook,
+  `ExtSched` and `ExtEvent`, `TorrentStateLive::ext_request` and
+  `ext_cancel`, `ManagedTorrent::ext_have_pieces`.
+- src/torrent_state/live/mod.rs: event calls at the bitfield, have, choke,
+  unchoke, extended handshake, peer death, block arrival and hash check
+  sites; in drive mode the chunk requester only keeps the peer interested,
+  blocks of one piece are accepted from any peer (first arrival wins,
+  written blocks are never rewritten), and a choke forgets the peer's
+  requests.
+- src/torrent_state/live/peer/mod.rs: `cancel_inflight_request` and
+  `forget_inflight_requests`.
+- src/chunk_tracker.rs: `is_chunk_have`.
+- src/session.rs, src/torrent_state/mod.rs, src/lib.rs: the `ext_sched`
+  option and re-exports.
+- src/torrent_state/streaming.rs: a `FileStream` no longer holds a blocking
+  spawner permit for its lifetime (as many open streams as permits starved
+  disk writes, and every stream then waited forever).
+- Cargo.toml: an empty [workspace] table.

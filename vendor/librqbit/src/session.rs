@@ -291,6 +291,10 @@ pub struct AddTorrentOptions {
 
     // Custom trackers
     pub trackers: Option<Vec<String>>,
+
+    /// Marquee fork: external block scheduler hook.
+    #[serde(skip)]
+    pub ext_sched: Option<crate::ExtSched>,
 }
 
 pub struct ListOnlyResponse {
@@ -1355,6 +1359,7 @@ impl Session {
                     ratelimits: opts.ratelimits,
                     initial_peers: opts.initial_peers.clone().unwrap_or_default(),
                     peer_limit: opts.peer_limit.or(self.peer_limit),
+                    ext_sched: opts.ext_sched.take(),
                     #[cfg(feature = "disable-upload")]
                     _disable_upload: self._disable_upload,
                 },

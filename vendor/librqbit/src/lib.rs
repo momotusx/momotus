@@ -100,6 +100,8 @@ pub use torrent_state::{
     ManagedTorrent, ManagedTorrentShared, ManagedTorrentState, TorrentMetadata, TorrentStats,
     TorrentStatsState,
 };
+// Marquee fork: external block scheduler hook.
+pub use torrent_state::ext::{ExtEvent, ExtSched};
 pub use type_aliases::FileInfos;
 
 pub use buffers::*;
