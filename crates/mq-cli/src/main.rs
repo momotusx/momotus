@@ -25,7 +25,9 @@ struct Cli {
     /// Data directory for the library database.
     #[arg(long, env = "MQ_DATA", default_value = ".mq-data")]
     data: PathBuf,
-    /// Profile id.
+    /// The profile to open on first run only: once this data directory has
+    /// switched profiles it opens as the last one (or the owner, `default`,
+    /// when that one is gone).
     #[arg(long, default_value = "default")]
     profile: String,
     #[command(subcommand)]
@@ -571,5 +573,16 @@ async fn import(core: &Core, timeout: Duration) -> Result<(), String> {
             Ok(Some(_)) => {}
             _ => return Err("import timed out".into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    #[test]
+    fn the_profile_flag_says_it_only_picks_the_first_run() {
+        let help = super::Cli::command().render_help().to_string();
+        assert!(help.contains("first run only"), "{help}");
     }
 }
