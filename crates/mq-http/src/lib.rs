@@ -132,8 +132,17 @@ pub struct Response {
 }
 
 impl Response {
+    /// A decode error names its kind and position, never the text it read: a
+    /// response may echo a key or token the request sent.
     pub fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, HttpError> {
-        serde_json::from_slice(&self.body).map_err(|e| HttpError::Decode(e.to_string()))
+        serde_json::from_slice(&self.body).map_err(|e| {
+            HttpError::Decode(format!(
+                "{:?} at line {} column {}",
+                e.classify(),
+                e.line(),
+                e.column()
+            ))
+        })
     }
 
     pub fn header(&self, name: &str) -> Option<&str> {
@@ -500,6 +509,23 @@ mod tests {
         // A local addon (already allowed to reach private addresses).
         assert!(redirect_allowed(&url("http://127.0.0.1:7000/s"), &lan));
         assert!(redirect_allowed(&url("http://127.0.0.1:7000/s"), &public));
+    }
+
+    #[test]
+    fn a_decode_error_never_carries_what_it_read() {
+        let response = Response {
+            status: 200,
+            headers: Default::default(),
+            body: Bytes::from_static(br#"{"expires_in":"SECRET-TOKEN"}"#),
+            final_url: Url::parse("https://api.example/token").unwrap(),
+        };
+        #[derive(Debug, serde::Deserialize)]
+        #[allow(dead_code)]
+        struct Token {
+            expires_in: u64,
+        }
+        let err = response.json::<Token>().unwrap_err();
+        assert!(!format!("{err} {err:?}").contains("SECRET"), "{err:?}");
     }
 
     #[test]
