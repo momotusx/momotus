@@ -31,6 +31,7 @@ struct SyncScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .task { await sync.loadDevices() }
         .sheet(item: Binding(get: { kit.map(KitText.init) }, set: { kit = $0?.text })) { shown in
             RecoveryKitSheet(kit: shown.text) { kit = nil }

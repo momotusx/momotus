@@ -46,7 +46,7 @@ struct SettingsScreen: View {
                 }
                 .buttonStyle(.plain)
                 NavigationLink {
-                    OnboardingScreen(core: core)
+                    OnboardingScreen(core: core, start: .check)
                 } label: {
                     SettingsRow(symbol: "checklist", title: "Setup check", detail: "Network, display, catalogs, sources and subtitles at a glance.")
                 }
@@ -86,6 +86,7 @@ struct SettingsScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .task(id: prefs.taskId) { prefs.start() }
         .task(id: addons.taskId) { addons.start() }
     }

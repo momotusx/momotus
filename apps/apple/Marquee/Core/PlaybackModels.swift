@@ -17,7 +17,7 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
 struct VersionRow: Decodable, Hashable, Sendable, Identifiable {
     /// What `playback` takes.
     let key: String
-    /// "4K", "1080p", "720p", "SD" or "Unknown".
+    /// "4K", "1080p", "720p" or "SD"; else the source ("WEB-DL") or "Quality not stated".
     let quality: String
     /// Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux".
     let features: [String]

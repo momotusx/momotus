@@ -8,6 +8,7 @@ enum Theme {
         static let surface = Color(light: RGBA(0.9216, 0.8902, 0.8431, 1), dark: RGBA(0.1059, 0.0941, 0.0824, 1))
         static let raised = Color(light: RGBA(0.8784, 0.8353, 0.7765, 1), dark: RGBA(0.1647, 0.1451, 0.1216, 1))
         static let line = Color(light: RGBA(0.8118, 0.7608, 0.6902, 1), dark: RGBA(0.2392, 0.2118, 0.1804, 1))
+        static let control = Color(light: RGBA(0.5490, 0.4902, 0.4157, 1), dark: RGBA(0.4627, 0.4157, 0.3569, 1))
         static let text = Color(light: RGBA(0.1098, 0.0863, 0.0667, 1), dark: RGBA(0.9647, 0.9373, 0.9020, 1))
         static let muted = Color(light: RGBA(0.3725, 0.3255, 0.2706, 1), dark: RGBA(0.7216, 0.6706, 0.6078, 1))
         static let accent = Color(light: RGBA(0.6118, 0.3451, 0.0000, 1), dark: RGBA(1.0000, 0.7098, 0.2784, 1))

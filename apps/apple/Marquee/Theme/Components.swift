@@ -65,7 +65,9 @@ struct FocusRing<S: InsettableShape>: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay {
-            if active {
+            // tvOS and macOS only: iOS keeps no TV-style ring, and the system
+            // draws its own indicator for keyboard users.
+            if active, !Self.touch {
                 let gap: CGFloat = 3
                 ZStack {
                     if scheme == .dark {
@@ -84,6 +86,12 @@ struct FocusRing<S: InsettableShape>: ViewModifier {
     private func ring(_ gap: CGFloat) -> some View {
         shape.inset(by: -(gap + Theme.Focus.ring)).strokeBorder(Theme.Palette.accent, lineWidth: Theme.Focus.ring)
     }
+
+    #if os(iOS)
+    private static var touch: Bool { true }
+    #else
+    private static var touch: Bool { false }
+    #endif
 }
 
 /// Shared interaction state for cards and pills: focus (tvOS, keyboard),
@@ -153,7 +161,7 @@ struct PillButtonStyle: ButtonStyle {
                         Capsule().fill(prominent ? AnyShapeStyle(Theme.Palette.accent) : AnyShapeStyle(Theme.Palette.raised.opacity(0.72)))
                     }
                     .overlay {
-                        if !prominent { Capsule().strokeBorder(Theme.Palette.line, lineWidth: 1) }
+                        if !prominent { Capsule().strokeBorder(Theme.Palette.control, lineWidth: 1) }
                     }
                     .contentShape(Capsule())
             )

@@ -109,9 +109,18 @@ struct PosterGrid: View {
                         ArtImage(url: tile.poster, fallback: tile.name)
                             .aspectRatio(2 / 3, contentMode: .fit)
                             .overlay(alignment: .bottom) {
-                                if let progress = tile.progress { ProgressLine(value: progress).padding(8) }
+                                if let progress = tile.progress { EdgeProgress(value: progress) }
                             }
                             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
+                        #if !os(tvOS)
+                        // Similar posters need their names; TV shows them on focus instead.
+                        Text(tile.name)
+                            .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
+                            .foregroundStyle(Theme.Palette.text)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        #endif
                         if let text = caption(tile) {
                             Text(text)
                                 .font(.text(Theme.type.caption + 1, relativeTo: .caption))

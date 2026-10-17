@@ -32,10 +32,16 @@ final class PlayerModel {
     private(set) var nextCancelled = false
     /// Up Next could not find a version of the next episode, in words.
     private(set) var nextFailure: String?
+    /// The next episode's Versions, kept when nothing played so the end card can open them.
+    private(set) var nextVersions: VersionsModel?
     private(set) var startingNext = false
     /// Where Skip credits was pressed: Up Next shows from there, and seeking
     /// back before it hides the card again.
     private(set) var skippedAt: Int64?
+    /// The file's audio tracks by name, and the index of the one playing.
+    private(set) var audioTracks: [String] = []
+    private(set) var audioTrack: Int?
+    @ObservationIgnored private var audioGroup: AVMediaSelectionGroup?
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
@@ -69,11 +75,42 @@ final class PlayerModel {
 
     var next: NextEpisode? { playback?.next }
 
-    /// The card shows near the end of an episode that has a next one.
+    /// The card shows near the end of an episode that has a next one; at the
+    /// end the end card takes over.
     var showNext: Bool {
-        guard !nextCancelled, let playback else { return false }
+        guard !nextCancelled, !showEndCard, let playback else { return false }
         return playback.offersNext(
             positionMs: Int64(position * 1000), durationMs: Int64(duration * 1000), ended: ended, skippedAt: skippedAt)
+    }
+
+    /// Never a black screen: once the item ends, or the next episode has no
+    /// version, a card offers the way on.
+    var showEndCard: Bool { ended || nextFailure != nil }
+
+    func selectAudio(_ index: Int) {
+        guard let group = audioGroup, group.options.indices.contains(index) else { return }
+        player.currentItem?.select(group.options[index], in: group)
+        audioTrack = index
+    }
+
+    /// Reads the audio tracks once the file is open.
+    private func loadAudio(_ item: AVPlayerItem, generation: Int) {
+        (audioTracks, audioTrack, audioGroup) = ([], nil, nil)
+        let asset = item.asset
+        Task { [weak self] in
+            guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
+                  let self, generation == self.generation else { return }
+            audioGroup = group
+            audioTracks = group.options.map(\.displayName)
+            audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
+        }
+    }
+
+    /// Plays this one again from the start.
+    func playAgain() {
+        (nextFailure, nextVersions, nextCancelled, skippedAt) = (nil, nil, false, nil)
+        seek(to: 0)
+        player.play()
     }
 
     /// The segment under the playhead, while Up Next is not on screen.
@@ -113,13 +150,16 @@ final class PlayerModel {
             poster: current.poster, resumeMs: nil)
         let model = VersionsModel(target: target, core: core, bingeGroup: playback?.bingeGroup)
         guard let pick = await model.settledPick() else {
-            nextFailure = "No version of S\(next.season):E\(next.episode) plays here yet. Pick one from its title page."
+            player.pause()
+            nextVersions = model
+            let words = model.snapshot.flatMap { $0.done ? VersionWords.none($0) : nil }
+            nextFailure = words ?? "No version answered yet."
             return
         }
         // The new view must exist before the old one goes: the core copies candidates at subscribe.
         versions = model
         route = pick
-        (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure) = (nil, false, nil, nil, false, false, nil)
+        (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure, nextVersions) = (nil, false, nil, nil, false, false, nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
         selectSubtitle(nil)
     }
@@ -259,6 +299,7 @@ final class PlayerModel {
             }
             .store(in: &itemBag)
         player.replaceCurrentItem(with: item)
+        loadAudio(item, generation: generation)
         if start > 1 { player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
         player.play()
     }

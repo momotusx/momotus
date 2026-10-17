@@ -7,6 +7,7 @@ struct VersionsScreen: View {
     let heading: String
     let core: CoreClient
     @State private var playing: PlayRoute?
+    @State private var addSource = false
     @Environment(\.metrics) private var metrics
     @State private var expanded: Set<String> = []
 
@@ -29,10 +30,12 @@ struct VersionsScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .onAppear(perform: model.freeze)
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: model, core: core)
         }
+        .navigationDestination(isPresented: $addSource) { AddonsPage(core: core, sourcesOnly: true) }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -85,6 +88,10 @@ struct VersionsScreen: View {
                 Text(snapshot.map { $0.hidden.count > 0 ? VersionWords.hidden($0.hidden) : "None of your addons had a source for this." } ?? "")
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
+                // Never the end of the road: a source is the way on.
+                Button { addSource = true } label: { Label("Add a source", systemImage: "plus") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .padding(.top, 6)
             }
             .padding(Theme.Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,11 +176,11 @@ private struct PickCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("RECOMMENDED FOR THIS DEVICE")
+            Text("RECOMMENDED FOR THIS SCREEN")
                 .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
-            Text(row.quality == "Unknown" ? "Quality unknown" : row.quality)
+            Text(row.quality)
                 .font(.display(Theme.type.title1 + 6))
                 .foregroundStyle(Theme.Palette.text)
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
@@ -235,7 +242,7 @@ private struct VersionRowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if wide {
                     HStack(spacing: 16) {
-                        Text(row.quality == "Unknown" ? "Unknown" : row.quality)
+                        Text(VersionWords.cell(row.quality))
                             .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                             .frame(width: 80, alignment: .leading)
                         Text(row.features.joined(separator: "  "))
@@ -248,7 +255,7 @@ private struct VersionRowView: View {
                     }
                 } else {
                     HStack {
-                        Text(row.quality == "Unknown" ? "Quality unknown" : row.quality)
+                        Text(VersionWords.cell(row.quality))
                             .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                         Text(row.features.joined(separator: "  "))
                         Spacer()

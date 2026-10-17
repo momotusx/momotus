@@ -54,6 +54,7 @@ struct HomeRowsScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         #if os(tvOS)
         // Back drops a picked row instead of leaving the screen.
         .onExitCommand(perform: picked == nil ? nil : { picked = nil })

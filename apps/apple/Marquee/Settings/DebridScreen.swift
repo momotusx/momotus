@@ -76,6 +76,7 @@ struct DebridScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .onAppear {
             for service in DebridKeys.services { saved[service.id] = DebridKeys.key(service.id) != nil }
         }
@@ -104,9 +105,12 @@ struct DebridScreen: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
+                // Save is the primary only once its field holds a key.
+                let draft = (drafts[service.id] ?? "").trimmingCharacters(in: .whitespaces)
                 Button("Save") { apply(service.id, drafts[service.id]) }
-                    .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled((drafts[service.id] ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
+                    .buttonStyle(PillButtonStyle(prominent: !draft.isEmpty))
+                    .disabled(draft.isEmpty)
                 if saved[service.id] == true {
                     Button("Remove") { apply(service.id, nil) }.buttonStyle(PillButtonStyle())
                 }

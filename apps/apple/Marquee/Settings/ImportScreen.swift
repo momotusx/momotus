@@ -36,6 +36,7 @@ struct ImportScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .task(id: [importer.taskId, attempt]) { importer.start() }
     }
 

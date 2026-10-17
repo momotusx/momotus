@@ -53,7 +53,8 @@ struct RootView: View {
         #endif
         .environment(\.metrics, metrics)
         .environment(immersion)
-        .tint(Theme.Palette.accent)
+        // Accent marks focus and the one primary action; everything else, the tab bar too, takes the text colour.
+        .tint(Theme.Palette.text)
         // Home stays subscribed for the app's life, so Back lands on the same rows.
         .task(id: home.taskId) { await home.run() }
         .overlay {
@@ -196,6 +197,37 @@ extension View {
         }
     }
 
+    /// A page-coloured scrim behind the status bar and the floating back
+    /// button (iOS), as the tab bar has its material at the bottom: invisible
+    /// on an unscrolled page, it hides content that scrolls under them.
+    /// Pages whose art runs under the bar pass `visible` once content scrolls there.
+    func topScrim(_ visible: Bool = true) -> some View {
+        #if os(iOS)
+        return overlay(alignment: .top) {
+            // Solid down to the bar's bottom (the safe area: status bar, plus the
+            // back button on pushed pages), then a 24 pt fade.
+            GeometryReader { geo in
+                let bar = geo.safeAreaInsets.top
+                LinearGradient(
+                    stops: [
+                        .init(color: Theme.Palette.bg, location: 0),
+                        .init(color: Theme.Palette.bg.opacity(0.92), location: bar / (bar + 24)),
+                        .init(color: Theme.Palette.bg.opacity(0), location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom)
+                    .frame(height: bar + 24)
+                    // The reader starts under the bar; the scrim belongs on it.
+                    .offset(y: -bar)
+            }
+            .allowsHitTesting(false)
+            .opacity(visible ? 1 : 0)
+            .animation(Theme.Motion.focus, value: visible)
+        }
+        #else
+        return self
+        #endif
+    }
+
     /// Lets art run under the window toolbar (macOS) or the status bar (iOS),
     /// as the hero needs. On iOS a scrim keeps the status bar readable once
     /// content scrolls under it.
@@ -203,14 +235,26 @@ extension View {
         #if os(macOS)
         return self.ignoresSafeArea(edges: .top).toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         #elseif os(iOS)
-        return self.ignoresSafeArea(edges: .top).overlay(alignment: .top) {
-            LinearGradient(colors: [Theme.Palette.bg.opacity(0.9), Theme.Palette.bg.opacity(0)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 110)
-                .ignoresSafeArea(edges: .top)
-                .allowsHitTesting(false)
-        }
+        // No scrim of its own: each hero puts one between its art and its words,
+        // and `topScrim` takes over once content scrolls under the bar.
+        return self.ignoresSafeArea(edges: .top)
         #else
         return self
+        #endif
+    }
+}
+
+/// Presents a flow over everything: full screen on iOS and tvOS (no tab bar,
+/// no nav rail), a sheet on macOS.
+struct FullScreen<Flow: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    @ViewBuilder let flow: () -> Flow
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.sheet(isPresented: $isPresented) { flow().frame(minWidth: 760, minHeight: 640) }
+        #else
+        content.fullScreenCover(isPresented: $isPresented, content: flow)
         #endif
     }
 }

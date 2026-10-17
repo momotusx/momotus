@@ -79,7 +79,7 @@ struct PosterTile: View {
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        ArtImage(url: tile.poster, fallback: tile.name)
+        ArtImage(url: tile.poster, fallback: [tile.name, tile.releaseInfo].compactMap { $0 }.joined(separator: "\n"))
             .frame(width: size.width, height: size.height)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
             .accessibilityElement(children: .combine)

@@ -13,10 +13,11 @@ struct EpisodeList: View {
     let runtime: String?
     /// The episode whose version is being found.
     let starting: String?
-    let failure: (videoId: String, text: String)?
+    let failure: EpisodeFailure?
     let select: (Int) -> Void
     let play: (Episode) -> Void
     let chooseVersion: (Episode) -> Void
+    let addSource: () -> Void
     let setWatched: (String, Bool) -> Void
 
     @State private var opened: Set<String> = []
@@ -56,6 +57,20 @@ struct EpisodeList: View {
                     .accessibilityAction(named: episode.watched ? "Mark as unwatched" : "Mark as watched") {
                         setWatched(episode.videoId, !episode.watched)
                     }
+                    // A reason is never the end: the way forward sits under it.
+                    if let failure, failure.videoId == episode.videoId {
+                        Group {
+                            if failure.noVersion {
+                                Button(action: addSource) { Label("Add a source", systemImage: "plus") }
+                            } else {
+                                Button { chooseVersion(episode) } label: { Label("Choose a version", systemImage: "square.stack.3d.up") }
+                            }
+                        }
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 56)
+                        .padding(.bottom, 12)
+                    }
                     Rectangle().fill(Theme.Palette.line.opacity(0.6)).frame(height: 1)
                 }
             }
@@ -68,7 +83,15 @@ struct EpisodeList: View {
     }
 }
 
-/// "SEASON 1 2 (3) 4 Specials": the selected season is circled.
+/// Why an episode from the list could not start, and whether any version exists at all.
+struct EpisodeFailure: Equatable {
+    let videoId: String
+    let text: String
+    /// Every addon answered with nothing playable: the way forward is a source.
+    let noVersion: Bool
+}
+
+/// "SEASON 1 2 [3] 4 Specials": the selected season sits on a raised fill.
 private struct SeasonPicker: View {
     let seasons: [Int]
     let selected: Int?
@@ -110,8 +133,9 @@ private struct SeasonButtonStyle: ButtonStyle {
             .foregroundStyle(selected ? Theme.Palette.text : Theme.Palette.muted)
             .padding(.horizontal, round ? 0 : 12)
             .frame(width: round ? 38 : nil, height: 38)
-            .overlay {
-                if selected { Capsule().strokeBorder(Theme.Palette.text, lineWidth: 1.5) }
+            // Selection is a fill; the ring is only ever focus.
+            .background {
+                if selected { Capsule().fill(Theme.Palette.raised) }
             }
             .contentShape(Capsule())
             .modifier(SeasonFocus(pressed: configuration.isPressed))

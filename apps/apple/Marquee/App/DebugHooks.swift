@@ -27,6 +27,15 @@ enum DebugHooks {
 
     @MainActor private static var seekTaken = false
 
+    /// `-MQOnboarding YES` opens the first-run flow over Home, once.
+    @MainActor static func takeOnboarding() -> Bool {
+        guard !onboardingTaken, UserDefaults.standard.bool(forKey: "MQOnboarding") else { return false }
+        onboardingTaken = true
+        return true
+    }
+
+    @MainActor private static var onboardingTaken = false
+
     /// `-MQShowVersions YES` opens the Versions page once versions are in.
     static var showVersions: Bool { UserDefaults.standard.bool(forKey: "MQShowVersions") }
 

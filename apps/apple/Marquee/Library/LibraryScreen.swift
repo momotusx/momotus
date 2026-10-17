@@ -55,14 +55,14 @@ struct LibraryScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .navigationDestination(for: CalendarRoute.self) { _ in CalendarScreen(core: core) }
         .task(id: library.taskId) { library.start() }
     }
 
-    /// "Movie, 25% watched", "S2:E3, 37% watched", or the year.
+    /// The core's caption when it sends one, else the episode ("S2:E3") or the
+    /// year; never a percentage (the bar on the poster shows progress).
     private func caption(_ tile: Tile) -> String? {
-        let what = episodeLabel(tile.videoId) ?? (tile.kind == "movie" ? "Movie" : nil)
-        guard let progress = tile.progress else { return tile.releaseInfo ?? what }
-        return [what, "\(Int((progress * 100).rounded()))% watched"].compactMap { $0 }.joined(separator: ", ")
+        tile.releaseInfo ?? episodeLabel(tile.videoId) ?? (tile.kind == "movie" ? "Movie" : nil)
     }
 }

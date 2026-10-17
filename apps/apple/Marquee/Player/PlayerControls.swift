@@ -7,6 +7,8 @@ struct PlayerControls: View {
     let model: PlayerModel
     let versions: VersionsModel?
     let back: () -> Void
+    /// True while a menu is open: the controls must stay up.
+    var hold: (Bool) -> Void = { _ in }
     @Environment(\.metrics) private var metrics
     @State private var scrub: Double?
 
@@ -19,10 +21,14 @@ struct PlayerControls: View {
         .padding(.horizontal, metrics.gutter)
         .padding(.vertical, metrics.wide ? Theme.Space.m : Theme.Space.s)
         .background {
+            // Full-bleed scrims, never boxes, so every OSD word holds 4.5:1 on
+            // any picture. The phone's bottom one reaches above the scrubber.
             VStack {
-                LinearGradient(colors: [.black.opacity(0.7), .clear], startPoint: .top, endPoint: .bottom).frame(height: 160)
+                LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: metrics.wide ? 200 : 120)
                 Spacer()
-                LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .top, endPoint: .bottom).frame(height: 240)
+                LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: metrics.wide ? 320 : 300)
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
@@ -129,9 +135,20 @@ struct PlayerControls: View {
         .buttonStyle(.plain)
     }
 
+    /// Audio, Subtitles, Versions, Speed: each a word with its current value.
     private var actions: some View {
         HStack(spacing: metrics.wide ? 26 : 16) {
-            Menu {
+            menu("Audio", "speaker.wave.2", audioValue) {
+                if model.audioTracks.isEmpty {
+                    Choice(text: "As the file has it", selected: true)
+                }
+                ForEach(Array(model.audioTracks.enumerated()), id: \.offset) { index, name in
+                    Button { model.selectAudio(index) } label: {
+                        Choice(text: name, selected: model.audioTrack == index)
+                    }
+                }
+            }
+            menu("Subtitles", "captions.bubble", subtitleValue) {
                 Button { model.selectSubtitle(nil) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil)
                 }
@@ -140,33 +157,39 @@ struct PlayerControls: View {
                         Choice(text: subtitleName(track), selected: model.subtitle == track)
                     }
                 }
-            } label: {
-                action("Subtitles", "captions.bubble", subtitleValue)
             }
             if let versions, let snapshot = versions.snapshot {
-                Menu {
+                menu("Versions", "square.stack.3d.up", currentQuality(snapshot)) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
                         Button { model.switchVersion(row.key) } label: {
                             Choice(text: "\(VersionWords.line(row)), \(row.via)", selected: row.key == playingKey)
                         }
                     }
-                } label: {
-                    action("Versions", "square.stack.3d.up", currentQuality(snapshot))
                 }
             }
-            Menu {
+            menu("Speed", "speedometer", speedText(model.rate)) {
                 ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
                     Button { model.rate = speed } label: {
                         Choice(text: speedText(speed), selected: model.rate == speed)
                     }
                 }
-            } label: {
-                action("Speed", "speedometer", speedText(model.rate))
             }
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .fixedSize()
+    }
+
+    /// An OSD menu that keeps the controls up while it is open, so they never
+    /// hide (and close it) under the viewer's finger.
+    private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, @ViewBuilder items: () -> Items) -> some View {
+        Menu {
+            Group { items() }
+                .onAppear { hold(true) }
+                .onDisappear { hold(false) }
+        } label: {
+            action(title, symbol, value)
+        }
     }
 
     private func action(_ title: String, _ symbol: String, _ value: String) -> some View {
@@ -177,6 +200,11 @@ struct PlayerControls: View {
         }
         .foregroundStyle(.white)
         .accessibilityElement(children: .combine)
+    }
+
+    /// The track playing, by name; "Default" when the file names none.
+    private var audioValue: String {
+        model.audioTrack.flatMap { model.audioTracks.indices.contains($0) ? model.audioTracks[$0] : nil } ?? "Default"
     }
 
     private var subtitleValue: String {
@@ -195,7 +223,7 @@ struct PlayerControls: View {
     private func currentQuality(_ snapshot: VersionsSnapshot) -> String {
         let rows = [snapshot.recommended].compactMap { $0 } + snapshot.rows
         guard let row = rows.first(where: { $0.key == playingKey }) else { return "Picked" }
-        return row.quality == "Unknown" ? "Quality unknown" : row.quality
+        return VersionWords.cell(row.quality)
     }
 
     private func speedText(_ speed: Float) -> String {

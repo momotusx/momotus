@@ -44,6 +44,7 @@ struct CalendarScreen: View {
             }
         }
         .background(Theme.Palette.bg)
+        .topScrim()
         .task(id: calendar.taskId) { calendar.start() }
         // The core needs the local date: at midnight and whenever the app comes back.
         .onChange(of: phase) { _, now in if now == .active { setToday() } }

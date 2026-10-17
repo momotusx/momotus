@@ -18,7 +18,7 @@ struct ContinueCard: View {
                 .overlay(alignment: .bottomLeading) {
                     TitleLogo(logo: tile.logo, name: tile.name, maxWidth: size.width * 0.55, height: size.height * 0.26, nameSize: Theme.type.title3)
                         .padding(.horizontal, 12)
-                        .padding(.bottom, 14)
+                        .padding(.bottom, tile.progress == nil ? 14 : 24)
                 }
                 .overlay(alignment: .bottom) {
                     if let progress = tile.progress { EdgeProgress(value: progress) }
@@ -40,27 +40,29 @@ struct ContinueCard: View {
         return CGSize(width: width, height: width * 9 / 16)
     }
 
-    /// "Next: S1 E2" for Next Up, "S2:E3, 37% watched", or "Movie, 25% watched".
-    private var caption: String {
-        if let next = tile.releaseInfo, next.hasPrefix("Next") { return next }
-        let what = episodeLabel(tile.videoId) ?? kindLabel(tile.kind) ?? ""
-        guard let progress = tile.progress else { return what }
-        return "\(what), \(Int((progress * 100).rounded()))% watched"
-    }
+    /// The core's one caption, as is: "S2:E3 · 36 min left", "36 min left", "Next: S1:E2".
+    private var caption: String { tile.releaseInfo ?? "" }
 }
 
-/// Progress on a card's bottom edge: a dark track so it reads on any image.
-private struct EdgeProgress: View {
+/// Progress inside a card or poster bottom strip: a 4 pt bar, track and fill, on a
+/// 32 pt dark scrim so it reads on white art too.
+struct EdgeProgress: View {
     let value: Double
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Rectangle().fill(.black.opacity(0.55))
-                Rectangle().fill(Color.white).frame(width: geo.size.width * min(max(value, 0), 1))
+        ZStack(alignment: .bottom) {
+            LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 32)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.24))
+                    Capsule().fill(.white).frame(width: geo.size.width * min(max(value, 0), 1))
+                }
             }
+            .frame(height: 4)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
         }
-        .frame(height: 4)
         .accessibilityHidden(true)
     }
 }

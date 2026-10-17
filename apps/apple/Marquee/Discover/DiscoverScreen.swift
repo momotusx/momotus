@@ -27,6 +27,7 @@ struct DiscoverScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .task(id: discover.taskId) { discover.start() }
     }
 

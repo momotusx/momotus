@@ -4,24 +4,47 @@ import SwiftUI
 /// field to install more. Addon URLs can hold API keys and are never shown.
 struct AddonsScreen: View {
     let addons: LiveRecord<AddonsSnapshot>
+    /// Show only sources (addons that give streams): where "Add a source" leads.
+    @State private var sourcesOnly: Bool
+    /// Opened to add a source: the link field takes focus.
+    private let focusLink: Bool
     @State private var removing: AddonInfo?
     @Environment(\.metrics) private var metrics
+
+    init(addons: LiveRecord<AddonsSnapshot>, sourcesOnly: Bool = false) {
+        self.addons = addons
+        _sourcesOnly = State(initialValue: sourcesOnly)
+        focusLink = sourcesOnly
+    }
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Addons")
-                Text("Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.")
+                Text(sourcesOnly
+                    ? "A source is an addon that finds a playable stream for a title. Marquee does not include any: paste a source addon's link to add one."
+                    : "Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.")
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
-                InstallField(addons: addons)
+                InstallField(addons: addons, focusRequest: focusLink ? 1 : 0)
                 if let failure = addons.failure {
                     StateLine(symbol: "exclamationmark.triangle", text: failure)
                 }
-                let list = addons.snapshot?.addons ?? []
-                ForEach(Array(list.enumerated()), id: \.element.id) { index, addon in
+                let all = addons.snapshot?.addons ?? []
+                ChipRow(
+                    label: "Show",
+                    chips: [Chip(id: false, title: "All", detail: "\(all.count)"),
+                            Chip(id: true, title: "Sources", detail: "\(all.filter(\.isSource).count)")],
+                    isSelected: { $0 == sourcesOnly },
+                    select: { sourcesOnly = $0 })
+                // Moves use the index in the full list, which is the order the core keeps.
+                let shown = all.enumerated().filter { !sourcesOnly || $0.element.isSource }
+                if sourcesOnly, shown.isEmpty, addons.snapshot != nil {
+                    StateLine(symbol: "play.slash", text: "No source yet. Paste a source addon's link above.")
+                }
+                ForEach(shown, id: \.element.id) { index, addon in
                     AddonCard(
-                        addon: addon, first: index == 0, last: index == list.count - 1,
+                        addon: addon, first: index == 0, last: index == all.count - 1,
                         toggle: { act("setAddonEnabled", addon, ["enabled": !addon.enabled]) },
                         move: { offset in act("moveAddon", addon, ["to": index + offset]) },
                         remove: { removing = addon })
@@ -34,6 +57,7 @@ struct AddonsScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .task(id: addons.taskId) { addons.start() }
         .confirmationDialog(
             "Remove \(removing?.name ?? "this addon")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
@@ -57,14 +81,21 @@ struct AddonsScreen: View {
 /// The Addons page with its own subscription, for links outside Settings.
 struct AddonsPage: View {
     @State private var addons: LiveRecord<AddonsSnapshot>
+    let sourcesOnly: Bool
 
-    init(core: CoreClient) {
+    init(core: CoreClient, sourcesOnly: Bool = false) {
         _addons = State(initialValue: LiveRecord("addons", core: core))
+        self.sourcesOnly = sourcesOnly
     }
 
     var body: some View {
-        AddonsScreen(addons: addons)
+        AddonsScreen(addons: addons, sourcesOnly: sourcesOnly)
     }
+}
+
+extension AddonInfo {
+    /// Gives streams: a source in the app's words.
+    var isSource: Bool { provides.contains("stream") }
 }
 
 /// An addon link field with Install; shared by Addons and onboarding.
@@ -93,15 +124,16 @@ struct InstallField: View {
                     #endif
                     .onSubmit(installLink)
                     .focused($fieldFocused)
-                    .onChange(of: focusRequest) { fieldFocused = true }
+                    .onChange(of: focusRequest, initial: true) { if focusRequest > 0 { fieldFocused = true } }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.line))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
                 Button(action: installLink) {
                     Label(installing ? "Installing" : "Install", systemImage: "plus")
                 }
-                .buttonStyle(PillButtonStyle(prominent: true))
+                // The primary only once there is a link to install.
+                .buttonStyle(PillButtonStyle(prominent: !link.trimmingCharacters(in: .whitespaces).isEmpty))
                 .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || installing)
             }
         }

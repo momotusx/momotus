@@ -74,8 +74,13 @@ enum VersionWords {
     }
 
     /// The line under Play: "1080p  HDR10  2.4 GB  Ready on Real-Debrid".
+    /// The quality is the core's headline as is ("Quality not stated" at worst).
     static func line(_ row: VersionRow) -> String {
-        ([row.quality == "Unknown" ? "Quality unknown" : row.quality] + row.features + [size(row.sizeBytes)].compactMap { $0 })
-            .joined(separator: "  ")
+        ([row.quality] + row.features + [size(row.sizeBytes)].compactMap { $0 }).joined(separator: "  ")
+    }
+
+    /// A short cell (a table column, an OSD value) says "Unknown", one word.
+    static func cell(_ quality: String) -> String {
+        quality == "Quality not stated" ? "Unknown" : quality
     }
 }

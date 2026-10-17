@@ -36,6 +36,7 @@ struct SearchScreen: View {
         .scrollDismissesKeyboard(.immediately)
         #endif
         .background(Theme.Palette.bg)
+        .topScrim()
         .task(id: search.taskId) { search.start() }
         .onChange(of: query) { _, value in setQuery(value) }
         .onAppear { fieldFocused = true }
@@ -70,7 +71,7 @@ struct SearchScreen: View {
         .padding(.vertical, metrics.wide ? 16 : 12)
         .frame(maxWidth: 780)
         .background(Capsule().fill(Theme.Palette.surface))
-        .overlay(Capsule().strokeBorder(fieldFocused ? Theme.Palette.accent : Theme.Palette.line, lineWidth: fieldFocused ? 2 : 1))
+        .overlay(Capsule().strokeBorder(fieldFocused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: fieldFocused ? 2 : 1))
         .animation(Theme.Motion.focus, value: fieldFocused)
     }
 

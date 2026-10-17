@@ -6,6 +6,9 @@ struct HomeScreen: View {
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
     @State private var width: CGFloat = 0
+    @State private var onboarding = false
+    /// Rows have scrolled under the status bar.
+    @State private var underBar = false
 
     var body: some View {
         ScrollView(.vertical) {
@@ -20,8 +23,19 @@ struct HomeScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > max(24, heroHeight - 160) } action: { underBar = $1 }
         .fullBleedTop()
+        .topScrim(underBar || model.needsSetup)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        #if DEBUG
+        .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
+        #endif
+        .modifier(FullScreen(isPresented: $onboarding) {
+            NavigationStack {
+                OnboardingScreen(core: core) { onboarding = false }
+            }
+            .environment(\.metrics, metrics)
+        })
     }
 
     @ViewBuilder private var content: some View {
@@ -53,7 +67,7 @@ struct HomeScreen: View {
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
             FlowRow(spacing: 12) {
-                NavigationLink { OnboardingScreen(core: core) } label: { Label("Set up Marquee", systemImage: "wrench.and.screwdriver") }
+                Button { onboarding = true } label: { Label("Set up Marquee", systemImage: "wrench.and.screwdriver") }
                     .buttonStyle(PillButtonStyle(prominent: true))
                 NavigationLink { AddonsPage(core: core) } label: { Label("Addons", systemImage: "puzzlepiece.extension") }
                     .buttonStyle(PillButtonStyle())

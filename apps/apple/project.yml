@@ -83,6 +83,7 @@ targets:
       - path: Marquee/Core/ListDiff.swift
       - path: Marquee/Player/WebVTT.swift
       - path: Marquee/Sync/SyncWords.swift
+      - path: Marquee/Theme/ArtLoader.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests

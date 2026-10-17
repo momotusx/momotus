@@ -74,7 +74,30 @@ actor ArtLoader {
                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
         else { return DecodedArt(thumb) }
         context.draw(thumb, in: CGRect(x: 0, y: 0, width: thumb.width, height: thumb.height))
-        return DecodedArt(context.makeImage() ?? thumb)
+        guard let drawn = context.makeImage() else { return DecodedArt(thumb) }
+        let alpha: Set<CGImageAlphaInfo> = [.premultipliedFirst, .premultipliedLast, .first, .last]
+        return DecodedArt(alpha.contains(thumb.alphaInfo) ? trimmed(drawn, context: context) : drawn)
+    }
+
+    /// Crops fully transparent edges. Logos often carry wide margins, which put
+    /// them tens of points right of the text they sit over.
+    static func trimmed(_ image: CGImage, context: CGContext) -> CGImage {
+        guard let data = context.data else { return image }
+        let (width, height, row) = (context.width, context.height, context.bytesPerRow)
+        let pixels = data.bindMemory(to: UInt8.self, capacity: row * height)
+        var (minX, minY, maxX, maxY) = (width, height, -1, -1)
+        for y in 0..<height {
+            let line = pixels + y * row
+            // BGRA, alpha last; rows run top to bottom, as cropping counts them.
+            for x in 0..<width where line[x * 4 + 3] > 8 {
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= minX, maxY >= minY, minX > 0 || minY > 0 || maxX < width - 1 || maxY < height - 1 else { return image }
+        return image.cropping(to: CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)) ?? image
     }
 }
 

@@ -44,7 +44,10 @@ struct HeroView: View {
                     stops: [.init(color: bg.opacity(0.94), location: 0), .init(color: bg.opacity(0.55), location: 0.38), .init(color: .clear, location: 0.7)],
                     startPoint: .leading, endPoint: .trailing)
             } else {
-                LinearGradient(colors: [bg.opacity(0.55), .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.22))
+                // Under the status bar and the wordmark, so both read on bright art.
+                LinearGradient(
+                    stops: [.init(color: bg.opacity(0.75), location: 0), .init(color: bg.opacity(0.5), location: 0.2), .init(color: .clear, location: 0.34)],
+                    startPoint: .top, endPoint: .bottom)
             }
             LinearGradient(
                 stops: [.init(color: .clear, location: 0.42), .init(color: bg.opacity(0.82), location: 0.8), .init(color: bg, location: 1)],
@@ -107,6 +110,7 @@ struct TitleLogo: View {
 
     /// nil while loading; then the art, or none when there is no logo.
     @State private var loaded: DecodedArt??
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -115,6 +119,9 @@ struct TitleLogo: View {
                 Image(decorative: art.image, scale: 1)
                     .resizable()
                     .scaledToFit()
+                    // Logos keep their colours; on a light page a soft shadow keeps
+                    // white letters from vanishing into the cream.
+                    .shadow(color: .black.opacity(scheme == .light ? 0.35 : 0), radius: 6, y: 2)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .transition(.opacity)
             case .some(.none):

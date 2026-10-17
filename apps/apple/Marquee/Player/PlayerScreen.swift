@@ -8,9 +8,14 @@ struct PlayerScreen: View {
     @Environment(SyncModel.self) private var sync
     @State private var controls = true
     @State private var lastTouch = ContinuousClock.now
+    @State private var showNextVersions = false
+    /// An OSD menu is open: the controls stay up.
+    @State private var menuOpen = false
+    let core: CoreClient
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         _model = State(initialValue: PlayerModel(route: route, versions: versions, core: core))
+        self.core = core
     }
 
     var body: some View {
@@ -18,6 +23,14 @@ struct PlayerScreen: View {
             Color.black.ignoresSafeArea()
             VideoSurface(player: model.player, onFirstFrame: model.firstFrame)
                 .ignoresSafeArea()
+                .accessibilityHidden(true)
+            // Taps on the picture toggle the controls. A gesture on the whole
+            // screen instead would sit over the menus (Audio, Subtitles, ...)
+            // and keep them from opening.
+            Color.clear
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .onTapGesture { touched(toggle: true) }
                 .accessibilityHidden(true)
             if let text = model.subtitleText {
                 GeometryReader { geo in
@@ -33,11 +46,14 @@ struct PlayerScreen: View {
                 .animation(Theme.Motion.panel, value: controls)
             }
             StatusOverlay(model: model, back: close)
-            if controls, model.playback?.phase != "failed" {
-                PlayerControls(model: model, versions: model.versions, back: close)
+            if controls, model.playback?.phase != "failed", !model.showEndCard {
+                PlayerControls(model: model, versions: model.versions, back: close) { open in
+                    menuOpen = open
+                    lastTouch = .now
+                }
                     .transition(.opacity)
             }
-            if let segment = model.segment, model.playback?.phase != "failed" {
+            if let segment = model.segment, model.playback?.phase != "failed", !model.showEndCard {
                 // Netflix places it bottom right on the controls' top line, and it
                 // stays there whether or not the controls show.
                 SkipButton(segment: segment, showSource: controls) { model.skip(segment) }
@@ -47,19 +63,28 @@ struct PlayerScreen: View {
                     .padding(.bottom, 212)
                     .transition(.opacity)
             }
-            if model.showNext || model.nextFailure != nil {
+            if model.showNext {
+                // Docked 16 pt clear of the scrubber when the controls show.
                 UpNextCard(model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(.trailing, Theme.Space.m)
-                    .padding(.bottom, controls ? 200 : Theme.Space.l)
+                    .padding(.horizontal, Theme.Space.m)
+                    .padding(.bottom, controls ? 212 : Theme.Space.l)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     .animation(Theme.Motion.panel, value: controls)
             }
+            if model.showEndCard {
+                EndCard(model: model, back: close) { showNextVersions = true }
+                    .transition(.opacity)
+            }
         }
         .animation(Theme.Motion.panel, value: model.showNext)
+        .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
-        .contentShape(Rectangle())
-        .onTapGesture { touched(toggle: true) }
+        .navigationDestination(isPresented: $showNextVersions) {
+            if let versions = model.nextVersions, let next = model.next {
+                VersionsScreen(model: versions, heading: "S\(next.season):E\(next.episode) \(next.title)", core: core)
+            }
+        }
         #if !os(tvOS)
         .onContinuousHover { _ in touched(toggle: false) }
         #endif
@@ -109,7 +134,7 @@ struct PlayerScreen: View {
     private func autoHide() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(500))
-            if controls, model.playing, ContinuousClock.now - lastTouch > .seconds(3) {
+            if controls, model.playing, !menuOpen, ContinuousClock.now - lastTouch > .seconds(3) {
                 withAnimation(Theme.Motion.panel) { controls = false }
             }
         }

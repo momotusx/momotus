@@ -37,6 +37,7 @@ struct PairingScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        .topScrim()
         .task(id: pairing?.taskId) { pairing?.start() }
     }
 
@@ -72,7 +73,7 @@ struct PairingScreen: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.line))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
         }
     }
 

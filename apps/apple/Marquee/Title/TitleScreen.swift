@@ -9,6 +9,8 @@ struct TitleScreen: View {
     @Environment(\.openURL) private var openURL
     @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
+    /// Content has scrolled under the status bar and the back button.
+    @State private var underBar = false
     /// Versions for the play target: the line under Play, Play itself, and the Versions page.
     @State private var versions: VersionsModel?
     /// Versions for an episode picked from the list, when it is not the play target.
@@ -16,9 +18,10 @@ struct TitleScreen: View {
     @State private var playing: PlayRoute?
     @State private var showVersions = false
     @State private var showEpisodeVersions = false
+    @State private var showAddons = false
     /// The episode whose version is being found, and why the last one could not start.
     @State private var starting: String?
-    @State private var startFailure: (videoId: String, text: String)?
+    @State private var startFailure: EpisodeFailure?
 
     init(route: TitleRoute, core: CoreClient) {
         _model = State(initialValue: TitleModel(route: route, core: core))
@@ -51,7 +54,9 @@ struct TitleScreen: View {
             if DebugHooks.showVersions, key != nil { showVersions = true }
         }
         #endif
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > scrimAfter } action: { underBar = $1 }
         .fullBleedTop()
+        .topScrim(underBar)
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: [versions, episodeVersions].compactMap { $0 }.first { $0.sub == route.versionsSub }, core: core)
         }
@@ -65,6 +70,7 @@ struct TitleScreen: View {
                 VersionsScreen(model: episodeVersions, heading: heading(episodeVersions.target), core: core)
             }
         }
+        .navigationDestination(isPresented: $showAddons) { AddonsPage(core: core, sourcesOnly: true) }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -123,14 +129,20 @@ struct TitleScreen: View {
         if let route {
             playing = route
         } else {
-            let text = model.snapshot.map { $0.done ? VersionWords.none($0) : nil } ?? nil
-            startFailure = (episode.videoId, text ?? "No version answered yet. Choose a version to keep waiting.")
+            let text = model.snapshot.flatMap { $0.done ? VersionWords.none($0) : nil }
+            startFailure = EpisodeFailure(videoId: episode.videoId, text: text ?? "No version answered yet. Choose a version to keep waiting.", noVersion: text != nil)
         }
     }
 
     private func chooseVersion(_ episode: Episode) {
         guard let model = versions(for: episode) else { return }
         if model === versions { showVersions = true } else { showEpisodeVersions = true }
+    }
+
+    /// The art runs under the bar at rest; past it, the page scrim takes over.
+    private var scrimAfter: CGFloat {
+        if !metrics.wide, details != nil, details?.background == nil { return 24 }
+        return max(24, heroHeight - 160)
     }
 
     private var heroHeight: CGFloat {
@@ -145,16 +157,22 @@ struct TitleScreen: View {
     @ViewBuilder private var hero: some View {
         if metrics.wide {
             ZStack(alignment: .bottomLeading) {
-                Backdrop(url: details?.background, height: heroHeight, wide: true)
+                Backdrop(url: details?.background, poster: details?.poster, height: heroHeight, wide: true)
                 decision.frame(maxWidth: 580, alignment: .leading)
                     .padding(.horizontal, metrics.gutter)
                     .padding(.bottom, Theme.Space.m)
             }
         } else {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ZStack(alignment: .bottomLeading) {
-                    Backdrop(url: details?.background, height: heroHeight, wide: false)
-                    logo.padding(.horizontal, metrics.gutter)
+                if let details, details.background == nil {
+                    // No backdrop: no empty band on a phone; the page starts at the
+                    // title, clear of the status bar and the back button.
+                    logo.padding(.horizontal, metrics.gutter).padding(.top, 116)
+                } else {
+                    ZStack(alignment: .bottomLeading) {
+                        Backdrop(url: details?.background, poster: nil, height: heroHeight, wide: false)
+                        logo.padding(.horizontal, metrics.gutter)
+                    }
                 }
                 decisionBody.padding(.horizontal, metrics.gutter)
             }
@@ -181,18 +199,20 @@ struct TitleScreen: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                 if let description = details.description {
-                    Text(description)
-                        .font(.text(Theme.type.body))
-                        .foregroundStyle(Theme.Palette.text)
-                        .lineLimit(metrics.wide ? 3 : 6)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Synopsis(text: description, lines: 3)
                 }
                 PlayBlock(
                     target: model.header?.playTarget, versions: versions?.snapshot, failure: versions?.failure,
-                    wide: metrics.wide
-                ) {
-                    playing = versions?.play()
-                }
+                    wide: metrics.wide,
+                    play: {
+                        if let route = versions?.play() {
+                            playing = route
+                        } else {
+                            // Sources still answering: play the pick once it settles.
+                            Task { playing = await versions?.settledPick() }
+                        }
+                    },
+                    addSource: { showAddons = true })
                 actions(details)
             } else if case .failed(let reason) = model.header?.state {
                 StateLine(symbol: "exclamationmark.triangle", text: reason, action: ("Try again", model.retry))
@@ -224,7 +244,7 @@ struct TitleScreen: View {
             }
             if details.kind == "movie" {
                 Button { model.setWatched(details.id, !watched); sync.schedule() } label: {
-                    Label(watched ? "Watched" : "Mark watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle")
+                    Label(watched ? "Watched" : "Mark as watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle")
                 }
             }
         }
@@ -241,9 +261,10 @@ struct TitleScreen: View {
                 }
                 .padding(.horizontal, metrics.gutter)
             } else {
+                // Phone: what to watch first, then who made it.
                 VStack(alignment: .leading, spacing: Theme.Space.l) {
-                    Credits(details: details, series: series)
                     if series { episodes }
+                    Credits(details: details, series: series)
                 }
                 .frame(maxWidth: 760, alignment: .leading)
                 .padding(.horizontal, metrics.gutter)
@@ -263,19 +284,57 @@ struct TitleScreen: View {
             select: model.selectSeason,
             play: { episode in Task { await play(episode) } },
             chooseVersion: chooseVersion,
+            addSource: { showAddons = true },
             setWatched: { model.setWatched($0, $1); sync.schedule() })
     }
 }
 
-/// Backdrop art faded into the page.
+/// Three lines and More; the whole text once opened.
+private struct Synopsis: View {
+    let text: String
+    let lines: Int
+    @State private var open = false
+    /// Heights of the text as shown and in full: More only when something is cut.
+    @State private var shown: CGFloat = 0
+    @State private var full: CGFloat = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(text)
+                .font(.text(Theme.type.body))
+                .foregroundStyle(Theme.Palette.text)
+                .lineLimit(open ? nil : lines)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shown = $0 }
+                .background(alignment: .topLeading) {
+                    Text(text)
+                        .font(.text(Theme.type.body))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { full = $0 }
+                }
+            if !open, full > shown + 1 {
+                Button("More") { withAnimation(Theme.Motion.panel) { open = true } }
+                    .buttonStyle(.plain)
+                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                    .accessibilityHint("Shows the whole synopsis")
+            }
+        }
+    }
+}
+
+/// Backdrop art faded into the page; with no backdrop, the poster blurred at
+/// 35% over the page colour, so the right side is never a blank band.
 private struct Backdrop: View {
     let url: String?
+    let poster: String?
     let height: CGFloat
     let wide: Bool
 
     var body: some View {
         let bg = Theme.Palette.bg
-        ArtImage(url: url, maxPixels: ArtSize.backdrop)
+        art
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .clipped()
@@ -286,43 +345,70 @@ private struct Backdrop: View {
                         startPoint: .leading, endPoint: .trailing)
                 }
                 LinearGradient(
-                    stops: [.init(color: bg.opacity(wide ? 0 : 0.45), location: 0), .init(color: .clear, location: 0.3), .init(color: bg.opacity(0.85), location: 0.82), .init(color: bg, location: 1)],
+                    stops: [.init(color: bg.opacity(wide ? 0 : 0.6), location: 0), .init(color: .clear, location: 0.3), .init(color: bg.opacity(0.85), location: 0.82), .init(color: bg, location: 1)],
                     startPoint: .top, endPoint: .bottom)
             }
             .accessibilityHidden(true)
     }
+
+    @ViewBuilder private var art: some View {
+        if url == nil, let poster {
+            Theme.Palette.bg.overlay {
+                ArtImage(url: poster, maxPixels: ArtSize.poster)
+                    .blur(radius: 40)
+                    .opacity(0.35)
+            }
+        } else {
+            ArtImage(url: url, maxPixels: ArtSize.backdrop)
+        }
+    }
 }
 
 /// Play or Resume with the resume point, and the chosen version under it.
+/// Never a Play that can only fail: with no version at all the primary
+/// becomes Add a source; while sources still answer, Play waits for the pick.
 private struct PlayBlock: View {
     let target: PlayTarget?
     let versions: VersionsSnapshot?
     let failure: String?
     let wide: Bool
     let play: () -> Void
+    let addSource: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button(action: play) {
-                HStack(spacing: 10) {
-                    Image(systemName: "play.fill")
-                    Text(target?.label ?? "Play")
-                    if let resume = target?.resumeMs, resume > 0 {
-                        Text("from \(clock(ms: resume))").fontWeight(.regular).opacity(0.8)
-                    }
+            if versions?.done == true, versions?.recommended == nil {
+                Button(action: addSource) {
+                    Label("Add a source", systemImage: "plus")
+                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
                 }
-                .frame(maxWidth: wide ? nil : .infinity)
-            }
-            .buttonStyle(PillButtonStyle(prominent: true))
-            .disabled(versions?.recommended == nil)
-            if let failure {
-                Label("Versions could not load: \(failure)", systemImage: "exclamationmark.triangle")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
-                    .foregroundStyle(Theme.Palette.muted)
+                .buttonStyle(PillButtonStyle(prominent: true))
             } else {
-                VersionLine(versions: versions)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                Button(action: play) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "play.fill")
+                        Text(target?.label ?? "Play")
+                        if let resume = target?.resumeMs, resume > 0 {
+                            Text("from \(clock(ms: resume))").fontWeight(.regular).opacity(0.8)
+                        }
+                    }
+                    .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
+                }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                // The reason shows right under it.
+                .disabled(failure != nil)
             }
+            Group {
+                if let failure {
+                    Label("Versions could not load: \(failure)", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(Theme.Palette.muted)
+                } else {
+                    VersionLine(versions: versions)
+                }
+            }
+            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -342,12 +428,12 @@ private struct VersionLine: View {
             Label(VersionWords.none(versions), systemImage: "exclamationmark.circle")
                 .foregroundStyle(Theme.Palette.muted)
         } else {
-            Label(
-                versions?.pendingAddons.isEmpty == false
-                    ? "Asking \(versions!.pendingAddons.joined(separator: ", "))"
-                    : "Finding the best version",
-                systemImage: "clock")
-                .foregroundStyle(Theme.Palette.muted)
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.mini)
+                Text("Finding versions")
+            }
+            .foregroundStyle(Theme.Palette.muted)
+            .accessibilityElement(children: .combine)
         }
     }
 }
