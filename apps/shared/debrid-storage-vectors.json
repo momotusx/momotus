@@ -1,6 +1,32 @@
 {
-  "about": "Cases for the debrid storage helper every app builds (plans/c10-handoff.md section A1, plans/core-protocol.md Debrid). Each case starts a helper over a fake keystore holding `keystore`, runs `steps` in order and checks every `expect`. Ops: `pending` (a debrid view push), `disconnect` (started, not awaited; a failure lands in `errors`), `hold` (the next keystore call of that kind starts and waits for `release`; a `fail` set for it applies after the release), `release`, `fail` (the next `times` calls of that kind fail), `settle` (wait until every queue is idle), `restart` (a new helper over the same keystore runs its start). The keystore keeps one record per service; `deleteRecord` removes the service's record only when it has that generation. `log` lists finished keystore calls, `failed` ones included.",
+  "about": "Cases for the debrid storage helper every app builds (plans/c10-handoff.md section A1, plans/core-protocol.md Debrid). Each case starts a helper over a fake keystore holding `keystore`, runs `steps` in order and checks every `expect`. Ops: `pending` (a debrid view push), `disconnect` (started, not awaited; a failure lands in `errors`), `hold` (the next keystore call of that kind starts and waits for `release`; a `fail` set for it applies after the release), `release`, `fail` (the next `times` calls of that kind fail; a keystore call, or the core's `disconnect`), `settle` (wait until every queue is idle), `restart` (a new helper over the same keystore runs its start). The keystore keeps one record per service; `deleteRecord` removes the service's record only when it has that generation. `log` lists finished keystore calls, `failed` ones included.",
   "cases": [
+    {
+      "name": "a failed core disconnect keeps its tombstone and is tried again with the next push",
+      "keystore": { "records": [{ "service": "torbox", "generation": "g1", "revision": 1, "credential": { "kind": "key", "key": "k1" } }], "tombstones": [] },
+      "steps": [
+        { "op": "fail", "call": "disconnect", "times": 1 },
+        { "op": "disconnect", "service": "torbox", "generation": "g1" },
+        { "op": "settle" },
+        {
+          "op": "expect",
+          "log": ["writeTombstone g1"],
+          "records": ["torbox g1 1"],
+          "tombstones": ["torbox g1"],
+          "disconnects": [],
+          "errors": ["torbox g1"]
+        },
+        { "op": "pending", "records": [] },
+        { "op": "settle" },
+        {
+          "op": "expect",
+          "log": ["writeTombstone g1", "deleteRecord g1", "deleteTombstone g1"],
+          "records": [],
+          "tombstones": [],
+          "disconnects": ["torbox g1"]
+        }
+      ]
+    },
     {
       "name": "a second disconnect of one generation shares the first, so its failure cannot be undone by the second",
       "keystore": { "records": [{ "service": "torbox", "generation": "g1", "revision": 1, "credential": { "kind": "key", "key": "k1" } }], "tombstones": [] },

@@ -67,7 +67,7 @@ export class DebridStore {
   pending(records: DebridRecord[]): void {
     for (const tombstone of this.unfinished.values()) {
       this.unfinished.delete(tombstone.generation);
-      this.enqueue(tombstone.service, tombstone.generation, false, () => this.finish(tombstone)).catch(() =>
+      this.enqueue(tombstone.service, tombstone.generation, false, () => this.retry(tombstone)).catch(() =>
         this.unfinished.set(tombstone.generation, tombstone),
       );
     }
@@ -106,7 +106,14 @@ export class DebridStore {
         this.gone.delete(generation);
         throw error;
       }
-      await this.core.disconnect(service, generation);
+      // The tombstone is durable now: from here a failure is remembered and the rest
+      // (core, then record and tombstone) is tried again with the next push.
+      try {
+        await this.core.disconnect(service, generation);
+      } catch (error) {
+        this.unfinished.set(generation, tombstone);
+        throw error;
+      }
       await this.finish(tombstone).catch(() => this.unfinished.set(generation, tombstone));
     });
   }
@@ -121,6 +128,12 @@ export class DebridStore {
     const newer = stored?.generation === record.generation && stored.revision > record.revision;
     if (!newer) await this.keystore.writeRecord(record);
     await this.core.ack(record.service, record.generation, record.revision);
+  }
+
+  /** An interrupted disconnect: tell the core again (it is idempotent), then clean up. */
+  private async retry(tombstone: DebridTombstone): Promise<void> {
+    await this.core.disconnect(tombstone.service, tombstone.generation);
+    await this.finish(tombstone);
   }
 
   /** Deletes the record, reads back that it is gone, then the tombstone. */

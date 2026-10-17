@@ -60,6 +60,7 @@ class FakeKeystore implements DebridKeystore {
 /** Answers `restore` the way the core does. */
 class FakeCore implements DebridCore {
   readonly acks: string[] = [];
+  failing = 0;
   readonly disconnects: string[] = [];
   readonly restores: { records: string[]; tombstones: string[] }[] = [];
 
@@ -76,6 +77,10 @@ class FakeCore implements DebridCore {
     this.acks.push(`${service} ${generation} ${revision}`);
   }
   async disconnect(service: string, generation: string) {
+    if (this.failing > 0) {
+      this.failing--;
+      throw new Error("disconnect");
+    }
     this.disconnects.push(`${service} ${generation}`);
   }
 }
@@ -112,7 +117,8 @@ for (const vector of vectors.cases) {
           keystore.release();
           break;
         case "fail":
-          keystore.failing.set(step.call as Call, step.times as number);
+          if (step.call === "disconnect") core.failing = step.times as number;
+          else keystore.failing.set(step.call as Call, step.times as number);
           break;
         case "settle":
           await store.idle();
