@@ -1,8 +1,9 @@
 //! Loopback stream server. Every playback gets one URL,
 //! `http://127.0.0.1:<port>/s/<token>/<filename>`, where the token is 32
-//! random bytes. Players never learn where bytes come from; today the source
-//! is an upstream HTTP(S) URL proxied with Range passthrough, later the
-//! torrent engine plugs in behind the same route.
+//! random bytes. Players never learn where bytes come from: an upstream
+//! HTTP(S) URL proxied with Range passthrough, or (feature `torrent`, full
+//! builds only) a file of the embedded torrent engine served from verified
+//! pieces.
 //!
 //! Subtitles get `http://127.0.0.1:<port>/sub/<token>/<lang>.vtt`: the
 //! addon's file fetched on request and served as UTF-8 WebVTT.
@@ -32,6 +33,12 @@ pub enum Upstream {
         /// Request headers from the stream's `proxyHeaders`.
         headers: Vec<(String, String)>,
         allow_private: bool,
+    },
+    #[cfg(feature = "torrent")]
+    Torrent {
+        engine: mq_engine::Engine,
+        torrent: mq_engine::TorrentHandle,
+        file: usize,
     },
 }
 
@@ -251,6 +258,145 @@ async fn serve(
                 request.method() == Method::HEAD,
             )
             .await
+        }
+        #[cfg(feature = "torrent")]
+        Upstream::Torrent {
+            engine,
+            torrent,
+            file,
+        } => {
+            torrent::serve(
+                &engine,
+                torrent,
+                file,
+                range.as_deref(),
+                request.method() == Method::HEAD,
+            )
+            .await
+        }
+    }
+}
+
+#[cfg(feature = "torrent")]
+mod torrent {
+    use super::*;
+
+    /// `bytes=a-b`, `bytes=a-` or `bytes=-n` against `len`, as `[start, end)`.
+    /// `None` when unsatisfiable or not a single byte range.
+    pub(crate) fn parse_range(header: &str, len: u64) -> Option<(u64, u64)> {
+        let spec = header.trim().strip_prefix("bytes=")?;
+        let (a, b) = spec.split_once('-')?;
+        let (start, end) = match (a.trim(), b.trim()) {
+            ("", n) => (len.saturating_sub(n.parse().ok()?), len),
+            (a, "") => (a.parse().ok()?, len),
+            (a, b) => (
+                a.parse().ok()?,
+                b.parse::<u64>().ok()?.saturating_add(1).min(len),
+            ),
+        };
+        (start < end && start < len).then_some((start, end))
+    }
+
+    fn content_type(name: &str) -> &'static str {
+        let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+        match ext.as_deref() {
+            Some("mkv") => "video/x-matroska",
+            Some("mp4" | "m4v") => "video/mp4",
+            Some("webm") => "video/webm",
+            Some("avi") => "video/x-msvideo",
+            Some("mov") => "video/quicktime",
+            Some("ts" | "m2ts") => "video/mp2t",
+            Some("mpg" | "mpeg") => "video/mpeg",
+            Some("wmv") => "video/x-ms-wmv",
+            Some("flv") => "video/x-flv",
+            _ => "application/octet-stream",
+        }
+    }
+
+    /// Serves one file of the engine with Range support. Headers go out at
+    /// once; the body follows as pieces are verified. HEAD opens no demand.
+    pub(crate) async fn serve(
+        engine: &mq_engine::Engine,
+        torrent: mq_engine::TorrentHandle,
+        file: usize,
+        range: Option<&str>,
+        head_only: bool,
+    ) -> Response {
+        let reader = match engine.open_reader(torrent, file).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("torrent stream unavailable: {e}");
+                return StatusCode::NOT_FOUND.into_response();
+            }
+        };
+        let len = reader.len();
+        let mut out = HeaderMap::new();
+        out.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        out.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(content_type(&reader.file().path)),
+        );
+        let (status, start, end) = match range {
+            None => (StatusCode::OK, 0, len),
+            Some(h) => match parse_range(h, len) {
+                Some((start, end)) => {
+                    let value = format!("bytes {start}-{}/{len}", end - 1);
+                    if let Ok(v) = HeaderValue::from_str(&value) {
+                        out.insert(header::CONTENT_RANGE, v);
+                    }
+                    (StatusCode::PARTIAL_CONTENT, start, end)
+                }
+                None => {
+                    if let Ok(v) = HeaderValue::from_str(&format!("bytes */{len}")) {
+                        out.insert(header::CONTENT_RANGE, v);
+                    }
+                    return (StatusCode::RANGE_NOT_SATISFIABLE, out).into_response();
+                }
+            },
+        };
+        out.insert(header::CONTENT_LENGTH, HeaderValue::from(end - start));
+        if head_only {
+            return (status, out).into_response();
+        }
+        let body = match reader.range(start, Some(end)).await {
+            Ok(body) => body,
+            Err(e) => {
+                tracing::warn!("torrent range failed: {e}");
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+        };
+        let chunks = stream::unfold(Some(body), |body| async move {
+            use tokio::io::AsyncReadExt;
+            let mut body = body?;
+            let mut buf = vec![0u8; 64 * 1024];
+            match body.read(&mut buf).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    buf.truncate(n);
+                    Some((Ok(bytes::Bytes::from(buf)), Some(body)))
+                }
+                Err(e) => Some((Err(e), None)),
+            }
+        });
+        (status, out, Body::from_stream(chunks)).into_response()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn parses_single_byte_ranges() {
+            assert_eq!(parse_range("bytes=0-", 100), Some((0, 100)));
+            assert_eq!(parse_range("bytes=10-19", 100), Some((10, 20)));
+            assert_eq!(parse_range("bytes=90-500", 100), Some((90, 100)));
+            assert_eq!(parse_range("bytes=-10", 100), Some((90, 100)));
+            assert_eq!(parse_range("bytes=100-", 100), None);
+            assert_eq!(parse_range("bytes=20-10", 100), None);
+            assert_eq!(parse_range("bytes=0-1,5-6", 100), None);
+            assert_eq!(parse_range("items=0-1", 100), None);
+            assert_eq!(content_type("A/B.MKV"), "video/x-matroska");
+            assert_eq!(content_type("x.iso"), "application/octet-stream");
         }
     }
 }
