@@ -200,8 +200,10 @@ CREATE TABLE tracker_state (
 /// is usable once its lock register exists (`pin_hash` NULL: no PIN); a row
 /// in `profile_gone` removes it for good. `pin_attempts` and `device_state`
 /// (the active profile) stay on this device. The unused V1 columns go, so
-/// nothing writes access into the cosmetic register.
+/// nothing writes access into the cosmetic register; raw imports name their
+/// profile, so its removal takes them too.
 const V8: &str = r#"
+ALTER TABLE import_raw ADD COLUMN profile_id TEXT;
 ALTER TABLE profiles DROP COLUMN kids;
 ALTER TABLE profiles DROP COLUMN pin_hash;
 ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '';

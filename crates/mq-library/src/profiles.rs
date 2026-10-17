@@ -153,7 +153,9 @@ impl Library {
         self.write(|c| {
             let changed = sql::set_gone(c, id, hlc)?;
             queue(c, changed, coll::PROFILE_GONE, &[id])
-        })
+        })?;
+        self.checkpoint();
+        Ok(())
     }
 
     /// Failed PIN attempts on this device since the last right one.
@@ -205,5 +207,114 @@ impl Library {
             )
             .map(drop)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hlc::Hlc;
+    use crate::store::CachedResponse;
+    use crate::sync::{DEVICE_TABLES, PROFILE_TABLES, SyncRecord};
+
+    fn hlc(wall: u64) -> String {
+        Hlc {
+            wall_ms: wall,
+            counter: 0,
+            device: 1,
+        }
+        .encode()
+    }
+
+    /// A new table must be purged with a profile or named device-wide, so a
+    /// removal can never leave a profile's rows behind unnoticed.
+    #[test]
+    fn every_table_is_purged_with_a_profile_or_device_wide() {
+        let lib = Library::temporary().unwrap();
+        let tables: Vec<String> = lib
+            .read(|c| {
+                let mut stmt = c.prepare(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                )?;
+                stmt.query_map([], |r| r.get(0))?.collect()
+            })
+            .unwrap();
+        for table in &tables {
+            let known = table == "profiles"
+                || PROFILE_TABLES.contains(&table.as_str())
+                || DEVICE_TABLES.contains(&table.as_str());
+            assert!(known, "{table} is neither purged nor device-wide");
+        }
+        // Every purged table really is keyed by profile.
+        for table in PROFILE_TABLES {
+            let has: bool = lib
+                .read(|c| {
+                    c.query_row(
+                        "SELECT EXISTS (SELECT 1 FROM pragma_table_info(?1) WHERE name = 'profile_id')",
+                        [table],
+                        |r| r.get(0),
+                    )
+                })
+                .unwrap();
+            assert!(has, "{table} has no profile_id");
+        }
+    }
+
+    /// Removing a profile, here or by sync, leaves none of its text in the
+    /// database or its log, not even in free pages.
+    #[test]
+    fn a_removed_profile_leaves_nothing_readable_in_the_files() {
+        let dir = std::env::temp_dir().join(format!("mq-scrub-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("library.sqlite");
+        let lib = Library::open(&path).unwrap();
+        let fill = |profile: &str, secret: &str| {
+            lib.create_profile(profile, profile, "", &hlc(1)).unwrap();
+            let value = format!("\"{secret}\"");
+            lib.set_setting(profile, "notes", &value, &hlc(2)).unwrap();
+            lib.record_search(profile, secret, 1).unwrap();
+            let payload = format!("{{\"authKey\":\"{secret}\"}}");
+            lib.store_raw_import(profile, "stremio", 1, &payload)
+                .unwrap();
+            let cached = CachedResponse {
+                body: b"{}".to_vec(),
+                stored_ms: 1,
+                max_age_s: 60,
+                stale_revalidate_s: 0,
+                stale_error_s: 0,
+            };
+            lib.cache_put(&format!("https://addon.example/{secret}/catalog"), &cached)
+                .unwrap();
+        };
+        fill("x", "SECRET-local-7f3a9c");
+        fill("z", "SECRET-synced-41be");
+        lib.set_setting("y", "notes", "\"kept-0d2e\"", &hlc(2))
+            .unwrap();
+        // Long since written: the rows sit in the database file itself.
+        lib.checkpoint();
+
+        lib.delete_profile("x", &hlc(3)).unwrap();
+        let gone = SyncRecord {
+            coll: crate::sync::coll::PROFILE_GONE,
+            key: "z".into(),
+            value: serde_json::json!({"profile": "z"}),
+            hlc: hlc(4),
+        };
+        lib.apply(&[gone]).unwrap();
+
+        let found = |text: &str| {
+            ["", "-wal"].iter().any(|suffix| {
+                let mut file = path.clone().into_os_string();
+                file.push(suffix);
+                let bytes = std::fs::read(file).unwrap_or_default();
+                bytes.windows(text.len()).any(|w| w == text.as_bytes())
+            })
+        };
+        assert!(!found("SECRET-local"), "a local removal left text behind");
+        assert!(!found("SECRET-synced"), "a synced removal left text behind");
+        assert!(found("kept-0d2e"), "the search really reads the files");
+        drop(lib);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

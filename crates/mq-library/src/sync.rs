@@ -75,7 +75,7 @@ pub(crate) fn refuse_gone(c: &Connection, profile: &str) -> rusqlite::Result<()>
 }
 
 /// Every row a profile has on this device, except its gone register.
-const PROFILE_TABLES: [&str; 13] = [
+pub(crate) const PROFILE_TABLES: [&str; 14] = [
     "profile_lock",
     "addons",
     "addon_list",
@@ -89,6 +89,20 @@ const PROFILE_TABLES: [&str; 13] = [
     "tracker_outbox",
     "tracker_state",
     "pin_attempts",
+    "import_raw",
+];
+
+/// Tables that hold no profile's rows: sync's own state, the device's, the
+/// tombstones, and `http_cache`, which is cleared whole when a profile goes
+/// (its keys are addon URLs, which can carry a profile's keys and searches).
+#[cfg(test)]
+pub(crate) const DEVICE_TABLES: [&str; 6] = [
+    "sync_state",
+    "sync_outbox",
+    "sync_roster",
+    "device_state",
+    "profile_gone",
+    "http_cache",
 ];
 
 /// Deletes every row of a gone profile.
@@ -267,7 +281,8 @@ impl Library {
     /// Applies pulled registers in one transaction; each replaces local state
     /// only when its HLC is newer. Returns how many registers changed.
     pub fn apply(&self, records: &[SyncRecord]) -> Result<usize, LibraryError> {
-        self.write(|c| {
+        let removal = records.iter().any(|r| r.coll == coll::PROFILE_GONE);
+        let changed = self.write(|c| {
             let mut changed = 0;
             for r in records {
                 match apply_one(c, r) {
@@ -281,7 +296,11 @@ impl Library {
                 }
             }
             Ok(changed)
-        })
+        })?;
+        if removal {
+            self.checkpoint();
+        }
+        Ok(changed)
     }
 
     /// The newest HLC stored in any register, so a restarted clock never
@@ -955,6 +974,7 @@ pub(crate) mod sql {
     /// Marks the profile gone and purges it. Never for the owner (callers
     /// check). Returns 1 when the register changed.
     pub fn set_gone(c: &Connection, profile: &str, hlc: &str) -> rusqlite::Result<usize> {
+        let first = !gone(c, profile)?;
         let changed = c.execute(
             "INSERT INTO profile_gone (profile_id, hlc) VALUES (?1, ?2)
              ON CONFLICT(profile_id) DO UPDATE SET hlc = excluded.hlc
@@ -962,6 +982,11 @@ pub(crate) mod sql {
             params![profile, hlc],
         )?;
         purge(c, profile)?;
+        if first {
+            // Cached addon answers are keyed by URLs that may carry the
+            // profile's addon keys or searches.
+            c.execute("DELETE FROM http_cache", [])?;
+        }
         Ok(changed)
     }
 

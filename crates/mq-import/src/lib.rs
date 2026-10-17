@@ -56,7 +56,7 @@ pub async fn import_account(
     let payload =
         serde_json::to_string(&snapshot).map_err(|e| ImportError::Decode(e.to_string()))?;
     let raw_import_id = lib
-        .store_raw_import("stremio", now as i64, &payload)
+        .store_raw_import(profile_id, "stremio", now as i64, &payload)
         .map_err(ImportError::Store)?;
     let mut report = apply_snapshot(lib, profile_id, profile_name, &snapshot, videos, now)
         .map_err(|source| ImportError::Apply {

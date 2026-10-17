@@ -189,6 +189,16 @@ impl Library {
         Ok(out)
     }
 
+    /// Moves the write-ahead log into the database and empties it, so the
+    /// old copies of rows deleted since are gone from the files too. Best
+    /// effort: a reader in the middle of a read leaves the log for later.
+    pub(crate) fn checkpoint(&self) {
+        let conn = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)") {
+            tracing::warn!("checkpoint after a profile removal failed: {e}");
+        }
+    }
+
     pub(crate) fn read<T>(
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
@@ -415,16 +425,19 @@ impl Library {
         })
     }
 
+    /// Keeps another app's raw answer for `profile` (removed with it).
     pub fn store_raw_import(
         &self,
+        profile: &str,
         source: &str,
         imported_ms: i64,
         payload: &str,
     ) -> Result<i64, LibraryError> {
         self.write(|c| {
+            refuse_gone(c, profile)?;
             c.execute(
-                "INSERT INTO import_raw (source, imported_ms, payload) VALUES (?1, ?2, ?3)",
-                params![source, imported_ms, payload],
+                "INSERT INTO import_raw (profile_id, source, imported_ms, payload) VALUES (?1, ?2, ?3, ?4)",
+                params![profile, source, imported_ms, payload],
             )?;
             Ok(c.last_insert_rowid())
         })
@@ -451,6 +464,9 @@ fn open_connection(target: &str) -> Result<Connection, LibraryError> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    // Deleted rows (a removed profile's) are overwritten, not left in free
+    // pages.
+    conn.pragma_update(None, "secure_delete", "ON")?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     Ok(conn)
 }
