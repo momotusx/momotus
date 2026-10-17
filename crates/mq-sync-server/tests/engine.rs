@@ -525,3 +525,71 @@ async fn a_restamp_lands_above_the_version_it_replaces() {
     assert_eq!(tv.progress("p", "v1").unwrap(), Some((8, 10)));
     assert_eq!(registers(&phone), registers(&tv));
 }
+
+/// A relay whose pull answers name another roster at the device's head
+/// (it moved to another history mid-round) is a fork, also when the roster
+/// read before looked fine.
+#[tokio::test]
+async fn a_pull_naming_another_roster_at_the_head_is_a_fork() {
+    use axum::Json;
+    use axum::routing::get;
+    use mq_sync::wire::{PullResponse, RelayInfo, RosterPage};
+    let (config, genesis) = offline("http://127.0.0.1");
+    let head = RosterHead {
+        seq: 0,
+        hash: genesis.hash(),
+    };
+    let app = axum::Router::new()
+        .route(
+            "/v1/relay",
+            get(|| async {
+                Json(RelayInfo {
+                    relay_id: Hex([7; 16]),
+                    generation: "g".into(),
+                    generation_since_ms: 0,
+                    server_ms: now_ms(),
+                })
+            }),
+        )
+        .route(
+            "/v1/roster",
+            get(move || {
+                let entries = vec![genesis.clone()];
+                async move {
+                    Json(RosterPage {
+                        from: 0,
+                        entries,
+                        head: Some(head),
+                        more: false,
+                    })
+                }
+            }),
+        )
+        .route(
+            "/v1/pull",
+            get(|| async {
+                Json(PullResponse {
+                    records: vec![],
+                    last: 0,
+                    head: 0,
+                    generation: "g".into(),
+                    more: false,
+                    server_ms: now_ms(),
+                    epoch: 0,
+                    roster: Some(RosterHead {
+                        seq: 0,
+                        hash: Hex([3; 32]),
+                    }),
+                })
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let config = SyncConfig { server, ..config };
+    let lib = Library::temporary().unwrap();
+    let err = mq_sync::pull_changes(&lib, &http(), &config, &HlcClock::new(1))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+}

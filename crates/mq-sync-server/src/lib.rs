@@ -621,18 +621,22 @@ impl Refused {
 
 /// The account's roster as stored, every entry checked again.
 fn load_roster(db: &Connection, account: &Id) -> rusqlite::Result<Roster> {
-    let mut stmt = db.prepare("SELECT body, sig FROM roster WHERE account = ?1 ORDER BY seq")?;
     let mut roster = Roster::default();
-    let rows = stmt.query_map(params![hex::encode(account.0)], |r| {
-        Ok(stored_entry(r.get(0)?, r.get(1)?))
-    })?;
-    for entry in rows {
-        if let Err(e) = roster.apply(&entry?) {
+    for entry in account_entries(db, account)? {
+        if let Err(e) = roster.apply(&entry) {
             tracing::error!("stored roster entry does not apply: {e}");
             break;
         }
     }
     Ok(roster)
+}
+
+fn account_entries(db: &Connection, account: &Id) -> rusqlite::Result<Vec<Entry>> {
+    let mut stmt = db.prepare("SELECT body, sig FROM roster WHERE account = ?1 ORDER BY seq")?;
+    stmt.query_map(params![hex::encode(account.0)], |r| {
+        Ok(stored_entry(r.get(0)?, r.get(1)?))
+    })?
+    .collect()
 }
 
 /// Appends `entries` after the account's head, checking each with the
@@ -936,12 +940,21 @@ async fn fresh_token(
     let mut db = lock(&state);
     let granted = (|| -> rusqlite::Result<Option<String>> {
         let tx = db.transaction()?;
-        let roster = load_roster(&tx, &request.account)?;
-        let device = roster
-            .members()
-            .get(&request.member)
-            .filter(|m| m.role == Role::Device);
-        if !device.is_some_and(|m| request.verifies(&m.keys, &grant.sig)) {
+        let entries = account_entries(&tx, &request.account)?;
+        let mut roster = Roster::default();
+        let mut keys = None;
+        let mut removed = None;
+        for (seq, entry) in entries.iter().enumerate() {
+            if roster.apply(entry).is_err() {
+                break;
+            }
+            match roster.members().get(&request.member) {
+                Some(m) if m.role == Role::Device => keys = Some(m.keys),
+                _ if keys.is_some() && removed.is_none() => removed = Some(seq as i64),
+                _ => {}
+            }
+        }
+        if !keys.is_some_and(|k| request.verifies(&k, &grant.sig)) {
             return Ok(None);
         }
         tx.execute(
@@ -957,6 +970,15 @@ async fn fresh_token(
             return Ok(None);
         }
         let token = mint(&tx, &request.account, Some(&request.member), "active", true)?;
+        // A device the roster dropped gets a token that reads up to its
+        // removal and nothing else, so it can learn that it was dropped
+        // even after a restore lost its old token.
+        if let Some(seq) = removed {
+            tx.execute(
+                "UPDATE device SET state = 'revoked', revoked_seq = ?2 WHERE token_hash = ?1",
+                params![token_hash(&token), seq],
+            )?;
+        }
         // At most a few such tokens per device: a loop that keeps asking
         // does not pile them up.
         tx.execute(

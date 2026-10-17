@@ -504,10 +504,12 @@ impl<'a> Session<'a> {
                 fetched => fetched?,
             };
             for entry in entries {
-                self.roster.apply(&entry).map_err(|e| {
-                    SyncError::Roster(format!(
+                self.roster.apply(&entry).map_err(|e| match e {
+                    // Not built on this device's head: another history.
+                    RosterError::NotNext => SyncError::Fork,
+                    e => SyncError::Roster(format!(
                         "the relay served an entry that does not check: {e}"
-                    ))
+                    )),
                 })?;
                 self.keep(entry)?;
             }

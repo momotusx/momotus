@@ -26,3 +26,4 @@ tracing.workspace = true
 [dev-dependencies]
 mq-http = { path = "../mq-http" }
 proptest = "1"
+hkdf = "0.13"

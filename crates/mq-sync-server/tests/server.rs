@@ -340,6 +340,21 @@ async fn a_member_signs_for_a_fresh_token_once() {
         info.server_ms - 6 * 60 * 1000,
     );
     assert!(ask(grant(stale)).await.is_err());
+    // A member holds at most three such tokens; more revoke the oldest.
+    let mut tokens = vec![fresh.device_token.clone()];
+    for _ in 0..3 {
+        let request = TokenRequest::new(info.relay_id, a.keys.account, member.id(), info.server_ms);
+        tokens.push(ask(grant(request)).await.unwrap().device_token);
+    }
+    let pulls = |t: String| {
+        let http = relay.http.clone();
+        let url = format!("{}/v1/pull", relay.base);
+        async move { http.get(&url, &opts(Some(&t))).await.is_ok() }
+    };
+    assert!(!pulls(tokens[0].clone()).await, "the oldest went");
+    for t in &tokens[1..] {
+        assert!(pulls(t.clone()).await);
+    }
     let stranger = mq_sync::roster::MemberSecret::generate();
     let forged = TokenRequest::new(info.relay_id, a.keys.account, member.id(), info.server_ms);
     let forged = TokenGrant {
