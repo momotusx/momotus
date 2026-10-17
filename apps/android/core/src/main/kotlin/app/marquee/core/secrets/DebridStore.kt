@@ -109,7 +109,7 @@ class DebridStore(
                 unfinished.values.toList().also { unfinished.clear() }
             }
         for (tombstone in retry) {
-            val done = enqueue(tombstone.service, tombstone.generation, write = false) { finish(tombstone) }
+            val done = enqueue(tombstone.service, tombstone.generation, write = false) { retry(tombstone) }
             done.invokeOnCompletion { failure ->
                 if (failure != null) synchronized(lock) { unfinished[tombstone.generation] = tombstone }
             }
@@ -141,13 +141,20 @@ class DebridStore(
                         synchronized(lock) { gone -= generation }
                         throw e
                     }
-                    core.disconnect(service, generation)
+                    // The tombstone is durable now: from here any failure, cancellation included, is
+                    // remembered and the rest (core, then record and tombstone) runs again with the
+                    // next push.
                     try {
-                        finish(tombstone)
-                    } catch (e: CancellationException) {
-                        throw e
+                        core.disconnect(service, generation)
                     } catch (e: Exception) {
                         synchronized(lock) { unfinished[generation] = tombstone }
+                        throw e
+                    }
+                    try {
+                        finish(tombstone)
+                    } catch (e: Exception) {
+                        synchronized(lock) { unfinished[generation] = tombstone }
+                        if (e is CancellationException) throw e
                     }
                 }
             disconnecting[generation] = done
@@ -170,6 +177,12 @@ class DebridStore(
         val newer = stored?.generation == record.generation && stored.revision > record.revision
         if (!newer) keystore.writeRecord(record)
         core.ack(record.service, record.generation, record.revision)
+    }
+
+    /** An interrupted disconnect: tell the core again (it is idempotent), then clean up. */
+    private suspend fun retry(tombstone: DebridTombstone) {
+        core.disconnect(tombstone.service, tombstone.generation)
+        finish(tombstone)
     }
 
     /** Deletes the record, reads back that it is gone, then the tombstone. */

@@ -97,6 +97,7 @@ class DebridStoreTest {
     /** Answers `restore` the way the core does. */
     private class FakeCore : DebridCore {
         val acks = mutableListOf<String>()
+        var failing = 0
         val disconnects = mutableListOf<String>()
         val restores = mutableListOf<Pair<List<String>, List<String>>>()
 
@@ -125,6 +126,10 @@ class DebridStoreTest {
             service: String,
             generation: String,
         ) {
+            if (failing > 0) {
+                failing--
+                error("disconnect")
+            }
             disconnects += "$service $generation"
         }
     }
@@ -168,7 +173,8 @@ class DebridStoreTest {
                 }
 
                 "fail" -> {
-                    keystore.failing[text("call")] = step.getValue("times").jsonPrimitive.int
+                    val times = step.getValue("times").jsonPrimitive.int
+                    if (text("call") == "disconnect") core.failing = times else keystore.failing[text("call")] = times
                 }
 
                 "settle" -> {
@@ -239,6 +245,9 @@ class DebridStoreTest {
 
         @Volatile var writeWaiting = false
 
+        /** The next this many record deletes throw cancellation. */
+        @Volatile var cancelDeletes = 0
+
         override suspend fun records() = stored.values.toList()
 
         override suspend fun tombstones() = stones.toList()
@@ -257,6 +266,10 @@ class DebridStoreTest {
             service: String,
             generation: String,
         ) {
+            if (cancelDeletes > 0) {
+                cancelDeletes--
+                throw CancellationException("going")
+            }
             stored.computeIfPresent(service) { _, r -> r.takeIf { it.generation != generation } }
         }
 
@@ -370,6 +383,25 @@ class DebridStoreTest {
             store.pending(listOf(record("g1", 2)))
             withTimeout(5_000) { store.idle() }
             assertEquals(2L, shared.stored["torbox"]?.revision, "the generation is still written")
+            assertEquals(emptyList(), shared.stones.toList())
+            scope.cancel()
+        }
+
+    @Test
+    fun aCancelledCleanupIsTriedAgain() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val shared = Shared()
+            shared.stored["torbox"] = record("g1", 1)
+            shared.cancelDeletes = 1
+            val store = DebridStore(shared, shared, scope)
+            val drop = store.disconnect("torbox", "g1")
+            withTimeout(5_000) { store.idle() }
+            assertTrue(drop.isCancelled)
+            assertEquals(1, shared.stones.size, "the tombstone stays until the record is gone")
+            store.pending(emptyList())
+            withTimeout(5_000) { store.idle() }
+            assertEquals(null, shared.stored["torbox"])
             assertEquals(emptyList(), shared.stones.toList())
             scope.cancel()
         }
