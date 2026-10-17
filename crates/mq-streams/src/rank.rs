@@ -138,7 +138,16 @@ fn playability(s: &ParsedStream, caps: &DeviceCaps) -> Option<Playability> {
                 || (*h == Hdr::DolbyVision && caps.display_hdr.contains(&Hdr::Hdr10))
         }
     });
-    match (codec_ok, hdr_ok) {
+    // Atmos rides on TrueHD or E-AC-3, so it says nothing about decoding.
+    let mut audio = r.audio.iter().filter(|a| **a != Audio::Atmos).peekable();
+    let audio_ok = audio.peek().is_none()
+        || audio.any(|a| caps.audio_decoders.contains(a) || caps.passthrough.contains(a));
+    let container_ok = r.container.as_deref().is_none_or(|c| {
+        caps.containers
+            .iter()
+            .any(|known| known.eq_ignore_ascii_case(c))
+    });
+    match (codec_ok && audio_ok && container_ok, hdr_ok) {
         (true, true) => Some(Playability::Native),
         _ if caps.has_fallback_engine => Some(Playability::NeedsFallbackEngine),
         (false, _) => None,

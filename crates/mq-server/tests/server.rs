@@ -58,6 +58,7 @@ async fn proxies_ranges_with_injected_headers_and_releases_tokens() {
     assert_eq!(resp.status, 206);
     assert_eq!(&resp.body[..], b"0123456789");
     assert_eq!(resp.header("content-range"), Some("bytes 10-19/100"));
+    assert_eq!(resp.header("access-control-allow-origin"), Some("*"));
     assert_eq!(resp.header("content-type"), Some("video/x-matroska"));
 
     server.release(&url);

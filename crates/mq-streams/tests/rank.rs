@@ -29,6 +29,7 @@ fn caps_4k_dv() -> DeviceCaps {
         ten_bit_hevc: true,
         passthrough: vec![mq_relparse::Audio::Eac3, mq_relparse::Audio::Atmos],
         has_fallback_engine: true,
+        ..DeviceCaps::basic_1080p()
     }
 }
 
@@ -223,5 +224,50 @@ fn a_4k_remux_does_not_win_on_a_1080p_screen() {
     assert!(
         ranked.rows.iter().all(|r| r.group != Group::NeedsDownload),
         "no ready alternative exists"
+    );
+}
+
+/// A browser plays H.264, VP9 and AV1 in MP4 or WebM with AAC or Opus, and
+/// has no second engine: a DTS-HD MKV remux is not something it can play.
+#[test]
+fn a_browser_is_not_offered_what_it_cannot_decode() {
+    let caps = DeviceCaps {
+        decoders: vec![VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1],
+        audio_decoders: vec![mq_relparse::Audio::Aac, mq_relparse::Audio::Opus],
+        containers: vec!["mp4".into(), "webm".into()],
+        has_fallback_engine: false,
+        ..DeviceCaps::basic_1080p()
+    };
+    let prefs = StreamPrefs::default();
+    let input = RankInput {
+        caps: &caps,
+        prefs: &prefs,
+        target: &target(),
+        last_binge_group: None,
+    };
+    let all = streams(
+        "torrentio",
+        0,
+        json!({ "streams": [
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-GROUP.mkv\n👤 300 💾 13.9 GB",
+              "infoHash": "dddddddddddddddddddddddddddddddddddddddd", "fileIdx": 0 },
+            { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.WEB.h264.AAC-GROUP.mp4\n👤 40 💾 1.9 GB",
+              "infoHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "fileIdx": 0 }
+        ]}),
+    );
+    let ranked = rank(all, &input);
+    let best = ranked.best().expect("the MP4 plays");
+    assert!(
+        best.stream.raw_description.contains("AAC"),
+        "{}",
+        best.stream.raw_description
+    );
+    assert_eq!(best.key.playability, Playability::Native);
+    assert!(
+        ranked
+            .hidden
+            .iter()
+            .any(|h| h.reason == HideReason::Unplayable),
+        "the remux is hidden as unplayable"
     );
 }

@@ -715,10 +715,18 @@ where
 /// optional `season`, `episode`, `bingeGroup`, and what the device can do:
 /// `displayHeight`, `hdr` ("dolby_vision", "hdr10", "hdr10_plus", "hlg"),
 /// `decoders` ("h264", "h265", "av1", "vp9", ...), `tenBitHevc`,
-/// `passthrough` ("ac3", "eac3", "dts", "true_hd", "atmos", ...) and
+/// `passthrough` and `audioDecoders` ("aac", "ac3", "eac3", "dts",
+/// "true_hd", "atmos", ...), `containers` ("mkv", "mp4", ...) and
 /// `hasFallbackEngine`. What is left out keeps a 1080p SDR stick's default.
-fn versions_params(params: &Value, prefs: StreamPrefs) -> Result<VersionsParams, String> {
+/// `language` (ISO 639-1, the device's) stands in for audio preferences the
+/// user has not set: that language first, then English.
+fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsParams, String> {
     let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
+    if prefs.languages.is_empty() {
+        let device: Option<String> = field(params, "language")?;
+        prefs.languages = device.into_iter().chain(["en".to_owned()]).collect();
+        prefs.languages.dedup();
+    }
     let mut caps = DeviceCaps::basic_1080p();
     if let Some(height) = num("displayHeight") {
         caps.display_height = height;
@@ -737,6 +745,12 @@ fn versions_params(params: &Value, prefs: StreamPrefs) -> Result<VersionsParams,
     }
     if let Some(fallback) = field(params, "hasFallbackEngine")? {
         caps.has_fallback_engine = fallback;
+    }
+    if let Some(audio) = field(params, "audioDecoders")? {
+        caps.audio_decoders = audio;
+    }
+    if let Some(containers) = field::<Vec<String>>(params, "containers")? {
+        caps.containers = containers.iter().map(|c| c.to_ascii_lowercase()).collect();
     }
     Ok(VersionsParams {
         kind: param(params, "kind")?,
@@ -765,15 +779,31 @@ mod tests {
         let params = json!({
             "kind": "movie", "videoId": "tt1", "displayHeight": 2160,
             "decoders": ["h264", "h265", "av1"], "tenBitHevc": false,
-            "passthrough": ["eac3", "atmos"], "hasFallbackEngine": false
+            "passthrough": ["eac3", "atmos"], "hasFallbackEngine": false,
+            "audioDecoders": ["aac", "opus"], "containers": ["MP4", "webm"],
+            "language": "tr"
         });
-        let caps = versions_params(&params, StreamPrefs::default())
-            .unwrap()
-            .caps;
+        let parsed = versions_params(&params, StreamPrefs::default()).unwrap();
+        let caps = parsed.caps;
         assert_eq!(caps.display_height, 2160);
         assert_eq!(json!(caps.decoders), json!(["h264", "h265", "av1"]));
         assert!(!caps.ten_bit_hevc && !caps.has_fallback_engine);
         assert_eq!(json!(caps.passthrough), json!(["eac3", "atmos"]));
+        assert_eq!(json!(caps.audio_decoders), json!(["aac", "opus"]));
+        assert_eq!(caps.containers, ["mp4", "webm"]);
+        assert_eq!(
+            parsed.prefs.languages,
+            ["tr", "en"],
+            "device language, then English"
+        );
+
+        // Languages the user chose win over the device's.
+        let chosen = StreamPrefs {
+            languages: vec!["de".into()],
+            ..StreamPrefs::default()
+        };
+        let parsed = versions_params(&params, chosen).unwrap();
+        assert_eq!(parsed.prefs.languages, ["de"]);
 
         let defaults = json!({"kind": "movie", "videoId": "tt1"});
         let caps = versions_params(&defaults, StreamPrefs::default())

@@ -16,12 +16,17 @@ pub struct DeviceCaps {
     pub ten_bit_hevc: bool,
     /// Formats the audio output accepts as passthrough.
     pub passthrough: Vec<Audio>,
+    /// Audio formats the primary engine decodes itself.
+    pub audio_decoders: Vec<Audio>,
+    /// Containers the primary engine opens, as lowercase file extensions.
+    pub containers: Vec<String>,
     /// A second engine (libmpv) exists for what the primary cannot play.
     pub has_fallback_engine: bool,
 }
 
 impl DeviceCaps {
-    /// A conservative default for a 1080p SDR stick with no passthrough.
+    /// A conservative default for a 1080p SDR stick with no passthrough:
+    /// common audio decodes, DTS and TrueHD go to the fallback engine.
     pub fn basic_1080p() -> Self {
         Self {
             display_height: 1080,
@@ -29,6 +34,18 @@ impl DeviceCaps {
             decoders: vec![VideoCodec::H264, VideoCodec::H265],
             ten_bit_hevc: true,
             passthrough: vec![],
+            audio_decoders: vec![
+                Audio::Aac,
+                Audio::Ac3,
+                Audio::Eac3,
+                Audio::Mp3,
+                Audio::Opus,
+                Audio::Flac,
+                Audio::Pcm,
+            ],
+            containers: ["mkv", "mp4", "m4v", "webm", "ts", "m2ts", "mov", "avi"]
+                .map(str::to_owned)
+                .to_vec(),
             has_fallback_engine: true,
         }
     }

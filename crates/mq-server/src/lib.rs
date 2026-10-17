@@ -286,6 +286,11 @@ async fn proxy_http(
     }
     out.entry(header::ACCEPT_RANGES)
         .or_insert(HeaderValue::from_static("bytes"));
+    // A page may read it as `<video crossorigin>`; the token is the capability.
+    out.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
     if head_only {
         return (status, out).into_response();
     }
