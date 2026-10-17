@@ -40,3 +40,23 @@ impl From<HttpError> for DebridError {
         }
     }
 }
+
+impl DebridError {
+    /// Removes `secrets` from a provider's code and message: some providers
+    /// echo what they were sent, and errors reach logs and screens.
+    pub(crate) fn without(self, secrets: &[&str]) -> Self {
+        let clean = |text: String| {
+            secrets
+                .iter()
+                .filter(|s| !s.is_empty())
+                .fold(text, |text, s| text.replace(s, "<redacted>"))
+        };
+        match self {
+            DebridError::Provider { code, message } => DebridError::Provider {
+                code: clean(code),
+                message: clean(message),
+            },
+            other => other,
+        }
+    }
+}

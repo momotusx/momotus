@@ -322,11 +322,13 @@ struct TokenResponse {
     refresh_token: String,
 }
 
+/// Every value sent (ids, secrets, codes) is kept out of the error.
 async fn token_request(api: &Api, pairs: &[(&str, &str)]) -> Result<TokenResponse, DebridError> {
+    let sent: Vec<&str> = pairs.iter().map(|(_, v)| *v).collect();
     let response = api
         .call(Method::POST, "/token", Some(form(pairs)), Vec::new())
         .await
-        .map_err(map_error)?;
+        .map_err(|e| map_error(e).without(&sent))?;
     Ok(response.json()?)
 }
 
@@ -384,6 +386,10 @@ struct DeviceCode {
 }
 
 impl Device {
+    pub(crate) fn secrets(&self) -> Vec<&str> {
+        vec![&self.device_code]
+    }
+
     pub(crate) async fn start(http: &HttpClient, base: &str) -> Result<(Self, Code), DebridError> {
         let api = Api::new(http.clone(), base);
         let path = with_query(

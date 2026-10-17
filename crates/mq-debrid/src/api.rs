@@ -144,9 +144,11 @@ where
     let used = auth.token();
     match call(Secret::new(used.clone())).await {
         Err(crate::DebridError::Auth) => match auth.refused(&used).await {
-            Some(next) => call(Secret::new(next)).await,
+            Some(next) => call(Secret::new(next.clone()))
+                .await
+                .map_err(|e| e.without(&[&used, &next])),
             None => Err(crate::DebridError::Auth),
         },
-        other => other,
+        other => other.map_err(|e| e.without(&[&used])),
     }
 }

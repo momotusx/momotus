@@ -7,7 +7,8 @@ use crate::realdebrid::Credentials;
 use crate::{DebridError, StoreId, alldebrid, realdebrid, torbox};
 use mq_http::HttpClient;
 use std::fmt;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 /// What the device shows while it waits.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,14 +118,14 @@ impl Login {
         if Instant::now() >= self.deadline {
             return Ok(LoginPoll::Expired);
         }
-        let poll = match &self.flow {
-            Flow::RealDebrid(device) => device.poll().await,
-            Flow::AllDebrid(pin) => pin.poll().await,
-            Flow::TorBox(device) => device.poll().await,
+        let (poll, secrets) = match &self.flow {
+            Flow::RealDebrid(device) => (device.poll().await, device.secrets()),
+            Flow::AllDebrid(pin) => (pin.poll().await, pin.secrets()),
+            Flow::TorBox(device) => (device.poll().await, device.secrets()),
         };
         match poll {
             Err(DebridError::RateLimited { .. }) => Ok(LoginPoll::SlowDown),
-            other => other,
+            other => other.map_err(|e| e.without(&secrets)),
         }
     }
 }

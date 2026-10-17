@@ -409,6 +409,10 @@ enum Collected {
 }
 
 impl Device {
+    pub(crate) fn secrets(&self) -> Vec<&str> {
+        vec![self.device_code.expose()]
+    }
+
     pub(crate) async fn start(http: &HttpClient, base: &str) -> Result<(Self, Code), DebridError> {
         let api = Api::new(http.clone(), base);
         let path = with_query("/v1/api/user/auth/device/start", &[("app", "Marquee")]);

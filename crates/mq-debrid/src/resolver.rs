@@ -125,7 +125,9 @@ struct Cached {
 #[derive(Default)]
 struct State {
     cache: Mutex<HashMap<Key, Cached>>,
-    flights: Mutex<HashMap<Key, (u64, Flight)>>,
+    /// With the connection's token, so `prune` can drop a gone one's flights
+    /// (a flight holds a resolver clone, and so its stores and credential).
+    flights: Mutex<HashMap<Key, (u64, Flight, CancellationToken)>>,
     next_flight: AtomicU64,
 }
 
@@ -254,7 +256,7 @@ impl Resolver {
                 return Ok(link);
             }
             match flights.get(&key) {
-                Some((id, flight)) => (*id, flight.clone()),
+                Some((id, flight, _)) => (*id, flight.clone()),
                 None => {
                     let id = self.state.next_flight.fetch_add(1, Ordering::Relaxed);
                     let store = match priority {
@@ -275,15 +277,20 @@ impl Resolver {
                     }
                     .boxed()
                     .shared();
-                    flights.insert(key.clone(), (id, flight.clone()));
+                    flights.insert(key.clone(), (id, flight.clone(), slot.gone.clone()));
                     (id, flight)
                 }
             }
         };
         let result = flight.await;
         let mut flights = lock(&self.state.flights);
-        if flights.get(&key).is_some_and(|(id, _)| *id == flight_id) {
+        if flights.get(&key).is_some_and(|(id, _, _)| *id == flight_id) {
             flights.remove(&key);
+        }
+        // A waiter resuming after a disconnect never gets a link the flight
+        // finished before it.
+        if slot.gone.is_cancelled() {
+            return Err(disconnected());
         }
         result
     }
@@ -337,8 +344,10 @@ impl Resolver {
         Ok(())
     }
 
-    /// Drops what gone connections left in the cache. Call after cancelling.
+    /// Drops what gone connections left in the cache and their flights. Call
+    /// after cancelling.
     pub fn prune(&self) {
+        lock(&self.state.flights).retain(|_, (_, _, gone)| !gone.is_cancelled());
         lock(&self.state.cache).retain(|_, e| !e.gone.is_cancelled());
     }
 

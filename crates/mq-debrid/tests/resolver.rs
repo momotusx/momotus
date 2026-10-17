@@ -488,3 +488,45 @@ async fn old_generation_results_are_never_published() {
     new.resolve(req()).await.unwrap();
     assert_eq!(slow.adds(), 2, "nothing of the cancelled flight was kept");
 }
+
+#[tokio::test]
+async fn a_waiter_resuming_after_disconnect_gets_no_link() {
+    use futures_util::FutureExt;
+    use tokio_util::sync::CancellationToken;
+    let mut slow = State::new();
+    slow.add_delay = Duration::from_millis(30);
+    let slow = Arc::new(slow);
+    let gone = CancellationToken::new();
+    let resolver = Resolver::new(config()).add_connection("A", gone.clone(), mock(&slow));
+    // The waiter joins the flight, then is not polled while it finishes.
+    let mut waiter = Box::pin(resolver.resolve(req()));
+    assert!((&mut waiter).now_or_never().is_none());
+    resolver.resolve(req()).await.unwrap();
+    gone.cancel();
+    resolver.prune();
+    let err = waiter.await.unwrap_err();
+    assert!(
+        matches!(&err, DebridError::Provider { code, .. } if code == "disconnected"),
+        "{err:?}"
+    );
+}
+
+#[tokio::test]
+async fn prune_drops_an_abandoned_flight() {
+    use futures_util::FutureExt;
+    use tokio_util::sync::CancellationToken;
+    let mut slow = State::new();
+    slow.add_delay = Duration::from_secs(30);
+    let slow = Arc::new(slow);
+    let gone = CancellationToken::new();
+    let resolver = Resolver::new(config()).add_connection("A", gone.clone(), mock(&slow));
+    // A caller that started a flight and went away.
+    let mut abandoned = Box::pin(resolver.resolve(req()));
+    assert!((&mut abandoned).now_or_never().is_none());
+    drop(abandoned);
+    gone.cancel();
+    resolver.prune();
+    drop(resolver);
+    // Nothing holds the store any more: not the flight, not the resolver.
+    assert_eq!(Arc::strong_count(&slow), 1);
+}

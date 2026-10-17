@@ -153,3 +153,23 @@ async fn premiumize_has_no_code_sign_in() {
     );
     assert!(server.requests().is_empty());
 }
+
+#[tokio::test]
+async fn a_poll_error_never_carries_the_pin_secret() {
+    let server = Server::start(vec![
+        route("GET", "/v4.1/pin/get", 200, AD_PIN),
+        route(
+            "POST",
+            "/v4/pin/check",
+            200,
+            r#"{"status":"error","error":{"code":"PIN_REJECTED","message":"check c0ffee is not valid"}}"#,
+        ),
+    ])
+    .await;
+    let login = Login::start_at(&client(), StoreId::AllDebrid, &server.base)
+        .await
+        .unwrap();
+    let err = login.poll().await.unwrap_err();
+    let printed = format!("{err} {err:?}");
+    assert!(!printed.contains("c0ffee"), "{printed}");
+}

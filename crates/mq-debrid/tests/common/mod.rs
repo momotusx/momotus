@@ -18,6 +18,8 @@ pub struct Recorded {
     /// Lowercased request head.
     pub head: String,
     pub body: String,
+    /// When the request arrived.
+    pub at: std::time::Instant,
 }
 
 pub struct Route {
@@ -142,6 +144,7 @@ async fn handle(mut socket: TcpStream, routes: Arc<Vec<Route>>, log: Arc<Mutex<V
         target: target.clone(),
         head: head.to_ascii_lowercase(),
         body,
+        at: std::time::Instant::now(),
     });
     let found = routes.iter().find(|r| {
         r.method == method && r.path == path && r.query.is_none_or(|q| query.contains(q))

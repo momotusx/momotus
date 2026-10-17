@@ -363,3 +363,38 @@ async fn a_rotated_token_is_retried_once() {
     assert!(requests[0].head.contains("bearer old"));
     assert!(requests[1].head.contains("bearer new"));
 }
+
+#[tokio::test]
+async fn provider_echoes_of_secrets_never_reach_errors() {
+    let server = Server::start(vec![
+        route(
+            "GET",
+            "/user",
+            400,
+            &format!(r#"{{"error":"unknown token {TOKEN}","error_code":-1}}"#),
+        ),
+        route(
+            "POST",
+            "/token",
+            400,
+            r#"{"error":"invalid refresh token REF for CSECRET"}"#,
+        ),
+    ])
+    .await;
+    let err = store(&server).user().await.unwrap_err();
+    let printed = format!("{err} {err:?}");
+    assert!(!printed.contains(TOKEN), "{printed}");
+    let creds = mq_debrid::Credentials {
+        client_id: "CID".into(),
+        client_secret: "CSECRET".into(),
+        access_token: "OLD".into(),
+        refresh_token: "REF".into(),
+        expires_in: 0,
+    };
+    let err = creds.refresh_at(&client(), &server.base).await.unwrap_err();
+    let printed = format!("{err} {err:?}");
+    assert!(
+        !printed.contains("REF ") && !printed.contains("CSECRET"),
+        "{printed}"
+    );
+}

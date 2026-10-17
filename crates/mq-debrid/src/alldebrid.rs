@@ -412,6 +412,10 @@ struct PinCheck {
 }
 
 impl Pin {
+    pub(crate) fn secrets(&self) -> Vec<&str> {
+        vec![&self.pin, &self.check]
+    }
+
     pub(crate) async fn start(http: &HttpClient, base: &str) -> Result<(Self, Code), DebridError> {
         let api = Api::new(http.clone(), base);
         let start: PinStart = unwrap(
