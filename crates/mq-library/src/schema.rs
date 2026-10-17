@@ -1,7 +1,14 @@
 use rusqlite_migration::{M, Migrations};
 
 pub(crate) fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V1), M::up(V2), M::up(V3), M::up(V4), M::up(V5)])
+    Migrations::new(vec![
+        M::up(V1),
+        M::up(V2),
+        M::up(V3),
+        M::up(V4),
+        M::up(V5),
+        M::up(V6),
+    ])
 }
 
 const V1: &str = r#"
@@ -130,5 +137,17 @@ CREATE TABLE sync_outbox (
     id    INTEGER PRIMARY KEY AUTOINCREMENT,
     coll  INTEGER NOT NULL,
     key   TEXT NOT NULL
+);
+"#;
+
+/// The account roster as this device verified it, per account (keyed by the
+/// genesis hash): signed entries in order. Changing relay or token keeps it.
+const V6: &str = r#"
+CREATE TABLE sync_roster (
+    genesis  TEXT NOT NULL,
+    seq      INTEGER NOT NULL,
+    body     BLOB NOT NULL,
+    sig      BLOB NOT NULL,
+    PRIMARY KEY (genesis, seq)
 );
 "#;

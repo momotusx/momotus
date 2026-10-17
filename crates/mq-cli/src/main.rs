@@ -80,24 +80,55 @@ enum Command {
 
 #[derive(Subcommand)]
 enum SyncAction {
-    /// Create an account on the relay and a key for it.
+    /// Create an account on the relay with this device as its first member.
     Init {
         server: String,
         #[arg(long)]
         invite: Option<String>,
+        #[arg(long, default_value = "cli")]
+        name: String,
     },
-    /// Use the account of another data dir (phase 1 stand-in for QR pairing).
-    Join { from: PathBuf },
     /// Push local changes, pull and apply remote ones.
     Now,
     /// Join an account from another device: prints a pairing code to approve.
-    Pair { server: String },
+    Pair {
+        server: String,
+        #[arg(long, default_value = "cli")]
+        name: String,
+    },
     /// Approve a device showing this pairing code.
     Approve { qr: String },
     /// Make a recovery kit (shown once).
     Kit,
     /// Join the account of a recovery kit.
-    Recover { server: String, kit: String },
+    Recover {
+        server: String,
+        kit: String,
+        #[arg(long, default_value = "cli")]
+        name: String,
+    },
+    /// List the account's devices and kits, with the roster fingerprint.
+    Devices,
+    /// Remove one device (by member id) and rotate the key.
+    Remove { member: String },
+    /// Report a device lost: drops it and what it vouched for, except
+    /// `--keep` ids, and every kit any of them made.
+    Lost {
+        member: String,
+        #[arg(long)]
+        keep: Vec<String>,
+    },
+    /// Send what is queued, leave the account, forget the sync setup.
+    Signout {
+        #[arg(long)]
+        force: bool,
+    },
+    /// After a fork: take the relay's roster (dropping again what this
+    /// device's roster dropped, plus `--drop` ids).
+    UseServerRoster {
+        #[arg(long)]
+        drop: Vec<String>,
+    },
 }
 
 #[tokio::main]
@@ -118,15 +149,25 @@ async fn main() {
         Command::Streams { kind, id } => streams(&core, kind, id).await,
         Command::Search { query } => search(&core, &query).await,
         Command::Sync { action } => match action {
-            SyncAction::Init { server, invite } => {
-                sync::init(&cli.data, &server, invite.as_deref()).await
-            }
-            SyncAction::Join { from } => sync::join(&cli.data, &from).await,
+            SyncAction::Init {
+                server,
+                invite,
+                name,
+            } => sync::init(&cli.data, &server, invite.as_deref(), &name).await,
             SyncAction::Now => sync::now(&core, &cli.data).await,
-            SyncAction::Pair { server } => sync::pair(&cli.data, &server).await,
-            SyncAction::Approve { qr } => sync::approve(&cli.data, &qr).await,
-            SyncAction::Kit => sync::kit(&cli.data).await,
-            SyncAction::Recover { server, kit } => sync::recover(&cli.data, &server, &kit).await,
+            SyncAction::Pair { server, name } => sync::pair(&cli.data, &server, &name).await,
+            SyncAction::Approve { qr } => sync::approve(&core, &cli.data, &qr).await,
+            SyncAction::Kit => sync::kit(&core, &cli.data).await,
+            SyncAction::Recover { server, kit, name } => {
+                sync::recover(&cli.data, &server, &kit, &name).await
+            }
+            SyncAction::Devices => sync::devices(&core, &cli.data).await,
+            SyncAction::Remove { member } => sync::remove(&core, &cli.data, &member).await,
+            SyncAction::Lost { member, keep } => sync::lost(&core, &cli.data, &member, &keep).await,
+            SyncAction::Signout { force } => sync::sign_out(&core, &cli.data, force).await,
+            SyncAction::UseServerRoster { drop } => {
+                sync::use_server_roster(&core, &cli.data, &drop).await
+            }
         },
         Command::Import { timeout_secs } => import(&core, Duration::from_secs(timeout_secs)).await,
         Command::Play {

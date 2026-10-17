@@ -7,6 +7,7 @@ pub mod seal;
 pub mod wire;
 
 pub use engine::{
-    SyncConfig, SyncError, SyncReport, add_device, create_account, pull_changes, push_changes,
-    sync_once,
+    Devices, LostPreview, MemberInfo, PAIRING_MS, SyncConfig, SyncError, SyncReport,
+    create_account, devices, lost_preview, pull_changes, push_changes, remove_devices, report_lost,
+    sign_out, sync_once, use_server_roster,
 };

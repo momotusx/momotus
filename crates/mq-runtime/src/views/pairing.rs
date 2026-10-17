@@ -8,7 +8,8 @@ use crate::Core;
 use crate::live::{FRAME, coalesce};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
-use mq_sync::pair::{Joined, start_pairing};
+use mq_sync::SyncConfig;
+use mq_sync::pair::start_pairing;
 use serde::Serialize;
 use std::pin::Pin;
 use std::sync::Mutex;
@@ -32,9 +33,9 @@ pub enum PairingSnapshot {
     Confirm {
         code: String,
     },
-    /// Store these in the keystore; sync can start.
+    /// Store this record in the keystore; sync can start.
     Joined {
-        joined: Joined,
+        record: Box<SyncConfig>,
     },
     Expired,
     Failed {
@@ -49,12 +50,14 @@ pub struct PairingView {
 }
 
 impl PairingView {
-    pub fn open(core: &Core, server: &str) -> Self {
+    /// `name` is how other devices of the account will see this one.
+    pub fn open(core: &Core, server: &str, name: &str) -> Self {
         let snapshot = SharedObservable::new(PairingSnapshot::Starting);
         let (decide, decision) = oneshot::channel();
         let task = tokio::spawn(run(
             core.clone(),
             server.to_owned(),
+            name.to_owned(),
             snapshot.clone(),
             decision,
         ));
@@ -114,6 +117,7 @@ impl Drop for PairingView {
 async fn run(
     core: Core,
     server: String,
+    name: String,
     snapshot: SharedObservable<PairingSnapshot>,
     decision: oneshot::Receiver<bool>,
 ) {
@@ -145,8 +149,10 @@ async fn run(
         code: offer.code.clone(),
     });
     match decision.await {
-        Ok(true) => match request.claim(core.http(), offer).await {
-            Ok(joined) => end(PairingSnapshot::Joined { joined }),
+        Ok(true) => match request.claim(core.http(), offer, &name).await {
+            Ok(record) => end(PairingSnapshot::Joined {
+                record: Box::new(record),
+            }),
             Err(e) => end(fail(e.to_string())),
         },
         _ => end(fail("the codes did not match; nothing was kept".into())),

@@ -322,7 +322,75 @@ impl Library {
             .map(drop)
         })
     }
+
+    /// Sync state keys starting with `prefix`, with their values.
+    pub fn sync_states(&self, prefix: &str) -> Result<Vec<(String, String)>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(
+                "SELECT key, value FROM sync_state WHERE substr(key, 1, length(?1)) = ?1",
+            )?;
+            stmt.query_map(params![prefix], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect()
+        })
+    }
+
+    pub fn delete_sync_state(&self, key: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute("DELETE FROM sync_state WHERE key = ?1", params![key])
+                .map(drop)
+        })
+    }
+
+    /// The account's roster entries this device verified, in order.
+    pub fn roster_entries(&self, genesis: &str) -> Result<Vec<SignedEntry>, LibraryError> {
+        self.read(|c| {
+            let mut stmt =
+                c.prepare("SELECT body, sig FROM sync_roster WHERE genesis = ?1 ORDER BY seq")?;
+            stmt.query_map(params![genesis], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect()
+        })
+    }
+
+    pub fn add_roster_entry(
+        &self,
+        genesis: &str,
+        seq: u64,
+        body: &[u8],
+        sig: &[u8],
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO sync_roster (genesis, seq, body, sig) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(genesis, seq) DO NOTHING",
+                params![genesis, seq as i64, body, sig],
+            )
+            .map(drop)
+        })
+    }
+
+    pub fn clear_roster(&self, genesis: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "DELETE FROM sync_roster WHERE genesis = ?1",
+                params![genesis],
+            )
+            .map(drop)
+        })
+    }
+
+    /// Forgets everything sync knew (this device was dropped from the
+    /// account): queue, cursors and roster. The library itself stays.
+    pub fn forget_sync(&self) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute_batch(
+                "DELETE FROM sync_outbox; DELETE FROM sync_state; DELETE FROM sync_roster;",
+            )
+        })
+    }
 }
+
+/// A roster entry as stored: body and signature.
+pub type SignedEntry = (Vec<u8>, Vec<u8>);
 
 /// One table's registers after the cursor. The key expression and the
 /// ordering match `SyncCursor`, so pages are exact.

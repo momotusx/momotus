@@ -245,13 +245,22 @@ async fn sync_account_then_two_devices_share_preferences() {
 
     let (tx_a, mut rx_a) = mpsc::unbounded_channel();
     let mut a = Session::new(Core::temporary("p").unwrap(), tx_a);
-    a.handle_text(&json!({"id": 1, "op": "createSyncAccount", "server": server}).to_string())
+    a.handle_text(
+        &json!({"id": 1, "op": "createSyncAccount", "server": server, "name": "Phone"}).to_string(),
+    )
+    .await;
+    let record = next(&mut rx_a).await["result"].clone();
+    assert_eq!(record["keys"]["ak"].as_str().unwrap().len(), 64);
+    assert_ne!(record["keys"]["ak"], record["keys"]["idKey"]);
+    let sync = json!({"op": "syncNow", "record": record});
+    a.handle_text(&json!({"id": 9, "op": "syncDevices", "record": record}).to_string())
         .await;
-    let account = next(&mut rx_a).await["result"].clone();
-    assert_eq!(account["keys"]["ak"].as_str().unwrap().len(), 64);
-    assert_ne!(account["keys"]["ak"], account["keys"]["idKey"]);
-    let sync = json!({"op": "syncNow", "server": server,
-        "deviceToken": account["deviceToken"], "keys": account["keys"]});
+    let devices = next(&mut rx_a).await;
+    assert_eq!(
+        devices["result"]["members"][0]["name"], "Phone",
+        "{devices}"
+    );
+    assert_eq!(devices["result"]["fingerprint"].as_str().unwrap().len(), 12);
 
     a.handle_text(
         &json!({"id": 2, "op": "setPrefs", "patch": {"subtitleLanguages": ["tur"]}}).to_string(),
@@ -278,7 +287,7 @@ async fn sync_account_then_two_devices_share_preferences() {
 
     let mut bad = sync;
     bad["id"] = json!(5);
-    bad["keys"]["ak"] = json!("zz");
+    bad["record"]["keys"]["ak"] = json!("zz");
     b.handle_text(&bad.to_string()).await;
     assert_eq!(next(&mut rx_b).await["ok"], false);
     let _ = std::fs::remove_dir_all(&dir);

@@ -1,10 +1,13 @@
 //! JSON shapes between devices and the relay. Binary fields travel as hex
 //! (key ids) and base64 (bodies).
 
+use crate::roster::{Digest32, Entry, Id, TokenRequest};
 use serde::{Deserialize, Serialize};
 
 /// Most records per push or pull page.
 pub const PAGE: usize = 500;
+/// Most roster entries per page (each is at most 64 KiB).
+pub const ROSTER_PAGE: usize = 64;
 /// Largest sealed body the relay accepts. The addon list carries every
 /// manifest, which reaches a few hundred KiB for heavy setups.
 pub const MAX_BODY: usize = 1024 * 1024;
@@ -33,6 +36,83 @@ pub struct WireRecord {
 #[serde(rename_all = "camelCase")]
 pub struct PushRequest {
     pub records: Vec<WireRecord>,
+    /// The roster head the device holds; the relay refuses the whole push
+    /// (409) when its own differs.
+    #[serde(default)]
+    pub head: Digest32,
+}
+
+/// Seq and hash of the last roster entry.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RosterHead {
+    pub seq: u64,
+    pub hash: Digest32,
+}
+
+/// The body of a 409 to a push: the device's roster or keys are behind.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Behind {
+    pub error: String,
+    pub epoch: u32,
+    pub roster: Option<RosterHead>,
+}
+
+/// Roster entries in seq order from `from`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RosterPage {
+    pub from: u64,
+    pub entries: Vec<Entry>,
+    pub head: Option<RosterHead>,
+    pub more: bool,
+}
+
+/// One entry to append (the relay checks every rule first).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppendRequest {
+    pub entry: Entry,
+}
+
+/// Entries a device holds and the relay lost, continuing the relay's head.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayRequest {
+    pub account: Id,
+    pub entries: Vec<Entry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayInfo {
+    /// Random, fixed for the relay's life; devices pin it to the URL.
+    pub relay_id: Id,
+    pub generation: String,
+    /// When the current generation started (0 if the relay was never
+    /// restored).
+    pub generation_since_ms: u64,
+    pub server_ms: u64,
+}
+
+/// A fresh token for a member, signed with its device key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenGrant {
+    pub request: TokenRequest,
+    pub sig: crate::roster::Hex<64>,
+}
+
+/// A new account: its genesis entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountRequest {
+    pub entry: Entry,
+}
+
+/// What redeeming a kit gives: a pending token and the kit's member id.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Redeemed {
+    pub account: Id,
+    pub device_token: String,
+    pub kit: Id,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,6 +170,12 @@ pub struct PullResponse {
     pub generation: String,
     pub more: bool,
     pub server_ms: u64,
+    /// The account's key epoch and roster head, so a device sees at once
+    /// that the roster moved (or forked) under it.
+    #[serde(default)]
+    pub epoch: u32,
+    #[serde(default)]
+    pub roster: Option<RosterHead>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

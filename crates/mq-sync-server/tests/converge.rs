@@ -1,13 +1,15 @@
-//! Three devices make random edits and sync in random order through a real
-//! relay; after two full rounds every device holds the same registers.
+//! Three devices make random edits, rotate keys, lose stored records and
+//! sync in random order through a real relay that may be restored from a
+//! snapshot; after two full rounds every device holds the same registers.
 
-use mq_http::{ClientConfig, HttpClient, RequestOptions};
+use mq_http::{ClientConfig, HttpClient};
 use mq_library::hlc::{HlcClock, now_ms};
 use mq_library::{AddonRow, Library, LibraryItemRow, ProgressRow, SyncCursor, coll};
-use mq_sync::wire::{AccountResponse, MAX_CLOCK_AHEAD_MS};
-use mq_sync::{SyncConfig, pull_changes, push_changes, sync_once};
+use mq_sync::wire::MAX_CLOCK_AHEAD_MS;
+use mq_sync::{SyncConfig, SyncReport, pull_changes, push_changes, sync_once};
 use proptest::prelude::*;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 
@@ -82,6 +84,23 @@ enum Op {
     Pull {
         device: usize,
     },
+    /// A plain key rotation (no one dropped).
+    Rotate {
+        device: usize,
+    },
+    /// A sync round whose changed record the app never stores.
+    DropRecord {
+        device: usize,
+    },
+    /// Reads the roster only (the devices screen).
+    CatchUp {
+        device: usize,
+    },
+    /// The operator backs up the relay database.
+    Snapshot,
+    /// The operator restores the last backup (the roster journal survives)
+    /// and starts the relay with a new generation.
+    Restore,
 }
 
 fn op() -> impl Strategy<Value = Op> {
@@ -137,7 +156,12 @@ fn op() -> impl Strategy<Value = Op> {
             }
         ),
         device.clone().prop_map(|device| Op::Push { device }),
-        device.prop_map(|device| Op::Pull { device }),
+        device.clone().prop_map(|device| Op::Pull { device }),
+        device.clone().prop_map(|device| Op::Rotate { device }),
+        device.clone().prop_map(|device| Op::DropRecord { device }),
+        device.prop_map(|device| Op::CatchUp { device }),
+        Just(Op::Snapshot),
+        Just(Op::Restore),
     ]
 }
 
@@ -218,15 +242,7 @@ impl Device {
                     .unwrap();
                 ((coll::STREAM_MEMORY, key(&[PROFILE, &item_id])), hlc)
             }
-            Op::Sync { .. }
-            | Op::Push { .. }
-            | Op::Pull { .. }
-            | Op::Restart { .. }
-            | Op::ClockJump { .. }
-            | Op::StalePullWrite { .. }
-            | Op::Import { .. } => {
-                unreachable!("handled by the runner")
-            }
+            _ => unreachable!("handled by the runner"),
         }
     }
 }
@@ -252,21 +268,70 @@ fn written(op: &Op, value: &serde_json::Value) -> bool {
     }
 }
 
-async fn relay(clock_offset_ms: Arc<AtomicI64>) -> String {
-    let dir = std::env::temp_dir().join(format!("mq-converge-{}-{}", std::process::id(), now_ms()));
+/// A relay on a database in its own directory, with the roster journal
+/// next to it.
+struct Relay {
+    url: String,
+    db: PathBuf,
+    offset: Arc<AtomicI64>,
+}
+
+impl Relay {
+    async fn start(db: PathBuf, offset: Arc<AtomicI64>, new_generation: bool) -> Self {
+        let app = mq_sync_server::router(
+            &db,
+            mq_sync_server::Config {
+                clock_offset_ms: offset.clone(),
+                new_generation,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+        Self { url, db, offset }
+    }
+
+    async fn new(offset: Arc<AtomicI64>) -> Self {
+        Self::start(fresh_dir().join("relay.sqlite"), offset, false).await
+    }
+
+    fn snapshot(&self) -> PathBuf {
+        let path = self.db.with_file_name("snapshot.sqlite");
+        let _ = std::fs::remove_file(&path);
+        rusqlite::Connection::open(&self.db)
+            .unwrap()
+            .execute("VACUUM INTO ?1", [path.to_str().unwrap()])
+            .unwrap();
+        path
+    }
+
+    /// A relay started from `snapshot` with this relay's journal: what an
+    /// operator gets restoring the database alone.
+    async fn restored(&self, snapshot: &PathBuf) -> Self {
+        let db = fresh_dir().join("relay.sqlite");
+        std::fs::copy(snapshot, &db).unwrap();
+        std::fs::copy(
+            self.db.with_extension("roster.jsonl"),
+            db.with_extension("roster.jsonl"),
+        )
+        .unwrap();
+        Self::start(db, self.offset.clone(), true).await
+    }
+}
+
+fn fresh_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("mq-converge-{}", rand_suffix()));
     std::fs::create_dir_all(&dir).unwrap();
-    let app = mq_sync_server::router(
-        &dir.join(format!("{}.sqlite", rand_suffix())),
-        mq_sync_server::Config {
-            clock_offset_ms,
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
-    base
+    dir
+}
+
+/// Stores a round's changed record, as the app does (unless it drops it).
+fn keep(config: &mut SyncConfig, report: SyncReport) {
+    if let Some(record) = report.record {
+        *config = record;
+    }
 }
 
 /// Registers so far written by one device only (no imports), with its last
@@ -297,45 +362,45 @@ fn registers(lib: &Library) -> Vec<mq_library::SyncRecord> {
 /// final rounds.
 async fn run(ops: Vec<Op>, slow: bool) {
     let offset = Arc::new(AtomicI64::new(if slow { -30 * 60 * 1000 } else { 0 }));
-    let server = relay(offset.clone()).await;
+    let mut relay = Relay::new(offset.clone()).await;
+    let mut snapshot: Option<PathBuf> = None;
     let http = HttpClient::new(ClientConfig::default()).unwrap();
-    let local = RequestOptions {
-        allow_private: true,
-        ..Default::default()
-    };
-    let keys = mq_sync::seal::KeyBundle::generate();
-    let mut configs = Vec::new();
+    let mut configs: Vec<SyncConfig> = Vec::new();
     let mut devices = Vec::new();
     // One device runs two hours slow; the fast one stays inside the relay's
     // 10 minutes (restamping is covered in tests/engine.rs).
     for (i, skew) in [0i64, -7_200_000, 540_000].into_iter().enumerate() {
-        // phase 1: each device is its own device token on one account; the
-        // account is created by the first and the token reused by the rest.
-        if i == 0 {
-            let account: AccountResponse = http
-                .post_json(
-                    &format!("{server}/v1/accounts"),
-                    &serde_json::json!({}),
-                    &local,
-                )
-                .await
-                .unwrap()
-                .json()
-                .unwrap();
-            configs.push(SyncConfig {
-                server: server.clone(),
-                device_token: account.device_token,
-                keys: keys.clone(),
-            });
-        } else {
-            configs.push(configs[0].clone());
-        }
         let library = Library::temporary().unwrap();
         let clock = HlcClock::new(i as u64 + 1);
         clock.set_offset_ms(skew);
         library
             .ensure_profile(PROFILE, PROFILE, &clock.tick(now_ms()).encode())
             .unwrap();
+        // The first device makes the account; the others join it by QR,
+        // each as its own member.
+        let record = if i == 0 {
+            mq_sync::create_account(&http, &relay.url, None, "first")
+                .await
+                .unwrap()
+        } else {
+            let first: &Device = &devices[0];
+            let joining = mq_sync::pair::start_pairing(&http, &relay.url)
+                .await
+                .unwrap();
+            let (_, record) = mq_sync::pair::approve_pairing(
+                &first.library,
+                &http,
+                &configs[0],
+                &first.clock,
+                &joining.qr,
+            )
+            .await
+            .unwrap();
+            configs[0] = record;
+            let offer = joining.poll(&http).await.unwrap().expect("approved");
+            joining.claim(&http, offer, "next").await.unwrap()
+        };
+        configs.push(record);
         devices.push(Device {
             library,
             clock,
@@ -372,9 +437,10 @@ async fn run(ops: Vec<Op>, slow: bool) {
             } => {
                 let d = &devices[*device];
                 let early = d.hlc();
-                pull_changes(&d.library, &http, &configs[*device], &d.clock)
+                let report = pull_changes(&d.library, &http, &configs[*device], &d.clock)
                     .await
                     .unwrap();
+                keep(&mut configs[*device], report);
                 let video_id = format!("tt1:1:{video}");
                 let row = ProgressRow {
                     video_id: &video_id,
@@ -434,21 +500,56 @@ async fn run(ops: Vec<Op>, slow: bool) {
             }
             Op::Sync { device } => {
                 let d = &devices[*device];
+                let report = sync_once(&d.library, &http, &configs[*device], &d.clock)
+                    .await
+                    .unwrap();
+                keep(&mut configs[*device], report);
+            }
+            Op::DropRecord { device } => {
+                let d = &devices[*device];
                 sync_once(&d.library, &http, &configs[*device], &d.clock)
                     .await
                     .unwrap();
             }
             Op::Push { device } => {
                 let d = &devices[*device];
-                push_changes(&d.library, &http, &configs[*device], &d.clock)
+                let report = push_changes(&d.library, &http, &configs[*device], &d.clock)
                     .await
                     .unwrap();
+                keep(&mut configs[*device], report);
             }
             Op::Pull { device } => {
                 let d = &devices[*device];
-                pull_changes(&d.library, &http, &configs[*device], &d.clock)
+                let report = pull_changes(&d.library, &http, &configs[*device], &d.clock)
                     .await
                     .unwrap();
+                keep(&mut configs[*device], report);
+            }
+            Op::Rotate { device } => {
+                let d = &devices[*device];
+                configs[*device] =
+                    mq_sync::remove_devices(&d.library, &http, &configs[*device], &d.clock, vec![])
+                        .await
+                        .unwrap();
+            }
+            Op::CatchUp { device } => {
+                let d = &devices[*device];
+                let seen = mq_sync::devices(&d.library, &http, &configs[*device], &d.clock)
+                    .await
+                    .unwrap();
+                assert_eq!(seen.members.len(), 3, "{seen:?}");
+                if let Some(record) = seen.record {
+                    configs[*device] = record;
+                }
+            }
+            Op::Snapshot => snapshot = Some(relay.snapshot()),
+            Op::Restore => {
+                if let Some(snapshot) = &snapshot {
+                    relay = relay.restored(snapshot).await;
+                    for config in &mut configs {
+                        config.server = relay.url.clone();
+                    }
+                }
             }
             Op::Progress { device, .. }
             | Op::Watched { device, .. }
@@ -479,12 +580,26 @@ async fn run(ops: Vec<Op>, slow: bool) {
     // The operator fixes the relay's clock, so what waited goes through.
     offset.store(0, Ordering::Relaxed);
     for _ in 0..2 {
-        for (d, config) in devices.iter().zip(&configs) {
-            sync_once(&d.library, &http, config, &d.clock)
-                .await
-                .unwrap();
+        for (d, config) in devices.iter().zip(configs.iter_mut()) {
+            // A round that changed the record publishes nothing: store it
+            // and go again, as the app does.
+            for _ in 0..3 {
+                let report = sync_once(&d.library, &http, config, &d.clock)
+                    .await
+                    .unwrap();
+                let again = report.again;
+                keep(config, report);
+                if !again {
+                    break;
+                }
+            }
         }
     }
+    let keys = &configs[0].keys;
+    assert!(
+        configs.iter().all(|c| c.keys == *keys),
+        "devices hold different keys after {ops:?}"
+    );
     let first = registers(&devices[0].library);
     for d in &devices[1..] {
         assert_eq!(

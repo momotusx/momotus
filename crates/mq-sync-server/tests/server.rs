@@ -1,6 +1,10 @@
 use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::hlc::{Hlc, now_ms};
-use mq_sync::wire::{AccountResponse, PullResponse, PushRequest, PushResponse, WireRecord};
+use mq_sync::SyncConfig;
+use mq_sync::roster::TokenRequest;
+use mq_sync::wire::{
+    AccountResponse, PullResponse, PushRequest, PushResponse, RelayInfo, TokenGrant, WireRecord,
+};
 use mq_sync_server::{Config, router};
 
 struct Relay {
@@ -47,25 +51,25 @@ fn opts(token: Option<&str>) -> RequestOptions {
 }
 
 impl Relay {
-    async fn account(&self) -> AccountResponse {
-        self.http
-            .post_json(
-                &format!("{}/v1/accounts", self.base),
-                &serde_json::json!({}),
-                &opts(None),
-            )
+    async fn account(&self) -> SyncConfig {
+        mq_sync::create_account(&self.http, &self.base, None, "test")
             .await
-            .unwrap()
-            .json()
             .unwrap()
     }
 
-    async fn push(&self, token: &str, records: Vec<WireRecord>) -> Result<PushResponse, HttpError> {
+    async fn push(
+        &self,
+        a: &SyncConfig,
+        records: Vec<WireRecord>,
+    ) -> Result<PushResponse, HttpError> {
         self.http
             .post_json(
                 &format!("{}/v1/push", self.base),
-                &PushRequest { records },
-                &opts(Some(token)),
+                &PushRequest {
+                    records,
+                    head: a.checkpoint.hash,
+                },
+                &opts(Some(&a.device_token)),
             )
             .await?
             .json()
@@ -113,7 +117,7 @@ async fn newer_wins_each_replacement_takes_a_seq_and_pull_pages() {
     let now = now_ms();
     let r = relay
         .push(
-            &a.device_token,
+            &a,
             vec![record(1, hlc(now, 1), "a1"), record(2, hlc(now, 1), "b1")],
         )
         .await
@@ -123,7 +127,7 @@ async fn newer_wins_each_replacement_takes_a_seq_and_pull_pages() {
     // Older and equal versions are stale; a newer one replaces and moves to the end.
     let r = relay
         .push(
-            &a.device_token,
+            &a,
             vec![
                 record(1, hlc(now - 1, 2), "a0"),
                 record(2, hlc(now, 1), "b1"),
@@ -165,27 +169,28 @@ async fn refuses_future_clocks_bad_tokens_and_overflowing_accounts() {
     let a = relay.account().await;
     let now = now_ms();
     let r = relay
-        .push(
-            &a.device_token,
-            vec![record(1, hlc(now + 11 * 60 * 1000, 1), "x")],
-        )
+        .push(&a, vec![record(1, hlc(now + 11 * 60 * 1000, 1), "x")])
         .await
         .unwrap();
     assert_eq!(r.accepted, 0);
     assert!(r.rejected[0].reason.contains("ahead"), "{:?}", r.rejected);
 
-    let err = relay.push("wrong", vec![]).await.unwrap_err();
+    let wrong = SyncConfig {
+        device_token: "wrong".into(),
+        ..a.clone()
+    };
+    let err = relay.push(&wrong, vec![]).await.unwrap_err();
     assert!(
         matches!(err, HttpError::Status { status: 401, .. }),
         "{err:?}"
     );
 
     relay
-        .push(&a.device_token, vec![record(1, hlc(now, 1), "12345678")])
+        .push(&a, vec![record(1, hlc(now, 1), "12345678")])
         .await
         .unwrap();
     let err = relay
-        .push(&a.device_token, vec![record(2, hlc(now, 1), "12345678")])
+        .push(&a, vec![record(2, hlc(now, 1), "12345678")])
         .await
         .unwrap_err();
     assert!(
@@ -194,10 +199,7 @@ async fn refuses_future_clocks_bad_tokens_and_overflowing_accounts() {
     );
     // Replacing a record with one of the same size still fits.
     relay
-        .push(
-            &a.device_token,
-            vec![record(1, hlc(now + 1, 1), "87654321")],
-        )
+        .push(&a, vec![record(1, hlc(now + 1, 1), "87654321")])
         .await
         .unwrap();
 }
@@ -209,22 +211,19 @@ async fn invite_gates_sign_up() {
         ..Config::default()
     })
     .await;
-    let url = format!("{}/v1/accounts", relay.base);
-    let err = relay
-        .http
-        .post_json(&url, &serde_json::json!({}), &opts(None))
-        .await
-        .unwrap_err();
-    assert!(matches!(err, HttpError::Status { status: 403, .. }));
-    let mut with = opts(None);
-    with.headers.push(("x-invite".into(), "letmein".into()));
+    let without = mq_sync::create_account(&relay.http, &relay.base, None, "t").await;
     assert!(
-        relay
-            .http
-            .post_json(&url, &serde_json::json!({}), &with)
-            .await
-            .is_ok()
+        matches!(
+            without,
+            Err(mq_sync::SyncError::Http(HttpError::Status {
+                status: 403,
+                ..
+            }))
+        ),
+        "{without:?}"
     );
+    let with = mq_sync::create_account(&relay.http, &relay.base, Some("letmein"), "t").await;
+    assert!(with.is_ok(), "{with:?}");
 }
 
 #[tokio::test]
@@ -233,61 +232,119 @@ async fn head_epochs_canonical_clocks_and_device_tokens() {
     let a = relay.account().await;
     let now = now_ms();
     relay
-        .push(&a.device_token, vec![record(1, hlc(now, 1), "v0")])
+        .push(&a, vec![record(1, hlc(now, 1), "v0")])
         .await
         .unwrap();
-    // An epoch the account has not reached is refused.
+    // An epoch other than the account's is refused, the whole push (409),
+    // so nothing is taken from the device's queue.
     let mut rotated = record(1, hlc(now, 1), "v1");
     rotated.epoch = 1;
-    let r = relay
-        .push(&a.device_token, vec![rotated.clone()])
-        .await
-        .unwrap();
-    assert_eq!(r.rejected[0].code, mq_sync::wire::Refusal::Epoch);
+    let err = relay.push(&a, vec![rotated.clone()]).await.unwrap_err();
+    assert!(
+        matches!(err, HttpError::Status { status: 409, .. }),
+        "{err:?}"
+    );
     // Once the account moved to epoch 1 (key rotation), the same hlc
-    // re-sealed under it replaces the old body.
+    // re-sealed under it replaces the old body, and epoch 0 is refused.
     rusqlite::Connection::open(relay._dir.0.join("relay.sqlite"))
         .unwrap()
         .execute("UPDATE account SET epoch = 1", [])
         .unwrap();
-    let r = relay.push(&a.device_token, vec![rotated]).await.unwrap();
+    let r = relay.push(&a, vec![rotated]).await.unwrap();
     assert_eq!(r.accepted, 1);
+    assert!(
+        relay
+            .push(&a, vec![record(4, hlc(now, 1), "old")])
+            .await
+            .is_err()
+    );
+    // A push naming another roster head is refused whole too.
+    let elsewhere = SyncConfig {
+        checkpoint: mq_sync::wire::RosterHead::default(),
+        ..a.clone()
+    };
+    assert!(relay.push(&elsewhere, vec![]).await.is_err());
+    let mut fine = record(5, hlc(now, 1), "v1");
+    fine.epoch = 1;
+    assert_eq!(relay.push(&a, vec![fine]).await.unwrap().accepted, 1);
     // Too short to be a sealed body.
     let mut empty = record(3, hlc(now, 1), "");
     empty.body = String::new();
-    let r = relay.push(&a.device_token, vec![empty]).await.unwrap();
+    empty.epoch = 1;
+    let r = relay.push(&a, vec![empty]).await.unwrap();
     assert_eq!(r.rejected[0].code, mq_sync::wire::Refusal::Invalid);
     // Uppercase hex would sort wrongly as text: refused.
-    let r = relay
-        .push(
-            &a.device_token,
-            vec![record(2, hlc(now, 1).to_uppercase(), "x")],
-        )
-        .await
-        .unwrap();
+    let mut upper = record(2, hlc(now, 1).to_uppercase(), "x");
+    upper.epoch = 1;
+    let r = relay.push(&a, vec![upper]).await.unwrap();
     assert_eq!(r.rejected.len(), 1);
 
     let page = relay.pull(&a.device_token, 0, 500).await;
     assert_eq!(page.head, page.last);
     assert!(!page.generation.is_empty());
     assert_eq!(page.records[0].epoch, 1);
+    assert_eq!(page.epoch, 1);
+    assert_eq!(page.roster.unwrap().hash, a.checkpoint.hash);
+}
 
-    // A second device gets its own token on the same account.
-    let second: AccountResponse = relay
+/// A device member gets a fresh token by signing for this relay, now, once.
+#[tokio::test]
+async fn a_member_signs_for_a_fresh_token_once() {
+    let relay = relay(Config::default()).await;
+    let a = relay.account().await;
+    let info: RelayInfo = relay
         .http
-        .post_json(
-            &format!("{}/v1/devices", relay.base),
-            &serde_json::json!({}),
-            &opts(Some(&a.device_token)),
-        )
+        .get(&format!("{}/v1/relay", relay.base), &opts(None))
         .await
         .unwrap()
         .json()
         .unwrap();
-    assert_eq!(second.account, a.account);
-    assert_ne!(second.device_token, a.device_token);
-    assert_eq!(
-        relay.pull(&second.device_token, 0, 500).await.records.len(),
-        1
+    let member = a.secret();
+    let grant = |request: TokenRequest| TokenGrant {
+        sig: member.sign_token(&request),
+        request,
+    };
+    let ask = |grant: TokenGrant| {
+        let http = relay.http.clone();
+        let url = format!("{}/v1/tokens", relay.base);
+        async move {
+            http.post_json(&url, &grant, &opts(None))
+                .await
+                .and_then(|r| r.json::<AccountResponse>())
+        }
+    };
+    let request = TokenRequest::new(info.relay_id, a.keys.account, member.id(), info.server_ms);
+    let fresh = ask(grant(request.clone())).await.unwrap();
+    assert_ne!(fresh.device_token, a.device_token);
+    assert!(
+        relay
+            .pull(&fresh.device_token, 0, 500)
+            .await
+            .records
+            .is_empty()
     );
+    // The same request again (a replayed nonce), one signed for another
+    // relay, one from the past, and one signed by someone else: refused.
+    assert!(ask(grant(request.clone())).await.is_err());
+    let other_relay = TokenRequest::new(
+        mq_sync::roster::Hex([9; 16]),
+        a.keys.account,
+        member.id(),
+        info.server_ms,
+    );
+    assert!(ask(grant(other_relay)).await.is_err());
+    let stale = TokenRequest::new(
+        info.relay_id,
+        a.keys.account,
+        member.id(),
+        info.server_ms - 6 * 60 * 1000,
+    );
+    assert!(ask(grant(stale)).await.is_err());
+    let stranger = mq_sync::roster::MemberSecret::generate();
+    let forged = TokenRequest::new(info.relay_id, a.keys.account, member.id(), info.server_ms);
+    let forged = TokenGrant {
+        sig: stranger.sign_token(&forged),
+        request: forged,
+    };
+    assert!(ask(forged).await.is_err());
 }

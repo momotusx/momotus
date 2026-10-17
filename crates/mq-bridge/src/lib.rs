@@ -4,7 +4,9 @@
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
 //! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
-//! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover",
+//! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
+//! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" |
+//! "useServerRoster",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, import,
 //! settings, pairing.
@@ -17,6 +19,8 @@ use mq_runtime::{
     VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
+use mq_sync::SyncConfig;
+use mq_sync::roster::Id;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -65,46 +69,83 @@ enum Request {
         id: u64,
         keys: Vec<(String, String)>,
     },
-    /// Creates a relay account. The reply carries the device token and a new
-    /// key bundle; the platform stores both in its keystore.
+    /// Creates a relay account with this device as its first member. The
+    /// reply is the keystore record (`SyncConfig`).
     CreateSyncAccount {
         id: u64,
         server: String,
         #[serde(default)]
         invite: Option<String>,
+        name: String,
     },
-    /// One sync round with secrets read from the keystore by the platform.
-    #[serde(rename_all = "camelCase")]
+    /// One sync round. `record` is the keystore record; a reply carrying a
+    /// new `record` must be stored, then sync again (`again`).
     SyncNow {
         id: u64,
-        server: String,
-        device_token: String,
-        keys: mq_sync::seal::KeyBundle,
+        record: Box<SyncConfig>,
     },
-    /// On a device that syncs: hands the account to the device showing `qr`.
-    #[serde(rename_all = "camelCase")]
+    /// On a device that syncs: vouches for the device showing `qr`. Replies
+    /// `{code, record}`.
     ApprovePairing {
         id: u64,
-        server: String,
-        device_token: String,
-        keys: mq_sync::seal::KeyBundle,
+        record: Box<SyncConfig>,
         qr: String,
     },
-    /// Makes a new recovery kit, stores the sealed keys on the relay and
-    /// returns the kit to show once.
-    #[serde(rename_all = "camelCase")]
+    /// Makes a recovery kit and adds it to the roster. Replies `{kit,
+    /// record}`; show the kit once.
     CreateRecoveryKit {
         id: u64,
-        server: String,
-        device_token: String,
-        keys: mq_sync::seal::KeyBundle,
+        record: Box<SyncConfig>,
     },
-    /// Joins the account a recovery kit belongs to; the reply goes to the
-    /// keystore.
+    /// Joins the account a recovery kit belongs to as a new device; the
+    /// reply is its keystore record.
     Recover {
         id: u64,
         server: String,
         kit: String,
+        name: String,
+    },
+    /// The account's members, fingerprint and epoch.
+    SyncDevices {
+        id: u64,
+        record: Box<SyncConfig>,
+    },
+    /// What reporting `lost` would drop: devices to untick, kits that go.
+    LostPreview {
+        id: u64,
+        record: Box<SyncConfig>,
+        lost: Id,
+    },
+    /// Removes one device (no cascade); replies the record to store.
+    RemoveDevice {
+        id: u64,
+        record: Box<SyncConfig>,
+        device: Id,
+    },
+    /// Drops `lost` and what it vouched for, except `keep`; replies the
+    /// record to store.
+    ReportLost {
+        id: u64,
+        record: Box<SyncConfig>,
+        lost: Id,
+        #[serde(default)]
+        keep: Vec<Id>,
+    },
+    /// Sends what is queued, leaves the account and forgets sync state; the
+    /// platform then deletes the keystore record.
+    SignOut {
+        id: u64,
+        record: Box<SyncConfig>,
+        #[serde(default)]
+        force: bool,
+    },
+    /// After a fork: takes the relay's roster, dropping again what this
+    /// device's roster had dropped plus `drop`; replies the record to store.
+    UseServerRoster {
+        id: u64,
+        record: Box<SyncConfig>,
+        #[serde(default)]
+        drop: Vec<Id>,
     },
     /// Merges `patch` into the profile preferences (see `Core::set_prefs`).
     SetPrefs {
@@ -200,80 +241,94 @@ impl Session {
                 let result = self.core.set_addon_enabled(&url, enabled);
                 self.reply(json!(id), done(result));
             }
-            Request::CreateSyncAccount { id, server, invite } => {
-                let result = mq_sync::create_account(self.core.http(), &server, invite.as_deref())
-                    .await
-                    .map(|a| {
-                        json!({
-                            "account": a.account,
-                            "deviceToken": a.device_token,
-                            "keys": mq_sync::seal::KeyBundle::generate(),
-                        })
-                    })
+            Request::CreateSyncAccount {
+                id,
+                server,
+                invite,
+                name,
+            } => {
+                let created =
+                    mq_sync::create_account(self.core.http(), &server, invite.as_deref(), &name)
+                        .await;
+                self.reply(json!(id), answer(created));
+            }
+            Request::SyncNow { id, record } => {
+                let report = self.core.sync(&record).await;
+                self.reply(json!(id), answer(report));
+            }
+            Request::ApprovePairing { id, record, qr } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let approved =
+                    mq_sync::pair::approve_pairing(library, http, &record, clock, &qr).await;
+                let result = approved
+                    .map(|(code, record)| json!({ "code": code, "record": record }))
                     .map_err(|e| e.to_string());
                 self.reply(json!(id), result);
             }
-            Request::SyncNow {
-                id,
-                server,
-                device_token,
-                keys,
-            } => {
-                let config = mq_sync::SyncConfig {
-                    server,
-                    device_token,
-                    keys,
-                };
-                let result = self
-                    .core
-                    .sync(&config)
-                    .await
-                    .map_err(|e| e.to_string())
-                    .and_then(|r| to_value(&r));
-                self.reply(json!(id), result);
-            }
-            Request::ApprovePairing {
-                id,
-                server,
-                device_token,
-                keys,
-                qr,
-            } => {
-                let config = mq_sync::SyncConfig {
-                    server,
-                    device_token,
-                    keys,
-                };
-                let result = mq_sync::pair::approve_pairing(self.core.http(), &config, &qr)
-                    .await
-                    .map(|code| json!({ "code": code }))
+            Request::CreateRecoveryKit { id, record } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let made = mq_sync::pair::make_kit(library, http, &record, clock).await;
+                let result = made
+                    .map(|(kit, record)| json!({ "kit": kit, "record": record }))
                     .map_err(|e| e.to_string());
                 self.reply(json!(id), result);
             }
-            Request::CreateRecoveryKit {
+            Request::Recover {
                 id,
                 server,
-                device_token,
-                keys,
+                kit,
+                name,
             } => {
-                let config = mq_sync::SyncConfig {
-                    server,
-                    device_token,
-                    keys,
-                };
-                let kit = mq_sync::pair::new_recovery_kit();
-                let result = mq_sync::pair::store_recovery(self.core.http(), &config, &kit)
-                    .await
-                    .map(|()| json!({ "kit": kit }))
-                    .map_err(|e| e.to_string());
-                self.reply(json!(id), result);
+                let joined = mq_sync::pair::recover(self.core.http(), &server, &kit, &name).await;
+                self.reply(json!(id), answer(joined));
             }
-            Request::Recover { id, server, kit } => {
-                let result = mq_sync::pair::recover(self.core.http(), &server, &kit)
-                    .await
-                    .map_err(|e| e.to_string())
-                    .and_then(|joined| to_value(&joined));
-                self.reply(json!(id), result);
+            Request::SyncDevices { id, record } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let devices = mq_sync::devices(library, http, &record, clock).await;
+                self.reply(json!(id), answer(devices));
+            }
+            Request::LostPreview { id, record, lost } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let preview = mq_sync::lost_preview(library, http, &record, clock, lost).await;
+                self.reply(json!(id), answer(preview));
+            }
+            Request::RemoveDevice { id, record, device } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let removed =
+                    mq_sync::remove_devices(library, http, &record, clock, vec![device]).await;
+                self.reply(json!(id), answer(removed));
+            }
+            Request::ReportLost {
+                id,
+                record,
+                lost,
+                keep,
+            } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let reported =
+                    mq_sync::report_lost(library, http, &record, clock, lost, keep).await;
+                self.reply(json!(id), answer(reported));
+            }
+            Request::SignOut { id, record, force } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let out = mq_sync::sign_out(library, http, &record, clock, force).await;
+                self.reply(
+                    json!(id),
+                    out.map(|()| json!({})).map_err(|e| e.to_string()),
+                );
+            }
+            Request::UseServerRoster { id, record, drop } => {
+                let (library, http, clock) =
+                    (self.core.library(), self.core.http(), self.core.clock());
+                let adopted = mq_sync::use_server_roster(library, http, &record, clock, drop).await;
+                self.reply(json!(id), answer(adopted));
             }
             Request::SetPrefs { id, patch } => {
                 let result = self
@@ -377,7 +432,8 @@ impl Session {
                 )
             }
             "pairing" => {
-                let pairing = PairingView::open(&self.core, &param(params, "server")?);
+                let name = param(params, "name").unwrap_or_else(|_| "New device".into());
+                let pairing = PairingView::open(&self.core, &param(params, "server")?, &name);
                 let (snapshot, updates) = pairing.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (View::Pairing(pairing), to_value(&snapshot)?, forward)
@@ -539,6 +595,12 @@ fn param(params: &Value, key: &str) -> Result<String, String> {
 
 fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|e| e.to_string())
+}
+
+fn answer<T: serde::Serialize>(result: Result<T, mq_sync::SyncError>) -> Result<Value, String> {
+    result
+        .map_err(|e| e.to_string())
+        .and_then(|value| to_value(&value))
 }
 
 async fn forward<S, U>(sub: u64, mut updates: S, out: mpsc::UnboundedSender<Value>)

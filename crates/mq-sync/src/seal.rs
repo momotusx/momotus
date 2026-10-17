@@ -24,57 +24,10 @@ pub enum SealError {
     Malformed,
 }
 
-/// Everything a device needs to read and write the account's records. QR
-/// enrollment and the recovery kit carry this bundle, not a bare key.
-///
-/// `ak` encrypts records and changes when a device is revoked (with
-/// `epoch`); `id_key` names registers and never changes, so a rotation does
-/// not rename every record on the relay.
-#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KeyBundle {
-    pub v: u8,
-    pub epoch: u32,
-    #[serde(with = "hex32")]
-    pub ak: [u8; 32],
-    #[serde(with = "hex32")]
-    pub id_key: [u8; 32],
-}
-
-impl std::fmt::Debug for KeyBundle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "KeyBundle(epoch {}, <redacted>)", self.epoch)
-    }
-}
-
-impl KeyBundle {
-    pub fn generate() -> Self {
-        Self {
-            v: 1,
-            epoch: 0,
-            ak: AccountKey::generate(),
-            id_key: AccountKey::generate(),
-        }
-    }
-}
-
-mod hex32 {
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(bytes: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&hex::encode(bytes))
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
-        let text = String::deserialize(d)?;
-        hex::decode(&text)
-            .ok()
-            .and_then(|b| b.try_into().ok())
-            .ok_or_else(|| serde::de::Error::custom("expected 64 hex digits"))
-    }
-}
-
-/// The account key, held in memory only; the platform keystore owns it.
+/// The keys of one epoch, held in memory only; the platform keystore owns
+/// the bundle (`roster::Bundle`) they come from. `ak` encrypts records and
+/// changes when a device is revoked; `id_key` names registers and never
+/// changes, so a rotation does not rename every record on the relay.
 #[derive(Clone)]
 pub struct AccountKey {
     enc: [u8; 32],
@@ -88,18 +41,15 @@ impl std::fmt::Debug for AccountKey {
 }
 
 impl AccountKey {
-    pub fn from_bundle(bundle: &KeyBundle) -> Self {
+    pub fn new(ak: &[u8; 32], id_key: &[u8; 32]) -> Self {
         Self {
-            enc: expand(&bundle.ak, b"marquee/sync/enc/v1"),
-            id: expand(&bundle.id_key, b"marquee/sync/id/v1"),
+            enc: expand(ak, b"marquee/sync/enc/v1"),
+            id: expand(id_key, b"marquee/sync/id/v1"),
         }
     }
 
-    /// A fresh random account key.
-    pub fn generate() -> [u8; 32] {
-        let mut ak = [0u8; 32];
-        getrandom::fill(&mut ak).expect("os randomness");
-        ak
+    pub fn from_bundle(bundle: &crate::roster::Bundle) -> Self {
+        Self::new(&bundle.ak.0, &bundle.id_key.0)
     }
 
     pub fn key_id(&self, coll: u8, key: &str) -> [u8; 16] {
@@ -226,17 +176,12 @@ mod tests {
 
     const HLC: &str = "000190000000000000000000000000a1";
 
-    fn bundle(n: u8) -> KeyBundle {
-        KeyBundle {
-            v: 1,
-            epoch: 0,
-            ak: [n; 32],
-            id_key: [n; 32],
-        }
+    fn account(n: u8) -> AccountKey {
+        AccountKey::new(&[n; 32], &[n; 32])
     }
 
     fn key() -> AccountKey {
-        AccountKey::from_bundle(&bundle(7))
+        account(7)
     }
 
     #[test]
@@ -291,7 +236,7 @@ mod tests {
             Err(SealError::Open),
             "body"
         );
-        let stranger = AccountKey::from_bundle(&bundle(8));
+        let stranger = account(8);
         assert_eq!(
             stranger.open(3, &id, HLC, 0, &body),
             Err(SealError::Open),
@@ -304,10 +249,7 @@ mod tests {
         let k = key();
         assert_eq!(k.key_id(2, "p/tt1"), k.key_id(2, "p/tt1"));
         assert_ne!(k.key_id(2, "p/tt1"), k.key_id(3, "p/tt1"));
-        assert_ne!(
-            k.key_id(2, "p/tt1"),
-            AccountKey::from_bundle(&bundle(9)).key_id(2, "p/tt1")
-        );
+        assert_ne!(k.key_id(2, "p/tt1"), account(9).key_id(2, "p/tt1"));
     }
 
     #[test]

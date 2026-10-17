@@ -139,6 +139,12 @@ impl Core {
         mq_sync::sync_once(self.library(), self.http(), config, &self.inner.clock).await
     }
 
+    /// The clock that stamps this device's writes (sync and roster calls
+    /// take it).
+    pub fn clock(&self) -> &HlcClock {
+        &self.inner.clock
+    }
+
     /// The loopback stream server, started on first use.
     pub async fn stream_server(&self) -> Result<Arc<StreamServer>, CoreError> {
         let server = self

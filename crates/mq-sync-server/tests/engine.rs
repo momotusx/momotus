@@ -1,11 +1,11 @@
 //! The device side against a real relay: recovery after a restore, records
 //! the relay refuses, clocks that ran ahead.
 
-use mq_http::{ClientConfig, HttpClient, RequestOptions};
+use mq_http::{ClientConfig, HttpClient};
 use mq_library::hlc::{Hlc, HlcClock, now_ms};
 use mq_library::{Library, ProgressRow, SyncCursor};
-use mq_sync::seal::KeyBundle;
-use mq_sync::wire::{AccountResponse, MAX_CLOCK_AHEAD_MS};
+use mq_sync::roster::{Entry, Hex, MemberSecret, Roster};
+use mq_sync::wire::{MAX_CLOCK_AHEAD_MS, RosterHead};
 use mq_sync::{SyncConfig, SyncError, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::{Path, PathBuf};
@@ -37,26 +37,28 @@ async fn serve(db: &Path, config: Config) -> String {
 }
 
 async fn account(server: &str) -> SyncConfig {
-    let http = HttpClient::new(ClientConfig::default()).unwrap();
-    let local = RequestOptions {
-        allow_private: true,
-        ..Default::default()
-    };
-    let a: AccountResponse = http
-        .post_json(
-            &format!("{server}/v1/accounts"),
-            &serde_json::json!({}),
-            &local,
-        )
+    mq_sync::create_account(&http(), server, None, "test")
         .await
         .unwrap()
-        .json()
-        .unwrap();
-    SyncConfig {
-        server: server.to_owned(),
-        device_token: a.device_token,
-        keys: KeyBundle::generate(),
-    }
+}
+
+/// A record for an account that exists only here (no relay was asked).
+fn offline(server: &str) -> (SyncConfig, Entry) {
+    let member = MemberSecret::generate();
+    let (entry, keys) = Roster::genesis_entry(&member, Hex([1; 16]), "t", now_ms());
+    let config = SyncConfig {
+        server: server.into(),
+        device_token: "t".into(),
+        member: Hex(member.seed()),
+        keys,
+        checkpoint: RosterHead {
+            seq: 0,
+            hash: entry.hash(),
+        },
+        relay_id: Hex([7; 16]),
+        revision: 1,
+    };
+    (config, entry)
 }
 
 fn http() -> HttpClient {
@@ -180,11 +182,7 @@ async fn a_write_from_a_clock_far_ahead_is_restamped_and_delivered() {
 
 #[tokio::test]
 async fn bearer_tokens_never_go_to_a_public_relay_in_clear_text() {
-    let config = SyncConfig {
-        server: "http://sync.example.com".into(),
-        device_token: "t".into(),
-        keys: KeyBundle::generate(),
-    };
+    let (config, _) = offline("http://sync.example.com");
     let lib = Library::temporary().unwrap();
     let err = sync_once(&lib, &http(), &config, &HlcClock::new(1))
         .await
@@ -193,13 +191,44 @@ async fn bearer_tokens_never_go_to_a_public_relay_in_clear_text() {
 }
 
 /// A relay that refuses every record as "clock ahead" and claims a time near
-/// the end of what 48 bits hold.
-async fn lying_relay() -> String {
+/// the end of what 48 bits hold. It serves `genesis` as the roster.
+async fn lying_relay(genesis: Entry) -> String {
     use axum::Json;
     use axum::routing::{get, post};
-    use mq_sync::wire::{PullResponse, PushRequest, PushResponse, Refusal, Rejected};
+    use mq_sync::wire::{
+        PullResponse, PushRequest, PushResponse, Refusal, Rejected, RelayInfo, RosterPage,
+    };
     const FAR: u64 = 0xffff_ffff_fff0;
+    let head = RosterHead {
+        seq: 0,
+        hash: genesis.hash(),
+    };
     let app = axum::Router::new()
+        .route(
+            "/v1/relay",
+            get(|| async {
+                Json(RelayInfo {
+                    relay_id: Hex([7; 16]),
+                    generation: "g".into(),
+                    generation_since_ms: 0,
+                    server_ms: FAR,
+                })
+            }),
+        )
+        .route(
+            "/v1/roster",
+            get(move || {
+                let entries = vec![genesis.clone()];
+                async move {
+                    Json(RosterPage {
+                        from: 0,
+                        entries,
+                        head: Some(head),
+                        more: false,
+                    })
+                }
+            }),
+        )
         .route(
             "/v1/push",
             post(|Json(request): Json<PushRequest>| async move {
@@ -223,7 +252,7 @@ async fn lying_relay() -> String {
         )
         .route(
             "/v1/pull",
-            get(|| async {
+            get(move || async move {
                 Json(PullResponse {
                     records: vec![],
                     last: 0,
@@ -231,6 +260,8 @@ async fn lying_relay() -> String {
                     generation: "g".into(),
                     more: false,
                     server_ms: FAR,
+                    epoch: 0,
+                    roster: Some(head),
                 })
             }),
         );
@@ -242,10 +273,10 @@ async fn lying_relay() -> String {
 
 #[tokio::test]
 async fn a_lying_relay_cannot_break_clocks_or_drop_writes() {
+    let (config, genesis) = offline("http://127.0.0.1");
     let config = SyncConfig {
-        server: lying_relay().await,
-        device_token: "t".into(),
-        keys: KeyBundle::generate(),
+        server: lying_relay(genesis).await,
+        ..config
     };
     let lib = Library::temporary().unwrap();
     let clock = HlcClock::new(1);

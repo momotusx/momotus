@@ -1,14 +1,10 @@
 //! Pairing a new device and recovering an account through a real relay.
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as B64;
 use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
-use mq_sync::pair::{
-    approve_pairing, new_recovery_kit, recover, reseal_recovery, start_pairing, store_recovery,
-};
-use mq_sync::seal::KeyBundle;
-use mq_sync::wire::AccountResponse;
-use mq_sync::{SyncConfig, SyncError};
+use mq_library::Library;
+use mq_library::hlc::HlcClock;
+use mq_sync::pair::{approve_pairing, make_kit, recover, start_pairing};
+use mq_sync::{SyncConfig, SyncError, devices, report_lost, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::PathBuf;
 
@@ -29,10 +25,15 @@ async fn relay_with(config: Config) -> (String, PathBuf) {
     (base, db)
 }
 
-fn devices(db: &PathBuf) -> i64 {
+/// Tokens that can push: one per device that joined.
+fn active(db: &PathBuf) -> i64 {
     rusqlite::Connection::open(db)
         .unwrap()
-        .query_row("SELECT COUNT(*) FROM device", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM device WHERE state = 'active'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap()
 }
 
@@ -47,70 +48,131 @@ fn local() -> RequestOptions {
     }
 }
 
-/// A device with its own account on the relay.
-async fn device(server: &str) -> SyncConfig {
-    let a: AccountResponse = http()
-        .post_json(
-            &format!("{server}/v1/accounts"),
-            &serde_json::json!({}),
-            &local(),
-        )
-        .await
-        .unwrap()
-        .json()
-        .unwrap();
-    SyncConfig {
-        server: server.to_owned(),
-        device_token: a.device_token,
-        keys: KeyBundle::generate(),
+/// A device with its own account on the relay, and its library and clock.
+struct Device {
+    record: SyncConfig,
+    library: Library,
+    clock: HlcClock,
+}
+
+impl Device {
+    async fn first(server: &str, name: &str) -> Self {
+        let record = mq_sync::create_account(&http(), server, None, name)
+            .await
+            .unwrap();
+        Self::with(record)
+    }
+
+    fn with(record: SyncConfig) -> Self {
+        Self {
+            record,
+            library: Library::temporary().unwrap(),
+            clock: HlcClock::new(1),
+        }
+    }
+
+    /// Syncs until the record settles, storing it like an app does.
+    async fn sync(&mut self) -> mq_sync::SyncReport {
+        let mut report = None;
+        for _ in 0..3 {
+            let r = sync_once(&self.library, &http(), &self.record, &self.clock)
+                .await
+                .unwrap();
+            let again = r.again;
+            if let Some(record) = r.record.clone() {
+                self.record = record;
+            }
+            report = Some(r);
+            if !again {
+                break;
+            }
+        }
+        report.unwrap()
+    }
+
+    async fn approve(&mut self, qr: &str) -> Result<String, SyncError> {
+        let (code, record) =
+            approve_pairing(&self.library, &http(), &self.record, &self.clock, qr).await?;
+        self.record = record;
+        Ok(code)
+    }
+
+    async fn pair(&mut self, server: &str, name: &str) -> Device {
+        let tv = start_pairing(&http(), server).await.unwrap();
+        let code = self.approve(&tv.qr).await.unwrap();
+        let offer = tv.poll(&http()).await.unwrap().expect("offer");
+        assert_eq!(offer.code, code);
+        Device::with(tv.claim(&http(), offer, name).await.unwrap())
+    }
+
+    async fn names(&mut self) -> Vec<String> {
+        let mut names: Vec<String> = devices(&self.library, &http(), &self.record, &self.clock)
+            .await
+            .unwrap()
+            .members
+            .into_iter()
+            .map(|m| m.name.unwrap_or_else(|| "kit".into()))
+            .collect();
+        names.sort();
+        names
     }
 }
 
 #[tokio::test]
 async fn a_tv_joins_by_qr_once_after_matching_codes() {
     let (server, db) = relay().await;
-    let phone = device(&server).await;
+    let mut phone = Device::first(&server, "Phone").await;
     let tv = start_pairing(&http(), &server).await.unwrap();
-    assert!(tv.qr.starts_with("marquee:pair?v=1&"), "{}", tv.qr);
+    assert!(tv.qr.starts_with("marquee:pair?v=2&"), "{}", tv.qr);
     assert_eq!(tv.poll(&http()).await.unwrap(), None, "waiting");
 
-    let shown_on_phone = approve_pairing(&http(), &phone, &tv.qr).await.unwrap();
+    let shown_on_phone = phone.approve(&tv.qr).await.unwrap();
     let offer = tv.poll(&http()).await.unwrap().expect("offer");
     assert_eq!(
         offer.code, shown_on_phone,
         "both screens show the same code"
     );
-    assert_eq!(devices(&db), 1, "no token before the user confirms");
+    assert_eq!(active(&db), 1, "no token before the user confirms");
 
-    let joined = tv.claim(&http(), offer).await.unwrap();
-    assert_eq!(joined.keys, phone.keys);
-    assert_eq!(joined.server, server);
-    assert_ne!(joined.device_token, phone.device_token, "its own token");
-    assert_eq!(devices(&db), 2);
+    let record = tv.claim(&http(), offer, "Living room TV").await.unwrap();
+    assert_eq!(record.keys, phone.record.keys);
+    assert_eq!(record.server, server);
+    assert_ne!(
+        record.device_token, phone.record.device_token,
+        "its own token"
+    );
+    assert_ne!(record.member, phone.record.member, "its own keys");
+    assert_eq!(active(&db), 2);
+    let mut tv_device = Device::with(record);
+    tv_device.sync().await;
+    assert_eq!(
+        phone.names().await,
+        vec!["Living room TV".to_owned(), "Phone".to_owned()]
+    );
 
     // The slot is single use.
     assert!(tv.poll(&http()).await.is_err());
-    let again = approve_pairing(&http(), &phone, &tv.qr).await.unwrap_err();
+    let again = phone.approve(&tv.qr).await.unwrap_err();
     assert!(again.to_string().contains("expired"), "{again}");
 }
 
 #[tokio::test]
 async fn someone_else_who_saw_the_qr_cannot_slip_in() {
     let (server, db) = relay().await;
-    let phone = device(&server).await;
-    let stranger = device(&server).await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let mut stranger = Device::first(&server, "Stranger").await;
     let tv = start_pairing(&http(), &server).await.unwrap();
 
     // The stranger answers first; the owner's phone is told so, and shows
     // no code that could match the one on the TV.
-    let strangers_code = approve_pairing(&http(), &stranger, &tv.qr).await.unwrap();
-    let err = approve_pairing(&http(), &phone, &tv.qr).await.unwrap_err();
+    let strangers_code = stranger.approve(&tv.qr).await.unwrap();
+    let err = phone.approve(&tv.qr).await.unwrap_err();
     assert!(err.to_string().contains("someone else"), "{err}");
     let offer = tv.poll(&http()).await.unwrap().expect("offer");
     assert_eq!(offer.code, strangers_code);
     // The user rejects: nothing is claimed, so no token exists for the TV.
     drop(offer);
-    assert_eq!(devices(&db), 2, "only the two accounts' own devices");
+    assert_eq!(active(&db), 2, "only the two accounts' own devices");
 
     // Knowing the slot id from the QR is not enough to collect the blob.
     let slot = tv
@@ -138,90 +200,109 @@ async fn someone_else_who_saw_the_qr_cannot_slip_in() {
 #[tokio::test]
 async fn a_blob_sealed_to_another_key_does_not_open() {
     let (server, _) = relay().await;
-    let phone = device(&server).await;
+    let mut phone = Device::first(&server, "Phone").await;
     let tv = start_pairing(&http(), &server).await.unwrap();
     let other = start_pairing(&http(), &server).await.unwrap();
-    // The TV's slot, but the other device's key.
-    let other_key = other.qr.split("&k=").nth(1).unwrap();
-    let forged = tv.qr.split("&k=").next().unwrap().to_owned() + "&k=" + other_key;
-    approve_pairing(&http(), &phone, &forged).await.unwrap();
+    // The TV's slot, but the other device's keys.
+    let keys = other.qr.split("&k=").nth(1).unwrap();
+    let forged = tv.qr.split("&k=").next().unwrap().to_owned() + "&k=" + keys;
+    phone.approve(&forged).await.unwrap();
     let err = tv.poll(&http()).await.unwrap_err();
     assert!(matches!(err, SyncError::Pairing(_)), "{err:?}");
     // Codes for another relay are refused before anything is sent.
     let elsewhere = tv.qr.replace("127.0.0.1", "127.0.0.2");
-    assert!(approve_pairing(&http(), &phone, &elsewhere).await.is_err());
+    assert!(phone.approve(&elsewhere).await.is_err());
 }
 
 #[tokio::test]
-async fn a_recovery_kit_survives_a_key_rotation() {
+async fn a_recovery_kit_follows_key_rotations() {
     let (server, _) = relay().await;
-    let phone = device(&server).await;
-    let kit = new_recovery_kit();
-    store_recovery(&http(), &phone, &kit).await.unwrap();
-
-    let joined = recover(&http(), &server, &kit.to_lowercase())
+    let mut phone = Device::first(&server, "Phone").await;
+    let (kit, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
-    assert_eq!(joined.keys, phone.keys);
-    assert_ne!(joined.device_token, phone.device_token);
+    phone.record = record;
 
-    // After a rotation any device reseals the new bundle without the kit; the
-    // id key never rotates, so the kit still accepts it.
-    let rotated = SyncConfig {
-        keys: KeyBundle {
-            epoch: 1,
-            id_key: phone.keys.id_key,
-            ..KeyBundle::generate()
-        },
-        ..phone.clone()
-    };
-    assert_eq!(reseal_recovery(&http(), &rotated).await.unwrap(), 1);
-    let joined = recover(&http(), &server, &kit).await.unwrap();
-    assert_eq!(joined.keys, rotated.keys);
+    let laptop = recover(&http(), &server, &kit.to_lowercase(), "Laptop")
+        .await
+        .unwrap();
+    assert_eq!(laptop.keys, phone.record.keys);
+    assert_ne!(laptop.device_token, phone.record.device_token);
+    let mut laptop = Device::with(laptop);
+    laptop.sync().await;
+
+    // After a rotation (the laptop is removed), the kit opens the new key.
+    phone.record = mq_sync::remove_devices(
+        &phone.library,
+        &http(),
+        &phone.record,
+        &phone.clock,
+        vec![laptop.record.secret().id()],
+    )
+    .await
+    .unwrap();
+    assert_eq!(phone.record.keys.epoch, 1);
+    let tablet = recover(&http(), &server, &kit, "Tablet").await.unwrap();
+    assert_eq!(tablet.keys, phone.record.keys);
 
     // A wrong kit finds nothing.
-    assert!(
-        recover(&http(), &server, &new_recovery_kit())
-            .await
-            .is_err()
-    );
+    let wrong = mq_sync::pair::new_recovery_kit();
+    assert!(recover(&http(), &server, &wrong, "x").await.is_err());
 }
 
+/// The usual recovery: the phone that made the kit is lost, the user
+/// recovers on a laptop and reports the phone lost, keeping the TV the phone
+/// paired. The phone and its kit go; the laptop and the TV keep syncing.
 #[tokio::test]
-async fn a_token_holder_cannot_plant_their_keys_in_a_recovery() {
+async fn reporting_a_lost_phone_after_recovering_keeps_what_the_user_holds() {
     let (server, _) = relay().await;
-    let phone = device(&server).await;
-    let kit = new_recovery_kit();
-    store_recovery(&http(), &phone, &kit).await.unwrap();
-
-    // A stolen token (or the relay itself) seals keys of its choosing to the
-    // kit's public key, which the relay lists to any device of the account.
-    let planted = SyncConfig {
-        keys: KeyBundle::generate(),
-        ..phone.clone()
-    };
-    assert_eq!(reseal_recovery(&http(), &planted).await.unwrap(), 1);
-    let err = recover(&http(), &server, &kit).await.unwrap_err();
-    assert!(err.to_string().contains("not this account"), "{err}");
-
-    // The kit list carries public keys only.
-    let list: serde_json::Value = http()
-        .get(
-            &format!("{server}/v1/recovery"),
-            &RequestOptions {
-                headers: vec![(
-                    "authorization".into(),
-                    format!("Bearer {}", phone.device_token),
-                )],
-                ..local()
-            },
-        )
+    let mut phone = Device::first(&server, "Phone").await;
+    let mut tv = phone.pair(&server, "TV").await;
+    tv.sync().await;
+    let (kit, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
-        .unwrap()
-        .json()
         .unwrap();
-    let pk = B64.decode(list["kits"][0]["pk"].as_str().unwrap()).unwrap();
-    assert_eq!(pk.len(), 32);
+    phone.record = record;
+    let mut laptop = Device::with(recover(&http(), &server, &kit, "Laptop").await.unwrap());
+    laptop.sync().await;
+
+    let phone_id = phone.record.secret().id();
+    let tv_id = tv.record.secret().id();
+    let preview = mq_sync::lost_preview(
+        &laptop.library,
+        &http(),
+        &laptop.record,
+        &laptop.clock,
+        phone_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(preview.devices, vec![tv_id], "the TV is listed to untick");
+    assert_eq!(preview.kits.len(), 1, "the kit shown on the phone goes");
+    laptop.record = report_lost(
+        &laptop.library,
+        &http(),
+        &laptop.record,
+        &laptop.clock,
+        phone_id,
+        vec![tv_id],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        laptop.names().await,
+        vec!["Laptop".to_owned(), "TV".to_owned()]
+    );
+
+    // The TV takes the new key and keeps syncing; the phone is out.
+    tv.sync().await;
+    assert_eq!(tv.record.keys, laptop.record.keys);
+    let err = sync_once(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Dropped), "{err:?}");
+    // The kit is dropped with it: it no longer recovers anything.
+    assert!(recover(&http(), &server, &kit, "Thief").await.is_err());
 }
 
 /// The status of a POST from `client`, as a trusted proxy would forward it.
@@ -268,30 +349,4 @@ async fn one_flooding_client_does_not_block_anyone_else() {
         status_from(&redeem, body.clone(), "198.51.100.7").await;
     }
     assert_eq!(status_from(&redeem, body, "203.0.113.9").await, 404);
-}
-
-/// The usual recovery: the phone that made the kit is lost, the user
-/// recovers on a new one and later revokes the lost phone. The new device
-/// must not hang off the lost one, and the kit moves to the new device.
-#[tokio::test]
-async fn a_redeemed_kit_belongs_to_the_device_that_redeemed_it() {
-    let (server, db) = relay().await;
-    let lost = device(&server).await;
-    let kit = new_recovery_kit();
-    store_recovery(&http(), &lost, &kit).await.unwrap();
-    recover(&http(), &server, &kit).await.unwrap();
-
-    let conn = rusqlite::Connection::open(&db).unwrap();
-    let (newest, parent): (Vec<u8>, Option<Vec<u8>>) = conn
-        .query_row(
-            "SELECT token_hash, minted_by FROM device ORDER BY rowid DESC LIMIT 1",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .unwrap();
-    assert_eq!(parent, None, "no parent to be revoked with");
-    let owner: Vec<u8> = conn
-        .query_row("SELECT added_by FROM recovery", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!(owner, newest, "the kit moved to the new device");
 }
