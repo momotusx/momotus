@@ -203,8 +203,10 @@ private fun AppNav(
                             sync,
                             onImport = { backStack.add(Route.Import) },
                             onSync = { backStack.add(if (sync.joined) Route.Sync else Route.Pairing) },
+                            onDebrid = { backStack.add(Route.Debrid) },
                         )
                     }
+                    entry<Route.Debrid> { DebridScreen(session) }
                     entry<Route.Pairing> {
                         PairingScreen(session, sync, onDone = {
                             if (backStack.size >

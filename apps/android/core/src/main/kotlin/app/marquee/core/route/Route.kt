@@ -43,6 +43,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object Sync : Route
 
+    /** Debrid accounts: a key per service, kept on this device. */
+    @Serializable
+    data object Debrid : Route
+
     @Serializable
     data class Title(
         val kind: String,

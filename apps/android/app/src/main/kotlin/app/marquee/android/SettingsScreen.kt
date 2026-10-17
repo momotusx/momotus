@@ -48,6 +48,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.DebridCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
@@ -125,6 +126,7 @@ fun SettingsScreen(
     sync: SyncController,
     onImport: () -> Unit,
     onSync: () -> Unit,
+    onDebrid: () -> Unit,
 ) {
     val holder =
         viewModel<SettingsHolder>(
@@ -237,6 +239,18 @@ fun SettingsScreen(
                 onImport,
             )
         }
+        item(key = "debrid") {
+            val count =
+                session.secrets
+                    .load()
+                    .debridKeys.size
+            LinkRow(
+                Icons.KeyRound,
+                "Debrid services",
+                if (count == 0) "Play torrents as fast direct links with a debrid key." else DebridCopy.inUse(count),
+                onDebrid,
+            )
+        }
         item(key = "devices-head") { Kicker("Devices and sync") }
         item(key = "devices") {
             if (sync.joined) {
@@ -261,7 +275,7 @@ fun SettingsScreen(
 
 /** A section card on glass. */
 @Composable
-private fun Section(content: @Composable () -> Unit) {
+internal fun Section(content: @Composable () -> Unit) {
     val shape = RoundedCornerShape(Marquee.radius.l)
     val colors = Marquee.colors
     Box(
