@@ -29,10 +29,13 @@ extension SyncReport {
         if abs(clockGapMs) > 600_000 {
             notes.append("The sync server's clock and this device's disagree by \(abs(clockGapMs) / 60_000) minutes, so edits sync in the order they are sent.")
         }
-        if waiting > 0 { notes.append("\(waiting) edits wait for the sync server's clock to catch up.") }
-        if parked > 0 { notes.append("\(parked) records wait for a key this device does not have yet.") }
+        if waiting > 0 { notes.append(waiting == 1 ? "1 edit waits for the sync server's clock to catch up." : "\(waiting) edits wait for the sync server's clock to catch up.") }
+        if parked > 0 { notes.append(parked == 1 ? "1 record waits for a key this device does not have yet." : "\(parked) records wait for a key this device does not have yet.") }
         if oldEpochWrites > 0 { notes.append("The sync server may be hiding device changes. Compare the fingerprint on each device.") }
-        if rotationWaitMs > 0 { notes.append("Changes wait \(max(1, rotationWaitMs / 60_000)) minutes after a sync server restore.") }
+        if rotationWaitMs > 0 {
+            let minutes = max(1, rotationWaitMs / 60_000)
+            notes.append("Changes wait \(minutes) \(minutes == 1 ? "minute" : "minutes") after a sync server restore.")
+        }
         switch blocked {
         case "rotationPending": notes.append("Edits wait until a key change finishes.")
         case "notActive": notes.append("This device is not active in the account, so its edits were not sent.")

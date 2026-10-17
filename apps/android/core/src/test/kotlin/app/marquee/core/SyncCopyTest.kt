@@ -20,6 +20,7 @@ class SyncCopyTest {
     private fun report(
         clockGapMs: Long = 0,
         waiting: Int = 0,
+        parked: Int = 0,
         rotationWaitMs: Long = 0,
         blocked: Blocked? = null,
     ) = SyncReport(
@@ -31,7 +32,7 @@ class SyncCopyTest {
         applied = 0,
         unreadable = 0,
         newer = 0,
-        parked = 0,
+        parked = parked,
         oldEpochWrites = 0,
         clockGapMs = clockGapMs,
         rotationWaitMs = rotationWaitMs,
@@ -39,6 +40,17 @@ class SyncCopyTest {
         fingerprint = "f",
         again = false,
     )
+
+    @Test
+    fun `one edit and one record read in the singular`() {
+        assertEquals(
+            listOf(
+                "1 edit waits for the sync server's clock to catch up.",
+                "1 record waits for a key this device does not have yet.",
+            ),
+            SyncCopy.notes(report(waiting = 1, parked = 1)),
+        )
+    }
 
     @Test
     fun `a clean round says nothing, and each trouble gets one line`() {

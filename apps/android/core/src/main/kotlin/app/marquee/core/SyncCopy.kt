@@ -63,8 +63,16 @@ object SyncCopy {
                         "so edits sync in the order they are sent.",
                 )
             }
-            if (report.waiting > 0) add("${report.waiting} edits wait for the sync server's clock to catch up.")
-            if (report.parked > 0) add("${report.parked} records wait for a key this device does not have yet.")
+            when (report.waiting) {
+                0 -> Unit
+                1 -> add("1 edit waits for the sync server's clock to catch up.")
+                else -> add("${report.waiting} edits wait for the sync server's clock to catch up.")
+            }
+            when (report.parked) {
+                0 -> Unit
+                1 -> add("1 record waits for a key this device does not have yet.")
+                else -> add("${report.parked} records wait for a key this device does not have yet.")
+            }
             if (report.oldEpochWrites >
                 0
             ) {
