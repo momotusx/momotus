@@ -2,6 +2,7 @@
  * back to the title set in the display face, posters to their name. */
 
 import { createEffect, createSignal, on, Show } from "solid-js";
+import { trimmedLogo } from "../lib/trim";
 
 /** The backdrop, else (none named, or it fails to load) `fallback`, shown
  * blurred; `onMissing` says the real backdrop is not there. */
@@ -37,16 +38,31 @@ export function Backdrop(props: {
   );
 }
 
+/** A logo with its transparent margins cut away (lib/trim.ts): undefined
+ * while that runs (the box is there, nothing jumps when the cut lands), null
+ * when the logo does not load at all. */
+export function useTrimmedLogo(src: () => string | null | undefined): () => string | null | undefined {
+  const [out, setOut] = createSignal<string | null | undefined>(undefined);
+  createEffect(
+    on(src, (url) => {
+      setOut(undefined);
+      if (url) void trimmedLogo(url).then((t) => src() === url && setOut(t));
+    }),
+  );
+  return out;
+}
+
 export function Logo(props: { src: string | null | undefined; name: string; class?: string; level?: 1 | 2 }) {
   const [broken, setBroken] = createSignal(false);
+  const trimmed = useTrimmedLogo(() => props.src);
   return (
     <Show
-      when={props.src && !broken()}
+      when={props.src && !broken() && trimmed() !== null}
       fallback={props.level === 2 ? <h2 class={`logo-text ${props.class ?? ""}`}>{props.name}</h2> : <h1 class={`logo-text ${props.class ?? ""}`}>{props.name}</h1>}
     >
       <img
         class={`logo ${props.class ?? ""}`}
-        src={props.src as string}
+        src={trimmed() ?? undefined}
         alt={props.name}
         decoding="async"
         onError={() => setBroken(true)}

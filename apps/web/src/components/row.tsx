@@ -6,7 +6,7 @@ import { A } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Wrench from "lucide-solid/icons/wrench";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
-import { Poster } from "./art";
+import { Poster, useTrimmedLogo } from "./art";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { form } from "../form";
@@ -57,6 +57,7 @@ export function TileCard(props: {
 }) {
   const cap = () => (props.captions === false ? null : caption(props.tile));
   const [logoBroken, setLogoBroken] = createSignal(false);
+  const tileLogo = useTrimmedLogo(() => (props.wide ? props.tile.logo : null));
   return (
     <A
       href={titlePath(props.tile.kind, props.tile.id)}
@@ -84,8 +85,8 @@ export function TileCard(props: {
           />
           <div class="art-scrim" />
           <div class="art-brand">
-            <Show when={props.tile.logo && !logoBroken()} fallback={<span class="art-name">{props.tile.name}</span>}>
-              <img class="art-logo" src={props.tile.logo as string} alt="" decoding="async" onError={() => setLogoBroken(true)} />
+            <Show when={props.tile.logo && !logoBroken() && tileLogo() !== null} fallback={<span class="art-name">{props.tile.name}</span>}>
+              <img class="art-logo" src={tileLogo() ?? undefined} alt="" decoding="async" onError={() => setLogoBroken(true)} />
             </Show>
           </div>
         </Show>

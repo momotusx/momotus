@@ -262,7 +262,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
               [...document.querySelectorAll<HTMLImageElement>(".tile img.fade:not(.in)")].every((img) => {
                 const r = img.getBoundingClientRect();
                 return r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth;
-              }) && [...document.querySelectorAll<HTMLImageElement>("img.logo, img.art-logo")].every((img) => img.complete),
+              }) && [...document.querySelectorAll<HTMLImageElement>("img.logo, img.art-logo")].every((img) => img.complete && !!img.getAttribute("src")),
             null,
             { timeout: 15_000 },
           )
