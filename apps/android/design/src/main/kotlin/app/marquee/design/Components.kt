@@ -45,7 +45,7 @@ private fun ButtonShell(
     big: Boolean,
     enabled: Boolean,
     focusRequester: FocusRequester?,
-    onFocus: (() -> Unit)?,
+    onFocusChange: ((Boolean) -> Unit)?,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -63,7 +63,7 @@ private fun ButtonShell(
                 .alpha(if (enabled) 1f else 0.55f)
                 .marqueeFocus(corner)
                 .then(
-                    if (onFocus != null) Modifier.onFocusChanged { if (it.isFocused) onFocus() } else Modifier,
+                    if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
                 ).heightIn(min = height) // grows with a large system font instead of cutting the label
                 .clip(shape)
                 .background(background)
@@ -93,8 +93,8 @@ fun PrimaryButton(
     big: Boolean = false,
     enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
-    onFocus: (() -> Unit)? = null,
-) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, focusRequester, onFocus)
+    onFocusChange: ((Boolean) -> Unit)? = null,
+) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, focusRequester, onFocusChange)
 
 @Composable
 fun SecondaryButton(
@@ -105,8 +105,8 @@ fun SecondaryButton(
     big: Boolean = false,
     enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
-    onFocus: (() -> Unit)? = null,
-) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Secondary, big, enabled, focusRequester, onFocus)
+    onFocusChange: ((Boolean) -> Unit)? = null,
+) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Secondary, big, enabled, focusRequester, onFocusChange)
 
 /** A pill for filters and choices. Selected is shown by fill and weight, not by the accent color. */
 @Composable

@@ -1,6 +1,7 @@
 package app.marquee.core
 
 import android.content.Context
+import android.system.Os
 import app.marquee.core.ffi.CoreListener
 import app.marquee.core.ffi.MarqueeCore
 import app.marquee.core.ffi.uniffiCallbackInterfaceCoreListener
@@ -18,7 +19,11 @@ object NativeCore {
         deviceId: ULong,
         listener: CoreListener,
         keepCallbackThreadsAttached: Boolean = true,
+        logFilter: String? = null,
     ): MarqueeCore {
+        // The core installs its logcat subscriber (tag `marquee`) on the first open and reads the
+        // filter then: `debug`, or `info,mq_sync=trace`. Unset means info.
+        if (logFilter != null) Os.setenv("MARQUEE_LOG", logFilter, true)
         // Order matters: the JNI symbol lives in the same library JNA registers below.
         System.loadLibrary(LIBRARY)
         PlatformVerifier.init(context.applicationContext)

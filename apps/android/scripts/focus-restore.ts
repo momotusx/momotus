@@ -41,15 +41,16 @@ const results: { ok: boolean }[] = [];
 for (let run = 1; run <= runs; run++) {
   adb("shell", "am", "force-stop", "app.marquee.android");
   adb("logcat", "-c");
+  // Touch mode is a display-wide state that any tap or swipe turns on, and in it focus requests do
+  // not land; a TV is never in touch mode. A navigation key leaves it, and goes to the launcher
+  // here (Tab does nothing there), before the app starts.
+  key("KEYCODE_TAB");
   adb("shell", "am", "start", "-n", "app.marquee.android/.MainActivity", "--es", "form", "tv");
-  // The emulator starts the window in touch mode, where focus requests do not land; a TV never
-  // is in touch mode. A modifier key leaves it without pressing anything.
-  await Bun.sleep(1_500);
-  key("KEYCODE_SHIFT_LEFT");
   const first = await until("Home focus", 40_000, () => focused(dump()));
 
   const downs = run % 3;
-  const rights = 1 + (run % 4);
+  // Even runs go well past the visible tiles, so the lane has scrolled when Back restores focus.
+  const rights = 1 + (run % 4) + (run % 2 === 0 ? 7 : 0);
   for (let i = 0; i < downs; i++) {
     key("KEYCODE_DPAD_DOWN");
     await Bun.sleep(450);

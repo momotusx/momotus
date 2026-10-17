@@ -7,9 +7,10 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -31,7 +32,9 @@ import app.marquee.ui.phone.PhoneHome
 import app.marquee.ui.phone.PhoneShell
 import app.marquee.ui.tv.TvHome
 import app.marquee.ui.tv.TvShell
+import app.marquee.ui.tv.firstTarget
 import app.marquee.ui.tv.focusFirstRow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** The whole app below the theme: the start decision, the frame, the pages, and the core-stopped cover. */
@@ -40,7 +43,8 @@ fun MarqueeRoot(
     session: CoreSession,
     form: Form,
 ) {
-    val app = viewModel<AppState>(factory = viewModelFactory { initializer { AppState(session) } })
+    val caps = (LocalContext.current.applicationContext as MarqueeApp).deviceCaps
+    val app = viewModel<AppState>(factory = viewModelFactory { initializer { AppState(session, caps) } })
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         when (app.start) {
             Start.Loading -> Unit
@@ -48,6 +52,26 @@ fun MarqueeRoot(
             Start.Home -> AppNav(session, form, app, Route.Home)
         }
         CoreStoppedOverlay(session)
+    }
+}
+
+/**
+ * TV, on Home: Back moves focus to the first tile of the first lane unless it is there already or
+ * there is no tile to move to (Home still loading, empty or failed), when Back leaves as usual.
+ * Its own composable, so the focus flag it reads recomposes only this and never the page.
+ */
+@Composable
+private fun HomeBackHandler(
+    app: AppState,
+    active: Boolean,
+) {
+    if (!active) return
+    val scope = rememberCoroutineScope()
+    val running = remember { arrayOfNulls<Job>(1) }
+    val reachable = firstTarget(app.home.rows.toList(), patient = false) != null
+    BackHandler(enabled = reachable && !app.tvHome.focus.onFirstRow.value) {
+        // A held Back repeats: one move of focus at a time, then the next press leaves.
+        if (running[0]?.isActive != true) running[0] = scope.launch { focusFirstRow(app.home, app.tvHome) }
     }
 }
 
@@ -59,7 +83,6 @@ private fun AppNav(
     initial: Route,
 ) {
     val backStack = rememberNavBackStack(initial)
-    val scope = rememberCoroutineScope()
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
@@ -83,9 +106,7 @@ private fun AppNav(
     // handler, which calls onBack below), and at the root the system default: the activity
     // finishes and the process stays cached for a quick return. On TV the first Back on Home
     // first moves focus to the first row, so a second Back leaves.
-    BackHandler(enabled = tv && top == Route.Home && !app.tvHome.focus.onFirstRow.value) {
-        scope.launch { focusFirstRow(app.home, app.tvHome) }
-    }
+    HomeBackHandler(app, active = tv && top == Route.Home)
 
     val content: @Composable () -> Unit = {
         val fade =
@@ -132,6 +153,7 @@ private fun AppNav(
             onSelect = ::choose,
             contentEntry = { if (top == Route.Home) app.tvHome.focus.lastEntry() else null },
             onRailFocus = { app.tvHome.focus.leftContent() },
+            onKey = { app.tvHome.focus.interacted() },
             content = content,
         )
     } else {

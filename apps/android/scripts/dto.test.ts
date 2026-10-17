@@ -17,3 +17,12 @@ test("tagged unions, enums and tuples come out as expected", () => {
   expect(kotlin).toContain("val progress: Float? = null,");
   expect(kotlin).not.toContain("sealed interface ListDiff");
 });
+
+test("the keystore record is a SyncRecord and a class that carries it never prints it", () => {
+  const kotlin = generate(sourceDir);
+  expect(kotlin).toContain("val record: SyncRecord? = null,");
+  expect(kotlin).toContain("val record: SyncRecord,");
+  expect(kotlin).toContain('override fun toString() = "Joined(record=hidden)"');
+  expect(kotlin).toMatch(/override fun toString\(\) = "SyncReport\(.*record=\$\{record\?\.let \{ "hidden" \}\}/);
+  expect(kotlin).not.toContain("Record<string, unknown>");
+});

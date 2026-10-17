@@ -53,6 +53,7 @@ import app.marquee.design.marqueeFocus
  * @param contentEntry where focus lands when it enters the content from the rail (null: the
  * default search).
  * @param onRailFocus called when focus reaches the rail.
+ * @param onKey called when an arrow key or select goes down.
  */
 @Composable
 fun TvShell(
@@ -61,6 +62,7 @@ fun TvShell(
     onSelect: (Route) -> Unit,
     contentEntry: () -> FocusRequester?,
     onRailFocus: () -> Unit,
+    onKey: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -70,6 +72,7 @@ fun TvShell(
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (event.key in dpadKeys) onKey()
                 val axis =
                     when (event.key) {
                         Key.DirectionLeft, Key.DirectionRight -> Axis.Horizontal
@@ -90,6 +93,9 @@ fun TvShell(
         ) { content() }
     }
 }
+
+private val dpadKeys =
+    setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown, Key.DirectionCenter, Key.Enter)
 
 private class Place(
     val route: Route,

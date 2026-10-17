@@ -127,6 +127,8 @@ class CoreClient(
 
     private val orphans = ArrayList<ViewBinding<*, *>>() // state thread only: views the dead core left open
 
+    private var dead = false // state thread only: the core died and no new one is attached yet
+
     /** Called on the state thread when the core's request loop ended by a panic (plans/core-protocol.md). */
     @Volatile
     var onCoreDied: ((reason: String) -> Unit)? = null
@@ -210,7 +212,14 @@ class CoreClient(
         params: JsonObject,
         binding: ViewBinding<S, U>,
     ): Subscription {
-        val transport = attached.await()
+        val transport =
+            try {
+                attached.await()
+            } catch (e: CoreError) {
+                // The core is down: this view subscribes again when a new one is attached.
+                scope.launch { orphans.add(binding) }
+                throw e
+            }
         val born = epoch
         val id = nextId.getAndIncrement()
         val deferred = CompletableDeferred<Long>()
@@ -312,7 +321,11 @@ class CoreClient(
         subs.clear()
         closed.clear()
         early.clear()
+        // Until a new core is attached, whatever still arrives is the dead core's.
+        dead = true
+        // Views still waiting for their subscribe reply come back too, not only the open ones.
         orphans.addAll(open)
+        for (w in waiting) if (w is Pending.Subscribe) orphans.add(w.binding)
         actions.add { for (binding in open) binding.sink.onFailure(message) }
         completions.add {
             for (w in waiting) {
@@ -327,10 +340,19 @@ class CoreClient(
 
     /** A new core is attached: views the dead one left open subscribe again, on fresh ids. */
     private fun revive() {
+        dead = false
+        early.clear()
         val old = orphans.toList()
         orphans.clear()
-        if (old.isEmpty()) return
-        Snapshot.withMutableSnapshot { for (binding in old) binding.sink.onFailure("desync: the core restarted") }
+        Snapshot.withMutableSnapshot {
+            for (binding in old) {
+                try {
+                    binding.sink.onFailure("desync: the core restarted")
+                } catch (e: Exception) {
+                    CoreLog.e("a view could not come back: ${CoreLog.describe(e)}")
+                }
+            }
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -340,7 +362,7 @@ class CoreClient(
         actions: MutableList<() -> Unit>,
         groups: MutableMap<Long, PushGroup<Any?>>,
     ) {
-        if (sub in closed) return
+        if (dead || sub in closed) return
         val binding = subs[sub] as ViewBinding<Any?, Any?>?
         if (binding == null) {
             // A push before its subscribe reply was handled: keep it, briefly and bounded.

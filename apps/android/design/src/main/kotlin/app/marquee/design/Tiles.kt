@@ -52,7 +52,9 @@ fun PosterTile(
     caption: String? = null,
     focusRequester: FocusRequester? = null,
     forceFocus: Boolean = false,
-    onFocus: (() -> Unit)? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    longClickLabel: String? = null,
 ) {
     val metrics = Marquee.tiles
     val size = metrics.sizeOf(shape)
@@ -70,12 +72,12 @@ fun PosterTile(
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .marqueeFocus(corner, Tokens.FOCUS_SCALE_CARD, forced = forceFocus, lift = lift)
                 .then(
-                    if (onFocus != null) Modifier.onFocusChanged { if (it.isFocused) onFocus() } else Modifier,
+                    if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
                 ).clip(RoundedCornerShape(corner))
                 .semantics {
                     contentDescription = title
                     if (state != null) stateDescription = state
-                }.focusClickable(onClick, Role.Button),
+                }.focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
         ) {
             RemoteImage(imageUrl, size.width, size.height, fallbackText = title) {
                 if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))

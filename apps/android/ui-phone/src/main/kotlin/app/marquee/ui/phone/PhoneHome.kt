@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.model.Hero
@@ -49,6 +51,7 @@ import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.Tokens
 import app.marquee.design.heightOf
 
 /** Home on a phone: a hero card, then one swipeable lane per catalog. */
@@ -58,8 +61,17 @@ fun PhoneHome(
     onOpen: (Tile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val listState = rememberLazyListState()
+    val hasHero = home.hero != null
+    // The list keeps the first lane where it is when a hero arrives above it; someone who has not
+    // scrolled yet should see the hero.
+    LaunchedEffect(hasHero) {
+        if (hasHero && listState.firstVisibleItemIndex <= 1 && listState.firstVisibleItemScrollOffset == 0) {
+            listState.scrollToItem(0)
+        }
+    }
     LazyColumn(
-        state = rememberLazyListState(),
+        state = listState,
         modifier = modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
         contentPadding = PaddingValues(top = Marquee.safe.top, bottom = Marquee.space.l),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
@@ -80,6 +92,8 @@ private fun HomeState(home: HomeView) {
                 title = "Home could not load",
                 body = status.reason,
                 icon = Icons.CircleAlert,
+                actionLabel = "Try again",
+                onAction = home::retry,
                 modifier = Modifier.padding(horizontal = side),
             )
         }
@@ -103,7 +117,8 @@ private fun PhoneHero(
     hero: Hero,
     onOpen: (Tile) -> Unit,
 ) {
-    val colors = Marquee.colors
+    // Artwork is dark and busy in either theme: the card always uses the dark scrim and light text.
+    val scrim = Tokens.dark.bg
     val tile = hero.tile
     Box(
         Modifier
@@ -111,22 +126,29 @@ private fun PhoneHero(
             .fillMaxWidth()
             .aspectRatio(HERO_RATIO)
             .clip(RoundedCornerShape(Marquee.radius.l))
-            .clickable(role = Role.Button, onClick = { onOpen(tile) }),
+            .clickable(role = Role.Button, onClickLabel = "Open ${tile.name}", onClick = { onOpen(tile) }),
     ) {
         Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
         // Keeps the title readable on any artwork.
         Box(
             Modifier
                 .matchParentSize()
-                .background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to colors.bg.copy(alpha = 0.92f))),
+                .background(
+                    Brush.verticalGradient(
+                        0.15f to Color.Transparent,
+                        0.65f to scrim.copy(alpha = 0.78f),
+                        1f to scrim.copy(alpha = 0.96f),
+                    ),
+                ),
         )
         Column(
             Modifier.align(Alignment.BottomStart).padding(Marquee.space.m),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
-            MqText(hero.reason, role = TextRole.Caption, color = colors.muted, maxLines = 2)
-            MqText(tile.name, role = TextRole.Title1, maxLines = 2)
-            PrimaryButton(label = "Open", onClick = { onOpen(tile) })
+            MqText(hero.reason, role = TextRole.Caption, color = Tokens.dark.text, maxLines = 2)
+            MqText(tile.name, role = TextRole.Title1, color = Tokens.dark.text, maxLines = 2)
+            // The card is the control for screen readers; the button repeats it for sighted touch.
+            PrimaryButton(label = "Open", onClick = { onOpen(tile) }, modifier = Modifier.clearAndSetSemantics { })
         }
     }
 }

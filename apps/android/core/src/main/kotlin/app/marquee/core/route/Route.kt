@@ -33,6 +33,23 @@ sealed interface Route : NavKey {
         val kind: String,
         val id: String,
     ) : Route
+
+    /** The ranked sources of one video (a movie, or one episode) of a title. */
+    @Serializable
+    data class Versions(
+        val kind: String,
+        val id: String,
+        val videoId: String,
+    ) : Route
+
+    /** Playing the version [key] of a video. Not restorable after the process dies: it pops to the title. */
+    @Serializable
+    data class Player(
+        val kind: String,
+        val id: String,
+        val videoId: String,
+        val key: String,
+    ) : Route
 }
 
 /** The five places the rail or the tab bar leads to, in display order. */

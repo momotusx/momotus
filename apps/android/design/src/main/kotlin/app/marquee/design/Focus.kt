@@ -3,6 +3,7 @@ package app.marquee.design
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.runtime.Composable
@@ -130,14 +131,29 @@ fun Modifier.focusClickable(
     onClick: () -> Unit,
     role: Role = Role.Button,
     enabled: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
+    longClickLabel: String? = null,
 ): Modifier =
-    clickable(
-        interactionSource = remember { MutableInteractionSource() },
-        indication = null,
-        enabled = enabled,
-        role = role,
-        onClick = onClick,
-    )
+    if (onLongClick == null) {
+        clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            enabled = enabled,
+            role = role,
+            onClick = onClick,
+        )
+    } else {
+        // Holding select on a remote, or pressing and holding on a touch screen.
+        combinedClickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            enabled = enabled,
+            role = role,
+            onLongClickLabel = longClickLabel,
+            onLongClick = onLongClick,
+            onClick = onClick,
+        )
+    }
 
 /** Like [focusClickable] for one choice of a group (filters): reports selected state to screen readers. */
 @Composable

@@ -19,9 +19,28 @@ export const outPath = join(import.meta.dir, "../core/src/main/kotlin/app/marque
 /** Hand-written in Kotlin: generic or tuple-carrying types the generator does not emit. */
 const handWritten = new Set(["ListDiff"]);
 
-const LONG = new Set(["resumeMs", "sizeBytes", "maxSizeBytes"]);
+const LONG = new Set([
+  "resumeMs",
+  "sizeBytes",
+  "maxSizeBytes",
+  "addedMs",
+  "clockGapMs",
+  "rotationWaitMs",
+  "expiresMs",
+]);
 const FLOAT = new Set(["progress"]);
 const INT = new Set([
+  "epoch",
+  "pushed",
+  "stale",
+  "refused",
+  "waiting",
+  "pulled",
+  "applied",
+  "unreadable",
+  "newer",
+  "parked",
+  "oldEpochWrites",
   "season",
   "episode",
   "count",
@@ -85,6 +104,9 @@ function typeIr(node: ts.TypeNode, field: string): TypeIr {
   if (ts.isTupleTypeNode(node)) return { k: "tuple", items: node.elements.map((e) => typeIr(e, `${field}[]`)) };
   if (ts.isTypeReferenceNode(node)) {
     const name = node.typeName.getText();
+    // The sync keystore record is opaque to the app: it stores it and hands it back (SyncRecord,
+    // a JsonObject, in Sync.kt).
+    if (name === "Record" && node.typeArguments?.length === 2) return { k: "ref", name: "SyncRecord", args: [] };
     const args = (node.typeArguments ?? []).map((t) => typeIr(t, field));
     if (name === "Array") return { k: "array", of: args[0] as TypeIr };
     return { k: "ref", name, args };
@@ -182,10 +204,31 @@ function params(fields: Field[], indent: string): string {
     .join("\n");
 }
 
+const isRecord = (t: TypeIr): boolean =>
+  (t.k === "ref" && t.name === "SyncRecord") || (t.k === "nullable" && isRecord(t.of));
+
+/**
+ * A class that carries the keystore record gets a `toString` that never prints it (it holds keys
+ * and a token), whatever logs or crash reports a value ends up in. Other fields print as usual.
+ */
+function redactingToString(className: string, fields: Field[], indent: string): string | null {
+  if (!fields.some((f) => isRecord(f.type))) return null;
+  const parts = fields.map((f) => {
+    if (!isRecord(f.type)) return `${f.name}=$${f.name}`;
+    return f.type.k === "nullable" ? `${f.name}=\${${f.name}?.let { "hidden" }}` : `${f.name}=hidden`;
+  });
+  return (
+    `${indent}// The keystore record holds keys and a token: never printed.\n` +
+    `${indent}override fun toString() = "${className}(${parts.join(", ")})"`
+  );
+}
+
 function emit(d: Decl): string {
   switch (d.kind) {
-    case "object":
-      return `${kdoc(d.doc, "")}@Serializable\ndata class ${d.name}(\n${params(d.fields, "    ")}\n)\n`;
+    case "object": {
+      const body = redactingToString(d.name, d.fields, "    ");
+      return `${kdoc(d.doc, "")}@Serializable\ndata class ${d.name}(\n${params(d.fields, "    ")}\n)${body ? ` {\n${body}\n}` : ""}\n`;
+    }
     case "enum": {
       const entries = d.values.map((v) => `    @SerialName("${v}") ${pascal(v)},`).join("\n");
       return `${kdoc(d.doc, "")}@Serializable\nenum class ${d.name} {\n${entries}\n}\n`;
@@ -197,7 +240,8 @@ function emit(d: Decl): string {
           if (v.fields.length === 0) {
             return `    @Serializable\n    @SerialName("${v.tag}")\n    data object ${cls} : ${d.name}`;
           }
-          return `    @Serializable\n    @SerialName("${v.tag}")\n    data class ${cls}(\n${params(v.fields, "        ")}\n    ) : ${d.name}`;
+          const body = redactingToString(cls, v.fields, "        ");
+          return `    @Serializable\n    @SerialName("${v.tag}")\n    data class ${cls}(\n${params(v.fields, "        ")}\n    ) : ${d.name}${body ? ` {\n${body}\n    }` : ""}`;
         })
         .join("\n\n");
       return `${kdoc(d.doc, "")}@Serializable\n@JsonClassDiscriminator("${d.tagField}")\nsealed interface ${d.name} {\n${body}\n}\n`;

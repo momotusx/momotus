@@ -2,6 +2,7 @@ package app.marquee.ui.tv
 
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
 
 /**
@@ -24,11 +25,21 @@ class FocusMemory {
     var focusedKey: String? = null
         private set
 
-    /** Counts focus arrivals. A restore that sees it change without having asked knows the user took over. */
-    var arrivals = 0
+    /**
+     * Counts D-pad presses (arrows and select). A restore that sees it change knows the user took
+     * over. Focus arrivals do not count: the system gives the window a default focus of its own
+     * when it appears, before any key is pressed.
+     */
+    var interactions = 0
         private set
 
-    /** Set by the screen on every composition: the id of its first row. */
+    /** True while the node of [focusedKey] has focus (it keeps the key when focus moves elsewhere). */
+    var hasFocus = false
+        private set
+
+    private var focusedRow: String? = null
+
+    /** The id of the screen's first row; the screen sets it on every composition and calls [refresh]. */
     var firstRow: String? = null
 
     /** True while focus is on a tile of the first row. Compose state, written only when it changes. */
@@ -40,15 +51,34 @@ class FocusMemory {
         key: String,
     ) {
         focusedKey = key
-        arrivals++
+        focusedRow = rowId
+        hasFocus = true
         if (rowId != null) chosenInRow[rowId] = key
-        val first = rowId != null && rowId == firstRow
+        refresh()
+    }
+
+    /** The node of [key] lost focus. */
+    fun lost(key: String) {
+        if (focusedKey != key) return
+        hasFocus = false
+        refresh()
+    }
+
+    /** Recomputes [onFirstRow]; also needed when a lane is inserted above the focused one. */
+    fun refresh() {
+        val first = hasFocus && focusedRow != null && focusedRow == firstRow
         if (onFirstRow.value != first) onFirstRow.value = first
+    }
+
+    /** A D-pad key went down (called by the shell). */
+    fun interacted() {
+        interactions++
     }
 
     /** Focus moved out of the content (to the rail). */
     fun leftContent() {
-        if (onFirstRow.value) onFirstRow.value = false
+        hasFocus = false
+        refresh()
     }
 
     fun attach(
@@ -85,4 +115,27 @@ class TvHomeState {
     private val rows = HashMap<String, LazyListState>()
 
     fun rowState(rowId: String): LazyListState = rows.getOrPut(rowId) { LazyListState() }
+}
+
+/**
+ * Puts focus on [key] as soon as its node exists, trying once per frame for up to [waitMs]; stops
+ * when it lands or when the user presses a key first. For screens whose targets are always
+ * composed (a title page); Home scrolls its lists first and has its own routine.
+ */
+suspend fun FocusMemory.focusWhenReady(
+    key: String,
+    waitMs: Long = 4_000,
+) {
+    val seen = interactions
+    val started = withFrameNanos { it }
+    while ((withFrameNanos { it } - started) / 1_000_000 < waitMs) {
+        if (interactions != seen) return
+        val requester = requester(key) ?: continue
+        try {
+            requester.requestFocus()
+        } catch (e: IllegalStateException) {
+            continue // not attached yet
+        }
+        if (focusedKey == key && hasFocus) return
+    }
 }

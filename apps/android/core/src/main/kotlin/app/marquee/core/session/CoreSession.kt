@@ -1,6 +1,7 @@
 package app.marquee.core.session
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -85,6 +86,7 @@ class CoreSession(
 
     @Volatile
     private var core: MarqueeCore? = null
+    private val debuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
     private var keepAttached = true
     private val booting = AtomicBoolean(false)
     private val restartTimes = ArrayDeque<Long>()
@@ -98,16 +100,15 @@ class CoreSession(
     }
 
     /** Opens the core again after it stopped. Does nothing while a boot is already running. */
-    fun restart() {
-        health = CoreHealth.Restarting
-        boot()
-    }
+    fun restart() = boot(announce = true)
 
-    private fun boot() {
+    private fun boot(announce: Boolean = false) {
         if (!booting.compareAndSet(false, true)) return
+        if (announce) health = CoreHealth.Restarting
         thread(name = "marquee-boot") {
             try {
                 val started = System.nanoTime()
+                val deaths = client.epoch
                 // The dead core holds the database and its runtime; drop it before opening a new one.
                 core?.close()
                 core = null
@@ -122,12 +123,15 @@ class CoreSession(
                         DeviceId.load(context.noBackupFilesDir),
                         listener,
                         keepAttached,
+                        // Debug builds log the core at debug level, release builds keep its default.
+                        logFilter = if (debuggable) "debug" else null,
                     )
                 core = opened
                 client.attach { text -> opened.send(text) }
                 openMillis = (System.nanoTime() - started) / 1_000_000
                 CoreLog.d("core open $openMillis ms, version ${opened.version()}")
-                health = CoreHealth.Running
+                // A core that died again while this one was opening keeps the state its death set.
+                if (client.epoch == deaths) health = CoreHealth.Running
                 ready.complete(Unit)
                 restoreSecrets()
             } catch (t: Throwable) {

@@ -54,6 +54,8 @@ import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.Tokens
+import app.marquee.design.describe
 import app.marquee.design.heightOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -76,13 +78,20 @@ fun TvHome(
 ) {
     val safe = Marquee.safe
     val metrics = Marquee.tiles
-    SideEffect { state.focus.firstRow = home.rows.firstOrNull()?.rowId }
+    SideEffect {
+        state.focus.firstRow = home.rows.firstOrNull()?.rowId
+        state.focus.refresh()
+    }
     LaunchedEffect(state) { restoreFocus(home, state, state.focus.focusedKey) }
     // On the first lane the hero shows above it: the page rests at its top. This waits for the
     // scroll that brings the focused tile into view to end, and runs again when the hero arrives
     // (the list keeps the first lane in place, so a hero that arrives later starts out of view).
     val hasHero = home.hero != null
     LaunchedEffect(state, hasHero) {
+        // Nobody has scrolled yet: a hero that arrives now belongs in view.
+        if (hasHero && state.page.firstVisibleItemIndex <= 1 && state.page.firstVisibleItemScrollOffset == 0) {
+            state.page.scrollToItem(0)
+        }
         snapshotFlow { state.focus.onFirstRow.value }.collectLatest { onFirst ->
             if (!onFirst) return@collectLatest
             withFrameNanos { }
@@ -120,6 +129,8 @@ private fun HomeState(home: HomeView) {
                 title = "Home could not load",
                 body = status.reason,
                 icon = Icons.CircleAlert,
+                actionLabel = "Try again",
+                onAction = home::retry,
                 modifier = Modifier.padding(start = inset, top = Marquee.safe.top),
             )
         }
@@ -144,7 +155,8 @@ private fun TvHero(
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
 ) {
-    val colors = Marquee.colors
+    // Artwork is dark and busy in either theme: the hero always uses the dark scrim and light text.
+    val scrim = Tokens.dark.bg
     val tile = hero.tile
     val requester = remember { FocusRequester() }
     DisposableEffect(requester) {
@@ -157,12 +169,18 @@ private fun TvHero(
         Box(
             Modifier
                 .matchParentSize()
-                .background(Brush.horizontalGradient(0f to colors.bg, 0.65f to colors.bg.copy(alpha = 0f))),
+                .background(
+                    Brush.horizontalGradient(
+                        0f to scrim,
+                        0.55f to scrim.copy(alpha = 0.88f),
+                        0.9f to scrim.copy(alpha = 0f),
+                    ),
+                ),
         )
         Box(
             Modifier
                 .matchParentSize()
-                .background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to colors.bg)),
+                .background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Marquee.colors.bg)),
         )
         Column(
             Modifier
@@ -171,13 +189,14 @@ private fun TvHero(
                 .widthIn(max = 820.dp),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
-            MqText(hero.reason, role = TextRole.Callout, color = colors.muted, maxLines = 2)
-            MqText(tile.name, role = TextRole.Hero, maxLines = 2)
+            MqText(hero.reason, role = TextRole.Callout, color = Tokens.dark.text, maxLines = 2)
+            MqText(tile.name, role = TextRole.Hero, color = Tokens.dark.text, maxLines = 2)
             PrimaryButton(
                 label = "Open",
                 onClick = { onOpen(tile) },
+                modifier = Modifier.describe("Open ${tile.name}"),
                 focusRequester = requester,
-                onFocus = { state.focus.arrived(null, HERO_KEY) },
+                onFocusChange = { if (it) state.focus.arrived(null, HERO_KEY) else state.focus.lost(HERO_KEY) },
             )
         }
     }
@@ -315,7 +334,7 @@ private fun TvTile(
         progress = tile.progress,
         caption = captionOf(tile),
         focusRequester = requester,
-        onFocus = { state.focus.arrived(rowId, key) },
+        onFocusChange = { if (it) state.focus.arrived(rowId, key) else state.focus.lost(key) },
     )
 }
 
@@ -333,38 +352,48 @@ internal suspend fun restoreFocus(
 ) {
     val focus = state.focus
     val started = withFrameNanos { it }
-    val seen = focus.arrivals
-    while ((withFrameNanos { it } - started) / 1_000_000 < waitMs) {
-        val rows = home.rows.toList()
+    val seen = focus.interactions
+    while (true) {
         val elapsed = (withFrameNanos { it } - started) / 1_000_000
-        val key = wanted ?: firstTarget(rows, patient = elapsed < PATIENCE_MS)
-        if (key != null && reveal(rows, home.hero != null, state, key)) {
-            val requester = focus.requester(key)
-            if (requester != null) {
-                try {
-                    requester.requestFocus()
-                } catch (e: IllegalStateException) {
-                    // Not attached yet: try again next frame.
-                    CoreLog.d("focus request waits for the next frame: ${e.message}")
-                }
-                if (focus.focusedKey == key) {
-                    val took = (withFrameNanos { it } - started) / 1_000_000
-                    CoreLog.d("focus on $key after $took ms, restore=${wanted != null}")
-                    return
-                }
-            }
+        if (elapsed >= waitMs) return
+        // A D-pad key went down since we started: the user took over.
+        if (focus.interactions != seen) return
+        val rows = home.rows.toList()
+        val hasHero = home.hero != null
+        val settled = rows.none { it.state == RowState.Loading || it.state == RowState.Slow }
+        // A wanted tile that is gone for good (a finished Continue Watching item) gives way to
+        // the first tile once the lanes have answered.
+        val gone = wanted != null && settled && !exists(rows, hasHero, wanted)
+        val key = if (wanted == null || gone) firstTarget(rows, patient = elapsed < PATIENCE_MS) else wanted
+        if (key == null || !reveal(rows, hasHero, state, key)) continue
+        val requester = focus.requester(key) ?: continue
+        try {
+            requester.requestFocus()
+        } catch (e: IllegalStateException) {
+            continue // not attached yet: the next frame tries again
         }
-        // Focus arrived somewhere that is not the key we asked for: the user took over.
-        if (focus.arrivals != seen && focus.focusedKey != key) return
+        // A request can succeed on the wrong node: check that focus really is on the key now.
+        if (focus.focusedKey == key && focus.hasFocus) {
+            CoreLog.d(
+                "focus on $key after ${(withFrameNanos { it } - started) / 1_000_000} ms, restore=${wanted != null}",
+            )
+            return
+        }
     }
 }
+
+private fun exists(
+    rows: List<HomeRow>,
+    hasHero: Boolean,
+    key: String,
+): Boolean = if (key == HERO_KEY) hasHero else rows.any { key in it.tileKeys() }
 
 /**
  * The tile that gets focus on first entry: the first tile of the first lane. While that lane is
  * still loading and [patient], there is no target yet, so focus never lands on a lower lane just
  * because it answered first; lanes that came back empty or failed are skipped.
  */
-internal fun firstTarget(
+fun firstTarget(
     rows: List<HomeRow>,
     patient: Boolean,
 ): String? {
@@ -395,7 +424,8 @@ private suspend fun reveal(
         if (state.page.layoutInfo.visibleItemsInfo
                 .none { it.index == itemIndex }
         ) {
-            state.page.scrollToItem(itemIndex)
+            // The first lane shows with the hero above it, so its page position is the top.
+            state.page.scrollToItem(if (rowIndex == 0) 0 else itemIndex)
         }
         val lane = state.rowState(row.rowId)
         if (lane.layoutInfo.visibleItemsInfo.none { it.index == tileIndex }) lane.scrollToItem(tileIndex)

@@ -172,6 +172,12 @@ abstract class LiveView<S, U>(
         }
     }
 
+    /** Opens the view again after it failed: the action behind a "Try again" button. */
+    fun retry() {
+        status = ViewStatus.Opening
+        resubscribe()
+    }
+
     private fun resubscribe() {
         val old = synchronized(lock) { subscription.also { subscription = null } }
         old?.close()

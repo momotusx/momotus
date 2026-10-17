@@ -1,6 +1,10 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package app.marquee.android
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +20,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreError
 import app.marquee.core.route.Route
@@ -34,14 +42,21 @@ import kotlinx.coroutines.launch
 
 private const val CINEMETA = "https://v3-cinemeta.strem.io/manifest.json"
 
-/** Puts focus on [requester] once the screen is laid out, for D-pad devices (a failed request is harmless). */
+/**
+ * Puts focus on [requester] once the screen is laid out, for D-pad devices: tries once per frame
+ * for about a second, because the node may not be attached on the first frame.
+ */
 @Composable
 private fun AutoFocus(requester: FocusRequester) {
     LaunchedEffect(requester) {
-        withFrameNanos { }
-        runCatching { requester.requestFocus() }
+        repeat(AUTO_FOCUS_FRAMES) {
+            withFrameNanos { }
+            if (runCatching { requester.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+        }
     }
 }
+
+private const val AUTO_FOCUS_FRAMES = 60
 
 /** A new user's first screen: one action that installs the standard catalog. */
 @Composable
@@ -76,17 +91,27 @@ fun OnboardingScreen(
             enabled = !busy,
             focusRequester = focus,
             onClick = {
-                busy = true
-                error = null
-                scope.launch {
-                    try {
-                        session.ops.installAddon(CINEMETA)
-                        onDone()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: CoreError) {
-                        error = e.message
-                        busy = false
+                if (!busy) {
+                    busy = true
+                    error = null
+                    scope.launch {
+                        try {
+                            session.ops.installAddon(CINEMETA)
+                            onDone()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: CoreError) {
+                            // An earlier try that timed out may have installed it after all.
+                            if (e.message?.contains("already", ignoreCase = true) == true) {
+                                onDone()
+                            } else {
+                                error = e.message
+                                busy = false
+                            }
+                        } catch (e: Exception) {
+                            error = "The answer could not be read"
+                            busy = false
+                        }
                     }
                 }
             },
@@ -126,12 +151,19 @@ fun CoreStoppedOverlay(session: CoreSession) {
     val health = session.health
     if (health != CoreHealth.Restarting && health !is CoreHealth.Stopped) return
     val focus = remember { FocusRequester() }
+    AutoFocus(focus)
     Box(
-        Modifier.fillMaxSize().background(Marquee.colors.bg).padding(horizontal = Marquee.safe.side),
+        Modifier
+            .fillMaxSize()
+            .background(Marquee.colors.bg)
+            // Touches and keys stop at the cover: the page under it must not react.
+            .pointerInput(Unit) {}
+            .focusProperties { exit = { FocusRequester.Cancel } }
+            .focusGroup()
+            .padding(horizontal = Marquee.safe.side),
         contentAlignment = Alignment.CenterStart,
     ) {
         if (health is CoreHealth.Stopped) {
-            AutoFocus(focus)
             StateMessage(
                 title = "Marquee stopped",
                 body = "The engine behind Marquee stopped working. Restart it to carry on.",
@@ -141,7 +173,10 @@ fun CoreStoppedOverlay(session: CoreSession) {
                 actionFocus = focus,
             )
         } else {
-            StateMessage(title = "Restarting", body = "Marquee is starting its engine again.")
+            // Nothing to press while it restarts, but focus must stay on the cover.
+            Box(Modifier.focusRequester(focus).focusable()) {
+                StateMessage(title = "Restarting", body = "Marquee is starting its engine again.")
+            }
         }
     }
 }

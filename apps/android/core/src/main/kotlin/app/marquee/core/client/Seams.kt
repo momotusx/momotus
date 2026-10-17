@@ -35,9 +35,13 @@ object CoreTimeouts {
 
 /**
  * What the device tells the ranking (`versions` params, plans/core-protocol.md). Names follow the
- * core's snake_case enums: decoders `h264`, `h265`, `av1`, `vp9`; passthrough `ac3`, `eac3`,
- * `dts`, `dts_hd`, `true_hd`, `atmos`, `dts_x`; hdr `dolby_vision`, `hdr10`, `hdr10_plus`, `hlg`.
- * Left out means a 1080p SDR stick.
+ * core's snake_case enums: decoders `h264`, `h265`, `av1`, `vp9`; audio decoders `aac`, `ac3`,
+ * `eac3`, `dts`, `true_hd`, `opus`, `flac`, `mp3`, `pcm`; passthrough `ac3`, `eac3`, `dts`,
+ * `dts_hd`, `true_hd`, `atmos`, `dts_x`; hdr `dolby_vision`, `hdr10`, `hdr10_plus`, `hlg`;
+ * containers `mkv`, `mp4`, `webm`, `ts`, ... A release plays directly only when its video codec,
+ * audio and container all fit; otherwise it needs the fallback engine. [language] is the device's
+ * (ISO 639-1) and stands in for audio languages the user has not chosen. Left out means a 1080p
+ * SDR stick.
  */
 data class DeviceCapsParams(
     val displayHeight: Int,
@@ -45,6 +49,9 @@ data class DeviceCapsParams(
     val decoders: List<String>? = null,
     val tenBitHevc: Boolean? = null,
     val passthrough: List<String>? = null,
+    val audioDecoders: List<String>? = null,
+    val containers: List<String>? = null,
+    val language: String? = null,
     val hasFallbackEngine: Boolean? = null,
 ) {
     fun toJson(): Map<String, JsonElement> =
@@ -54,6 +61,9 @@ data class DeviceCapsParams(
             decoders?.let { put("decoders", JsonArray(it.map(::JsonPrimitive))) }
             tenBitHevc?.let { put("tenBitHevc", JsonPrimitive(it)) }
             passthrough?.let { put("passthrough", JsonArray(it.map(::JsonPrimitive))) }
+            audioDecoders?.let { put("audioDecoders", JsonArray(it.map(::JsonPrimitive))) }
+            containers?.let { put("containers", JsonArray(it.map(::JsonPrimitive))) }
+            language?.let { put("language", JsonPrimitive(it)) }
             hasFallbackEngine?.let { put("hasFallbackEngine", JsonPrimitive(it)) }
         }
 }

@@ -2,7 +2,9 @@ package app.marquee.core.session
 
 import app.marquee.core.client.CoreClient
 import app.marquee.core.model.ApprovedPairing
+import app.marquee.core.model.Devices
 import app.marquee.core.model.InstalledAddon
+import app.marquee.core.model.LostPreview
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.RecoveryKitResult
 import app.marquee.core.model.SyncRecord
@@ -126,15 +128,15 @@ class CoreOps(
     ): SyncRecord =
         client.request("recover", mapOf("server" to text(server), "kit" to text(kit), "name" to text(name))).jsonObject
 
-    /** The account's members, fingerprint and epoch (see plans/core-protocol.md for the shape). */
-    suspend fun syncDevices(record: SyncRecord): JsonObject =
-        client.request("syncDevices", mapOf("record" to record)).jsonObject
+    /** The account's members, fingerprint and epoch. A changed `record` in the reply must be stored. */
+    suspend fun syncDevices(record: SyncRecord): Devices =
+        call("syncDevices", mapOf("record" to record), Devices.serializer())
 
-    /** What reporting [lost] would drop: `{devices, kits}`. */
+    /** What reporting [lost] would drop by default: the devices it vouched for, and the kits. */
     suspend fun lostPreview(
         record: SyncRecord,
         lost: String,
-    ): JsonObject = client.request("lostPreview", mapOf("record" to record, "lost" to text(lost))).jsonObject
+    ): LostPreview = call("lostPreview", mapOf("record" to record, "lost" to text(lost)), LostPreview.serializer())
 
     /** Returns the record to store. Put behind the OS re-authentication prompt. */
     suspend fun removeDevice(

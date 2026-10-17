@@ -37,12 +37,32 @@ data class Attempt(
 )
 
 @Serializable
+enum class Blocked {
+    @SerialName("rotationPending") RotationPending,
+    @SerialName("notActive") NotActive,
+    @SerialName("relayDisagrees") RelayDisagrees,
+}
+
+@Serializable
 data class CatalogChoice(
     /** `addon id|type|catalog id`, the value `select` takes. */
     val id: String,
     val name: String,
     val source: String,
 )
+
+/** The account's members, after catching up. */
+@Serializable
+data class Devices(
+    val members: List<MemberInfo>,
+    val fingerprint: String,
+    val epoch: Int,
+    val rotationPending: Boolean,
+    val record: SyncRecord? = null,
+) {
+    // The keystore record holds keys and a token: never printed.
+    override fun toString() = "Devices(members=$members, fingerprint=$fingerprint, epoch=$epoch, rotationPending=$rotationPending, record=${record?.let { "hidden" }})"
+}
 
 @Serializable
 data class DiscoverSnapshot(
@@ -238,6 +258,26 @@ enum class LibrarySort {
     @SerialName("name") Name,
 }
 
+/** What reporting `lost` drops by default: the devices it vouched for (transitively) for the user to untick, and the kits that always go. */
+@Serializable
+data class LostPreview(
+    val devices: List<String>,
+    val kits: List<String>,
+)
+
+/** A member of the account as the devices screen shows it. */
+@Serializable
+data class MemberInfo(
+    val id: String,
+    val kit: Boolean,
+    val name: String? = null,
+    /** Who vouched for it. */
+    val sponsor: String? = null,
+    /** By the adding device's clock. */
+    val addedMs: Long,
+    val thisDevice: Boolean,
+)
+
 @Serializable
 data class NextEpisode(
     val videoId: String,
@@ -246,6 +286,46 @@ data class NextEpisode(
     val episode: Int,
     val thumbnail: String? = null,
 )
+
+@Serializable
+@JsonClassDiscriminator("phase")
+sealed interface PairingSnapshot {
+    @Serializable
+    @SerialName("starting")
+    data object Starting : PairingSnapshot
+
+    @Serializable
+    @SerialName("waiting")
+    data class Waiting(
+        val qr: String,
+        val expiresMs: Long,
+    ) : PairingSnapshot
+
+    @Serializable
+    @SerialName("confirm")
+    data class Confirm(
+        val code: String,
+    ) : PairingSnapshot
+
+    @Serializable
+    @SerialName("joined")
+    data class Joined(
+        val record: SyncRecord,
+    ) : PairingSnapshot {
+        // The keystore record holds keys and a token: never printed.
+        override fun toString() = "Joined(record=hidden)"
+    }
+
+    @Serializable
+    @SerialName("expired")
+    data object Expired : PairingSnapshot
+
+    @Serializable
+    @SerialName("failed")
+    data class Failed(
+        val reason: String,
+    ) : PairingSnapshot
+}
 
 @Serializable
 enum class PlaybackPhase {
@@ -369,6 +449,43 @@ data class SubtitleTrack(
     val forced: Boolean,
     val hearingImpaired: Boolean,
 )
+
+@Serializable
+data class SyncReport(
+    val pushed: Int,
+    /** The relay already had these or newer. */
+    val stale: Int,
+    /** Registers the relay will never take (too large, malformed); dropped from the outbox so they do not block the rest. */
+    val refused: Int,
+    /** Registers the relay cannot take yet (stamped ahead of its clock); still queued, they go once the relay's clock reaches them. */
+    val waiting: Int,
+    val pulled: Int,
+    /** Pulled registers that changed local state. */
+    val applied: Int,
+    /** Pulled records that did not open with this account key. */
+    val unreadable: Int,
+    /** Pulled records written by a newer app version, kept for after the update. */
+    val newer: Int,
+    /** Pulled records under a key epoch this device does not hold yet; they are read again once it does. */
+    val parked: Int,
+    /** Pulled records sealed under an old key well after it was replaced. An honest relay refuses those, so the app should say the relay may be hiding roster changes, and suggest comparing fingerprints. */
+    val oldEpochWrites: Int,
+    /** This device's clock minus the relay's. Beyond 10 minutes either way one of them is wrong: the UI should say so (pushes get stamped at the relay's time, and last-writer-wins falls back to push order). */
+    val clockGapMs: Long,
+    /** A rotation is due but waits this long after a relay restore; pushes wait with it. */
+    val rotationWaitMs: Long,
+    /** Why queued changes were not sent this round, when the app should say so (none when only the record changed: then `again` is set). */
+    val blocked: Blocked? = null,
+    /** The roster fingerprint, for people to compare between devices. */
+    val fingerprint: String,
+    /** A changed keystore record: store it, then sync again at once. */
+    val record: SyncRecord? = null,
+    /** Sync again right away (the record changed, nothing was published). */
+    val again: Boolean,
+) {
+    // The keystore record holds keys and a token: never printed.
+    override fun toString() = "SyncReport(pushed=$pushed, stale=$stale, refused=$refused, waiting=$waiting, pulled=$pulled, applied=$applied, unreadable=$unreadable, newer=$newer, parked=$parked, oldEpochWrites=$oldEpochWrites, clockGapMs=$clockGapMs, rotationWaitMs=$rotationWaitMs, blocked=$blocked, fingerprint=$fingerprint, record=${record?.let { "hidden" }}, again=$again)"
+}
 
 @Serializable
 data class Tile(

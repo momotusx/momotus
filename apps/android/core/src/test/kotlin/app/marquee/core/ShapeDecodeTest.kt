@@ -1,11 +1,14 @@
 package app.marquee.core
 
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.Blocked
+import app.marquee.core.model.Devices
 import app.marquee.core.model.DiscoverSnapshot
 import app.marquee.core.model.DiscoverState
 import app.marquee.core.model.HideReason
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.ImportSnapshot
+import app.marquee.core.model.LostPreview
 import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
@@ -120,21 +123,47 @@ class ShapeDecodeTest {
     }
 
     @Test
-    fun `a sync report carries counters, the fingerprint and an optional record`() {
+    fun `a sync report carries counters, why edits were held back, the fingerprint and an optional record`() {
         val report =
             strict.decodeFromString(
                 SyncReport.serializer(),
                 """{"pushed":3,"stale":1,"refused":0,"waiting":2,"pulled":10,"applied":4,"unreadable":0,"newer":0,
-                    "parked":1,"oldEpochWrites":0,"clockGapMs":-1200,"rotationWaitMs":0,"fingerprint":"ab12cd34ef56",
-                    "record":{"server":"https://sync.example","deviceToken":"t"},"again":true}""",
+                    "parked":1,"oldEpochWrites":0,"clockGapMs":-1200,"rotationWaitMs":0,"blocked":"rotationPending",
+                    "fingerprint":"ab12cd34ef56","record":{"server":"https://sync.example","deviceToken":"secret-token"},
+                    "again":true}""",
             )
         assertEquals(-1200L, report.clockGapMs)
+        assertEquals(Blocked.RotationPending, report.blocked)
         assertEquals(true, report.again)
-        assertEquals("SyncReport(pushed=3, pulled=10, applied=4, again=true)", report.toString())
-        assertEquals(
-            null,
-            strict.decodeFromString(SyncReport.serializer(), """{"pushed":0,"record":null,"again":false}""").record,
-        )
+        // The record holds keys and a token: it never reaches a log line.
+        assertEquals(false, report.toString().contains("secret-token"))
+        assertEquals(true, report.toString().contains("record=hidden"))
+        val bare =
+            strict.decodeFromString(
+                SyncReport.serializer(),
+                """{"pushed":0,"stale":0,"refused":0,"waiting":0,"pulled":0,"applied":0,"unreadable":0,"newer":0,
+                    "parked":0,"oldEpochWrites":0,"clockGapMs":0,"rotationWaitMs":0,"blocked":null,
+                    "fingerprint":"","record":null,"again":false}""",
+            )
+        assertEquals(null, bare.record)
+        assertEquals(null, bare.blocked)
+    }
+
+    @Test
+    fun `the devices screen decodes members and the lost preview`() {
+        val devices =
+            strict.decodeFromString(
+                Devices.serializer(),
+                """{"members":[{"id":"a1","kit":false,"name":"Living room","sponsor":null,"addedMs":1700000000000,"thisDevice":true},
+                    {"id":"b2","kit":true,"name":null,"sponsor":"a1","addedMs":1700000100000,"thisDevice":false}],
+                    "fingerprint":"ab12cd34ef56","epoch":3,"rotationPending":false,"record":null}""",
+            )
+        assertEquals(3, devices.epoch)
+        assertEquals(1_700_000_000_000L, devices.members.first().addedMs)
+        assertEquals("a1", devices.members.last().sponsor)
+        val preview =
+            strict.decodeFromString(LostPreview.serializer(), """{"devices":["b2"],"kits":["k1"]}""")
+        assertEquals(listOf("b2"), preview.devices)
     }
 
     @Test
@@ -145,7 +174,7 @@ class ShapeDecodeTest {
                 """{"phase":"joined","record":{"server":"s"}}""",
             )
         assertIs<PairingSnapshot.Joined>(joined)
-        assertEquals("Joined(record)", joined.toString()) // never prints the record
+        assertEquals("Joined(record=hidden)", joined.toString()) // never prints the record
         assertIs<PairingSnapshot.Waiting>(
             strict.decodeFromString(
                 PairingSnapshot.serializer(),

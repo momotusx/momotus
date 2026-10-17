@@ -413,6 +413,37 @@ class CoreClientTest {
         }
 
     @Test
+    fun `a view that failed because the core never started comes back when one is attached`() =
+        runBlocking {
+            client.attachFailed("The core could not start: no library")
+            val view = HomeView(client, scope).also { it.open() }
+            until("failed") { view.status is ViewStatus.Failed }
+
+            client.attach(homeCore(CopyOnWriteArrayList(), CopyOnWriteArrayList(), 10))
+
+            until("open") { view.status == ViewStatus.Open }
+        }
+
+    @Test
+    fun `pushes of the dead core never reach a view of the new one`() =
+        runBlocking {
+            client.attach(homeCore(CopyOnWriteArrayList(), CopyOnWriteArrayList(), 10))
+            val view = HomeView(client, scope).also { it.open() }
+            until("open") { view.status == ViewStatus.Open }
+            client.onMessage("""{"core":"died","reason":"x"}""")
+            // The dead core's last words, with the id the new core is about to reuse.
+            client.onMessage("""{"sub":10,"updates":[{"kind":"rows","diffs":[{"op":"remove","index":0}]}]}""")
+            until("failed") { view.status is ViewStatus.Failed }
+
+            client.attach(homeCore(CopyOnWriteArrayList(), CopyOnWriteArrayList(), 10))
+
+            until("open again") { view.status == ViewStatus.Open }
+            delay(100)
+            assertEquals(ViewStatus.Open, view.status) // the stale remove did not make it resubscribe in a loop
+            assertEquals(0, view.rows.size)
+        }
+
+    @Test
     fun `views of a dead core subscribe again on the new one and never close its subscriptions`() =
         runBlocking {
             val subscribed = CopyOnWriteArrayList<Long>()

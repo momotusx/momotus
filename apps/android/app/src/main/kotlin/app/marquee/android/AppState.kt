@@ -6,12 +6,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.ui.tv.TvHomeState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -25,9 +27,13 @@ enum class Start { Loading, Onboarding, Home }
  */
 class AppState(
     private val session: CoreSession,
+    caps: Deferred<DeviceCapsParams>,
 ) : ViewModel() {
     var start: Start by mutableStateOf(Start.Loading)
         private set
+
+    /** The one open Versions view, shared by the title page, the Versions screen and the player. */
+    val versions = VersionsHolder(session, caps, viewModelScope)
 
     private var homeView: HomeView? = null
 
@@ -58,6 +64,7 @@ class AppState(
     }
 
     override fun onCleared() {
+        versions.close()
         homeView?.close()
     }
 }

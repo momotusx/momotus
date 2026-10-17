@@ -21,23 +21,24 @@ import app.marquee.design.Tokens
  * launch with extras that pick the tree and theme or open a debug screen (`DebugEntry`).
  */
 class MainActivity : ComponentActivity() {
+    /** Set for a TV and for a debug launch that names a theme; null means the phone follows the system. */
+    private var forcedDark: Boolean? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         val form = FormFactor.detect(this, if (debuggable) intent.getStringExtra("form") else null)
         val themeExtra = if (debuggable) intent.getStringExtra("theme") else null
-        val forcedDark =
+        forcedDark =
             when {
                 form == Form.Tv -> true
                 themeExtra == "light" -> false
                 themeExtra == "dark" -> true
                 else -> null
             }
+        val forcedDark = forcedDark
 
-        // Transparent bars; the icon color follows the theme the screen is drawn in.
-        val bars = Color.TRANSPARENT
-        val style = SystemBarStyle.auto(bars, bars, detectDarkMode = { forcedDark ?: it.isNight() })
-        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+        applyBars()
         // The first frame shows this color, so a light phone never flashes dark.
         val dark = forcedDark ?: resources.isNight()
         window.setBackgroundDrawable(ColorDrawable((if (dark) Tokens.dark else Tokens.light).bg.toArgb()))
@@ -47,6 +48,21 @@ class MainActivity : ComponentActivity() {
         setContent {
             MarqueeTheme(form, forcedDark ?: isSystemInDarkTheme()) { MarqueeRoot(session, form) }
         }
+    }
+
+    // The manifest handles uiMode changes without recreating the activity, so a phone that
+    // switches between light and dark while the app is open needs its bar icons set again.
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyBars()
+    }
+
+    /** Transparent bars; the icon color follows the theme the screen is drawn in. */
+    private fun applyBars() {
+        val bars = Color.TRANSPARENT
+        val forced = forcedDark
+        val style = SystemBarStyle.auto(bars, bars, detectDarkMode = { forced ?: it.isNight() })
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
 
     override fun onDestroy() {
