@@ -140,7 +140,7 @@ class DebridStore(
         val tombstone = DebridTombstone(service, generation)
         // One step under the lock (it is reentrant): a concurrent second call shares this one.
         synchronized(lock) {
-            disconnecting[generation]?.let { return it }
+            disconnecting[generation]?.let { return it.handle() }
             gone += generation
             queues[service]?.forEach { if (it.write && it.generation == generation) it.dropped = true }
             // A generation whose tombstone was ever stored stays gone, whatever fails.
@@ -175,10 +175,27 @@ class DebridStore(
                         if (e is CancellationException) throw e
                     }
                 }
+            // Kept until the queued work itself settles: cancelling a caller's handle never lets a
+            // second disconnect of the generation run beside this one.
             disconnecting[generation] = done
             done.invokeOnCompletion { synchronized(lock) { disconnecting.remove(generation) } }
-            return done
+            return done.handle()
         }
+    }
+
+    /** What a caller awaits: it follows the queued work, and cancelling it leaves that work alone. */
+    private fun Deferred<Unit>.handle(): Deferred<Unit> {
+        val handle = CompletableDeferred<Unit>()
+        invokeOnCompletion { cause ->
+            if (cause ==
+                null
+            ) {
+                handle.complete(Unit)
+            } else {
+                handle.completeExceptionally(cause)
+            }
+        }
+        return handle
     }
 
     /** Returns once every queue is idle (tests, shutdown). */

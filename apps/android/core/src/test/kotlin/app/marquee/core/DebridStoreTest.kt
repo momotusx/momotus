@@ -251,6 +251,18 @@ class DebridStoreTest {
         /** The next this many core disconnects fail. */
         @Volatile var failDisconnects = 0
 
+        /** Core disconnects that went through. */
+        val disconnected =
+            java.util.concurrent.atomic
+                .AtomicInteger()
+
+        /** When set, a tombstone write waits for it; then the next [failTombstones] writes fail. */
+        @Volatile var tombstoneGate: CompletableDeferred<Unit>? = null
+
+        @Volatile var tombstoneWaiting = false
+
+        @Volatile var failTombstones = 0
+
         override suspend fun records() = stored.values.toList()
 
         override suspend fun tombstones() = stones.toList()
@@ -277,6 +289,14 @@ class DebridStoreTest {
         }
 
         override suspend fun writeTombstone(tombstone: DebridTombstone) {
+            tombstoneGate?.let {
+                tombstoneWaiting = true
+                it.await()
+            }
+            if (failTombstones > 0) {
+                failTombstones--
+                error("writeTombstone")
+            }
             stones += tombstone
         }
 
@@ -303,6 +323,7 @@ class DebridStoreTest {
                 failDisconnects--
                 error("disconnect")
             }
+            disconnected.incrementAndGet()
         }
     }
 
@@ -466,6 +487,34 @@ class DebridStoreTest {
             store.pending(listOf(record("g1", 2)))
             withTimeout(5_000) { store.idle() }
             assertEquals(null, shared.stored["torbox"], "g1 is never written again")
+            scope.cancel()
+        }
+
+    @Test
+    fun aCancelledDisconnectHandleLeavesTheWorkShared() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val shared = Shared()
+            shared.stored["torbox"] = record("g1", 1)
+            val gate = CompletableDeferred<Unit>()
+            shared.tombstoneGate = gate
+            shared.failTombstones = 1
+            val store = DebridStore(shared, shared, scope)
+            val first = store.disconnect("torbox", "g1")
+            withTimeout(5_000) { while (!shared.tombstoneWaiting) delay(5) }
+            // The caller gives up on the first while its tombstone write is under way.
+            first.cancel()
+            val second = store.disconnect("torbox", "g1")
+            shared.tombstoneGate = null
+            gate.complete(Unit)
+            withTimeout(5_000) { store.idle() }
+            withTimeout(5_000) { runCatching { second.await() } }
+            assertTrue(second.getCompletionExceptionOrNull() != null, "the second shares the failed first")
+            assertEquals(0, shared.disconnected.get(), "no second disconnect ran beside it")
+            store.pending(listOf(record("g1", 2)))
+            withTimeout(5_000) { store.idle() }
+            // Nothing was disconnected, so the account stays connected and its update is stored.
+            assertEquals(2L, shared.stored["torbox"]?.revision)
             scope.cancel()
         }
 
