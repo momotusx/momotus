@@ -164,7 +164,10 @@ private struct EpisodeRow: View {
             HStack(alignment: .top, spacing: metrics.wide ? 18 : 12) {
                 still
                 VStack(alignment: .leading, spacing: metrics.wide ? 6 : 4) {
-                    CardTitle(text: episode.title.isEmpty ? "Episode \(episode.episode)" : episode.title, size: metrics.cardName + 2, onGlass: true)
+                    // Two lines on a phone, where the still leaves the title little width.
+                    CardTitle(
+                        text: episode.title.isEmpty ? "Episode \(episode.episode)" : episode.title,
+                        size: metrics.cardName + 2, onGlass: true, lines: metrics.wide ? 1 : 2)
                     if !meta.isEmpty {
                         Text(meta)
                             .font(.text(metrics.cardInfo, weight: .medium, relativeTo: .caption))

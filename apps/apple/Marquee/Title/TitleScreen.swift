@@ -201,8 +201,8 @@ struct TitleScreen: View {
                     Synopsis(text: description, lines: 3)
                 }
                 PlayBlock(
-                    target: model.header?.playTarget, versions: versions?.snapshot, failure: versions?.failure,
-                    wide: metrics.wide,
+                    target: model.header?.playTarget, runtime: details.runtime, versions: versions?.snapshot,
+                    failure: versions?.failure, wide: metrics.wide,
                     play: {
                         if let route = versions?.play() {
                             playing = route
@@ -224,31 +224,39 @@ struct TitleScreen: View {
     }
 
     /// Versions, Trailer (when the metadata names one), Library and, for a
-    /// movie, Watched: round buttons with their words, a held state lit.
+    /// movie, Watched: round buttons with their words, a held state lit. A
+    /// phone gives them one row of equal columns (a word may take two lines),
+    /// never ragged wrapped rows.
     private func actions(_ details: TitleDetails) -> some View {
         let header = model.header
         let inLibrary = header?.inLibrary ?? false
         let watched = header?.watched ?? false
         let count = versions?.snapshot.map { $0.rows.count + ($0.recommended == nil ? 0 : 1) } ?? 0
-        return FlowRow(spacing: metrics.wide ? 26 : 22) {
+        let layout = metrics.wide ? AnyLayout(FlowRow(spacing: 26)) : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
+        let column = metrics.wide ? nil : CGFloat.infinity
+        return layout {
             Button { showVersions = true } label: {
                 Label(count > 0 ? "Versions (\(count))" : "Versions", glyph: "layers")
             }
             .buttonStyle(RoundButtonStyle())
             .disabled(versions == nil)
+            .frame(maxWidth: column)
             if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
                 Button { openURL(url) } label: { Label("Trailer", glyph: "film") }
                     .buttonStyle(RoundButtonStyle())
+                    .frame(maxWidth: column)
             }
             Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
                 Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
             }
             .buttonStyle(RoundButtonStyle(on: inLibrary))
+            .frame(maxWidth: column)
             if details.kind == "movie" {
                 Button { model.setWatched(details.id, !watched); sync.schedule() } label: {
                     Label(watched ? "Watched" : "Mark as watched", glyph: "circle-check")
                 }
                 .buttonStyle(RoundButtonStyle(on: watched))
+                .frame(maxWidth: column)
             }
         }
         .padding(.top, 4)
@@ -372,6 +380,8 @@ private struct Backdrop: View {
 /// becomes Add a source; while sources still answer, Play waits for the pick.
 private struct PlayBlock: View {
     let target: PlayTarget?
+    /// The title's runtime ("57 min"), so Resume says the time left.
+    let runtime: String?
     let versions: VersionsSnapshot?
     let failure: String?
     let wide: Bool
@@ -392,7 +402,7 @@ private struct PlayBlock: View {
                         Glyph("play-fill")
                         Text(target?.label ?? "Play")
                         if let resume = target?.resumeMs, resume > 0 {
-                            Text("from \(clock(ms: resume))").fontWeight(.regular).opacity(0.8)
+                            Text(resumeText(resumeMs: resume, runtime: runtime)).fontWeight(.regular).opacity(0.8)
                         }
                     }
                     .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)

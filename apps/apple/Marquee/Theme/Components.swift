@@ -172,6 +172,7 @@ struct CardTitle: View {
     let text: String
     var size = Theme.type.callout
     var onGlass = false
+    var lines = 1
     @Environment(\.card) private var card
 
     var body: some View {
@@ -179,7 +180,8 @@ struct CardTitle: View {
             .font(.text(size, weight: .bold, relativeTo: .callout))
             .tracking(size * Theme.Tracking.label)
             .foregroundStyle(card.lit && !onGlass ? Theme.Palette.accent : Theme.Palette.text)
-            .lineLimit(1)
+            .lineLimit(lines)
+            .multilineTextAlignment(.leading)
     }
 }
 
@@ -275,8 +277,9 @@ private struct RoundLabel<Icon: View, Title: View>: View {
             title
                 .font(.text(Self.word, weight: Font.Weight(token: Theme.Weight.label), relativeTo: .caption))
                 .foregroundStyle(focused || hovered ? Theme.Palette.text : Theme.Palette.muted)
-                .lineLimit(1)
-                .fixedSize()
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .opacity(enabled ? 1 : 0.55)
         .contentShape(Rectangle())
