@@ -6,8 +6,10 @@ use url::Url;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AddonError {
-    #[error("invalid transport url: {0}")]
-    InvalidTransportUrl(String),
+    /// Why the link is not an addon link, in words; never the link itself,
+    /// which may carry a key.
+    #[error("not an addon link: {0}")]
+    InvalidTransportUrl(&'static str),
     #[error("legacy JSON-RPC addons are not supported yet")]
     LegacyTransport,
     #[error(transparent)]
@@ -24,15 +26,20 @@ pub fn normalize_transport_url(raw: &str) -> Result<Url, AddonError> {
         Some(rest) => format!("https://{rest}"),
         None => raw.to_owned(),
     };
-    let url = Url::parse(&raw).map_err(|_| AddonError::InvalidTransportUrl(raw.clone()))?;
+    let url =
+        Url::parse(&raw).map_err(|_| AddonError::InvalidTransportUrl("it is not a web address"))?;
     if !matches!(url.scheme(), "http" | "https") {
-        return Err(AddonError::InvalidTransportUrl(raw));
+        return Err(AddonError::InvalidTransportUrl(
+            "it must start with https://, http:// or stremio://",
+        ));
     }
     if url.path().ends_with(ADDON_LEGACY_PATH) {
         return Err(AddonError::LegacyTransport);
     }
     if !url.path().ends_with(ADDON_MANIFEST_PATH) {
-        return Err(AddonError::InvalidTransportUrl(raw));
+        return Err(AddonError::InvalidTransportUrl(
+            "it must end with /manifest.json",
+        ));
     }
     Ok(url)
 }
@@ -65,7 +72,9 @@ pub fn resource_url(transport_url: &Url, path: &ResourcePath) -> Result<String, 
             suffix,
             &base[at + ADDON_MANIFEST_PATH.len()..]
         )),
-        None => Err(AddonError::InvalidTransportUrl(base.to_owned())),
+        None => Err(AddonError::InvalidTransportUrl(
+            "it does not end with /manifest.json",
+        )),
     }
 }
 
@@ -126,5 +135,18 @@ mod tests {
         ));
         assert!(normalize_transport_url("ftp://x/manifest.json").is_err());
         assert!(normalize_transport_url("https://x/other.json").is_err());
+    }
+
+    #[test]
+    fn a_rejected_link_never_appears_in_its_error() {
+        for raw in [
+            "https://addon.example/realdebrid=SECRET/manifest.jso",
+            "ftp://addon.example/SECRET/manifest.json",
+            "SECRET not a link",
+        ] {
+            let error = normalize_transport_url(raw).unwrap_err();
+            let text = format!("{error} {error:?}");
+            assert!(!text.contains("SECRET"), "{text}");
+        }
     }
 }

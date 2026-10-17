@@ -44,8 +44,11 @@ fn is_private_v6(ip: Ipv6Addr) -> bool {
         || (first & 0xffc0) == 0xfe80 // link local
 }
 
-/// Removes credentials, query values and addon config path segments that
-/// often carry API keys, keeping enough to identify the endpoint in logs.
+/// Removes credentials, query values and every path segment that is not a
+/// Stremio resource word or a content id, keeping enough to identify the
+/// endpoint in logs. An allow list, since a key can be short and look like
+/// anything: an addon's config (`realdebrid=KEY`), a debrid download token,
+/// a file name.
 pub fn redact_url(url: &Url) -> String {
     let mut out = format!("{}://{}", url.scheme(), url.host_str().unwrap_or(""));
     if let Some(port) = url.port() {
@@ -53,10 +56,10 @@ pub fn redact_url(url: &Url) -> String {
     }
     for segment in url.path_segments().into_iter().flatten() {
         out.push('/');
-        if looks_secret(segment) {
-            out.push_str("<redacted>");
-        } else {
+        if is_structural(segment) {
             out.push_str(segment);
+        } else {
+            out.push_str("<redacted>");
         }
     }
     if url.query().is_some() {
@@ -65,14 +68,34 @@ pub fn redact_url(url: &Url) -> String {
     out
 }
 
-fn looks_secret(segment: &str) -> bool {
-    segment.len() >= 24
-        && segment
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .count()
-            * 10
-            >= segment.len() * 8
+/// A Stremio resource word ("manifest.json", "stream", "movie") or a content
+/// id ("tt1254207", "tt0944947:1:5", "kitsu:46474:1"), with or without `.json`.
+fn is_structural(segment: &str) -> bool {
+    const WORDS: [&str; 12] = [
+        "manifest",
+        "stream",
+        "meta",
+        "catalog",
+        "subtitles",
+        "addon_catalog",
+        "movie",
+        "series",
+        "channel",
+        "tv",
+        "anime",
+        "other",
+    ];
+    let segment = segment.replace("%3A", ":").replace("%3a", ":");
+    let s = segment.strip_suffix(".json").unwrap_or(&segment);
+    if s.is_empty() || WORDS.contains(&s) {
+        return true;
+    }
+    let mut parts = s.split(':');
+    let id = parts.next().unwrap_or_default();
+    let numbered = |p: &str, at: usize| p.len() > at && p[at..].bytes().all(|b| b.is_ascii_digit());
+    let known = (id.starts_with("tt") && numbered(id, 2))
+        || (id == "kitsu" && parts.next().is_some_and(|n| numbered(n, 0)));
+    known && parts.all(|n| numbered(n, 0))
 }
 
 #[cfg(test)]
@@ -118,5 +141,34 @@ mod tests {
             "https://addon.example/<redacted>/stream/movie/tt1.json?<redacted>"
         );
         assert!(!redacted.contains("secret"));
+    }
+
+    #[test]
+    fn keeps_only_resource_words_and_content_ids() {
+        for (raw, want) in [
+            // A short key, an addon config with a key in it, a debrid token and file name.
+            (
+                "https://a.example/k3y9Zq/manifest.json",
+                "https://a.example/<redacted>/manifest.json",
+            ),
+            (
+                "https://t.example/providers=yts|realdebrid=ABC123/stream/series/tt0944947:1:5.json",
+                "https://t.example/<redacted>/stream/series/tt0944947:1:5.json",
+            ),
+            (
+                "https://x.example/d/WCRZ4JNYGSMSI/Movie.2010.mkv",
+                "https://x.example/<redacted>/<redacted>/<redacted>",
+            ),
+            (
+                "https://k.example/meta/anime/kitsu%3A46474%3A1.json",
+                "https://k.example/meta/anime/kitsu%3A46474%3A1.json",
+            ),
+            (
+                "https://v.example/v3/media",
+                "https://v.example/<redacted>/<redacted>",
+            ),
+        ] {
+            assert_eq!(redact_url(&Url::parse(raw).unwrap()), want, "{raw}");
+        }
     }
 }
