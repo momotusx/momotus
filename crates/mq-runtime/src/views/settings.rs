@@ -44,10 +44,9 @@ impl Core {
     /// The profile's preferences, defaults for anything never set.
     pub fn prefs(&self) -> Prefs {
         let mut merged = serde_json::to_value(Prefs::default()).unwrap_or_default();
-        let mut rows = self.library().settings(self.profile()).unwrap_or_default();
-        // Whole fields first, then the leaves inside them ("streams.quality").
-        rows.sort_by_key(|(key, _)| key.contains('.'));
-        for (key, value) in rows {
+        // Oldest first: a whole field ("streams") and a leaf inside it
+        // ("streams.quality") end with whichever was written last.
+        for (key, value) in self.library().settings(self.profile()).unwrap_or_default() {
             let Ok(value) = serde_json::from_str::<Value>(&value) else {
                 continue;
             };

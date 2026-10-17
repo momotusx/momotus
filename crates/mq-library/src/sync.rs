@@ -239,16 +239,50 @@ impl Library {
     /// lost records.
     pub fn queue_all(&self) -> Result<(), LibraryError> {
         self.write(|c| {
+            // Registers already queued are skipped, so repeating this cannot
+            // grow the outbox.
             c.execute_batch(
                 "INSERT INTO sync_outbox (coll, key)
-                   SELECT 0, id FROM profiles
+                 SELECT coll, key FROM (
+                   SELECT 0 AS coll, id AS key FROM profiles
                    UNION ALL SELECT 1, profile_id FROM addon_list
                    UNION ALL SELECT 2, profile_id || char(31) || item_id FROM library_items
                    UNION ALL SELECT 3, profile_id || char(31) || video_id FROM progress
                    UNION ALL SELECT 4, profile_id || char(31) || video_id FROM watched
                    UNION ALL SELECT 5, profile_id || char(31) || key FROM settings
-                   UNION ALL SELECT 6, profile_id || char(31) || item_id FROM stream_memory",
+                   UNION ALL SELECT 6, profile_id || char(31) || item_id FROM stream_memory
+                 ) AS r
+                 WHERE NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.coll = r.coll AND o.key = r.key)",
             )
+        })
+    }
+
+    /// Gives a register a new hlc and queues it, even when that is lower: for
+    /// a version stamped by a clock that ran ahead, which no other device
+    /// ever accepted.
+    pub fn restamp(&self, coll: u8, key: &str, hlc: &str) -> Result<(), LibraryError> {
+        let tables: &[(&str, &str)] = match coll {
+            coll::PROFILES => &[("profiles", "id")],
+            coll::ADDONS => &[("addon_list", "profile_id"), ("addons", "profile_id")],
+            coll::ITEMS => &[("library_items", "profile_id || char(31) || item_id")],
+            coll::PROGRESS => &[("progress", "profile_id || char(31) || video_id")],
+            coll::WATCHED => &[("watched", "profile_id || char(31) || video_id")],
+            coll::SETTINGS => &[("settings", "profile_id || char(31) || key")],
+            coll::STREAM_MEMORY => &[("stream_memory", "profile_id || char(31) || item_id")],
+            _ => return Ok(()),
+        };
+        self.write(|c| {
+            for (table, key_expr) in tables {
+                c.execute(
+                    &format!("UPDATE {table} SET hlc = ?1 WHERE {key_expr} = ?2"),
+                    params![hlc, key],
+                )?;
+            }
+            c.execute(
+                "INSERT INTO sync_outbox (coll, key) VALUES (?1, ?2)",
+                params![coll, key],
+            )
+            .map(drop)
         })
     }
 
@@ -447,13 +481,13 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
 }
 
 enum ApplyError {
-    Shape(serde_json::Error),
+    Shape(String),
     Sql(rusqlite::Error),
 }
 
 impl From<serde_json::Error> for ApplyError {
     fn from(e: serde_json::Error) -> Self {
-        Self::Shape(e)
+        Self::Shape(e.to_string())
     }
 }
 
@@ -463,12 +497,26 @@ impl From<rusqlite::Error> for ApplyError {
     }
 }
 
+/// A value must describe the register its key names: the key is what the
+/// reader verified against the blind id, the value is what gets written.
+fn same_key(r: &SyncRecord, parts: &[&str]) -> Result<(), ApplyError> {
+    if key(parts) == r.key {
+        Ok(())
+    } else {
+        Err(ApplyError::Shape(format!(
+            "value does not match key in coll {}",
+            r.coll
+        )))
+    }
+}
+
 fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
     let value = r.value.clone();
     let hlc = r.hlc.as_str();
     Ok(match r.coll {
         coll::PROFILES => {
             let v: ProfileValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile])?;
             c.execute(
                 "INSERT INTO profiles (id, name, hlc) VALUES (?1, ?2, ?3)
                  ON CONFLICT(id) DO UPDATE SET name = excluded.name, hlc = excluded.hlc
@@ -478,6 +526,7 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         }
         coll::ADDONS => {
             let v: AddonsValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile])?;
             let rows: Vec<AddonRow> = v
                 .addons
                 .into_iter()
@@ -490,10 +539,11 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
                     allow_private: a.allow_private,
                 })
                 .collect();
-            sql::set_addons(c, &v.profile, &rows, hlc, true)?
+            sql::set_addons(c, &v.profile, &rows, hlc)?
         }
         coll::ITEMS => {
             let v: ItemValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.item_id])?;
             let item = LibraryItemRow {
                 item_id: v.item_id,
                 kind: v.kind,
@@ -506,6 +556,7 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         }
         coll::PROGRESS => {
             let v: ProgressValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.video_id])?;
             let p = ProgressRow {
                 video_id: &v.video_id,
                 item_id: &v.item_id,
@@ -517,14 +568,17 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         }
         coll::WATCHED => {
             let v: WatchedValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.video_id])?;
             sql::set_watched(c, &v.profile, &v.item_id, &v.video_id, v.watched, hlc)?
         }
         coll::SETTINGS => {
             let v: SettingValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.key])?;
             sql::set_setting(c, &v.profile, &v.key, &v.value_json, hlc)?
         }
         coll::STREAM_MEMORY => {
             let v: MemoryValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.item_id])?;
             sql::set_stream_memory(
                 c,
                 &v.profile,
@@ -559,25 +613,19 @@ pub(crate) fn queue(
 pub(crate) mod sql {
     use super::*;
 
-    /// `only_if_newer` guards the list by its register HLC (sync apply); a
-    /// local edit replaces it outright. Returns 1 when the list changed.
+    /// Replaces the list when `hlc` is newer than the list's register; local
+    /// edits are guarded too, since a pull can apply a newer list between
+    /// an edit taking its hlc and reaching the writer. Returns 1 on change.
     pub fn set_addons(
         c: &Connection,
         profile: &str,
         addons: &[AddonRow],
         hlc: &str,
-        only_if_newer: bool,
     ) -> rusqlite::Result<usize> {
-        let guard = if only_if_newer {
-            " WHERE excluded.hlc > addon_list.hlc"
-        } else {
-            ""
-        };
         let won = c.execute(
-            &format!(
-                "INSERT INTO addon_list (profile_id, hlc) VALUES (?1, ?2)
-                 ON CONFLICT(profile_id) DO UPDATE SET hlc = excluded.hlc{guard}"
-            ),
+            "INSERT INTO addon_list (profile_id, hlc) VALUES (?1, ?2)
+             ON CONFLICT(profile_id) DO UPDATE SET hlc = excluded.hlc
+             WHERE excluded.hlc > addon_list.hlc",
             params![profile, hlc],
         )?;
         if won == 0 {

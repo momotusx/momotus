@@ -38,8 +38,10 @@ pub enum CoreError {
 pub struct CoreConfig {
     pub data_dir: PathBuf,
     pub profile_id: String,
-    /// 0 means the random id this data dir generated on first open; sync
-    /// needs every device to have its own.
+    /// Sync needs every device to have its own id. Apps pass one kept in the
+    /// keystore with this-device-only access, so a restored backup on a new
+    /// phone does not share it; 0 means a random id stored in the data dir
+    /// (the CLI and tests).
     pub device_id: u64,
 }
 
@@ -82,7 +84,11 @@ impl Core {
         };
         let clock = HlcClock::new(device_id);
         if let Some(newest) = library.newest_hlc()?.as_deref().and_then(Hlc::decode) {
-            clock.observe(newest, now_ms());
+            // Never more than the 10 minutes the relay allows: a row stamped
+            // by a clock far ahead must not pin this one there.
+            let now = now_ms();
+            let wall_ms = newest.wall_ms.min(now + mq_sync::wire::MAX_CLOCK_AHEAD_MS);
+            clock.observe(Hlc { wall_ms, ..newest }, now);
         }
         let library = Arc::new(library);
         let store = Arc::new(LibraryCache(library.clone()));

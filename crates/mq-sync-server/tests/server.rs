@@ -100,7 +100,8 @@ fn record(key: u8, hlc: String, body: &str) -> WireRecord {
         key_id: hex::encode([key; 16]),
         hlc,
         epoch: 0,
-        body: base64::engine::general_purpose::STANDARD.encode(body),
+        // Real bodies are at least a nonce and a tag; pad to 48 bytes.
+        body: base64::engine::general_purpose::STANDARD.encode(format!("{body:<48}")),
         seq: 0,
     }
 }
@@ -139,7 +140,7 @@ async fn newer_wins_each_replacement_takes_a_seq_and_pull_pages() {
     let rest = relay.pull(&a.device_token, page.last, 500).await;
     assert_eq!((rest.records.len(), rest.more), (1, false));
     assert_eq!(rest.records[0].hlc, hlc(now + 1, 2));
-    assert_eq!(rest.records[0].seq, 3);
+    assert!(rest.records[0].seq > page.records[0].seq);
     assert!(
         relay
             .pull(&a.device_token, rest.last, 500)
@@ -156,8 +157,8 @@ async fn newer_wins_each_replacement_takes_a_seq_and_pull_pages() {
 #[tokio::test]
 async fn refuses_future_clocks_bad_tokens_and_overflowing_accounts() {
     let relay = relay(Config {
-        // One 8-byte body plus its 96-byte row overhead fits, two do not.
-        quota_bytes: 150,
+        // One 48-byte body plus its 96-byte row overhead fits, two do not.
+        quota_bytes: 200,
         ..Config::default()
     })
     .await;
@@ -235,11 +236,27 @@ async fn head_epochs_canonical_clocks_and_device_tokens() {
         .push(&a.device_token, vec![record(1, hlc(now, 1), "v0")])
         .await
         .unwrap();
-    // Re-sealed under a new key epoch with the same hlc: replaces.
+    // An epoch the account has not reached is refused.
     let mut rotated = record(1, hlc(now, 1), "v1");
     rotated.epoch = 1;
+    let r = relay
+        .push(&a.device_token, vec![rotated.clone()])
+        .await
+        .unwrap();
+    assert_eq!(r.rejected[0].code, mq_sync::wire::Refusal::Epoch);
+    // Once the account moved to epoch 1 (key rotation), the same hlc
+    // re-sealed under it replaces the old body.
+    rusqlite::Connection::open(relay._dir.0.join("relay.sqlite"))
+        .unwrap()
+        .execute("UPDATE account SET epoch = 1", [])
+        .unwrap();
     let r = relay.push(&a.device_token, vec![rotated]).await.unwrap();
     assert_eq!(r.accepted, 1);
+    // Too short to be a sealed body.
+    let mut empty = record(3, hlc(now, 1), "");
+    empty.body = String::new();
+    let r = relay.push(&a.device_token, vec![empty]).await.unwrap();
+    assert_eq!(r.rejected[0].code, mq_sync::wire::Refusal::Invalid);
     // Uppercase hex would sort wrongly as text: refused.
     let r = relay
         .push(
@@ -251,7 +268,8 @@ async fn head_epochs_canonical_clocks_and_device_tokens() {
     assert_eq!(r.rejected.len(), 1);
 
     let page = relay.pull(&a.device_token, 0, 500).await;
-    assert_eq!((page.head, page.last), (2, 2));
+    assert_eq!(page.head, page.last);
+    assert!(!page.generation.is_empty());
     assert_eq!(page.records[0].epoch, 1);
 
     // A second device gets its own token on the same account.

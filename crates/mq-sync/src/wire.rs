@@ -5,8 +5,11 @@ use serde::{Deserialize, Serialize};
 
 /// Most records per push or pull page.
 pub const PAGE: usize = 500;
-/// Largest sealed body the relay accepts.
-pub const MAX_BODY: usize = 64 * 1024;
+/// Largest sealed body the relay accepts. The addon list carries every
+/// manifest, which reaches a few hundred KiB for heavy setups.
+pub const MAX_BODY: usize = 1024 * 1024;
+/// Smallest possible sealed body: a 24-byte nonce and a 16-byte tag.
+pub const MIN_BODY: usize = 40;
 /// A record whose clock is further ahead of the relay than this is refused.
 pub const MAX_CLOCK_AHEAD_MS: u64 = 10 * 60 * 1000;
 
@@ -47,6 +50,22 @@ pub struct PushResponse {
 pub struct Rejected {
     pub key_id: String,
     pub reason: String,
+    #[serde(default)]
+    pub code: Refusal,
+}
+
+/// Why the relay refused a record, so a device knows whether to retry.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Refusal {
+    /// The record's clock is too far ahead of the relay.
+    ClockAhead,
+    TooLarge,
+    /// Written under a key epoch the account has not reached.
+    Epoch,
+    #[default]
+    #[serde(other)]
+    Invalid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +78,10 @@ pub struct PullResponse {
     /// lost records, and the device sends and reads everything again.
     #[serde(default)]
     pub head: u64,
+    /// Changes when the relay is restored from a backup; a device that saw
+    /// another value sends and reads everything again.
+    #[serde(default)]
+    pub generation: String,
     pub more: bool,
     pub server_ms: u64,
 }

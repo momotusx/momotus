@@ -152,3 +152,31 @@ fn a_write_landing_during_a_push_stays_queued() {
     other.apply(&all(&lib)).unwrap();
     assert_eq!(other.outbox(500).unwrap().last_id, None);
 }
+
+#[test]
+fn a_local_addon_edit_older_than_a_pulled_list_does_not_replace_it() {
+    let a = Library::temporary().unwrap();
+    let b = Library::temporary().unwrap();
+    let row = |url: &str| AddonRow {
+        transport_url: url.into(),
+        manifest_json: "{}".into(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    // The edit on B took its hlc (L), then a pull applied A's newer list (R).
+    let l = hlc(5, 2);
+    a.set_addons("p", &[row("https://a/manifest.json")], &hlc(9, 1))
+        .unwrap();
+    b.apply(&all(&a)).unwrap();
+    b.set_addons("p", &[row("https://b/manifest.json")], &l)
+        .unwrap();
+    let urls: Vec<_> = b
+        .addons("p")
+        .unwrap()
+        .into_iter()
+        .map(|r| r.transport_url)
+        .collect();
+    assert_eq!(urls, ["https://a/manifest.json"]);
+    assert_eq!(all(&b), all(&a));
+}

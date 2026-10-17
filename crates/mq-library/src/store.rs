@@ -181,7 +181,8 @@ impl Library {
     }
 
     /// Replaces the profile's addon list in one transaction, keeping order.
-    /// A local edit always wins: its HLC is the newest this device has seen.
+    /// Last writer wins like every register: a newer list pulled meanwhile is
+    /// kept.
     pub fn set_addons(
         &self,
         profile: &str,
@@ -189,7 +190,7 @@ impl Library {
         hlc: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
-            let n = sql::set_addons(c, profile, addons, hlc, false)?;
+            let n = sql::set_addons(c, profile, addons, hlc)?;
             queue(c, n, coll::ADDONS, &[profile])
         })
     }
@@ -570,11 +571,13 @@ impl Library {
         })
     }
 
-    /// Every setting of the profile as (key, JSON value).
+    /// Every setting of the profile as (key, JSON value), oldest write first,
+    /// so a reader that layers them ends with the newest.
     pub fn settings(&self, profile: &str) -> Result<Vec<(String, String)>, LibraryError> {
         self.read(|c| {
-            let mut stmt =
-                c.prepare("SELECT key, value_json FROM settings WHERE profile_id = ?1")?;
+            let mut stmt = c.prepare(
+                "SELECT key, value_json FROM settings WHERE profile_id = ?1 ORDER BY hlc",
+            )?;
             stmt.query_map(params![profile], |r| Ok((r.get(0)?, r.get(1)?)))?
                 .collect()
         })

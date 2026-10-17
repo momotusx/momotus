@@ -78,20 +78,25 @@ fn read(path: &Path) -> Result<KeyFile, String> {
     serde_json::from_str(&text).map_err(|e| e.to_string())
 }
 
+/// Written to a fresh 0600 file and renamed over the old one, so the key is
+/// never readable by others and never half written.
 fn write(path: &Path, file: &KeyFile) -> Result<(), String> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
+    let temp = path.with_extension("json.tmp");
+    let _ = std::fs::remove_file(&temp);
     let mut out = std::fs::OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .mode(0o600)
-        .open(path)
+        .open(&temp)
         .map_err(|e| e.to_string())?;
     out.write_all(
         serde_json::to_string_pretty(file)
             .expect("plain struct")
             .as_bytes(),
     )
-    .map_err(|e| e.to_string())
+    .and_then(|()| out.sync_all())
+    .map_err(|e| e.to_string())?;
+    std::fs::rename(&temp, path).map_err(|e| e.to_string())
 }

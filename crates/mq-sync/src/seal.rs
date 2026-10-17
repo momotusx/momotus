@@ -5,7 +5,7 @@
 //! - The key id is `HMAC-SHA256(K_id, coll || 0 || key)[..16]`, so the server
 //!   can upsert per register without learning which title or setting it is.
 //! - The body is `nonce(24) || XChaCha20-Poly1305(PADME(value))`, with the
-//!   coll, key id, hlc, schema version and key epoch bound as AAD, so a body
+//!   format tag, coll, key id, hlc and key epoch bound as AAD, so a body
 //!   cannot be moved to another key or replayed under another hlc.
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
@@ -14,7 +14,6 @@ use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-pub const SCHEMA_VERSION: u16 = 1;
 const NONCE: usize = 24;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -183,7 +182,6 @@ fn aad(coll: u8, key_id: &[u8; 16], hlc: &str, epoch: u32) -> Vec<u8> {
     aad.push(coll);
     aad.extend_from_slice(key_id);
     aad.extend_from_slice(hlc.as_bytes());
-    aad.extend_from_slice(&SCHEMA_VERSION.to_le_bytes());
     aad.extend_from_slice(&epoch.to_le_bytes());
     aad
 }
