@@ -182,8 +182,8 @@ private fun AppNav(
                     }
                     entry<Route.Search> { SearchScreen(session, ::open) }
                     entry<Route.Discover> { DiscoverScreen(session, ::open) }
-                    entry<Route.Library> { ComingSoonScreen("Library") }
-                    entry<Route.Settings> { ComingSoonScreen("Settings") }
+                    entry<Route.Library> { LibraryScreen(session, ::open) }
+                    entry<Route.Settings> { SettingsScreen(session) }
                     entry<Route.Title> { route ->
                         TitleScreen(
                             route,

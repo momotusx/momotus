@@ -54,6 +54,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.TileCopy
 import app.marquee.core.model.DiscoverState
 import app.marquee.core.model.HomeRow
+import app.marquee.core.model.LibrarySort
 import app.marquee.core.model.RowNotice
 import app.marquee.core.model.Tile
 import app.marquee.core.model.notice
@@ -61,6 +62,7 @@ import app.marquee.core.model.tileKeys
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.DiscoverView
 import app.marquee.core.views.GenreChange
+import app.marquee.core.views.LibraryView
 import app.marquee.core.views.SearchView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
@@ -77,6 +79,7 @@ import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.dpadExits
 import app.marquee.design.laneHeight
 import app.marquee.ui.phone.LocalBarSpace
 import app.marquee.ui.tv.tvContentTop
@@ -105,7 +108,7 @@ class DiscoverHolder(
 
 /** Where a browse page starts and ends: under the TV pill, or under the status bar and over the phone bar. */
 @Composable
-private fun pagePadding(): PaddingValues =
+internal fun pagePadding(): PaddingValues =
     if (Marquee.form == Form.Tv) {
         PaddingValues(top = tvContentTop(), bottom = Marquee.safe.bottom)
     } else {
@@ -115,7 +118,7 @@ private fun pagePadding(): PaddingValues =
 
 /** An accent eyebrow over the page title in display type (design/DECISION.md v2, Browse pages). */
 @Composable
-private fun BrowseHeader(
+internal fun BrowseHeader(
     eyebrow: String,
     title: String,
     side: Dp = Marquee.safe.side,
@@ -131,7 +134,7 @@ private fun BrowseHeader(
 
 /** A small label in `dim` capitals over a row of choices. */
 @Composable
-private fun Kicker(
+internal fun Kicker(
     text: String,
     side: Dp = Marquee.safe.side,
 ) {
@@ -145,7 +148,7 @@ private fun Kicker(
 }
 
 @Composable
-private fun <T> ChipRow(
+internal fun <T> ChipRow(
     label: String,
     choices: List<Pair<T, String>>,
     selected: T,
@@ -167,7 +170,7 @@ private fun <T> ChipRow(
 
 /** A line of guidance or a reason, with a warning mark when something failed. */
 @Composable
-private fun Note(
+internal fun Note(
     text: String,
     failed: Boolean = false,
     side: Dp = Marquee.safe.side,
@@ -282,6 +285,7 @@ private fun SearchField(
             modifier =
                 Modifier
                     .weight(1f)
+                    .dpadExits()
                     .onFocusChanged { focused = it.isFocused }
                     .semantics { contentDescription = "Search titles" },
             decorationBox = { inner ->
@@ -339,7 +343,7 @@ private fun ResultRow(
 }
 
 @Composable
-private fun Poster(
+internal fun Poster(
     tile: Tile,
     onOpen: (Tile) -> Unit,
     caption: String? = tile.releaseInfo,
@@ -492,10 +496,97 @@ fun DiscoverScreen(
 }
 
 /** A grid item across the whole width. */
-private fun LazyGridScope.full(
+internal fun LazyGridScope.full(
     key: String,
     content: @Composable () -> Unit,
 ) = item(key = key, span = { GridItemSpan(maxLineSpan) }) { content() }
 
 /** How many tiles before the end the next page is asked for. */
 private const val LOAD_AHEAD = 12
+
+class LibraryHolder(
+    session: CoreSession,
+) : ViewModel() {
+    val view: LibraryView = session.library()
+
+    override fun onCleared() = view.close()
+}
+
+/**
+ * The library (plans/android-design-v2.md 5.3): type chips with their counts, the sort, and a
+ * poster grid whose line under each tile is the core's own ("S2:E3 · 36 min left", "Watched"),
+ * or the type for a title never played.
+ */
+@Composable
+fun LibraryScreen(
+    session: CoreSession,
+    onOpen: (Tile) -> Unit,
+) {
+    val holder =
+        viewModel<LibraryHolder>(
+            key = "library",
+            factory = viewModelFactory { initializer { LibraryHolder(session) } },
+        )
+    val view = holder.view
+    val snapshot = view.snapshot
+    val metrics = Marquee.tiles
+    val side = Marquee.safe.side
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(metrics.poster.width),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding =
+            pagePadding().let {
+                PaddingValues(
+                    start = side,
+                    end = side,
+                    top = it.calculateTopPadding(),
+                    bottom = it.calculateBottomPadding(),
+                )
+            },
+        horizontalArrangement = Arrangement.spacedBy(metrics.gap),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+    ) {
+        full("head") { BrowseHeader("Yours", "Library", side = 0.dp) }
+        when {
+            view.status is ViewStatus.Failed -> {
+                val reason = (view.status as ViewStatus.Failed).reason
+                full("failed") { Note("Library could not open: $reason", failed = true, side = 0.dp) }
+            }
+
+            snapshot == null -> {
+                full("loading") { Note("Loading your library", side = 0.dp) }
+            }
+
+            snapshot.items.isEmpty() && snapshot.kind == null -> {
+                full("empty") {
+                    Note("Your library is empty. Add a title from its page and it shows here.", side = 0.dp)
+                }
+            }
+
+            else -> {
+                full("kinds") {
+                    val total = snapshot.kinds.sumOf { it.count }
+                    val all: List<Pair<String?, String>> = listOf(null to "All $total")
+                    val kinds = all + snapshot.kinds.map { it.kind to "${it.label} ${it.count}" }
+                    ChipRow("Type", kinds, snapshot.kind, 0.dp) { view.setFilter(it) }
+                }
+                full("sort") {
+                    val sorts =
+                        listOf(
+                            LibrarySort.Recent to "Recently watched",
+                            LibrarySort.Added to "Added",
+                            LibrarySort.Name to "Name",
+                        )
+                    ChipRow("Sort", sorts, snapshot.sort, 0.dp) { view.setSort(it) }
+                }
+                if (snapshot.items.isEmpty()) {
+                    full("none") { Note("Nothing of this type in your library.", side = 0.dp) }
+                } else {
+                    itemsIndexed(snapshot.items, key = { index, tile -> "${tile.id}#$index" }) { _, tile ->
+                        Poster(tile, onOpen, caption = tile.releaseInfo ?: TileCopy.kind(tile.kind))
+                    }
+                }
+            }
+        }
+    }
+}

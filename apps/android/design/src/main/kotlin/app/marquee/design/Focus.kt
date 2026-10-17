@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -16,13 +17,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.flow.collectLatest
@@ -169,3 +177,38 @@ fun Modifier.focusSelectable(
         role = role,
         onClick = onClick,
     )
+
+/**
+ * For an on/off control: a screen reader hears a switch it can always press. A selected choice of
+ * [focusSelectable] loses its click action there, so it cannot turn a setting off.
+ */
+@Composable
+fun Modifier.focusToggleable(
+    on: Boolean,
+    onToggle: () -> Unit,
+): Modifier =
+    toggleable(
+        value = on,
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        role = Role.Switch,
+        onValueChange = { onToggle() },
+    )
+
+/**
+ * For a text field: Up and Down leave it, as on every other control, instead of moving the cursor
+ * to the start or the end. Without it a remote cannot get out of a focused field (seen on the TV
+ * emulator); Left and Right keep moving the cursor.
+ */
+@Composable
+fun Modifier.dpadExits(): Modifier {
+    val focus = LocalFocusManager.current
+    return onPreviewKeyEvent { event ->
+        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        when (event.key) {
+            Key.DirectionUp -> focus.moveFocus(FocusDirection.Up)
+            Key.DirectionDown -> focus.moveFocus(FocusDirection.Down)
+            else -> false
+        }
+    }
+}

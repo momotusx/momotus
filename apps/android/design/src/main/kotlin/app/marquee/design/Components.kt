@@ -150,7 +150,10 @@ fun SecondaryButton(
     onFocusChange,
 )
 
-/** A pill for filters and choices. Selected is the white pill with a check, never color alone. */
+/**
+ * A pill for filters and choices. Selected is the white pill with a check, never color alone.
+ * [switch] makes it an on/off control on its own rather than one choice of a group.
+ */
 @Composable
 fun Chip(
     label: String,
@@ -159,6 +162,7 @@ fun Chip(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
+    switch: Boolean = false,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -174,8 +178,16 @@ fun Chip(
                 .then(
                     if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
                 ).heightIn(min = target)
-                .focusSelectable(selected, onClick)
-                .padding(vertical = (target - pill) / 2),
+                .then(
+                    if (switch) {
+                        Modifier.focusToggleable(
+                            selected,
+                            onClick,
+                        )
+                    } else {
+                        Modifier.focusSelectable(selected, onClick)
+                    },
+                ).padding(vertical = (target - pill) / 2),
         contentAlignment = Alignment.Center,
     ) {
         Box(
