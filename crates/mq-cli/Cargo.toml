@@ -10,7 +10,11 @@ name = "mq"
 path = "src/main.rs"
 
 [dependencies]
-mq-runtime = { path = "../mq-runtime" }
+mq-runtime = { path = "../mq-runtime", features = ["torrent"] }
+mq-engine = { path = "../mq-engine" }
+mq-server = { path = "../mq-server", features = ["torrent"] }
+url.workspace = true
+libc = "0.2"
 mq-streams = { path = "../mq-streams" }
 mq-sync = { path = "../mq-sync" }
 mq-library = { path = "../mq-library" }

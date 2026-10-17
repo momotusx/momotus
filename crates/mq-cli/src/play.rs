@@ -16,6 +16,8 @@ pub struct PlayOptions {
     pub seconds: u64,
     /// Resume position.
     pub start_ms: Option<u64>,
+    /// Seek to these percentages after the first frame and time each.
+    pub seeks: Vec<f64>,
 }
 
 pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> {
@@ -45,8 +47,12 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
         "--load-scripts=no".into(),
         "--config=no".into(),
         "--really-quiet".into(),
-        format!("--length={}", options.seconds),
     ];
+    // With seeks mpv quits after the last one; `--length` would end playback
+    // once a seek jumps past it.
+    if options.seeks.is_empty() {
+        args.push(format!("--length={}", options.seconds));
+    }
     if let Some(ms) = options.start_ms {
         args.push(format!("--start={:.3}", ms as f64 / 1000.0));
     }
@@ -92,6 +98,40 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
             _ => {}
         }
     }
+    // Seek latency: from the seek command to mpv's next `playback-restart`
+    // (the first frame shown at the new position).
+    let mut seeks = Vec::new();
+    for pct in options.seeks.iter().filter(|_| first_frame_ms.is_some()) {
+        let cmd = json!({ "command": ["seek", pct, "absolute-percent"] }).to_string() + "\n";
+        if write.write_all(cmd.as_bytes()).await.is_err() {
+            break;
+        }
+        let sent = Instant::now();
+        let mut restarted = None;
+        while sent.elapsed() < SEEK_TIMEOUT {
+            let Ok(Ok(Some(line))) = tokio::time::timeout(SEEK_TIMEOUT, lines.next_line()).await
+            else {
+                break;
+            };
+            let event = serde_json::from_str::<Value>(&line).unwrap_or_default();
+            match event.get("event").and_then(Value::as_str) {
+                Some("playback-restart") => {
+                    restarted = Some(sent.elapsed().as_millis() as u64);
+                    break;
+                }
+                Some("end-file") => break,
+                _ => {}
+            }
+        }
+        seeks.push(json!({ "pct": pct, "ms": restarted }));
+        if restarted.is_none() {
+            break;
+        }
+    }
+    if !options.seeks.is_empty() {
+        let quit = json!({ "command": ["quit"] }).to_string() + "\n";
+        let _ = write.write_all(quit.as_bytes()).await;
+    }
     let _ = child.wait().await;
     let _ = std::fs::remove_file(&socket);
     Ok(json!({
@@ -99,9 +139,12 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
         "probe_ms": probe_ms,
         "file_loaded_ms": file_loaded_ms,
         "first_frame_ms": first_frame_ms,
+        "seeks": seeks,
         "total_ms": started.elapsed().as_millis() as u64,
     }))
 }
+
+const SEEK_TIMEOUT: Duration = Duration::from_secs(60);
 
 async fn connect(path: &std::path::Path, within: Duration) -> Result<UnixStream, String> {
     let deadline = Instant::now() + within;

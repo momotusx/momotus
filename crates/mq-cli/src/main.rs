@@ -15,6 +15,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+mod magnet;
 mod play;
 mod sync;
 
@@ -67,6 +68,31 @@ enum Command {
         headless: bool,
         #[arg(long, default_value_t = 5)]
         seconds: u64,
+    },
+    /// Stream a torrent through the engine and the loopback server: time to
+    /// metadata, first byte, Ready (head and tail verified), first frame in
+    /// mpv, and seeks. Takes a magnet URI or an info hash.
+    PlayMagnet {
+        magnet: String,
+        /// File index (default: the largest video).
+        #[arg(long)]
+        file: Option<usize>,
+        #[arg(long)]
+        headless: bool,
+        #[arg(long, default_value_t = 5)]
+        seconds: u64,
+        /// Seek to 25, 50 and 75% and time each.
+        #[arg(long)]
+        seek: bool,
+        /// librqbit's stock picker instead of DWH (A/B runs).
+        #[arg(long)]
+        stock: bool,
+        /// No player: time bytes at the head and the seek points instead.
+        #[arg(long)]
+        bytes: bool,
+        /// Keep torrent data here (default: a temporary folder, deleted).
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
     },
     /// Probe an http(s) stream, play it in mpv and report time to first frame.
     PlayUrl {
@@ -134,6 +160,33 @@ enum SyncAction {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    // The engine alone: no core, so peak RSS is the engine's.
+    if let Command::PlayMagnet {
+        magnet,
+        file,
+        headless,
+        seconds,
+        seek,
+        stock,
+        bytes,
+        data_dir,
+    } = cli.command
+    {
+        let options = magnet::MagnetOptions {
+            file,
+            headless,
+            seconds,
+            seek,
+            stock,
+            bytes,
+            data_dir,
+        };
+        match magnet::play_magnet(&magnet, options).await {
+            Ok(run) => emit(run),
+            Err(e) => fail(&e),
+        }
+        return;
+    }
     let core = match Core::open(CoreConfig {
         data_dir: cli.data.clone(),
         profile_id: cli.profile.clone(),
@@ -176,6 +229,7 @@ async fn main() {
             headless,
             seconds,
         } => play(&core, kind, id, headless, seconds).await,
+        Command::PlayMagnet { .. } => unreachable!("handled before the core opens"),
         Command::PlayUrl {
             url,
             headless,
@@ -186,6 +240,7 @@ async fn main() {
                 headless,
                 seconds,
                 start_ms: None,
+                seeks: Vec::new(),
             },
         )
         .await
@@ -414,6 +469,7 @@ async fn play(
             headless,
             seconds,
             start_ms: ready.resume_ms,
+            seeks: Vec::new(),
         },
     )
     .await?;
