@@ -1,0 +1,11 @@
+//! Stream selection: normalize addon streams into typed facts, gate what
+//! cannot or should not play, rank the rest with device capabilities, and
+//! explain the pick. Pure: no I/O, no clock.
+
+mod model;
+mod normalize;
+mod rank;
+
+pub use model::*;
+pub use normalize::normalize;
+pub use rank::{RankInput, rank, title_similarity};
