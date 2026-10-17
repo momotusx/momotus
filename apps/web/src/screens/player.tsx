@@ -1,5 +1,8 @@
 import { A, useNavigate, useParams, useSearchParams } from "@solidjs/router";
+import ArrowLeft from "lucide-solid/icons/arrow-left";
+import AudioLines from "lucide-solid/icons/audio-lines";
 import Captions from "lucide-solid/icons/captions";
+import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Gauge from "lucide-solid/icons/gauge";
 import Layers from "lucide-solid/icons/layers";
@@ -18,9 +21,9 @@ import type { Segment } from "../core/generated/Segment";
 import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
-import { focusEl } from "../focus/dom";
+import { autoFocus, goBack } from "../focus/dom";
 import { bytes, clock, decoded, episodeLabel, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
-import { languageName, qualityText } from "../lib/words";
+import { languageName, qualityCell, qualityText } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -98,9 +101,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const [buffered, setBuffered] = createSignal<[number, number][]>([]);
   const [rate, setRate] = createSignal(1);
   const [osd, setOsd] = createSignal(true);
-  const [panel, setPanel] = createSignal<"subs" | null>(null);
+  const [panel, setPanel] = createSignal<"subs" | "audio" | null>(null);
   const [track, setTrack] = createSignal<{ src: string; lang: string } | null>(null);
   const [subError, setSubError] = createSignal<string | null>(null);
+  const [ended, setEnded] = createSignal(false);
   let resumed = false;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -135,6 +139,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         setPanel(null);
         return;
       }
+      // An end or no-version card owns the screen: keys work on it as usual.
+      if (ended() || document.querySelector(".endcard")) return;
       // Skip and Up Next stay on screen with the controls hidden: Enter on
       // them acts at once instead of only waking the controls.
       const onScreen = (document.activeElement as HTMLElement | null)?.closest(".skip-wrap, .next");
@@ -218,7 +224,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const endsAt = () => {
     if (!duration()) return null;
     const at = new Date(Date.now() + (remaining() / rate()) * 1000);
-    return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   };
   // The core looks up skip segments once it knows the length of the version
   // that plays; a failover is a new version (new key), so it hears again.
@@ -255,13 +261,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Up Next: from the release-matched credits start when the core knows it,
   // else the last NEXT_AT seconds, or at once after Skip credits.
   const showNext = () => {
-    if (!next() || duration() <= 60) return false;
+    if (!next() || duration() <= 60 || ended()) return false;
     const skipped = skippedAt();
     if (skipped !== null && time() * 1000 >= skipped) return true;
     const at = snap()?.nextAtMs;
     return at !== null && at !== undefined ? time() * 1000 >= at : remaining() <= NEXT_AT;
   };
-  const showSkip = () => !!segment() && !showNext() && !panel();
+  const showSkip = () => !!segment() && !showNext() && !panel() && !ended();
   // Skip takes focus when it appears, like Up Next; when it goes, focus goes
   // back to play and pause if it was on Skip.
   createEffect(
@@ -269,15 +275,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       () => (showSkip() ? `${segment()?.kind}:${segment()?.startMs}` : null),
       (now, was) => {
         if (now && now !== was) {
-          queueMicrotask(() => {
-            const el = document.querySelector<HTMLElement>('[data-f="player:skip"]');
-            if (el) focusEl(el);
-          });
+          queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="player:skip"]')));
         } else if (!now && was && !document.activeElement?.closest(".player-scr [data-f]")) {
-          queueMicrotask(() => {
-            const el = document.querySelector<HTMLElement>('[data-f="player:toggle"]');
-            if (el) focusEl(el);
-          });
+          queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="player:toggle"]')));
         }
       },
     ),
@@ -293,27 +293,49 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     on(showNext, (shown, was) => {
       if (shown && !was) {
         setOsd(true);
-        queueMicrotask(() => {
-          const el = document.querySelector<HTMLElement>('[data-f="next:play"]');
-          if (el) focusEl(el);
-        });
+        queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="next:play"]')));
       }
     }),
   );
-  // Opening the panel moves focus into it (the press asked for it); closing
-  // returns to the Subtitles button.
+  // Opening a panel moves focus into it (the press asked for it); closing
+  // returns to the button that opened it.
   createEffect(
     on(panel, (p, was) => {
-      const target = p ? (document.querySelector<HTMLElement>(".panel .opt.on") ?? document.querySelector<HTMLElement>(".panel .opt")) : was ? document.querySelector<HTMLElement>('[data-f="player:subs"]') : null;
-      if (target) queueMicrotask(() => focusEl(target));
+      const target = p
+        ? (document.querySelector<HTMLElement>(".panel .opt.on") ?? document.querySelector<HTMLElement>(".panel .opt"))
+        : was
+          ? document.querySelector<HTMLElement>(`[data-f="player:${was}"]`)
+          : null;
+      if (target) queueMicrotask(() => autoFocus(target));
     }),
   );
 
+  // The end of the file: an end card with the next step, never a dead end.
   const onEnded = () => {
     report();
     const href = nextHref();
     if (href && prefs.state.data?.autoplayNext) navigate(href, { replace: true });
-    else setOsd(true);
+    else {
+      setOsd(false);
+      setEnded(true);
+    }
+  };
+  createEffect(
+    on(ended, (e) => {
+      if (e) queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(".endcard [data-autofocus]")));
+    }),
+  );
+  const playAgain = () => {
+    setEnded(false);
+    setSkippedAt(null);
+    video.currentTime = 0;
+    void video.play().catch(() => undefined);
+  };
+  // Audio: the track the element reports, else what the playing version says.
+  const audioText = () => {
+    const lang = playing()?.languages[0];
+    const channels = playing()?.features.find((f) => /^\d\.\d$|Atmos/.test(f));
+    return [lang ? languageName(lang) : null, channels].filter(Boolean).join(" ") || "Default";
   };
 
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
@@ -336,6 +358,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   return (
     <div
       class="player-scr"
+      data-scheme="dark"
       classList={{ idle: !osd() && !!url() }}
       onPointerMove={wake}
       onPointerDown={(e) => {
@@ -400,38 +423,100 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
 
       <Show when={status()}>
         {(s) => (
-          <section class="pstate" role="status">
-            <p class={`st ${s().tone}`}>
-              <Show when={s().busy} fallback={<CircleAlert aria-hidden />}>
-                <LoaderCircle aria-hidden class="spin" />
-              </Show>
-              {s().text}
-            </p>
-            <Show when={snap()?.attempts.length}>
-              <ul class="attempts">
-                <For each={snap()?.attempts}>
-                  {(a) => (
-                    <li>
-                      <b>{a.via}</b>
-                      <span>{a.error}</span>
-                    </li>
-                  )}
-                </For>
-              </ul>
-            </Show>
-            <Show when={!s().busy}>
-              <div class="acts">
-                <A class="btn primary" href={versionsPath(props.kind, props.id, props.videoId)} data-f="player:versions" data-autofocus>
-                  <Layers aria-hidden />
-                  Choose another version
-                </A>
-                <A class="btn" href="/addons" data-f="player:addons">
-                  Addons
-                </A>
+          <Show
+            when={!s().busy}
+            fallback={
+              <section class="pstate" role="status">
+                <p class={`st ${s().tone}`}>
+                  <LoaderCircle aria-hidden class="spin" />
+                  {s().text}
+                </p>
+              </section>
+            }
+          >
+            {/* Nothing plays: a centered card with the way on, never a
+                black screen with a line of text. */}
+            <section class="endcard" role="alert">
+              <div class="end-body">
+                <p class="st bad">
+                  <CircleAlert aria-hidden />
+                  {s().text}
+                </p>
+                <Show when={snap()?.attempts.length}>
+                  <ul class="attempts">
+                    <For each={snap()?.attempts}>
+                      {(a) => (
+                        <li>
+                          <b>{a.via}</b>
+                          <span>{a.error}</span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+                <div class="acts">
+                  <A class="btn primary big" href={versionsPath(props.kind, props.id, props.videoId)} data-f="player:versions" data-autofocus>
+                    <Layers aria-hidden />
+                    Choose a version
+                  </A>
+                  <button class="btn big" data-f="player:back" onClick={goBack}>
+                    <ArrowLeft aria-hidden />
+                    Back
+                  </button>
+                </div>
               </div>
-            </Show>
-          </section>
+            </section>
+          </Show>
         )}
+      </Show>
+
+      <Show when={ended()}>
+        <section class="endcard" aria-label="Finished">
+          <div class="end-body">
+            <Show
+              when={next()}
+              fallback={
+                <>
+                  <p class="kicker">Finished</p>
+                  <h2>{ctx.details()?.name}</h2>
+                  <div class="acts">
+                    <button class="btn primary big" data-f="end:back" data-autofocus onClick={goBack}>
+                      <ArrowLeft aria-hidden />
+                      Back to {ctx.details()?.name ?? "the title"}
+                    </button>
+                    <button class="btn big" data-f="end:again" onClick={playAgain}>
+                      <RotateCcw aria-hidden />
+                      Play again
+                    </button>
+                  </div>
+                </>
+              }
+            >
+              {(n) => (
+                <>
+                  <p class="kicker">Next episode</p>
+                  <h2>
+                    {episodeLabel(n().season, n().episode)} {n().title}
+                  </h2>
+                  <div class="acts">
+                    <A class="btn primary big" href={nextHref() ?? "#"} replace data-f="end:next" data-autofocus>
+                      <SkipForward aria-hidden />
+                      Next episode
+                    </A>
+                    <button class="btn big" data-f="end:again" onClick={playAgain}>
+                      <RotateCcw aria-hidden />
+                      Play again
+                    </button>
+                    <button class="btn big" data-f="end:back" onClick={goBack}>
+                      <ArrowLeft aria-hidden />
+                      Back to {ctx.details()?.name ?? "the title"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </Show>
+          </div>
+        </section>
       </Show>
 
       <Show when={subError()}>
@@ -441,7 +526,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         </p>
       </Show>
 
-      <Show when={url()}>
+      <Show when={url() && !ended()}>
         <section class="osd" aria-label="Playback controls" inert={panel() !== null || undefined}>
           <div class="tl">
             <span class="num">{clock(time())}</span>
@@ -476,6 +561,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             <div class="transport">
               <button class="round" data-f="player:back10" aria-label="Back 10 seconds" onClick={() => seek(-10)}>
                 <RotateCcw aria-hidden />
+                <span class="round-n num" aria-hidden="true">
+                  10
+                </span>
               </button>
               <button class="round main" data-f="player:toggle" data-autofocus aria-label={paused() ? "Play" : "Pause"} onClick={toggle}>
                 <Show when={paused()} fallback={<Pause aria-hidden class="fill" />}>
@@ -484,19 +572,41 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </button>
               <button class="round" data-f="player:fwd10" aria-label="Forward 10 seconds" onClick={() => seek(10)}>
                 <RotateCw aria-hidden />
+                <span class="round-n num" aria-hidden="true">
+                  10
+                </span>
               </button>
             </div>
+            {/* Audio, Subtitles, Versions, Speed, then Episodes for series. */}
             <div class="pacts">
+              <button class="pa" data-f="player:audio" onClick={() => setPanel(panel() ? null : "audio")} aria-expanded={panel() === "audio"}>
+                <AudioLines aria-hidden />
+                <b>Audio</b>
+                <small>{audioText()}</small>
+              </button>
               <button class="pa" data-f="player:subs" onClick={() => setPanel(panel() ? null : "subs")} aria-expanded={panel() === "subs"}>
                 <Captions aria-hidden />
                 <b>Subtitles</b>
-                <small>{track() ? languageName(track()?.lang ?? "") : snap()?.subtitlesPending ? "Searching" : `Off, ${snap()?.subtitles.length ?? 0} found`}</small>
+                <small>
+                  {track()
+                    ? languageName(track()?.lang ?? "")
+                    : snap()?.subtitlesPending
+                      ? "Searching"
+                      : snap()?.subtitles.length
+                        ? `Off, ${snap()?.subtitles.length} found`
+                        : "None found"}
+                </small>
               </button>
               <A class="pa" href={versionsPath(props.kind, props.id, props.videoId)} data-f="player:versionsact">
                 <Layers aria-hidden />
                 <b>Versions</b>
-                <small>{playing() ? qualityText(playing()?.quality ?? "") : ""}</small>
+                <small>{playing() ? qualityCell(playing()?.quality ?? "") : ""}</small>
               </A>
+              <button class="pa" data-f="player:speed" onClick={cycleSpeed}>
+                <Gauge aria-hidden />
+                <b>Speed</b>
+                <small class="num">{rate()}x</small>
+              </button>
               <Show when={ctx.ref}>
                 {(r) => (
                   <A class="pa" href={titlePath(props.kind, props.id)} data-f="player:episodes">
@@ -506,14 +616,27 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   </A>
                 )}
               </Show>
-              <button class="pa" data-f="player:speed" onClick={cycleSpeed}>
-                <Gauge aria-hidden />
-                <b>Speed</b>
-                <small class="num">{rate()}x</small>
-              </button>
             </div>
           </div>
         </section>
+      </Show>
+
+      <Show when={panel() === "audio"}>
+        <aside class="panel" aria-label="Audio" data-fgroup="audio">
+          <h2>Audio</h2>
+          <div class="panel-list" data-vscroll>
+            <button class="opt on" data-f="audio:current" data-autofocus onClick={() => setPanel(null)}>
+              <Check aria-hidden class="opt-check" />
+              <b>{audioText()}</b>
+              <span>The track this version plays</span>
+            </button>
+            <p class="opt-note">Other languages come with other versions.</p>
+            <A class="opt" href={versionsPath(props.kind, props.id, props.videoId)} data-f="audio:versions">
+              <b>Choose a version</b>
+              <span>{versions()?.rows.length ? `${versions()?.rows.length} more listed` : "See what is listed"}</span>
+            </A>
+          </div>
+        </aside>
       </Show>
 
       <Show when={panel() === "subs"}>
@@ -521,11 +644,17 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           <h2>Subtitles</h2>
           <div class="panel-list" data-vscroll>
             <button class="opt" classList={{ on: !track() }} data-f="sub:off" data-autofocus onClick={() => pickSubtitle(null)}>
+              <Show when={!track()}>
+                <Check aria-hidden class="opt-check" />
+              </Show>
               Off
             </button>
             <For each={snap()?.subtitles ?? []}>
               {(t, i) => (
-                <button class="opt" data-f={`sub:${i()}`} onClick={() => pickSubtitle(t)}>
+                <button class="opt" classList={{ on: track()?.src === t.url }} data-f={`sub:${i()}`} onClick={() => pickSubtitle(t)}>
+                  <Show when={track()?.src === t.url}>
+                    <Check aria-hidden class="opt-check" />
+                  </Show>
                   <b>{languageName(t.lang)}</b>
                   <span>
                     {[t.label, t.source, t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null].filter(Boolean).join(", ")}
