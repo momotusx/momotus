@@ -1,0 +1,13 @@
+{
+ "id": 1,
+ "ok": true,
+ "result": {
+  "snapshot": {
+   "header": {
+    "hero": null
+   },
+   "rows": []
+  },
+  "sub": 1
+ }
+}

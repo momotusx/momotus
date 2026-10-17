@@ -1,0 +1,557 @@
+[
+ {
+  "sub": 3,
+  "updates": [
+   {
+    "header": {
+     "details": {
+      "background": "https://images.metahub.space/background/medium/tt0903747/img",
+      "cast": [
+       "Bryan Cranston",
+       "Aaron Paul",
+       "Anna Gunn"
+      ],
+      "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
+      "directors": [],
+      "genres": [
+       "Crime",
+       "Drama",
+       "Thriller"
+      ],
+      "id": "tt0903747",
+      "kind": "series",
+      "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
+      "name": "Breaking Bad",
+      "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+      "rating": "9.5",
+      "releaseInfo": "2008–2013",
+      "runtime": "49 min",
+      "source": "Cinemeta"
+     },
+     "inLibrary": false,
+     "playTarget": {
+      "label": "Play S1:E1",
+      "resumeMs": null,
+      "videoId": "tt0903747:1:1"
+     },
+     "seasons": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "selectedSeason": 1,
+     "state": {
+      "state": "ready"
+     }
+    },
+    "kind": "header"
+   },
+   {
+    "diffs": [
+     {
+      "op": "append",
+      "values": [
+       {
+        "episode": 1,
+        "overview": "When an unassuming high school chemistry teacher discovers he has a rare form of lung cancer, he decides to team up with a former student and create a top of the line crystal meth in a used RV, to provide for his family once he is gone.",
+        "progress": null,
+        "released": "2008-01-21",
+        "season": 1,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/1/1/w780.jpg",
+        "title": "Pilot",
+        "videoId": "tt0903747:1:1",
+        "watched": false
+       },
+       {
+        "episode": 2,
+        "overview": "Walt and Jesse attempt to tie up loose ends. The desperate situation gets more complicated with the flip of a coin. Walt's wife, Skyler, becomes suspicious of Walt's strange behavior.",
+        "progress": null,
+        "released": "2008-01-28",
+        "season": 1,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/1/2/w780.jpg",
+        "title": "Cat's in the Bag...",
+        "videoId": "tt0903747:1:2",
+        "watched": false
+       },
+       {
+        "episode": 3,
+        "overview": "Walter fights with Jesse over his drug use, causing him to leave Walter alone with their captive, Krazy-8. Meanwhile, Hank has a scared straight moment with Walter Jr..",
+        "progress": null,
+        "released": "2008-02-11",
+        "season": 1,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/1/3/w780.jpg",
+        "title": "...And the Bag's in the River",
+        "videoId": "tt0903747:1:3",
+        "watched": false
+       },
+       {
+        "episode": 4,
+        "overview": "Walter finally tells his family that he has cancer. Meanwhile, the DEA believes Albuquerque has a new, big time player to worry about. Jesse makes a surprise visit to his parents home.",
+        "progress": null,
+        "released": "2008-02-18",
+        "season": 1,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/1/4/w780.jpg",
+        "title": "Cancer Man",
+        "videoId": "tt0903747:1:4",
+        "watched": false
+       },
+       {
+        "episode": 5,
+        "overview": "Walter and Skyler attend a former colleague's birthday party. Jesse tries to free himself from drugs, while Skyler organizes an intervention.",
+        "progress": null,
+        "released": "2008-02-25",
+        "season": 1,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/1/5/w780.jpg",
+        "title": "Gray Matter",
+        "videoId": "tt0903747:1:5",
+        "watched": false
+       },
+       {
+        "episode": 6,
+        "overview": "The side effects of chemo begin to plague Walt. Meanwhile, the DEA rounds up suspected dealers.",
+        "progress": null,
+        "released": "2008-03-03",
+        "season": 1,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/1/6/w780.jpg",
+        "title": "Crazy Handful of Nothin'",
+        "videoId": "tt0903747:1:6",
+        "watched": false
+       },
+       {
+        "episode": 7,
+        "overview": "Walter accepts his new identity as a drug dealer. Elsewhere, Jesse decides to put his aunt's house on the market and Marie throws Skyler a baby shower.",
+        "progress": null,
+        "released": "2008-03-10",
+        "season": 1,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/1/7/w780.jpg",
+        "title": "A No-Rough-Stuff-Type Deal",
+        "videoId": "tt0903747:1:7",
+        "watched": false
+       }
+      ]
+     }
+    ],
+    "kind": "episodes"
+   }
+  ]
+ },
+ {
+  "sub": 3,
+  "updates": [
+   {
+    "header": {
+     "details": {
+      "background": "https://images.metahub.space/background/medium/tt0903747/img",
+      "cast": [
+       "Bryan Cranston",
+       "Aaron Paul",
+       "Anna Gunn"
+      ],
+      "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
+      "directors": [],
+      "genres": [
+       "Crime",
+       "Drama",
+       "Thriller"
+      ],
+      "id": "tt0903747",
+      "kind": "series",
+      "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
+      "name": "Breaking Bad",
+      "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+      "rating": "9.5",
+      "releaseInfo": "2008–2013",
+      "runtime": "49 min",
+      "source": "Cinemeta"
+     },
+     "inLibrary": false,
+     "playTarget": {
+      "label": "Play S1:E1",
+      "resumeMs": null,
+      "videoId": "tt0903747:1:1"
+     },
+     "seasons": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "selectedSeason": 2,
+     "state": {
+      "state": "ready"
+     }
+    },
+    "kind": "header"
+   },
+   {
+    "diffs": [
+     {
+      "op": "clear"
+     },
+     {
+      "op": "append",
+      "values": [
+       {
+        "episode": 1,
+        "overview": "Walt and Jesse are reminded of Tuco’s volatile nature, and try to figure a way out of their business partnership. Hank attempts to mend fences between the estranged Marie and Skyler.",
+        "progress": null,
+        "released": "2009-03-09",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/1/w780.jpg",
+        "title": "Seven Thirty-Seven",
+        "videoId": "tt0903747:2:1",
+        "watched": false
+       },
+       {
+        "episode": 2,
+        "overview": "Walt and Jesse find themselves in close quarters with an unhinged Tuco. Marie and Hank comfort Skyler, who is distraught over Walt’s disappearance. Hank pays a visit to Mrs. Pinkman on some not-so-official business.",
+        "progress": null,
+        "released": "2009-03-16",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/2/w780.jpg",
+        "title": "Grilled",
+        "videoId": "tt0903747:2:2",
+        "watched": false
+       },
+       {
+        "episode": 3,
+        "overview": "Walt and Jesse cover their tracks, but as a result, both of their financial situations suffer. Meanwhile, Hank and his DEA colleagues may have a break in their meth investigation.",
+        "progress": null,
+        "released": "2009-03-23",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/3/w780.jpg",
+        "title": "Bit by a Dead Bee",
+        "videoId": "tt0903747:2:3",
+        "watched": false
+       },
+       {
+        "episode": 4,
+        "overview": "Walt tries to reconnect with his family. Still suspicious of her husband's actions, Skyler keeps her distance. Jesse finds himself without a place to live and struggles to cope.",
+        "progress": null,
+        "released": "2009-03-30",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/4/w780.jpg",
+        "title": "Down",
+        "videoId": "tt0903747:2:4",
+        "watched": false
+       },
+       {
+        "episode": 5,
+        "overview": "Tensions and bills mount at the White household. Hank makes progress at work, but struggles with some residual effects from his encounter with Tuco. Jesse assembles a crew of dealers to get their product out on the streets.",
+        "progress": null,
+        "released": "2009-04-06",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/5/w780.jpg",
+        "title": "Breakage",
+        "videoId": "tt0903747:2:5",
+        "watched": false
+       },
+       {
+        "episode": 6,
+        "overview": "Walt returns to work. Skinny Pete gets ripped off and when Jesse steps in, he gets more than he bargained for. Walt's cover story on how Elliott and Gretchen are paying for his medical treatment starts to collapse.",
+        "progress": null,
+        "released": "2009-04-13",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/6/w780.jpg",
+        "title": "Peekaboo",
+        "videoId": "tt0903747:2:6",
+        "watched": false
+       },
+       {
+        "episode": 7,
+        "overview": "Rumors fly about Jesse's recent actions as he and Walt discuss expanding their business into new territories. Hank struggles in El Paso. Skyler pursues a new job opportunity. Jesse gets to know his landlord, Jane.",
+        "progress": null,
+        "released": "2009-04-20",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/7/w780.jpg",
+        "title": "Negro Y Azul",
+        "videoId": "tt0903747:2:7",
+        "watched": false
+       },
+       {
+        "episode": 8,
+        "overview": "When Badger gets busted, Walt and Jesse seek the legal advice of a shady attorney, Saul Goodman. Hank returns to Albuquerque, but his troubled mental state and demeanor cause Marie to worry.",
+        "progress": null,
+        "released": "2009-04-27",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/8/w780.jpg",
+        "title": "Better Call Saul",
+        "videoId": "tt0903747:2:8",
+        "watched": false
+       },
+       {
+        "episode": 9,
+        "overview": "The Whites await news about Walt's cancer treatment progress. Walt and Jesse retreat to the desert for a marathon cook.",
+        "progress": null,
+        "released": "2009-05-04",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/9/w780.jpg",
+        "title": "4 Days Out",
+        "videoId": "tt0903747:2:9",
+        "watched": false
+       },
+       {
+        "episode": 10,
+        "overview": "Walt and Hank get into a fight, and Walt consumes himself with home improvements. Skyler opens up to her boss, Ted. Jane hides her relationship with Jesse from her father.",
+        "progress": null,
+        "released": "2009-05-11",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/10/w780.jpg",
+        "title": "Over",
+        "videoId": "tt0903747:2:10",
+        "watched": false
+       },
+       {
+        "episode": 11,
+        "overview": "Saul proposes a new business partner. Skyler makes a disturbing discovery. Jesse divulges his real profession to Jane.",
+        "progress": null,
+        "released": "2009-05-18",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/11/w780.jpg",
+        "title": "Mandala",
+        "videoId": "tt0903747:2:11",
+        "watched": false
+       },
+       {
+        "episode": 12,
+        "overview": "The Whites welcome a new addition. Walter,  Jr. launches a website to aid his struggling family. Jesse's addiction spirals out of control.",
+        "progress": null,
+        "released": "2009-05-25",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/12/w780.jpg",
+        "title": "Phoenix",
+        "videoId": "tt0903747:2:12",
+        "watched": false
+       },
+       {
+        "episode": 13,
+        "overview": "Walt's lies have pushed Skyler to her limit. Jesse self-destructs after a personal blow, forcing Walt to come to his aid. Donald's grief leads to tragedy.",
+        "progress": null,
+        "released": "2009-06-01",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/13/w780.jpg",
+        "title": "ABQ",
+        "videoId": "tt0903747:2:13",
+        "watched": false
+       }
+      ]
+     }
+    ],
+    "kind": "episodes"
+   }
+  ]
+ },
+ {
+  "sub": 3,
+  "updates": [
+   {
+    "diffs": [
+     {
+      "op": "clear"
+     },
+     {
+      "op": "append",
+      "values": [
+       {
+        "episode": 1,
+        "overview": "Walt and Jesse are reminded of Tuco’s volatile nature, and try to figure a way out of their business partnership. Hank attempts to mend fences between the estranged Marie and Skyler.",
+        "progress": null,
+        "released": "2009-03-09",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/1/w780.jpg",
+        "title": "Seven Thirty-Seven",
+        "videoId": "tt0903747:2:1",
+        "watched": true
+       },
+       {
+        "episode": 2,
+        "overview": "Walt and Jesse find themselves in close quarters with an unhinged Tuco. Marie and Hank comfort Skyler, who is distraught over Walt’s disappearance. Hank pays a visit to Mrs. Pinkman on some not-so-official business.",
+        "progress": null,
+        "released": "2009-03-16",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/2/w780.jpg",
+        "title": "Grilled",
+        "videoId": "tt0903747:2:2",
+        "watched": false
+       },
+       {
+        "episode": 3,
+        "overview": "Walt and Jesse cover their tracks, but as a result, both of their financial situations suffer. Meanwhile, Hank and his DEA colleagues may have a break in their meth investigation.",
+        "progress": null,
+        "released": "2009-03-23",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/3/w780.jpg",
+        "title": "Bit by a Dead Bee",
+        "videoId": "tt0903747:2:3",
+        "watched": false
+       },
+       {
+        "episode": 4,
+        "overview": "Walt tries to reconnect with his family. Still suspicious of her husband's actions, Skyler keeps her distance. Jesse finds himself without a place to live and struggles to cope.",
+        "progress": null,
+        "released": "2009-03-30",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/4/w780.jpg",
+        "title": "Down",
+        "videoId": "tt0903747:2:4",
+        "watched": false
+       },
+       {
+        "episode": 5,
+        "overview": "Tensions and bills mount at the White household. Hank makes progress at work, but struggles with some residual effects from his encounter with Tuco. Jesse assembles a crew of dealers to get their product out on the streets.",
+        "progress": null,
+        "released": "2009-04-06",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/5/w780.jpg",
+        "title": "Breakage",
+        "videoId": "tt0903747:2:5",
+        "watched": false
+       },
+       {
+        "episode": 6,
+        "overview": "Walt returns to work. Skinny Pete gets ripped off and when Jesse steps in, he gets more than he bargained for. Walt's cover story on how Elliott and Gretchen are paying for his medical treatment starts to collapse.",
+        "progress": null,
+        "released": "2009-04-13",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/6/w780.jpg",
+        "title": "Peekaboo",
+        "videoId": "tt0903747:2:6",
+        "watched": false
+       },
+       {
+        "episode": 7,
+        "overview": "Rumors fly about Jesse's recent actions as he and Walt discuss expanding their business into new territories. Hank struggles in El Paso. Skyler pursues a new job opportunity. Jesse gets to know his landlord, Jane.",
+        "progress": null,
+        "released": "2009-04-20",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/7/w780.jpg",
+        "title": "Negro Y Azul",
+        "videoId": "tt0903747:2:7",
+        "watched": false
+       },
+       {
+        "episode": 8,
+        "overview": "When Badger gets busted, Walt and Jesse seek the legal advice of a shady attorney, Saul Goodman. Hank returns to Albuquerque, but his troubled mental state and demeanor cause Marie to worry.",
+        "progress": null,
+        "released": "2009-04-27",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/8/w780.jpg",
+        "title": "Better Call Saul",
+        "videoId": "tt0903747:2:8",
+        "watched": false
+       },
+       {
+        "episode": 9,
+        "overview": "The Whites await news about Walt's cancer treatment progress. Walt and Jesse retreat to the desert for a marathon cook.",
+        "progress": null,
+        "released": "2009-05-04",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/9/w780.jpg",
+        "title": "4 Days Out",
+        "videoId": "tt0903747:2:9",
+        "watched": false
+       },
+       {
+        "episode": 10,
+        "overview": "Walt and Hank get into a fight, and Walt consumes himself with home improvements. Skyler opens up to her boss, Ted. Jane hides her relationship with Jesse from her father.",
+        "progress": null,
+        "released": "2009-05-11",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/10/w780.jpg",
+        "title": "Over",
+        "videoId": "tt0903747:2:10",
+        "watched": false
+       },
+       {
+        "episode": 11,
+        "overview": "Saul proposes a new business partner. Skyler makes a disturbing discovery. Jesse divulges his real profession to Jane.",
+        "progress": null,
+        "released": "2009-05-18",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/11/w780.jpg",
+        "title": "Mandala",
+        "videoId": "tt0903747:2:11",
+        "watched": false
+       },
+       {
+        "episode": 12,
+        "overview": "The Whites welcome a new addition. Walter,  Jr. launches a website to aid his struggling family. Jesse's addiction spirals out of control.",
+        "progress": null,
+        "released": "2009-05-25",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/12/w780.jpg",
+        "title": "Phoenix",
+        "videoId": "tt0903747:2:12",
+        "watched": false
+       },
+       {
+        "episode": 13,
+        "overview": "Walt's lies have pushed Skyler to her limit. Jesse self-destructs after a personal blow, forcing Walt to come to his aid. Donald's grief leads to tragedy.",
+        "progress": null,
+        "released": "2009-06-01",
+        "season": 2,
+        "thumbnail": "https://episodes.metahub.space/tt0903747/2/13/w780.jpg",
+        "title": "ABQ",
+        "videoId": "tt0903747:2:13",
+        "watched": false
+       }
+      ]
+     }
+    ],
+    "kind": "episodes"
+   },
+   {
+    "header": {
+     "details": {
+      "background": "https://images.metahub.space/background/medium/tt0903747/img",
+      "cast": [
+       "Bryan Cranston",
+       "Aaron Paul",
+       "Anna Gunn"
+      ],
+      "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
+      "directors": [],
+      "genres": [
+       "Crime",
+       "Drama",
+       "Thriller"
+      ],
+      "id": "tt0903747",
+      "kind": "series",
+      "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
+      "name": "Breaking Bad",
+      "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+      "rating": "9.5",
+      "releaseInfo": "2008–2013",
+      "runtime": "49 min",
+      "source": "Cinemeta"
+     },
+     "inLibrary": true,
+     "playTarget": {
+      "label": "Play S1:E1",
+      "resumeMs": null,
+      "videoId": "tt0903747:1:1"
+     },
+     "seasons": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "selectedSeason": 2,
+     "state": {
+      "state": "ready"
+     }
+    },
+    "kind": "header"
+   }
+  ]
+ }
+]

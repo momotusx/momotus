@@ -1,0 +1,20 @@
+{
+ "id": 5,
+ "ok": true,
+ "result": {
+  "snapshot": {
+   "episodes": [],
+   "header": {
+    "details": null,
+    "inLibrary": false,
+    "playTarget": null,
+    "seasons": [],
+    "selectedSeason": null,
+    "state": {
+     "state": "loading"
+    }
+   }
+  },
+  "sub": 3
+ }
+}

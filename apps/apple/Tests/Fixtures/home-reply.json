@@ -1,0 +1,68 @@
+{
+ "id": 4,
+ "ok": true,
+ "result": {
+  "snapshot": {
+   "header": {
+    "hero": null
+   },
+   "rows": [
+    {
+     "rowId": "com.linvo.cinemeta:movie:top",
+     "source": "Cinemeta",
+     "state": {
+      "state": "loading"
+     },
+     "tiles": [],
+     "title": "Popular Movies"
+    },
+    {
+     "rowId": "com.linvo.cinemeta:series:top",
+     "source": "Cinemeta",
+     "state": {
+      "state": "loading"
+     },
+     "tiles": [],
+     "title": "Popular Series"
+    },
+    {
+     "rowId": "com.linvo.cinemeta:movie:year",
+     "source": "Cinemeta",
+     "state": {
+      "state": "loading"
+     },
+     "tiles": [],
+     "title": "New Movies"
+    },
+    {
+     "rowId": "com.linvo.cinemeta:series:year",
+     "source": "Cinemeta",
+     "state": {
+      "state": "loading"
+     },
+     "tiles": [],
+     "title": "New Series"
+    },
+    {
+     "rowId": "com.linvo.cinemeta:movie:imdbRating",
+     "source": "Cinemeta",
+     "state": {
+      "state": "loading"
+     },
+     "tiles": [],
+     "title": "Featured Movies"
+    },
+    {
+     "rowId": "com.linvo.cinemeta:series:imdbRating",
+     "source": "Cinemeta",
+     "state": {
+      "state": "loading"
+     },
+     "tiles": [],
+     "title": "Featured Series"
+    }
+   ]
+  },
+  "sub": 2
+ }
+}
