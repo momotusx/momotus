@@ -4,8 +4,14 @@ import android.app.Application
 import android.util.Log
 import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreSession
+import app.marquee.design.createImageLoader
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
 
-class MarqueeApp : Application() {
+class MarqueeApp :
+    Application(),
+    SingletonImageLoader.Factory {
     lateinit var session: CoreSession
         private set
 
@@ -21,6 +27,8 @@ class MarqueeApp : Application() {
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
     }
+
+    override fun newImageLoader(context: PlatformContext): ImageLoader = createImageLoader(context)
 
     companion object {
         const val TAG = "marquee"

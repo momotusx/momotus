@@ -3,6 +3,7 @@ package app.marquee.android
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -15,21 +16,32 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.marquee.design.Form
 
-/** P1 stand-in screen: what the core module sees. Replaced by the real shell in P3. */
+/**
+ * Stand-in shell until P3. Debug extras: `screen=gallery form=tv|phone theme=dark|light` shows the
+ * design gallery; without them the diagnostics screen shows what the core module sees.
+ */
 class MainActivity : ComponentActivity() {
-    private lateinit var diagnostics: Diagnostics
+    private var diagnostics: Diagnostics? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        if (intent.getStringExtra("screen") == "gallery") {
+            val form = if (intent.getStringExtra("form") == "tv") Form.Tv else Form.Phone
+            val dark = intent.getStringExtra("theme") != "light"
+            setContent { GalleryHost(form, dark) }
+            return
+        }
         val app = application as MarqueeApp
-        diagnostics = Diagnostics(app, app.session)
-        diagnostics.start()
-        setContent { DiagnosticsScreen(diagnostics) }
+        val diag = Diagnostics(app, app.session).also { it.start() }
+        diagnostics = diag
+        setContent { DiagnosticsScreen(diag) }
     }
 
     override fun onDestroy() {
-        diagnostics.stop()
+        diagnostics?.stop()
         super.onDestroy()
     }
 }
