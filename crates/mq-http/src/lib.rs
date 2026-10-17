@@ -203,13 +203,21 @@ fn install_crypto_provider() {
 /// lead to a private one.
 fn redirect(attempt: reqwest::redirect::Attempt) -> reqwest::redirect::Action {
     let first = attempt.previous().first();
+    let last = attempt.previous().last();
     if attempt.previous().len() > 5 {
         attempt.error("too many redirects")
+    } else if last.is_some_and(|last| downgrades(last, attempt.url())) {
+        // A key in the path or query would travel in the clear.
+        attempt.error("redirect from https to http")
     } else if first.is_some_and(|first| !redirect_allowed(first, attempt.url())) {
         attempt.error("redirect from a public to a private address")
     } else {
         attempt.follow()
     }
+}
+
+fn downgrades(from: &Url, to: &Url) -> bool {
+    from.scheme() == "https" && to.scheme() == "http"
 }
 
 fn redirect_allowed(first: &Url, next: &Url) -> bool {
@@ -492,5 +500,21 @@ mod tests {
         // A local addon (already allowed to reach private addresses).
         assert!(redirect_allowed(&url("http://127.0.0.1:7000/s"), &lan));
         assert!(redirect_allowed(&url("http://127.0.0.1:7000/s"), &public));
+    }
+
+    #[test]
+    fn https_to_http_redirect_is_refused() {
+        let url = |s: &str| Url::parse(s).unwrap();
+        let secure = url("https://addon.example/manifest.json");
+        assert!(downgrades(
+            &secure,
+            &url("http://addon.example/manifest.json")
+        ));
+        assert!(!downgrades(&secure, &url("https://cdn.example/m.json")));
+        assert!(!downgrades(&url("http://addon.example/"), &secure));
+        assert!(!downgrades(
+            &url("http://addon.example/a"),
+            &url("http://addon.example/b")
+        ));
     }
 }
