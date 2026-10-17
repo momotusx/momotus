@@ -3,7 +3,8 @@
 use regex::Regex;
 use std::sync::LazyLock;
 
-use crate::engine::{F, Rule, build, next_char, rule};
+use crate::engine::{F, Rule, next_char, rule};
+use crate::lean::std_regex;
 use crate::transform::Tf;
 
 /// Scripts PTT treats as "non English" (kana, CJK, Cyrillic, Arabic, Kannada, Malayalam, Thai).
@@ -15,11 +16,11 @@ macro_rules! non_english {
 
 macro_rules! lazy {
     ($pat:expr) => {
-        LazyLock::new(|| build($pat, false))
+        LazyLock::new(|| std_regex($pat, false))
     };
 }
 
-static MOVIE: LazyLock<Regex> = LazyLock::new(|| build(r"[\[(]movie[)\]]", true));
+static MOVIE: LazyLock<Regex> = LazyLock::new(|| std_regex(r"[\[(]movie[)\]]", true));
 static EDGE_SYMBOLS: LazyLock<Regex> = lazy!(concat!(
     r"^[^\w",
     non_english!(),

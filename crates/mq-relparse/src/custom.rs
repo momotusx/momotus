@@ -7,7 +7,7 @@ use crate::engine::{Ctx, F, Hit, Matched, Pos, Rule, in_leading_bracket, nb, rul
 use crate::transform::{Tf, Val};
 
 fn re(pat: &str, ci: bool) -> Regex {
-    crate::engine::build(pat, ci)
+    crate::lean::std_regex(pat, ci)
 }
 
 fn hit(idx: usize) -> Hit {
@@ -131,11 +131,12 @@ pub(crate) fn episodes(ctx: &mut Ctx) -> Option<Hit> {
         .map_or(ctx.title.len(), |e| e.min(ctx.title.len()));
     let begin = slice(&ctx.title, 0, end);
     let middle = slice(&ctx.title, start, end);
-    let (digits, whole) = {
-        let found = EP_BEGIN.find(begin).or_else(|| EP_MIDDLE.find(middle))?;
-        let g1 = found.caps.get(1)?.as_str().to_string();
-        let whole = found.caps.get(0)?.as_str().to_string();
-        (g1, whole)
+    let (digits, whole) = match EP_BEGIN.find(begin) {
+        Some(f) => (f.group(begin, 1)?.to_string(), f.raw(begin).to_string()),
+        None => {
+            let f = EP_MIDDLE.find(middle)?;
+            (f.group(middle, 1)?.to_string(), f.raw(middle).to_string())
+        }
     };
     let n: u32 = digits.parse().ok()?;
     ctx.set(F::Episodes, Val::Ints(vec![n]));

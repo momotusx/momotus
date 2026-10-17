@@ -3,11 +3,11 @@
 //! Rules run in this order; the order is part of the behaviour (see `engine::run_all`).
 //! Look-arounds of the original patterns are expressed with guards, see `engine::Look`.
 
-use regex::Captures;
 use std::sync::LazyLock;
 
 use crate::custom;
 use crate::engine::{F, Handler, Pos, Table, na, nb, rule};
+use crate::lean::Groups;
 use crate::transform::Tf;
 
 pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
@@ -24,7 +24,31 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
         rule(F::Adult, r"\b(XXX|xxx|Xxx)\b", Tf::True).rm().into(),
         Handler::Gated(
             custom::scene,
-            r"WEB|-(?:CAKES|GGEZ|GGWP|GLHF|GOSSIP|NAISU|KOGI|PECULATE|SLOT|EDITH|ETHEL|ELEANOR|B2B|SPAMnEGGS|FTP|DiRT|SYNCOPY|BAE|SuccessfulCrab|NHTFS|SURCODE|B0MBARDIERS)",
+            &[
+                "web",
+                "-cakes",
+                "-ggez",
+                "-ggwp",
+                "-glhf",
+                "-gossip",
+                "-naisu",
+                "-kogi",
+                "-peculate",
+                "-slot",
+                "-edith",
+                "-ethel",
+                "-eleanor",
+                "-b2b",
+                "-spamneggs",
+                "-ftp",
+                "-dirt",
+                "-syncopy",
+                "-bae",
+                "-successfulcrab",
+                "-nhtfs",
+                "-surcode",
+                "-b0mbardiers",
+            ],
         ),
         rule(F::Extras, r"\bNCED\b", Tf::Uniq(r"NCED")).rm().into(),
         rule(F::Extras, r"\bNCOP\b", Tf::Uniq(r"NCOP")).rm().into(),
@@ -187,7 +211,7 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
         rule(F::Audio, r"\b(H[DQ])?.?(Clean.?Aud(io)?)\b", Tf::Uniq(r"HQ Clean Audio")).ci().rm().again().into(),
         rule(F::Group, r"- ?([^\-. \[]+[^\-. \[)\]\d][^\-. \[)\]]*)(?:\[[\w.-]+\])?", Tf::Raw).ci().look(na(r"\d+$|S\d+|\d+x|ep?\d+|[^\[]+\]$").at(Pos::Start(1))).la(r"\.\w{2,4}$|$").into(),
         rule(F::Volumes, r"\bvol(?:s|umes?)?[. -]*(?:\d{1,2}[., +/\\&-]+)+\d{1,2}\b", Tf::Range).ci().rm().into(),
-        Handler::Gated(custom::volumes, "vol"),
+        Handler::Gated(custom::volumes, &["vol"]),
         rule(F::Languages, r"\b(temporadas?|completa)\b", Tf::Uniq(r"es")).ci().again().into(),
         rule(F::Languages, r"\b(?:INT[EÉ]GRALE?)\b", Tf::Uniq(r"fr")).ci().again().into(),
         rule(F::Languages, r"\b(?:Saison)\b", Tf::Uniq(r"fr")).ci().again().into(),
@@ -275,7 +299,7 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
         rule(F::Episodes, r"E(\d+)\b", Tf::IntArr).ci().into(),
         rule(F::Episodes, r"\b\d{1,4}-\d{1,4}\b", Tf::Range).ci().into(),
         Handler::Func(custom::episodes),
-        Handler::Gated(custom::anime_eps, "One|Bleach|Naruto"),
+        Handler::Gated(custom::anime_eps, &["one", "bleach", "naruto"]),
         rule(F::Country, r"\b(US|UK|AU|NZ|CA)\b", Tf::Val(r"$1")).into(),
         rule(F::Languages, r"\bengl?(?:sub[A-Z]*)?\b", Tf::Uniq(r"en")).ci().rm().again().into(),
         rule(F::Languages, r"\beng?sub[A-Z]*\b", Tf::Uniq(r"en")).ci().again().into(),
@@ -453,12 +477,12 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
 });
 
 /// Both separators of a date must be the same character (PTT uses a back-reference).
-fn same_sep(_: &str, c: &Captures) -> bool {
-    c.get(2).map(|m| m.as_str()) == c.get(3).map(|m| m.as_str())
+fn same_sep(text: &str, c: &Groups) -> bool {
+    c.text(text, 2) == c.text(text, 3)
 }
 
-fn not_at_start(_: &str, c: &Captures) -> bool {
-    c.get(0).is_some_and(|m| m.start() != 0)
+fn not_at_start(_: &str, c: &Groups) -> bool {
+    c.span(0).is_some_and(|(start, _)| start != 0)
 }
 
 fn dts_lossless(raw: &str) -> &'static str {

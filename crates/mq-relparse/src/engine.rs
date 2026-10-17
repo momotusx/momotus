@@ -1,13 +1,14 @@
 //! Handler engine: a table of regex rules applied in order to a shrinking title.
 //!
 //! Semantics follow PTT's `Parser.parse` (MIT, see README NOTICE). Look-arounds are not
-//! available in the linear-time `regex` crate, so rules carry explicit [`Look`] guards that
+//! available in linear-time regex engines, so rules carry explicit [`Look`] guards that
 //! inspect the text before or after a match (or capture group) instead.
 
-use regex::{Captures, Regex, RegexBuilder};
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use crate::gate::{Gate, relax};
+use crate::gate::{Gate, View, rule_needles};
+use crate::lean::{Groups, Re};
 use crate::transform::{Tf, Val};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -161,7 +162,7 @@ pub(crate) struct Look {
     neg: bool,
     pos: Pos,
     pat: &'static str,
-    re: OnceLock<Regex>,
+    re: OnceLock<Re>,
 }
 
 fn look(behind: bool, neg: bool, pat: &'static str) -> Look {
@@ -189,23 +190,18 @@ impl Look {
         self
     }
 
-    /// A positive look-behind evaluated at the start of the match.
-    fn is_prefix(&self) -> bool {
-        self.behind && !self.neg && matches!(self.pos, Pos::Start(0))
-    }
-
-    fn regex(&self, ci: bool) -> &Regex {
+    fn regex(&self, ci: bool) -> &Re {
         self.re.get_or_init(|| {
             let wrapped = if self.behind {
                 format!("(?:{})$", self.pat)
             } else {
                 format!("^(?:{})", self.pat)
             };
-            build(&wrapped, ci)
+            Re::new(&wrapped, ci)
         })
     }
 
-    fn holds(&self, ci: bool, text: &str, caps: &Captures) -> bool {
+    fn holds(&self, ci: bool, text: &str, caps: &Groups) -> bool {
         let Some(at) = self.offset(text, caps) else {
             return true;
         };
@@ -218,19 +214,12 @@ impl Look {
         hit != self.neg
     }
 
-    fn offset(&self, text: &str, caps: &Captures) -> Option<usize> {
+    fn offset(&self, text: &str, caps: &Groups) -> Option<usize> {
         match self.pos {
-            Pos::Start(g) => caps.get(g).map(|m| m.start()),
-            Pos::End(g) => caps.get(g).map(|m| m.end()),
-            Pos::Before(g) => caps.get(g).map(|m| prev_char(text, m.start())),
+            Pos::Start(g) => caps.span(g).map(|s| s.0),
+            Pos::End(g) => caps.span(g).map(|s| s.1),
+            Pos::Before(g) => caps.span(g).map(|s| prev_char(text, s.0)),
         }
-    }
-}
-
-pub(crate) fn build(pat: &str, ci: bool) -> Regex {
-    match RegexBuilder::new(pat).case_insensitive(ci).build() {
-        Ok(re) => re,
-        Err(e) => panic!("invalid relparse pattern {pat:?}: {e}"),
     }
 }
 
@@ -242,28 +231,33 @@ struct Opts {
     remove: bool,
 }
 
-pub(crate) type Check = fn(&str, &Captures) -> bool;
+pub(crate) type Check = fn(&str, &Groups) -> bool;
 
 /// A match plus the span PTT would report (a trailing look-ahead group is not part of it).
-pub(crate) struct Found<'t> {
-    pub caps: Captures<'t>,
+pub(crate) struct Found {
+    pub groups: Groups,
     pub start: usize,
     pub end: usize,
-    groups: usize,
+    /// Number of groups the pattern has in PTT's sense (without the look-ahead group).
+    ngroups: usize,
 }
 
-impl<'t> Found<'t> {
-    pub fn raw(&self, text: &'t str) -> &'t str {
+impl Found {
+    pub fn raw<'t>(&self, text: &'t str) -> &'t str {
         &text[self.start..self.end]
     }
 
+    pub fn group<'t>(&self, text: &'t str, i: usize) -> Option<&'t str> {
+        self.groups.text(text, i)
+    }
+
     /// PTT passes group 1 to the transformer when the pattern has groups and it is non-empty.
-    fn input(&self, text: &'t str) -> &'t str {
-        if self.groups == 0 {
+    fn input<'t>(&self, text: &'t str) -> &'t str {
+        if self.ngroups == 0 {
             return self.raw(text);
         }
-        match self.caps.get(1) {
-            Some(g) if !g.as_str().is_empty() => g.as_str(),
+        match self.group(text, 1) {
+            Some(g) if !g.is_empty() => g,
             _ => self.raw(text),
         }
     }
@@ -276,7 +270,33 @@ struct Branch {
     tail: Option<&'static str>,
     looks: Vec<Look>,
     checks: Vec<Check>,
-    re: OnceLock<Regex>,
+    /// Small engine, used while the branch is searched rarely; dropped once `fast` exists.
+    lean: Mutex<Option<Arc<Re>>>,
+    /// Engine with a lazy DFA, built when the branch is searched on a fair share of titles.
+    fast: OnceLock<Re>,
+    runs: AtomicU32,
+}
+
+/// Titles parsed so far, to tell how often a branch runs.
+static PARSES: AtomicU64 = AtomicU64::new(0);
+
+/// A branch searched at least this often, and on at least one title in `HOT_SHARE`, gets the
+/// fast engine: it saves about 2 us per search and costs about 150 us and 30 KB once.
+const HOT_RUNS: u32 = 48;
+const HOT_SHARE: u64 = 4;
+
+enum Engine<'a> {
+    Fast(&'a Re),
+    Lean(Arc<Re>),
+}
+
+impl Engine<'_> {
+    fn re(&self) -> &Re {
+        match self {
+            Engine::Fast(r) => r,
+            Engine::Lean(r) => r,
+        }
+    }
 }
 
 impl Branch {
@@ -286,34 +306,51 @@ impl Branch {
             tail: None,
             looks: Vec::new(),
             checks: Vec::new(),
-            re: OnceLock::new(),
+            lean: Mutex::new(None),
+            fast: OnceLock::new(),
+            runs: AtomicU32::new(0),
         }
     }
 
-    fn regex(&self, ci: bool) -> &Regex {
-        self.re.get_or_init(|| match self.tail {
-            Some(t) => build(&format!("(?:{})({t})", self.pat), ci),
-            None => build(self.pat, ci),
-        })
+    fn source(&self) -> String {
+        match self.tail {
+            Some(t) => format!("(?:{})({t})", self.pat),
+            None => self.pat.to_string(),
+        }
     }
 
-    pub fn find<'t>(&self, ci: bool, text: &'t str, mut from: usize) -> Option<Found<'t>> {
-        let re = self.regex(ci);
+    fn engine(&self, ci: bool) -> Engine<'_> {
+        if let Some(fast) = self.fast.get() {
+            return Engine::Fast(fast);
+        }
+        let runs = self.runs.fetch_add(1, Ordering::Relaxed).saturating_add(1);
+        if runs >= HOT_RUNS && u64::from(runs) * HOT_SHARE >= PARSES.load(Ordering::Relaxed) {
+            let fast = self.fast.get_or_init(|| Re::fast(&self.source(), ci));
+            *self.lean.lock().unwrap_or_else(PoisonError::into_inner) = None;
+            return Engine::Fast(fast);
+        }
+        let mut slot = self.lean.lock().unwrap_or_else(PoisonError::into_inner);
+        let re = slot.get_or_insert_with(|| Arc::new(Re::new(&self.source(), ci)));
+        Engine::Lean(Arc::clone(re))
+    }
+
+    pub fn find(&self, ci: bool, text: &str, mut from: usize) -> Option<Found> {
+        let engine = self.engine(ci);
+        let re = engine.re();
         while from <= text.len() {
-            let caps = re.captures_at(text, from)?;
-            let m0 = caps.get(0)?;
-            let start = m0.start();
-            if self.accepts(ci, text, &caps) {
-                let last = caps.len() - 1;
-                let (end, groups) = match self.tail {
-                    Some(_) => (caps.get(last).map_or(m0.end(), |g| g.start()), last - 1),
-                    None => (m0.end(), last),
+            let groups = re.captures_at(text, from)?;
+            let (start, whole_end) = groups.span(0)?;
+            if self.accepts(ci, text, &groups) {
+                let last = groups.len() - 1;
+                let (end, ngroups) = match self.tail {
+                    Some(_) => (groups.span(last).map_or(whole_end, |g| g.0), last - 1),
+                    None => (whole_end, last),
                 };
                 return Some(Found {
-                    caps,
+                    groups,
                     start,
                     end,
-                    groups,
+                    ngroups,
                 });
             }
             from = next_char(text, start);
@@ -321,30 +358,14 @@ impl Branch {
         None
     }
 
-    fn accepts(&self, ci: bool, text: &str, caps: &Captures) -> bool {
+    fn accepts(&self, ci: bool, text: &str, caps: &Groups) -> bool {
         self.checks.iter().all(|c| c(text, caps))
             && self.looks.iter().all(|l| l.holds(ci, text, caps))
     }
 
-    /// Relaxed pattern for the gate. A positive look-behind at the match start and a trailing
-    /// look-ahead are necessary conditions too, so they are matched as text around the pattern.
-    fn gate(&self) -> String {
-        let before: String = self
-            .looks
-            .iter()
-            .filter(|l| l.is_prefix())
-            .map(|l| format!("(?:{})", relax(l.pat)))
-            .collect();
-        let after = self
-            .tail
-            .map(|t| format!("(?:{})", relax(t)))
-            .unwrap_or_default();
-        format!("{before}(?:{}){after}", relax(self.pat))
-    }
-
     #[cfg(test)]
     fn warm(&self, ci: bool) {
-        self.regex(ci);
+        self.engine(ci);
         self.looks.iter().for_each(|l| {
             l.regex(ci);
         });
@@ -433,19 +454,10 @@ impl Rule {
         self
     }
 
-    /// A relaxed alternation of all branches, for the pre-filter.
-    pub fn gate_pattern(&self) -> String {
-        let alts: Vec<String> = self
-            .branches
-            .iter()
-            .map(|b| format!("(?:{})", b.gate()))
-            .collect();
-        let joined = alts.join("|");
-        if self.ci {
-            format!("(?i:{joined})")
-        } else {
-            format!("(?:{joined})")
-        }
+    /// Literals of which every match contains one (see `needle.rs`), `None` if unknown.
+    pub fn needles(&self) -> Option<Vec<String>> {
+        let pats: Vec<&str> = self.branches.iter().map(|b| b.pat).collect();
+        rule_needles(&pats)
     }
 
     /// Compile every pattern now (panics on an invalid one).
@@ -455,12 +467,12 @@ impl Rule {
     }
 
     /// Leftmost accepted match over all alternatives (earlier alternative wins ties).
-    pub fn find<'t>(&self, text: &'t str) -> Option<Found<'t>> {
+    pub fn find(&self, text: &str) -> Option<Found> {
         self.find_from(text, 0)
     }
 
-    pub fn find_from<'t>(&self, text: &'t str, from: usize) -> Option<Found<'t>> {
-        let mut best: Option<Found<'t>> = None;
+    pub fn find_from(&self, text: &str, from: usize) -> Option<Found> {
+        let mut best: Option<Found> = None;
         for b in &self.branches {
             if let Some(c) = b.find(self.ci, text, from)
                 && best.as_ref().is_none_or(|cur| c.start < cur.start)
@@ -542,8 +554,9 @@ pub(crate) enum Handler {
     Re(Box<Rule>),
     /// A function handler that always runs.
     Func(HandlerFn),
-    /// A function handler that can only act when this pattern matches the title.
-    Gated(HandlerFn, &'static str),
+    /// A function handler that can only act when the title contains one of these (lowercase)
+    /// literals.
+    Gated(HandlerFn, &'static [&'static str]),
 }
 
 impl Handler {
@@ -559,11 +572,12 @@ impl Handler {
         matches!(self, Handler::Re(r) if r.settled(ctx))
     }
 
-    pub fn gate_pattern(&self) -> Option<String> {
+    /// Literals the title must contain for this handler to act, `None` if it always runs.
+    pub fn needles(&self) -> Option<Vec<String>> {
         match self {
-            Handler::Re(r) => Some(r.gate_pattern()),
+            Handler::Re(r) => r.needles(),
             Handler::Func(_) => None,
-            Handler::Gated(_, p) => Some(format!("(?i:{p})")),
+            Handler::Gated(_, set) => Some(set.iter().map(|s| (*s).to_string()).collect()),
         }
     }
 }
@@ -589,21 +603,22 @@ impl Table {
 
 /// The main loop of PTT's `Parser.parse`: raw per-field results plus where the title ends.
 ///
-/// The gate is re-scanned whenever the title changes, so skipping a rule is always exact.
+/// The gate view is rebuilt whenever the title changes, so skipping a rule is always exact.
 pub(crate) fn run_all(table: &Table, title: String) -> (Ctx, usize) {
+    PARSES.fetch_add(1, Ordering::Relaxed);
     let mut ctx = Ctx::new(title);
     let mut end = ctx.title.len();
-    let mut found = table.gate.scan(&ctx.title);
+    let mut view = View::new(&ctx.title);
     let mut stale = false;
     for (i, h) in table.handlers.iter().enumerate() {
         if h.settled(&ctx) {
             continue;
         }
         if stale {
-            table.gate.rescan(&mut found, i, &ctx.title);
+            view.reset(&ctx.title);
             stale = false;
         }
-        if !table.gate.allows(&found, i) {
+        if !table.gate.allows(&view, i) {
             continue;
         }
         let Some(hit) = h.run(&mut ctx) else { continue };

@@ -4,9 +4,9 @@
 //! an ordered list of patterns (data, below); the first pattern that matches wins. The release
 //! name itself goes through [`crate::parse`], with the other strings only filling gaps.
 
-use regex::Regex;
 use std::sync::LazyLock;
 
+use crate::lean::{Groups, Re};
 use crate::model::{AddonStreamFacts, ParsedRelease, Quality, Resolution, VideoCodec};
 use crate::parse;
 
@@ -119,30 +119,44 @@ const FLAG_LANGUAGES: &[(&str, &str)] = &[
     ("EE", "et"),
 ];
 
-fn compile(pats: &[&str]) -> Vec<Regex> {
-    pats.iter()
-        .map(|p| crate::engine::build(p, false))
-        .collect()
+fn compile(pats: &[&str]) -> Vec<Re> {
+    pats.iter().map(|p| Re::new(p, false)).collect()
 }
 
-static SEEDERS_RE: LazyLock<Vec<Regex>> = LazyLock::new(|| compile(SEEDERS));
-static SIZE_RE: LazyLock<Vec<Regex>> = LazyLock::new(|| compile(SIZE));
-static SOURCE_RE: LazyLock<Vec<Regex>> = LazyLock::new(|| compile(SOURCE));
-static SERVICE_RE: LazyLock<Vec<Regex>> = LazyLock::new(|| compile(SERVICE));
+static SEEDERS_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SEEDERS));
+static SIZE_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SIZE));
+static SOURCE_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SOURCE));
+static SERVICE_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SERVICE));
 
 fn clip(s: &str) -> &str {
     crate::custom::slice(s, 0, MAX_TEXT_BYTES)
 }
 
-/// First capture group of the first pattern that matches any of the texts (texts in order).
-fn first_capture<'t>(pats: &[Regex], texts: &[&'t str]) -> Option<regex::Captures<'t>> {
-    pats.iter()
-        .find_map(|re| texts.iter().find_map(|t| re.captures(t)))
+/// One match with its capture groups, bound to the text it was found in.
+struct Cap<'t> {
+    text: &'t str,
+    groups: Groups,
+}
+
+impl<'t> Cap<'t> {
+    /// Text of group `i`, empty when the group did not take part.
+    fn get(&self, i: usize) -> &'t str {
+        self.groups.text(self.text, i).unwrap_or("")
+    }
+}
+
+/// First match of the first pattern that matches any of the texts (texts in order).
+fn first_capture<'t>(pats: &[Re], texts: &[&'t str]) -> Option<Cap<'t>> {
+    pats.iter().find_map(|re| {
+        texts
+            .iter()
+            .find_map(|t| re.captures_at(t, 0).map(|groups| Cap { text: t, groups }))
+    })
 }
 
 fn seeders(texts: &[&str]) -> Option<u32> {
-    let caps = first_capture(&SEEDERS_RE, texts)?;
-    caps[1].replace(',', "").parse().ok()
+    let cap = first_capture(&SEEDERS_RE, texts)?;
+    cap.get(1).replace(',', "").parse().ok()
 }
 
 fn unit_factor(unit: &str) -> f64 {
@@ -170,30 +184,37 @@ fn number(s: &str) -> Option<f64> {
 }
 
 fn size_bytes(texts: &[&str]) -> Option<u64> {
-    let caps = first_capture(&SIZE_RE, texts)?;
-    let bytes = number(&caps[1])? * unit_factor(&caps[2]);
+    let cap = first_capture(&SIZE_RE, texts)?;
+    let bytes = number(cap.get(1))? * unit_factor(cap.get(2));
     (bytes.is_finite() && (1.0..1e16).contains(&bytes)).then_some(bytes as u64)
 }
 
 fn source_site(texts: &[&str]) -> Option<String> {
-    let caps = first_capture(&SOURCE_RE, texts)?;
-    let site = caps[1].trim();
+    let cap = first_capture(&SOURCE_RE, texts)?;
+    let site = cap.get(1).trim();
     let site: String = site.chars().take(MAX_SOURCE_CHARS).collect();
     (!site.is_empty()).then_some(site)
 }
 
 /// The first debrid tag whose code is a known service, with its cache state if it states one.
 fn service_and_cached(name: &str) -> (Option<String>, Option<bool>) {
-    for caps in SERVICE_RE.iter().flat_map(|re| re.captures_iter(name)) {
-        let Some((_, id)) = SERVICE_IDS.iter().find(|(c, _)| *c == &caps[1]) else {
-            continue;
-        };
-        let marker = caps.get(2).map_or("", |m| m.as_str());
-        let cached = CACHED_MARKERS
-            .iter()
-            .find(|(m, _)| marker.starts_with(m))
-            .map(|(_, v)| *v);
-        return (Some((*id).to_string()), cached);
+    for re in SERVICE_RE.iter() {
+        let mut from = 0;
+        while from <= name.len() {
+            let Some(groups) = re.captures_at(name, from) else {
+                break;
+            };
+            from = groups.span(0).map_or(name.len() + 1, |s| s.1.max(from + 1));
+            let cap = Cap { text: name, groups };
+            if let Some((_, id)) = SERVICE_IDS.iter().find(|(c, _)| *c == cap.get(1)) {
+                let marker = cap.get(2);
+                let cached = CACHED_MARKERS
+                    .iter()
+                    .find(|(m, _)| marker.starts_with(m))
+                    .map(|(_, v)| *v);
+                return (Some((*id).to_string()), cached);
+            }
+        }
     }
     (None, None)
 }

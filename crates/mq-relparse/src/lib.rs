@@ -1,6 +1,7 @@
 //! Release-name parser (a port of the PTT handler table) and addon stream text extractors.
 //!
-//! Only the linear-time `regex` crate is used, so hostile addon text cannot cause ReDoS.
+//! Only linear-time engines (`regex` and `regex-automata`) are used, so hostile addon text
+//! cannot cause ReDoS.
 //! See the crate README for attribution (NOTICE), accuracy and speed numbers.
 //!
 //! ```
@@ -30,7 +31,9 @@ mod engine;
 mod gate;
 #[cfg(test)]
 mod golden;
+mod lean;
 mod model;
+mod needle;
 mod rules;
 mod title;
 mod transform;
@@ -42,7 +45,7 @@ pub use addon::parse_addon_stream;
 /// Inputs longer than this are cut (at a char boundary) before parsing.
 const MAX_INPUT_BYTES: usize = 2048;
 
-/// Build the handler table and compile the most common patterns now (a few hundred
+/// Build the handler table and compile the patterns the first titles need (tens of
 /// milliseconds), so the first real [`parse`] call does not pay for it. Safe to call from a
 /// background thread at startup; calling it is optional.
 pub fn warm_up() {

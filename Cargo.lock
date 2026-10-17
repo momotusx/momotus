@@ -2044,6 +2044,7 @@ dependencies = [
  "insta",
  "proptest",
  "regex",
+ "regex-automata",
  "serde",
  "serde_json",
 ]

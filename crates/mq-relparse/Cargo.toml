@@ -1,6 +1,6 @@
 [package]
 name = "mq-relparse"
-description = "Release-name and addon stream text parser (linear-time regex only)"
+description = "Release-name and addon stream text parser (linear-time regex engines only)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,10 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+# regex-automata is the engine behind `regex`; it is used directly for its meta regex with only
+# the small NFA engines enabled (see src/lean.rs). Both are linear time.
 regex = "1"
+regex-automata = "0.4"
 serde.workspace = true
 
 [dev-dependencies]
