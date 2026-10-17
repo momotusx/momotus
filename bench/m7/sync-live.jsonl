@@ -31,3 +31,4 @@
 {"event":"sign_out","device":"B","then":"C rotated to epoch 2 on its next sync","members":["Laptop"]}
 {"event":"journal_restart","roster_rows":{"before":7,"after_deleting_from_database":3,"after_restart":7},"epoch_after_restart":2,"laptop_sync_ms":4,"phone_after_restart":"this device was removed from the account","token_lines_in_relay_log":0}
 {"event":"phase3_verified_by_main","pair_code_match":"048237","tv_pulled_addons":1,"fingerprints_equal_after_pair":"23CF7Y8KMSF9","lost_epoch":1,"lost_dropped_kits":1,"removed_device_answer":"this device was removed from the account","old_kit_redeem_status":404,"token_lines_in_relay_log":0}
+{"event":"code_review_fixes","cli_sync_output_record":null,"cli_sync_output_recordChanged":false,"kit_removed_epoch":1,"journal_lines_after_cutting_the_middle":2,"journal_after_restart":"byte-identical to before the cut (3 lines)","sync_after_restart":{"pushed":0,"pulled":0,"ms":5},"genesis_replay_status":409}
