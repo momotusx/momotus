@@ -28,7 +28,9 @@ struct HeroView: View {
         .overlay(alignment: .topLeading) {
             // Phone: the wordmark sits in the card; wide screens carry it in the navigation.
             if !metrics.wide {
-                Wordmark(size: 22).padding(.leading, 18).padding(.top, 16)
+                Wordmark(size: 22)
+                    .shadow(color: Theme.Palette.bg.opacity(0.6), radius: 6, y: 1)
+                    .padding(.leading, 18).padding(.top, 16)
             }
         }
         .padding(.horizontal, metrics.wide ? metrics.gutter - 16 : 10)
@@ -50,8 +52,13 @@ struct HeroView: View {
                     stops: [.init(color: bg.opacity(0.9), location: 0), .init(color: bg.opacity(0.3), location: 0.34), .init(color: .clear, location: 0.58)],
                     startPoint: .bottom, endPoint: .top)
             } else {
+                // A 72 pt band under the wordmark, then a fade: the white mark
+                // reads on bright art too.
                 LinearGradient(
-                    stops: [.init(color: bg.opacity(0.55), location: 0), .init(color: .clear, location: 0.22)],
+                    stops: [
+                        .init(color: bg.opacity(0.78), location: 0), .init(color: bg.opacity(0.6), location: 72 / height),
+                        .init(color: .clear, location: 140 / height),
+                    ],
                     startPoint: .top, endPoint: .bottom)
                 LinearGradient(
                     stops: [.init(color: bg.opacity(0.96), location: 0), .init(color: bg.opacity(0.55), location: 0.38), .init(color: .clear, location: 0.62)],

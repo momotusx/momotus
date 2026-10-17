@@ -30,6 +30,15 @@ struct ChipRow<ID: Hashable>: View {
                 }
                 .scrollIndicators(.hidden)
                 .scrollClipDisabled()
+                // A chip cut at the edge fades out over 24 pt, so it reads as "more this way".
+                .mask {
+                    HStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 24)
+                    }
+                    .padding(.leading, -metrics.gutter)
+                    .padding(.vertical, -8)
+                }
             }
         }
     }

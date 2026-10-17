@@ -20,6 +20,18 @@ enum AppTab: String, CaseIterable, Hashable {
     var isTool: Bool { self == .search || self == .settings }
 }
 
+/// Moves to another place in the navigation (an empty page's way in), as
+/// `openURL` does for links.
+struct OpenTabAction {
+    let open: @MainActor (AppTab) -> Void
+
+    @MainActor func callAsFunction(_ tab: AppTab) { open(tab) }
+}
+
+extension EnvironmentValues {
+    @Entry var openTab = OpenTabAction { _ in }
+}
+
 /// The floating glass navigation: a bar at the bottom on iPhone and iPad, a
 /// pill at the top on the Mac (in the window toolbar) and on TV.
 struct RootView: View {
@@ -39,6 +51,7 @@ struct RootView: View {
         content
             .preferredColorScheme(.dark)
             .environment(\.metrics, metrics)
+            .environment(\.openTab, OpenTabAction { select($0) })
             .environment(immersion)
             // Accent marks focus and the one primary action; everything else takes the text colour.
             .tint(Theme.Palette.text)
@@ -316,32 +329,13 @@ extension View {
         }
     }
 
-    /// A page-coloured scrim behind the status bar and the floating back
-    /// button (iOS): invisible on an unscrolled page, it hides content that
+    /// A scroll-edge material behind the status bar and the floating back
+    /// button (iOS): absent on an unscrolled page, it covers content that
     /// scrolls under them. Pages whose art runs under the bar pass `visible`
     /// once content scrolls there.
     func topScrim(_ visible: Bool = true) -> some View {
         #if os(iOS)
-        return overlay(alignment: .top) {
-            // Solid down to the bar's bottom (the safe area: status bar, plus the
-            // back button on pushed pages), then a 24 pt fade.
-            GeometryReader { geo in
-                let bar = geo.safeAreaInsets.top
-                LinearGradient(
-                    stops: [
-                        .init(color: Theme.Palette.bg, location: 0),
-                        .init(color: Theme.Palette.bg.opacity(0.92), location: bar / (bar + 24)),
-                        .init(color: Theme.Palette.bg.opacity(0), location: 1),
-                    ],
-                    startPoint: .top, endPoint: .bottom)
-                    .frame(height: bar + 24)
-                    // The reader starts under the bar; the scrim belongs on it.
-                    .offset(y: -bar)
-            }
-            .allowsHitTesting(false)
-            .opacity(visible ? 1 : 0)
-            .animation(Theme.Motion.focus, value: visible)
-        }
+        return modifier(TopScrim(visible: visible))
         #else
         return self
         #endif
@@ -362,6 +356,46 @@ extension View {
         #endif
     }
 }
+
+#if os(iOS)
+/// iOS 26 and later: the system's hard scroll-edge material, shown only once
+/// content has scrolled under the bar (it would frost a hero's art at rest).
+/// Earlier systems: a page-coloured fade.
+private struct TopScrim: ViewModifier {
+    let visible: Bool
+    @State private var scrolled = false
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { scrolled = $1 }
+                .scrollEdgeEffectStyle(.hard, for: .top)
+                .scrollEdgeEffectHidden(!(visible && scrolled), for: .top)
+        } else {
+            content.overlay(alignment: .top) {
+                // Solid down to the bar's bottom (the safe area: status bar, plus the
+                // back button on pushed pages), then a 24 pt fade.
+                GeometryReader { geo in
+                    let bar = geo.safeAreaInsets.top
+                    LinearGradient(
+                        stops: [
+                            .init(color: Theme.Palette.bg, location: 0),
+                            .init(color: Theme.Palette.bg.opacity(0.92), location: bar / (bar + 24)),
+                            .init(color: Theme.Palette.bg.opacity(0), location: 1),
+                        ],
+                        startPoint: .top, endPoint: .bottom)
+                        .frame(height: bar + 24)
+                        // The reader starts under the bar; the scrim belongs on it.
+                        .offset(y: -bar)
+                }
+                .allowsHitTesting(false)
+                .opacity(visible ? 1 : 0)
+                .animation(Theme.Motion.focus, value: visible)
+            }
+        }
+    }
+}
+#endif
 
 /// Presents a flow over everything: full screen on iOS and tvOS (no tab bar,
 /// no navigation pill), a sheet on macOS.
