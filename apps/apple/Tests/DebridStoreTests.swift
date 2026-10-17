@@ -195,12 +195,30 @@ final class DebridStoreTests: XCTestCase {
             if let record { stored[record.service] = record }
         }
 
+        /// When set, the next record write waits for `releaseHeldWrite` and then throws cancellation.
+        private var holdNext = false
+        private var held: CheckedContinuation<Void, Never>?
+
+        var writeWaiting: Bool { held != nil }
+
         func setCancelWrites(_ on: Bool) { cancelWrites = on }
+        func holdNextWrite() { holdNext = true }
+
+        func releaseHeldWrite() {
+            held?.resume()
+            held = nil
+        }
+
         func records() -> [DebridRecord] { Array(stored.values) }
         func tombstones() -> [DebridTombstone] { stones }
 
-        func writeRecord(_ record: DebridRecord) throws {
+        func writeRecord(_ record: DebridRecord) async throws {
             if cancelWrites { throw CancellationError() }
+            if holdNext {
+                holdNext = false
+                await withCheckedContinuation { held = $0 }
+                throw CancellationError()
+            }
             stored[record.service] = record
         }
 
@@ -289,6 +307,62 @@ final class DebridStoreTests: XCTestCase {
         let revision = await shared.stored["torbox"]?.revision
         XCTAssertEqual(revision, 2)
         if stopped && written { await store.idle() }
+    }
+
+    /// Swift's form of a cancelled scope: the keystore throws cancellation on the
+    /// first write, with a disconnect queued behind it. Everything settles,
+    /// nothing is written, no tombstone is left. (A Swift task cancelled before
+    /// it starts still runs its body, so the pump itself always gets to clean up.)
+    func testACancelledPumpSettlesEverything() async {
+        let shared = Shared(Self.record("g1", 1))
+        await shared.setCancelWrites(true)
+        let store = DebridStore(keystore: shared, core: shared)
+        // A new connection's write first (a disconnect of g1 does not drop it), then the disconnect.
+        store.pending([Self.record("g2", 1)])
+        let drop = store.disconnect(service: "torbox", generation: "g1")
+        let stopped = await settled(store)
+        XCTAssertTrue(stopped, "the cancelled pump unregisters")
+        do {
+            try await drop.value
+            XCTFail("a disconnect that never ran succeeded")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
+        let revision = await shared.stored["torbox"]?.revision
+        let stones = await shared.stones
+        XCTAssertEqual(revision, 1)
+        XCTAssertEqual(stones, [])
+    }
+
+    func testADisconnectDroppedByCancellationLeavesItsGenerationWritable() async {
+        let shared = Shared(nil)
+        await shared.holdNextWrite()
+        let store = DebridStore(keystore: shared, core: shared)
+        store.pending([Self.record("g1", 1)])
+        var held = false
+        for _ in 0..<5_000 {
+            if await shared.writeWaiting { held = true; break }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(held, "the write is held")
+        // Queued behind the held write, then thrown away when that write is cancelled.
+        let drop = store.disconnect(service: "torbox", generation: "g1")
+        await shared.releaseHeldWrite()
+        let stopped = await settled(store)
+        XCTAssertTrue(stopped, "the cancelled pump unregisters")
+        do {
+            try await drop.value
+            XCTFail("a disconnect that never ran succeeded")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
+        store.pending([Self.record("g1", 2)])
+        let written = await settled(store)
+        XCTAssertTrue(written, "later work starts a new pump")
+        let revision = await shared.stored["torbox"]?.revision
+        let stones = await shared.stones
+        XCTAssertEqual(revision, 2, "the generation is still written")
+        XCTAssertEqual(stones, [])
     }
 
     func testCredentialsNeverPrint() throws {

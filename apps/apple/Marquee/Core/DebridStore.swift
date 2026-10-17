@@ -109,7 +109,8 @@ final class DebridStore {
             job.dropped = true
         }
         let tombstone = DebridTombstone(service: service, generation: generation)
-        return enqueue(service, generation, write: false) { [self] in
+        // Settled without running (cancellation), it leaves the generation writable again.
+        return enqueue(service, generation, write: false, discard: { [self] in gone.remove(generation) }) { [self] in
             do {
                 try await keystore.writeTombstone(tombstone)
             } catch {
@@ -144,8 +145,11 @@ final class DebridStore {
     }
 
     @discardableResult
-    private func enqueue(_ service: String, _ generation: String, write: Bool, _ run: @escaping @MainActor () async throws -> Void) -> Job {
-        let job = Job(generation: generation, write: write, run: run)
+    private func enqueue(
+        _ service: String, _ generation: String, write: Bool, discard: @escaping @MainActor () -> Void = {},
+        _ run: @escaping @MainActor () async throws -> Void
+    ) -> Job {
+        let job = Job(generation: generation, write: write, run: run, discard: discard)
         // Checked with the insert, in one actor step: a write of a generation a
         // disconnect marked gone is never queued behind its cleanup.
         if write && gone.contains(generation) {
@@ -154,10 +158,25 @@ final class DebridStore {
         }
         queues[service, default: []].append(job)
         if pumps[service] == nil {
-            // Registered before it runs, so its own exit can remove it.
+            // Registered before it runs, so its own exit can remove it. A Swift
+            // task runs its body even when cancelled before it starts, so the
+            // pump's own exit paths always get to unregister it.
             pumps[service] = Task { [self] in await pump(service) }
         }
         return job
+    }
+
+    /// A pump ended by cancellation: unregister it and settle what it left
+    /// queued, undoing what queueing did, so `idle` returns, later work starts
+    /// a new pump, and a disconnect that never ran does not keep its
+    /// generation marked gone.
+    private func abandon(_ service: String) {
+        let left = queues.removeValue(forKey: service) ?? []
+        pumps[service] = nil
+        for job in left {
+            job.discard()
+            job.settle(.failure(CancellationError()))
+        }
     }
 
     private func pump(_ service: String) async {
@@ -177,13 +196,10 @@ final class DebridStore {
                 try await job.run()
                 job.settle(.success(()))
             } catch is CancellationError {
-                // The work is being cancelled: the pump stops, and first settles
-                // everything queued and unregisters, so `idle` returns and later
-                // work starts a new pump.
+                // The work is being cancelled: the pump stops; `abandon` settles
+                // what is left queued.
                 job.settle(.failure(CancellationError()))
-                let left = queues.removeValue(forKey: service) ?? []
-                pumps[service] = nil
-                for queued in left { queued.settle(.failure(CancellationError())) }
+                abandon(service)
                 return
             } catch {
                 job.settle(.failure(error))
@@ -196,12 +212,14 @@ final class DebridStore {
         let generation: String
         let write: Bool
         let run: @MainActor () async throws -> Void
+        /// Undoes what queueing it did, when it is settled without running (cancellation).
+        let discard: @MainActor () -> Void
         var dropped = false
         private var result: Result<Void, any Error>?
         private var waiters: [CheckedContinuation<Void, any Error>] = []
 
-        init(generation: String, write: Bool, run: @escaping @MainActor () async throws -> Void) {
-            (self.generation, self.write, self.run) = (generation, write, run)
+        init(generation: String, write: Bool, run: @escaping @MainActor () async throws -> Void, discard: @escaping @MainActor () -> Void) {
+            (self.generation, self.write, self.run, self.discard) = (generation, write, run, discard)
         }
 
         func settle(_ outcome: Result<Void, any Error>) {
