@@ -5,7 +5,7 @@ mod budget;
 mod net;
 
 pub use budget::Priority;
-pub use net::{is_private_host, redact_url};
+pub use net::{is_private_host, is_private_ip, redact_url};
 pub use reqwest::Method;
 pub use reqwest::header::HeaderMap;
 
@@ -162,8 +162,31 @@ impl Default for ClientConfig {
 
 #[derive(Clone)]
 pub struct HttpClient {
+    /// For requests allowed to reach private addresses (local addons).
     inner: reqwest::Client,
+    /// For everything else: names that resolve only to private addresses
+    /// are refused when connecting, so a public name pointing at the LAN,
+    /// a redirect to one, or a DNS answer that changes later cannot reach
+    /// it.
+    public: reqwest::Client,
     budget: Arc<Budget>,
+}
+
+/// Resolves with the system resolver and keeps only public addresses.
+struct PublicOnly;
+
+impl reqwest::dns::Resolve for PublicOnly {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let found = tokio::net::lookup_host((name.as_str(), 0)).await?;
+            let public: Vec<std::net::SocketAddr> =
+                found.filter(|a| !is_private_ip(a.ip())).collect();
+            if public.is_empty() {
+                return Err(format!("{} resolves only to private addresses", name.as_str()).into());
+            }
+            Ok(Box::new(public.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
 }
 
 static CRYPTO: Once = Once::new();
@@ -197,15 +220,18 @@ fn redirect_allowed(first: &Url, next: &Url) -> bool {
 impl HttpClient {
     pub fn new(config: ClientConfig) -> Result<Self, HttpError> {
         install_crypto_provider();
-        let inner = reqwest::Client::builder()
-            .user_agent(config.user_agent)
-            .connect_timeout(config.connect_timeout)
-            .redirect(reqwest::redirect::Policy::custom(redirect))
-            .pool_idle_timeout(Duration::from_secs(90))
-            .build()
-            .map_err(|e| HttpError::Network(e.to_string()))?;
+        let builder = || {
+            reqwest::Client::builder()
+                .user_agent(config.user_agent.clone())
+                .connect_timeout(config.connect_timeout)
+                .redirect(reqwest::redirect::Policy::custom(redirect))
+                .pool_idle_timeout(Duration::from_secs(90))
+        };
+        let build =
+            |b: reqwest::ClientBuilder| b.build().map_err(|e| HttpError::Network(e.to_string()));
         Ok(Self {
-            inner,
+            inner: build(builder())?,
+            public: build(builder().dns_resolver(Arc::new(PublicOnly)))?,
             budget: Arc::new(Budget::new(config.per_host_limit, config.global_limit)),
         })
     }
@@ -328,7 +354,12 @@ impl HttpClient {
         total_timeout: Option<Duration>,
     ) -> Result<reqwest::Response, HttpError> {
         let mut headers = build_headers(&opts.headers, range);
-        let mut request = self.inner.request(method, url);
+        let client = if opts.allow_private {
+            &self.inner
+        } else {
+            &self.public
+        };
+        let mut request = client.request(method, url);
         if let Some(timeout) = total_timeout {
             request = request.timeout(timeout);
         }
@@ -438,6 +469,14 @@ async fn read_capped(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn names_that_resolve_only_to_private_addresses_are_refused() {
+        use reqwest::dns::Resolve;
+        let name = "localhost".parse().unwrap();
+        let err = PublicOnly.resolve(name).await.err().expect("refused");
+        assert!(err.to_string().contains("private"), "{err}");
+    }
 
     #[test]
     fn redirects_never_lead_from_public_to_private() {

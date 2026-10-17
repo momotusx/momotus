@@ -193,3 +193,36 @@ async fn surfaces_retry_after_on_status_errors() {
         other => panic!("{other:?}"),
     }
 }
+
+/// Live: a public name that resolves to loopback (nip.io) is refused unless
+/// the request may reach private addresses. Run with `--ignored`.
+#[tokio::test]
+#[ignore = "network"]
+async fn live_public_name_pointing_at_loopback_is_refused() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buf = [0u8; 1024];
+            let _ = socket.read(&mut buf).await;
+            let _ = socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .await;
+        }
+    });
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let url = format!("http://127.0.0.1.nip.io:{port}/");
+    let public = RequestOptions::default();
+    let err = http.get(&url, &public).await.unwrap_err();
+    println!("public request: {err}");
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let ok = http.get(&url, &local).await.unwrap();
+    assert_eq!(&ok.body[..], b"ok");
+}

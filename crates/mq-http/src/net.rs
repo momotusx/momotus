@@ -16,6 +16,14 @@ pub fn is_private_host(host: &str) -> bool {
     }
 }
 
+/// Loopback, private, link-local and other non-public addresses.
+pub fn is_private_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => is_private_v4(ip),
+        IpAddr::V6(ip) => is_private_v6(ip),
+    }
+}
+
 fn is_private_v4(ip: Ipv4Addr) -> bool {
     ip.is_loopback()
         || ip.is_private()
