@@ -18,7 +18,6 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { focusEl } from "../focus/dom";
 import { bytes, clock, decoded, episodeLabel, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
-import { toVtt } from "../lib/subs";
 import { languageName, qualityText } from "../lib/words";
 import "./player.css";
 
@@ -194,9 +193,12 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     setTrack(null);
     if (!t) return;
     try {
+      // The core serves every track as UTF-8 WebVTT that any origin may
+      // read. A same-origin blob keeps the <video> request free of CORS,
+      // which the media route does not answer.
       const res = await fetch(t.url);
       if (!res.ok) throw new Error(`the subtitle server answered ${res.status}`);
-      const blob = new Blob([toVtt(await res.text())], { type: "text/vtt" });
+      const blob = await res.blob();
       setTrack({ src: URL.createObjectURL(blob), lang: t.lang });
       queueMicrotask(() => {
         const tt = video.textTracks[0];

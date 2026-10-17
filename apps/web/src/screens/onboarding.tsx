@@ -4,7 +4,7 @@ import DoorOpen from "lucide-solid/icons/door-open";
 import Plus from "lucide-solid/icons/plus";
 import Sparkle from "lucide-solid/icons/sparkle";
 import { createSignal, For, onCleanup, Show } from "solid-js";
-import { link, liveView, op, reasonOf } from "../core/client";
+import { link, liveView, op, ping, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import { focusEl } from "../focus/dom";
 import type { Tone } from "../lib/words";
@@ -39,6 +39,12 @@ export default function Onboarding() {
     window.removeEventListener("offline", onNet);
   });
   const [busy, setBusy] = createSignal<string | null>(null);
+  // Liveness from the core itself, every few seconds while this screen is open.
+  const [pingMs, setPingMs] = createSignal<number | null>(null);
+  const check = () => ping().then(setPingMs, () => setPingMs(null));
+  void check();
+  const pinger = setInterval(check, 5000);
+  onCleanup(() => clearInterval(pinger));
   const [note, setNote] = createSignal<{ tone: Tone; text: string } | null>(null);
 
   const focusInstall = () => {
@@ -69,8 +75,8 @@ export default function Onboarding() {
     return [
       {
         label: "Core",
-        tone: link() === "open" ? "ok" : link() === "closed" ? "bad" : "warn",
-        text: link() === "open" ? "Connected" : link() === "closed" ? "Not reachable" : "Connecting",
+        tone: pingMs() !== null ? "ok" : link() === "closed" ? "bad" : "warn",
+        text: pingMs() !== null ? `Connected, answers in ${pingMs()} ms` : link() === "closed" ? "Not reachable" : "Connecting",
       },
       { label: "Network", tone: online() ? "ok" : "bad", text: online() ? "Online" : "Offline" },
       { label: "Display", tone: "ok", text: `${lines >= 2000 ? "4K" : lines >= 1000 ? "1080p" : "720p"}${hdr ? ", HDR" : ""}` },

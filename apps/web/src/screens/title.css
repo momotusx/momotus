@@ -39,9 +39,12 @@
 .eps-head { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; padding-bottom: 16px;
   border-bottom: 2px solid var(--text); }
 .eps-head h2 { font: 600 var(--type-title2) / 1 var(--font-display); }
-.seasons { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: -14px; }
-.seasons .kicker { margin-left: 14px; }
-.seasons .kicker { margin-right: 8px; }
+/* One line of seasons that scrolls sideways when a show has many, so
+ * Specials always follows the last season. Padding leaves room for focus. */
+.seasons { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; align-self: stretch; width: calc(100% + 28px);
+  margin: -24px -14px; padding: 24px 14px; }
+.seasons .kicker { margin-right: 8px; flex: none; }
+.seasons .tab { flex: none; }
 .tab { height: 52px; padding: 0 20px; border-radius: 26px; font: 600 var(--type-callout) / 1 var(--font-text); color: var(--muted); }
 .seasons.compact .tab { min-width: 52px; padding: 0 14px; text-align: center; }
 .tab.on { color: var(--text); box-shadow: inset 0 0 0 2px var(--text); }

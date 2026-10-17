@@ -159,12 +159,46 @@ export function titleView(kind: string, id: string): TitleView {
   return { state, command: (c) => command(c) };
 }
 
-/** What this screen can show, for the versions ranking. */
-export function displayCaps(): { displayHeight: number; hdr: string[] } {
+export interface DeviceCaps {
+  displayHeight: number;
+  hdr: string[];
+  decoders: string[];
+  tenBitHevc: boolean;
+  passthrough: string[];
+  hasFallbackEngine: boolean;
+}
+
+// Codec names as the core's ranking expects them, with a probe for each.
+const DECODERS: [name: string, type: string][] = [
+  ["h264", 'video/mp4; codecs="avc1.640028"'],
+  ["h265", 'video/mp4; codecs="hvc1.1.6.L120.90"'],
+  ["av1", 'video/mp4; codecs="av01.0.08M.08"'],
+  ["vp9", 'video/webm; codecs="vp9"'],
+];
+
+const decodes = (type: string) =>
+  (typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(type)) || document.createElement("video").canPlayType(type) === "probably";
+
+/** What this browser can show and decode, so Versions ranks for it. A web
+ * player decodes audio itself (no passthrough) and has no second engine. */
+export function displayCaps(): DeviceCaps {
   const lines = Math.min(screen.width, screen.height) * (window.devicePixelRatio || 1);
-  const displayHeight = lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : 720;
-  const hdr = matchMedia("(dynamic-range: high)").matches ? ["hdr10", "hlg"] : [];
-  return { displayHeight, hdr };
+  return {
+    displayHeight: lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : 720,
+    hdr: matchMedia("(dynamic-range: high)").matches ? ["hdr10", "hlg"] : [],
+    decoders: DECODERS.filter(([, type]) => decodes(type)).map(([name]) => name),
+    tenBitHevc: decodes('video/mp4; codecs="hvc1.2.4.L120.90"'),
+    passthrough: [],
+    hasFallbackEngine: false,
+  };
+}
+
+/** Round trip to the core in milliseconds (`ping` answers from the request
+ * loop at once, so this measures the link, not the network). */
+export async function ping(): Promise<number> {
+  const t0 = performance.now();
+  await op("ping");
+  return Math.round(performance.now() - t0);
 }
 
 export interface VersionsParams {

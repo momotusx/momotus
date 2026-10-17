@@ -254,7 +254,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
     <section class="eps" aria-label="Episodes">
       <header class="eps-head">
         <h2>Episodes</h2>
-        <div class="seasons" role="tablist" aria-label="Seasons" data-fgroup="seasons" classList={{ compact: compact() }}>
+        <div class="seasons" role="tablist" aria-label="Seasons" data-fgroup="seasons" data-hscroll="80" classList={{ compact: compact() }}>
           <Show when={compact()}>
             <span class="kicker">Season</span>
           </Show>

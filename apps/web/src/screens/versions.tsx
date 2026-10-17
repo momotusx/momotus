@@ -88,7 +88,8 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
     setOpen(next);
   };
   const caps = displayCaps();
-  const device = `This screen: ${caps.displayHeight >= 2160 ? "4K" : `${caps.displayHeight}p`}${caps.hdr.length ? ", HDR" : ""}`;
+  const codecNames: Record<string, string> = { h264: "H.264", h265: "HEVC", av1: "AV1", vp9: "VP9" };
+  const device = `This screen: ${caps.displayHeight >= 2160 ? "4K" : `${caps.displayHeight}p`}${caps.hdr.length ? ", HDR" : ""}, plays ${caps.decoders.map((d) => codecNames[d] ?? d).join(", ")}`;
   const progress = () => {
     const s = snap();
     if (!s) return { tone: "idle", text: "Opening" };
@@ -178,7 +179,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                     <dt>Via</dt>
                     <dd>{p().via}</dd>
                     <Show when={p().features.length > 1}>
-                      <dt>Sound and picture</dt>
+                      <dt>Features</dt>
                       <dd>{p().features.join(", ")}</dd>
                     </Show>
                     <Show when={p().languages.length}>

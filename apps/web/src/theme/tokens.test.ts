@@ -8,4 +8,7 @@ test("tokens.css matches design/tokens.json (run `bun run tokens`)", () => {
   expect(css).toContain("--accent: #FFB547;");
   expect(css).toContain('--font-display: "Fraunces Variable", Fraunces, Georgia, serif;');
   expect(css).toMatch(/:root\[data-form="phone"\] \{\n {2}--type-hero: 34px;/);
+  // The light theme gets a crisp 3 px line, the dark theme a soft 14 px halo.
+  expect(css).toMatch(/:root\[data-theme="light"\] \{[^}]*--focus-halo: 3px;/);
+  expect(css).toMatch(/:root \{[^}]*--focus-halo: 14px;/);
 });
