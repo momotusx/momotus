@@ -1719,6 +1719,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-engine-sched"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
 name = "mq-ffi"
 version = "0.1.0"
 dependencies = [

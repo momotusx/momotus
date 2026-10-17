@@ -1,0 +1,11 @@
+[package]
+name = "mq-engine-sched"
+description = "Deterministic streaming scheduler (DWH) for the Marquee torrent engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+proptest = "1"
