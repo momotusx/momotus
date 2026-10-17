@@ -80,7 +80,7 @@ fun PhoneHome(
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
-        contentPadding = PaddingValues(top = Marquee.safe.top, bottom = Marquee.space.l),
+        contentPadding = PaddingValues(top = Marquee.safe.top, bottom = Marquee.space.l + LocalBarSpace.current),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         val hero = home.hero

@@ -1,21 +1,42 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package app.marquee.ui.phone
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.core.route.TOP_LEVEL
@@ -27,9 +48,15 @@ import app.marquee.design.TextRole
 import app.marquee.design.focusSelectable
 
 /**
- * The phone frame: the screen above a bottom bar with the five top-level places, each an icon with
- * its label. The bar sits above the system navigation bar and is hidden on pages that take the
- * whole screen (a title page, the player).
+ * How much of the bottom the floating bar covers (its height, margin and the system navigation
+ * bar), so a screen pads its list to scroll clear of it. Zero where there is no bar.
+ */
+val LocalBarSpace = compositionLocalOf { 0.dp }
+
+/**
+ * The phone frame (plans/android-design-v2.md section 3): the screen fills the window and a
+ * floating glass bar with the top-level places sits above the system navigation bar. The bar
+ * shows on top-level places only and hides while the keyboard is up.
  */
 @Composable
 fun PhoneShell(
@@ -39,9 +66,21 @@ fun PhoneShell(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Column(modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
-        if (showTabs) PhoneTabs(selected, onSelect)
+    val showBar = showTabs && !WindowInsets.isImeVisible
+    val inset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val space: Dp = if (showBar) BAR_HEIGHT + BAR_MARGIN * 2 + inset else 0.dp
+    Box(modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalBarSpace provides space) { content() }
+        if (showBar) {
+            PhoneBar(
+                selected,
+                onSelect,
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = BAR_MARGIN),
+            )
+        }
     }
 }
 
@@ -59,32 +98,52 @@ private val places =
         Route.Settings to Place("Settings", Icons.Settings),
     )
 
+/** Browsing places first, then the tools, as on the web and Apple. */
+private val order = listOf(Route.Home, Route.Discover, Route.Library, Route.Search, Route.Settings)
+
 @Composable
-private fun PhoneTabs(
+private fun PhoneBar(
     selected: Route,
     onSelect: (Route) -> Unit,
+    modifier: Modifier,
 ) {
     val colors = Marquee.colors
-    Column(Modifier.fillMaxWidth().background(colors.bg).navigationBarsPadding()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
-        Row(Modifier.fillMaxWidth().height(TAB_HEIGHT)) {
-            for (route in TOP_LEVEL) {
-                val place = places.getValue(route)
-                val isSelected = route == selected
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .focusSelectable(isSelected, { onSelect(route) }, Role.Tab),
-                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    MqIcon(place.icon, tint = if (isSelected) colors.text else colors.muted)
+    // Narrow screens and large text keep the icons; each keeps its label as its spoken name.
+    val compact = LocalConfiguration.current.screenWidthDp < 360 || LocalDensity.current.fontScale > 1.3f
+    val shape = RoundedCornerShape(Marquee.radius.l)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(BAR_HEIGHT)
+            .clip(shape)
+            // Opaque: Android blurs no content behind a node, and the translucent glass let the
+            // text under the bar show through it (seen on the emulator).
+            .background(colors.glassStrong.compositeOver(colors.bg))
+            .border(1.dp, colors.control, shape)
+            .padding(6.dp),
+    ) {
+        for (route in order.filter { it in TOP_LEVEL }) {
+            val place = places.getValue(route)
+            val isSelected = route == selected
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(Marquee.radius.m))
+                    .background(if (isSelected) colors.text.copy(alpha = 0.12f) else Color.Transparent)
+                    .semantics { contentDescription = place.label }
+                    .focusSelectable(isSelected, { onSelect(route) }, Role.Tab),
+                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                MqIcon(place.icon, tint = if (isSelected) colors.text else colors.muted)
+                if (!compact) {
                     MqText(
                         place.label,
+                        modifier = Modifier.clearAndSetSemantics { },
                         role = TextRole.Caption,
                         color = if (isSelected) colors.text else colors.muted,
-                        weight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        weight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                         maxLines = 1,
                     )
                 }
@@ -93,4 +152,5 @@ private fun PhoneTabs(
     }
 }
 
-private val TAB_HEIGHT = 64.dp
+private val BAR_HEIGHT = 64.dp
+private val BAR_MARGIN = 12.dp
