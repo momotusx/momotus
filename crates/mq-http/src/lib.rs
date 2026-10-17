@@ -259,8 +259,60 @@ impl HttpClient {
             return Err(HttpError::BlockedPrivate(host));
         }
         let _permit = self.budget.acquire(&host, opts.priority).await;
+        let response = self
+            .open(method, url, body, opts, range, Some(opts.timeout))
+            .await?;
+        read_capped(response, opts).await
+    }
+
+    /// Streams a response body without buffering it, for playback. The
+    /// per-host permit is held until the body is dropped; `opts.timeout` is an
+    /// idle timeout between chunks, not a total limit. Non-2xx statuses are
+    /// returned as responses so a proxy can pass them through.
+    pub async fn stream(
+        &self,
+        url: &str,
+        range: Option<String>,
+        opts: &RequestOptions,
+    ) -> Result<StreamingResponse, HttpError> {
+        let parsed = Url::parse(url).map_err(|_| HttpError::InvalidUrl(redact_str(url)))?;
+        let host = parsed.host_str().unwrap_or_default().to_owned();
+        if !opts.allow_private && is_private_host(&host) {
+            return Err(HttpError::BlockedPrivate(host));
+        }
+        let permit = self.budget.acquire(&host, opts.priority).await;
+        let response = self
+            .open(Method::GET, parsed, None, opts, range, None)
+            .await?;
+        let status = response.status().as_u16();
+        let headers = response.headers().clone();
+        let idle = opts.timeout;
+        let body = response
+            .bytes_stream()
+            .map(move |chunk| chunk.map_err(|e| HttpError::from_reqwest(e, idle)));
+        Ok(StreamingResponse {
+            status,
+            headers,
+            body: Box::pin(body),
+            idle,
+            _permit: permit,
+        })
+    }
+
+    async fn open(
+        &self,
+        method: Method,
+        url: Url,
+        body: Option<Body>,
+        opts: &RequestOptions,
+        range: Option<String>,
+        total_timeout: Option<Duration>,
+    ) -> Result<reqwest::Response, HttpError> {
         let mut headers = build_headers(&opts.headers, range);
-        let mut request = self.inner.request(method, url).timeout(opts.timeout);
+        let mut request = self.inner.request(method, url);
+        if let Some(timeout) = total_timeout {
+            request = request.timeout(timeout);
+        }
         if let Some(body) = body {
             let (content_type, bytes) = body.encode();
             if let Ok(value) = HeaderValue::try_from(content_type) {
@@ -269,11 +321,29 @@ impl HttpClient {
             request = request.body(bytes);
         }
         let request = request.headers(headers);
-        let response = request
+        request
             .send()
             .await
-            .map_err(|e| HttpError::from_reqwest(e, opts.timeout))?;
-        read_capped(response, opts).await
+            .map_err(|e| HttpError::from_reqwest(e, opts.timeout))
+    }
+}
+
+/// A response whose body arrives as a stream of chunks.
+pub struct StreamingResponse {
+    pub status: u16,
+    pub headers: HeaderMap,
+    body: std::pin::Pin<Box<dyn futures_util::Stream<Item = Result<Bytes, HttpError>> + Send>>,
+    idle: Duration,
+    _permit: budget::Permit,
+}
+
+impl StreamingResponse {
+    /// Next chunk, or `Timeout` when the origin stalls past the idle limit.
+    pub async fn next_chunk(&mut self) -> Option<Result<Bytes, HttpError>> {
+        match tokio::time::timeout(self.idle, self.body.next()).await {
+            Ok(chunk) => chunk,
+            Err(_) => Some(Err(HttpError::Timeout(self.idle))),
+        }
     }
 }
 

@@ -1823,6 +1823,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "futures-util",
+ "getrandom 0.3.4",
+ "mq-http",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
