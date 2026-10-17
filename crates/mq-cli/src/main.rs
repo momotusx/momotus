@@ -10,6 +10,8 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+mod play;
+
 #[derive(Parser)]
 #[command(name = "mq", about = "Marquee core driver")]
 struct Cli {
@@ -36,6 +38,14 @@ enum Command {
     },
     /// Query every stream addon for a title, e.g. `movie tt0111161` or `series tt0944947:1:1`.
     Streams { kind: String, id: String },
+    /// Probe an http(s) stream, play it in mpv and report time to first frame.
+    PlayUrl {
+        url: String,
+        #[arg(long)]
+        headless: bool,
+        #[arg(long, default_value_t = 5)]
+        seconds: u64,
+    },
 }
 
 #[tokio::main]
@@ -54,6 +64,13 @@ async fn main() {
         Command::Addons => addons(&core),
         Command::Home { timeout_secs } => home(&core, Duration::from_secs(timeout_secs)).await,
         Command::Streams { kind, id } => streams(&core, kind, id).await,
+        Command::PlayUrl {
+            url,
+            headless,
+            seconds,
+        } => play::play_url(&url, play::PlayOptions { headless, seconds })
+            .await
+            .map(emit),
     };
     if let Err(e) = result {
         fail(&e);
@@ -65,7 +82,7 @@ fn fail(message: &str) -> ! {
     std::process::exit(1);
 }
 
-fn emit(value: serde_json::Value) {
+pub(crate) fn emit(value: serde_json::Value) {
     println!("{value}");
 }
 

@@ -13,8 +13,10 @@ path = "src/main.rs"
 mq-runtime = { path = "../mq-runtime" }
 mq-addons = { path = "../mq-addons" }
 mq-protocol = { path = "../mq-protocol" }
+mq-http = { path = "../mq-http" }
+mq-media = { path = "../mq-media" }
 clap = { version = "4", features = ["derive", "env"] }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["process", "net", "io-util"] }
 futures-util = "0.3"
 serde.workspace = true
 serde_json.workspace = true

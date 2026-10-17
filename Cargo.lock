@@ -1695,6 +1695,8 @@ dependencies = [
  "clap",
  "futures-util",
  "mq-addons",
+ "mq-http",
+ "mq-media",
  "mq-protocol",
  "mq-runtime",
  "serde",
