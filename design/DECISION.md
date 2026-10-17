@@ -12,7 +12,7 @@ Minimal, dark, glass. One cool near-black page, translucent surfaces with a cool
 | Surfaces | Glass: `glass` rgba(13,18,25,.58) or `glassStrong` rgba(9,13,19,.84), backdrop blur 18 px with saturate 1.08, a 1 px `edge` rgba(215,232,255,.13), a top highlight `inset 0 1px 0 rgba(255,255,255,.055)`, shadow `0 18px 48px rgba(0,0,0,.24)`. Solid fallbacks where blur is unavailable: `surface` #0C1118, `raised` #141B24 |
 | Text | White by level: `text` #FFFFFF, `muted` #DCDDDD, `dim` #AAABAD. Never grey on grey |
 | Primary action | One per screen (Play, Resume, Play again, Install): a white pill (`primary` #FFFFFF, `onPrimary` #0A0A0C), weight 650. Secondary actions are round or pill glass buttons with a `control` #626A73 edge (3.63:1 on `bg`) |
-| Accent | `accent` #E5372A (4.66:1 on `bg`): the focus ring, the active tab marker, eyebrow labels, a focused or hovered title, Skip and progress. Never a large fill |
+| Accent | `accent` #E5372A (4.66:1 on `bg`, 4.43:1 on `surface`, 4.05:1 on `raised`): the focus ring, the active tab marker, eyebrow labels, a focused or hovered title, Skip and progress. Never a large fill. Accent text sits on `bg` only; over artwork an eyebrow is a chip filled with `bg` (as flystream's spotlight chip), since even a 90% scrim over light art leaves accent at 3.7:1 |
 | Ratings | `star` #F5C518, only beside a number |
 | Type | Inter (OFL) everywhere. Display weight 800 at tracking -0.035em; headings 800 at -0.025em; labels 650 at -0.01em; body 400. TV and phone sizes stay as in `type` |
 | Radii | Posters `m` 12, cards and rows `card` 14, panels `l` 18, the home hero card `hero` 22, pills 999 |
