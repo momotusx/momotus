@@ -294,15 +294,6 @@ mod tests {
         // Long since written: the rows sit in the database file itself.
         lib.checkpoint();
 
-        lib.delete_profile("x", &hlc(3)).unwrap();
-        let gone = SyncRecord {
-            coll: crate::sync::coll::PROFILE_GONE,
-            key: "z".into(),
-            value: serde_json::json!({"profile": "z"}),
-            hlc: hlc(4),
-        };
-        lib.apply(&[gone]).unwrap();
-
         let found = |text: &str| {
             ["", "-wal"].iter().any(|suffix| {
                 let mut file = path.clone().into_os_string();
@@ -311,9 +302,21 @@ mod tests {
                 bytes.windows(text.len()).any(|w| w == text.as_bytes())
             })
         };
+        assert!(found("SECRET-local"), "the search really reads the files");
+
+        // Each kind of removal is checked before the next one runs.
+        lib.delete_profile("x", &hlc(3)).unwrap();
         assert!(!found("SECRET-local"), "a local removal left text behind");
+        assert!(found("SECRET-synced"));
+        let gone = SyncRecord {
+            coll: crate::sync::coll::PROFILE_GONE,
+            key: "z".into(),
+            value: serde_json::json!({"profile": "z"}),
+            hlc: hlc(4),
+        };
+        lib.apply(&[gone]).unwrap();
         assert!(!found("SECRET-synced"), "a synced removal left text behind");
-        assert!(found("kept-0d2e"), "the search really reads the files");
+        assert!(found("kept-0d2e"), "other profiles stay");
         drop(lib);
         let _ = std::fs::remove_dir_all(dir);
     }
