@@ -31,6 +31,18 @@ pub enum Table {
 }
 
 impl Table {
+    /// Every table, for listeners that missed changes and must refresh all.
+    pub const ALL: [Table; 8] = [
+        Table::Profiles,
+        Table::Addons,
+        Table::LibraryItems,
+        Table::Progress,
+        Table::Watched,
+        Table::StreamMemory,
+        Table::Settings,
+        Table::SearchHistory,
+    ];
+
     fn from_name(name: &str) -> Option<Self> {
         Some(match name {
             "profiles" => Table::Profiles,
@@ -270,6 +282,26 @@ impl Library {
             local(c, coll::WATCHED, &[profile, video_id], hlc, |h| {
                 sql::set_watched(c, profile, item_id, video_id, watched, h)
             })
+        })
+    }
+
+    /// Which of `video_ids` are watched, in one read.
+    pub fn watched_among(
+        &self,
+        profile: &str,
+        video_ids: &[&str],
+    ) -> Result<std::collections::HashSet<String>, LibraryError> {
+        if video_ids.is_empty() {
+            return Ok(Default::default());
+        }
+        self.read(|c| {
+            let marks = vec!["?"; video_ids.len()].join(",");
+            let mut stmt = c.prepare(&format!(
+                "SELECT video_id FROM watched WHERE profile_id = ? AND watched = 1 AND video_id IN ({marks})"
+            ))?;
+            let args = std::iter::once(&profile).chain(video_ids.iter());
+            stmt.query_map(rusqlite::params_from_iter(args), |r| r.get(0))?
+                .collect()
         })
     }
 

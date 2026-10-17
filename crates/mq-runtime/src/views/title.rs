@@ -304,7 +304,7 @@ async fn watch_library(ctx: Ctx) {
     let mut changes = ctx.core.library().subscribe();
     // Catch writes made between open and this subscription.
     ctx.render();
-    while let Ok(tables) = changes.recv().await {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables
             .iter()
             .any(|t| matches!(t, Table::Progress | Table::Watched | Table::LibraryItems))

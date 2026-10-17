@@ -164,6 +164,9 @@ struct State {
     source: u64,
     /// The source and duration the current skip lookup is for.
     lookup: Option<(u64, u64)>,
+    /// The running skip lookup; started and replaced under the state lock,
+    /// so an older report can never abort a newer lookup.
+    segments_task: Option<JoinHandle<()>>,
 }
 
 pub struct PlaybackView {
@@ -172,7 +175,6 @@ pub struct PlaybackView {
     snapshot: SharedObservable<PlaybackSnapshot>,
     state: Arc<Mutex<State>>,
     task: Mutex<Option<JoinHandle<()>>>,
-    segments_task: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl PlaybackView {
@@ -215,9 +217,9 @@ impl PlaybackView {
                 dirty: false,
                 source: 0,
                 lookup: None,
+                segments_task: None,
             })),
             task: Mutex::new(None),
-            segments_task: Mutex::new(None),
         };
         view.spawn_resolve();
         view
@@ -259,9 +261,6 @@ impl PlaybackView {
             clear_segments(&mut s);
             self.snapshot.set(s.snapshot.clone());
         }
-        if let Some(task) = lock(&self.segments_task).take() {
-            task.abort();
-        }
         self.spawn_resolve();
     }
 
@@ -277,8 +276,8 @@ impl PlaybackView {
         let Some(target) = Target::from_ids(&t.kind, &t.item_id, &t.video_id) else {
             return;
         };
-        let lookup = {
-            let mut s = lock(&self.state);
+        let mut s = lock(&self.state);
+        {
             if s.snapshot.phase != PlaybackPhase::Ready || s.snapshot.key.as_deref() != Some(key) {
                 return;
             }
@@ -288,15 +287,15 @@ impl PlaybackView {
             {
                 return;
             }
-            let lookup = (s.source, duration_ms);
-            s.lookup = Some(lookup);
-            if !s.snapshot.segments.is_empty() || s.snapshot.next_at_ms.is_some() {
-                s.snapshot.segments.clear();
-                s.snapshot.next_at_ms = None;
-                self.snapshot.set(s.snapshot.clone());
-            }
-            lookup
-        };
+        }
+        let lookup = (s.source, duration_ms);
+        s.lookup = Some(lookup);
+        if !s.snapshot.segments.is_empty() || s.snapshot.next_at_ms.is_some() {
+            s.snapshot.segments.clear();
+            s.snapshot.next_at_ms = None;
+            self.snapshot.set(s.snapshot.clone());
+        }
+        // Spawning does not block, so it happens under the lock.
         let task = tokio::spawn(find_segments(
             self.core.clone(),
             self.state.clone(),
@@ -304,7 +303,7 @@ impl PlaybackView {
             target,
             lookup,
         ));
-        if let Some(old) = lock(&self.segments_task).replace(task) {
+        if let Some(old) = s.segments_task.replace(task) {
             old.abort();
         }
     }
@@ -354,10 +353,11 @@ impl PlaybackView {
 
 impl Drop for PlaybackView {
     fn drop(&mut self) {
-        for task in [&self.task, &self.segments_task] {
-            if let Some(task) = lock(task).take() {
-                task.abort();
-            }
+        if let Some(task) = lock(&self.task).take() {
+            task.abort();
+        }
+        if let Some(task) = lock(&self.state).segments_task.take() {
+            task.abort();
         }
         self.save();
         release_all(&mut lock(&self.state));
@@ -368,6 +368,9 @@ impl Drop for PlaybackView {
 fn clear_segments(s: &mut State) {
     s.source += 1;
     s.lookup = None;
+    if let Some(task) = s.segments_task.take() {
+        task.abort();
+    }
     s.snapshot.segments.clear();
     s.snapshot.next_at_ms = None;
 }

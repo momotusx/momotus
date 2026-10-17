@@ -233,7 +233,12 @@ impl Owner {
                         && let Some(series) = self.series.get_mut(&item_id)
                         && series.generation == generation
                     {
-                        series.outcome = outcome;
+                        // A refresh that fails keeps the episodes it had.
+                        let keep = matches!(outcome, Outcome::Failed(_))
+                            && matches!(series.outcome, Outcome::Ready(_));
+                        if !keep {
+                            series.outcome = outcome;
+                        }
                         series.fetched_at = Some(Instant::now());
                     }
                     self.start_fetches();
@@ -345,7 +350,7 @@ fn render(core: &Core, today: NaiveDate, series: &HashMap<String, Series>) -> Ca
     let last = today
         .checked_add_days(Days::new(FUTURE_DAYS))
         .unwrap_or(today);
-    let mut items = Vec::new();
+    let mut inside: Vec<(&String, &Series, &Candidate)> = Vec::new();
     let (mut pending, mut failed, mut no_schedule) = (0, Vec::new(), Vec::new());
     for (item_id, s) in series {
         match &s.outcome {
@@ -360,35 +365,34 @@ fn render(core: &Core, today: NaiveDate, series: &HashMap<String, Series>) -> Ca
                 name: s.name.clone(),
                 reason: None,
             }),
-            Outcome::Ready(candidates) => {
-                let inside: Vec<&Candidate> = candidates
+            Outcome::Ready(candidates) => inside.extend(
+                candidates
                     .iter()
                     .filter(|c| (first..=last).contains(&c.date))
-                    .collect();
-                if inside.is_empty() {
-                    continue;
-                }
-                let watched: HashSet<String> = core
-                    .library()
-                    .watched_videos(core.profile(), item_id)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .collect();
-                items.extend(inside.into_iter().map(|c| CalendarItem {
-                    item_id: item_id.clone(),
-                    video_id: c.video_id.clone(),
-                    name: s.name.clone(),
-                    season: c.season,
-                    episode: c.episode,
-                    title: c.title.clone(),
-                    date: c.date.to_string(),
-                    poster: s.poster.clone(),
-                    still: c.still.clone(),
-                    watched: watched.contains(&c.video_id),
-                }));
-            }
+                    .map(|c| (item_id, s, c)),
+            ),
         }
     }
+    let ids: Vec<&str> = inside.iter().map(|(_, _, c)| c.video_id.as_str()).collect();
+    let watched = core
+        .library()
+        .watched_among(core.profile(), &ids)
+        .unwrap_or_default();
+    let mut items: Vec<CalendarItem> = inside
+        .into_iter()
+        .map(|(item_id, s, c)| CalendarItem {
+            item_id: item_id.clone(),
+            video_id: c.video_id.clone(),
+            name: s.name.clone(),
+            season: c.season,
+            episode: c.episode,
+            title: c.title.clone(),
+            date: c.date.to_string(),
+            poster: s.poster.clone(),
+            still: c.still.clone(),
+            watched: watched.contains(&c.video_id),
+        })
+        .collect();
     items.sort_by(|a, b| {
         (&a.date, &a.name, a.season, a.episode, &a.video_id).cmp(&(
             &b.date,
@@ -408,8 +412,10 @@ fn render(core: &Core, today: NaiveDate, series: &HashMap<String, Series>) -> Ca
             }),
         }
     }
-    failed.sort_by(|a, b| a.name.cmp(&b.name));
-    no_schedule.sort_by(|a, b| a.name.cmp(&b.name));
+    let by_name =
+        |a: &CalendarSeries, b: &CalendarSeries| (&a.name, &a.item_id).cmp(&(&b.name, &b.item_id));
+    failed.sort_by(by_name);
+    no_schedule.sort_by(by_name);
     CalendarSnapshot {
         today: today.to_string(),
         days,

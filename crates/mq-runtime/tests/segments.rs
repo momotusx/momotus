@@ -262,3 +262,67 @@ async fn live_skip_sources() {
         );
     }
 }
+
+/// A source that fails once is asked again next time, not remembered as a
+/// title without segments.
+#[tokio::test]
+async fn a_failed_lookup_is_not_remembered() {
+    use mq_runtime::segments::Target;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = calls.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let n = seen.fetch_add(1, Ordering::SeqCst);
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let body = r#"{"intro":[{"start_ms":null,"end_ms":90000}]}"#;
+                let resp = if n == 0 {
+                    "HTTP/1.1 503 Busy\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                } else {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                };
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    let core = Core::temporary("p").unwrap();
+    let base = format!("http://{addr}");
+    core.segments().set_hosts(Hosts {
+        theintrodb: base.clone(),
+        introdb: base.clone(),
+        aniskip: base.clone(),
+        kitsu: base,
+        local: true,
+    });
+    let target = Target::from_ids("movie", "tt1727587", "tt1727587").unwrap();
+    assert!(
+        core.segments()
+            .primary(&target, DURATION)
+            .await
+            .segments
+            .is_empty()
+    );
+    let second = core.segments().primary(&target, DURATION).await;
+    assert_eq!(second.segments.len(), 1, "asked again after the failure");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn imdb_ids_are_tt_and_digits_only() {
+    use mq_runtime::segments::Target;
+    assert!(Target::from_ids("movie", "tt1&x=1", "tt1&x=1").is_none());
+    assert!(Target::from_ids("series", "tt1", "tt1#a:1:2").is_none());
+    assert!(Target::from_ids("movie", "tt12345678901", "tt12345678901").is_none());
+    assert!(Target::from_ids("movie", "tt0111161", "tt0111161").is_some());
+}

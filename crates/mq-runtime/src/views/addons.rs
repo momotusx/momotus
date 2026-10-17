@@ -89,7 +89,7 @@ async fn watch(
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
     snapshot: SharedObservable<AddonsSnapshot>,
 ) {
-    while let Ok(tables) = changes.recv().await {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables.contains(&Table::Addons) {
             let next = list(&core);
             if next != snapshot.get() {

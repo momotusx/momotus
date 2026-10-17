@@ -76,7 +76,7 @@ impl Target {
             return Some(Target::Kitsu { id, episode });
         }
         let mut parts = video_id.split(':');
-        let imdb = parts.next().filter(|id| id.starts_with("tt"))?.to_owned();
+        let imdb = parts.next().filter(|id| is_imdb(id))?.to_owned();
         match (parts.next(), parts.next()) {
             (Some(season), Some(episode)) => Some(Target::Episode {
                 imdb,
@@ -87,6 +87,21 @@ impl Target {
             _ => None,
         }
     }
+}
+
+/// `tt` and 1 to 10 digits: the only ids that go into a source's query.
+fn is_imdb(id: &str) -> bool {
+    id.strip_prefix("tt")
+        .is_some_and(|d| (1..=10).contains(&d.len()) && d.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// What a source answered.
+enum Got {
+    Body(Value),
+    /// A real "not found" (404).
+    Miss,
+    /// Timed out, failed, refused (429), or not JSON: say nothing yet.
+    Failed,
 }
 
 /// Where each database answers; tests point these at a local server.
@@ -163,6 +178,10 @@ impl Finder {
             }
             Target::Kitsu { id, episode } => self.aniskip(*id, *episode, duration_ms).await,
         };
+        // A failure is not remembered: the next playback asks again.
+        let Some(raw) = raw else {
+            return Found::default();
+        };
         let segments = normalize(raw, duration_ms);
         let next_at_ms = segments
             .iter()
@@ -195,7 +214,7 @@ impl Finder {
             Target::Kitsu { .. } => return Vec::new(),
         };
         let host = lock(&self.hosts).introdb.clone();
-        let Some(body) = self
+        let Got::Body(body) = self
             .get("IntroDB", &format!("{host}/segments?{query}"))
             .await
         else {
@@ -208,7 +227,7 @@ impl Finder {
         normalize(raw, duration_ms)
     }
 
-    async fn theintrodb(&self, target: &Target, duration_ms: u64) -> Vec<Raw> {
+    async fn theintrodb(&self, target: &Target, duration_ms: u64) -> Option<Vec<Raw>> {
         let query = match target {
             Target::Movie { imdb } => format!("imdb_id={imdb}"),
             Target::Episode {
@@ -216,19 +235,20 @@ impl Finder {
                 season,
                 episode,
             } => format!("imdb_id={imdb}&season={season}&episode={episode}"),
-            Target::Kitsu { .. } => return Vec::new(),
+            Target::Kitsu { .. } => return Some(Vec::new()),
         };
         let host = lock(&self.hosts).theintrodb.clone();
         let url = format!("{host}/v3/media?{query}&duration_ms={duration_ms}");
-        self.get("TheIntroDB", &url)
-            .await
-            .map(|body| theintrodb_segments(&body))
-            .unwrap_or_default()
+        match self.get("TheIntroDB", &url).await {
+            Got::Body(body) => Some(theintrodb_segments(&body)),
+            Got::Miss => Some(Vec::new()),
+            Got::Failed => None,
+        }
     }
 
-    async fn aniskip(&self, kitsu: u64, episode: u32, duration_ms: u64) -> Vec<Raw> {
-        let Some(mut mal) = self.mal_id(kitsu).await else {
-            return Vec::new();
+    async fn aniskip(&self, kitsu: u64, episode: u32, duration_ms: u64) -> Option<Vec<Raw>> {
+        let Some(mut mal) = self.mal_id(kitsu).await? else {
+            return Some(Vec::new());
         };
         let host = lock(&self.hosts).aniskip.clone();
         // Split cours: a later part's episodes can live under another MAL id.
@@ -236,8 +256,11 @@ impl Finder {
         let mut seen = vec![mal];
         for _ in 0..3 {
             let url = format!("{host}/v2/relation-rules/{mal}");
-            let Some(rules) = self.get("AniSkip", &url).await else {
-                break;
+            let rules = match self.get("AniSkip", &url).await {
+                Got::Body(rules) => rules,
+                Got::Miss => break,
+                // Without the rules the episode may be the wrong one.
+                Got::Failed => return None,
             };
             match relation_target(&rules, episode) {
                 Some((next, next_episode)) if !seen.contains(&next) => {
@@ -251,35 +274,41 @@ impl Finder {
             "{host}/v2/skip-times/{mal}/{episode}?types=op&types=ed&types=recap&types=mixed-op&types=mixed-ed&episodeLength={}",
             duration_ms / 1000
         );
-        self.get("AniSkip", &url)
-            .await
-            .map(|body| aniskip_segments(&body, duration_ms))
-            .unwrap_or_default()
+        match self.get("AniSkip", &url).await {
+            Got::Body(body) => Some(aniskip_segments(&body, duration_ms)),
+            Got::Miss => Some(Vec::new()),
+            Got::Failed => None,
+        }
     }
 
-    async fn mal_id(&self, kitsu: u64) -> Option<u64> {
+    /// The MAL id of a Kitsu entry: `Some(None)` when Kitsu has no single
+    /// mapping, `None` when Kitsu could not be asked.
+    async fn mal_id(&self, kitsu: u64) -> Option<Option<u64>> {
         if let Some(known) = lock(&self.memory).mal.get(&kitsu) {
-            return *known;
+            return Some(*known);
         }
         let host = lock(&self.hosts).kitsu.clone();
         let url = format!(
             "{host}/api/edge/anime/{kitsu}/mappings?filter%5BexternalSite%5D=myanimelist/anime&page%5Blimit%5D=20"
         );
-        let body = self.get("Kitsu", &url).await?;
-        let mal = kitsu_mal(&body);
+        let mal = match self.get("Kitsu", &url).await {
+            Got::Body(body) => kitsu_mal(&body),
+            Got::Miss => None,
+            Got::Failed => return None,
+        };
         lock(&self.memory).mal.insert(kitsu, mal);
-        mal
+        Some(mal)
     }
 
-    /// GETs JSON from a source; any failure is a miss. A 429 rests the
-    /// source for its `Retry-After`, else an hour.
-    async fn get(&self, source: &'static str, url: &str) -> Option<Value> {
+    /// GETs JSON from a source. A 429 rests the source for its
+    /// `Retry-After` (at most a day), else an hour.
+    async fn get(&self, source: &'static str, url: &str) -> Got {
         if lock(&self.memory)
             .resting
             .get(source)
             .is_some_and(|until| Instant::now() < *until)
         {
-            return None;
+            return Got::Failed;
         }
         let opts = RequestOptions {
             timeout: REQUEST_TIMEOUT,
@@ -288,21 +317,22 @@ impl Finder {
             ..Default::default()
         };
         match self.http.get(url, &opts).await {
-            Ok(response) => response.json().ok(),
+            Ok(response) => response.json().map_or(Got::Failed, Got::Body),
+            Err(HttpError::Status { status: 404, .. }) => Got::Miss,
             Err(HttpError::Status {
                 status: 429,
                 retry_after,
                 ..
             }) => {
-                let rest = retry_after.unwrap_or(REST);
-                lock(&self.memory)
-                    .resting
-                    .insert(source, Instant::now() + rest);
-                None
+                let rest = retry_after.unwrap_or(REST).min(Duration::from_secs(86_400));
+                if let Some(until) = Instant::now().checked_add(rest) {
+                    lock(&self.memory).resting.insert(source, until);
+                }
+                Got::Failed
             }
             Err(e) => {
                 tracing::debug!("{source} skip lookup failed: {e}");
-                None
+                Got::Failed
             }
         }
     }
@@ -409,15 +439,18 @@ fn kitsu_mal(body: &Value) -> Option<u64> {
 /// Where AniSkip's relation rules move `episode` of this MAL entry.
 fn relation_target(body: &Value, episode: u32) -> Option<(u64, u32)> {
     body["rules"].as_array()?.iter().find_map(|rule| {
-        let from_start = rule["from"]["start"].as_u64()? as u32;
-        let from_end = rule["from"]["end"].as_u64().map_or(u32::MAX, |e| e as u32);
+        let number = |v: &Value| v.as_u64().and_then(|n| u32::try_from(n).ok());
+        let from_start = number(&rule["from"]["start"])?;
+        let from_end = rule["from"]["end"]
+            .as_u64()
+            .map_or(Some(u32::MAX), |e| u32::try_from(e).ok())?;
         if !(from_start..=from_end).contains(&episode) {
             return None;
         }
-        let to_start = rule["to"]["start"].as_u64()? as u32;
+        let to_start = number(&rule["to"]["start"])?;
         Some((
             rule["to"]["malId"].as_u64()?,
-            to_start + (episode - from_start),
+            to_start.checked_add(episode - from_start)?,
         ))
     })
 }
@@ -428,7 +461,12 @@ fn relation_target(body: &Value, episode: u32) -> Option<(u64, u32)> {
 fn check(r: &Raw, duration_ms: u64) -> Option<Segment> {
     let duration = duration_ms as f64;
     let start = r.start.unwrap_or(0.0);
-    let end = r.end.unwrap_or(duration).min(duration);
+    // `min` would turn a NaN end into the duration; a missing end is no end.
+    let end = match r.end {
+        Some(end) if end.is_nan() => return None,
+        Some(end) => end.min(duration),
+        None => duration,
+    };
     if !start.is_finite() || !end.is_finite() || start < 0.0 || start >= end {
         return None;
     }
@@ -587,6 +625,8 @@ mod tests {
                 raw(SegmentKind::Intro, Some(50_000.0), Some(40_000.0)),
                 raw(SegmentKind::Intro, Some(f64::NAN), Some(40_000.0)),
                 raw(SegmentKind::Recap, Some(-5.0), Some(40_000.0)),
+                // A source that sends no end does not mean "until the end".
+                raw(SegmentKind::Recap, Some(1_000.0), Some(f64::NAN)),
                 raw(SegmentKind::Intro, Some(HOUR as f64 + 1.0), None),
                 raw(SegmentKind::Intro, Some(0.0), Some(HOUR as f64 / 2.0)),
                 raw(SegmentKind::Credits, Some(0.0), None),

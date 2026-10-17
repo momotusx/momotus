@@ -17,6 +17,17 @@ use tokio::sync::broadcast::{Receiver, error::RecvError};
 /// Waits until the installed addons change: an install, removal, move or
 /// switch, a finished import, or a list pulled by sync. False once the
 /// library is gone.
+/// The next library change. After a lag (changes were missed) every table
+/// counts as changed, so a listener refreshes instead of stopping; `None`
+/// only when the library is gone.
+pub(crate) async fn next_change(changes: &mut Receiver<Vec<Table>>) -> Option<Vec<Table>> {
+    match changes.recv().await {
+        Ok(tables) => Some(tables),
+        Err(RecvError::Lagged(_)) => Some(Table::ALL.to_vec()),
+        Err(RecvError::Closed) => None,
+    }
+}
+
 pub(crate) async fn addons_changed(changes: &mut Receiver<Vec<Table>>) -> bool {
     loop {
         match changes.recv().await {

@@ -144,7 +144,7 @@ async fn watch(
     query: Arc<Mutex<Query>>,
     snapshot: SharedObservable<LibrarySnapshot>,
 ) {
-    while let Ok(tables) = changes.recv().await {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables
             .iter()
             .any(|t| matches!(t, Table::LibraryItems | Table::Progress))

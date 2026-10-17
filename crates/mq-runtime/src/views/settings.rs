@@ -179,7 +179,7 @@ async fn watch(
     mut changes: broadcast::Receiver<Vec<Table>>,
     snapshot: SharedObservable<Prefs>,
 ) {
-    while let Ok(tables) = changes.recv().await {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables.contains(&Table::Settings) {
             let next = core.prefs();
             if next != snapshot.get() {

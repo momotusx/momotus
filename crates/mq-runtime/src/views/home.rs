@@ -430,12 +430,16 @@ async fn watch_addons(
             header.set(HomeHeader { hero: None });
         }
         maybe_pick_hero(&rows, &header);
-        loads.spawn(load_catalogs(
-            core.clone(),
-            fresh,
-            rows.clone(),
-            header.clone(),
-        ));
+        // Hiding, showing or moving rows that kept their tiles loads nothing.
+        if !fresh.is_empty() {
+            loads.spawn(load_catalogs(
+                core.clone(),
+                fresh,
+                rows.clone(),
+                header.clone(),
+            ));
+        }
+        while loads.try_join_next().is_some() {}
     }
 }
 
@@ -530,9 +534,13 @@ fn apply_catalog(
             .map_err(|e| format!("unreadable catalog: {e}"))
     });
     update_row(rows, row_id, |row| {
-        // A row shown again loads again; whichever load answers first wins,
-        // so an older answer never replaces a newer one.
-        if !matches!(row.state, RowState::Loading | RowState::Slow) {
+        // A row shown again loads again. The first answer fills it; a later
+        // success may still replace a failure (an older load that failed
+        // first), but nothing replaces tiles.
+        let open = matches!(row.state, RowState::Loading | RowState::Slow);
+        let recovers = matches!(row.state, RowState::Failed { .. })
+            && matches!(outcome, Ok(ResourceResponse::Metas { .. }));
+        if !open && !recovers {
             return;
         }
         match outcome {
@@ -624,7 +632,7 @@ async fn watch_continue(
     let mut changes = core.library().subscribe();
     refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
-    while let Ok(tables) = changes.recv().await {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables
             .iter()
             .any(|t| matches!(t, Table::Progress | Table::Watched | Table::LibraryItems))
