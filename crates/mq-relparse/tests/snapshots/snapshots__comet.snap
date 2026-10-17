@@ -1,0 +1,444 @@
+---
+source: crates/mq-relparse/tests/snapshots.rs
+expression: "render(\"comet\")"
+---
+tt0111161 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(58411555225) site=Some("DMM") cached=None service=None | title="The Shawshank Redemption" year=1994 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa] ch=5.1 group="SyncTeam" container=mkv remux=1
+tt0111161 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(18146236825) site=Some("StremThru") cached=None service=None | title="The Shawshank Redemption" year=1994 res=R1080p q=BluRay codec=H264 audio=[Ac3] ch=5.1 group="playHD"
+tt0111161 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(4187593113) site=Some("StremThru") cached=None service=None | title="The Shawshank Redemption" year=1994 res=R720p q=BluRay codec=Unknown lang=en,uk,es container=mkv
+tt0111161 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(962383052) site=Some("StremThru|Knaben") cached=None service=None | title="The Shawshank Redemption" year=1994 res=Unknown q=Dvd codec=Unknown lang=ru group="VIDEO4PSP"
+tt0068646 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(49) size=Some(49499498086) site=Some("Torrentio|Rutracker") cached=None service=None | title="The Godfather" year=1972 res=R1080p q=Remux codec=Unknown lang=en,ru,es remux=1
+tt0068646 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(6549825126) site=Some("StremThru") cached=None service=None | title="The Godfather" year=1972 res=R1080p q=BluRay codec=H264 audio=[Ac3] container=mkv
+tt0068646 "[TORRENT🧲] Comet unknown"
+    seeders=Some(2) size=Some(3113851289) site=Some("The Pirate Bay") cached=None service=None | title="Mario Puzos The Godfather Coda The Death of Michael Corleon" res=Unknown q=Unknown codec=Unknown
+tt0468569 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(1) size=Some(10200547328) site=Some("TorBox|filemood") cached=None service=None | title="The Dark Knight" year=2008 res=R2160p q=BluRay codec=H265 bits=10 hdr=[Hdr10] audio=[Eac3] ch=5.1 lang=zh group="47BT"
+tt0468569 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(1825361100) site=Some("StremThru") cached=None service=None | title="The Dark Knight" year=2008 res=R1080p q=BluRay codec=H264 group="다크나이트" container=mp4
+tt0468569 "[TORRENT🧲] Comet 720p"
+    seeders=Some(0) size=Some(3113851289) site=Some("TorBox|commie") cached=None service=None | title="The Dark Knight Rises" res=R720p q=BluRay codec=Unknown audio=[Aac] group="Commie" container=mkv
+tt0133093 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(0) size=Some(59055800320) site=Some("DebridAccount|torbox") cached=None service=None | title="The Matrix" year=1999 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa, Atmos, TrueHd] ch=7.1 lang=es container=mkv remux=1 proper=1 dubbed=1
+tt0133093 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(9126805504) site=Some("StremThru") cached=None service=None | title="The Matrix" year=1999 res=R1080p q=WebDl codec=H264 audio=[Atmos, Eac3] ch=5.1 group="SM737" container=mkv
+tt0133093 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(22978075033) site=Some("StremThru") cached=None service=None | title="The Matrix" year=1999 res=R1080p q=BluRay codec=H265 complete=1
+tt0133093 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(961439334) site=Some("StremThru") cached=None service=None | title="The Matrix" year=1999 res=Unknown q=Unknown codec=Unknown container=avi
+tt1375666 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2576980377) site=Some("StremThru") cached=None service=None | title="Inception" year=2010 res=R1080p q=BluRay codec=H265 audio=[Ac3] lang=de group="FuN"
+tt1375666 "[TORRENT🧲] Comet 480p"
+    seeders=None size=Some(786432000) site=Some("StremThru") cached=None service=None | title="Inception" year=2010 res=R480p q=Dvd codec=Unknown lang=it
+tt1375666 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(714289971) site=Some("StremThru") cached=None service=None | title="Inception" year=2010 res=Unknown q=Unknown codec=Xvid lang=nl container=avi
+tt0109830 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(16965120819) site=Some("StremThru") cached=None service=None | title="Forrest Gump" year=1994 res=R2160p q=BluRay codec=H265 bits=10 hdr=[Hdr10] container=mkv
+tt0109830 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2899102924) site=Some("StremThru|TorrentGalaxyClone") cached=None service=None | title="Forrest Gump" year=1994 res=R1080p q=BluRay codec=H264 ch=5.1 group="RiPRG" container=mkv
+tt0109830 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(4724464025) site=Some("StremThru") cached=None service=None | title="Forrest Gump" year=1994 res=R1080p q=Unknown codec=H264
+tt0137523 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(76772540416) site=Some("StremThru") cached=None service=None | title="Fight Club" year=1999 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa] ch=5.1 group="UNITED24" container=mkv remux=1
+tt0137523 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(4724464025) site=Some("StremThru") cached=None service=None | title="Fight Club" year=1999 res=R1080p q=BluRay codec=H264 audio=[Ac3] ch=5.1 group="PeN"
+tt0137523 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(3221225472) site=Some("StremThru") cached=None service=None | title="Fight Club" year=1999 res=R720p q=Unknown codec=H264 audio=[Ac3] lang=fr,es group="ROMKENT" dubbed=1
+tt0137523 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(2576980377) site=Some("StremThru") cached=None service=None | title="Fight Club" year=1999 res=Unknown q=BluRay codec=H264 lang=en,hi,es dubbed=1
+tt0110912 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(7408818585) site=Some("StremThru|Knaben") cached=None service=None | title="Pulp Fiction" year=1994 res=R1080p q=BluRay codec=H265 bits=10 hdr=[DolbyVision, Hdr10] audio=[Eac3] ch=5.1 group="SM737" container=mkv
+tt0110912 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(12777527705) site=Some("StremThru") cached=None service=None | title="Pulp Fiction" year=1994 res=R1080p q=Hdtv codec=Unknown audio=[Ac3] ch=5.1 lang=fr container=mkv
+tt0110912 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(7838315315) site=Some("StremThru") cached=None service=None | title="Pulp Fiction" year=1994 res=Unknown q=Unknown codec=Unknown
+tt0816692 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(1) size=Some(16106127360) site=Some("TorBox|poop") cached=None service=None | title="Interstellar" year=2014 res=R2160p q=BluRay codec=H264 audio=[DtsHdMa, Aac] ch=5.1 group="POOP"
+tt0816692 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2576980377) site=Some("StremThru") cached=None service=None | title="Interstellar" year=2014 res=R1080p q=WebDl codec=Unknown lang=es container=mkv dubbed=1
+tt0816692 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(4509715660) site=Some("StremThru") cached=None service=None | title="INTERSTELLAR" year=2014 res=Unknown q=Unknown codec=Unknown audio=[Ac3] ch=2.0
+tt0120737 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(124661425766) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10Plus] audio=[Atmos, TrueHd] ch=7.1 group="tarunk9c" container=mkv remux=1 extended=1
+tt0120737 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(5046586572) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=WebDl codec=H265 audio=[Atmos, Eac3] ch=5.1 group="GDRK" container=mkv
+tt0120737 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(3435973836) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=BluRay codec=H264 container=mp4 extended=1
+tt0120737 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(8375186227) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings - The Fellowship of the Ring" res=Unknown q=Unknown codec=Unknown container=mkv
+tt1130884 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(45634027520) site=Some("StremThru") cached=None service=None | title="Shutter Island" year=2010 res=R1080p q=Remux codec=Unknown container=mkv remux=1
+tt1130884 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(8482560409) site=Some("StremThru") cached=None service=None | title="Shutter Island" year=2010 res=R1080p q=BluRay codec=H265 lang=en container=mkv
+tt1130884 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(766718771) site=Some("StremThru") cached=None service=None | title="Shutter Island" res=Unknown q=Unknown codec=Unknown group="VIDEO4PSP"
+tt6751668 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(6) size=Some(30494267801) site=Some("Comet|Ygg API") cached=None service=None | title="Parasite" year=2019 res=R2160p q=BluRay codec=H265 lang=es group="FLOP" container=mkv dubbed=1
+tt6751668 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(1) size=Some(5798205849) site=Some("TorBox|unknown") cached=None service=None | title="Паразиты" year=2019 res=R1080p q=WebDl codec=Unknown lang=ru container=mkv
+tt6751668 "[TORRENT🧲] Comet 720p"
+    seeders=Some(1) size=Some(835295641) site=Some("TorBox|psa") cached=None service=None | title="Parasite A K A Gisaengchung" year=2019 res=R720p q=BluRay codec=H265 lang=ko group="PSA" container=mkv
+tt15398776 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(92771293593) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, TrueHd] ch=7.1 group="DRX" container=mkv remux=1
+tt15398776 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(11703785881) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R2160p q=BluRay codec=H265 audio=[Aac] lang=en,ta,kn,es,hi container=mkv
+tt15398776 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(19219978649) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=H265 lang=fr,es group="Slay3R" container=mkv dubbed=1
+tt15398776 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(9878424780) site=Some("StremThru") cached=None service=None | title="Оппенгеймер" year=2023 res=Unknown q=Unknown codec=Unknown lang=ru container=mkv
+tt1160419 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(44452911513) site=Some("StremThru") cached=None service=None | title="Dune Part One" year=2021 res=R2160p q=BluRay codec=H265 lang=es group="SESKAPiLE" container=mkv dubbed=1
+tt1160419 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(4724464025) site=Some("StremThru") cached=None service=None | title="Dune" year=2021 res=R1080p q=WebDl codec=Unknown lang=es container=mkv dubbed=1
+tt1160419 "[TORRENT🧲] Comet unknown"
+    seeders=Some(3) size=Some(668467200) site=Some("TorBox|msd") cached=None service=None | title="Dune" year=2021 res=Unknown q=BluRay codec=H264 group="mSD"
+tt0087843 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(31997506355) site=Some("StremThru") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R1080p q=Remux codec=H264 group="mfcorrea" remux=1
+tt0087843 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(1) size=Some(4080218931) site=Some("Torrentio|EXT") cached=None service=None | title="Erase una vez en America" year=1984 res=R1080p q=BluRay codec=H264 audio=[Ac3] lang=en,es
+tt0087843 "[TORRENT🧲] Comet unknown"
+    seeders=Some(0) size=Some(3435973836) site=Some("StremThru|Knaben") cached=None service=None | title="Once Upon a Time in America" year=1984 res=Unknown q=Unknown codec=Unknown lang=es group="&Aacute;udio" dubbed=1
+tt0114369 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(78275778969) site=Some("StremThru") cached=None service=None | title="Se7en" year=1995 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa] ch=7.1 group="SyncTeam" container=mkv remux=1
+tt0114369 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(0) size=Some(2684354560) site=Some("DebridAccount|alldebrid") cached=None service=None | title="Seven" year=1995 res=R1080p q=BluRay codec=H264 lang=es container=mkv dubbed=1
+tt0114369 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(6442450944) site=Some("StremThru") cached=None service=None | title="Se7en" year=1995 res=R720p q=BluRay codec=H264 container=mkv
+tt0114369 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(886780723) site=Some("StremThru") cached=None service=None | title="Se7en" year=1995 res=Unknown q=BluRay codec=Unknown lang=uk container=mp4
+tt0245429 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2576980377) site=Some("StremThru|Torrents.csv") cached=None service=None | title="Spirited Away" year=2001 res=R1080p q=BluRay codec=H265 group="CptCrunch" container=mkv
+tt0245429 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(7516192768) site=Some("StremThru") cached=None service=None | title="Spirited Away" year=2001 res=R720p q=BluRay codec=H264 audio=[Dts]
+tt0245429 "[TORRENT🧲] Comet unknown"
+    seeders=Some(3) size=Some(684195840) site=Some("The Pirate Bay") cached=None service=None | title="Spirited Away &amp; Princess Mononoke Soundtrack's" res=Unknown q=Unknown codec=Unknown audio=[Flac]
+tt0317248 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(19971597926) site=Some("DMM") cached=None service=None | title="City of God" year=2002 res=R1080p q=BluRay codec=H264 audio=[Eac3] ch=5.1 group="POH" container=mkv repack=1
+tt0317248 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(11274289152) site=Some("StremThru") cached=None service=None | title="Cidade de Deus" year=2002 res=R1080p q=BluRay codec=Unknown lang=ru container=mkv
+tt0317248 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(18468359372) site=Some("StremThru") cached=None service=None | title="Cidade de Deus" year=2002 res=Unknown q=Unknown codec=Unknown hdr=[Hdr10] container=mkv
+tt2084970 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(40050570035) site=Some("StremThru") cached=None service=None | title="The Imitation Game" year=2014 res=R2160p q=BluRay codec=Unknown hdr=[Hdr10] audio=[Ac3] lang=es group="ChrisVPS" container=mkv dubbed=1
+tt2084970 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2254857830) site=Some("StremThru") cached=None service=None | title="The Imitation Game" year=2014 res=R1080p q=Unknown codec=H264 audio=[Ac3] lang=en,fr,es container=mkv
+tt2084970 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(943823257) site=Some("StremThru") cached=None service=None | title="The Imitation Game" year=2014 res=R720p q=BluRay codec=Unknown container=mkv
+tt2084970 "[TORRENT🧲] Comet unknown"
+    seeders=Some(3) size=Some(1288490188) site=Some("TorBox|din") cached=None service=None | title="The Imitation Game" year=2014 res=Unknown q=BluRay codec=H264 group="DiN"
+tt0848228 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(9126805504) site=Some("StremThru") cached=None service=None | title="The Avengers" year=2012 res=R1080p q=WebDl codec=H264 audio=[Atmos, Eac3] ch=5.1 lang=zh group="TAGWEB"
+tt0848228 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(6871947673) site=Some("StremThru|Knaben") cached=None service=None | title="The Avengers" year=2012 res=R1080p q=BluRay codec=Av1 bits=10 group="FELIX12345"
+tt0848228 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(1503238553) site=Some("StremThru|Knaben") cached=None service=None | title="marvel one-shot item 47" res=Unknown q=Unknown codec=Unknown group="rmxtras" container=mkv
+tt0076759 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(40587440947) site=Some("StremThru") cached=None service=None | title="Star Wars Episode IV A New Hope" year=1977 res=R2160p q=BluRay codec=H265 hdr=[Sdr] audio=[Atmos, TrueHd] ch=7.1 lang=da,fi,sv,no,es group="NorTekst" container=mkv
+tt0076759 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2791728742) site=Some("StremThru") cached=None service=None | title="Star Wars Episode IV A New Hope" year=1977 res=R1080p q=BluRay codec=H265 audio=[Ac3] lang=hu
+tt0076759 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(13099650252) site=Some("StremThru") cached=None service=None | title="Star Wars Episode IV - A New Hope" year=1977 res=R720p q=Hdtv codec=Unknown lang=en container=mkv
+tt0172495 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(72370198937) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10] audio=[DtsX, Eac3] ch=7.1 lang=en,hi,es group="LUMiX" container=mkv remux=1 extended=1
+tt0172495 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(12240656793) site=Some("StremThru") cached=None service=None | title="高清影视之家发布" year=2000 res=R1080p q=WebDl codec=H264 audio=[Ac3] ch=5.1 lang=zh group="BATWEB"
+tt0172495 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(1717986918) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=R720p q=BluRay codec=H264 lang=en,hi,te,ta,es container=mkv extended=1
+tt0172495 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(783600844) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=Unknown q=Dvd codec=Unknown container=avi
+tt0120689 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(0) size=Some(27165668147) site=Some("TorBox|unknown") cached=None service=None | title="Frank Darabont" year=1999 res=R1080p q=Remux codec=Unknown lang=ru remux=1
+tt0120689 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2684354560) site=Some("Peerflix| Sinsitio") cached=None service=None | title="La milla verde" year=1999 res=R1080p q=BluRay codec=Unknown lang=en,es container=mkv
+tt0120689 "[TORRENT🧲] Comet unknown"
+    seeders=Some(1) size=Some(8053063680) site=Some("TorBox|unknown") cached=None service=None | title="The Green Mile" res=Unknown q=Unknown codec=Unknown
+tt4154796 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(15784004812) site=Some("StremThru") cached=None service=None | title="Avengers Endgame" year=2019 res=R2160p q=Unknown codec=Unknown hdr=[Hdr10] ch=7.1 lang=en,de,es container=mkv
+tt4154796 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(594018304) site=Some("StremThru") cached=None service=None | title="Avengers Endgame" year=2019 res=R1080p q=Unknown codec=H265 bits=10 container=mkv
+tt4154796 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(1181116006) site=Some("StremThru") cached=None service=None | title="Avengers Endgame" year=2019 res=R720p q=BluRay codec=Unknown lang=en,hi,te,ta,es group="1" container=mkv
+tt1745960 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(72692321484) site=Some("StremThru") cached=None service=None | title="Top Gun Maverick" year=2022 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10Plus] audio=[Atmos, TrueHd] ch=7.1 group="jennaortegaUHD" remux=1
+tt1745960 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(15569256448) site=Some("StremThru") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=BluRay codec=H264 audio=[Atmos, TrueHd] ch=7.1 group="EVO"
+tt1745960 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(6657199308) site=Some("TorBox|unknown") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=WebRip codec=H264 audio=[Ac3] lang=en,ko,es container=mkv
+tt1745960 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(3113851289) site=Some("StremThru") cached=None service=None | title="Top Gun Maverick" year=2022 res=Unknown q=BluRay codec=H264 audio=[Aac] lang=en,ru,lt,es group="Morpheus" container=mkv
+tt0361748 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(3) size=Some(36721970380) site=Some("TorBox|knaben") cached=None service=None | title="更多高清电影访问" year=2009 res=R2160p q=BluRay codec=H265 bits=10 hdr=[Hdr10] audio=[DtsHdMa] ch=5.1 lang=zh
+tt0361748 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2899102924) site=Some("StremThru|Knaben") cached=None service=None | title="Inglourious Basterds" year=2009 res=R1080p q=BluRay codec=H265 audio=[Ac3] group="D3FiL3R" container=mkv
+tt0361748 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(735576064) site=Some("StremThru|The Pirate Bay") cached=None service=None | title="Inglourious Basterds" year=2009 res=Unknown q=Unknown codec=Unknown
+tt0167260 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(59807419596) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R2160p q=WebDl codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, TrueHd] ch=7.1 group="FLUX" container=mkv extended=1
+tt0167260 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(7301444403) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R1080p q=BluRay codec=H264 audio=[Dts] extended=1
+tt0167260 "[TORRENT🧲] Comet 720p"
+    seeders=Some(0) size=Some(3758096384) site=Some("StremThru|Knaben") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R720p q=BluRay codec=H264 group="x0r" container=mkv
+tt0482571 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(0) size=Some(59163174502) site=Some("DebridAccount|realdebrid") cached=None service=None | title="The Prestige" year=2006 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10Plus] audio=[DtsHdMa] ch=5.1 group="SyncTeam" container=mkv remux=1
+tt0482571 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(15139759718) site=Some("StremThru") cached=None service=None | title="The Prestige" year=2006 res=R1080p q=BluRay codec=H264 audio=[Dts] group="Z0N3" container=mkv
+tt0482571 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(575877939) site=Some("StremThru|TheRARBG") cached=None service=None | title="The Prestige" year=2006 res=R720p q=BluRay codec=H265 bits=10 group="budgetbits" container=mkv
+tt0482571 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(1610612736) site=Some("StremThru") cached=None service=None | title="The Prestige" year=2006 res=Unknown q=BluRay codec=H264 container=mkv
+tt1853728 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(2) size=Some(14066017894) site=Some("TorBox|torrentdownload") cached=None service=None | title="Django Unchained" year=2012 res=R1080p q=BluRay codec=H264 audio=[Dts]
+tt1853728 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(7086696038) site=Some("StremThru") cached=None service=None | title="Django Unchained" year=2012 res=R720p q=BluRay codec=H264 group="SPARKS"
+tt1853728 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(7945689497) site=Some("StremThru") cached=None service=None | title="Django Unchained" year=2012 res=Unknown q=BluRay codec=H264 audio=[Ac3] lang=en,ru,es container=mkv
+tt0102926 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(0) size=Some(46170898432) site=Some("Comet|Ygg API") cached=None service=None | title="le silence des agneaux" year=1991 res=R2160p q=BluRay codec=H265 bits=10 hdr=[Hdr10] audio=[DtsHdMa] ch=5.1 lang=es group="AZAZE" dubbed=1
+tt0102926 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(6335076761) site=Some("StremThru") cached=None service=None | title="The Silence of the Lambs" year=1991 res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en,zh,es group="ENG"
+tt0102926 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(8804682956) site=Some("StremThru") cached=None service=None | title="The Silence of the Lambs" year=1991 res=R720p q=BluRay codec=Unknown lang=en,uk,es container=mkv
+tt0944947:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(34252364185) site=Some("StremThru|TheRARBG") cached=None service=None | title="Game of Thrones" res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa, Atmos, TrueHd] ch=7.1 seasons=[1] eps=[1] group="PB69" container=mkv remux=1
+tt0944947:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(1073741824) site=Some("TorBox|unknown") cached=None service=None | title="POOP" res=R1080p q=BluRay codec=H264 seasons=[1] eps=[1] container=mp4
+tt0944947:1:1 "[TORRENT🧲] Comet 480p"
+    seeders=Some(0) size=Some(168296448) site=Some("TorBox|unknown") cached=None service=None | title="Game of Thrones" res=R480p q=Hdtv codec=H264 seasons=[1] eps=[1] container=mkv
+tt0944947:1:1 "[TORRENT🧲] Comet 720X360p"
+    seeders=None size=Some(807088947) site=Some("StremThru") cached=None service=None | title="Game of Thrones" year=2011 res=Unknown q=BluRay codec=Unknown seasons=[1] eps=[1] container=avi
+tt0903747:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2254857830) site=Some("StremThru") cached=None service=None | title="Breaking Bad" res=R1080p q=WebDl codec=H264 audio=[Ac3] ch=5.1 seasons=[1] eps=[1] container=mkv
+tt0903747:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(881328128) site=Some("StremThru") cached=None service=None | title="Breaking Bad" res=R720p q=BluRay codec=H264 lang=fr,es seasons=[1] eps=[1] group="GHoST" container=mkv dubbed=1
+tt0903747:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(364642723430) site=Some("StremThru") cached=None service=None | title="Breaking Bad" year=2008 res=Unknown q=Unknown codec=Unknown group="show" complete=1
+tt0386676:2:5 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(2147483648) site=Some("TorBox|artgenone") cached=None service=None | title="The Office" res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=2.0 seasons=[2] eps=[5] group="Artgenone" container=mkv
+tt0386676:2:5 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(471334912) site=Some("TorBox|ftmvhd") cached=None service=None | title="The Office" res=R1080p q=WebDl codec=H265 lang=es seasons=[2] eps=[5] group="FTMVHD" container=mkv dubbed=1
+tt0386676:2:5 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(524707430) site=Some("StremThru") cached=None service=None | title="The Office" res=R720p q=Hdtv codec=H264 seasons=[2] eps=[5] group="MRSK" container=mkv
+tt0108778:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(7838315315) site=Some("StremThru") cached=None service=None | title="Friends" res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa] ch=5.1 seasons=[1] eps=[1] group="seedpool" container=mkv remux=1
+tt0108778:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(28) size=Some(1395864371) site=Some("TheRARBG") cached=None service=None | title="Conversations with Friends" res=R1080p q=WebDl codec=H264 seasons=[1] eps=[1]
+tt0108778:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(50) size=Some(698561331) site=Some("TheRARBG") cached=None service=None | title="Conversations with Friends" res=R720p q=WebDl codec=H264 seasons=[1] eps=[1]
+tt0108778:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(322227404) site=Some("StremThru|The Pirate Bay") cached=None service=None | title="Friends" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt0306414:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(1610612736) site=Some("StremThru") cached=None service=None | title="The Wire" res=R1080p q=BluRay codec=H265 bits=10 seasons=[1] eps=[1] group="HazMatt" container=mkv
+tt0306414:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(4724464025) site=Some("StremThru") cached=None service=None | title="The Wire" res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=5.1 seasons=[1] eps=[1] group="Kitsune"
+tt0306414:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(1) size=Some(934910361) site=Some("The Pirate Bay") cached=None service=None | title="The Wire" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt2861424:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(6) size=Some(780874547) site=Some("Knaben") cached=None service=None | title="Rick and Morty The Anime" res=R1080p q=WebDl codec=H264 audio=[Aac] ch=2.0 lang=en seasons=[1] eps=[1] group="ToonsHub" container=mkv
+tt2861424:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(768920780) site=Some("StremThru") cached=None service=None | title="Rick and Morty" res=R1080p q=BluRay codec=H264 lang=pl,es seasons=[1] eps=[1] container=mkv dubbed=1
+tt2861424:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(56) size=Some(541799219) site=Some("Comet|Ygg API") cached=None service=None | title="Rick et Morty" res=Unknown q=Unknown codec=H265 seasons=[1] eps=[1] group="Amen" container=mkv
+tt0773262:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(20) size=Some(9556302233) site=Some("Knaben") cached=None service=None | title="Dexter Resurrection" res=R2160p q=WebDl codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, Eac3] ch=5.1 seasons=[1] eps=[1] group="FLUX" container=mkv
+tt0773262:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(1) size=Some(574619648) site=Some("Knaben") cached=None service=None | title="Dexter New Blood" res=R1080p q=Unknown codec=H265 seasons=[1] eps=[1] group="MeGusta" container=mkv
+tt0773262:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(0) size=Some(766718771) site=Some("DebridAccount|realdebrid") cached=None service=None | title="Dexter" res=R720p q=BluRay codec=H264 seasons=[1] eps=[1] group="MOD" container=mkv
+tt0773262:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(13) size=Some(13958643712) site=Some("Comet|YGGTorrent") cached=None service=None | title="Dexter Original Sin" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt0141842:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(6979321856) site=Some("StremThru") cached=None service=None | title="The Sopranos" res=R1080p q=BluRay codec=H264 audio=[Ac3] lang=en,de,es seasons=[1] eps=[1] group="FREAKS" container=mkv
+tt0141842:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(9) size=Some(5046586572) site=Some("Torrentio|Rutracker") cached=None service=None | title="The Sopranos" res=R720p q=BluRay codec=Unknown lang=en seasons=[1] eps=[1] container=mkv
+tt0141842:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(5261334937) site=Some("StremThru") cached=None service=None | title="The Sopranos" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt4574334:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(0) size=Some(7194070220) site=Some("DebridAccount|torbox") cached=None service=None | title="Stranger Things" res=R2160p q=WebDl codec=H265 hdr=[DolbyVision, Hdr10] audio=[Eac3] ch=5.1 lang=es seasons=[1] eps=[1] container=mkv dubbed=1
+tt4574334:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(3221225472) site=Some("DMM") cached=None service=None | title="Stranger Things" res=R1080p q=WebDl codec=H264 lang=es seasons=[1] eps=[1] group="FW" container=mkv dubbed=1
+tt4574334:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(533096038) site=Some("StremThru") cached=None service=None | title="Stranger Things" res=R720p q=WebDl codec=H264 audio=[Eac3] ch=5.1 lang=en,hi,te,ta,es seasons=[1] eps=[1] container=mkv
+tt7366338:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(26521423052) site=Some("DMM") cached=None service=None | title="Chernobyl" res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa] lang=fr,es seasons=[1] eps=[1] group="HYPERION" container=mkv remux=1 dubbed=1
+tt7366338:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(13) size=Some(658505728) site=Some("TorBox|torrentproject") cached=None service=None | title="Chernobyl" res=R1080p q=Unknown codec=H265 bits=10 seasons=[1] eps=[1] container=mkv
+tt7366338:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(9) size=Some(1503238553) site=Some("Comet|Ygg API") cached=None service=None | title="Chernobyl" res=R720p q=WebDl codec=H264 lang=es seasons=[1] eps=[1] group="FRATERNiTY" container=mkv dubbed=1
+tt7366338:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(254699110) site=Some("StremThru") cached=None service=None | title="Chernobyl" res=Unknown q=BluRay codec=H264 seasons=[1] eps=[1] group="REWARD" container=mkv
+tt5491994:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(9) size=Some(15354508083) site=Some("Torrentio|ThePirateBay") cached=None service=None | title="Planet Earth II" res=R2160p q=BluRay codec=H265 hdr=[Hdr10] audio=[DtsHd] ch=5.1 seasons=[1] eps=[1] group="DDR" container=mkv
+tt5491994:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(1503238553) site=Some("DMM") cached=None service=None | title="Planet Earth III" res=R1080p q=Unknown codec=H265 seasons=[1] eps=[1] group="ELiTE" container=mkv
+tt5491994:1:1 "[TORRENT🧲] Comet 480p"
+    seeders=Some(1) size=Some(662804889) site=Some("Knaben") cached=None service=None | title="Planet Earth III" res=R480p q=Unknown codec=H264 seasons=[1] eps=[1] group="RUBiK" container=mkv
+tt0364845:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(2) size=Some(675597516) site=Some("TorBox|unknown") cached=None service=None | title="NCIS Los Angeles" res=R1080p q=WebDl codec=H265 audio=[Ac3] ch=5.1 lang=ru seasons=[1] eps=[1] container=mkv
+tt0364845:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(2) size=Some(446169088) site=Some("Knaben") cached=None service=None | title="NCIS Origins" res=R1080p q=Unknown codec=H265 seasons=[1] eps=[1] group="MeGusta" container=mkv
+tt0364845:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(8) size=Some(297481011) site=Some("TorBox|zooqle") cached=None service=None | title="NCIS DC" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mp4
+tt0098904:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(3) size=Some(2899102924) site=Some("TorBox|crfw") cached=None service=None | title="Seinfeld" res=R2160p q=WebDl codec=H265 hdr=[DolbyVision, Hdr10] audio=[Eac3] ch=5.1 seasons=[1] eps=[1] group="CRFW" container=mkv
+tt0098904:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(138083198566) site=Some("StremThru") cached=None service=None | title="Seinfeld" year=1989 res=R1080p q=WebRip codec=H265 bits=10 audio=[Aac] ch=2.0 seasons=[1, 2, 3, 4, 5, 6, 7, 8, 9] eps=[1, 2, 3, 4, 5, 6, 7, 8, 9] group="EDGE2020"
+tt0098904:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(547042099) site=Some("StremThru") cached=None service=None | title="Seinfeld" res=R720p q=WebRip codec=H264 audio=[Aac] ch=2.0 seasons=[1] eps=[1] group="NTb"
+tt0098904:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(1) size=Some(243898777) site=Some("TorBox|apibay") cached=None service=None | title="Seinfeld" res=Unknown q=Dvd codec=H264 seasons=[1] eps=[1] group="DiGG" container=mkv
+tt1190634:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2254857830) site=Some("StremThru") cached=None service=None | title="The Boys" res=R1080p q=BluRay codec=H265 bits=10 audio=[Eac3] ch=5.1 seasons=[1] eps=[1] group="d3g" container=mkv
+tt1190634:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(3972844748) site=Some("StremThru") cached=None service=None | title="The Boys" year=2019 res=R1080p q=WebRip codec=H264 audio=[Ac3] ch=5.1 lang=en,it,es seasons=[1] eps=[1] group="Morpheus" container=mkv
+tt1190634:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(3) size=Some(1503238553) site=Some("TorBox|sn2p") cached=None service=None | title="The Boys" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt11126994:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(1610612736) site=Some("StremThru") cached=None service=None | title="Arcane" res=R2160p q=BluRay codec=H265 bits=10 hdr=[Hdr10] audio=[Aac] ch=5.1 seasons=[1] eps=[1] group="Vyndros" container=mkv
+tt11126994:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(1055706316) site=Some("TorBox|asko") cached=None service=None | title="Arcane" year=2021 res=R1080p q=WebRip codec=H265 bits=10 hdr=[Hdr10] audio=[Eac3] ch=5.1 lang=fr,es seasons=[1] eps=[1] group="ASKO" container=mkv dubbed=1
+tt11126994:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(446903091) site=Some("StremThru") cached=None service=None | title="Arcane" res=R1080p q=Unknown codec=H265 seasons=[1] eps=[1] group="MeGusta"
+tt2560140:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(8160437862) site=Some("DMM") cached=None service=None | title="Attack on Titan" year=2000 res=R1080p q=Remux codec=H264 audio=[Flac] ch=2.0 lang=es seasons=[1] eps=[1] group="Jewel" container=mkv remux=1 repack=1 dubbed=1
+tt2560140:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(6) size=Some(1503238553) site=Some("TorBox|knaben") cached=None service=None | title="Deutsch" res=R1080p q=Unknown codec=Unknown lang=de seasons=[1, 2, 3, 4] eps=[1, 2, 3, 4, 5, 6, 7, 8] group="German/Deutsch"
+tt2560140:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(520932556) site=Some("StremThru") cached=None service=None | title="01" res=R720p q=Unknown codec=H264 lang=ru seasons=[1] eps=[1] group="01" container=mkv
+tt2560140:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(96154419) site=Some("DMM") cached=None service=None | title="Attack on Titan" year=2000 res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt0877057:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(0) size=Some(536661196) site=Some("TorBox|adn") cached=None service=None | title="SUPER CUBE" res=R1080p q=WebDl codec=H264 audio=[Aac] lang=fr seasons=[1] eps=[1] group="ADN" container=mkv
+tt0877057:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(0) size=Some(626629017) site=Some("TorBox|adn") cached=None service=None | title="Paranoia Agent" res=R1080p q=WebDl codec=H264 audio=[Aac] lang=es seasons=[1] eps=[1] group="ADN" container=mkv dubbed=1
+tt0877057:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(5) size=Some(77594624) site=Some("Torrentio|NyaaSi") cached=None service=None | title="Death Note" res=R720p q=BluRay codec=H264 seasons=[1] eps=[1] group="TSR" container=mkv
+tt0388629:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(1610612736) site=Some("StremThru") cached=None service=None | title="ONE PIECE" res=R1080p q=WebDl codec=H265 hdr=[Hdr10] audio=[Atmos, Eac3] ch=5.1 seasons=[1] eps=[1] group="APEX" container=mkv
+tt0388629:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(0) size=Some(5368709120) site=Some("TorBox|unknown") cached=None service=None | title="The Walking Dead" res=R1080p q=Unknown codec=H265 lang=fr seasons=[1] eps=[1] group="FLOP" container=mkv
+tt0388629:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(2) size=Some(1395864371) site=Some("TorBox|solidtorrents") cached=None service=None | title="One Piece" res=R720p q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt0944947:3:9 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(3) size=Some(8375186227) site=Some("TorBox|fw") cached=None service=None | title="Game of Thrones" res=R2160p q=WebDl codec=H265 hdr=[DolbyVision, Hdr10] lang=es seasons=[3] eps=[9] group="FW" container=mkv dubbed=1
+tt0944947:3:9 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(4831838208) site=Some("Comet|YGGTorrent") cached=None service=None | title="Game Of Thrones" year=2013 res=R1080p q=BluRay codec=Unknown lang=es seasons=[3] eps=[9] container=mkv dubbed=1
+tt0944947:3:9 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(2254857830) site=Some("StremThru") cached=None service=None | title="The Rains of Castamere" res=Unknown q=Unknown codec=Unknown seasons=[3] eps=[9] container=mkv
+tt0944947:3:9 "[TORRENT🧲] Comet unknown"
+    seeders=Some(3) size=Some(608278937) site=Some("TorBox|unknown") cached=None service=None | title="Game of Thrones" res=Unknown q=WebRip codec=Unknown lang=en,ru,es seasons=[3] eps=[9] container=avi
+tt0903747:5:14 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(1610612736) site=Some("StremThru|TheRARBG") cached=None service=None | title="Breaking Bad" res=R1080p q=BluRay codec=H265 seasons=[5] eps=[14] group="YAWNiX" container=mkv
+tt0903747:5:14 "[TORRENT🧲] Comet 720p"
+    seeders=Some(77) size=Some(396047155) site=Some("StremThru|Knaben") cached=None service=None | title="breaking bad" res=R720p q=BluRay codec=Unknown seasons=[5] eps=[14] container=mkv
+tt0903747:5:14 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(331454873) site=Some("StremThru") cached=None service=None | title="Breaking Bad" res=Unknown q=BluRay codec=H265 seasons=[5] eps=[14] group="ION265" container=mp4
+tt0460649:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(290) size=Some(393216000) site=Some("Torrentio|1337x") cached=None service=None | title="How I Met Your Mother" year=2005 res=R1080p q=WebDl codec=H265 seasons=[1] eps=[1] container=mkv
+tt0460649:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(194) site=Some("StremThru|Uindex") cached=None service=None | title="How I Met Your Mother" res=R720p q=Unknown codec=H265 seasons=[1] eps=[1] group="MeGusta"
+tt0460649:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(183500800) site=Some("StremThru") cached=None service=None | title="How I Met Your Mother" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] group="Pilot" container=avi
+tt1520211:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(4402341478) site=Some("StremThru|Knaben") cached=None service=None | title="The Walking Dead" res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=5.1 seasons=[1] eps=[1] group="FLUX" container=mkv
+tt1520211:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(5368709120) site=Some("StremThru|Torrents.csv") cached=None service=None | title="The Walking Dead" res=R1080p q=BluRay codec=H264 lang=es seasons=[1] eps=[1] container=mkv dubbed=1
+tt1520211:1:1 "[TORRENT🧲] Comet 480p"
+    seeders=Some(0) size=Some(262668288) site=Some("TorBox|bob") cached=None service=None | title="The Walking Dead" res=R480p q=BluRay codec=H264 seasons=[1] eps=[1] group="BoB" container=mkv
+tt1520211:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(9) size=Some(367735603) site=Some("TorBox|ion265") cached=None service=None | title="The Walking Dead World Beyond" res=Unknown q=BluRay codec=H265 seasons=[1] eps=[1] group="ION265" container=mp4
+tt2356777:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(647390822) site=Some("StremThru|Knaben") cached=None service=None | title="True Detective" res=R1080p q=Unknown codec=H265 seasons=[1] eps=[1] group="MeGusta" container=mkv
+tt2356777:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(1181116006) site=Some("StremThru") cached=None service=None | title="True Detective" res=R720p q=BluRay codec=H264 audio=[Aac] seasons=[1] eps=[1] group="NESMEURED" container=mkv
+tt2356777:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(389545984) site=Some("StremThru") cached=None service=None | title="true detective" res=Unknown q=Hdtv codec=H264 seasons=[1] eps=[1] group="killers" container=mp4
+tt3032476:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(11166914969) site=Some("TorBox|unknown") cached=None service=None | title="Better Call Saul" res=R1080p q=Remux codec=H264 audio=[DtsHdMa] lang=es seasons=[1] eps=[1] group="MA" container=mkv remux=1 dubbed=1
+tt3032476:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(1181116006) site=Some("StremThru") cached=None service=None | title="Better Call Saul" res=R1080p q=WebDl codec=H265 audio=[Eac3] ch=5.1 lang=es seasons=[1] eps=[1] group="BTT" container=mkv dubbed=1
+tt3032476:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(0) size=Some(1181116006) site=Some("Comet|YGGTorrent") cached=None service=None | title="Better Call Saul" res=R720p q=Hdtv codec=H264 lang=fr seasons=[1] eps=[1] group="NESTA" container=mkv proper=1
+tt0203259:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(24) size=Some(3221225472) site=Some("The Pirate Bay") cached=None service=None | title="Law and Order Special Victims Unit" res=R1080p q=WebDl codec=H264 audio=[Ac3] ch=2.0 seasons=[1] eps=[1] group="playWEB" container=mkv
+tt0203259:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(950743859) site=Some("StremThru") cached=None service=None | title="Law and Order Special Victims Unit" res=R1080p q=WebRip codec=H265 bits=10 audio=[Eac3] ch=2.0 seasons=[1] eps=[1] group="iVy" container=mkv
+tt0203259:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(1610612736) site=Some("StremThru") cached=None service=None | title="Law And Order SVU" res=R720p q=WebDl codec=H264 seasons=[1] eps=[1] group="SKYFiRE"
+tt1439629:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(0) size=Some(2147483648) site=Some("DebridAccount|torbox") cached=None service=None | title="Community" res=R2160p q=WebDl codec=H265 audio=[Eac3] ch=5.1 seasons=[1] eps=[1] group="HHWEB" container=mkv
+tt1439629:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(97) size=Some(274307481) site=Some("The Pirate Bay") cached=None service=None | title="Community" res=R1080p q=Unknown codec=H265 bits=10 seasons=[1] eps=[1] container=mkv
+tt1439629:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(3) size=Some(841272524) site=Some("TorBox|unknown") cached=None service=None | title="Community" res=R720p q=WebDl codec=Unknown lang=en,ru,es seasons=[1] eps=[1] container=mkv
+tt0412142:1:1 "[TORRENT🧲] Comet 2160p"
+    seeders=Some(3) size=Some(6549825126) site=Some("Knaben") cached=None service=None | title="Spartacus House Of Ashur" res=R2160p q=WebDl codec=H265 audio=[Atmos, Eac3] ch=5.1 seasons=[1] eps=[1] group="FLUX" container=mkv
+tt0412142:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(7) size=Some(5905580032) site=Some("TorBox|unknown") cached=None service=None | title="House of Cards" res=R1080p q=BluRay codec=Unknown lang=en seasons=[1] eps=[1] container=mkv
+tt0412142:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(10) size=Some(434110464) site=Some("TheRARBG") cached=None service=None | title="Fixer Upper Colorado Mountain House" res=R720p q=Unknown codec=H265 seasons=[1] eps=[1] group="MeGusta"
+tt0412142:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(532257177) site=Some("StremThru") cached=None service=None | title="House" res=Unknown q=BluRay codec=H264 lang=en,hu,es seasons=[1] eps=[1] group="Patkos96" container=mkv
+tt0460681:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(382310809) site=Some("StremThru|Knaben") cached=None service=None | title="Supernatural" res=R1080p q=Unknown codec=H265 seasons=[1] eps=[1] container=m4v
+tt0460681:1:1 "[TORRENT🧲] Comet 720p"
+    seeders=None size=Some(690592153) site=Some("StremThru") cached=None service=None | title="Supernatural" res=R720p q=Unknown codec=Unknown lang=zh seasons=[1] eps=[1] group="人人影视" container=mp4
+tt0460681:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(0) size=Some(6335076761) site=Some("DebridAccount|torbox") cached=None service=None | title="gs88-supernatural" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+tt2442560:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(798280908) site=Some("DMM") cached=None service=None | title="Peaky Blinders" res=R1080p q=BluRay codec=H265 audio=[Aac] lang=en,it,es seasons=[1] eps=[1] group="V3SP4EV3R" container=mkv
+tt2442560:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(0) size=Some(9878424780) site=Some("DebridAccount|realdebrid") cached=None service=None | title="Peaky Blinders" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en,zh,es seasons=[1] eps=[1, 2, 3, 4, 5, 6] group="ENG"
+tt2442560:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(3) size=Some(419744972) site=Some("TorBox|war") cached=None service=None | title="wpbS" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mp4
+tt1844624:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(9878424780) site=Some("StremThru") cached=None service=None | title="American Horror Story" res=R1080p q=Remux codec=H264 audio=[DtsHdMa] ch=5.1 seasons=[1] eps=[1] group="NOGRP" container=mkv remux=1
+tt1844624:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(0) size=Some(2576980377) site=Some("TorBox|thesyndicate") cached=None service=None | title="American Horror Story" res=R1080p q=WebDl codec=H264 lang=es seasons=[1] eps=[1] group="THESYNDiCATE" container=mkv dubbed=1
+tt1844624:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(1) size=Some(919601152) site=Some("TorBox|limetorrents") cached=None service=None | title="American Horror Story Murder House" res=Unknown q=Unknown codec=H264 audio=[Ac3] lang=en,it,de,es seasons=[1] eps=[1] container=mkv
+tt1844624:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(9234179686) site=Some("StremThru|Knaben") cached=None service=None | title="S" year=2011 res=Unknown q=WebRip codec=Unknown lang=ru seasons=[1] eps=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+kitsu:1:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(2040109465) site=Some("AnimeTosho") cached=None service=None | title="Cowboy Bebop 16" res=R1080p q=Unknown codec=Unknown bits=10 lang=es group="EG" container=mkv dubbed=1
+kitsu:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(5) size=Some(925578035) site=Some("Knaben") cached=None service=None | title="" year=1998 res=Unknown q=Unknown codec=Unknown audio=[Ac3] lang=ru eps=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+kitsu:1:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(1) size=Some(262248857) site=Some("TorBox|unknown") cached=None service=None | title="Law Firm Weighs In on Fallout 76 Fornite Hits 200 Million Players Live Action Cowboy Bebop" res=Unknown q=Unknown codec=Unknown container=mp4
+kitsu:12:1 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(1181116006) site=Some("StremThru") cached=None service=None | title="高清剧集网发布" year=1999 res=R2160p q=WebDl codec=H264 audio=[Aac] lang=zh seasons=[1] group="ZeroTV"
+kitsu:12:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(54) size=Some(1610612736) site=Some("TorBox|chris44") cached=None service=None | title="One Piece" year=1999 res=R1080p q=WebDl codec=Unknown lang=fr,es seasons=[1] eps=[1] container=mkv dubbed=1
+kitsu:12:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(0) size=None site=Some("TorBox|unknown") cached=None service=None | title="C81 [Higuma-ya Nora Higuma] Nami-san ga! One Piece" res=Unknown q=Unknown codec=Unknown lang=en
+kitsu:11469:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(3) size=Some(5368709120) site=Some("TorBox|ao") cached=None service=None | title="My Hero Academia" res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=2.0 lang=zh seasons=[1] group="Ao" complete=1
+kitsu:11469:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(12) size=Some(2469606195) site=Some("TorBox|ember") cached=None service=None | title="My Hero Academia: Heroes Rising" year=2019 res=R1080p q=WebRip codec=H265 group="EMBER"
+kitsu:11469:1 "[TORRENT🧲] Comet 480p"
+    seeders=Some(8) size=Some(1610612736) site=Some("TorBox|unknown") cached=None service=None | title="Boku no Hero Academia - Heroes-Rising - Movie" res=R480p q=Unknown codec=Unknown group="Erai-raws"
+kitsu:11469:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(1) size=Some(366477312) site=Some("TorBox|unknown") cached=None service=None | title="Boku no Hero Academia" year=2021 res=Unknown q=Unknown codec=Unknown
+kitsu:7442:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(18) size=Some(657247436) site=Some("Torrentio|EXT") cached=None service=None | title="Attack on Titan" res=R1080p q=BluRay codec=Av1 audio=[Opus] ch=2.0 lang=es seasons=[1] eps=[1] group="GapMoe" container=mkv repack=1 dubbed=1
+kitsu:7442:1 "[TORRENT🧲] Comet 720p"
+    seeders=Some(3) size=Some(20186346291) site=Some("TorBox|noobsubs") cached=None service=None | title="Attack on Titan 25" res=R720p q=BluRay codec=Unknown bits=8 audio=[Aac] lang=en,es group="NoobSubs" container=mp4 dubbed=1
+kitsu:7442:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(18) size=Some(78643200) site=Some("Nyaa") cached=None service=None | title="Attack On Titan" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1, 2, 3] container=mkv
+kitsu:1555:1 "[TORRENT🧲] Comet 1080p"
+    seeders=Some(4) size=Some(635017625) site=Some("TorBox|up") cached=None service=None | title="Naruto - Naruto, the Genie, and the Three Wishes, Believe It!" res=R1080p q=BluRay codec=H264 audio=[Ac3] group="uP" container=mkv
+kitsu:1555:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(5690831667) site=Some("StremThru") cached=None service=None | title="Naruto Shippuden" res=Unknown q=Unknown codec=Unknown seasons=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] eps=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337, 338, 339, 340, 341, 342, 343, 344, 345] group="1-345"
+kitsu:1555:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(0) size=Some(1932735283) site=Some("TorBox|unknown") cached=None service=None | title="Naruto Shippuden" res=Unknown q=Unknown codec=Unknown seasons=[1]
+kitsu:46474:1 "[TORRENT🧲] Comet 2160p"
+    seeders=None size=Some(1610612736) site=Some("StremThru") cached=None service=None | title="高清剧集网发布" year=2023 res=R2160p q=WebDl codec=H265 hdr=[Hdr10] audio=[Aac] lang=zh seasons=[1] group="ColorTV"
+kitsu:46474:1 "[TORRENT🧲] Comet 1080p"
+    seeders=None size=Some(14066017894) site=Some("StremThru") cached=None service=None | title="Sousou no Frieren" year=2023 res=R1080p q=WebRip codec=H265 lang=ru seasons=[1]
+kitsu:46474:1 "[TORRENT🧲] Comet unknown"
+    seeders=Some(259) size=Some(283220377) site=Some("Torrentio|NyaaSi") cached=None service=None | title="Frieren - Beyond Journey's End" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] container=mkv
+kitsu:46474:1 "[TORRENT🧲] Comet unknown"
+    seeders=None size=Some(3113851289) site=Some("DMM") cached=None service=None | title="Sousou no Frieren" res=Unknown q=Unknown codec=Unknown seasons=[1] eps=[1] group="Kakumei" container=mkv
