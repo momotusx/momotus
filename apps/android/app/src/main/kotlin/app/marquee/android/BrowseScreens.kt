@@ -107,11 +107,14 @@ class DiscoverHolder(
     override fun onCleared() = view.close()
 }
 
-/** Where a browse page starts and ends: under the TV pill, or under the status bar and over the phone bar. */
+/**
+ * Where a browse page starts and ends: under the TV pill, or under the status bar and over the phone
+ * bar. A deep page ([framed] false) has no pill above it on TV, so it starts at the safe area.
+ */
 @Composable
-internal fun pagePadding(): PaddingValues =
+internal fun pagePadding(framed: Boolean = true): PaddingValues =
     if (Marquee.form == Form.Tv) {
-        PaddingValues(top = tvContentTop(), bottom = Marquee.safe.bottom)
+        PaddingValues(top = if (framed) tvContentTop() else Marquee.safe.top, bottom = Marquee.safe.bottom)
     } else {
         val status = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         PaddingValues(top = status + Marquee.space.m, bottom = Marquee.space.l + LocalBarSpace.current)

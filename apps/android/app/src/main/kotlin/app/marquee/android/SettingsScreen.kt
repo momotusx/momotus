@@ -32,8 +32,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -60,6 +62,7 @@ import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
+import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RoundButton
@@ -67,6 +70,8 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.dpadExits
+import app.marquee.design.focusClickable
+import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -114,7 +119,10 @@ private fun SaidLine(
 }
 
 @Composable
-fun SettingsScreen(session: CoreSession) {
+fun SettingsScreen(
+    session: CoreSession,
+    onImport: () -> Unit,
+) {
     val holder =
         viewModel<SettingsHolder>(
             key = "settings",
@@ -218,6 +226,14 @@ fun SettingsScreen(session: CoreSession) {
                 }
             }
         }
+        item(key = "import") {
+            LinkRow(
+                Icons.Download,
+                "Import from Stremio",
+                "Addons, library and progress, with a code. No password typed here.",
+                onImport,
+            )
+        }
         item(key = "playback-head") { Kicker("Playback") }
         item(key = "playback") { Playback(holder, busy != null) { what, op -> run(what, Place.Playback, op = op) } }
         said?.takeIf { it.place == Place.Playback }?.let { item(key = "playback-said") { SaidLine(it) } }
@@ -240,6 +256,39 @@ private fun Section(content: @Composable () -> Unit) {
             .border(1.dp, colors.edge, shape)
             .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
     ) { content() }
+}
+
+/** A row that opens another page: its icon, name and what it does, and a chevron (the web's LinkRow). */
+@Composable
+private fun LinkRow(
+    icon: ImageVector,
+    title: String,
+    text: String,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(Marquee.radius.l)
+    val colors = Marquee.colors
+    Row(
+        Modifier
+            .padding(horizontal = Marquee.safe.side)
+            .fillMaxWidth()
+            .marqueeFocus(Marquee.radius.l, scale = 1.01f)
+            .clip(shape)
+            .background(colors.surface)
+            .border(1.dp, colors.edge, shape)
+            .semantics(mergeDescendants = true) {}
+            .focusClickable(onClick, Role.Button)
+            .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(icon, tint = colors.muted)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            MqText(title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+            MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = 2)
+        }
+        MqIcon(Icons.ChevronRight, tint = colors.muted)
+    }
 }
 
 @Composable

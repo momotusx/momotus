@@ -78,7 +78,7 @@ import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
-import app.marquee.design.openTrailer
+import app.marquee.design.openLink
 
 /** How many lines of the synopsis show before "More". */
 private const val SYNOPSIS_LINES = 3
@@ -335,7 +335,7 @@ private fun Info(
                 RoundButton(Icons.Layers, "Versions", { onVersions(target.videoId) }, showLabel = true)
             }
             details.trailers.firstOrNull()?.let { trailer ->
-                RoundButton(Icons.Film, "Trailer", { openTrailer(context, trailer.url) }, showLabel = true)
+                RoundButton(Icons.Film, "Trailer", { openLink(context, trailer.url) }, showLabel = true)
             }
             RoundButton(
                 icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,

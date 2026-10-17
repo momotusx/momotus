@@ -175,7 +175,10 @@ private fun AppNav(
             predictivePopTransitionSpec = { fade },
             entryProvider =
                 entryProvider {
-                    entry<Route.Onboarding> { OnboardingScreen(session, onDone = ::arrive) }
+                    entry<Route.Onboarding> {
+                        OnboardingScreen(session, onDone = ::arrive, onImport = { backStack.add(Route.Import) })
+                    }
+                    entry<Route.Import> { ImportScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
                         if (tv) {
                             TvHome(app.home, app.tvHome, onOpen = ::open, onPlay = ::playTile)
@@ -193,7 +196,7 @@ private fun AppNav(
                             onDiscover = { choose(Route.Discover) },
                         )
                     }
-                    entry<Route.Settings> { SettingsScreen(session) }
+                    entry<Route.Settings> { SettingsScreen(session, onImport = { backStack.add(Route.Import) }) }
                     entry<Route.Title> { route ->
                         TitleScreen(
                             route,

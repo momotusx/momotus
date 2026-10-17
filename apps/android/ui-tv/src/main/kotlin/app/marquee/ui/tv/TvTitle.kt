@@ -73,7 +73,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
-import app.marquee.design.openTrailer
+import app.marquee.design.openLink
 
 private const val PLAY = "play"
 private const val EPISODES = "episodes"
@@ -281,7 +281,7 @@ private fun Info(
                 RoundButton(
                     icon = Icons.Film,
                     label = "Trailer",
-                    onClick = { openTrailer(context, trailer.url) },
+                    onClick = { openLink(context, trailer.url) },
                     showLabel = true,
                     focusRequester = focus.requesterFor("trailer"),
                     onFocusChange = focus.watch(ACTIONS, "trailer"),

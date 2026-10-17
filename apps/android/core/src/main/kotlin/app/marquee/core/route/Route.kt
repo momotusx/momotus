@@ -31,6 +31,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object Settings : Route
 
+    /** Import from Stremio: a code to enter at link.stremio.com. */
+    @Serializable
+    data object Import : Route
+
     @Serializable
     data class Title(
         val kind: String,

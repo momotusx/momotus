@@ -647,10 +647,10 @@ fun RatingLine(
 }
 
 /**
- * Opens a trailer's watch page in the YouTube app or a browser. False when the device has neither
- * (some TVs), so the caller can say so.
+ * Opens a web page (a trailer's watch page, a sign-in link) in the app that handles it or a
+ * browser. False when the device has neither (some TVs), so the caller can say so.
  */
-fun openTrailer(
+fun openLink(
     context: android.content.Context,
     url: String,
 ): Boolean =

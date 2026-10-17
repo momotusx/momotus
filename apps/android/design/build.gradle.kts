@@ -29,6 +29,8 @@ dependencies {
     api(libs.coil.compose)
     api(libs.coil.network.okhttp)
     implementation(libs.androidx.core.ktx)
+    // The QR encoder for codes shown on a TV (Apache 2.0); Android has none of its own.
+    implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
