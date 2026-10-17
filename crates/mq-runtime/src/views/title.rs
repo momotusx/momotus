@@ -19,6 +19,12 @@ use tokio::task::JoinSet;
 const META_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct TitleDetails {
     pub id: String,
     pub kind: String,
@@ -37,6 +43,11 @@ pub struct TitleDetails {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum TitleState {
     Loading,
@@ -45,6 +56,12 @@ pub enum TitleState {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct TitleHeader {
     pub state: TitleState,
     pub details: Option<TitleDetails>,
@@ -56,6 +73,12 @@ pub struct TitleHeader {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct PlayTarget {
     pub video_id: String,
     pub label: String,
@@ -63,6 +86,12 @@ pub struct PlayTarget {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct Episode {
     pub video_id: String,
     pub season: u32,
@@ -76,6 +105,11 @@ pub struct Episode {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TitleUpdate {
     Header { header: Box<TitleHeader> },
@@ -99,6 +133,12 @@ pub struct TitleView {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct TitleSnapshot {
     pub header: TitleHeader,
     pub episodes: Vec<Episode>,

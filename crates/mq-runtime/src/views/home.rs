@@ -22,6 +22,12 @@ const SOFT_DEADLINE: Duration = Duration::from_millis(2500);
 const HARD_DEADLINE: Duration = Duration::from_secs(12);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct Tile {
     pub id: String,
     pub kind: String,
@@ -38,6 +44,11 @@ pub struct Tile {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum RowState {
     Loading,
@@ -48,6 +59,12 @@ pub enum RowState {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct HomeRow {
     pub row_id: String,
     pub title: String,
@@ -57,11 +74,23 @@ pub struct HomeRow {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct HomeHeader {
     pub hero: Option<Hero>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct Hero {
     pub tile: Tile,
     /// One line telling the user why this title is here.
@@ -69,6 +98,11 @@ pub struct Hero {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum HomeUpdate {
     Header { header: Box<HomeHeader> },
@@ -89,6 +123,12 @@ pub struct HomeView {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
 pub struct HomeSnapshot {
     pub header: HomeHeader,
     pub rows: Vec<HomeRow>,

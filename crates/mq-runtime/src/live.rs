@@ -8,6 +8,11 @@ use std::time::Duration;
 
 /// Index-based list change, serializable for traces and every binding.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum ListDiff<T> {
     Append { values: Vec<T> },
