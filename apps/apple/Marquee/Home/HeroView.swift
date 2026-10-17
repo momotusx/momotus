@@ -1,74 +1,88 @@
 import SwiftUI
 
-/// Full-bleed art for one title with its logo, the reason it is here and
-/// the two actions. Holds its height while empty so rows never jump.
+/// The home hero: an inset rounded card holding the backdrop, why the title
+/// is here, its logo (or its name), the meta line, three lines of synopsis,
+/// Play and Details. Holds its height while empty so rows never jump.
 struct HeroView: View {
     let hero: Hero?
     let height: CGFloat
-    let overlap: CGFloat
     @Environment(\.metrics) private var metrics
 
     var body: some View {
+        let card = RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous)
         ZStack(alignment: .bottomLeading) {
             ArtImage(url: hero?.tile.background ?? hero?.tile.poster, maxPixels: ArtSize.backdrop)
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                .clipped()
                 .accessibilityHidden(true)
             scrims
             if let hero {
                 details(hero)
-                    .padding(.horizontal, metrics.gutter)
-                    .padding(.bottom, overlap + Theme.Space.m)
+                    .padding(.leading, metrics.wide ? Theme.Space.xl - 12 : 18)
+                    .padding(.trailing, metrics.wide ? Theme.Space.l : 18)
+                    .padding(.bottom, metrics.wide ? Theme.Space.l : 20)
             }
         }
+        .frame(maxWidth: .infinity)
         .frame(height: height)
+        .clipShape(card)
+        .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
         .overlay(alignment: .topLeading) {
+            // Phone: the wordmark sits in the card; wide screens carry it in the navigation.
             if !metrics.wide {
-                Text("Marquee")
-                    .font(.display(Theme.type.title1))
-                    .foregroundStyle(Theme.Palette.text)
-                    .padding(.leading, metrics.gutter)
-                    .padding(.top, 64)
-                    .accessibilityAddTraits(.isHeader)
+                Wordmark(size: 22).padding(.leading, 18).padding(.top, 16)
             }
         }
-        .padding(.bottom, -overlap)
+        .padding(.horizontal, metrics.wide ? metrics.gutter - 16 : 10)
     }
 
+    /// The art fades to the page colour from the left (wide) or the top and
+    /// the bottom (phone), so the words read on any picture.
     private var scrims: some View {
         let bg = Theme.Palette.bg
         return ZStack {
             if metrics.wide {
                 LinearGradient(
-                    stops: [.init(color: bg.opacity(0.94), location: 0), .init(color: bg.opacity(0.55), location: 0.38), .init(color: .clear, location: 0.7)],
+                    stops: [
+                        .init(color: bg.opacity(0.94), location: 0), .init(color: bg.opacity(0.72), location: 0.28),
+                        .init(color: bg.opacity(0.18), location: 0.58), .init(color: .clear, location: 0.72),
+                    ],
                     startPoint: .leading, endPoint: .trailing)
-            } else {
-                // Under the status bar and the wordmark, so both read on bright art.
                 LinearGradient(
-                    stops: [.init(color: bg.opacity(0.75), location: 0), .init(color: bg.opacity(0.5), location: 0.2), .init(color: .clear, location: 0.34)],
+                    stops: [.init(color: bg.opacity(0.9), location: 0), .init(color: bg.opacity(0.3), location: 0.34), .init(color: .clear, location: 0.58)],
+                    startPoint: .bottom, endPoint: .top)
+            } else {
+                LinearGradient(
+                    stops: [.init(color: bg.opacity(0.55), location: 0), .init(color: .clear, location: 0.22)],
                     startPoint: .top, endPoint: .bottom)
+                LinearGradient(
+                    stops: [.init(color: bg.opacity(0.96), location: 0), .init(color: bg.opacity(0.55), location: 0.38), .init(color: .clear, location: 0.62)],
+                    startPoint: .bottom, endPoint: .top)
             }
-            LinearGradient(
-                stops: [.init(color: .clear, location: 0.42), .init(color: bg.opacity(0.82), location: 0.8), .init(color: bg, location: 1)],
-                startPoint: .top, endPoint: .bottom)
         }
         .allowsHitTesting(false)
     }
 
     private func details(_ hero: Hero) -> some View {
         let tile = hero.tile
-        return VStack(alignment: .leading, spacing: metrics.wide ? 14 : 10) {
-            TitleLogo(logo: tile.logo, name: tile.name, maxWidth: metrics.wide ? 440 : 260, height: metrics.wide ? 120 : 88)
-            Text(hero.reason)
-                .font(.display(metrics.wide ? Theme.type.title1 : Theme.type.title2, italic: true))
-                .foregroundStyle(Theme.Palette.text)
-            if let meta = meta(tile) {
-                Text(meta)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+        let wide = metrics.wide
+        return VStack(alignment: .leading, spacing: 0) {
+            Eyebrow(text: hero.reason)
+                .padding(.bottom, wide ? 14 : 10)
+            TitleLogo(
+                logo: tile.logo, name: tile.name, maxWidth: wide ? 440 : 260, height: wide ? 120 : 84,
+                nameSize: wide ? Theme.type.hero + 12 : Theme.type.title1)
+                .padding(.bottom, wide ? 18 : 12)
+            MetaLine(rating: tile.rating, parts: heroMeta(hero), size: wide ? Theme.type.callout : 13)
+                .foregroundStyle(Theme.Palette.muted)
+                .padding(.bottom, wide ? 14 : 10)
+            if let description = hero.description {
+                Text(description)
+                    .font(.text(wide ? Theme.type.callout : 14, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, wide ? 22 : 16)
             }
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: wide ? 24 : 14) {
                 NavigationLink(value: TitleRoute(tile)) {
                     Label("Play", glyph: "play-fill")
                 }
@@ -76,26 +90,57 @@ struct HeroView: View {
                 NavigationLink(value: TitleRoute(tile)) {
                     Label("Details", glyph: "info")
                 }
-                .buttonStyle(PillButtonStyle())
+                .buttonStyle(RoundButtonStyle())
             }
-            .padding(.top, 6)
         }
-        .frame(maxWidth: metrics.wide ? 620 : .infinity, alignment: .leading)
-    }
-
-    private func meta(_ tile: Tile) -> String? {
-        let parts = [tile.releaseInfo, kindLabel(tile.kind)].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
+        .frame(maxWidth: wide ? 620 : .infinity, alignment: .leading)
     }
 }
 
-func kindLabel(_ kind: String) -> String? {
-    switch kind {
-    case "movie": "Movie"
-    case "series": "Series"
-    case "channel": "Channel"
-    case "tv": "Live TV"
-    default: nil
+/// The hero's meta after the rating: year, runtime and genres, as the core gives them.
+func heroMeta(_ hero: Hero) -> [String] {
+    let genres = (hero.genres ?? []).joined(separator: ", ")
+    return [hero.tile.releaseInfo, hero.runtime, genres.isEmpty ? nil : genres].compactMap { $0 }
+}
+
+/// An eyebrow: accent, spaced capitals.
+struct Eyebrow: View {
+    let text: String
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
+            .tracking(Theme.type.caption * 0.14)
+            .foregroundStyle(Theme.Palette.accent)
+            .lineLimit(2)
+    }
+}
+
+/// "★ 9.2 · 2011–2019 · Drama, Fantasy · 8 seasons": the gold star beside the
+/// rating, the rest joined by dots. Lines break only between the parts.
+struct MetaLine: View {
+    let rating: String?
+    let parts: [String]
+    let size: CGFloat
+
+    var body: some View {
+        FlowRow(spacing: size * 0.45) {
+            if let rating {
+                HStack(spacing: size * 0.3) {
+                    Glyph("star-fill", size: size * 0.9, relativeTo: .callout).foregroundStyle(Theme.Palette.star)
+                    Text(rating).fontWeight(.bold).foregroundStyle(Theme.Palette.text)
+                }
+            }
+            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                if rating != nil || index > 0 {
+                    Text("\u{B7}").foregroundStyle(Theme.Palette.dim)
+                }
+                Text(part)
+            }
+        }
+        .font(.text(size, weight: .semibold, relativeTo: .callout))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(([rating.map { "Rated \($0)" }] + parts).compactMap { $0 }.joined(separator: ", "))
     }
 }
 
@@ -110,7 +155,6 @@ struct TitleLogo: View {
 
     /// nil while loading; then the art, or none when there is no logo.
     @State private var loaded: DecodedArt??
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -119,14 +163,11 @@ struct TitleLogo: View {
                 Image(decorative: art.image, scale: 1)
                     .resizable()
                     .scaledToFit()
-                    // Logos keep their colours; on a light page a soft shadow keeps
-                    // white letters from vanishing into the cream.
-                    .shadow(color: .black.opacity(scheme == .light ? 0.35 : 0), radius: 6, y: 2)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .transition(.opacity)
             case .some(.none):
                 Text(name)
-                    .font(.display(nameSize))
+                    .display(nameSize)
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)

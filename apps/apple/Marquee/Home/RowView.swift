@@ -9,8 +9,8 @@ struct RowView: View {
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header.padding(.horizontal, metrics.gutter)
+        VStack(alignment: .leading, spacing: metrics.wide ? 16 : 12) {
+            RowHeader(title: row.title, subtitle: subtitle).padding(.horizontal, metrics.gutter)
             switch row.state {
             case .loading, .slow:
                 SkeletonStrip()
@@ -27,20 +27,6 @@ struct RowView: View {
         #if os(tvOS)
         .focusSection()
         #endif
-    }
-
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(row.title)
-                .font(.display(Theme.type.title2))
-                .foregroundStyle(Theme.Palette.text)
-                .accessibilityAddTraits(.isHeader)
-            if let subtitle {
-                Text(subtitle)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
-                    .foregroundStyle(Theme.Palette.muted)
-            }
-        }
     }
 
     private var subtitle: String? {
@@ -60,7 +46,6 @@ struct RowView: View {
                         }
                     }
                     .buttonStyle(CardButtonStyle())
-                    .accessibilityLabel(tile.name)
                     .simultaneousGesture(TapGesture().onEnded { onOpen?() })
                 }
             }
@@ -73,17 +58,65 @@ struct RowView: View {
     }
 }
 
-/// Poster art for a catalog tile.
+/// A section header: a bar, the title, its source and a hairline to the edge.
+struct RowHeader: View {
+    let title: String
+    var subtitle: String?
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        HStack(spacing: metrics.wide ? 14 : 8) {
+            Capsule()
+                .fill(Theme.Palette.text)
+                .frame(width: metrics.wide ? 4 : 3, height: size * 1.05)
+            Text(title)
+                .display(size)
+                .foregroundStyle(Theme.Palette.text)
+                .lineLimit(1)
+                .layoutPriority(1)
+                .accessibilityAddTraits(.isHeader)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.text(metrics.cardInfo + 1, weight: .medium, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.dim)
+                    .lineLimit(1)
+            }
+            Rectangle()
+                .fill(Theme.Palette.lineStrong)
+                .frame(height: 1)
+                .frame(minWidth: 12, maxWidth: .infinity)
+                .padding(.leading, 4)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var size: CGFloat {
+        #if os(tvOS)
+        return Theme.type.title3
+        #else
+        return metrics.wide ? 24 : 19
+        #endif
+    }
+}
+
+/// A catalog poster: the art with its rating chip, the name and the year
+/// (or the core's caption) under it, never over it.
 struct PosterTile: View {
     let tile: Tile
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        ArtImage(url: tile.poster, fallback: [tile.name, tile.releaseInfo].compactMap { $0 }.joined(separator: "\n"))
-            .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(tile.name)
+        VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
+            ArtImage(url: tile.poster, fallback: tile.name)
+                .frame(width: size.width, height: size.height)
+                .overlay(alignment: .topTrailing) {
+                    if let rating = tile.rating { RatingChip(rating: rating).padding(metrics.chip * 0.55) }
+                }
+                .cardArt()
+            CardCaption(name: tile.name, info: tile.releaseInfo).frame(width: size.width, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel([tile.name, tile.releaseInfo, tile.rating.map { "rated \($0)" }].compactMap { $0 }.joined(separator: ", "))
     }
 
     private var size: CGSize {
@@ -109,16 +142,21 @@ private struct SkeletonStrip: View {
     @State private var dim = false
 
     var body: some View {
-        HStack(spacing: metrics.wide ? 20 : 12) {
-            ForEach(0..<10, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)
-                    .fill(Theme.Palette.surface)
-                    .frame(width: metrics.poster.width, height: metrics.poster.height)
+        // The posters hang in an overlay so their row never widens the page:
+        // as a plain child it pushed a whole Search page off the side.
+        Color.clear
+            .frame(height: metrics.poster.height)
+            .overlay(alignment: .leading) {
+                HStack(spacing: metrics.wide ? 20 : 12) {
+                    ForEach(0..<10, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous)
+                            .fill(Theme.Palette.surface)
+                            .frame(width: metrics.poster.width, height: metrics.poster.height)
+                    }
+                }
+                .padding(.horizontal, metrics.gutter)
             }
-        }
-        .padding(.horizontal, metrics.gutter)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipped()
+            .clipped()
         .opacity(dim ? 0.55 : 1)
         .animation(reduceMotion ? nil : .easeInOut(duration: 1.1).repeatForever(), value: dim)
         .onAppear { dim = true }

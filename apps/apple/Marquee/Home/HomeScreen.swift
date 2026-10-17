@@ -15,7 +15,8 @@ struct HomeScreen: View {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 // Without catalogs there is no art to show: setup takes the top.
                 if !model.needsSetup {
-                    HeroView(hero: model.header.hero, height: heroHeight, overlap: overlap)
+                    HeroView(hero: model.header.hero, height: heroHeight)
+                        .padding(.top, cardTop)
                 }
                 content
             }
@@ -23,8 +24,11 @@ struct HomeScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > max(24, heroHeight - 160) } action: { underBar = $1 }
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > cardTop } action: { underBar = $1 }
+        #if os(macOS)
+        // The card runs up under the window toolbar, where the navigation pill floats over it.
         .fullBleedTop()
+        #endif
         .topScrim(underBar || model.needsSetup)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         #if DEBUG
@@ -57,11 +61,10 @@ struct HomeScreen: View {
     private var setup: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             if !metrics.wide {
-                Text("Marquee").font(.display(Theme.type.title1)).foregroundStyle(Theme.Palette.muted)
-                    .padding(.bottom, Theme.Space.l)
+                Wordmark(size: 22).padding(.bottom, Theme.Space.l)
             }
             Text("Home fills up from your addons")
-                .font(.display(Theme.type.title1))
+                .display(Theme.type.title1)
                 .foregroundStyle(Theme.Palette.text)
             Text("No addon with catalogs is installed yet. Add one to see what is popular, new and featured.")
                 .font(.text(Theme.type.body))
@@ -76,15 +79,24 @@ struct HomeScreen: View {
         .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xxl - 20)
     }
 
-    /// The first row slides up over the faded bottom of the hero art.
-    private var overlap: CGFloat { metrics.wide ? 72 : 24 }
+    /// The card's gap to the top: under the status bar on a phone, under
+    /// the window toolbar on the Mac.
+    private var cardTop: CGFloat {
+        #if os(macOS)
+        return 12
+        #elseif os(tvOS)
+        return 0
+        #else
+        return 8
+        #endif
+    }
 
     private var heroHeight: CGFloat {
         #if os(tvOS)
-        return 670
+        return 600
         #else
-        guard width > 0 else { return metrics.wide ? 520 : 460 }
-        return metrics.wide ? min(max(width * 0.5, 420), 640) : min(width * 1.2, 540)
+        guard width > 0 else { return metrics.wide ? 460 : 520 }
+        return metrics.wide ? min(max(width * 0.36, 400), 560) : 520
         #endif
     }
 }

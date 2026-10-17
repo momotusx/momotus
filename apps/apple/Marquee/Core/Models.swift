@@ -14,12 +14,19 @@ struct Tile: Decodable, Hashable, Sendable {
     let progress: Double?
     /// Video to resume for Continue Watching tiles.
     let videoId: String?
+    /// The IMDb rating the addon gave, as written ("8.4").
+    let rating: String?
 }
 
 struct Hero: Decodable, Hashable, Sendable {
     let tile: Tile
     /// One line telling the user why this title is here.
     let reason: String
+    let description: String?
+    /// At most three, in the addon's order. Optional here only so replies
+    /// recorded before the field existed still decode.
+    let genres: [String]?
+    let runtime: String?
 }
 
 struct HomeHeader: Decodable, Hashable, Sendable {

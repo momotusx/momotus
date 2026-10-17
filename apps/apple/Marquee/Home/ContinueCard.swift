@@ -1,42 +1,28 @@
 import SwiftUI
 
-/// A Continue Watching or Next Up card: 16:9 art (the episode still, else the
-/// backdrop, else the poster), the logo or title bottom left, the episode
-/// below, and progress on the bottom edge.
+/// A Continue Watching or Next Up card: a 16:9 still (the episode still,
+/// else the backdrop, else the poster) with a thin accent progress line,
+/// then the name and the core's caption under it.
 struct ContinueCard: View {
     let tile: Tile
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ArtImage(url: tile.background ?? tile.poster, maxPixels: ArtSize.backdrop / 2)
-                .overlay {
-                    LinearGradient(
-                        stops: [.init(color: .clear, location: 0.45), .init(color: .black.opacity(0.75), location: 1)],
-                        startPoint: .top, endPoint: .bottom)
-                }
-                .overlay(alignment: .bottomLeading) {
-                    TitleLogo(logo: tile.logo, name: tile.name, maxWidth: size.width * 0.55, height: size.height * 0.26, nameSize: Theme.type.title3)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, tile.progress == nil ? 14 : 24)
-                }
+        VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
+            ArtImage(url: tile.background ?? tile.poster, maxPixels: ArtSize.backdrop / 2, fallback: tile.name)
                 .overlay(alignment: .bottom) {
                     if let progress = tile.progress { EdgeProgress(value: progress) }
                 }
                 .frame(width: size.width, height: size.height)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
-            Text(caption)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
-                .foregroundStyle(Theme.Palette.muted)
-                .lineLimit(1)
-                .frame(width: size.width, alignment: .leading)
+                .cardArt()
+            CardCaption(name: tile.name, info: caption).frame(width: size.width)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(tile.name), \(caption)")
     }
 
     private var size: CGSize {
-        let width: CGFloat = metrics.wide ? (metrics.poster.width >= Theme.Poster.tv.width ? Theme.Poster.landscape.width : 320) : 260
+        let width: CGFloat = metrics.wide ? (metrics.poster.width >= Theme.Poster.tv.width ? Theme.Poster.landscape.width : 320) : 240
         return CGSize(width: width, height: width * 9 / 16)
     }
 
@@ -44,24 +30,26 @@ struct ContinueCard: View {
     private var caption: String { tile.releaseInfo ?? "" }
 }
 
-/// Progress inside a card or poster bottom strip: a 4 pt bar, track and fill, on a
-/// 32 pt dark scrim so it reads on white art too.
+/// Progress at the foot of card art: a thin accent line on its track, over
+/// a dark strip so it reads on white art too.
 struct EdgeProgress: View {
     let value: Double
+    @Environment(\.metrics) private var metrics
 
     var body: some View {
+        let inset: CGFloat = metrics.wide ? 12 : 6
         ZStack(alignment: .bottom) {
-            LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 32)
+            LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
+                .frame(height: metrics.wide ? 30 : 20)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.24))
-                    Capsule().fill(.white).frame(width: geo.size.width * min(max(value, 0), 1))
+                    Capsule().fill(.white.opacity(0.28))
+                    Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
                 }
             }
-            .frame(height: 4)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+            .frame(height: metrics.wide ? 4 : 3)
+            .padding(.horizontal, inset)
+            .padding(.bottom, inset)
         }
         .accessibilityHidden(true)
     }

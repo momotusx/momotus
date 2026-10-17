@@ -45,6 +45,8 @@ struct ChipRow<ID: Hashable>: View {
         ForEach(chips) { chip in
             Button { select(chip.id) } label: {
                 HStack(spacing: 6) {
+                    // Selection is a fill and a check, never a ring: the ring means focus.
+                    if isSelected(chip.id) { Glyph("check", size: Theme.type.callout, relativeTo: .callout) }
                     Text(chip.title)
                     if let detail = chip.detail {
                         Text(detail).fontWeight(.regular).opacity(0.7)
@@ -57,7 +59,7 @@ struct ChipRow<ID: Hashable>: View {
     }
 }
 
-/// Selected chips are filled with the text color; the rest sit on the raised surface.
+/// Selected chips are white with dark words; the rest are a faint white fill.
 struct ChipStyle: ButtonStyle {
     let selected: Bool
 
@@ -73,11 +75,11 @@ struct ChipStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
-                .foregroundStyle(selected ? Theme.Palette.bg : Theme.Palette.text.opacity(0.85))
+                .labelFont(Theme.type.callout, relativeTo: .callout)
+                .foregroundStyle(selected ? Theme.Palette.onPrimary : Theme.Palette.muted)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(selected ? Theme.Palette.text : Theme.Palette.raised.opacity(hovered ? 1 : 0.8)))
+                .background(Capsule().fill(selected ? Theme.Palette.primary : .white.opacity(hovered ? 0.14 : 0.08)))
                 .contentShape(Capsule())
                 .modifier(FocusRing(shape: Capsule(), active: focused))
                 .scaleEffect(configuration.isPressed ? 0.96 : 1)
@@ -92,7 +94,7 @@ struct ChipStyle: ButtonStyle {
 /// Posters in a grid that fills the width; each opens its title page.
 struct PosterGrid: View {
     let tiles: [Tile]
-    var caption: (Tile) -> String? = { _ in nil }
+    var caption: (Tile) -> String? = \.releaseInfo
     /// Called when the last poster comes on screen, to load the next page.
     var onEnd: (() -> Void)?
     @Environment(\.metrics) private var metrics
@@ -105,29 +107,17 @@ struct PosterGrid: View {
         ) {
             ForEach(Array(tiles.enumerated()), id: \.offset) { index, tile in
                 NavigationLink(value: TitleRoute(tile)) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
                         ArtImage(url: tile.poster, fallback: tile.name)
                             .aspectRatio(2 / 3, contentMode: .fit)
+                            .overlay(alignment: .topTrailing) {
+                                if let rating = tile.rating { RatingChip(rating: rating).padding(metrics.chip * 0.55) }
+                            }
                             .overlay(alignment: .bottom) {
                                 if let progress = tile.progress { EdgeProgress(value: progress) }
                             }
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
-                        #if !os(tvOS)
-                        // Similar posters need their names; TV shows them on focus instead.
-                        Text(tile.name)
-                            .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
-                            .foregroundStyle(Theme.Palette.text)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        #endif
-                        if let text = caption(tile) {
-                            Text(text)
-                                .font(.text(Theme.type.caption + 1, relativeTo: .caption))
-                                .foregroundStyle(Theme.Palette.muted)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                            .cardArt()
+                        CardCaption(name: tile.name, info: caption(tile))
                     }
                 }
                 .buttonStyle(CardButtonStyle())
@@ -138,6 +128,45 @@ struct PosterGrid: View {
     }
 }
 
+/// Under card art: the name (700, accent while the card is lit), then the
+/// year or the core's caption, dim.
+struct CardCaption: View {
+    let name: String
+    let info: String?
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            CardTitle(text: name, size: metrics.cardName)
+            if let info, !info.isEmpty {
+                Text(info)
+                    .font(.text(metrics.cardInfo, weight: .medium, relativeTo: .caption))
+                    .foregroundStyle(Theme.Palette.dim)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// "★ 8.0" on a small strong-glass chip at a poster's top right.
+struct RatingChip: View {
+    let rating: String
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        HStack(spacing: metrics.chip * 0.3) {
+            Glyph("star-fill", size: metrics.chip * 0.85, relativeTo: .caption2).foregroundStyle(Theme.Palette.star)
+            Text(rating).font(.text(metrics.chip, weight: .bold, relativeTo: .caption2)).monospacedDigit()
+        }
+        .foregroundStyle(Theme.Palette.text)
+        .padding(.horizontal, metrics.chip * 0.55)
+        .frame(height: metrics.chip * 1.8)
+        .glass(Capsule(), strong: true)
+        .accessibilityHidden(true)
+    }
+}
+
 /// The page title in the display face.
 struct ScreenTitle: View {
     let text: String
@@ -145,7 +174,7 @@ struct ScreenTitle: View {
 
     var body: some View {
         Text(text)
-            .font(.display(metrics.wide ? 40 : Theme.type.title1 + 6))
+            .display(metrics.wide ? 40 : Theme.type.title1 + 6)
             .foregroundStyle(Theme.Palette.text)
             .accessibilityAddTraits(.isHeader)
     }

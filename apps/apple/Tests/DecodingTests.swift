@@ -146,3 +146,18 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(!reply.ok)
     #expect(reply.error == "unknown command: nope")
 }
+
+@Test func heroCarriesRatingSynopsisGenresAndRuntime() throws {
+    // The shape mq-runtime's home test asserts (tests/home.rs).
+    let json = #"""
+    {"reason": "#1 in Popular Movies on Cinemeta", "description": "A banker convicted of uxoricide forms a friendship.",
+     "genres": ["Drama", "Crime", "Prison"], "runtime": "142 min",
+     "tile": {"id": "tt0111161", "kind": "movie", "name": "The Shawshank Redemption", "poster": null, "background": null,
+              "logo": null, "posterShape": "poster", "releaseInfo": "1994", "progress": null, "videoId": null, "rating": "9.3"}}
+    """#
+    let hero = try JSONDecoder().decode(Hero.self, from: Data(json.utf8))
+    #expect(hero.tile.rating == "9.3")
+    #expect(hero.genres == ["Drama", "Crime", "Prison"])
+    #expect(hero.runtime == "142 min")
+    #expect(hero.description?.hasPrefix("A banker") == true)
+}
