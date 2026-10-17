@@ -111,6 +111,23 @@ test("Skip credits from live skip data, by remote, only on a press", async ({ pa
       if (v) v.currentTime = at;
     }, s);
   await expect.poll(time, { timeout: 30_000 }).toBeGreaterThanOrEqual(150);
+  try {
+    await skipCredits(page, time, seekTo);
+  } finally {
+    // Back to the seeded position for the tests that follow, pass or fail.
+    await page.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) {
+        v.currentTime = 150;
+        v.pause();
+      }
+    });
+    await expect.poll(time).toBeLessThan(151);
+    await page.waitForTimeout(500);
+  }
+});
+
+async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: number) => Promise<void>) {
   const skip = page.locator('[data-f="player:skip"]');
   await expect(skip).toHaveCount(0);
 
@@ -129,6 +146,18 @@ test("Skip credits from live skip data, by remote, only on a press", async ({ pa
   const t = await time();
   expect(t).toBeGreaterThan(494);
   expect(t).toBeLessThan(510);
+  // Hidden controls: bottom right, inside the band of the control row (its
+  // height follows the action labels, so the band, not one centre line).
+  const box = (sel: string) =>
+    page.evaluate((s) => {
+      const r = document.querySelector(s)?.getBoundingClientRect();
+      return r ? { top: r.top, bottom: r.bottom, mid: (r.top + r.bottom) / 2 } : { top: 0, bottom: 0, mid: 0 };
+    }, sel);
+  const inRow = async () => {
+    const [b, row] = [await box('[data-f="player:skip"]'), await box(".ctl")];
+    return b.mid >= row.top && b.mid <= row.bottom && b.bottom > 1080 * 0.88;
+  };
+  await expect.poll(inRow).toBe(true);
 
   // One press acts at once, without first waking the controls.
   await page.keyboard.press("Enter");
@@ -136,17 +165,12 @@ test("Skip credits from live skip data, by remote, only on a press", async ({ pa
   await expect(skip).toHaveCount(0);
   await expect.poll(() => focused(page)).toBe("player:toggle");
 
-  // Back to the seeded position for the tests that follow.
-  await page.evaluate(() => {
-    const v = document.querySelector("video");
-    if (v) {
-      v.currentTime = 150;
-      v.pause();
-    }
-  });
-  await expect.poll(time).toBeLessThan(151);
-  await page.waitForTimeout(500);
-});
+  // With the controls up (the press woke them) it sits above the progress bar.
+  await seekTo(493);
+  await expect(skip).toBeVisible();
+  await expect(page.locator(".player-scr")).not.toHaveClass(/idle/);
+  await expect.poll(async () => (await box(".scrub")).top - (await box('[data-f="player:skip"]')).bottom).toBeGreaterThan(16);
+}
 
 test("movie page: trailer overlay and Mark watched by remote", async ({ page }) => {
   await page.goto(`/title/movie/${BBB_ID}?form=tv`);
