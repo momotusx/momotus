@@ -40,6 +40,8 @@ export class DebridStore {
   private readonly pumps = new Map<string, Promise<void>>();
   /** Generations with a tombstone written or queued: never written again. */
   private readonly gone = new Set<string>();
+  /** Generations whose tombstone is stored: a repeated disconnect never undoes it. */
+  private readonly durable = new Set<string>();
   /** Tombstones whose record delete failed; retried with the next push. */
   private readonly unfinished = new Map<string, DebridTombstone>();
   private readonly disconnecting = new Map<string, Promise<void>>();
@@ -53,13 +55,17 @@ export class DebridStore {
   async start(): Promise<void> {
     for (const tombstone of await this.keystore.tombstones()) {
       this.gone.add(tombstone.generation);
+      this.durable.add(tombstone.generation);
       await this.finish(tombstone).catch(() => this.unfinished.set(tombstone.generation, tombstone));
     }
     // Records with a tombstone go too: the core refuses them, and a tombstone
     // whose record is still stored is never handed back as deletable.
     const answer = await this.core.restore(await this.keystore.records(), await this.keystore.tombstones());
     for (const tombstone of answer.tombstones) {
-      await this.keystore.deleteTombstone(tombstone).catch(() => undefined);
+      await this.keystore.deleteTombstone(tombstone).then(
+        () => this.durable.delete(tombstone.generation),
+        () => undefined,
+      );
     }
   }
 
@@ -100,11 +106,16 @@ export class DebridStore {
     }
     const tombstone = { service, generation };
     return this.enqueue(service, generation, false, async () => {
-      try {
-        await this.keystore.writeTombstone(tombstone);
-      } catch (error) {
-        this.gone.delete(generation);
-        throw error;
+      // An earlier disconnect whose core call failed left its tombstone: this
+      // one goes on from there, and the generation stays gone whatever fails.
+      if (!this.durable.has(generation)) {
+        try {
+          await this.keystore.writeTombstone(tombstone);
+        } catch (error) {
+          this.gone.delete(generation);
+          throw error;
+        }
+        this.durable.add(generation);
       }
       // The tombstone is durable now: from here a failure is remembered and the rest
       // (core, then record and tombstone) is tried again with the next push.
@@ -114,7 +125,10 @@ export class DebridStore {
         this.unfinished.set(generation, tombstone);
         throw error;
       }
-      await this.finish(tombstone).catch(() => this.unfinished.set(generation, tombstone));
+      await this.finish(tombstone).then(
+        () => this.unfinished.delete(generation),
+        () => this.unfinished.set(generation, tombstone),
+      );
     });
   }
 
@@ -144,6 +158,7 @@ export class DebridStore {
     );
     if (left) throw new Error("record still stored");
     await this.keystore.deleteTombstone(tombstone);
+    this.durable.delete(tombstone.generation);
   }
 
   private enqueue(service: string, generation: string, write: boolean, run: () => Promise<void>): Promise<void> {

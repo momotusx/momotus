@@ -28,6 +28,28 @@
       ]
     },
     {
+      "name": "a repeated disconnect goes on from the stored tombstone, so a later push for that generation is never written",
+      "keystore": { "records": [{ "service": "torbox", "generation": "g1", "revision": 1, "credential": { "kind": "key", "key": "k1" } }], "tombstones": [] },
+      "steps": [
+        { "op": "fail", "call": "disconnect", "times": 1 },
+        { "op": "disconnect", "service": "torbox", "generation": "g1" },
+        { "op": "settle" },
+        { "op": "fail", "call": "writeTombstone", "times": 1 },
+        { "op": "disconnect", "service": "torbox", "generation": "g1" },
+        { "op": "settle" },
+        { "op": "pending", "records": [{ "service": "torbox", "generation": "g1", "revision": 2, "credential": { "kind": "key", "key": "k2" } }] },
+        { "op": "settle" },
+        {
+          "op": "expect",
+          "log": ["writeTombstone g1", "deleteRecord g1", "deleteTombstone g1"],
+          "records": [],
+          "tombstones": [],
+          "disconnects": ["torbox g1"],
+          "errors": ["torbox g1"]
+        }
+      ]
+    },
+    {
       "name": "a second disconnect of one generation shares the first, so its failure cannot be undone by the second",
       "keystore": { "records": [{ "service": "torbox", "generation": "g1", "revision": 1, "credential": { "kind": "key", "key": "k1" } }], "tombstones": [] },
       "steps": [

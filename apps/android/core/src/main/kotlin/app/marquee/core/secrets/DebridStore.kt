@@ -80,6 +80,9 @@ class DebridStore(
     /** Generations with a tombstone written or queued: never written again. */
     private val gone = HashSet<String>()
 
+    /** Generations whose tombstone is stored: a repeated disconnect never undoes it. */
+    private val durable = HashSet<String>()
+
     /** Tombstones whose record delete failed; retried with the next push. */
     private val unfinished = LinkedHashMap<String, DebridTombstone>()
     private val disconnecting = HashMap<String, Deferred<Unit>>()
@@ -87,7 +90,10 @@ class DebridStore(
     /** At start, before any view: finish interrupted disconnects, then restore. */
     suspend fun start() {
         for (tombstone in keystore.tombstones()) {
-            synchronized(lock) { gone += tombstone.generation }
+            synchronized(lock) {
+                gone += tombstone.generation
+                durable += tombstone.generation
+            }
             try {
                 finish(tombstone)
             } catch (e: CancellationException) {
@@ -99,7 +105,12 @@ class DebridStore(
         // Records with a tombstone go too: the core refuses them, and a tombstone whose record
         // is still stored is never handed back as deletable.
         val answer = core.restore(keystore.records(), keystore.tombstones())
-        for (tombstone in answer.tombstones) runCatching { keystore.deleteTombstone(tombstone) }
+        for (tombstone in answer.tombstones) {
+            runCatching {
+                keystore.deleteTombstone(tombstone)
+                synchronized(lock) { durable -= tombstone.generation }
+            }
+        }
     }
 
     /** Every `debrid` view push: store each pending record, then acknowledge it. */
@@ -133,13 +144,19 @@ class DebridStore(
             disconnecting[generation]?.let { return it }
             gone += generation
             queues[service]?.forEach { if (it.write && it.generation == generation) it.dropped = true }
+            // A generation whose tombstone an earlier disconnect stored stays gone, whatever fails.
+            val reopen = { synchronized(lock) { if (generation !in durable) gone -= generation } }
             val done =
-                enqueue(service, generation, write = false, discard = { synchronized(lock) { gone -= generation } }) {
-                    try {
-                        keystore.writeTombstone(tombstone)
-                    } catch (e: Exception) {
-                        synchronized(lock) { gone -= generation }
-                        throw e
+                enqueue(service, generation, write = false, discard = reopen) {
+                    // An earlier disconnect whose core call failed left its tombstone: go on from there.
+                    if (synchronized(lock) { generation !in durable }) {
+                        try {
+                            keystore.writeTombstone(tombstone)
+                        } catch (e: Exception) {
+                            reopen()
+                            throw e
+                        }
+                        synchronized(lock) { durable += generation }
                     }
                     // The tombstone is durable now: from here any failure, cancellation included, is
                     // remembered and the rest (core, then record and tombstone) runs again with the
@@ -152,6 +169,7 @@ class DebridStore(
                     }
                     try {
                         finish(tombstone)
+                        synchronized(lock) { unfinished -= generation }
                     } catch (e: Exception) {
                         synchronized(lock) { unfinished[generation] = tombstone }
                         if (e is CancellationException) throw e
@@ -194,6 +212,7 @@ class DebridStore(
             }
         check(!left) { "record still stored" }
         keystore.deleteTombstone(tombstone)
+        synchronized(lock) { durable -= tombstone.generation }
     }
 
     private fun enqueue(

@@ -248,6 +248,9 @@ class DebridStoreTest {
         /** The next this many record deletes throw cancellation. */
         @Volatile var cancelDeletes = 0
 
+        /** The next this many core disconnects fail. */
+        @Volatile var failDisconnects = 0
+
         override suspend fun records() = stored.values.toList()
 
         override suspend fun tombstones() = stones.toList()
@@ -295,7 +298,12 @@ class DebridStoreTest {
         override suspend fun disconnect(
             service: String,
             generation: String,
-        ) = Unit
+        ) {
+            if (failDisconnects > 0) {
+                failDisconnects--
+                error("disconnect")
+            }
+        }
     }
 
     private fun record(
@@ -402,6 +410,34 @@ class DebridStoreTest {
             store.pending(emptyList())
             withTimeout(5_000) { store.idle() }
             assertEquals(null, shared.stored["torbox"])
+            assertEquals(emptyList(), shared.stones.toList())
+            scope.cancel()
+        }
+
+    @Test
+    fun aDroppedRepeatDisconnectKeepsAStoredTombstonesGenerationGone() =
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            val shared = Shared()
+            shared.stored["torbox"] = record("g1", 1)
+            // The disconnect and its retry both fail at the core: the tombstone stays stored.
+            shared.failDisconnects = 2
+            val store = DebridStore(shared, shared, scope)
+            runCatching { store.disconnect("torbox", "g1").await() }
+            withTimeout(5_000) { store.idle() }
+            val gate = CompletableDeferred<Unit>()
+            shared.writeGate = gate
+            store.pending(listOf(record("g2", 1)))
+            withTimeout(5_000) { while (!shared.writeWaiting) delay(5) }
+            // Queued behind the held write, then thrown away when that write is cancelled.
+            val repeat = store.disconnect("torbox", "g1")
+            shared.writeGate = null
+            gate.complete(Unit)
+            withTimeout(5_000) { store.idle() }
+            assertTrue(repeat.isCancelled)
+            store.pending(listOf(record("g1", 2)))
+            withTimeout(5_000) { store.idle() }
+            assertEquals(null, shared.stored["torbox"], "g1 is never written again")
             assertEquals(emptyList(), shared.stones.toList())
             scope.cancel()
         }
