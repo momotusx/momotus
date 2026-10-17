@@ -1,0 +1,1 @@
+{"date":"2026-10-17","check":"classifier against the real Trakt hosts with an unknown client id (no account, no app yet)","deviceCode":{"answer":"Refused 401 invalid_client","ms":1356},"usersSettings":{"answer":"Transient (Cloudflare 403 HTML page)"},"note":"also confirmed from the owner's Stremio profile (read only): Trakt access tokens carry expires_in 604800 s (7 days)"}

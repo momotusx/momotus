@@ -2834,6 +2834,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-tracking"
+version = "0.1.0"
+dependencies = [
+ "mq-http",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

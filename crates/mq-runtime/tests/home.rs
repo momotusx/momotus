@@ -550,3 +550,31 @@ async fn continue_watching_shows_before_its_metas_answer() {
         Some("https://images.example/tt9-1-1.jpg")
     );
 }
+
+const SERIES_WITH_TVDB: &str = r#"{"meta":{"id":"tt7","type":"series","name":"Show","videos":[
+  {"id":"tt7:1:1","title":"Pilot","season":1,"episode":1,"tvdb_id":349232},
+  {"id":"tt7:1:2","title":"Second","season":1,"episode":2,"tvdb_id":349235},
+  {"id":"tt7:1:3","title":"Third","season":1,"episode":3}]}}"#;
+
+/// stremio-core's `Video` has no `tvdb_id`; the core reads it from the raw
+/// answer for Trakt, and episodes without one are simply absent.
+#[tokio::test]
+async fn meta_keeps_tvdb_ids() {
+    let core = Core::temporary("p").unwrap();
+    let mut meta = catalog_addon("meta", Duration::ZERO, 200, SERIES_WITH_TVDB).await;
+    meta.manifest_json = serde_json::json!({
+        "id": "meta", "version": "1.0.0", "name": "Meta",
+        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    })
+    .to_string();
+    core.library()
+        .set_addons("p", &[meta], &core.hlc())
+        .unwrap();
+    let ids = core.episode_tvdb_ids("tt7").await.unwrap();
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids.get("tt7:1:1"), Some(&349232));
+    assert_eq!(ids.get("tt7:1:2"), Some(&349235));
+    // The typed meta still decodes from the same answer.
+    let (decoded, _) = core.fetch_meta("series", "tt7").await.unwrap();
+    assert_eq!(decoded.videos.len(), 3);
+}

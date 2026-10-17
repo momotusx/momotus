@@ -269,6 +269,39 @@ impl Core {
     /// Stremio; later addons are asked only when earlier ones fail. Returns the
     /// meta and the name of the addon that gave it.
     pub async fn fetch_meta(&self, kind: &str, id: &str) -> Result<(MetaItem, String), String> {
+        let (body, name) = self.fetch_meta_body(kind, id).await?;
+        match serde_json::from_slice::<ResourceResponse>(&body) {
+            Ok(ResourceResponse::Meta { meta }) => Ok((meta, name)),
+            Ok(_) => Err(format!("{name} returned no details")),
+            Err(e) => Err(format!("{name} returned unreadable details: {e}")),
+        }
+    }
+
+    /// Each episode's TVDB id by video id, from the same meta answer (served
+    /// from the addon cache after the first look). stremio-core's `Video`
+    /// has no such field, so it is read from the raw JSON. Metas that do not
+    /// carry it give an empty map.
+    pub async fn episode_tvdb_ids(
+        &self,
+        id: &str,
+    ) -> Result<std::collections::HashMap<String, u64>, String> {
+        let (body, _) = self.fetch_meta_body("series", id).await?;
+        let raw: serde_json::Value =
+            serde_json::from_slice(&body).map_err(|e| format!("unreadable details: {e}"))?;
+        Ok(raw["meta"]["videos"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| Some((v["id"].as_str()?.to_owned(), v["tvdb_id"].as_u64()?)))
+            .collect())
+    }
+
+    /// The first meta answer in addon order that decodes, as raw bytes.
+    async fn fetch_meta_body(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<(bytes::Bytes, String), String> {
         let path = ResourcePath {
             resource: "meta".into(),
             r#type: kind.to_owned(),
@@ -281,7 +314,7 @@ impl Core {
             let name = &addon.manifest.name;
             match self.addons().fetch(addon, &path, META_TIMEOUT).await {
                 Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
-                    Ok(ResourceResponse::Meta { meta }) => return Ok((meta, name.clone())),
+                    Ok(ResourceResponse::Meta { .. }) => return Ok((fetched.body, name.clone())),
                     Ok(_) => last_error = format!("{name} returned no details"),
                     Err(e) => last_error = format!("{name} returned unreadable details: {e}"),
                 },
