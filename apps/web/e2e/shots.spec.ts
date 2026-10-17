@@ -2,7 +2,7 @@
  * written to e2e/shots/ as JPEG (quality 80) for review. */
 
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
-import { GOT, startIfPaused } from "./core";
+import { GOT, reseedBbb, startIfPaused } from "./core";
 import { BBB_ID } from "./source";
 
 type Form = "tv" | "desktop" | "phone";
@@ -93,11 +93,12 @@ const SCREENS: Screen[] = [
   {
     name: "player",
     path: `/play/movie/${BBB_ID}/${BBB_ID}`,
-    ready: async (page) => {
+    ready: async (page, form) => {
       await visible('[data-f="player:toggle"]')(page);
       await startIfPaused(page);
       await expect.poll(() => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0), { timeout: 30_000 }).toBeGreaterThan(152);
-      await page.locator('[data-f="player:toggle"]').focus();
+      // Touch has no focus ring; TV and desktop show where the remote is.
+      if (form !== "phone") await page.locator('[data-f="player:toggle"]').focus();
     },
   },
   {
@@ -124,6 +125,24 @@ const SCREENS: Screen[] = [
         }
       });
       await page.waitForTimeout(500);
+    },
+  },
+  {
+    // The movie's end: the card with Back to the title and Play again.
+    name: "player-end",
+    path: `/play/movie/${BBB_ID}/${BBB_ID}`,
+    ready: async (page) => {
+      await visible('[data-f="player:toggle"]')(page);
+      await startIfPaused(page);
+      await expect.poll(() => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0), { timeout: 30_000 }).toBeGreaterThan(150);
+      await page.evaluate(() => {
+        const v = document.querySelector("video");
+        if (v) v.currentTime = v.duration - 2;
+      });
+      await visible(".endcard", 15_000)(page);
+    },
+    after: async (page) => {
+      await reseedBbb(page);
     },
   },
   { name: "discover", path: "/discover", ready: visible(".grid .tile img.in") },
@@ -182,13 +201,15 @@ const SCREENS: Screen[] = [
       await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/\d+ installed/);
     },
   },
-  { name: "welcome", path: "/welcome", ready: visible(".check li") },
-  { name: "import", path: "/import", ready: visible(".code span, .problem") },
+  { name: "welcome", path: "/welcome", ready: visible(".door") },
+  { name: "welcome-source", path: "/welcome?step=2", ready: visible(".sugg") },
+  { name: "welcome-check", path: "/welcome?step=3", ready: visible(".check li") },
+  { name: "import", path: "/import", ready: visible(".code, .problem") },
   { name: "pairing", path: "/pair", ready: visible(".install") },
 ];
 
-const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "versions", "player-skip", "discover", "settings", "home-rows", "calendar"]);
-const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "player-skip", "home-rows", "calendar"]);
+const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "versions", "player-skip", "discover", "search", "library", "addons", "settings", "home-rows", "calendar", "welcome", "welcome-source", "welcome-check", "import", "pairing"]);
+const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-episode", "title-no-trailer", "versions", "player-skip", "discover", "library", "addons", "settings", "home-rows", "calendar", "welcome", "welcome-check", "import", "pairing"]);
 
 // Each shot opens a fresh context, so artwork is fetched once here and
 // served to every context after that, instead of asking the image CDN for

@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { Client, GOT, startIfPaused, watch } from "./core";
+import { Client, GOT, reseedBbb, startIfPaused, watch } from "./core";
 import { BBB_ID, SAMPLE_EPISODE } from "./source";
 
 test.use({ viewport: { width: 1920, height: 1080 } });
@@ -72,6 +72,8 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(153);
   const src = await page.evaluate(() => document.querySelector("video")?.src ?? "");
   expect(src).toMatch(/^http:\/\/127\.0\.0\.1:\d+\//);
+  // Actions in one order everywhere: Audio, Subtitles, Versions, Speed.
+  expect(await page.locator(".pacts .pa b").allTextContents()).toEqual(["Audio", "Subtitles", "Versions", "Speed"]);
 
   // Subtitles from OpenSubtitles load into the video as a text track, all by
   // remote: the first press only wakes the hidden controls.
@@ -203,7 +205,80 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   await expect(watched).toHaveText("Watched");
   await page.keyboard.press("Enter");
   await expect(watched).toHaveAttribute("aria-pressed", "false");
-  await expect(watched).toHaveText("Mark watched");
+  await expect(watched).toHaveText("Mark as watched");
+});
+
+test("onboarding: one decision per step, Back walks the steps", async ({ page }) => {
+  await page.goto("/welcome?form=tv");
+  await expect.poll(() => focused(page)).toBe("welcome:stremio");
+  await expect(page.locator(".door")).toHaveCount(2);
+  await expect(page.locator(".check")).toHaveCount(0);
+  await expect(page.locator('[data-f="welcome:skip"]')).toHaveText("Browse first");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => focused(page)).toBe("welcome:fresh");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/step=2/);
+  await expect(page.locator("h1")).toHaveText("Add a source");
+  // No typing first on a remote: focus lands on Continue, not the link field.
+  await expect.poll(() => focused(page)).toBe("welcome:next");
+  // The installed suggestions show at full strength with the word.
+  await expect(page.locator('[data-f="welcome:add:Cinemeta"]')).toContainText("Installed");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/step=3/);
+  await expect(page.locator(".check li").first()).toBeVisible();
+  await expect(page.locator(".check")).not.toContainText("Core");
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/step=2/);
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/welcome(\?form=tv)?$/);
+});
+
+test("no dead ends: Add a source when nothing plays, a card when nothing plays in the player", async ({ page }) => {
+  // Tom & Cherry: no addon here lists a version this browser can play.
+  await page.goto("/title/movie/tt43718175?form=tv");
+  const add = page.locator('[data-f="title:addsource"]');
+  await expect(add).toHaveText("Add a source", { timeout: 60_000 });
+  await expect(page.locator('[data-f="title:play"]')).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("title:addsource");
+  await expect(page.locator(".vline")).toContainText("No playable version found");
+
+  // Straight into the player: a centered card offers a version or Back.
+  await page.goto("/play/movie/tt43718175/tt43718175?form=tv");
+  await expect(page.locator(".endcard")).toContainText("No playable version found", { timeout: 60_000 });
+  await expect.poll(() => focused(page)).toBe("player:versions");
+  await expect(page.locator('[data-f="player:versions"]')).toHaveText("Choose a version");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => focused(page)).toBe("player:back");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/title\/movie\/tt43718175/);
+});
+
+test("a movie ends on a card: Back to the title, or Play again", async ({ page }) => {
+  await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
+  await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await startIfPaused(page);
+  const time = () => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
+  await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(150);
+  try {
+    await page.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = v.duration - 2;
+    });
+    const card = page.locator(".endcard");
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card.locator("h2")).toHaveText("Big Buck Bunny");
+    await expect.poll(() => focused(page)).toBe("end:back");
+    await expect(page.locator('[data-f="end:back"]')).toHaveText("Back to Big Buck Bunny");
+    await expect(page.locator(".osd")).toHaveCount(0);
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => focused(page)).toBe("end:again");
+    await page.keyboard.press("Enter");
+    await expect(card).toHaveCount(0);
+    await expect.poll(time).toBeLessThan(5);
+  } finally {
+    await page.evaluate(() => document.querySelector("video")?.pause());
+    await reseedBbb(page);
+  }
 });
 
 test("an episode row plays that episode, not the resume target", async ({ page }) => {
@@ -400,6 +475,12 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     await expect(page.locator(".row").first()).toHaveAttribute("aria-label", "Continue Watching", { timeout: 30_000 });
     await expect(page.locator(".hero .acts .btn").first()).toBeVisible();
     await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible({ timeout: 30_000 });
+    // Focus moves by itself only on TV: pointer and touch get no ring on load.
+    if (form === "tv") await expect.poll(() => focused(page)).not.toBeNull();
+    else {
+      await page.waitForTimeout(500);
+      expect(await focused(page)).toBeNull();
+    }
     const gaps = await page.evaluate(() => {
       const bottom = (els: Element[]) => Math.max(...els.map((e) => e.getBoundingClientRect().bottom));
       const rows = [...document.querySelectorAll(".row")];
@@ -425,10 +506,13 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     });
     expect(row.tops).toBe(1);
     expect(row.overflow).toBeLessThanOrEqual(1);
-    // Watched is the round toggle beside Play, not a secondary action.
+    // Watched is the labeled pill beside Play, not a secondary action.
     const play = await page.locator('[data-f="title:play"]').boundingBox();
     const toggle = await page.locator('[data-f="title:watched"]').boundingBox();
     expect(Math.abs((toggle?.y ?? 0) + (toggle?.height ?? 0) / 2 - ((play?.y ?? 0) + (play?.height ?? 0) / 2))).toBeLessThan(2);
+    // The display class comes from the screen, not the window.
+    await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`);
+    await expect(page.locator(".device")).toContainText("This screen: 1080p", { timeout: 30_000 });
     await context.close();
   });
 }

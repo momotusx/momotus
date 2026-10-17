@@ -8,6 +8,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BBB_ID } from "./source";
 
 export const PORTS = { bridge: 17801, vite: 15301, source: 17802 };
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
@@ -167,4 +168,27 @@ export async function watch(
   await c.command(playback.sub, { type: "progress", positionMs, durationMs });
   await c.req("unsubscribe", { sub: playback.sub });
   await c.req("unsubscribe", { sub: versions.sub });
+}
+
+/** Puts Big Buck Bunny back where the seed left it (2:30, unwatched) after a
+ * test played it to the end. The player's page goes first: closing its
+ * playback view saves the end position, which would land after the reseed.
+ * Finishing marks the film watched, so that mark is cleared before the
+ * position is written again. */
+export async function reseedBbb(page: Page) {
+  await page.goto("about:blank");
+  // The bridge drops the page's session when its socket closes; give it a
+  // moment so the view's last save is behind us.
+  await new Promise((r) => setTimeout(r, 1000));
+  const c = new Client();
+  try {
+    type Header = { state: { state: string } };
+    const title = await c.subscribe<{ header?: Header }>("title", { kind: "movie", id: BBB_ID });
+    await until("Big Buck Bunny details", () => (c.header<Header>(title.sub) ?? title.now().header)?.state.state === "ready");
+    await c.command(title.sub, { type: "setWatched", videoId: BBB_ID, value: false });
+    await c.req("unsubscribe", { sub: title.sub });
+    await watch(c, { kind: "movie", itemId: BBB_ID, videoId: BBB_ID, title: "Big Buck Bunny", via: "Sample Source" }, 150_000, 596_000);
+  } finally {
+    c.close();
+  }
 }
