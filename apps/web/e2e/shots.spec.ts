@@ -89,6 +89,32 @@ const SCREENS: Screen[] = [
       await page.locator('[data-f="player:toggle"]').focus();
     },
   },
+  {
+    // Inside the live TheIntroDB credits, controls hidden, Skip focused.
+    name: "player-skip",
+    path: `/play/movie/${BBB_ID}/${BBB_ID}`,
+    ready: async (page) => {
+      await visible('[data-f="player:toggle"]')(page);
+      await startIfPaused(page);
+      await expect.poll(() => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0), { timeout: 30_000 }).toBeGreaterThan(150);
+      await page.evaluate(() => {
+        const v = document.querySelector("video");
+        if (v) v.currentTime = 493;
+      });
+      await visible('[data-f="player:skip"]')(page);
+      await expect(page.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+    },
+    after: async (page) => {
+      await page.evaluate(() => {
+        const v = document.querySelector("video");
+        if (v) {
+          v.currentTime = 150;
+          v.pause();
+        }
+      });
+      await page.waitForTimeout(500);
+    },
+  },
   { name: "discover", path: "/discover", ready: visible(".grid .tile img.in") },
   {
     name: "search",
@@ -106,8 +132,8 @@ const SCREENS: Screen[] = [
   { name: "pairing", path: "/pair", ready: visible(".install") },
 ];
 
-const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer", "versions", "discover", "settings"]);
-const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer"]);
+const LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer", "versions", "player-skip", "discover", "settings"]);
+const TV_LIGHT = new Set(["home", "title", "title-trailer", "title-watched", "title-no-trailer", "player-skip"]);
 
 // Each shot opens a fresh context, so artwork is fetched once here and
 // served to every context after that, instead of asking the image CDN for

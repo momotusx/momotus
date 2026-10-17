@@ -100,6 +100,54 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await expect(page).toHaveURL(new RegExp(`/title/movie/${BBB_ID}`));
 });
 
+test("Skip credits from live skip data, by remote, only on a press", async ({ page }) => {
+  await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
+  await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await startIfPaused(page);
+  const time = () => page.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
+  const seekTo = (s: number) =>
+    page.evaluate((at) => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = at;
+    }, s);
+  await expect.poll(time, { timeout: 30_000 }).toBeGreaterThanOrEqual(150);
+  const skip = page.locator('[data-f="player:skip"]');
+  await expect(skip).toHaveCount(0);
+
+  // TheIntroDB marks this release's credits from 8:10.458 to 9:40.917; the
+  // core looks them up once the player reports the file's length.
+  await seekTo(493);
+  await expect(skip).toHaveText("Skip credits", { timeout: 30_000 });
+  await expect.poll(() => focused(page)).toBe("player:skip");
+  await expect(page.locator(".skip-src")).toHaveText("Skip data: TheIntroDB");
+  await expect(page.locator(".skip-src")).toHaveCSS("opacity", "1");
+
+  // It never jumps by itself: the credits keep playing until the press, and
+  // the button stays on screen with the controls hidden.
+  await expect(page.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+  await expect(skip).toBeVisible();
+  const t = await time();
+  expect(t).toBeGreaterThan(494);
+  expect(t).toBeLessThan(510);
+
+  // One press acts at once, without first waking the controls.
+  await page.keyboard.press("Enter");
+  await expect.poll(time).toBeGreaterThanOrEqual(580.9);
+  await expect(skip).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("player:toggle");
+
+  // Back to the seeded position for the tests that follow.
+  await page.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) {
+      v.currentTime = 150;
+      v.pause();
+    }
+  });
+  await expect.poll(time).toBeLessThan(151);
+  await page.waitForTimeout(500);
+});
+
 test("movie page: trailer overlay and Mark watched by remote", async ({ page }) => {
   await page.goto(`/title/movie/${BBB_ID}?form=tv`);
   await expect.poll(() => focused(page)).toBe("title:play");
