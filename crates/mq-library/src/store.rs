@@ -472,3 +472,35 @@ impl Library {
         })
     }
 }
+
+impl Library {
+    pub fn is_in_library(&self, profile: &str, item_id: &str) -> Result<bool, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT in_library FROM library_items WHERE profile_id = ?1 AND item_id = ?2",
+                params![profile, item_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map(|v| v.unwrap_or(false))
+        })
+    }
+
+    /// The most recently updated progress row for a title:
+    /// (video id, position ms, duration ms).
+    pub fn latest_progress(
+        &self,
+        profile: &str,
+        item_id: &str,
+    ) -> Result<Option<(String, i64, i64)>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT video_id, position_ms, duration_ms FROM progress
+                 WHERE profile_id = ?1 AND item_id = ?2 ORDER BY updated_ms DESC LIMIT 1",
+                params![profile, item_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+        })
+    }
+}

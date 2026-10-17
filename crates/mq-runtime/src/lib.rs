@@ -9,3 +9,4 @@ pub mod views;
 
 pub use crate::core::{Core, CoreConfig, CoreError};
 pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
+pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
