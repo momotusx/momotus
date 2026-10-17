@@ -67,7 +67,7 @@ for (let run = 1; run <= runs; run++) {
   key("KEYCODE_DPAD_CENTER");
   // The title page needs Cinemeta, which the emulator can fail to reach in time when the host is
   // loaded. That is the network, not focus: the run is recorded as skipped and tried again.
-  const page = await until("the title page", 15_000, () => /(Add to library|In library|could not load)/.exec(dump())?.[1]);
+  const page = await until("the title page", 15_000, () => /(Add to Library|In Library|could not load)/.exec(dump())?.[1]);
   if (page === "could not load") {
     const line = { date: new Date().toISOString().slice(0, 10), run, skipped: "the title did not load (network)" };
     appendFileSync(out, `${JSON.stringify(line)}\n`);

@@ -222,47 +222,30 @@ private fun Info(
                 .focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
-            val primaryFocus = focus.requesterFor(PLAY)
-            val primaryWatch = focus.watch(ACTIONS, PLAY)
-            when (primary) {
-                is PrimaryAction.Play -> {
-                    PrimaryButton(
-                        label = primary.label,
-                        icon = Icons.Play,
-                        enabled = target != null,
-                        onClick = {
-                            when {
-                                target != null && recommended != null -> onPlay(recommended.key, target.videoId)
-                                target != null -> onVersions(target.videoId)
-                            }
-                        },
-                        focusRequester = primaryFocus,
-                        onFocusChange = primaryWatch,
-                    )
-                }
-
-                PrimaryAction.ChooseVersion -> {
-                    PrimaryButton(
-                        label = "Choose a version",
-                        icon = Icons.Layers,
-                        onClick = { target?.let { onVersions(it.videoId) } },
-                        focusRequester = primaryFocus,
-                        onFocusChange = primaryWatch,
-                    )
-                }
-
-                PrimaryAction.AddSource -> {
-                    PrimaryButton(
-                        label = "Add a source",
-                        icon = Icons.Plus,
-                        onClick = onAddSource,
-                        focusRequester = primaryFocus,
-                        onFocusChange = primaryWatch,
-                    )
-                }
-            }
-            // Versions is the primary action itself when nothing is ready, and has nothing to list when no addon answered.
-            if (target != null && primary is PrimaryAction.Play) {
+            // One button for every state, so its node (and the focus on it) survives the addons answering:
+            // Play turning into "Add a source" must not drop focus onto the page underneath.
+            PrimaryButton(
+                label = primary.label,
+                icon =
+                    when (primary) {
+                        is PrimaryAction.Play -> Icons.Play
+                        PrimaryAction.ChooseVersion -> Icons.Layers
+                        PrimaryAction.AddSource -> Icons.Plus
+                    },
+                enabled = primary !is PrimaryAction.Play || target != null,
+                onClick = {
+                    when {
+                        primary == PrimaryAction.AddSource -> onAddSource()
+                        target == null -> Unit
+                        primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
+                        else -> onPlay(recommended.key, target.videoId)
+                    }
+                },
+                focusRequester = focus.requesterFor(PLAY),
+                onFocusChange = focus.watch(ACTIONS, PLAY),
+            )
+            // Always there once there is something to play, so focus on it is never pulled out from under the viewer.
+            if (target != null) {
                 SecondaryButton(
                     label = "Versions",
                     icon = Icons.Layers,
@@ -335,12 +318,13 @@ private fun Details(
 ) {
     if (facts.isEmpty()) return
     FlowRow(
-        modifier.widthIn(max = 1100.dp),
+        // Only as wide as the version line: the scrim is dark enough for small text no further out.
+        modifier.widthIn(max = 760.dp),
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.l),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         for ((label, value) in facts) {
-            Column(Modifier.widthIn(max = 420.dp)) {
+            Column(Modifier.widthIn(max = 360.dp)) {
                 MqText(label, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
                 MqText(value, role = TextRole.Callout, maxLines = 2)
             }

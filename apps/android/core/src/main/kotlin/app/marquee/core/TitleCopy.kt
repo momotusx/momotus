@@ -8,16 +8,23 @@ import kotlin.math.roundToInt
 
 /** What a title page's primary button is for. */
 sealed interface PrimaryAction {
+    /** The words on the button. */
+    val label: String
+
     /** Play (or Resume): [label] says which. */
     data class Play(
-        val label: String,
+        override val label: String,
     ) : PrimaryAction
 
     /** Every addon answered and some versions exist, but none is ready to play: pick one. */
-    data object ChooseVersion : PrimaryAction
+    data object ChooseVersion : PrimaryAction {
+        override val label = "Choose a version"
+    }
 
     /** Every addon answered and none gave a version: the only useful step is adding a source. */
-    data object AddSource : PrimaryAction
+    data object AddSource : PrimaryAction {
+        override val label = "Add a source"
+    }
 }
 
 /** The words of the title page, shared by both UI trees and equal to the web family's. */

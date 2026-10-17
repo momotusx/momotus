@@ -141,8 +141,10 @@ fun TvPlayer(
         val segment by remember(controller) {
             derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
         }
-        val showSkip = segment != null && !showNext && panel == null && !ended
+        val showSkip = segment != null && !showNext && panel == null && !ended && live && controller.status == null
         val skipFocus = remember { FocusRequester() }
+        // Whether the Skip button has focus, so that when it goes only its own focus is handed back.
+        var skipHasFocus by remember { mutableStateOf(false) }
 
         // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
         val secondsLeft by remember(controller) {
@@ -189,7 +191,8 @@ fun TvPlayer(
             runCatching {
                 if (showSkip && showControls) {
                     skipFocus.requestFocus()
-                } else if (!showSkip && showControls && panel == null && !showNext) {
+                } else if (!showSkip && skipHasFocus && showControls && panel == null && !showNext) {
+                    // Only when focus was on Skip: a viewer scrubbing the bar keeps it.
                     play.requestFocus()
                 }
             }
@@ -404,6 +407,7 @@ fun TvPlayer(
                         segment = skip,
                         onSkip = { controller.skip(skip) },
                         focus = skipFocus,
+                        onFocusChange = { skipHasFocus = it },
                         modifier =
                             Modifier
                                 .align(Alignment.BottomEnd)

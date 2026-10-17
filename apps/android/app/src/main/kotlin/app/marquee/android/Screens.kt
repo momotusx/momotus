@@ -26,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreError
 import app.marquee.core.route.Route
@@ -47,10 +48,15 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun AutoFocus(requester: FocusRequester) {
-    // Only for a D-pad: on a touch screen nothing should look focused until a key asks for it.
+    // Only for a D-pad: on a touch screen nothing should look focused until a key asks for it. A field
+    // under a cover (the engine stopped) must not keep taking keys, so the touch screen lets go of focus.
     val dpad = Marquee.form == Form.Tv
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(requester, dpad) {
-        if (!dpad) return@LaunchedEffect
+        if (!dpad) {
+            focusManager.clearFocus()
+            return@LaunchedEffect
+        }
         repeat(AUTO_FOCUS_FRAMES) {
             withFrameNanos { }
             if (runCatching { requester.requestFocus() }.getOrDefault(false)) return@LaunchedEffect

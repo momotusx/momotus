@@ -288,13 +288,7 @@ fun PlayerStatus(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 modifier = Modifier.padding(top = Marquee.space.xs),
             ) {
-                // Nothing was tried (no version is ready, as for a next episode): "another" would be wrong.
-                PrimaryButton(
-                    if (attempts.isEmpty()) "Choose a version" else "Choose another version",
-                    onVersions,
-                    icon = Icons.Layers,
-                    focusRequester = focus,
-                )
+                PrimaryButton("Choose a version", onVersions, icon = Icons.Layers, focusRequester = focus)
                 SecondaryButton("Back", onBack)
             }
         } else if (status != null) {
@@ -361,6 +355,7 @@ fun SkipButton(
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
     focus: FocusRequester? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
 ) {
     Column(
         modifier,
@@ -368,7 +363,13 @@ fun SkipButton(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
     ) {
         MqText("Skip data: ${segment.source}", role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
-        PrimaryButton(skipLabel(segment.kind), onSkip, icon = Icons.SkipForward, focusRequester = focus)
+        PrimaryButton(
+            skipLabel(segment.kind),
+            onSkip,
+            icon = Icons.SkipForward,
+            focusRequester = focus,
+            onFocusChange = onFocusChange,
+        )
     }
 }
 

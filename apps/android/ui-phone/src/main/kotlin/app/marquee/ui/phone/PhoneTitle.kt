@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -132,7 +134,10 @@ fun PhoneTitle(
         else -> {
             val hasArt = details.background != null || details.poster != null
             var menuFor by remember { mutableStateOf<Episode?>(null) }
-            if (hasArt) LightStatusBarIcons()
+            val list = rememberLazyListState()
+            // Light icons only while the artwork is under the bar: scrolled away, the page is under it.
+            val atTop by remember { derivedStateOf { list.firstVisibleItemIndex == 0 } }
+            if (hasArt && atTop) LightStatusBarIcons()
             menuFor?.let { episode ->
                 ActionMenu(
                     title = TitleCopy.episode(episode).removePrefix("Watched, "),
@@ -148,6 +153,7 @@ fun PhoneTitle(
                 )
             }
             LazyColumn(
+                state = list,
                 modifier = modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = Marquee.space.xl),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
@@ -289,40 +295,25 @@ private fun Info(
             color = colors.muted,
         )
         details.description?.let { Synopsis(it) }
-        when (primary) {
-            is PrimaryAction.Play -> {
-                PrimaryButton(
-                    label = primary.label,
-                    icon = Icons.Play,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = target != null,
-                    onClick = {
-                        when {
-                            target != null && recommended != null -> onPlay(recommended.key, target.videoId)
-                            target != null -> onVersions(target.videoId)
-                        }
-                    },
-                )
-            }
-
-            PrimaryAction.ChooseVersion -> {
-                PrimaryButton(
-                    label = "Choose a version",
-                    icon = Icons.Layers,
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { target?.let { onVersions(it.videoId) } },
-                )
-            }
-
-            PrimaryAction.AddSource -> {
-                PrimaryButton(
-                    label = "Add a source",
-                    icon = Icons.Plus,
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = onAddSource,
-                )
-            }
-        }
+        PrimaryButton(
+            label = primary.label,
+            icon =
+                when (primary) {
+                    is PrimaryAction.Play -> Icons.Play
+                    PrimaryAction.ChooseVersion -> Icons.Layers
+                    PrimaryAction.AddSource -> Icons.Plus
+                },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = primary !is PrimaryAction.Play || target != null,
+            onClick = {
+                when {
+                    primary == PrimaryAction.AddSource -> onAddSource()
+                    target == null -> Unit
+                    primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
+                    else -> onPlay(recommended.key, target.videoId)
+                }
+            },
+        )
         if (target == null) {
             StatusNote("Nothing to play yet")
         } else {
@@ -332,8 +323,7 @@ private fun Info(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
-            // Versions is the primary action itself when nothing is ready, and has nothing to list when no addon answered.
-            if (target != null && primary is PrimaryAction.Play) {
+            if (target != null) {
                 SecondaryButton("Versions", icon = Icons.Layers, onClick = { onVersions(target.videoId) })
             }
             SecondaryButton(
@@ -387,7 +377,7 @@ private fun Synopsis(text: String) {
         if (cut || expanded) {
             Box(
                 Modifier
-                    .heightIn(min = 48.dp)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     .focusClickable({ expanded = !expanded }, Role.Button),
                 contentAlignment = Alignment.CenterStart,
             ) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -145,6 +146,8 @@ private fun AppNav(
     // finishes and the process stays cached for a quick return. On TV the first Back on Home
     // first moves focus to the first row, so a second Back leaves.
     HomeBackHandler(app, active = tv && top == Route.Home)
+    // Home stays composed under a title page while it fades: what focus does there must not change where Back returns to.
+    SideEffect { app.tvHome.focus.paused = top != Route.Home }
 
     val content: @Composable () -> Unit = {
         val fade =

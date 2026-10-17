@@ -126,7 +126,8 @@ fun PhonePlayer(
         val segment by remember(controller) {
             derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
         }
-        val showSkip = segment != null && !showNext && panel == null && !ended && !inPip
+        val showSkip =
+            segment != null && !showNext && panel == null && !ended && !inPip && live && controller.status == null
 
         // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
         val secondsLeft by remember(controller) {

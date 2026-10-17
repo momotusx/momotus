@@ -48,11 +48,19 @@ class FocusMemory {
     /** True while focus is on a tile of the first row. Compose state, written only when it changes. */
     val onFirstRow = mutableStateOf(false)
 
+    /**
+     * True while another screen is on top of this one (Home stays composed under a title page during
+     * the fade). Arrivals are not recorded then: when the page above drops its focused node, the system
+     * hands focus to the first node of the page below, and that must not become where Back returns to.
+     */
+    var paused = false
+
     /** Focus arrived on [key], which belongs to the row [rowId] (or to a part of the page with no row). */
     fun arrived(
         rowId: String?,
         key: String,
     ) {
+        if (paused) return
         focusedKey = key
         focusedRow = rowId
         hasFocus = true

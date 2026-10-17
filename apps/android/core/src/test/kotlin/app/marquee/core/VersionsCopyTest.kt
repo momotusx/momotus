@@ -63,6 +63,9 @@ class VersionsCopyTest {
         assertEquals(VersionLine.Problem("Sources could not load"), VersionsCopy.line(null, failed = true))
         val none = VersionsCopy.line(snapshot(done = true))
         assertEquals(true, none is VersionLine.Problem && none.text.startsWith("No playable version found."))
+        // Every addon answered, rows exist, none is recommended: say so and let the viewer choose.
+        val notReady = VersionsCopy.line(snapshot(done = true).copy(rows = listOf(row())))
+        assertEquals(VersionLine.Problem("No version is ready to play yet. Choose one to start it."), notReady)
         val chosen = VersionsCopy.line(snapshot(recommended = row())) as VersionLine.Chosen
         assertEquals(listOf("4K", "HDR10", "1.3 GB"), chosen.facts)
         assertEquals("Ready on Real-Debrid", chosen.status)
