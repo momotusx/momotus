@@ -85,22 +85,37 @@ class PairingHolder(
         private set
     private var watch: Job? = null
 
+    /** The view whose join went to the sync controller: each join is handed over once. */
+    private var handed: PairingView? = null
+
     fun start(
         server: String,
         name: String,
     ) {
+        hand()
         view?.close()
         watch?.cancel()
         val next = session.pairing(server, name)
         view = next
         watch =
             viewModelScope.launch {
-                val joined = snapshotFlow { next.snapshot }.filterIsInstance<PairingSnapshot.Joined>().first()
-                sync.didJoin(joined.record)
+                snapshotFlow { next.snapshot }.filterIsInstance<PairingSnapshot.Joined>().first()
+                hand()
             }
     }
 
+    /** Gives a joined record to the app's sync controller, which stores it whatever this page does next. */
+    private fun hand() {
+        val current = view ?: return
+        val joined = current.snapshot as? PairingSnapshot.Joined ?: return
+        if (handed === current) return
+        handed = current
+        sync.didJoin(joined.record)
+    }
+
     override fun onCleared() {
+        // Leaving before the watcher ran (Back right after Joined) still hands the join over.
+        hand()
         view?.close()
     }
 }
@@ -118,7 +133,15 @@ fun PairingScreen(
             factory = viewModelFactory { initializer { PairingHolder(session, sync) } },
         )
     val tv = Marquee.form == Form.Tv
-    val known = remember(context) { context.knownServer() }
+    // A remembered address with a user name or password (an older version saved it) is not used.
+    val known =
+        remember(context) {
+            context
+                .knownServer()
+                .trim()
+                .takeIf(::plainAddress)
+                .orEmpty()
+        }
     var server by rememberSaveable { mutableStateOf(known) }
     var name by rememberSaveable { mutableStateOf(if (tv) "Marquee TV" else "Marquee phone") }
     // The fields are open only while no server is known: with one, the code shows at once.
@@ -217,7 +240,7 @@ private fun Session(
         } else {
             when (view.snapshot) {
                 is PairingSnapshot.Confirm -> "confirm"
-                is PairingSnapshot.Joined -> "joined"
+                is PairingSnapshot.Joined -> if (sync.joining) null else "joined"
                 PairingSnapshot.Expired -> "expired"
                 is PairingSnapshot.Failed -> "stopped"
                 else -> null
@@ -296,8 +319,13 @@ private fun Session(
                     MqIcon(Icons.CircleCheck, tint = Marquee.colors.ok)
                     MqText("This device joined your sync account.", role = TextRole.Headline)
                 }
-                SyncState(sync)
-                PrimaryButton("Done", onDone, focusRequester = answer)
+                // Done waits until the join is stored on this device.
+                if (sync.joining) {
+                    StatusWord("Saving the account on this device", Status.Warn)
+                } else {
+                    SyncState(sync)
+                    PrimaryButton("Done", onDone, focusRequester = answer)
+                }
             }
         }
 

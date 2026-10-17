@@ -41,6 +41,20 @@ pub enum HttpError {
 }
 
 impl HttpError {
+    /// What went wrong as a fixed word, for logs that must not name an
+    /// address (a sync relay's host is the user's own).
+    pub fn kind(&self) -> &'static str {
+        match self {
+            HttpError::InvalidUrl(_) => "invalid url",
+            HttpError::BlockedPrivate(_) => "blocked address",
+            HttpError::Timeout(_) => "timeout",
+            HttpError::TooLarge { .. } => "too large",
+            HttpError::Status { .. } => "http status",
+            HttpError::Network(_) => "network",
+            HttpError::Decode(_) => "decode",
+        }
+    }
+
     fn from_reqwest(e: reqwest::Error, timeout: Duration) -> Self {
         if e.is_timeout() {
             HttpError::Timeout(timeout)

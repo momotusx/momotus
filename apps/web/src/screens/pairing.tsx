@@ -127,7 +127,9 @@ export default function PairingScreen() {
   // The server this device used before: with it, the code shows at once and
   // nothing is typed. The fields live under Advanced, open only when no
   // server is known yet.
-  const known = read(SERVER_KEY);
+  // A remembered address with a user name or password (an older version saved it) is not used.
+  const stored = read(SERVER_KEY).trim();
+  const known = plainAddress(stored) ? stored : "";
   const [server, setServer] = createSignal(known);
   const [name, setName] = createSignal(`Marquee ${form() === "tv" ? "TV" : form() === "phone" ? "phone" : "desktop"}`);
   const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known ? { server: known, name: name(), n: 1 } : null);

@@ -3,6 +3,7 @@ package app.marquee.android
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -105,68 +108,76 @@ fun OnboardingScreen(
             MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
             SkipLink("Browse first", onDone)
         }
-        Column(
-            Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.m, Alignment.CenterVertically),
-        ) {
-            MqText("How would you like to begin?", role = if (tv) TextRole.Title1 else TextRole.Title2)
-            MqText(
-                "No account needed. Everything stays on this device until you turn on sync.",
-                role = TextRole.Body,
-                color = Marquee.colors.muted,
-                modifier = Modifier.widthIn(max = 720.dp),
-            )
-            val doors: @Composable (Modifier) -> Unit = { door ->
-                onImport?.let {
+        // Scrolls when it does not fit (a small phone at a large font scale); centered when it does.
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.m, Alignment.CenterVertically),
+            ) {
+                MqText("How would you like to begin?", role = if (tv) TextRole.Title1 else TextRole.Title2)
+                MqText(
+                    "No account needed. Everything stays on this device until you turn on sync.",
+                    role = TextRole.Body,
+                    color = Marquee.colors.muted,
+                    modifier = Modifier.widthIn(max = 720.dp),
+                )
+                val doors: @Composable (Modifier) -> Unit = { door ->
+                    onImport?.let {
+                        Door(
+                            "I use Stremio",
+                            "Bring your addons, library and Continue Watching over with a code.",
+                            Icons.Link,
+                            it,
+                            door,
+                            first,
+                        )
+                    }
                     Door(
-                        "I use Stremio",
-                        "Bring your addons, library and Continue Watching over with a code.",
-                        Icons.Link,
-                        it,
+                        if (busy) "Installing" else "Start fresh",
+                        "Add the standard catalog, then add a source to play.",
+                        Icons.Plus,
+                        ::startFresh,
                         door,
-                        first,
+                        first.takeIf { onImport == null },
+                    )
+                    onPair?.let {
+                        Door(
+                            "I already use Marquee",
+                            "Join your other device's sync account with a code. Library and addons follow.",
+                            Icons.QrCode,
+                            it,
+                            door,
+                            null,
+                        )
+                    }
+                }
+                val single = onImport == null && onPair == null
+                if (tv) {
+                    // The doors share the width; a single one keeps the width of a card, not of the screen.
+                    Row(
+                        Modifier.height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.l),
+                    ) {
+                        doors(if (single) Modifier.widthIn(max = 640.dp) else Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        doors(Modifier.fillMaxWidth())
+                    }
+                }
+                MqText(
+                    "A source is an addon that finds a playable stream for a title. Marquee does not include any.",
+                    role = TextRole.Callout,
+                    color = Marquee.colors.muted,
+                    modifier = Modifier.widthIn(max = 720.dp),
+                )
+                error?.let {
+                    StateMessage(
+                        title = "Cinemeta could not be installed",
+                        body = "$it. Check the network and try again.",
+                        icon = Icons.CircleAlert,
                     )
                 }
-                Door(
-                    if (busy) "Installing" else "Start fresh",
-                    "Add the standard catalog, then add a source to play.",
-                    Icons.Plus,
-                    ::startFresh,
-                    door,
-                    first.takeIf { onImport == null },
-                )
-                onPair?.let {
-                    Door(
-                        "I already use Marquee",
-                        "Join your other device's sync account with a code. Library and addons follow.",
-                        Icons.QrCode,
-                        it,
-                        door,
-                        null,
-                    )
-                }
-            }
-            val single = onImport == null && onPair == null
-            if (tv) {
-                // The doors share the width; a single one keeps the width of a card, not of the screen.
-                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
-                    doors(if (single) Modifier.widthIn(max = 640.dp) else Modifier.weight(1f).fillMaxHeight())
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) { doors(Modifier.fillMaxWidth()) }
-            }
-            MqText(
-                "A source is an addon that finds a playable stream for a title. Marquee does not include any.",
-                role = TextRole.Callout,
-                color = Marquee.colors.muted,
-                modifier = Modifier.widthIn(max = 720.dp),
-            )
-            error?.let {
-                StateMessage(
-                    title = "Cinemeta could not be installed",
-                    body = "$it. Check the network and try again.",
-                    icon = Icons.CircleAlert,
-                )
             }
         }
     }

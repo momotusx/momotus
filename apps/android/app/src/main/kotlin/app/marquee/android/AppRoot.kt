@@ -145,6 +145,12 @@ private fun AppNav(
         backStack.add(Route.Home)
     }
 
+    // A join from the first screen settles how to begin: back on it, the app goes Home.
+    val onFirstScreen = backStack.singleOrNull() == Route.Onboarding
+    LaunchedEffect(sync.joined, onFirstScreen) {
+        if (sync.joined && onFirstScreen) arrive()
+    }
+
     // Back, in one place. Order: overlays and the player (none yet), the stack (NavDisplay's own
     // handler, which calls onBack below), and at the root the system default: the activity
     // finishes and the process stays cached for a quick return. On TV the first Back on Home

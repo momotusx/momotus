@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -52,19 +53,22 @@ class SyncController(
     var problem: String? by mutableStateOf(null)
         private set
 
+    /** A join is being stored: the pairing page holds Done until it is. */
+    var joining by mutableStateOf(false)
+        private set
+
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private var timer: Job? = null
 
     /** Bumped by every join, under this object's lock: a round from before it stores nothing. */
     private var account = 0L
 
-    /** The worker, once the core runs, and the first round. */
+    /** The worker, and a round each time the core runs (at start and after every restart). */
     fun start() {
+        session.scope.launch { for (ask in wake) rounds() }
         session.scope.launch {
-            snapshotFlow { session.health }.first { it == CoreHealth.Running }
-            for (ask in wake) rounds()
+            snapshotFlow { session.health }.filter { it == CoreHealth.Running }.collect { request() }
         }
-        request()
     }
 
     /** Asks for a round: now, or after the one running. */
@@ -92,23 +96,27 @@ class SyncController(
     }
 
     /**
-     * After pairing: the record replaces any account before it, then the first round. False when the
-     * keystore could keep it for this session only; sync then waits until it is stored.
+     * After pairing: the record replaces any account before it, then the first round. The work is the
+     * app's, not the page's: leaving the page at once never loses or half-stores a join. When the
+     * keystore keeps it for this session only, sync waits until it is stored.
      */
-    suspend fun didJoin(record: SyncRecord): Boolean {
-        // The keystore write syncs to disk: never on the main thread.
-        val durable =
-            withContext(Dispatchers.IO) {
-                synchronized(this@SyncController) {
-                    account++
-                    session.secrets.update { it.copy(syncRecord = record) }
-                    durable()
+    fun didJoin(record: SyncRecord) {
+        joining = true
+        session.scope.launch {
+            // The keystore write syncs to disk: never on the main thread.
+            val durable =
+                withContext(Dispatchers.IO) {
+                    synchronized(this@SyncController) {
+                        account++
+                        session.secrets.update { it.copy(syncRecord = record) }
+                        durable()
+                    }
                 }
-            }
-        joined = true
-        problem = if (durable) null else SyncCopy.JOINED_SESSION_ONLY
-        request()
-        return durable
+            joined = true
+            problem = if (durable) null else SyncCopy.JOINED_SESSION_ONLY
+            joining = false
+            request()
+        }
     }
 
     private fun durable() = session.secrets.health != SecretStore.Health.MemoryOnly
@@ -119,7 +127,8 @@ class SyncController(
      * the record exists in memory only: the next round stores it again first.
      */
     private suspend fun rounds() {
-        if (session.health != CoreHealth.Running) return
+        // A request made while the core restarts waits for it rather than being dropped.
+        snapshotFlow { session.health }.first { it == CoreHealth.Running }
         val (mine, stored) = synchronized(this) { account to session.secrets.load().syncRecord }
         var record = stored ?: return
         if (!durable()) {

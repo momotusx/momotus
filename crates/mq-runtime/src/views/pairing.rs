@@ -148,7 +148,10 @@ async fn run(
             Ok(None) => {}
             // A dropped connection is retried; a reply that does not open is
             // final.
-            Err(mq_sync::SyncError::Http(e)) => tracing::debug!("pairing poll failed: {e}"),
+            // The kind only: the error text keeps the relay's host.
+            Err(mq_sync::SyncError::Http(e)) => {
+                tracing::debug!("pairing poll failed: {}", e.kind())
+            }
             Err(e) => return end(fail(e.to_string())),
         }
     };
