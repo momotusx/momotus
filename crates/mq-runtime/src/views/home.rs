@@ -242,7 +242,7 @@ fn row_title(slot: &CatalogSlot) -> String {
     format!("{name} {}", type_label(&slot.path.r#type))
 }
 
-fn type_label(kind: &str) -> &str {
+pub(crate) fn type_label(kind: &str) -> &str {
     match kind {
         "movie" => "Movies",
         "series" => "Series",
@@ -341,7 +341,7 @@ fn apply_catalog(
     });
 }
 
-fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
+pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
     Tile {
         id: m.id,
         kind: m.r#type,

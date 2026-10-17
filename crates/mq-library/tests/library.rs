@@ -151,3 +151,16 @@ fn http_cache_round_trip_and_trim() {
     );
     assert_eq!(lib.cache_get("missing").unwrap(), None);
 }
+
+#[test]
+fn search_history_newest_first_and_capped() {
+    let lib = Library::temporary().unwrap();
+    lib.ensure_profile("p", "p", "0").unwrap();
+    for i in 0..60 {
+        lib.record_search("p", &format!("q{i}"), i).unwrap();
+    }
+    lib.record_search("p", "q3", 100).unwrap();
+    let recent = lib.recent_searches("p", 100).unwrap();
+    assert_eq!(recent.len(), 50);
+    assert_eq!(&recent[..2], ["q3", "q59"]);
+}

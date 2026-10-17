@@ -3,12 +3,13 @@
 //! IPC channel.
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
-//! "setDebridKeys", ...}`. Views: home, title, versions, playback.
+//! "setDebridKeys", ...}`. Views: home, search, title, versions, playback.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 
 use futures_util::StreamExt;
 use mq_runtime::{
-    Core, HomeView, PlayTarget, PlaybackView, StoreId, TitleView, VersionsParams, VersionsView,
+    Core, HomeView, PlayTarget, PlaybackView, SearchView, StoreId, TitleView, VersionsParams,
+    VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde::Deserialize;
@@ -53,6 +54,7 @@ enum View {
     Title(TitleView),
     Versions(VersionsView),
     Playback(PlaybackView),
+    Search(SearchView),
 }
 
 struct Subscription {
@@ -175,6 +177,12 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out));
                 (View::Versions(versions), to_value(&snapshot)?, forward)
             }
+            "search" => {
+                let search = SearchView::open(&self.core);
+                let (snapshot, updates) = search.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out));
+                (View::Search(search), to_value(&snapshot)?, forward)
+            }
             "playback" => {
                 let playback = self.playback(params)?;
                 let (snapshot, updates) = playback.subscribe();
@@ -222,6 +230,8 @@ impl Session {
                     .map_err(|e| e.to_string())?;
             }
             (View::Versions(versions), "freeze") => versions.freeze(),
+            (View::Search(search), "setQuery") => search.set_query(&param(command, "query")?),
+            (View::Search(search), "remember") => search.remember().map_err(|e| e.to_string())?,
             (View::Playback(playback), "progress") => {
                 let ms = |key: &str| {
                     command

@@ -504,4 +504,40 @@ impl Library {
             .optional()
         })
     }
+
+    /// Remembers a search the user acted on; keeps the newest 50.
+    pub fn record_search(
+        &self,
+        profile: &str,
+        query: &str,
+        used_ms: i64,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO search_history (profile_id, query, used_ms) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(profile_id, query) DO UPDATE SET used_ms = excluded.used_ms",
+                params![profile, query, used_ms],
+            )?;
+            c.execute(
+                "DELETE FROM search_history WHERE profile_id = ?1 AND query NOT IN
+                   (SELECT query FROM search_history WHERE profile_id = ?1 ORDER BY used_ms DESC LIMIT 50)",
+                params![profile],
+            )
+            .map(drop)
+        })
+    }
+
+    pub fn recent_searches(
+        &self,
+        profile: &str,
+        limit: usize,
+    ) -> Result<Vec<String>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(
+                "SELECT query FROM search_history WHERE profile_id = ?1 ORDER BY used_ms DESC LIMIT ?2",
+            )?;
+            stmt.query_map(params![profile, limit as i64], |r| r.get(0))?
+                .collect()
+        })
+    }
 }

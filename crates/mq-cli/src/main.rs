@@ -6,8 +6,8 @@ use futures_util::StreamExt;
 use mq_addons::{AddonEvent, Deadlines};
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_runtime::{
-    Core, CoreConfig, HomeView, PlayTarget, PlaybackPhase, PlaybackView, RowState, StoreId,
-    TitleView, VersionsParams, VersionsView,
+    Core, CoreConfig, HomeView, PlayTarget, PlaybackPhase, PlaybackView, RowState, SearchView,
+    StoreId, TitleView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use serde_json::json;
@@ -42,6 +42,8 @@ enum Command {
     },
     /// Query every stream addon for a title, e.g. `movie tt0111161` or `series tt0944947:1:1`.
     Streams { kind: String, id: String },
+    /// Search every addon catalog that supports it and print the rows.
+    Search { query: String },
     /// Pick the recommended version of a title and play it in mpv, e.g.
     /// `movie tt1727587` or `series tt0944947:1:1`. Debrid keys come from
     /// MQ_RD_TOKEN, MQ_TORBOX_KEY, MQ_ALLDEBRID_KEY or MQ_PREMIUMIZE_KEY.
@@ -79,6 +81,7 @@ async fn main() {
         Command::Addons => addons(&core),
         Command::Home { timeout_secs } => home(&core, Duration::from_secs(timeout_secs)).await,
         Command::Streams { kind, id } => streams(&core, kind, id).await,
+        Command::Search { query } => search(&core, &query).await,
         Command::Play {
             kind,
             id,
@@ -343,4 +346,29 @@ async fn until<T>(within: Duration, f: impl Fn() -> Option<T>) -> Option<T> {
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+}
+
+async fn search(core: &Core, query: &str) -> Result<(), String> {
+    let started = Instant::now();
+    let view = SearchView::open(core);
+    view.set_query(query);
+    let settled = until(Duration::from_secs(15), || {
+        let s = view.snapshot();
+        let busy = s
+            .rows
+            .iter()
+            .any(|r| matches!(r.state, RowState::Loading | RowState::Slow));
+        (s.query == query && !s.rows.is_empty() && !busy).then_some(s)
+    })
+    .await
+    .ok_or("no results in 15 s")?;
+    for row in settled.rows {
+        emit(json!({
+            "event": "row", "title": row.title, "source": row.source, "state": row.state,
+            "results": row.tiles.iter().take(5).map(|t| &t.name).collect::<Vec<_>>(),
+            "count": row.tiles.len(),
+        }));
+    }
+    emit(json!({ "event": "search_done", "ms": ms(started.elapsed()), "debounce_ms": 250 }));
+    Ok(())
 }
