@@ -295,11 +295,11 @@ async fn a_finished_episode_leaves_its_next_one_in_continue_watching() {
     }
     let tile = tile.expect("Next Up tile");
     assert_eq!(tile.video_id.as_deref(), Some("tt9:1:2"));
-    assert_eq!(tile.release_info.as_deref(), Some("Next: S1 E2"));
+    assert_eq!(tile.release_info.as_deref(), Some("Next: S1:E2"));
     assert_eq!(tile.progress, None);
-    // It has artwork, so it can lead the Home hero.
-    let hero = view.snapshot().header.hero.expect("hero");
-    assert_eq!(hero.reason, "Pick up where you left off");
+    // The hero features a catalog, never the first Continue Watching tile
+    // right below it; with no catalog rows there is none.
+    assert!(view.snapshot().header.hero.is_none());
 }
 
 #[tokio::test]
@@ -476,6 +476,11 @@ async fn continue_watching_tiles_carry_the_episode_still() {
         Some("https://images.example/tt9-logo.png")
     );
     assert_eq!(tile.progress, Some(0.4));
+    // One caption rule for every app: where you are and what is left.
+    assert_eq!(
+        tile.release_info.as_deref(),
+        Some("S1:E1 \u{b7} 1 min left")
+    );
 }
 
 /// The row is on screen before a slow meta addon answers; the artwork

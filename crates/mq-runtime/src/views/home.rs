@@ -596,27 +596,20 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
     let candidate = rows
         .iter()
         .take_while(|row| row.state != RowState::Loading)
+        // Continue Watching is the first row already; the hero repeating its
+        // first tile reads as a mistake (design audit), so it features a catalog.
+        .filter(|row| row.row_id != CONTINUE_ROW_ID)
         .find_map(|row| {
             let tile = row.tiles.iter().find(|t| t.background.is_some())?;
-            let from_continue = row.row_id == CONTINUE_ROW_ID;
-            let reason = if from_continue {
-                "Pick up where you left off".to_owned()
-            } else {
-                format!("#1 in {} on {}", row.title, row.source)
-            };
-            Some((
-                from_continue,
-                Hero {
-                    tile: tile.clone(),
-                    reason,
-                },
-            ))
+            Some(Hero {
+                tile: tile.clone(),
+                reason: format!("#1 in {} on {}", row.title, row.source),
+            })
         });
     let current = header.get().hero;
     let next = match (candidate, &current) {
-        (Some((true, hero)), _) => Some(hero),
-        (Some((false, _)), Some(existing)) => Some(existing.clone()),
-        (Some((false, hero)), None) => Some(hero),
+        (Some(_), Some(existing)) => Some(existing.clone()),
+        (Some(hero), None) => Some(hero),
         (None, _) => None,
     };
     if current != next {
@@ -727,15 +720,34 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode) -> Tile {
             .or_else(|| p.background.as_ref().map(|u| u.to_string())),
         logo: p.logo.as_ref().map(|u| u.to_string()),
         poster_shape: "poster".into(),
-        release_info: Some(format!("Next: S{} E{}", next.season, next.episode)),
+        release_info: Some(format!("Next: S{}:E{}", next.season, next.episode)),
         progress: None,
         video_id: Some(next.video_id),
+    }
+}
+
+/// The one caption every app shows under a Continue Watching tile:
+/// "S2:E3 · 36 min left" for an episode, "36 min left" for a movie.
+fn continue_caption(item: &ContinueItem) -> String {
+    let mut parts = item.video_id.rsplit(':');
+    let episode = parts.next().and_then(|e| e.parse::<u32>().ok());
+    let season = parts.next().and_then(|s| s.parse::<u32>().ok());
+    let left = if item.duration_ms > item.position_ms {
+        let minutes = (item.duration_ms - item.position_ms + 59_999) / 60_000;
+        format!("{minutes} min left")
+    } else {
+        "In progress".to_owned()
+    };
+    match (season, episode) {
+        (Some(s), Some(e)) if item.kind == "series" => format!("S{s}:E{e} \u{b7} {left}"),
+        _ => left,
     }
 }
 
 fn tile_from_continue(item: ContinueItem, meta: Option<&mq_protocol::MetaItem>) -> Tile {
     let progress = (item.duration_ms > 0)
         .then(|| (item.position_ms as f32 / item.duration_ms as f32).clamp(0.0, 1.0));
+    let caption = continue_caption(&item);
     let still = meta
         .and_then(|m| m.videos.iter().find(|v| v.id == item.video_id))
         .and_then(|v| v.thumbnail.clone());
@@ -756,7 +768,7 @@ fn tile_from_continue(item: ContinueItem, meta: Option<&mq_protocol::MetaItem>) 
         }),
         logo: preview.and_then(|p| p.logo.as_ref()).map(|u| u.to_string()),
         poster_shape: "poster".into(),
-        release_info: None,
+        release_info: Some(caption),
         progress,
         video_id: Some(item.video_id),
     }
