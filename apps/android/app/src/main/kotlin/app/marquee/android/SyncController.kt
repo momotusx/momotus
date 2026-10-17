@@ -13,12 +13,14 @@ import app.marquee.core.secrets.SecretStore
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The sync account on this device, for the app's life (plans/android-design-v2.md 13c, Apple's
@@ -93,12 +95,15 @@ class SyncController(
      * After pairing: the record replaces any account before it, then the first round. False when the
      * keystore could keep it for this session only; sync then waits until it is stored.
      */
-    fun didJoin(record: SyncRecord): Boolean {
+    suspend fun didJoin(record: SyncRecord): Boolean {
+        // The keystore write syncs to disk: never on the main thread.
         val durable =
-            synchronized(this) {
-                account++
-                session.secrets.update { it.copy(syncRecord = record) }
-                durable()
+            withContext(Dispatchers.IO) {
+                synchronized(this@SyncController) {
+                    account++
+                    session.secrets.update { it.copy(syncRecord = record) }
+                    durable()
+                }
             }
         joined = true
         problem = if (durable) null else SyncCopy.JOINED_SESSION_ONLY

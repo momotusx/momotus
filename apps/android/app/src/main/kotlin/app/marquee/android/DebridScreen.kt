@@ -59,7 +59,11 @@ import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 // Debrid services (plans/android-design-v2.md 13d, Apple's DebridScreen): a key per service in the
 // encrypted SecretStore, handed to the core with `setDebridKeys`. A key is never shown again or logged.
@@ -92,37 +96,48 @@ class DebridHolder(
         service: String,
         key: String?,
     ) {
-        val keys =
-            session.secrets
-                .update {
-                    it.copy(
-                        debridKeys = DebridCopy.change(it.debridKeys, service, key),
-                    )
-                }.debridKeys
         drafts.remove(service)
+        // One change at a time, in the order pressed: the core never gets an older list after a newer one.
+        viewModelScope.launch { one.withLock { store(service, key) } }
+    }
+
+    private val one = Mutex()
+
+    private suspend fun store(
+        service: String,
+        key: String?,
+    ) {
+        // The keystore write syncs to disk: never on the main thread.
+        val (keys, stored) =
+            withContext(Dispatchers.IO) {
+                val next =
+                    session.secrets.update {
+                        it.copy(
+                            debridKeys = DebridCopy.change(it.debridKeys, service, key),
+                        )
+                    }
+                next.debridKeys to (session.secrets.health != SecretStore.Health.MemoryOnly)
+            }
         saved = savedNow()
-        val stored = session.secrets.health != SecretStore.Health.MemoryOnly
         sessionOnly = if (stored || key == null) sessionOnly - service else sessionOnly + service
-        viewModelScope.launch {
-            said =
-                try {
-                    val count = session.ops.setDebridKeys(keys)
-                    val tone =
-                        if (!stored) {
-                            Status.Warn
-                        } else if (count == 0) {
-                            Status.Idle
-                        } else {
-                            Status.Ok
-                        }
-                    DebridSaid(service, DebridCopy.outcome(stored, count), tone)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    val why = (e as? CoreError)?.message ?: CoreLog.describe(e)
-                    DebridSaid(service, DebridCopy.outcome(stored, null, why), Status.Bad)
-                }
-        }
+        said =
+            try {
+                val count = session.ops.setDebridKeys(keys)
+                val tone =
+                    if (!stored) {
+                        Status.Warn
+                    } else if (count == 0) {
+                        Status.Idle
+                    } else {
+                        Status.Ok
+                    }
+                DebridSaid(service, DebridCopy.outcome(stored, count), tone)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val why = (e as? CoreError)?.message ?: CoreLog.describe(e)
+                DebridSaid(service, DebridCopy.outcome(stored, null, why), Status.Bad)
+            }
     }
 }
 
