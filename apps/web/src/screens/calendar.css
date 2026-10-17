@@ -1,0 +1,44 @@
+/* Calendar: an agenda. The day sits in a left column, its episodes in a row
+ * beside it. The focus ring sits on the art like Home tiles; the card scales. */
+
+.cal .lede { font: 400 var(--type-body) / 1.4 var(--font-text); color: var(--muted); margin: -16px 0 20px; max-width: 1300px; }
+.cal-head .st { margin-bottom: 12px; font: 500 var(--type-callout) var(--font-text); }
+.cal-head .st svg { width: 28px; height: 28px; }
+.cal-note { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); margin-bottom: 12px; max-width: 1300px; }
+.cal-day { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 32px; align-items: start; padding: 28px 0; border-top: 1px solid var(--line); }
+.cal-day h2 { display: grid; gap: 8px; padding-top: 6px; font: 600 var(--type-title3) / 1.05 var(--font-display); }
+.cal-day h2 small { font: 500 var(--type-callout) var(--font-text); color: var(--muted); }
+.cal-day.past h2 { color: var(--muted); }
+.cal-track { display: flex; gap: 32px; overflow-x: auto; scrollbar-width: none; padding: 24px 80px 24px 24px; margin: -24px -80px -24px -24px; }
+.cal-track::-webkit-scrollbar { display: none; }
+.cal-card { flex: none; width: 320px; display: grid; gap: 14px; transform-origin: center; }
+.cal-art { display: grid; place-items: center; width: 320px; height: 180px; border-radius: var(--radius-m); overflow: hidden; background: var(--raised); }
+.cal-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cal-art img.poster { object-position: center 22%; }
+.cal-name { padding: 0 24px; text-align: center; font: 600 var(--type-headline) / 1.15 var(--font-display); }
+.cal-text { display: grid; gap: 6px; min-width: 0; padding: 0 4px; }
+.cal-text b { font: 600 var(--type-callout) / 1.2 var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-ep { font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-ep .num { margin-right: 10px; font-weight: 600; color: var(--text); }
+.cal-seen { display: inline-flex; align-items: center; gap: 6px; font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
+.cal-seen svg { width: 20px; height: 20px; }
+.cal-day.past .cal-art { opacity: .78; }
+.cal-card:focus-visible, [data-form="tv"] .cal-card:focus { outline: none; box-shadow: none; transform: scale(var(--focus-scale-card)); }
+.cal-card:focus-visible .cal-art, [data-form="tv"] .cal-card:focus .cal-art {
+  outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); opacity: 1; }
+@media (hover: hover) { [data-form="desktop"] .cal-card:hover { transform: scale(1.03); } }
+
+/* Phone: the day above a short list, art beside the text. */
+[data-form="phone"] .cal .lede { margin: -8px 0 12px; font-size: 15px; }
+[data-form="phone"] .cal-head .st, [data-form="phone"] .cal-note { font-size: 13px; }
+[data-form="phone"] .cal-head .st svg { width: 18px; height: 18px; }
+[data-form="phone"] .cal-day { grid-template-columns: 1fr; gap: 10px; padding: 16px 0; }
+[data-form="phone"] .cal-day h2 { display: flex; align-items: baseline; gap: 10px; padding: 0; font-size: 22px; }
+[data-form="phone"] .cal-day h2 small { font-size: 14px; }
+[data-form="phone"] .cal-track { flex-direction: column; gap: 12px; overflow: visible; padding: 0; margin: 0; }
+[data-form="phone"] .cal-card { width: auto; grid-template-columns: 128px minmax(0, 1fr); align-items: center; gap: 12px; }
+[data-form="phone"] .cal-art { width: 128px; height: 72px; border-radius: 8px; }
+[data-form="phone"] .cal-name { padding: 0 8px; font-size: 13px; }
+[data-form="phone"] .cal-text b { font-size: 15px; }
+[data-form="phone"] .cal-ep, [data-form="phone"] .cal-seen { font-size: 13px; }
+[data-form="phone"] .cal-seen svg { width: 14px; height: 14px; }

@@ -1,4 +1,5 @@
 import { A, type RouteSectionProps, Route, Router, useLocation, useNavigate } from "@solidjs/router";
+import CalendarDays from "lucide-solid/icons/calendar-days";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Compass from "lucide-solid/icons/compass";
 import House from "lucide-solid/icons/house";
@@ -10,6 +11,7 @@ import { bridgeUrl, link } from "./core/client";
 import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
 import Addons from "./screens/addons";
+import CalendarScreen from "./screens/calendar";
 import Discover from "./screens/discover";
 import Home from "./screens/home";
 import HomeRows from "./screens/home-rows";
@@ -29,6 +31,7 @@ const destinations: { path: string; label: string; icon: Component<{ "aria-hidde
   { path: "/", label: "Home", icon: House },
   { path: "/discover", label: "Discover", icon: Compass },
   { path: "/library", label: "Library", icon: LibraryBig },
+  { path: "/calendar", label: "Calendar", icon: CalendarDays },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 // Settings sub-pages keep the rail and light up Settings.
@@ -156,6 +159,7 @@ export function App() {
       <Route path="/search" component={Search} />
       <Route path="/discover" component={Discover} />
       <Route path="/library" component={Library} />
+      <Route path="/calendar" component={CalendarScreen} />
       <Route path="/addons" component={Addons} />
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />
