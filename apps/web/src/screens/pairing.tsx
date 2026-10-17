@@ -6,18 +6,10 @@ import X from "lucide-solid/icons/x";
 import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
 import { liveView } from "../core/client";
+import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapshot";
 import { form } from "../form";
 import "./browse.css";
 import "./settings.css";
-
-/** The core's pairing snapshot (plans/core-protocol.md, Views). */
-type Pairing =
-  | { phase: "starting" }
-  | { phase: "waiting"; qr: string; expiresMs: number }
-  | { phase: "confirm"; code: string }
-  | { phase: "joined"; record: unknown }
-  | { phase: "expired" }
-  | { phase: "failed"; reason: string };
 
 const SERVER_KEY = "mq.syncServer";
 const read = (k: string) => {

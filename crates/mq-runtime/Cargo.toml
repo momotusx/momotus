@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-ts = ["dep:ts-rs", "mq-streams/ts"]
+ts = ["dep:ts-rs", "mq-streams/ts", "mq-sync/ts"]
 
 [dependencies]
 ts-rs = { version = "12", optional = true, features = ["serde-compat"] }

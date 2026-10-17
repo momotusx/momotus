@@ -20,6 +20,11 @@ use tokio::task::JoinHandle;
 const POLL_EVERY: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(tag = "phase", rename_all = "camelCase")]
 pub enum PairingSnapshot {
     Starting,
@@ -27,6 +32,7 @@ pub enum PairingSnapshot {
     #[serde(rename_all = "camelCase")]
     Waiting {
         qr: String,
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
         expires_ms: u64,
     },
     /// Ask: does the other device show this code? Then `confirm` or `reject`.
@@ -35,6 +41,7 @@ pub enum PairingSnapshot {
     },
     /// Store this record in the keystore; sync can start.
     Joined {
+        #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
         record: Box<SyncConfig>,
     },
     Expired,

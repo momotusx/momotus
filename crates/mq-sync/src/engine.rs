@@ -64,6 +64,8 @@ const TRIES: usize = 3;
 
 /// The keystore record of one device of one account. The app stores it
 /// whole and passes it to every call; calls that change it return it.
+/// Apps keep it as opaque JSON, `Record<string, unknown>` in the TypeScript
+/// types: it holds a token and keys.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncConfig {
@@ -97,6 +99,11 @@ impl SyncConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncReport {
     pub pushed: u32,
@@ -126,9 +133,11 @@ pub struct SyncReport {
     /// This device's clock minus the relay's. Beyond 10 minutes either way
     /// one of them is wrong: the UI should say so (pushes get stamped at
     /// the relay's time, and last-writer-wins falls back to push order).
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub clock_gap_ms: i64,
     /// A rotation is due but waits this long after a relay restore; pushes
     /// wait with it.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub rotation_wait_ms: u64,
     /// Why queued changes were not sent this round, when the app should say
     /// so (none when only the record changed: then `again` is set).
@@ -136,12 +145,18 @@ pub struct SyncReport {
     /// The roster fingerprint, for people to compare between devices.
     pub fingerprint: String,
     /// A changed keystore record: store it, then sync again at once.
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown> | null"))]
     pub record: Option<SyncConfig>,
     /// Sync again right away (the record changed, nothing was published).
     pub again: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Blocked {
     /// A member left: pushes wait for the key rotation (which itself waits
@@ -1313,26 +1328,40 @@ fn open(key: &AccountKey, wire: &WireRecord) -> Result<(SyncRecord, u16), SealEr
 
 /// A member of the account as the devices screen shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberInfo {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub id: Id,
     pub kit: bool,
     pub name: Option<String>,
     /// Who vouched for it.
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub sponsor: Option<Id>,
     /// By the adding device's clock.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub added_ms: u64,
     pub this_device: bool,
 }
 
 /// The account's members, after catching up.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct Devices {
     pub members: Vec<MemberInfo>,
     pub fingerprint: String,
     pub epoch: u32,
     pub rotation_pending: bool,
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown> | null"))]
     pub record: Option<SyncConfig>,
 }
 
@@ -1372,9 +1401,16 @@ pub async fn devices(
 /// What reporting `lost` drops by default: the devices it vouched for
 /// (transitively) for the user to untick, and the kits that always go.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[serde(rename_all = "camelCase")]
 pub struct LostPreview {
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub devices: Vec<Id>,
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub kits: Vec<Id>,
 }
 
