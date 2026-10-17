@@ -180,8 +180,8 @@ private fun AppNav(
                             PhoneHome(app.home, onOpen = ::open, onPlay = ::playTile)
                         }
                     }
-                    entry<Route.Search> { ComingSoonScreen("Search") }
-                    entry<Route.Discover> { ComingSoonScreen("Discover") }
+                    entry<Route.Search> { SearchScreen(session, ::open) }
+                    entry<Route.Discover> { DiscoverScreen(session, ::open) }
                     entry<Route.Library> { ComingSoonScreen("Library") }
                     entry<Route.Settings> { ComingSoonScreen("Settings") }
                     entry<Route.Title> { route ->
