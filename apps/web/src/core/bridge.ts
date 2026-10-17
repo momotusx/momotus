@@ -28,6 +28,8 @@ interface Waiter {
   reject: (e: Error) => void;
   /** Runs inside `receive`, before any later message of the same batch. */
   onResult?: (result: unknown) => void;
+  /** A `subscribe`: its view may push before this reply arrives. */
+  opens: boolean;
 }
 
 /** Most batches kept for one subscription whose reply has not come yet. */
@@ -39,11 +41,13 @@ export class Bridge {
   private listeners = new Map<number, (updates: unknown[]) => void>();
   // The core may push for a new view before its subscribe reply arrives, and a
   // transport may hand over the reply and pushes in one synchronous batch.
-  // Pushes for an id above every registered one wait here for their reply;
-  // ids only grow, so a push at or below that mark with no listener belongs
-  // to a closed view and is dropped.
+  // While a subscribe waits for its reply, a push with no listener may be its
+  // view's, so it waits here by subscription id. Replies from the core and
+  // from a desktop shell's host (pairing) keep no common order and their ids
+  // share no range, so only the opens in flight decide: with none, a push
+  // with no listener belongs to a closed view and is dropped.
   private early = new Map<number, unknown[][]>();
-  private highest = 0;
+  private opening = 0;
 
   constructor(private transport: Transport) {
     transport.onMessage((text) => this.receive(text));
@@ -51,6 +55,7 @@ export class Bridge {
       for (const { reject } of this.pending.values()) reject(new BridgeError("connection closed"));
       this.pending.clear();
       this.early.clear();
+      this.opening = 0;
     });
   }
 
@@ -64,7 +69,7 @@ export class Bridge {
     if ("sub" in message && "updates" in message) {
       const listener = this.listeners.get(message.sub);
       if (listener) listener(message.updates);
-      else if (message.sub > this.highest) {
+      else if (this.opening > 0) {
         const queue = this.early.get(message.sub) ?? [];
         if (queue.length < EARLY_LIMIT) queue.push(message.updates);
         this.early.set(message.sub, queue);
@@ -78,6 +83,8 @@ export class Bridge {
       waiter.onResult?.(message.result);
       waiter.resolve(message.result);
     } else waiter.reject(new BridgeError(message.error, message.code));
+    // The last open settled: what still waits has no view to go to.
+    if (waiter.opens && --this.opening === 0) this.early.clear();
   }
 
   /** Pushes on a subscription the host owns rather than the core (a desktop
@@ -89,8 +96,10 @@ export class Bridge {
 
   request<T>(op: string, fields: Record<string, unknown> = {}, onResult?: (result: T) => void): Promise<T> {
     const id = this.nextId++;
+    const opens = op === "subscribe";
+    if (opens) this.opening++;
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onResult: onResult as Waiter["onResult"] });
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onResult: onResult as Waiter["onResult"], opens });
       this.transport.send(JSON.stringify({ id, op, ...fields }));
     });
   }
@@ -107,10 +116,8 @@ export class Bridge {
       on.snapshot(r.snapshot);
       const forward = (updates: unknown[]) => on.updates(updates as U[]);
       this.listeners.set(r.sub, forward);
-      this.highest = Math.max(this.highest, r.sub);
       for (const updates of this.early.get(r.sub) ?? []) forward(updates);
-      // Replies come in request order: anything older than this id is stale.
-      for (const id of this.early.keys()) if (id <= r.sub) this.early.delete(id);
+      this.early.delete(r.sub);
     });
     return {
       sub,

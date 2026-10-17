@@ -99,6 +99,58 @@ describe("Bridge", () => {
     expect((bridge as unknown as { early: Map<number, unknown> }).early.size).toBe(0);
   });
 
+  // A desktop shell's host answers pairing with ids from 2^52 (plans/m3-desktop.md
+  // 4.4.5) and in no fixed order against the page's own views.
+  const HOST = 2 ** 52;
+
+  test("a view opened after a host subscription still gets its early pushes", async () => {
+    const { transport, deliver } = loopback();
+    const bridge = new Bridge(transport);
+    const pairing = recorder();
+    const home = recorder();
+    const openP = bridge.subscribe("pairing", {}, pairing.on);
+    deliver({ id: 1, ok: true, result: { sub: HOST, snapshot: "P" } });
+    await openP;
+    const openH = bridge.subscribe("home", {}, home.on);
+    deliver({ sub: 1, updates: ["h1"] });
+    deliver({ id: 2, ok: true, result: { sub: 1, snapshot: "H" } });
+    await openH;
+    expect(home.seen).toEqual([{ snapshot: "H" }, ["h1"]]);
+  });
+
+  for (const hostFirst of [true, false]) {
+    test(`host and page views opening together, ${hostFirst ? "host" : "page"} reply first`, async () => {
+      const { transport, deliver } = loopback();
+      const bridge = new Bridge(transport);
+      const pairing = recorder();
+      const home = recorder();
+      const openP = bridge.subscribe("pairing", {}, pairing.on);
+      const openH = bridge.subscribe("home", {}, home.on);
+      deliver({ sub: 1, updates: ["h1"] });
+      deliver({ sub: HOST, updates: ["p1"] });
+      const replyP = { id: 1, ok: true, result: { sub: HOST, snapshot: "P" } };
+      const replyH = { id: 2, ok: true, result: { sub: 1, snapshot: "H" } };
+      deliver(hostFirst ? replyP : replyH);
+      deliver({ sub: 1, updates: ["h2"] });
+      deliver({ sub: HOST, updates: ["p2"] });
+      deliver(hostFirst ? replyH : replyP);
+      await Promise.all([openP, openH]);
+      expect(home.seen).toEqual([{ snapshot: "H" }, ["h1"], ["h2"]]);
+      expect(pairing.seen).toEqual([{ snapshot: "P" }, ["p1"], ["p2"]]);
+      expect((bridge as unknown as { early: Map<number, unknown> }).early.size).toBe(0);
+    });
+  }
+
+  test("pushes left over when the last open settles are dropped, failed opens included", async () => {
+    const { transport, deliver } = loopback();
+    const bridge = new Bridge(transport);
+    const opening = bridge.subscribe("home", {}, recorder().on).catch(() => undefined);
+    deliver({ sub: 7, updates: ["for a closed view"] });
+    deliver({ id: 1, ok: false, error: "unknown view" });
+    await opening;
+    expect((bridge as unknown as { early: Map<number, unknown> }).early.size).toBe(0);
+  });
+
   test("rejects failed requests with the core error", async () => {
     const { transport, deliver } = loopback();
     const bridge = new Bridge(transport);
