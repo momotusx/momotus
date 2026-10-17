@@ -2,7 +2,7 @@ use bytes::Bytes;
 use mq_http::HeaderMap;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Caching rules for one response. Addon body fields (`cacheMaxAge`,
 /// `staleRevalidate`, `staleError`, seconds) win over `Cache-Control`.
@@ -65,11 +65,29 @@ impl CacheHit {
     }
 }
 
-struct Entry {
-    body: Bytes,
-    stored: Instant,
-    control: CacheControl,
+/// A cached response as stored by a persistent backend.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoredResponse {
+    pub body: Bytes,
+    /// Wall-clock milliseconds since the Unix epoch.
+    pub stored_ms: u64,
+    pub control: CacheControl,
 }
+
+/// Second cache tier that survives restarts (the library database in apps).
+pub trait CacheStore: Send + Sync {
+    fn load(&self, key: &str) -> Option<StoredResponse>;
+    fn save(&self, key: &str, value: &StoredResponse);
+}
+
+fn wall_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+type Entry = StoredResponse;
 
 /// In-memory response cache with a fixed entry budget.
 // ponytail: evicts the oldest entry with a linear scan; fine at a few hundred
@@ -77,6 +95,7 @@ struct Entry {
 pub struct ResponseCache {
     capacity: usize,
     entries: Mutex<HashMap<String, Entry>>,
+    store: Option<std::sync::Arc<dyn CacheStore>>,
 }
 
 impl ResponseCache {
@@ -84,6 +103,14 @@ impl ResponseCache {
         Self {
             capacity,
             entries: Mutex::new(HashMap::new()),
+            store: None,
+        }
+    }
+
+    pub fn with_store(capacity: usize, store: std::sync::Arc<dyn CacheStore>) -> Self {
+        Self {
+            store: Some(store),
+            ..Self::new(capacity)
         }
     }
 
@@ -112,11 +139,11 @@ impl ResponseCache {
         key: &str,
         rule: impl Fn(Duration, &CacheControl) -> Option<bool>,
     ) -> Option<CacheHit> {
-        let entries = self.entries.lock().unwrap_or_else(|p| p.into_inner());
-        let entry = entries.get(key)?;
-        let stale = rule(entry.stored.elapsed(), &entry.control)?;
+        let entry = self.memory_or_store(key)?;
+        let age = Duration::from_millis(wall_ms().saturating_sub(entry.stored_ms));
+        let stale = rule(age, &entry.control)?;
         Some(CacheHit {
-            body: entry.body.clone(),
+            body: entry.body,
             stale,
         })
     }
@@ -125,24 +152,43 @@ impl ResponseCache {
         if !control.cacheable() {
             return;
         }
+        let entry = Entry {
+            body,
+            stored_ms: wall_ms(),
+            control,
+        };
+        if let Some(store) = &self.store {
+            store.save(&key, &entry);
+        }
+        self.remember(key, entry);
+    }
+
+    fn memory_or_store(&self, key: &str) -> Option<Entry> {
+        if let Some(entry) = self
+            .entries
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(key)
+        {
+            return Some(entry.clone());
+        }
+        let entry = self.store.as_ref()?.load(key)?;
+        self.remember(key.to_owned(), entry.clone());
+        Some(entry)
+    }
+
+    fn remember(&self, key: String, entry: Entry) {
         let mut entries = self.entries.lock().unwrap_or_else(|p| p.into_inner());
         if entries.len() >= self.capacity && !entries.contains_key(&key) {
             let oldest = entries
                 .iter()
-                .min_by_key(|(_, e)| e.stored)
+                .min_by_key(|(_, e)| e.stored_ms)
                 .map(|(k, _)| k.clone());
             if let Some(oldest) = oldest {
                 entries.remove(&oldest);
             }
         }
-        entries.insert(
-            key,
-            Entry {
-                body,
-                stored: Instant::now(),
-                control,
-            },
-        );
+        entries.insert(key, entry);
     }
 }
 

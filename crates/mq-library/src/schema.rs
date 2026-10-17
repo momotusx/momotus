@@ -1,7 +1,7 @@
 use rusqlite_migration::{M, Migrations};
 
 pub(crate) fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(V1)])
+    Migrations::new(vec![M::up(V1), M::up(V2)])
 }
 
 const V1: &str = r#"
@@ -89,4 +89,16 @@ CREATE TABLE import_raw (
     imported_ms  INTEGER NOT NULL,
     payload      TEXT NOT NULL
 );
+"#;
+
+const V2: &str = r#"
+CREATE TABLE http_cache (
+    key                 TEXT PRIMARY KEY,
+    body                BLOB NOT NULL,
+    stored_ms           INTEGER NOT NULL,
+    max_age_s           INTEGER NOT NULL,
+    stale_revalidate_s  INTEGER NOT NULL,
+    stale_error_s       INTEGER NOT NULL
+);
+CREATE INDEX http_cache_age ON http_cache (stored_ms);
 "#;

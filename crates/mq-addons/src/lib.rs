@@ -6,7 +6,7 @@ mod fanout;
 mod health;
 mod transport;
 
-pub use cache::{CacheControl, ResponseCache};
+pub use cache::{CacheControl, CacheStore, ResponseCache, StoredResponse};
 pub use fanout::{AddonEvent, Deadlines, Fanout};
 pub use health::{AddonHealth, HealthBook};
 pub use transport::{AddonError, resource_url};
@@ -47,9 +47,13 @@ pub struct AddonClient {
 
 impl AddonClient {
     pub fn new(http: HttpClient) -> Self {
+        Self::with_cache(http, ResponseCache::new(512))
+    }
+
+    pub fn with_cache(http: HttpClient, cache: ResponseCache) -> Self {
         Self {
             http,
-            cache: Arc::new(ResponseCache::new(512)),
+            cache: Arc::new(cache),
             health: Arc::new(HealthBook::default()),
         }
     }

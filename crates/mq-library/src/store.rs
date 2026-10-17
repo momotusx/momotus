@@ -422,3 +422,53 @@ impl Drop for Library {
         }
     }
 }
+
+/// One persisted HTTP response; durations in seconds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CachedResponse {
+    pub body: Vec<u8>,
+    pub stored_ms: i64,
+    pub max_age_s: i64,
+    pub stale_revalidate_s: i64,
+    pub stale_error_s: i64,
+}
+
+/// Rows kept in the HTTP cache; the oldest are trimmed past this.
+const HTTP_CACHE_ROWS: i64 = 2000;
+
+impl Library {
+    pub fn cache_get(&self, key: &str) -> Result<Option<CachedResponse>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT body, stored_ms, max_age_s, stale_revalidate_s, stale_error_s FROM http_cache WHERE key = ?1",
+                params![key],
+                |r| {
+                    Ok(CachedResponse {
+                        body: r.get(0)?,
+                        stored_ms: r.get(1)?,
+                        max_age_s: r.get(2)?,
+                        stale_revalidate_s: r.get(3)?,
+                        stale_error_s: r.get(4)?,
+                    })
+                },
+            )
+            .optional()
+        })
+    }
+
+    pub fn cache_put(&self, key: &str, value: &CachedResponse) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT OR REPLACE INTO http_cache (key, body, stored_ms, max_age_s, stale_revalidate_s, stale_error_s)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![key, value.body, value.stored_ms, value.max_age_s, value.stale_revalidate_s, value.stale_error_s],
+            )?;
+            c.execute(
+                "DELETE FROM http_cache WHERE key IN (
+                   SELECT key FROM http_cache ORDER BY stored_ms DESC LIMIT -1 OFFSET ?1)",
+                params![HTTP_CACHE_ROWS],
+            )?;
+            Ok(())
+        })
+    }
+}

@@ -324,22 +324,28 @@ fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
 /// Continue Watching item may replace it.
 fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObservable<HomeHeader>) {
     let rows = lock(rows);
-    let candidate = rows.iter().find_map(|row| {
-        let tile = row.tiles.iter().find(|t| t.background.is_some())?;
-        let from_continue = row.row_id == CONTINUE_ROW_ID;
-        let reason = if from_continue {
-            "Pick up where you left off".to_owned()
-        } else {
-            format!("#1 in {} on {}", row.title, row.source)
-        };
-        Some((
-            from_continue,
-            Hero {
-                tile: tile.clone(),
-                reason,
-            },
-        ))
-    });
+    // Walk rows in display order and stop at the first one still loading, so
+    // the hero is deterministic and never taken from a row further down just
+    // because it answered first. Slow, failed and empty rows are skipped.
+    let candidate = rows
+        .iter()
+        .take_while(|row| row.state != RowState::Loading)
+        .find_map(|row| {
+            let tile = row.tiles.iter().find(|t| t.background.is_some())?;
+            let from_continue = row.row_id == CONTINUE_ROW_ID;
+            let reason = if from_continue {
+                "Pick up where you left off".to_owned()
+            } else {
+                format!("#1 in {} on {}", row.title, row.source)
+            };
+            Some((
+                from_continue,
+                Hero {
+                    tile: tile.clone(),
+                    reason,
+                },
+            ))
+        });
     let current = header.get().hero;
     let next = match (candidate, &current) {
         (Some((true, hero)), _) => Some(hero),

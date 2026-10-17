@@ -1,4 +1,6 @@
-use mq_addons::{AddonClient, InstalledAddon};
+use mq_addons::{
+    AddonClient, CacheControl, CacheStore, InstalledAddon, ResponseCache, StoredResponse,
+};
 use mq_http::{ClientConfig, HttpClient};
 use mq_library::hlc::now_ms;
 use mq_library::{AddonRow, HlcClock, Library};
@@ -37,7 +39,7 @@ pub struct Core {
 
 struct Inner {
     addons: AddonClient,
-    library: Library,
+    library: Arc<Library>,
     clock: HlcClock,
     profile: String,
 }
@@ -57,10 +59,13 @@ impl Core {
     fn with_library(library: Library, profile: String, device_id: u64) -> Result<Self, CoreError> {
         let http = HttpClient::new(ClientConfig::default())?;
         let clock = HlcClock::new(device_id);
+        let library = Arc::new(library);
+        let store = Arc::new(LibraryCache(library.clone()));
+        let addons = AddonClient::with_cache(http, ResponseCache::with_store(512, store));
         library.ensure_profile(&profile, &profile, &clock.tick(now_ms()).encode())?;
         Ok(Self {
             inner: Arc::new(Inner {
-                addons: AddonClient::new(http),
+                addons,
                 library,
                 clock,
                 profile,
@@ -123,5 +128,38 @@ impl Core {
         self.library()
             .set_addons(self.profile(), &rows, &self.hlc())?;
         Ok(addon)
+    }
+}
+
+/// Persists addon responses in the library database so Home can render from
+/// cache on the next launch while it revalidates.
+struct LibraryCache(Arc<Library>);
+
+impl CacheStore for LibraryCache {
+    fn load(&self, key: &str) -> Option<StoredResponse> {
+        let row = self.0.cache_get(key).ok()??;
+        let secs = |s: i64| std::time::Duration::from_secs(s.max(0) as u64);
+        Some(StoredResponse {
+            body: row.body.into(),
+            stored_ms: row.stored_ms.max(0) as u64,
+            control: CacheControl {
+                max_age: secs(row.max_age_s),
+                stale_revalidate: secs(row.stale_revalidate_s),
+                stale_error: secs(row.stale_error_s),
+            },
+        })
+    }
+
+    fn save(&self, key: &str, value: &StoredResponse) {
+        let row = mq_library::CachedResponse {
+            body: value.body.to_vec(),
+            stored_ms: value.stored_ms as i64,
+            max_age_s: value.control.max_age.as_secs() as i64,
+            stale_revalidate_s: value.control.stale_revalidate.as_secs() as i64,
+            stale_error_s: value.control.stale_error.as_secs() as i64,
+        };
+        if let Err(e) = self.0.cache_put(key, &row) {
+            tracing::warn!("http cache write failed: {e}");
+        }
     }
 }

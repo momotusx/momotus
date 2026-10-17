@@ -133,3 +133,21 @@ fn reopen_persists_data() {
     drop(lib);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn http_cache_round_trip_and_trim() {
+    let lib = Library::temporary().unwrap();
+    let value = mq_library::CachedResponse {
+        body: b"{\"metas\":[]}".to_vec(),
+        stored_ms: 1,
+        max_age_s: 60,
+        stale_revalidate_s: 3600,
+        stale_error_s: 0,
+    };
+    lib.cache_put("https://a/catalog.json", &value).unwrap();
+    assert_eq!(
+        lib.cache_get("https://a/catalog.json").unwrap(),
+        Some(value)
+    );
+    assert_eq!(lib.cache_get("missing").unwrap(), None);
+}
