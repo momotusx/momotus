@@ -156,11 +156,12 @@ impl StreamServer {
         };
         let error = match tokio::time::timeout(deadline, source.meta(0)).await {
             Ok(Ok(_) | Err(ahead::Refusal::Passthrough)) => return Ok(url),
-            Ok(Err(ahead::Refusal::Status(status, _))) => {
-                format!("source did not answer: http status {}", status.as_u16())
+            Ok(Err(ahead::Refusal::Status(status, _))) => refused(status),
+            Ok(Err(ahead::Refusal::Failed(reason))) => {
+                tracing::info!("stream source unreachable: {reason}");
+                "The source could not be reached".into()
             }
-            Ok(Err(ahead::Refusal::Failed(reason))) => format!("source did not answer: {reason}"),
-            Err(_) => "source did not answer in time".into(),
+            Err(_) => "The source did not answer in time".into(),
         };
         self.release(&url);
         Err(error)
@@ -324,6 +325,20 @@ async fn serve(
             file,
         } => torrent::serve(&engine, torrent, file, range.as_deref(), head_only).await,
     }
+}
+
+/// A source's error answer in plain words for the attempt list, with the
+/// status kept for support.
+fn refused(status: StatusCode) -> String {
+    let code = status.as_u16();
+    let words = match code {
+        404 | 410 => "The link no longer exists",
+        401 | 403 => "The source refused access",
+        429 => "The source is busy, try again soon",
+        500..=599 => "The source had an error",
+        _ => "The source answered with an error",
+    };
+    format!("{words} ({code})")
 }
 
 /// `bytes=a-b`, `bytes=a-` or `bytes=-n` against `len`, as `[start, end)`.

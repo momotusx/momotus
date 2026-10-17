@@ -617,15 +617,15 @@ async fn open_source(
             #[cfg(not(feature = "torrent"))]
             {
                 let _ = (info_hash, file_idx, trackers);
-                return Err("torrents need a debrid account in this version".into());
+                return Err("Torrents need a debrid account in this version".into());
             }
         }
         Source::ClientResolve(_) | Source::Torrent { .. } => {
             let (service, request) = debrid_request(stream, target.season, target.episode)
-                .ok_or("the addon did not say which torrent to resolve")?;
+                .ok_or("The addon did not say which torrent to play")?;
             let resolver = core
                 .debrid()
-                .ok_or("this version needs a debrid account; add one in Settings")?;
+                .ok_or("This version needs a debrid account. Add one in Settings")?;
             let resolved = resolver
                 .resolve(with_store(&resolver, service.as_deref(), request))
                 .await
@@ -684,7 +684,7 @@ async fn open_torrent(
         engine.add_magnet(info_hash, trackers, &[]),
     )
     .await
-    .map_err(|_| "no peer sent the torrent's metadata in time".to_owned())?
+    .map_err(|_| "No peer sent the torrent's details in time".to_owned())?
     .map_err(|e| e.to_string())?;
     let hint = match (file_idx, &stream.filename, target.season, target.episode) {
         (Some(i), ..) => FileHint::Index(i as usize),

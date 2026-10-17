@@ -666,7 +666,7 @@ async fn open_checks_the_origin_with_the_read_that_serves_the_player() {
         .open(upstream(&refusing), "v.mkv", Duration::from_secs(5))
         .await
         .unwrap_err();
-    assert!(err.contains("http status 403"), "{err}");
+    assert_eq!(err, "The source refused access (403)");
     let err = server
         .open(
             upstream("http://127.0.0.1:9/v.mkv"),
@@ -675,7 +675,7 @@ async fn open_checks_the_origin_with_the_read_that_serves_the_player() {
         )
         .await
         .unwrap_err();
-    assert!(err.starts_with("source did not answer"), "{err}");
+    assert_eq!(err, "The source could not be reached");
 }
 
 /// An origin node that stops feeding an open connection must not hold the
