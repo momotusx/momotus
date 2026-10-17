@@ -70,6 +70,17 @@
 .next h3 { font: 600 var(--type-headline) / 1.2 var(--font-display); margin: 8px 0 6px; }
 .next p.num { font: 500 var(--type-callout) var(--font-text); color: #D9CEBF; margin-bottom: 16px; }
 .next .btn { margin-top: 10px; }
+/* Skip: bottom right above the controls (Netflix, Plex), and on screen while
+ * they are hidden. The source line shows with focus or the controls. */
+.skip-wrap { position: absolute; right: var(--safe-side); bottom: 300px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 24px; }
+.player-scr .btn.skip-btn { background: rgba(20, 16, 12, .84); color: #F6EFE6; box-shadow: inset 0 0 0 2px rgba(246, 239, 230, .38); transform-origin: right center; }
+.player-scr .btn.skip-btn:focus-visible, [data-form="tv"] .player-scr .btn.skip-btn:focus { background: #FFB547; color: #1A1206; }
+.skip-src { font: 500 var(--type-caption) / 1 var(--font-text); color: #D9CEBF; text-shadow: 0 1px 8px rgba(0, 0, 0, .7);
+  opacity: 0; transition: opacity var(--motion-focus) var(--ease); }
+.skip-wrap:focus-within .skip-src, .player-scr:not(.idle) .skip-src { opacity: 1; }
+[data-form="phone"] .skip-wrap { right: 12px; bottom: 190px; gap: 18px; }
+[data-form="phone"] .skip-src { font-size: 12px; }
+
 .toast { position: absolute; left: 50%; top: var(--safe-top); transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
   padding: 14px 22px; border-radius: 14px; background: #2A251F; font: 500 var(--type-callout) var(--font-text); }
 .toast svg { width: 28px; height: 28px; color: #FF7A6B; }

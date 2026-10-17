@@ -14,6 +14,8 @@ import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMo
 import { Backdrop } from "../components/art";
 import { liveView, prefsView } from "../core/client";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
+import type { Segment } from "../core/generated/Segment";
+import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { focusEl } from "../focus/dom";
@@ -26,6 +28,7 @@ const HIDE_MS = 4000;
 const PROGRESS_MS = 5000;
 // Up Next appears this many seconds before the end.
 const NEXT_AT = 20;
+const SKIP: Record<SegmentKind, string> = { intro: "Skip intro", recap: "Skip recap", credits: "Skip credits", preview: "Skip preview" };
 
 export default function Player() {
   const params = useParams();
@@ -132,7 +135,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         setPanel(null);
         return;
       }
-      if (!osd() && !back) {
+      // Skip and Up Next stay on screen with the controls hidden: Enter on
+      // them acts at once instead of only waking the controls.
+      const onScreen = (document.activeElement as HTMLElement | null)?.closest(".skip-wrap, .next");
+      if (!osd() && !back && !(onScreen && e.key === "Enter")) {
         e.preventDefault();
         e.stopImmediatePropagation();
       }
@@ -159,6 +165,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         () => {
           if (!resumed && at > 0) video.currentTime = at;
           resumed = true;
+          sendDuration();
         },
         { once: true },
       );
@@ -213,8 +220,68 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const at = new Date(Date.now() + (remaining() / rate()) * 1000);
     return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
+  // The core looks up skip segments once it knows the length of the version
+  // that plays; a failover is a new version (new key), so it hears again.
+  const durationSent = new Set<string>();
+  const sendDuration = () => {
+    const p = playback();
+    const key = snap()?.key;
+    if (!p || !key || durationSent.has(key) || !video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    durationSent.add(key);
+    void p.command({ type: "duration", key, durationMs: Math.round(video.duration * 1000) });
+  };
+
+  // The segment under the playhead, active on [startMs, endMs).
+  const segment = (): Segment | null => {
+    const t = time() * 1000;
+    return snap()?.segments.find((s) => t >= s.startMs && t < s.endMs) ?? null;
+  };
+  // Credits that run to the end of the file lead into Up Next rather than a seek.
+  const creditsToEnd = (s: Segment) => s.kind === "credits" && duration() > 0 && s.endMs >= duration() * 1000 - 1000;
+  // Where Skip credits was pressed; seeking back before it hides Up Next again.
+  const [skippedAt, setSkippedAt] = createSignal<number | null>(null);
+  // Manual only: the viewer presses Skip; the player never jumps by itself.
+  const skip = (s: Segment) => {
+    if (creditsToEnd(s)) {
+      if (next()) setSkippedAt(s.startMs);
+      else video.currentTime = Math.max(0, video.duration - 0.05);
+    } else {
+      video.currentTime = s.endMs / 1000;
+    }
+    wake();
+  };
+
   const next = () => snap()?.next ?? null;
-  const showNext = () => !!next() && duration() > 60 && remaining() <= NEXT_AT;
+  // Up Next: from the release-matched credits start when the core knows it,
+  // else the last NEXT_AT seconds, or at once after Skip credits.
+  const showNext = () => {
+    if (!next() || duration() <= 60) return false;
+    const skipped = skippedAt();
+    if (skipped !== null && time() * 1000 >= skipped) return true;
+    const at = snap()?.nextAtMs;
+    return at !== null && at !== undefined ? time() * 1000 >= at : remaining() <= NEXT_AT;
+  };
+  const showSkip = () => !!segment() && !showNext() && !panel();
+  // Skip takes focus when it appears, like Up Next; when it goes, focus goes
+  // back to play and pause if it was on Skip.
+  createEffect(
+    on(
+      () => (showSkip() ? `${segment()?.kind}:${segment()?.startMs}` : null),
+      (now, was) => {
+        if (now && now !== was) {
+          queueMicrotask(() => {
+            const el = document.querySelector<HTMLElement>('[data-f="player:skip"]');
+            if (el) focusEl(el);
+          });
+        } else if (!now && was && !document.activeElement?.closest(".player-scr [data-f]")) {
+          queueMicrotask(() => {
+            const el = document.querySelector<HTMLElement>('[data-f="player:toggle"]');
+            if (el) focusEl(el);
+          });
+        }
+      },
+    ),
+  );
   const nextHref = () => {
     const n = next();
     if (!n) return null;
@@ -298,7 +365,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           report();
         }}
         onTimeUpdate={() => setTime(video.currentTime)}
-        onDurationChange={() => setDuration(Number.isFinite(video.duration) ? video.duration : 0)}
+        onDurationChange={() => {
+          setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+          sendDuration();
+        }}
         onProgress={() => {
           const out: [number, number][] = [];
           for (let i = 0; i < video.buffered.length; i++) out.push([video.buffered.start(i), video.buffered.end(i)]);
@@ -468,6 +538,18 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             </Show>
           </div>
         </aside>
+      </Show>
+
+      <Show when={showSkip() && segment()} keyed>
+        {(s) => (
+          <div class="skip-wrap">
+            <button class="btn skip-btn" data-f="player:skip" onClick={() => skip(s)}>
+              <SkipForward aria-hidden />
+              {SKIP[s.kind]}
+            </button>
+            <p class="skip-src">Skip data: {s.source}</p>
+          </div>
+        )}
       </Show>
 
       <Show when={showNext() && next()}>
