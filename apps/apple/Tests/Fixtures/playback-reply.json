@@ -1,0 +1,20 @@
+{
+ "id": 12,
+ "ok": true,
+ "result": {
+  "snapshot": {
+   "attempts": [],
+   "bingeGroup": null,
+   "filename": null,
+   "key": null,
+   "next": null,
+   "phase": "resolving",
+   "resumeMs": null,
+   "sizeBytes": null,
+   "subtitles": [],
+   "subtitlesPending": false,
+   "url": null
+  },
+  "sub": 5
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "id": 11,
+ "ok": true,
+ "result": {
+  "snapshot": {
+   "done": false,
+   "failedAddons": [],
+   "frozen": false,
+   "hidden": {
+    "byReason": [],
+    "count": 0
+   },
+   "pendingAddons": [
+    "Sample Source"
+   ],
+   "recommended": null,
+   "rows": [],
+   "slowAddons": []
+  },
+  "sub": 4
+ }
+}

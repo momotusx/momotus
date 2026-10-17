@@ -102,6 +102,8 @@ struct TitleLogo: View {
     let name: String
     let maxWidth: CGFloat
     let height: CGFloat
+    /// Size of the name when there is no logo.
+    var nameSize = Theme.type.hero
 
     /// nil while loading; then the art, or none when there is no logo.
     @State private var loaded: DecodedArt??
@@ -117,7 +119,7 @@ struct TitleLogo: View {
                     .transition(.opacity)
             case .some(.none):
                 Text(name)
-                    .font(.display(Theme.type.hero))
+                    .font(.display(nameSize))
                     .foregroundStyle(Theme.Palette.text)
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)

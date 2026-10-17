@@ -1,7 +1,8 @@
 // Records real bridge traffic into Tests/Fixtures for the Swift decoding tests.
 // Needs a running bridge over an empty data dir, for example:
 //   MQ_DATA=$(mktemp -d) MQ_BRIDGE_PORT=7791 cargo run -p mq-bridge
-// then: bun apps/apple/scripts/capture-fixtures.ts ws://127.0.0.1:7791/ws
+// and the sample source (scripts/sample-source.ts) on port 7792, then:
+//   bun apps/apple/scripts/capture-fixtures.ts ws://127.0.0.1:7791/ws
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -61,5 +62,30 @@ const bad = await request("command", { sub, command: { type: "nope" } });
 save("title-reply.json", title);
 save("title-pushes.json", pushesFor(sub));
 save("command-error-reply.json", bad);
-console.log(`home rows ${home.result.snapshot.rows.length}, title pushes ${pushesFor(sub).length}, header ${!!header}`);
+// Versions and playback for the sample source's Big Buck Bunny, with the
+// capabilities the Apple app sends (AVPlayer: MP4 and MOV only).
+await request("installAddon", { url: "http://127.0.0.1:7792/manifest.json" });
+const versions = await request("subscribe", {
+  view: "versions",
+  params: {
+    kind: "movie", videoId: "tt1254207", title: "Big Buck Bunny", displayHeight: 1206,
+    hdr: ["hdr10", "hlg"], decoders: ["h264", "h265"], tenBitHevc: true,
+    audioDecoders: ["aac", "ac3", "eac3", "atmos", "flac", "mp3", "pcm"],
+    containers: ["mp4", "m4v", "mov"], hasFallbackEngine: false, language: "en",
+  },
+});
+await sleep(4000);
+const vsub = versions.result.sub;
+const vpushes = pushesFor(vsub);
+const latest = vpushes.at(-1)?.updates.at(-1) ?? versions.result.snapshot;
+const playback = await request("subscribe", {
+  view: "playback",
+  params: { versionsSub: vsub, key: latest.recommended.key, kind: "movie", itemId: "tt1254207", videoId: "tt1254207", name: "Big Buck Bunny" },
+});
+await sleep(3000);
+save("versions-reply.json", versions);
+save("versions-pushes.json", vpushes);
+save("playback-reply.json", playback);
+save("playback-pushes.json", pushesFor(playback.result.sub));
+console.log(`home rows ${home.result.snapshot.rows.length}, title pushes ${pushesFor(sub).length}, header ${!!header}, versions pushes ${vpushes.length}`);
 socket.close();

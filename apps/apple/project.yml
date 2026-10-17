@@ -76,7 +76,9 @@ targets:
       - path: Tests
         excludes: ["Fixtures/**"]
       - path: Marquee/Core/Models.swift
+      - path: Marquee/Core/PlaybackModels.swift
       - path: Marquee/Core/ListDiff.swift
+      - path: Marquee/Player/WebVTT.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests

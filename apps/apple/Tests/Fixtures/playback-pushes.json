@@ -1,0 +1,33 @@
+[
+ {
+  "sub": 5,
+  "updates": [
+   {
+    "attempts": [],
+    "bingeGroup": null,
+    "filename": "Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4",
+    "key": "url:http://127.0.0.1:7792/media/Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4",
+    "next": null,
+    "phase": "ready",
+    "resumeMs": null,
+    "sizeBytes": 61878609,
+    "subtitles": [],
+    "subtitlesPending": true,
+    "url": "http://127.0.0.1:58591/s/cf8908d06b0503007a3b19726179d5430e009713bd6cfa32b0544bf93e4f1169/Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4"
+   },
+   {
+    "attempts": [],
+    "bingeGroup": null,
+    "filename": "Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4",
+    "key": "url:http://127.0.0.1:7792/media/Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4",
+    "next": null,
+    "phase": "ready",
+    "resumeMs": null,
+    "sizeBytes": 61878609,
+    "subtitles": [],
+    "subtitlesPending": false,
+    "url": "http://127.0.0.1:58591/s/cf8908d06b0503007a3b19726179d5430e009713bd6cfa32b0544bf93e4f1169/Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4"
+   }
+  ]
+ }
+]

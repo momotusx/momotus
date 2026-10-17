@@ -101,6 +101,12 @@ final class CoreClient {
         try await request("command", ["sub": sub, "command": command]) { _ in }
     }
 
+    /// A command sent at once without waiting for its reply, so it reaches the
+    /// core before anything sent after it (an unsubscribe, for example).
+    func commandNow(_ sub: UInt64, _ command: [String: any Sendable]) {
+        send("command", ["sub": sub, "command": command])
+    }
+
     /// An op from the protocol's op table whose result is not needed.
     func perform(_ op: String, _ fields: [String: any Sendable] = [:]) async throws {
         try await request(op, fields) { _ in }

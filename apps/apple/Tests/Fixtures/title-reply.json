@@ -12,7 +12,8 @@
     "selectedSeason": null,
     "state": {
      "state": "loading"
-    }
+    },
+    "watched": false
    }
   },
   "sub": 3

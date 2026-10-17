@@ -3,26 +3,6 @@
   "sub": 2,
   "updates": [
    {
-    "header": {
-     "hero": {
-      "reason": "#1 in Popular Movies on Cinemeta",
-      "tile": {
-       "background": "https://images.metahub.space/background/medium/tt22084616/img",
-       "id": "tt22084616",
-       "kind": "movie",
-       "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
-       "name": "Spider-Man: Brand New Day",
-       "poster": "https://images.metahub.space/poster/small/tt22084616/img",
-       "posterShape": "poster",
-       "progress": null,
-       "releaseInfo": "2026",
-       "videoId": null
-      }
-     }
-    },
-    "kind": "header"
-   },
-   {
     "diffs": [
      {
       "index": 4,
@@ -113,6 +93,18 @@
          "logo": "https://images.metahub.space/logo/medium/tt1756855/img",
          "name": "Coyote vs. Acme",
          "poster": "https://images.metahub.space/poster/small/tt1756855/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt27706593/img",
+         "id": "tt27706593",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt27706593/img",
+         "name": "The Rivals of Amziah King",
+         "poster": "https://images.metahub.space/poster/small/tt27706593/img",
          "posterShape": "poster",
          "progress": null,
          "releaseInfo": "2026",
@@ -261,275 +253,9 @@
          "progress": null,
          "releaseInfo": "2026",
          "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt32890033/img",
-         "id": "tt32890033",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt32890033/img",
-         "name": "Minions & Monsters",
-         "poster": "https://images.metahub.space/poster/small/tt32890033/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
         }
        ],
        "title": "Featured Movies"
-      }
-     },
-     {
-      "index": 0,
-      "op": "set",
-      "value": {
-       "rowId": "com.linvo.cinemeta:movie:top",
-       "source": "Cinemeta",
-       "state": {
-        "state": "ready"
-       },
-       "tiles": [
-        {
-         "background": "https://images.metahub.space/background/medium/tt22084616/img",
-         "id": "tt22084616",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
-         "name": "Spider-Man: Brand New Day",
-         "poster": "https://images.metahub.space/poster/small/tt22084616/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt6933238/img",
-         "id": "tt6933238",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt6933238/img",
-         "name": "Unabomber",
-         "poster": "https://images.metahub.space/poster/small/tt6933238/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt15047880/img",
-         "id": "tt15047880",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt15047880/img",
-         "name": "Disclosure Day",
-         "poster": "https://images.metahub.space/poster/small/tt15047880/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt37287335/img",
-         "id": "tt37287335",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt37287335/img",
-         "name": "Obsession",
-         "poster": "https://images.metahub.space/poster/small/tt37287335/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt26657236/img",
-         "id": "tt26657236",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt26657236/img",
-         "name": "Backrooms",
-         "poster": "https://images.metahub.space/poster/small/tt26657236/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt36983905/img",
-         "id": "tt36983905",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt36983905/img",
-         "name": "The Uprising",
-         "poster": "https://images.metahub.space/poster/small/tt36983905/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt22526100/img",
-         "id": "tt22526100",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt22526100/img",
-         "name": "The Love Hypothesis",
-         "poster": "https://images.metahub.space/poster/small/tt22526100/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://live.metahub.space/background/medium/tt36064406/img",
-         "id": "tt36064406",
-         "kind": "movie",
-         "logo": "https://live.metahub.space/logo/medium/tt36064406/img",
-         "name": "Phantom Power",
-         "poster": "https://live.metahub.space/poster/small/tt36064406/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2014",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt27543632/img",
-         "id": "tt27543632",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt27543632/img",
-         "name": "The Housemaid",
-         "poster": "https://images.metahub.space/poster/small/tt27543632/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2025",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt0074285/img",
-         "id": "tt0074285",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt0074285/img",
-         "name": "Carrie",
-         "poster": "https://images.metahub.space/poster/small/tt0074285/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "1976",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt27165187/img",
-         "id": "tt27165187",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt27165187/img",
-         "name": "The End of Oak Street",
-         "poster": "https://images.metahub.space/poster/small/tt27165187/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt36429458/img",
-         "id": "tt36429458",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt36429458/img",
-         "name": "Doing Life",
-         "poster": "https://images.metahub.space/poster/small/tt36429458/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt12042730/img",
-         "id": "tt12042730",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt12042730/img",
-         "name": "Project Hail Mary",
-         "poster": "https://images.metahub.space/poster/small/tt12042730/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt31349844/img",
-         "id": "tt31349844",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt31349844/img",
-         "name": "Runner",
-         "poster": "https://images.metahub.space/poster/small/tt31349844/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt14173636/img",
-         "id": "tt14173636",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt14173636/img",
-         "name": "The Invite",
-         "poster": "https://images.metahub.space/poster/small/tt14173636/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt27369017/img",
-         "id": "tt27369017",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt27369017/img",
-         "name": "Hope",
-         "poster": "https://images.metahub.space/poster/small/tt27369017/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt37969426/img",
-         "id": "tt37969426",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt37969426/img",
-         "name": "The Muppet Show",
-         "poster": "https://images.metahub.space/poster/small/tt37969426/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt11561116/img",
-         "id": "tt11561116",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt11561116/img",
-         "name": "The Whisper Man",
-         "poster": "https://images.metahub.space/poster/small/tt11561116/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt28014327/img",
-         "id": "tt28014327",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt28014327/img",
-         "name": "Mayday",
-         "poster": "https://images.metahub.space/poster/small/tt28014327/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt1756855/img",
-         "id": "tt1756855",
-         "kind": "movie",
-         "logo": "https://images.metahub.space/logo/medium/tt1756855/img",
-         "name": "Coyote vs. Acme",
-         "poster": "https://images.metahub.space/poster/small/tt1756855/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026",
-         "videoId": null
-        }
-       ],
-       "title": "Popular Movies"
       }
      }
     ],
@@ -795,7 +521,12 @@
        ],
        "title": "Featured Series"
       }
-     },
+     }
+    ],
+    "kind": "rows"
+   },
+   {
+    "diffs": [
      {
       "index": 2,
       "op": "set",
@@ -1051,259 +782,284 @@
       }
      },
      {
-      "index": 1,
+      "index": 0,
       "op": "set",
       "value": {
-       "rowId": "com.linvo.cinemeta:series:top",
+       "rowId": "com.linvo.cinemeta:movie:top",
        "source": "Cinemeta",
        "state": {
         "state": "ready"
        },
        "tiles": [
         {
-         "background": "https://images.metahub.space/background/medium/tt11540908/img",
-         "id": "tt11540908",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt11540908/img",
-         "name": "Carrie",
-         "poster": "https://images.metahub.space/poster/small/tt11540908/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt35934755/img",
-         "id": "tt35934755",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt35934755/img",
-         "name": "Below",
-         "poster": "https://images.metahub.space/poster/small/tt35934755/img",
+         "background": "https://images.metahub.space/background/medium/tt22084616/img",
+         "id": "tt22084616",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
+         "name": "Spider-Man: Brand New Day",
+         "poster": "https://images.metahub.space/poster/small/tt22084616/img",
          "posterShape": "poster",
          "progress": null,
          "releaseInfo": "2026",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt21097264/img",
-         "id": "tt21097264",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt21097264/img",
-         "name": "East of Eden",
-         "poster": "https://images.metahub.space/poster/small/tt21097264/img",
+         "background": "https://images.metahub.space/background/medium/tt6933238/img",
+         "id": "tt6933238",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt6933238/img",
+         "name": "Unabomber",
+         "poster": "https://images.metahub.space/poster/small/tt6933238/img",
          "posterShape": "poster",
          "progress": null,
          "releaseInfo": "2026",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt26545992/img",
-         "id": "tt26545992",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt26545992/img",
-         "name": "Lanterns",
-         "poster": "https://images.metahub.space/poster/small/tt26545992/img",
+         "background": "https://images.metahub.space/background/medium/tt15047880/img",
+         "id": "tt15047880",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt15047880/img",
+         "name": "Disclosure Day",
+         "poster": "https://images.metahub.space/poster/small/tt15047880/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2026–",
+         "releaseInfo": "2026",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt10986410/img",
-         "id": "tt10986410",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt10986410/img",
-         "name": "Ted Lasso",
-         "poster": "https://images.metahub.space/poster/small/tt10986410/img",
+         "background": "https://images.metahub.space/background/medium/tt37287335/img",
+         "id": "tt37287335",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt37287335/img",
+         "name": "Obsession",
+         "poster": "https://images.metahub.space/poster/small/tt37287335/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2020–",
+         "releaseInfo": "2026",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt31510819/img",
-         "id": "tt31510819",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt31510819/img",
-         "name": "MobLand",
-         "poster": "https://images.metahub.space/poster/small/tt31510819/img",
+         "background": "https://images.metahub.space/background/medium/tt26657236/img",
+         "id": "tt26657236",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt26657236/img",
+         "name": "Backrooms",
+         "poster": "https://images.metahub.space/poster/small/tt26657236/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2025–",
+         "releaseInfo": "2026",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt5875444/img",
-         "id": "tt5875444",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt5875444/img",
-         "name": "Slow Horses",
-         "poster": "https://images.metahub.space/poster/small/tt5875444/img",
+         "background": "https://images.metahub.space/background/medium/tt36983905/img",
+         "id": "tt36983905",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt36983905/img",
+         "name": "The Uprising",
+         "poster": "https://images.metahub.space/poster/small/tt36983905/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2022–",
+         "releaseInfo": "2026",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt37972251/img",
-         "id": "tt37972251",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt37972251/img",
-         "name": "War",
-         "poster": "https://images.metahub.space/poster/small/tt37972251/img",
+         "background": "https://images.metahub.space/background/medium/tt32393988/img",
+         "id": "tt32393988",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt32393988/img",
+         "name": "Insidious: Out of the Further",
+         "poster": "https://images.metahub.space/poster/small/tt32393988/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2025–",
+         "releaseInfo": "2026",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt1844624/img",
-         "id": "tt1844624",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt1844624/img",
-         "name": "American Horror Story",
-         "poster": "https://images.metahub.space/poster/small/tt1844624/img",
+         "background": "https://images.metahub.space/background/medium/tt22526100/img",
+         "id": "tt22526100",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt22526100/img",
+         "name": "The Love Hypothesis",
+         "poster": "https://images.metahub.space/poster/small/tt22526100/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2011–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt13210838/img",
-         "id": "tt13210838",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt13210838/img",
-         "name": "The Gentlemen",
-         "poster": "https://images.metahub.space/poster/small/tt13210838/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2024–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt35854736/img",
-         "id": "tt35854736",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt35854736/img",
-         "name": "Avatar: Seven Havens",
-         "poster": "https://images.metahub.space/poster/small/tt35854736/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt33539520/img",
-         "id": "tt33539520",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt33539520/img",
-         "name": "Neagley",
-         "poster": "https://images.metahub.space/poster/small/tt33539520/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt1196946/img",
-         "id": "tt1196946",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt1196946/img",
-         "name": "The Mentalist",
-         "poster": "https://images.metahub.space/poster/small/tt1196946/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2008–2015",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt0944947/img",
-         "id": "tt0944947",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt0944947/img",
-         "name": "Game of Thrones",
-         "poster": "https://images.metahub.space/poster/small/tt0944947/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2011–2019",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt9288030/img",
-         "id": "tt9288030",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt9288030/img",
-         "name": "Reacher",
-         "poster": "https://images.metahub.space/poster/small/tt9288030/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2022–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt33332385/img",
-         "id": "tt33332385",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt33332385/img",
-         "name": "Widow's Bay",
-         "poster": "https://images.metahub.space/poster/small/tt33332385/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2026–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt13111078/img",
-         "id": "tt13111078",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt13111078/img",
-         "name": "Lioness",
-         "poster": "https://images.metahub.space/poster/small/tt13111078/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2023–",
-         "videoId": null
-        },
-        {
-         "background": "https://images.metahub.space/background/medium/tt14688458/img",
-         "id": "tt14688458",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt14688458/img",
-         "name": "Silo",
-         "poster": "https://images.metahub.space/poster/small/tt14688458/img",
-         "posterShape": "poster",
-         "progress": null,
-         "releaseInfo": "2023–",
+         "releaseInfo": "2026",
          "videoId": null
         },
         {
          "background": "https://live.metahub.space/background/medium/tt36064406/img",
          "id": "tt36064406",
-         "kind": "series",
+         "kind": "movie",
          "logo": "https://live.metahub.space/logo/medium/tt36064406/img",
-         "name": "Coven Academy",
+         "name": "Phantom Power",
          "poster": "https://live.metahub.space/poster/small/tt36064406/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2026–",
+         "releaseInfo": "2014",
          "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt0903747/img",
-         "id": "tt0903747",
-         "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
-         "name": "Breaking Bad",
-         "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+         "background": "https://images.metahub.space/background/medium/tt27543632/img",
+         "id": "tt27543632",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt27543632/img",
+         "name": "The Housemaid",
+         "poster": "https://images.metahub.space/poster/small/tt27543632/img",
          "posterShape": "poster",
          "progress": null,
-         "releaseInfo": "2008–2013",
+         "releaseInfo": "2025",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt0074285/img",
+         "id": "tt0074285",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt0074285/img",
+         "name": "Carrie",
+         "poster": "https://images.metahub.space/poster/small/tt0074285/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "1976",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt27165187/img",
+         "id": "tt27165187",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt27165187/img",
+         "name": "The End of Oak Street",
+         "poster": "https://images.metahub.space/poster/small/tt27165187/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt36429458/img",
+         "id": "tt36429458",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt36429458/img",
+         "name": "Doing Life",
+         "poster": "https://images.metahub.space/poster/small/tt36429458/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt12042730/img",
+         "id": "tt12042730",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt12042730/img",
+         "name": "Project Hail Mary",
+         "poster": "https://images.metahub.space/poster/small/tt12042730/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt31349844/img",
+         "id": "tt31349844",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt31349844/img",
+         "name": "Runner",
+         "poster": "https://images.metahub.space/poster/small/tt31349844/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt14173636/img",
+         "id": "tt14173636",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt14173636/img",
+         "name": "The Invite",
+         "poster": "https://images.metahub.space/poster/small/tt14173636/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt27369017/img",
+         "id": "tt27369017",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt27369017/img",
+         "name": "Hope",
+         "poster": "https://images.metahub.space/poster/small/tt27369017/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt37969426/img",
+         "id": "tt37969426",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt37969426/img",
+         "name": "The Muppet Show",
+         "poster": "https://images.metahub.space/poster/small/tt37969426/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt11561116/img",
+         "id": "tt11561116",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt11561116/img",
+         "name": "The Whisper Man",
+         "poster": "https://images.metahub.space/poster/small/tt11561116/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt28014327/img",
+         "id": "tt28014327",
+         "kind": "movie",
+         "logo": "https://images.metahub.space/logo/medium/tt28014327/img",
+         "name": "Mayday",
+         "poster": "https://images.metahub.space/poster/small/tt28014327/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
          "videoId": null
         }
        ],
-       "title": "Popular Series"
+       "title": "Popular Movies"
       }
-     },
+     }
+    ],
+    "kind": "rows"
+   },
+   {
+    "header": {
+     "hero": {
+      "reason": "#1 in Popular Movies on Cinemeta",
+      "tile": {
+       "background": "https://images.metahub.space/background/medium/tt22084616/img",
+       "id": "tt22084616",
+       "kind": "movie",
+       "logo": "https://images.metahub.space/logo/medium/tt22084616/img",
+       "name": "Spider-Man: Brand New Day",
+       "poster": "https://images.metahub.space/poster/small/tt22084616/img",
+       "posterShape": "poster",
+       "progress": null,
+       "releaseInfo": "2026",
+       "videoId": null
+      }
+     }
+    },
+    "kind": "header"
+   },
+   {
+    "diffs": [
      {
       "index": 3,
       "op": "set",
@@ -1314,6 +1070,18 @@
         "state": "ready"
        },
        "tiles": [
+        {
+         "background": "https://images.metahub.space/background/medium/tt23112594/img",
+         "id": "tt23112594",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt23112594/img",
+         "name": "VisionQuest",
+         "poster": "https://images.metahub.space/poster/small/tt23112594/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
         {
          "background": "https://images.metahub.space/background/medium/tt39395275/img",
          "id": "tt39395275",
@@ -1541,21 +1309,273 @@
          "progress": null,
          "releaseInfo": "2026–",
          "videoId": null
+        }
+       ],
+       "title": "New Series"
+      }
+     }
+    ],
+    "kind": "rows"
+   }
+  ]
+ },
+ {
+  "sub": 2,
+  "updates": [
+   {
+    "diffs": [
+     {
+      "index": 1,
+      "op": "set",
+      "value": {
+       "rowId": "com.linvo.cinemeta:series:top",
+       "source": "Cinemeta",
+       "state": {
+        "state": "ready"
+       },
+       "tiles": [
+        {
+         "background": "https://images.metahub.space/background/medium/tt11540908/img",
+         "id": "tt11540908",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt11540908/img",
+         "name": "Carrie",
+         "poster": "https://images.metahub.space/poster/small/tt11540908/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
         },
         {
-         "background": "https://images.metahub.space/background/medium/tt43673968/img",
-         "id": "tt43673968",
+         "background": "https://images.metahub.space/background/medium/tt35934755/img",
+         "id": "tt35934755",
          "kind": "series",
-         "logo": "https://images.metahub.space/logo/medium/tt43673968/img",
-         "name": "Mourinho",
-         "poster": "https://images.metahub.space/poster/small/tt43673968/img",
+         "logo": "https://images.metahub.space/logo/medium/tt35934755/img",
+         "name": "Below",
+         "poster": "https://images.metahub.space/poster/small/tt35934755/img",
          "posterShape": "poster",
          "progress": null,
          "releaseInfo": "2026",
          "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt21097264/img",
+         "id": "tt21097264",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt21097264/img",
+         "name": "East of Eden",
+         "poster": "https://images.metahub.space/poster/small/tt21097264/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt26545992/img",
+         "id": "tt26545992",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt26545992/img",
+         "name": "Lanterns",
+         "poster": "https://images.metahub.space/poster/small/tt26545992/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt10986410/img",
+         "id": "tt10986410",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt10986410/img",
+         "name": "Ted Lasso",
+         "poster": "https://images.metahub.space/poster/small/tt10986410/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2020–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt31510819/img",
+         "id": "tt31510819",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt31510819/img",
+         "name": "MobLand",
+         "poster": "https://images.metahub.space/poster/small/tt31510819/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt5875444/img",
+         "id": "tt5875444",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt5875444/img",
+         "name": "Slow Horses",
+         "poster": "https://images.metahub.space/poster/small/tt5875444/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2022–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt37972251/img",
+         "id": "tt37972251",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt37972251/img",
+         "name": "War",
+         "poster": "https://images.metahub.space/poster/small/tt37972251/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2025–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt1844624/img",
+         "id": "tt1844624",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt1844624/img",
+         "name": "American Horror Story",
+         "poster": "https://images.metahub.space/poster/small/tt1844624/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2011–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt13210838/img",
+         "id": "tt13210838",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt13210838/img",
+         "name": "The Gentlemen",
+         "poster": "https://images.metahub.space/poster/small/tt13210838/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2024–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt35854736/img",
+         "id": "tt35854736",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt35854736/img",
+         "name": "Avatar: Seven Havens",
+         "poster": "https://images.metahub.space/poster/small/tt35854736/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt33539520/img",
+         "id": "tt33539520",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt33539520/img",
+         "name": "Neagley",
+         "poster": "https://images.metahub.space/poster/small/tt33539520/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt1196946/img",
+         "id": "tt1196946",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt1196946/img",
+         "name": "The Mentalist",
+         "poster": "https://images.metahub.space/poster/small/tt1196946/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2008–2015",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt0944947/img",
+         "id": "tt0944947",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt0944947/img",
+         "name": "Game of Thrones",
+         "poster": "https://images.metahub.space/poster/small/tt0944947/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2011–2019",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt9288030/img",
+         "id": "tt9288030",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt9288030/img",
+         "name": "Reacher",
+         "poster": "https://images.metahub.space/poster/small/tt9288030/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2022–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt33332385/img",
+         "id": "tt33332385",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt33332385/img",
+         "name": "Widow's Bay",
+         "poster": "https://images.metahub.space/poster/small/tt33332385/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt13111078/img",
+         "id": "tt13111078",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt13111078/img",
+         "name": "Lioness",
+         "poster": "https://images.metahub.space/poster/small/tt13111078/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2023–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt14688458/img",
+         "id": "tt14688458",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt14688458/img",
+         "name": "Silo",
+         "poster": "https://images.metahub.space/poster/small/tt14688458/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2023–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt36064406/img",
+         "id": "tt36064406",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt36064406/img",
+         "name": "Coven Academy",
+         "poster": "https://images.metahub.space/poster/small/tt36064406/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2026–",
+         "videoId": null
+        },
+        {
+         "background": "https://images.metahub.space/background/medium/tt0903747/img",
+         "id": "tt0903747",
+         "kind": "series",
+         "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
+         "name": "Breaking Bad",
+         "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+         "posterShape": "poster",
+         "progress": null,
+         "releaseInfo": "2008–2013",
+         "videoId": null
         }
        ],
-       "title": "New Series"
+       "title": "Popular Series"
       }
      }
     ],

@@ -3,7 +3,8 @@ import Testing
 
 // Fixtures are real bridge traffic recorded by scripts/capture-fixtures.ts:
 // a fresh core, Cinemeta installed, Home opened, then Breaking Bad with
-// selectSeason 2, setWatched on its first episode and setInLibrary.
+// selectSeason 2, setWatched on its first episode and setInLibrary, then
+// Versions and Playback for the sample source's Big Buck Bunny.
 
 private struct Reply<R: Decodable>: Decodable {
     let id: UInt64?
@@ -77,10 +78,46 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(header.selectedSeason == 2)
     #expect(header.inLibrary)
     #expect(header.playTarget?.label == "Play S1:E1")
+    #expect(header.watched == false)
+    #expect(header.details?.trailers.first?.youtubeId == "VFkjBy2b50Q")
     #expect(episodes.count == 13)
     #expect(episodes.allSatisfy { $0.season == 2 })
     #expect(episodes.first?.watched == true)
     #expect(episodes.dropFirst().allSatisfy { !$0.watched })
+}
+
+@Test func versionsArriveAsWholeSnapshotsWithThePick() throws {
+    let reply = try fixture("versions-reply.json", as: Reply<Opened<VersionsSnapshot>>.self)
+    let opened = try #require(reply.result)
+    #expect(opened.snapshot.recommended == nil)
+    #expect(opened.snapshot.pendingAddons == ["Sample Source"])
+    // Record views push whole snapshots: the last one wins.
+    let pushes = try fixture("versions-pushes.json", as: [Push<VersionsSnapshot>].self)
+    let latest = try #require(pushes.last?.updates.last)
+    #expect(latest.done)
+    let pick = try #require(latest.recommended)
+    #expect(pick.status == .direct)
+    #expect(pick.reasons == ["playsDirectly"])
+    #expect(pick.sizeBytes == 61_878_609)
+    #expect(pick.via == "Sample Source")
+}
+
+@Test func playbackHandsOverALoopbackURL() throws {
+    let reply = try fixture("playback-reply.json", as: Reply<Opened<PlaybackSnapshot>>.self)
+    #expect(reply.ok)
+    let pushes = try fixture("playback-pushes.json", as: [Push<PlaybackSnapshot>].self)
+    let latest = try #require(pushes.last?.updates.last)
+    #expect(latest.phase == "ready")
+    #expect(URL(string: latest.url ?? "")?.host() == "127.0.0.1")
+    #expect(latest.attempts.isEmpty)
+    #expect(latest.subtitlesPending == false)
+}
+
+@Test func hiddenReasonsDecodeFromPairs() throws {
+    let json = #"{"count": 3, "byReason": [["unplayable", 2], ["wrongTitle", 1]]}"#
+    let hidden = try JSONDecoder().decode(HiddenSummary.self, from: Data(json.utf8))
+    #expect(hidden.byReason.map(\.reason) == ["unplayable", "wrongTitle"])
+    #expect(hidden.byReason.map(\.count) == [2, 1])
 }
 
 @Test func failedCommandsCarryTheCoreError() throws {

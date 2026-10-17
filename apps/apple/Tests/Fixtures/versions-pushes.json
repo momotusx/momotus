@@ -1,0 +1,36 @@
+[
+ {
+  "sub": 4,
+  "updates": [
+   {
+    "done": true,
+    "failedAddons": [],
+    "frozen": false,
+    "hidden": {
+     "byReason": [],
+     "count": 0
+    },
+    "pendingAddons": [],
+    "recommended": {
+     "failoverCount": 0,
+     "features": [],
+     "group": "best",
+     "key": "url:http://127.0.0.1:7792/media/Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4",
+     "languages": [],
+     "quality": "Unknown",
+     "reasons": [
+      "playsDirectly"
+     ],
+     "releaseName": "Big.Buck.Bunny.2008.360p.WEB.H264.AAC.mp4",
+     "sizeBytes": 61878609,
+     "status": {
+      "kind": "direct"
+     },
+     "via": "Sample Source"
+    },
+    "rows": [],
+    "slowAddons": []
+   }
+  ]
+ }
+]

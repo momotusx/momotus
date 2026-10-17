@@ -51,7 +51,11 @@ struct RowView: View {
             LazyHStack(alignment: .top, spacing: metrics.wide ? 20 : 12) {
                 ForEach(Array(row.tiles.enumerated()), id: \.offset) { _, tile in
                     NavigationLink(value: TitleRoute(tile)) {
-                        PosterTile(tile: tile)
+                        if row.rowId == "continue-watching" {
+                            ContinueCard(tile: tile)
+                        } else {
+                            PosterTile(tile: tile)
+                        }
                     }
                     .buttonStyle(CardButtonStyle())
                     .accessibilityLabel(tile.name)
@@ -66,47 +70,26 @@ struct RowView: View {
     }
 }
 
-/// Poster art; Continue Watching adds progress and the episode.
+/// Poster art for a catalog tile.
 struct PosterTile: View {
     let tile: Tile
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ArtImage(url: tile.poster)
-                .overlay {
-                    if tile.poster == nil {
-                        Text(tile.name)
-                            .font(.display(Theme.type.headline))
-                            .foregroundStyle(Theme.Palette.muted)
-                            .multilineTextAlignment(.center)
-                            .padding(Theme.Space.xs)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if let progress = tile.progress {
-                        ProgressLine(value: progress).padding(10)
-                    }
-                }
-                .frame(width: size.width, height: size.height)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
-            if tile.videoId != nil {
-                VStack(alignment: .leading, spacing: 2) {
+        ArtImage(url: tile.poster)
+            .overlay {
+                if tile.poster == nil {
                     Text(tile.name)
-                        .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                        .foregroundStyle(Theme.Palette.text)
-                    if let episode = episodeLabel(tile.videoId) {
-                        Text(episode)
-                            .font(.text(Theme.type.callout, relativeTo: .callout))
-                            .foregroundStyle(Theme.Palette.muted)
-                    }
+                        .font(.display(Theme.type.headline))
+                        .foregroundStyle(Theme.Palette.muted)
+                        .multilineTextAlignment(.center)
+                        .padding(Theme.Space.xs)
                 }
-                .lineLimit(1)
-                .frame(width: size.width, alignment: .leading)
             }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(tile.name)
+            .frame(width: size.width, height: size.height)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(tile.name)
     }
 
     private var size: CGSize {

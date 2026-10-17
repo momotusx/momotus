@@ -113,6 +113,15 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let directors: [String]
     let rating: String?
     let source: String
+    /// Trailers the metadata names (YouTube), first is the main one.
+    let trailers: [Trailer]
+}
+
+struct Trailer: Decodable, Hashable, Sendable {
+    let title: String
+    let youtubeId: String
+    /// The watch page, for handing the trailer to a browser or the YouTube app.
+    let url: String
 }
 
 struct PlayTarget: Decodable, Hashable, Sendable {
@@ -129,6 +138,9 @@ struct TitleHeader: Decodable, Hashable, Sendable {
     let selectedSeason: Int?
     /// Episode (or the movie itself) the primary button resumes or starts.
     let playTarget: PlayTarget?
+    /// A movie the user watched (episodes carry their own flag); toggled with
+    /// `setWatched` on the movie's id.
+    let watched: Bool
 }
 
 struct Episode: Decodable, Hashable, Sendable {

@@ -70,3 +70,9 @@ struct Metrics: Sendable {
 extension EnvironmentValues {
     @Entry var metrics = Metrics.regular
 }
+
+/// The player asks for the whole window (the sidebar hides) while it is up.
+@MainActor @Observable
+final class Immersion {
+    var active = false
+}

@@ -12,6 +12,17 @@ enum DebugHooks {
         return TitleRoute(kind: parts[0], id: parts[1], name: "")
     }
 
+    /// `-MQAutoPlay YES` presses Play on the title page once a version is picked.
+    static var autoPlay: Bool { UserDefaults.standard.bool(forKey: "MQAutoPlay") }
+
+    /// `-MQShowVersions YES` opens the Versions page once versions are in.
+    static var showVersions: Bool { UserDefaults.standard.bool(forKey: "MQShowVersions") }
+
+    /// `-MQInstallAddons url1,url2` installs addons through the protocol at launch.
+    static var installAddons: [String] {
+        UserDefaults.standard.string(forKey: "MQInstallAddons")?.split(separator: ",").map(String.init) ?? []
+    }
+
     #if os(macOS)
     /// `notifyutil -p app.marquee.snapshot` writes each window to
     /// $TMPDIR/marquee-window-<n>.png, drawn by AppKit (no screen recording).

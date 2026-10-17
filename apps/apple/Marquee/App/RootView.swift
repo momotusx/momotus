@@ -23,6 +23,8 @@ struct RootView: View {
     @Environment(CoreClient.self) private var core
     @State private var tab = AppTab.home
     @State private var homePath: [TitleRoute] = []
+    @State private var columns = NavigationSplitViewVisibility.all
+    @State private var immersion = Immersion()
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -30,7 +32,9 @@ struct RootView: View {
     var body: some View {
         Group {
             if metrics.wide && !isTV {
-                NavigationSplitView {
+                NavigationSplitView(columnVisibility: Binding(
+                    get: { immersion.active ? .detailOnly : columns }, set: { columns = $0 }
+                )) {
                     Sidebar(selection: $tab)
                         .navigationSplitViewColumnWidth(220)
                 } detail: {
@@ -48,6 +52,7 @@ struct RootView: View {
         .preferredColorScheme(.dark)
         #endif
         .environment(\.metrics, metrics)
+        .environment(immersion)
         .tint(Theme.Palette.accent)
         .overlay {
             if let failure = core.failure {
@@ -57,6 +62,15 @@ struct RootView: View {
         #if DEBUG
         .onAppear {
             if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }
+        }
+        .task {
+            for url in DebugHooks.installAddons {
+                do {
+                    try await core.perform("installAddon", ["url": url])
+                } catch {
+                    coreLog.notice("debug install \(url, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                }
+            }
         }
         #endif
     }

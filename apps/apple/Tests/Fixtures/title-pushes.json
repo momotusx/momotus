@@ -26,7 +26,14 @@
       "rating": "9.5",
       "releaseInfo": "2008–2013",
       "runtime": "49 min",
-      "source": "Cinemeta"
+      "source": "Cinemeta",
+      "trailers": [
+       {
+        "title": "Breaking Bad",
+        "url": "https://www.youtube.com/watch?v=VFkjBy2b50Q",
+        "youtubeId": "VFkjBy2b50Q"
+       }
+      ]
      },
      "inLibrary": false,
      "playTarget": {
@@ -45,7 +52,8 @@
      "selectedSeason": 1,
      "state": {
       "state": "ready"
-     }
+     },
+     "watched": false
     },
     "kind": "header"
    },
@@ -165,7 +173,14 @@
       "rating": "9.5",
       "releaseInfo": "2008–2013",
       "runtime": "49 min",
-      "source": "Cinemeta"
+      "source": "Cinemeta",
+      "trailers": [
+       {
+        "title": "Breaking Bad",
+        "url": "https://www.youtube.com/watch?v=VFkjBy2b50Q",
+        "youtubeId": "VFkjBy2b50Q"
+       }
+      ]
      },
      "inLibrary": false,
      "playTarget": {
@@ -184,7 +199,8 @@
      "selectedSeason": 2,
      "state": {
       "state": "ready"
-     }
+     },
+     "watched": false
     },
     "kind": "header"
    },
@@ -529,7 +545,14 @@
       "rating": "9.5",
       "releaseInfo": "2008–2013",
       "runtime": "49 min",
-      "source": "Cinemeta"
+      "source": "Cinemeta",
+      "trailers": [
+       {
+        "title": "Breaking Bad",
+        "url": "https://www.youtube.com/watch?v=VFkjBy2b50Q",
+        "youtubeId": "VFkjBy2b50Q"
+       }
+      ]
      },
      "inLibrary": true,
      "playTarget": {
@@ -548,7 +571,8 @@
      "selectedSeason": 2,
      "state": {
       "state": "ready"
-     }
+     },
+     "watched": false
     },
     "kind": "header"
    }

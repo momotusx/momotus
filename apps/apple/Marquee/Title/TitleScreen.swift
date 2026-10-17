@@ -4,11 +4,18 @@ import SwiftUI
 /// the version under it, library), then credits and the episode contents.
 struct TitleScreen: View {
     @State private var model: TitleModel
+    let core: CoreClient
     @Environment(\.metrics) private var metrics
+    @Environment(\.openURL) private var openURL
     @State private var width: CGFloat = 0
+    /// Versions for the play target: the line under Play, Play itself, and the Versions page.
+    @State private var versions: VersionsModel?
+    @State private var playing: PlayRoute?
+    @State private var showVersions = false
 
     init(route: TitleRoute, core: CoreClient) {
         _model = State(initialValue: TitleModel(route: route, core: core))
+        self.core = core
     }
 
     var body: some View {
@@ -27,13 +34,52 @@ struct TitleScreen: View {
         .background(Theme.Palette.bg)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task(id: model.taskId) { await model.run() }
+        .task(id: playTarget?.videoId) { await openVersions() }
+        #if DEBUG
+        .onChange(of: versions?.snapshot?.recommended?.key) { _, key in
+            if DebugHooks.autoPlay, key != nil, playing == nil { playing = versions?.play() }
+            if DebugHooks.showVersions, key != nil { showVersions = true }
+        }
+        #endif
         .fullBleedTop()
+        .navigationDestination(item: $playing) { route in
+            PlayerScreen(route: route, versions: versions, core: core)
+        }
+        .navigationDestination(isPresented: $showVersions) {
+            if let versions {
+                VersionsScreen(model: versions, heading: versionsHeading, core: core)
+            }
+        }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
     }
 
     private var details: TitleDetails? { model.header?.details }
+
+    private var playTarget: PlayTargetInfo? {
+        guard let details, let target = model.header?.playTarget else { return nil }
+        return PlayTargetInfo(
+            kind: details.kind, itemId: details.id, videoId: target.videoId, title: details.name,
+            poster: details.poster, resumeMs: target.resumeMs)
+    }
+
+    /// One Versions view per play target; it stays open while its playback runs.
+    private func openVersions() async {
+        guard let target = playTarget else { versions = nil; return }
+        let model = VersionsModel(target: target, core: core)
+        versions = model
+        await model.run()
+    }
+
+    /// "S2:E3 What Is Dead May Never Die" or the movie's name.
+    private var versionsHeading: String {
+        guard let target = versions?.target, let season = target.season, let number = target.episode else {
+            return details?.name ?? model.route.name
+        }
+        let title = model.episodes.first { $0.videoId == target.videoId }?.title
+        return ["S\(season):E\(number)", title].compactMap { $0 }.joined(separator: " ")
+    }
 
     private var heroHeight: CGFloat {
         #if os(tvOS)
@@ -89,8 +135,13 @@ struct TitleScreen: View {
                         .lineLimit(metrics.wide ? 3 : 6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                PlayBlock(target: model.header?.playTarget, wide: metrics.wide)
-                actions
+                PlayBlock(
+                    target: model.header?.playTarget, versions: versions?.snapshot, failure: versions?.failure,
+                    wide: metrics.wide
+                ) {
+                    playing = versions?.play()
+                }
+                actions(details)
             } else if case .failed(let reason) = model.header?.state {
                 StateLine(symbol: "exclamationmark.triangle", text: reason, action: ("Try again", model.retry))
             } else {
@@ -101,22 +152,31 @@ struct TitleScreen: View {
         }
     }
 
-    private var actions: some View {
-        let inLibrary = model.header?.inLibrary ?? false
-        return HStack(spacing: 12) {
-            Button {
-            } label: {
-                Label("Versions", systemImage: "square.stack.3d.up")
+    /// Versions, Trailer (when the metadata names one), Library and, for a
+    /// movie, Watched. They wrap onto a second line on narrow screens.
+    private func actions(_ details: TitleDetails) -> some View {
+        let header = model.header
+        let inLibrary = header?.inLibrary ?? false
+        let watched = header?.watched ?? false
+        let count = versions?.snapshot.map { $0.rows.count + ($0.recommended == nil ? 0 : 1) } ?? 0
+        return FlowRow(spacing: 12) {
+            Button { showVersions = true } label: {
+                Label(count > 0 ? "Versions (\(count))" : "Versions", systemImage: "square.stack.3d.up")
             }
-            .buttonStyle(PillButtonStyle())
-            .disabled(true)
-            Button {
-                model.setInLibrary(!inLibrary)
-            } label: {
+            .disabled(versions == nil)
+            if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
+                Button { openURL(url) } label: { Label("Trailer", systemImage: "film") }
+            }
+            Button { model.setInLibrary(!inLibrary) } label: {
                 Label(inLibrary ? "In Library" : "Add to Library", systemImage: inLibrary ? "bookmark.fill" : "bookmark")
             }
-            .buttonStyle(PillButtonStyle())
+            if details.kind == "movie" {
+                Button { model.setWatched(details.id, !watched) } label: {
+                    Label(watched ? "Watched" : "Mark watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle")
+                }
+            }
         }
+        .buttonStyle(PillButtonStyle())
     }
 
     @ViewBuilder private var lower: some View {
@@ -180,12 +240,14 @@ private struct Backdrop: View {
 /// Play or Resume with the resume point, and the chosen version under it.
 private struct PlayBlock: View {
     let target: PlayTarget?
+    let versions: VersionsSnapshot?
+    let failure: String?
     let wide: Bool
+    let play: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button {
-            } label: {
+            Button(action: play) {
                 HStack(spacing: 10) {
                     Image(systemName: "play.fill")
                     Text(target?.label ?? "Play")
@@ -196,9 +258,43 @@ private struct PlayBlock: View {
                 .frame(maxWidth: wide ? nil : .infinity)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
-            .disabled(target == nil)
-            Label("The best version is picked when sources answer", systemImage: "bolt")
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+            .disabled(versions?.recommended == nil)
+            if let failure {
+                Label("Versions could not load: \(failure)", systemImage: "exclamationmark.triangle")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+            } else {
+                VersionLine(versions: versions)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+            }
+        }
+    }
+}
+
+/// "720p  472 MB  (dot) Torrent, 153 seeds  via Torrentio", or why there is none yet.
+private struct VersionLine: View {
+    let versions: VersionsSnapshot?
+
+    var body: some View {
+        if let best = versions?.recommended {
+            let dot = Text(Image(systemName: "circle.fill")).font(.system(size: 8)).foregroundStyle(VersionWords.statusColor(best.status))
+            let via = Text("via \(best.via)").foregroundStyle(Theme.Palette.muted)
+            Text("\(VersionWords.line(best))   \(dot) \(VersionWords.status(best.status))   \(via)")
+                .foregroundStyle(Theme.Palette.text)
+                .accessibilityLabel("\(VersionWords.line(best)), \(VersionWords.status(best.status)), via \(best.via)")
+        } else if let versions, versions.done {
+            Label(
+                versions.hidden.count > 0
+                    ? "No version plays here: \(VersionWords.hidden(versions.hidden))"
+                    : "No version found: your addons have no source for this",
+                systemImage: "exclamationmark.circle")
+                .foregroundStyle(Theme.Palette.muted)
+        } else {
+            Label(
+                versions?.pendingAddons.isEmpty == false
+                    ? "Asking \(versions!.pendingAddons.joined(separator: ", "))"
+                    : "Finding the best version",
+                systemImage: "clock")
                 .foregroundStyle(Theme.Palette.muted)
         }
     }
