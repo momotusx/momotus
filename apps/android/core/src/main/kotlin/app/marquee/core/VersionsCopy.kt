@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.HideReason
@@ -7,6 +8,7 @@ import app.marquee.core.model.Reason
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
+import java.util.Locale
 
 /** What the line under a title's primary button says about the versions. */
 sealed interface VersionLine {
@@ -151,15 +153,20 @@ object VersionsCopy {
 
     /** The heading of the card shown while there is no recommendation. */
     fun waitingTitle(snapshot: VersionsSnapshot): String =
-        if (snapshot.done) "No playable version found" else "Finding versions"
+        when {
+            !snapshot.done -> "Finding versions"
+            snapshot.rows.isEmpty() -> "No playable version found"
+            else -> "Nothing is ready to play yet"
+        }
 
-    /** What the card says while there is no recommendation: who is slow or failed, else a plain line. */
+    /** What the card says while there is no recommendation: who is slow or failed, else why. */
     fun waitingBody(snapshot: VersionsSnapshot): String =
         addons(snapshot)
-            ?: if (snapshot.done) {
-                "None of your addons returned a stream for this video. A source addon finds playable streams."
-            } else {
-                "Your addons are answering."
+            ?: when {
+                !snapshot.done -> "Your addons are answering."
+                snapshot.rows.isNotEmpty() -> "Choose a version to start it."
+                snapshot.hidden.count > 0 -> "Every result was hidden: ${hiddenDetail(snapshot.hidden)}."
+                else -> "None of your addons returned a stream for this video. A source addon finds playable streams."
             }
 
     private fun hideText(
@@ -181,6 +188,134 @@ object VersionsCopy {
     /** "3 are for other titles, 2 are over your size limit": the other half. */
     fun hiddenDetail(summary: HiddenSummary): String =
         summary.byReason.joinToString(", ") { (reason, n) -> "$n ${hideText(reason, n == 1)}" }
+
+    /** The tone of a line drawn with a dot. */
+    enum class Tone { Idle, Ok, Warn, Bad }
+
+    /** The header's line: who is still asked, slow or silent, else how many versions there are. */
+    fun progress(snapshot: VersionsSnapshot?): Pair<String, Tone> {
+        val names = { list: List<String> -> list.joinToString(", ") }
+        return when {
+            snapshot == null -> {
+                "Opening" to Tone.Idle
+            }
+
+            snapshot.pendingAddons.isNotEmpty() -> {
+                "Asking ${names(snapshot.pendingAddons)}" to Tone.Warn
+            }
+
+            snapshot.slowAddons.isNotEmpty() -> {
+                "${names(snapshot.slowAddons)} is slow, still waiting" to Tone.Warn
+            }
+
+            snapshot.failedAddons.isNotEmpty() -> {
+                "${names(snapshot.failedAddons)} did not answer" to Tone.Bad
+            }
+
+            else -> {
+                val n = snapshot.rows.size + (if (snapshot.recommended != null) 1 else 0)
+                (if (n == 1) "1 version" else "$n versions") to Tone.Ok
+            }
+        }
+    }
+
+    /** "This screen: 1080p, HDR, plays H.264, HEVC in MKV, MP4": what the ranking was made for. */
+    fun device(caps: DeviceCapsParams): String {
+        val screen = if (caps.displayHeight >= 2160) "4K" else "${caps.displayHeight}p"
+        val plays = caps.decoders?.takeIf { it.isNotEmpty() }?.joinToString(", ") { CODECS[it] ?: it.uppercase() }
+        val boxes =
+            caps.containers?.takeIf { it.isNotEmpty() }?.joinToString(", ") {
+                if (it ==
+                    "webm"
+                ) {
+                    "WebM"
+                } else {
+                    it.uppercase()
+                }
+            }
+        return buildString {
+            append("This screen: $screen")
+            if (caps.hdr.isNotEmpty()) append(", HDR")
+            if (plays != null) append(", plays $plays")
+            if (plays != null && boxes != null) append(" in $boxes")
+        }
+    }
+
+    private val CODECS = mapOf("h264" to "H.264", "h265" to "HEVC", "av1" to "AV1", "vp9" to "VP9")
+
+    /** A recommendation's facts, in the web's order: size, status, where from, more features, languages. */
+    fun facts(row: VersionRow): List<Pair<String, String>> =
+        listOfNotNull(
+            "Size" to (row.sizeBytes?.let(Format::bytes) ?: "Unknown"),
+            "Status" to status(row.status),
+            "Via" to row.via,
+            ("Features" to row.features.joinToString(", ")).takeIf { row.features.size > 1 },
+            ("Languages" to languages(row)).takeIf { row.languages.isNotEmpty() },
+        )
+
+    /** The quality and the first feature, the card's heading: "4K Dolby Vision". */
+    fun pickHeading(row: VersionRow): String = listOfNotNull(row.quality, row.features.firstOrNull()).joinToString(" ")
+
+    /** The line under Play: how many sources back this release up. */
+    fun failover(row: VersionRow): String =
+        if (row.failoverCount > 0) {
+            "${row.failoverCount + 1} sources. If one fails, the next starts on its own."
+        } else {
+            "One source for this release."
+        }
+
+    /** What an opened row adds under its release name: "English, 2 sources", or "Language not stated". */
+    fun detail(row: VersionRow): String =
+        listOfNotNull(
+            languages(row).takeIf { it.isNotEmpty() },
+            "${row.failoverCount + 1} sources".takeIf { row.failoverCount > 0 },
+        ).joinToString(", ").ifEmpty { "Language not stated" }
+
+    /** "English, Turkish" from the release's codes. */
+    fun languages(row: VersionRow): String = row.languages.joinToString(", ", transform = ::languageName)
+
+    /** The English name of a language code ("eng", "tr", "pt-BR"); the code in capitals when unknown. */
+    fun languageName(code: String): String {
+        val tag = ISO1[code.lowercase()] ?: code
+        val name = Locale.forLanguageTag(tag).getDisplayName(Locale.ENGLISH)
+        return if (name.isEmpty() || name.equals(code, ignoreCase = true)) code.uppercase() else name
+    }
+
+    // The bibliographic three-letter codes Locale does not take, as on the web.
+    private val ISO1 =
+        mapOf(
+            "eng" to "en",
+            "tur" to "tr",
+            "fre" to "fr",
+            "fra" to "fr",
+            "ger" to "de",
+            "deu" to "de",
+            "spa" to "es",
+            "ita" to "it",
+            "por" to "pt",
+            "rus" to "ru",
+            "jpn" to "ja",
+            "kor" to "ko",
+            "chi" to "zh",
+            "zho" to "zh",
+            "ara" to "ar",
+            "dut" to "nl",
+            "nld" to "nl",
+            "pol" to "pl",
+            "swe" to "sv",
+            "hin" to "hi",
+            "gre" to "el",
+            "ell" to "el",
+            "rum" to "ro",
+            "ron" to "ro",
+            "hun" to "hu",
+            "cze" to "cs",
+            "ces" to "cs",
+            "heb" to "he",
+            "per" to "fa",
+            "fas" to "fa",
+            "pob" to "pt-BR",
+        )
 
     /** Addons still answering or that failed, as one line, or null. */
     fun addons(snapshot: VersionsSnapshot): String? {

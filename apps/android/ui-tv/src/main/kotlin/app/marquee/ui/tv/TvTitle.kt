@@ -59,6 +59,7 @@ import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MenuAction
 import app.marquee.design.MqText
+import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
@@ -249,7 +250,7 @@ private fun Info(
                 label = primary.label,
                 icon =
                     when (primary) {
-                        is PrimaryAction.Play -> Icons.Play
+                        is PrimaryAction.Play -> PlayFilled
                         PrimaryAction.ChooseVersion -> Icons.Layers
                         PrimaryAction.AddSource -> Icons.Plus
                     },

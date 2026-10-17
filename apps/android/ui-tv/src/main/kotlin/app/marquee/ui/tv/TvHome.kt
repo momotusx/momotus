@@ -54,6 +54,7 @@ import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
+import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
@@ -239,7 +240,7 @@ private fun TvHero(
                 if (tile.playable()) {
                     PrimaryButton(
                         label = "Play",
-                        icon = Icons.Play,
+                        icon = PlayFilled,
                         onClick = { onPlay(tile) },
                         modifier = Modifier.describe("Play ${tile.name}"),
                         focusRequester = playRequester,

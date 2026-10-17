@@ -75,6 +75,8 @@ fun MqText(
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     /** Overrides the role's tracking (spaced capitals of an eyebrow). */
     letterSpacing: TextUnit = TextUnit.Unspecified,
+    /** A face other than the role's: monospace for a release name. */
+    fontFamily: FontFamily? = null,
 ) {
     val size = Marquee.type.size(role)
     BasicText(
@@ -85,7 +87,7 @@ fun MqText(
             TextStyle(
                 color = color,
                 fontSize = size,
-                fontFamily = if (role.display) MarqueeFonts.display else MarqueeFonts.text,
+                fontFamily = fontFamily ?: if (role.display) MarqueeFonts.display else MarqueeFonts.text,
                 fontWeight = weight ?: if (role.display) FontWeight(Tokens.weight.display) else FontWeight.Normal,
                 letterSpacing =
                     if (letterSpacing !=

@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import app.marquee.core.client.CoreClient
+import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonsSnapshot
 import app.marquee.core.model.CalendarSnapshot
 import app.marquee.core.model.DiscoverSnapshot
@@ -229,7 +230,10 @@ class VersionsView(
     params: JsonObject,
 ) : RecordView<VersionsSnapshot>(client, scope, "versions", params, VersionsSnapshot.serializer()) {
     /** Send on the first focus move: the pick under the cursor never changes after. */
-    fun freeze() = post(command("freeze"))
+    fun freeze() {
+        CoreLog.d("versions: the pick is frozen")
+        post(command("freeze"))
+    }
 }
 
 class PlaybackView(

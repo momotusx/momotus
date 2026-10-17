@@ -43,6 +43,7 @@ import app.marquee.design.MarqueeTheme
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.Palette
+import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RoundButton
@@ -103,8 +104,8 @@ private fun Gallery() {
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                PrimaryButton("Play", {}, icon = Icons.Play)
-                PrimaryButton("Resume from 41:12", {}, icon = Icons.Play, big = true)
+                PrimaryButton("Play", {}, icon = PlayFilled)
+                PrimaryButton("Resume from 41:12", {}, icon = PlayFilled, big = true)
                 SecondaryButton("Versions", {}, icon = Icons.Layers)
                 SecondaryButton("Add to Library", {}, icon = Icons.BookmarkPlus)
                 SecondaryButton("In Library", {}, icon = Icons.BookmarkCheck, selected = true)

@@ -52,6 +52,7 @@ import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
+import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
@@ -185,7 +186,7 @@ private fun PhoneHero(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
                 verticalAlignment = Alignment.Top,
             ) {
-                if (tile.playable()) PrimaryButton(label = "Play", icon = Icons.Play, onClick = { onPlay(tile) })
+                if (tile.playable()) PrimaryButton(label = "Play", icon = PlayFilled, onClick = { onPlay(tile) })
                 RoundButton(Icons.Info, "Details", { onOpen(tile) }, showLabel = true)
             }
         }

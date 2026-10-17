@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -667,20 +668,35 @@ fun FactsTable(
 ) {
     if (facts.isEmpty()) return
     val colors = Marquee.colors
-    val tv = Marquee.form == Form.Tv
     val shape = RoundedCornerShape(Marquee.radius.l)
-    Column(
+    FactsGrid(
+        facts,
         modifier
             .clip(shape)
             .background(colors.glassStrong)
             .border(1.dp, colors.edge, shape)
-            .padding(if (tv) 28.dp else 16.dp),
-        verticalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 10.dp),
-    ) {
+            .padding(if (Marquee.form == Form.Tv) 28.dp else 16.dp),
+    )
+}
+
+/**
+ * The rows of [FactsTable] without its glass, for a card that is glass already. A label in
+ * [tones] puts a status dot before its value ("Status: ● Direct link").
+ */
+@Composable
+fun FactsGrid(
+    facts: List<Pair<String, String>>,
+    modifier: Modifier = Modifier,
+    tones: Map<String, Status> = emptyMap(),
+) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 10.dp)) {
         for ((label, value) in facts) {
             Row(
                 Modifier.semantics(mergeDescendants = true) {},
                 horizontalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 MqText(
                     label,
@@ -690,8 +706,49 @@ fun FactsTable(
                     weight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
+                tones[label]?.let { StatusDot(it) }
                 MqText(value, role = TextRole.Caption, maxLines = 2)
             }
         }
     }
+}
+
+/** A small label in `dim` spaced capitals: a card's kicker, a table's column, a group's name. */
+@Composable
+fun CapsLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Marquee.colors.dim,
+) {
+    MqText(
+        text.uppercase(),
+        modifier = modifier,
+        role = TextRole.Caption,
+        color = color,
+        weight = FontWeight.Bold,
+        maxLines = 1,
+        letterSpacing = 0.12.em,
+    )
+}
+
+/** A bar on glass with an edge: a group's name and count, or the hidden summary. */
+@Composable
+fun GlassBar(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(Marquee.radius.m)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(colors.glass)
+            .border(1.dp, colors.edge, shape)
+            .padding(horizontal = if (tv) 22.dp else 16.dp, vertical = if (tv) 12.dp else 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }

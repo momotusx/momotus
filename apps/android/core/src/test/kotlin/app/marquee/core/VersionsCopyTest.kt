@@ -142,4 +142,101 @@ class VersionsCopyTest {
                 )
         assertTrue(words.all { it.isNotBlank() && it.all { c -> c.code < 0x2000 } })
     }
+
+    @Test
+    fun `the header says who is still asked, slow or silent, else the count`() {
+        assertEquals("Opening" to VersionsCopy.Tone.Idle, VersionsCopy.progress(null))
+        assertEquals(
+            "Asking Torrentio" to VersionsCopy.Tone.Warn,
+            VersionsCopy.progress(snapshot(pending = listOf("Torrentio"))),
+        )
+        assertEquals(
+            "Torrentio is slow, still waiting" to VersionsCopy.Tone.Warn,
+            VersionsCopy.progress(snapshot(slow = listOf("Torrentio"))),
+        )
+        assertEquals(
+            "Torrentio did not answer" to VersionsCopy.Tone.Bad,
+            VersionsCopy.progress(snapshot(failed = listOf("Torrentio"))),
+        )
+        assertEquals(
+            "1 version" to VersionsCopy.Tone.Ok,
+            VersionsCopy.progress(snapshot(recommended = row(), done = true)),
+        )
+        assertEquals("0 versions" to VersionsCopy.Tone.Ok, VersionsCopy.progress(snapshot(done = true)))
+    }
+
+    @Test
+    fun `the device line names the screen, the codecs and the containers`() {
+        val caps =
+            app.marquee.core.client.DeviceCapsParams(
+                displayHeight = 2160,
+                hdr = listOf("hdr10"),
+                decoders = listOf("h264", "h265", "av1"),
+                containers = listOf("mkv", "webm"),
+            )
+        assertEquals("This screen: 4K, HDR, plays H.264, HEVC, AV1 in MKV, WebM", VersionsCopy.device(caps))
+        assertEquals(
+            "This screen: 1080p",
+            VersionsCopy.device(
+                app.marquee.core.client
+                    .DeviceCapsParams(displayHeight = 1080, hdr = emptyList()),
+            ),
+        )
+    }
+
+    @Test
+    fun `the card lists the facts it has, in the web's order`() {
+        val one = row(sizeBytes = null, features = listOf("HDR10")).copy(languages = listOf("eng", "tur"))
+        assertEquals(
+            listOf(
+                "Size" to "Unknown",
+                "Status" to "Ready on Real-Debrid",
+                "Via" to "Real-Debrid",
+                "Languages" to "English, Turkish",
+            ),
+            VersionsCopy.facts(one),
+        )
+        val two = row(features = listOf("Dolby Vision", "Atmos"))
+        assertEquals(listOf("Size", "Status", "Via", "Features"), VersionsCopy.facts(two).map { it.first })
+        assertEquals("4K Dolby Vision", VersionsCopy.pickHeading(two))
+    }
+
+    @Test
+    fun `failover and an opened row say how many sources back a release`() {
+        assertEquals("One source for this release.", VersionsCopy.failover(row()))
+        assertEquals(
+            "3 sources. If one fails, the next starts on its own.",
+            VersionsCopy.failover(row().copy(failoverCount = 2)),
+        )
+        assertEquals("Language not stated", VersionsCopy.detail(row()))
+        assertEquals("English, 2 sources", VersionsCopy.detail(row().copy(languages = listOf("en"), failoverCount = 1)))
+    }
+
+    @Test
+    fun `language codes read as English names, an unknown code in capitals`() {
+        assertEquals("English", VersionsCopy.languageName("eng"))
+        assertEquals("German", VersionsCopy.languageName("ger"))
+        assertEquals("Turkish", VersionsCopy.languageName("tr"))
+        assertEquals("Portuguese (Brazil)", VersionsCopy.languageName("pob"))
+        assertEquals("QQX", VersionsCopy.languageName("qqx"))
+    }
+
+    @Test
+    fun `the card without a pick says whether it is looking, nothing came, all was hidden, or none is ready`() {
+        val looking = snapshot()
+        assertEquals(
+            "Finding versions" to "Your addons are answering.",
+            VersionsCopy.waitingTitle(looking) to VersionsCopy.waitingBody(looking),
+        )
+        val none = snapshot(done = true)
+        assertEquals("No playable version found", VersionsCopy.waitingTitle(none))
+        assertTrue(VersionsCopy.waitingBody(none).startsWith("None of your addons returned a stream"))
+        val hidden = none.copy(hidden = HiddenSummary(2, listOf(Tuple2(HideReason.Unplayable, 2))))
+        assertEquals("Every result was hidden: 2 cannot play on this device.", VersionsCopy.waitingBody(hidden))
+        val unready = none.copy(rows = listOf(row().copy(status = VersionStatus.NeedsDownload("Real-Debrid"))))
+        assertEquals(
+            "Nothing is ready to play yet" to "Choose a version to start it.",
+            VersionsCopy.waitingTitle(unready) to VersionsCopy.waitingBody(unready),
+        )
+    }
 }
