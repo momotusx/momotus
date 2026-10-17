@@ -1125,6 +1125,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-addons"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "mq-http",
+ "mq-protocol",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "stremio-core",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "mq-http"
 version = "0.1.0"
 dependencies = [

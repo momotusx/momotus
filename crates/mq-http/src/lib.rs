@@ -6,11 +6,12 @@ mod net;
 
 pub use budget::Priority;
 pub use net::{is_private_host, redact_url};
+pub use reqwest::header::HeaderMap;
 
 use budget::Budget;
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, RANGE};
+use reqwest::header::{HeaderName, HeaderValue, RANGE};
 use std::sync::{Arc, Once};
 use std::time::Duration;
 use url::Url;
