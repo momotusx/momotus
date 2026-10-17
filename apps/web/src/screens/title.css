@@ -88,12 +88,16 @@
 .ep.later .ep-t { color: var(--muted); }
 .ep-main:focus-visible, [data-form="tv"] .ep-main:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
 .ep-main:focus-visible .ep-ov, [data-form="tv"] .ep-main:focus .ep-ov, .ep.now .ep-ov { display: block; }
-.ep-mark { flex: none; display: none; align-items: center; gap: 8px; height: 52px; margin-top: 12px; padding: 0 18px; border-radius: 26px;
-  font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); opacity: 0; white-space: nowrap; }
-.ep-mark svg { width: 22px; height: 22px; }
-.ep:focus-within .ep-mark, .ep-mark:focus { display: inline-flex; opacity: 1; }
-.ep-mark[aria-pressed="true"] { color: var(--text); }
-@media (hover: hover) { [data-form="desktop"] .ep:hover .ep-mark { display: inline-flex; opacity: 1; } [data-form="desktop"] .ep-main:hover { background: var(--surface); } }
+/* Secondary actions: on screen while the row has focus (or the pointer). */
+/* Stacked, so the focused episode keeps room for its title on one line. */
+.ep-acts { flex: none; display: none; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 6px; }
+.ep-act { display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 18px; border-radius: 26px;
+  font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); white-space: nowrap; }
+.ep-act svg { width: 22px; height: 22px; }
+.ep-act:focus-visible, [data-form="tv"] .ep-act:focus { color: var(--text); background: var(--raised); }
+.ep:focus-within .ep-acts { display: flex; }
+.ep-act[aria-pressed="true"] { color: var(--text); }
+@media (hover: hover) { [data-form="desktop"] .ep:hover .ep-acts { display: flex; } [data-form="desktop"] .ep-main:hover { background: var(--surface); } }
 
 /* Phone: one column. */
 [data-form="phone"] .title-scr { position: relative; padding-bottom: 32px; }
@@ -132,8 +136,9 @@
 [data-form="phone"] .ep-ov { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-left: 34px; font-size: 13px; }
 [data-form="phone"] .meter { margin-left: 34px; }
 [data-form="phone"] .dots { margin: 0 8px; }
-[data-form="phone"] .ep-mark { display: inline-flex; opacity: 1; height: 32px; margin: 0 0 0 26px; padding: 0 8px; font-size: 13px; }
-[data-form="phone"] .ep-mark svg { width: 16px; height: 16px; }
+[data-form="phone"] .ep-acts { display: flex; flex-direction: row; margin: 0 0 0 26px; }
+[data-form="phone"] .ep-act { height: 32px; padding: 0 8px; font-size: 13px; }
+[data-form="phone"] .ep-act svg { width: 16px; height: 16px; }
 
 /* Long lists fade at the bottom so a cut row reads as "more below". */
 .toc { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 56px), transparent); }

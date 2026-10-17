@@ -30,6 +30,22 @@ describe("pick", () => {
     expect(pick(at(all, "a2"), all, "down", new Map())).toBe("b1");
   });
 
+  test("entering a stack lands on its first member, moving inside it does not", () => {
+    // A tall focused row with two actions stacked to its right; the lower
+    // action is nearer the row's centre.
+    const all: Candidate<string>[] = [
+      { key: "row", rect: { left: 0, top: 0, width: 600, height: 240 } },
+      { key: "versions", entry: "versions", rect: { left: 620, top: 10, width: 200, height: 52 } },
+      { key: "mark", entry: "versions", rect: { left: 620, top: 70, width: 200, height: 52 } },
+      { key: "next", rect: { left: 0, top: 260, width: 600, height: 80 } },
+    ];
+    const none = new Map<string, string>();
+    expect(pick(at(all, "row"), all, "right", none)).toBe("versions");
+    expect(pick(at(all, "versions"), all, "down", none)).toBe("mark");
+    expect(pick(at(all, "mark"), all, "up", none)).toBe("versions");
+    expect(pick(at(all, "mark"), all, "left", none)).toBe("row");
+  });
+
   test("entering a row restores its remembered tile", () => {
     const all = grid();
     const memory = new Map([["b", "b2"]]);

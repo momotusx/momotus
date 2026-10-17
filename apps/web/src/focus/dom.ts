@@ -88,6 +88,7 @@ export function move(dir: Direction): boolean {
     key: el.dataset.f as string,
     rect: el.getBoundingClientRect(),
     group: groupOf(el),
+    entry: el.closest<HTMLElement>("[data-fentry]")?.querySelector<HTMLElement>("[data-f]")?.dataset.f,
   }));
   const here = list[els.indexOf(current)] as Candidate<string>;
   let target: string | null = null;

@@ -1,4 +1,4 @@
-import { A, useParams } from "@solidjs/router";
+import { A, useParams, useSearchParams } from "@solidjs/router";
 import BookmarkCheck from "lucide-solid/icons/bookmark-check";
 import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
 import Check from "lucide-solid/icons/check";
@@ -285,7 +285,17 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
     const s = header()?.selectedSeason;
     if (s !== null && s !== undefined) remember("seasons", `season:${s}`);
   });
-  const select = (s: number) => props.view.command({ type: "selectSeason", season: s });
+  // The season in the URL wins over the core's default (the play target's
+  // season), so Back from an episode and links from Calendar land on it.
+  const [query, setQuery] = useSearchParams();
+  createEffect(() => {
+    const h = header();
+    const want = typeof query.season === "string" ? Number(query.season) : Number.NaN;
+    if (h && Number.isInteger(want) && h.selectedSeason !== want && h.seasons.includes(want)) {
+      void props.view.command({ type: "selectSeason", season: want });
+    }
+  });
+  const select = (s: number) => setQuery({ season: String(s) }, { replace: true });
   const left = (e: Episode) => {
     if (e.watched) return "Watched";
     if (e.progress !== null) return props.runtime ? `${Math.max(1, Math.round(props.runtime * (1 - e.progress)))} min left` : `${pct(e.progress)} watched`;
@@ -341,15 +351,23 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                   </span>
                 </Show>
               </A>
-              <button
-                class="ep-mark"
-                data-f={`mark:${e.videoId}`}
-                aria-pressed={e.watched}
-                onClick={() => props.view.command({ type: "setWatched", videoId: e.videoId, value: !e.watched })}
-              >
-                <Check aria-hidden />
-                {e.watched ? "Watched" : "Mark watched"}
-              </button>
+              {/* The row plays this episode; choosing its version or marking
+                  it watched are the secondary actions beside it. */}
+              <div class="ep-acts" data-fentry>
+                <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Versions of ${episodeLabel(e.season, e.episode)}`}>
+                  <Layers aria-hidden />
+                  Versions
+                </A>
+                <button
+                  class="ep-act"
+                  data-f={`mark:${e.videoId}`}
+                  aria-pressed={e.watched}
+                  onClick={() => props.view.command({ type: "setWatched", videoId: e.videoId, value: !e.watched })}
+                >
+                  <Check aria-hidden />
+                  {e.watched ? "Watched" : "Mark watched"}
+                </button>
+              </div>
             </li>
           )}
         </For>

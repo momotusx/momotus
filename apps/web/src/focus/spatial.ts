@@ -19,6 +19,9 @@ export interface Candidate<K> {
   key: K;
   rect: Rect;
   group?: string;
+  /** First member of the stack this candidate is in (`data-fentry`): moving
+   * into the stack from outside lands there, not on the nearest member. */
+  entry?: K;
 }
 
 const right = (r: Rect) => r.left + r.width;
@@ -78,6 +81,7 @@ export function pick<K>(
     }
   }
   if (!best) return null;
+  if (best.entry !== undefined && best.entry !== current.entry) return best.entry;
   const leavingGroup = best.group !== undefined && best.group !== current.group;
   if (leavingGroup) {
     const remembered = memory.get(best.group as string);
