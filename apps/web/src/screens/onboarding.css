@@ -1,61 +1,68 @@
-/* Welcome: two doors (Lobby), addons, and the Readout setup check. */
+/* Welcome: one decision per step, as a full screen with no rail or tabs. */
 
 .welcome.page { position: absolute; inset: 0; padding: var(--safe-top) var(--safe-side) var(--safe-bottom); }
+.welcome-head { display: flex; align-items: center; justify-content: space-between; }
 .welcome-head .brand { padding-left: 0; }
-.welcome-head h1 { font: 600 var(--type-hero) / 1.04 var(--font-display); letter-spacing: -.01em; margin: 44px 0 14px; }
-.welcome-head p { font: 400 var(--type-headline) / 1.35 var(--font-text); color: var(--muted); }
-.welcome-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; align-items: start; margin-top: 52px; }
+.step-body { display: grid; justify-items: start; gap: 22px; max-width: 1560px; margin-top: 56px; }
+.step-body h1 { font: 600 var(--type-hero) / 1.04 var(--font-display); letter-spacing: -.01em; }
+.step-body .lead { font: 400 var(--type-headline) / 1.35 var(--font-text); color: var(--muted); max-width: 1200px; }
+.step-body .acts { margin-top: 12px; }
 
-.doors { display: grid; gap: 16px; }
-.door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 30px 30px; border-radius: 26px; background: var(--surface);
-  box-shadow: inset 0 0 0 2px var(--line); transform-origin: center; }
+/* Step 1: two doors side by side on TV and desktop, stacked on a phone. */
+.doors { display: grid; grid-template-columns: repeat(2, 720px); gap: 40px; margin-top: 20px; }
+.door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 34px 34px; border-radius: 26px; background: var(--surface);
+  box-shadow: inset 0 0 0 2px var(--line); transform-origin: center; text-align: left; }
 .door > svg { width: 44px; height: 44px; flex: none; }
 .door b { display: block; font: 600 var(--type-title3) / 1.1 var(--font-display); }
 .door small { display: block; margin-top: 8px; font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
 .door .chev { margin-left: auto; width: 32px; height: 32px; color: var(--muted); }
 .door:focus-visible, [data-form="tv"] .door:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
 @media (hover: hover) { [data-form="desktop"] .door:hover { background: var(--raised); } }
-.doors .aside { font: 400 var(--type-caption) / 1.4 var(--font-text); color: var(--muted); margin-top: 8px; }
+.step-body .aside { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
 
-.panel-card { display: flex; flex-direction: column; gap: 18px; padding: 28px 30px; border-radius: 26px; background: var(--surface); box-shadow: inset 0 0 0 2px var(--line); }
-.panel-card > .kicker { margin-bottom: 4px; }
-.panel-card > .st { font: 500 var(--type-caption) / 1.3 var(--font-text); }
-.suggest { display: grid; gap: 12px; }
-.sugg { display: flex; align-items: center; gap: 18px; padding: 16px 20px; border-radius: 18px; background: var(--raised); }
+/* Step 2: the link field, then two useful addons. */
+.step-body .install { margin: 0; width: min(100%, 1200px); }
+.step-body .field-line { min-width: 0; flex-basis: 100%; }
+.step-body > .kicker { margin-top: 10px; }
+.suggest { display: grid; grid-template-columns: repeat(2, minmax(0, 520px)); gap: 16px; }
+.sugg { display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-radius: 18px; background: var(--raised); text-align: left; }
 .sugg svg { width: 28px; height: 28px; flex: none; }
 .sugg b { display: block; font: 600 var(--type-callout) / 1.2 var(--font-text); }
 .sugg small { display: block; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); margin-top: 2px; }
-.sugg:disabled { cursor: default; }
-.sugg.done { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
+/* Installed: full strength, a green check and the word, never faded. */
+.sugg.done { background: transparent; box-shadow: inset 0 0 0 2px var(--control); cursor: default; }
 .sugg.done svg { color: var(--ok); }
-.sugg:disabled:not(.done) { opacity: .7; }
-.panel-card .install { margin: 0; }
-.panel-card .field-line { min-width: 0; flex-basis: 100%; }
+.step-body > .st { font: 500 var(--type-caption) / 1.3 var(--font-text); }
 
-.check ul { display: grid; }
-.check li { display: grid; grid-template-columns: 136px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 64px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+/* Step 3: the setup check, a dot and a word per row, never color alone. */
+.check ul { display: grid; width: min(100%, 1200px); }
+.check li { display: grid; grid-template-columns: 220px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-height: 72px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .check li:last-child { border-bottom: 0; }
 .check .cl { font: 600 var(--type-callout) var(--font-text); }
-.check .st { font: 400 var(--type-caption) / 1.3 var(--font-text); }
-.fix { height: 48px; padding: 0 18px; border-radius: 24px; background: color-mix(in srgb, var(--text) 12%, transparent); font: 600 var(--type-caption) var(--font-text); white-space: nowrap; }
+.check .st { font: 400 var(--type-callout) / 1.3 var(--font-text); }
+.fix { height: 52px; padding: 0 20px; border-radius: 26px; background: color-mix(in srgb, var(--text) 12%, transparent); box-shadow: inset 0 0 0 2px var(--control);
+  font: 600 var(--type-caption) var(--font-text); white-space: nowrap; }
 .fix:focus-visible, [data-form="tv"] .fix:focus { transform: scale(var(--focus-scale-card)); }
 
-.skip { position: absolute; top: var(--safe-top); right: var(--safe-side); display: inline-flex; align-items: center; gap: 10px; height: 56px; padding: 0 22px; border-radius: 28px;
+.skip { display: inline-flex; align-items: center; gap: 10px; height: 56px; padding: 0 22px; border-radius: 28px;
   font: 500 var(--type-callout) var(--font-text); color: var(--muted); }
 .skip svg { width: 26px; height: 26px; }
 .skip:focus-visible, [data-form="tv"] .skip:focus { color: var(--text); }
 
 [data-form="phone"] .welcome.page { position: static; padding: 20px 16px 40px; }
-[data-form="phone"] .welcome-head h1 { margin: 24px 0 8px; }
-[data-form="phone"] .welcome-head p { font-size: 15px; }
-[data-form="phone"] .welcome-grid { grid-template-columns: 1fr; gap: 16px; margin-top: 24px; }
+[data-form="phone"] .welcome-head .brand { font-size: 24px; }
+[data-form="phone"] .skip { height: 40px; padding: 0; font-size: 15px; }
+[data-form="phone"] .step-body { gap: 14px; margin-top: 24px; }
+[data-form="phone"] .step-body h1 { font-size: 34px; }
+[data-form="phone"] .step-body .lead { font-size: 16px; }
+[data-form="phone"] .doors { grid-template-columns: 1fr; gap: 12px; width: 100%; margin-top: 8px; }
 [data-form="phone"] .door { gap: 14px; padding: 16px; border-radius: 16px; }
 [data-form="phone"] .door > svg { width: 26px; height: 26px; }
 [data-form="phone"] .door b { font-size: 20px; }
 [data-form="phone"] .door small { font-size: 13px; }
 [data-form="phone"] .door .chev { width: 18px; height: 18px; }
-[data-form="phone"] .doors .aside { font-size: 13px; }
-[data-form="phone"] .panel-card { padding: 16px; border-radius: 16px; gap: 12px; }
+[data-form="phone"] .step-body .aside { font-size: 13px; }
+[data-form="phone"] .suggest { grid-template-columns: 1fr; width: 100%; gap: 10px; }
 [data-form="phone"] .sugg { padding: 12px; gap: 12px; border-radius: 12px; }
 [data-form="phone"] .sugg svg { width: 18px; height: 18px; }
 [data-form="phone"] .sugg b { font-size: 15px; }
@@ -64,5 +71,3 @@
 [data-form="phone"] .check .cl { font-size: 14px; }
 [data-form="phone"] .check .st { font-size: 13px; }
 [data-form="phone"] .fix { height: 32px; padding: 0 10px; font-size: 12px; }
-[data-form="phone"] .skip { position: static; margin-top: 16px; height: 40px; padding: 0; font-size: 15px; }
-[data-form="phone"] .welcome-head .brand { font-size: 24px; }

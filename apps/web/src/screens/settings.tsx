@@ -1,4 +1,5 @@
 import { A } from "@solidjs/router";
+import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Download from "lucide-solid/icons/download";
 import Puzzle from "lucide-solid/icons/puzzle";
@@ -51,6 +52,9 @@ function Choice<T>(props: {
               data-autofocus={props.autofocus && i() === 0 ? "" : undefined}
               onClick={() => props.onPick(item.value)}
             >
+              <Show when={props.isOn(item.value)}>
+                <Check aria-hidden class="chip-check" />
+              </Show>
               {item.label}
             </button>
           )}
@@ -107,7 +111,13 @@ export default function SettingsScreen() {
             text={count() ? `${count()} installed. ${sources().length ? `Streams from ${sources().join(", ")}.` : "None of them finds streams yet."}` : "None installed yet."}
           />
           <LinkRow href="/import" fkey="settings:import" icon={<Download aria-hidden />} title="Import from Stremio" text="Addons, library and progress, with a code. No password typed here." />
-          <LinkRow href="/welcome" fkey="settings:setup" icon={<Wrench aria-hidden />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />
+          <LinkRow href="/welcome?step=3" fkey="settings:setup" icon={<Wrench aria-hidden />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />
+        </div>
+      </section>
+
+      <section class="set">
+        <h2>Devices and sync</h2>
+        <div class="links">
           <LinkRow href="/pair" fkey="settings:pair" icon={<QrCode aria-hidden />} title="Pair this device" text="Join your sync account by scanning a code on a device that already syncs." />
         </div>
       </section>

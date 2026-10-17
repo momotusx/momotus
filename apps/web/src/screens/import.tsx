@@ -1,12 +1,15 @@
 import { A } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
+import ExternalLink from "lucide-solid/icons/external-link";
 import House from "lucide-solid/icons/house";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
+import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
 import { liveView } from "../core/client";
 import type { ImportSnapshot } from "../core/generated/ImportSnapshot";
+import { form } from "../form";
 import "./browse.css";
 import "./settings.css";
 
@@ -15,6 +18,7 @@ function Attempt(props: { onRetry: () => void }) {
   const view = liveView<ImportSnapshot>("import");
   const s = () => view.state.data;
   const hostOf = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const [otherDevice, setOtherDevice] = createSignal(false);
   return (
     <Switch
       fallback={
@@ -31,28 +35,73 @@ function Attempt(props: { onRetry: () => void }) {
         </section>
       </Match>
       <Match when={s()?.phase === "waitingForLink" && (s() as Extract<ImportSnapshot, { phase: "waitingForLink" }>)}>
-        {(w) => (
-          <div class="pair-grid">
-            <div class="qrbox">
-              <Qr text={w().linkUrl} label={`QR code that opens ${hostOf(w().linkUrl)}`} />
-            </div>
-            <div class="pair-steps">
-              <p class="step">
-                <b>1.</b> Scan the code, or open <b class="mono">{hostOf(w().linkUrl)}</b> on a phone or computer where you are signed in to Stremio.
-              </p>
-              <p class="step">
-                <b>2.</b> Enter this code there:
-              </p>
-              <p class="code num" aria-label={`Code ${w().code.split("").join(" ")}`}>
-                <For each={w().code.split("")}>{(c) => <span>{c}</span>}</For>
-              </p>
-              <p class="st warn live">
-                <i class="dot" />
-                Waiting for the code to be entered
-              </p>
-            </div>
-          </div>
-        )}
+        {(w) => {
+          const code = () => <p class="code" aria-label={`Code ${w().code.split("").join(" ")}`}>{w().code}</p>;
+          const waiting = () => (
+            <p class="st warn live">
+              <i class="dot" />
+              Waiting for the code to be entered
+            </p>
+          );
+          const again = () => (
+            <button class="btn" data-f="import:new" onClick={props.onRetry}>
+              <RefreshCw aria-hidden />
+              Get a new code
+            </button>
+          );
+          // A phone signs in on itself: the link opens here, and the QR is
+          // only for when the sign-in happens on another device.
+          return (
+            <Show
+              when={form() !== "phone"}
+              fallback={
+                <div class="pair-steps">
+                  <p class="step">
+                    <b>1.</b> Open <b class="mono">{hostOf(w().linkUrl)}</b> where you are signed in to Stremio.
+                  </p>
+                  <a class="btn primary" href={w().linkUrl} target="_blank" rel="noopener noreferrer" data-f="import:open">
+                    <ExternalLink aria-hidden />
+                    Open {hostOf(w().linkUrl)}
+                  </a>
+                  <p class="step">
+                    <b>2.</b> Enter this code there:
+                  </p>
+                  {code()}
+                  {waiting()}
+                  <div class="acts">
+                    <button class="btn" data-f="import:other" aria-expanded={otherDevice()} onClick={() => setOtherDevice(!otherDevice())}>
+                      <QrCode aria-hidden />
+                      Use another device
+                    </button>
+                    {again()}
+                  </div>
+                  <Show when={otherDevice()}>
+                    <div class="qrbox">
+                      <Qr text={w().linkUrl} label={`QR code that opens ${hostOf(w().linkUrl)}`} />
+                    </div>
+                  </Show>
+                </div>
+              }
+            >
+              <div class="pair-grid">
+                <div class="qrbox">
+                  <Qr text={w().linkUrl} label={`QR code that opens ${hostOf(w().linkUrl)}`} />
+                </div>
+                <div class="pair-steps">
+                  <p class="step">
+                    <b>1.</b> Scan the code, or open <b class="mono">{hostOf(w().linkUrl)}</b> on a phone or computer where you are signed in to Stremio.
+                  </p>
+                  <p class="step">
+                    <b>2.</b> Enter this code there:
+                  </p>
+                  {code()}
+                  {waiting()}
+                  <div class="acts">{again()}</div>
+                </div>
+              </div>
+            </Show>
+          );
+        }}
       </Match>
       <Match when={s()?.phase === "importing" && (s() as Extract<ImportSnapshot, { phase: "importing" }>)}>
         {(i) => (
@@ -111,7 +160,10 @@ export default function Import() {
   return (
     <main class="browse page settings-page" data-vscroll>
       <h1>Import from Stremio</h1>
-      <p class="lede">Brings your addons, library, Continue Watching and watched marks. Nothing is typed on this screen.</p>
+      <p class="lede">
+        Brings your addons, library, Continue Watching and watched marks over once. Nothing is sent back to Stremio.
+        <Show when={form() === "tv"}> Nothing is typed on this screen.</Show>
+      </p>
       <Show when={attempt() + 1} keyed>
         <Attempt onRetry={() => setAttempt(attempt() + 1)} />
       </Show>

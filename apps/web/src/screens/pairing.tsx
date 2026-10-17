@@ -2,8 +2,9 @@ import Check from "lucide-solid/icons/check";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import Settings2 from "lucide-solid/icons/settings-2";
 import X from "lucide-solid/icons/x";
-import { createSignal, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
 import { liveView } from "../core/client";
 import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapshot";
@@ -23,13 +24,8 @@ const read = (k: string) => {
 function Session(props: { server: string; name: string; onDone: () => void }) {
   const view = liveView<Pairing>("pairing", { server: props.server, name: props.name });
   const p = () => view.state.data;
-  const [now, setNow] = createSignal(Date.now());
-  const tick = setInterval(() => setNow(Date.now()), 1000);
-  onCleanup(() => clearInterval(tick));
-  const left = () => {
-    const x = p();
-    return x?.phase === "waiting" ? Math.max(0, Math.round((x.expiresMs - now()) / 1000)) : 0;
-  };
+  // When the code stops working, as a time of day ("1:54 PM").
+  const until = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return (
     <Switch
       fallback={
@@ -55,7 +51,7 @@ function Session(props: { server: string; name: string; onDone: () => void }) {
               <p class="step">On a device that already syncs, open Settings, then add a device, and scan this code.</p>
               <p class="st warn live">
                 <i class="dot" />
-                Waiting for the other device, code valid for <span class="num">{left()}</span> s
+                Waiting for the other device. The code works until <span class="num">{until(w().expiresMs)}</span>.
               </p>
             </div>
           </div>
@@ -65,8 +61,8 @@ function Session(props: { server: string; name: string; onDone: () => void }) {
         {(c) => (
           <section class="confirm">
             <p class="step">Does the other device show the same six digits?</p>
-            <p class="code num" aria-label={`Code ${c().code.split("").join(" ")}`}>
-              <For each={c().code.split("")}>{(d) => <span>{d}</span>}</For>
+            <p class="code" aria-label={`Code ${c().code.split("").join(" ")}`}>
+              {c().code}
             </p>
             <div class="acts">
               <button class="btn primary" data-f="pair:yes" data-autofocus onClick={() => void view.command({ type: "confirm" })}>
@@ -107,9 +103,14 @@ function Session(props: { server: string; name: string; onDone: () => void }) {
 }
 
 export default function PairingScreen() {
-  const [server, setServer] = createSignal(read(SERVER_KEY));
+  // The server this device used before: with it, the code shows at once and
+  // nothing is typed. The fields live under Advanced, open only when no
+  // server is known yet.
+  const known = read(SERVER_KEY);
+  const [server, setServer] = createSignal(known);
   const [name, setName] = createSignal(`Marquee ${form() === "tv" ? "TV" : form() === "phone" ? "phone" : "desktop"}`);
-  const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(null);
+  const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known ? { server: known, name: name(), n: 1 } : null);
+  const [advanced, setAdvanced] = createSignal(!known);
   const start = (e: Event) => {
     e.preventDefault();
     const s = server().trim();
@@ -125,22 +126,31 @@ export default function PairingScreen() {
     <main class="browse page settings-page" data-vscroll>
       <h1>Pair this device</h1>
       <p class="lede">Joins your sync account so library, progress and addons follow you. Nothing is kept until both screens show the same code.</p>
-      <form class="install" onSubmit={start}>
-        <label class="field-line">
-          <span class="kicker">Sync server</span>
-          <input type="url" placeholder="https://sync.example.org" value={server()} onInput={(e) => setServer(e.currentTarget.value)} data-f="pair:server" data-autofocus autocomplete="off" spellcheck={false} />
-        </label>
-        <label class="field-line">
-          <span class="kicker">This device</span>
-          <input type="text" value={name()} onInput={(e) => setName(e.currentTarget.value)} data-f="pair:name" autocomplete="off" />
-        </label>
-        <button class="btn primary" type="submit" data-f="pair:start">
-          <QrCode aria-hidden />
-          Show a code
-        </button>
-      </form>
       <Show when={run()} keyed>
         {(r) => <Session server={r.server} name={r.name} onDone={() => setRun({ ...r, n: r.n + 1 })} />}
+      </Show>
+      <Show when={!known}>
+        <p class="note small">Enter your sync server once; this device remembers it.</p>
+      </Show>
+      <button class="btn disclose" data-f="pair:advanced" aria-expanded={advanced()} onClick={() => setAdvanced(!advanced())}>
+        <Settings2 aria-hidden />
+        Advanced
+      </button>
+      <Show when={advanced()}>
+        <form class="install" onSubmit={start}>
+          <label class="field-line">
+            <span class="kicker">Sync server</span>
+            <input type="url" placeholder="https://sync.example.org" value={server()} onInput={(e) => setServer(e.currentTarget.value)} data-f="pair:server" autocomplete="off" spellcheck={false} />
+          </label>
+          <label class="field-line">
+            <span class="kicker">This device</span>
+            <input type="text" value={name()} onInput={(e) => setName(e.currentTarget.value)} data-f="pair:name" autocomplete="off" />
+          </label>
+          <button class="btn primary" type="submit" data-f="pair:start">
+            <QrCode aria-hidden />
+            Show a code
+          </button>
+        </form>
       </Show>
     </main>
   );

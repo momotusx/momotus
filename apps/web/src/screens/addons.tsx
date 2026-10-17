@@ -1,5 +1,6 @@
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
+import Link2 from "lucide-solid/icons/link-2";
 import Plus from "lucide-solid/icons/plus";
 import Power from "lucide-solid/icons/power";
 import Trash2 from "lucide-solid/icons/trash";
@@ -7,6 +8,7 @@ import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { liveView, op, reasonOf } from "../core/client";
 import type { AddonInfo } from "../core/generated/AddonInfo";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
+import { form } from "../form";
 import { kindLabel, providesText } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
@@ -114,6 +116,7 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
           class="btn"
           aria-pressed={a().enabled}
           data-f={`addon:${props.index}:enabled`}
+          data-autofocus={props.index === 0 ? "" : undefined}
           onClick={() => void run("setAddonEnabled", { enabled: !a().enabled })}
         >
           <Power aria-hidden />
@@ -144,11 +147,25 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
 export default function Addons() {
   const view = liveView<AddonsSnapshot>("addons");
   const list = () => view.state.data?.addons ?? [];
+  // No typing on a TV by default: the link field waits behind "Paste a
+  // link", and focus starts on the first addon.
+  const tv = () => form() === "tv";
+  const [paste, setPaste] = createSignal(false);
   return (
     <main class="browse page settings-page" data-vscroll>
       <h1>Addons</h1>
       <p class="lede">Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.</p>
-      <InstallField autofocus />
+      <Show
+        when={!tv() || paste()}
+        fallback={
+          <button class="btn disclose" data-f="addons:paste" aria-expanded={false} onClick={() => setPaste(true)}>
+            <Link2 aria-hidden />
+            Paste a link
+          </button>
+        }
+      >
+        <InstallField autofocus={tv()} />
+      </Show>
       <Switch>
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">
