@@ -40,6 +40,8 @@ const SEP: char = '\u{1f}';
 
 /// The owner profile: every device starts with it, it can never be gone.
 pub const OWNER: &str = "default";
+/// The owner's name until someone renames it (the apps call it the main profile).
+pub const OWNER_NAME: &str = "Main";
 
 /// Avatars are an app's own ids (a bundled image and a colour token), and
 /// they sync to every device: up to 64 ASCII letters, digits, ':', '-' or

@@ -10,6 +10,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V6),
         M::up(V7),
         M::up(V8),
+        M::up(V9),
     ])
 }
 
@@ -243,3 +244,44 @@ CREATE TABLE device_state (
     value  TEXT NOT NULL
 );
 "#;
+
+// The owner was named after its id. Never renamed (still the zero hlc), it
+// takes the name people see; the hlc stays zero, so any real rename synced
+// from another device still wins.
+const V9: &str = r#"
+UPDATE profiles SET name = 'Main'
+    WHERE id = 'default' AND name = 'default' AND substr(hlc, 1, 16) = '0000000000000000';
+"#;
+
+#[cfg(test)]
+mod tests {
+    use super::migrations;
+    use rusqlite::Connection;
+
+    /// V9 names a never-renamed owner and leaves a deliberate name alone.
+    #[test]
+    fn the_owner_takes_its_name_only_while_never_renamed() {
+        for (hlc, want) in [
+            ("0000000000000000000000000000000a", "Main"),
+            ("01a14b5de9630000000000000000000a", "default"),
+        ] {
+            let mut c = Connection::open_in_memory().unwrap();
+            migrations().to_version(&mut c, 8).unwrap();
+            c.execute(
+                "INSERT INTO profiles (id, name, hlc) VALUES ('default', 'default', ?1)",
+                [hlc],
+            )
+            .unwrap();
+            migrations().to_latest(&mut c).unwrap();
+            let (name, kept): (String, String) = c
+                .query_row(
+                    "SELECT name, hlc FROM profiles WHERE id = 'default'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(name, want, "{hlc}");
+            assert_eq!(kept, hlc, "the hlc never moves");
+        }
+    }
+}

@@ -2,7 +2,7 @@ use mq_addons::{
     AddonClient, CacheControl, CacheStore, InstalledAddon, ResponseCache, StoredResponse,
 };
 use mq_http::{ClientConfig, HttpClient};
-use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER};
+use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::path::{Path, PathBuf};
@@ -107,7 +107,7 @@ impl Device {
             clock.observe(newest, clock.wall_now());
         }
         // The owner, with the lowest hlc: what another device synced wins.
-        library.ensure_profile(OWNER, OWNER, &Hlc::zero(device_id).encode())?;
+        library.ensure_profile(OWNER, OWNER_NAME, &Hlc::zero(device_id).encode())?;
         Ok(Arc::new(Self {
             library: Arc::new(library),
             clock,

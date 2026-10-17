@@ -432,6 +432,14 @@ async fn switching_is_refused_while_views_other_than_the_picker_are_open() {
 }
 
 #[tokio::test]
+async fn a_new_device_calls_its_owner_main() {
+    let core = Core::temporary("default").unwrap();
+    let mut c = Client::new(core);
+    let snapshot = picker_snapshot(&mut c).await;
+    assert_eq!(profile(&snapshot, "default")["name"], "Main", "{snapshot}");
+}
+
+#[tokio::test]
 async fn the_owner_pin_resets_without_it_even_while_locked() {
     let core = Core::temporary("default").unwrap();
     let mut c = Client::new(core.clone());

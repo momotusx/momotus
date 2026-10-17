@@ -19,5 +19,7 @@ pub use store::{
     AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryEntry, LibraryError,
     LibraryItemRow, ProgressRow, Table,
 };
-pub use sync::{OWNER, OutboxPage, SignedEntry, SyncCursor, SyncRecord, coll, valid_avatar};
+pub use sync::{
+    OWNER, OWNER_NAME, OutboxPage, SignedEntry, SyncCursor, SyncRecord, coll, valid_avatar,
+};
 pub use tracker::{ImportReport, ImportedPlay, Intent, IntentOp, NewIntent, TrackerKey};
