@@ -161,8 +161,17 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     // with a trailer has the most secondary actions.
     await page.goto(`/title/movie/${BBB_ID}?form=${form}`);
     await expect(page.locator('[data-f="title:trailer"]')).toBeVisible({ timeout: 30_000 });
-    const tops = await page.locator(".info .acts .btn").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
-    expect(new Set(tops).size).toBe(1);
+    const row = await page.locator(".info .acts").evaluate((acts) => {
+      const box = (acts.closest(".info") as HTMLElement).getBoundingClientRect();
+      const buttons = [...acts.querySelectorAll(".btn")].map((e) => e.getBoundingClientRect());
+      return {
+        tops: new Set(buttons.map((b) => Math.round(b.top))).size,
+        // One row that also fits its column: nothing spills past the edge.
+        overflow: Math.max(...buttons.map((b) => b.right)) - box.right,
+      };
+    });
+    expect(row.tops).toBe(1);
+    expect(row.overflow).toBeLessThanOrEqual(1);
     // Watched is the round toggle beside Play, not a secondary action.
     const play = await page.locator('[data-f="title:play"]').boundingBox();
     const toggle = await page.locator('[data-f="title:watched"]').boundingBox();
