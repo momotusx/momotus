@@ -26,8 +26,19 @@ debug = "line-tables-only"
 [profile.release]
 lto = "thin"
 codegen-units = 1
-opt-level = "s"
+# Smallest code by default: the Android library has a 12 MB budget. The
+# crates on hot paths below keep speed.
+opt-level = "z"
 strip = true
+
+[profile.release.package.regex-automata]
+opt-level = 3
+[profile.release.package.aho-corasick]
+opt-level = 3
+[profile.release.package.mq-relparse]
+opt-level = 3
+[profile.release.package.libsqlite3-sys]
+opt-level = "s"
 
 # Regex-heavy parsing is far too slow unoptimized; keep debug builds usable.
 [profile.dev.package.regex-automata]
