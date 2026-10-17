@@ -57,6 +57,26 @@ pub struct PlaybackSnapshot {
     pub subtitles: Vec<SubtitleTrack>,
     /// Subtitles addons are still being asked.
     pub subtitles_pending: bool,
+    /// The next released episode, for an Up Next card.
+    pub next: Option<NextEpisode>,
+    /// The playing stream's binge group; pass it as `bingeGroup` when opening
+    /// Versions for the next episode so the same release line is picked.
+    pub binge_group: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct NextEpisode {
+    pub video_id: String,
+    pub title: String,
+    pub season: u32,
+    pub episode: u32,
+    pub thumbnail: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -154,6 +174,8 @@ impl PlaybackView {
             attempts: Vec::new(),
             subtitles: Vec::new(),
             subtitles_pending: false,
+            next: None,
+            binge_group: None,
         };
         let view = Self {
             core: core.clone(),
@@ -387,17 +409,25 @@ async fn resolve_next(
                         .collect();
                     order_subtitles(&mut s.snapshot.subtitles, &wanted);
                     s.snapshot.subtitles_pending = true;
+                    s.snapshot.binge_group = stream.binge_group.clone();
                     snapshot.set(s.snapshot.clone());
                 }
-                find_subtitles(
+                let subtitles = find_subtitles(
                     &core,
                     &target,
                     &upstream,
                     filename.as_deref(),
                     &state,
                     &snapshot,
-                )
-                .await;
+                );
+                let next = async {
+                    if let Some(next) = next_episode(&core, &target).await {
+                        let mut s = lock(&state);
+                        s.snapshot.next = Some(next);
+                        snapshot.set(s.snapshot.clone());
+                    }
+                };
+                tokio::join!(subtitles, next);
                 return;
             }
             Err(error) => {
@@ -639,4 +669,38 @@ fn order_subtitles(tracks: &mut [SubtitleTrack], wanted: &[String]) {
             .position(|w| w.eq_ignore_ascii_case(&t.lang))
             .unwrap_or(wanted.len())
     });
+}
+
+/// The episode after this one in season and episode order, skipping
+/// specials (season 0) unless a special is playing and episodes not out yet.
+async fn next_episode(core: &Core, target: &PlayTarget) -> Option<NextEpisode> {
+    target.season?;
+    let (meta, _) = core.fetch_meta(&target.kind, &target.item_id).await.ok()?;
+    let current = meta
+        .videos
+        .iter()
+        .find(|v| v.id == target.video_id)?
+        .series_info
+        .clone()?;
+    let now = mq_library::hlc::now_ms() as i64;
+    let mut episodes: Vec<_> = meta
+        .videos
+        .iter()
+        .filter_map(|v| Some((v, v.series_info.clone()?)))
+        .filter(|(_, s)| s.season > 0 || current.season == 0)
+        .collect();
+    episodes.sort_by_key(|(_, s)| (s.season, s.episode));
+    episodes
+        .into_iter()
+        .find(|(v, s)| {
+            (s.season, s.episode) > (current.season, current.episode)
+                && v.released.is_none_or(|r| r.timestamp_millis() <= now)
+        })
+        .map(|(v, s)| NextEpisode {
+            video_id: v.id.clone(),
+            title: v.title.clone(),
+            season: s.season,
+            episode: s.episode,
+            thumbnail: v.thumbnail.clone(),
+        })
 }

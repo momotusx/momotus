@@ -320,3 +320,99 @@ async fn finds_subtitles_by_hash_size_and_filename() {
         )
     );
 }
+
+/// Meta addon for a three-episode season plus a special; episode 3 is not
+/// out yet. Also serves a one-byte video.
+async fn series_addon() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let body = if head.starts_with("GET /meta/") {
+                    let ep = |s: u32, e: u32, released: &str| {
+                        serde_json::json!({"id": format!("tt9:{s}:{e}"), "title": format!("Episode {e}"),
+                                           "season": s, "episode": e, "released": released})
+                    };
+                    serde_json::json!({"meta": {"id": "tt9", "type": "series", "name": "Show", "videos": [
+                        ep(1, 2, "2020-01-08T00:00:00Z"), ep(0, 1, "2019-12-01T00:00:00Z"),
+                        ep(1, 1, "2020-01-01T00:00:00Z"), ep(1, 3, "2099-01-01T00:00:00Z")
+                    ]}})
+                    .to_string()
+                } else {
+                    "M".into()
+                };
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    base
+}
+
+#[tokio::test]
+async fn offers_the_next_released_episode_and_the_binge_group() {
+    let base = series_addon().await;
+    let core = Core::temporary("p").unwrap();
+    let manifest = serde_json::json!({
+        "id": "show", "version": "1.0.0", "name": "Show",
+        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    core.library()
+        .set_addons(
+            core.profile(),
+            &[AddonRow {
+                transport_url: format!("{base}/manifest.json"),
+                manifest_json: manifest.to_string(),
+                position: 0,
+                enabled: true,
+                allow_private: true,
+            }],
+            &core.hlc(),
+        )
+        .unwrap();
+    let streams = format!(
+        r#"{{"streams":[{{"url":"{base}/video.mkv","behaviorHints":{{"bingeGroup":"show|1080p|NTb"}}}}]}}"#
+    );
+    let candidates: Vec<ParsedStream> = decode_streams(streams.as_bytes())
+        .unwrap()
+        .streams
+        .iter()
+        .map(|w| normalize(w, "show", "Show", 0, 0))
+        .collect();
+    let play = |episode: u32| PlayTarget {
+        kind: "series".into(),
+        item_id: "tt9".into(),
+        video_id: format!("tt9:1:{episode}"),
+        season: Some(1),
+        episode: Some(episode),
+        ..PlayTarget::default()
+    };
+
+    let view = PlaybackView::open(&core, candidates.clone(), play(1));
+    let mut next = None;
+    for _ in 0..300 {
+        let s = view.snapshot();
+        if s.next.is_some() {
+            next = Some(s);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let s = next.expect("next episode found");
+    assert_eq!(s.next.unwrap().video_id, "tt9:1:2");
+    assert_eq!(s.binge_group.as_deref(), Some("show|1080p|NTb"));
+
+    // Episode 3 is not out yet, so the last aired episode offers nothing.
+    let view = PlaybackView::open(&core, candidates, play(2));
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(view.snapshot().next, None);
+}

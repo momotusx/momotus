@@ -392,7 +392,7 @@ fn play_target(
 ) -> Option<PlayTarget> {
     if let Some((video_id, position, duration)) = resume
         && position > 0
-        && (duration == 0 || (position as f64) < duration as f64 * 0.92)
+        && (duration == 0 || (position as f64) < duration as f64 * mq_library::FINISHED_RATIO)
     {
         let label =
             episode_label(meta, &video_id).map_or("Resume".to_owned(), |e| format!("Resume {e}"));

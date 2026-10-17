@@ -15,7 +15,7 @@ pub use views::home::{HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
 pub use views::library::{KindCount, LibrarySnapshot, LibrarySort, LibraryView};
 pub use views::playback::{
-    Attempt, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
+    Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
 };
 pub use views::search::{SearchSnapshot, SearchView};
 pub use views::settings::{Prefs, SettingsView};
