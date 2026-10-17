@@ -38,7 +38,7 @@ does the same work otherwise.
 |---|---|---|
 | `title` | `String` | cleaned title, empty when the text holds none |
 | `year` | `Option<u16>` | |
-| `resolution` | `Resolution` | `R480p R576p R720p R1080p R1440p R2160p R4320p Unknown`; `720i` counts as `R720p`, `WxH` and odd heights go to the nearest step |
+| `resolution` | `Resolution` | `R360p R480p R576p R720p R1080p R1440p R2160p R4320p Unknown` (`R360p` covers 240 to 399 lines); `720i` counts as `R720p`, `WxH` and odd heights go to the nearest step |
 | `quality` | `Quality` | `Cam Telesync Screener Dvd Hdtv WebRip WebDl BluRay Remux Unknown` |
 | `codec` | `VideoCodec` | `H264 H265 Av1 Vp9 Xvid Mpeg2 Vc1 Unknown` |
 | `bit_depth` | `Option<u8>` | 8, 10 or 12 |

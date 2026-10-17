@@ -351,7 +351,7 @@ tt0412142:1:1 "TorrentsDB\n1080p"
 tt0412142:1:1 "TorrentsDB\n1080p"
     seeders=Some(13) size=Some(689753292) site=Some("1337x") cached=None service=None | title="Il male dentro-Lullozz" year=2004 res=R1080p q=WebRip codec=H265 audio=[Aac] lang=en,it seasons=[1] eps=[16] group="Lullozzo" container=mkv
 tt0412142:1:1 "TorrentsDB\n360p"
-    seeders=Some(8) size=Some(128576389) site=Some("ThePirateBay") cached=None service=None | title="House" res=Unknown q=Dvd codec=Unknown seasons=[1] eps=[1] group="threesixtyp" container=mp4
+    seeders=Some(8) size=Some(128576389) site=Some("ThePirateBay") cached=None service=None | title="House" res=R360p q=Dvd codec=Unknown seasons=[1] eps=[1] group="threesixtyp" container=mp4
 tt0412142:1:1 "TorrentsDB\nUnknown"
     seeders=Some(3) size=Some(1621350154) site=Some("rutor") cached=None service=None | title="1-01 Pilot" res=Unknown q=Hdtv codec=Unknown lang=ru seasons=[1] eps=[1] container=m4v
 tt0460681:1:1 "TorrentsDB\n1080p"

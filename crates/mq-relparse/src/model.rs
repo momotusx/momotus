@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum Resolution {
+    /// 240 to 399 lines (240p, 360p).
+    #[serde(rename = "360p")]
+    R360p,
     #[serde(rename = "480p")]
     R480p,
     #[serde(rename = "576p")]
@@ -27,6 +30,7 @@ impl Resolution {
     /// Vertical pixel count, 0 for `Unknown`.
     pub fn height(self) -> u32 {
         match self {
+            Resolution::R360p => 360,
             Resolution::R480p => 480,
             Resolution::R576p => 576,
             Resolution::R720p => 720,

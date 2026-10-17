@@ -279,7 +279,7 @@ tt5491994:1:1 "Torrentio\n720p"
 tt0364845:1:1 "Torrentio\n1080p"
     seeders=Some(6) size=Some(1148903751) site=Some("EXT") cached=None service=None | title="NCIS Origins" res=R1080p q=WebRip codec=H265 lang=en,cs seasons=[1] eps=[1] group="KONTRAST" container=mkv
 tt0364845:1:1 "Torrentio\n360p"
-    seeders=Some(37) size=Some(115102187) site=Some("ThePirateBay") cached=None service=None | title="NCIS" res=Unknown q=Hdtv codec=Unknown seasons=[1] eps=[1] group="threesixtyp" container=mp4
+    seeders=Some(37) size=Some(115102187) site=Some("ThePirateBay") cached=None service=None | title="NCIS" res=R360p q=Hdtv codec=Unknown seasons=[1] eps=[1] group="threesixtyp" container=mp4
 tt0098904:1:1 "Torrentio\n4k DV | HDR"
     seeders=Some(5) size=Some(3027951943) site=Some("Rutracker") cached=None service=None | title="Seinfeld" year=1989 res=R2160p q=WebDl codec=H265 bits=10 hdr=[DolbyVision, Hdr10] lang=en,ru,uk seasons=[1] eps=[1] container=mkv
 tt0098904:1:1 "Torrentio\n1080p"
@@ -371,7 +371,7 @@ tt1439629:1:1 "Torrentio\n1080p"
 tt1439629:1:1 "Torrentio\n1080p"
     seeders=Some(4) size=Some(1062710804) site=Some("TorrentGalaxy") cached=None service=None | title="Pilot" year=2009 res=R1080p q=BluRay codec=Av1 bits=10 ch=2.0 seasons=[1] eps=[1] container=mkv
 tt1439629:1:1 "Torrentio\n360p"
-    seeders=Some(1) size=Some(69059215) site=Some("ThePirateBay") cached=None service=None | title="Community" res=Unknown q=WebRip codec=Unknown seasons=[1] eps=[1] group="threesixtyp" container=mp4
+    seeders=Some(1) size=Some(69059215) site=Some("ThePirateBay") cached=None service=None | title="Community" res=R360p q=WebRip codec=Unknown seasons=[1] eps=[1] group="threesixtyp" container=mp4
 tt0412142:1:1 "Torrentio\n1080p"
     seeders=Some(42) size=Some(2394444267) site=Some("TorrentGalaxy") cached=None service=None | title="House" res=R1080p q=WebDl codec=Av1 audio=[Eac3] ch=2.0 lang=en,it seasons=[1] eps=[1] container=mkv
 tt0412142:1:1 "Torrentio\n1080p"

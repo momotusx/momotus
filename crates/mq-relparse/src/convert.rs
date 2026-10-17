@@ -69,7 +69,7 @@ fn ints_of(ctx: &Ctx, f: F) -> Vec<u32> {
     }
 }
 
-/// Map a pixel height to the nearest enum step (None below 400 lines).
+/// Map a pixel height to the nearest enum step (Unknown below 200 lines).
 fn bucket(h: u32) -> Resolution {
     match h {
         4000.. => Resolution::R4320p,
@@ -79,6 +79,7 @@ fn bucket(h: u32) -> Resolution {
         700.. => Resolution::R720p,
         560.. => Resolution::R576p,
         400.. => Resolution::R480p,
+        200.. => Resolution::R360p,
         _ => Resolution::Unknown,
     }
 }
@@ -183,4 +184,18 @@ fn container(ctx: &Ctx) -> Option<String> {
     }
     let ext = str_of(ctx, F::Extension)?;
     VIDEO_EXTENSIONS.contains(&ext).then(|| ext.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn low_resolutions_get_their_own_step() {
+        assert_eq!(resolution_from("360p"), Resolution::R360p);
+        assert_eq!(resolution_from("240p"), Resolution::R360p);
+        assert_eq!(resolution_from("640x360"), Resolution::R360p);
+        assert_eq!(resolution_from("480p"), Resolution::R480p);
+        assert_eq!(resolution_from("144p"), Resolution::Unknown);
+    }
 }
