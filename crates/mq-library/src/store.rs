@@ -311,13 +311,18 @@ impl Library {
         limit: usize,
         finished: bool,
     ) -> Result<Vec<ContinueItem>, LibraryError> {
+        // Progress written after the watched mark (a newer register) is a
+        // rewatch in progress: unfinished again until it is marked again.
+        let partial =
+            "p.position_ms > 0 AND (p.duration_ms = 0 OR p.position_ms < p.duration_ms * ?2)";
         let condition = if finished {
-            "COALESCE(i.kind, 'movie') = 'series'
-                   AND ((p.duration_ms > 0 AND p.position_ms >= p.duration_ms * ?2) OR COALESCE(w.watched, 0) = 1)"
+            format!(
+                "COALESCE(i.kind, 'movie') = 'series'
+                   AND ((p.duration_ms > 0 AND p.position_ms >= p.duration_ms * ?2)
+                        OR (COALESCE(w.watched, 0) = 1 AND NOT (p.hlc > w.hlc AND {partial})))"
+            )
         } else {
-            "p.position_ms > 0
-                   AND (p.duration_ms = 0 OR p.position_ms < p.duration_ms * ?2)
-                   AND COALESCE(w.watched, 0) = 0"
+            format!("{partial} AND (COALESCE(w.watched, 0) = 0 OR p.hlc > w.hlc)")
         };
         self.read(|c| {
             let mut stmt = c.prepare(&format!(

@@ -105,6 +105,47 @@ fn continue_watching_newest_unfinished_per_title() {
     assert_eq!(lib.watched_videos("p", "tt1").unwrap(), ["tt1:1:2"]);
 }
 
+/// Playing a watched episode again puts it back in Continue Watching until
+/// it is marked again; it stops counting as finished meanwhile.
+#[test]
+fn rewatch_shows_in_continue_watching() {
+    let lib = Library::temporary().unwrap();
+    lib.upsert_item("p", &item("tt1", "Show One"), true, "0001")
+        .unwrap();
+    lib.set_progress("p", progress("tt1:1:1", "tt1", 950, 1000, 10), "0002")
+        .unwrap();
+    lib.set_watched("p", "tt1", "tt1:1:1", true, "0003")
+        .unwrap();
+    let cw = |lib: &Library| -> Vec<String> {
+        lib.continue_watching("p", 10)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.video_id)
+            .collect()
+    };
+    let done = |lib: &Library| -> Vec<String> {
+        lib.finished_series("p", 10)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.video_id)
+            .collect()
+    };
+    assert!(cw(&lib).is_empty());
+    assert_eq!(done(&lib), ["tt1:1:1"]);
+
+    lib.set_progress("p", progress("tt1:1:1", "tt1", 300, 1000, 20), "0004")
+        .unwrap();
+    assert_eq!(cw(&lib), ["tt1:1:1"]);
+    assert!(done(&lib).is_empty());
+
+    lib.set_progress("p", progress("tt1:1:1", "tt1", 960, 1000, 30), "0005")
+        .unwrap();
+    lib.set_watched("p", "tt1", "tt1:1:1", true, "0006")
+        .unwrap();
+    assert!(cw(&lib).is_empty());
+    assert_eq!(done(&lib), ["tt1:1:1"]);
+}
+
 #[tokio::test]
 async fn one_notification_per_transaction_with_touched_tables() {
     let lib = Library::temporary().unwrap();
