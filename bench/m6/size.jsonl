@@ -6,3 +6,4 @@
 {"date":"2026-10-17","phase":"P0","env":"emulator","metric":"core_open_ms","attached":52,"nodetach":29,"note":"library load, verifier init, MarqueeCore.open (SQLite open and migrations)"}
 {"date":"2026-10-17","phase":"P1","artifact":"libmarquee_core.so","bytes":10018480,"budget_bytes":12000000,"note":"unchanged since P0"}
 {"date":"2026-10-17","phase":"P1","artifact":"app-release.apk","bytes":11152033,"budget_bytes":60000000,"note":"core module (DTOs, client, views, secret store) adds about 67 KB over P0"}
+{"date":"2026-10-17","phase":"P2","artifact":"libmarquee_core.so","target":"aarch64-linux-android","method":"cargo ndk release, strip=none, then llvm-strip --strip-all","bytes":10783816,"budget_bytes":12000000,"note":"after the rebase onto feat/protocol-wire (sync phase 3, C8, C9, C2); +765332 B over P0. The M4 engine (about 6 MB) still does not fit"}

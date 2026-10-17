@@ -136,7 +136,10 @@ class CoreSession(
 
     fun import() = ImportView(client, scope).also { it.open() }
 
-    fun pairing(server: String) = PairingView(client, scope, server).also { it.open() }
+    fun pairing(
+        server: String,
+        name: String,
+    ) = PairingView(client, scope, server, name).also { it.open() }
 
     /**
      * Ranked stream choices for one video. `title` is the movie or series name, never an episode

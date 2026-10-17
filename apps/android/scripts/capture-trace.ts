@@ -110,6 +110,12 @@ await trace("addons", async () => {
 await trace("home", async () => {
   const sub = await open("home");
   await sleep(7000);
+  // Home follows the installed addons on its own: switch Cinemeta off and on while it is open.
+  const cinemeta = "https://v3-cinemeta.strem.io/manifest.json";
+  await request("setAddonEnabled", { url: cinemeta, enabled: false });
+  await sleep(1500);
+  await request("setAddonEnabled", { url: cinemeta, enabled: true });
+  await sleep(4000);
   await request("unsubscribe", { sub });
 });
 
@@ -174,6 +180,10 @@ await trace("versions-playback", async () => {
     title: "Sintel",
     displayHeight: 2160,
     hdr: ["hdr10"],
+    decoders: ["h264", "h265"],
+    tenBitHevc: true,
+    passthrough: ["ac3", "eac3"],
+    hasFallbackEngine: false,
   });
   await sleep(6000);
   await command(versions, { type: "freeze" });

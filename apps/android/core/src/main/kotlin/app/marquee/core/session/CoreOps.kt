@@ -1,10 +1,11 @@
 package app.marquee.core.session
 
 import app.marquee.core.client.CoreClient
+import app.marquee.core.model.ApprovedPairing
 import app.marquee.core.model.InstalledAddon
-import app.marquee.core.model.Joined
 import app.marquee.core.model.Prefs
-import app.marquee.core.model.SyncAccount
+import app.marquee.core.model.RecoveryKitResult
+import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
@@ -17,8 +18,9 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * The core's one-shot ops (plans/core-protocol.md "Ops"). Home, Discover and Search follow addon
- * changes on their own, so nothing here reopens a view. Secrets arrive as arguments; the core
- * keeps none of them.
+ * changes on their own, so nothing here reopens a view. Secrets (debrid keys, the sync record)
+ * arrive as arguments; the core keeps none of them. Replies that carry a changed `record` must be
+ * stored by the caller before the next call.
  */
 class CoreOps(
     private val client: CoreClient,
@@ -65,45 +67,87 @@ class CoreOps(
             .jsonPrimitive.int
     }
 
+    /** Starts an account with this device as its first member (`name` is how other devices show it). Returns the record to store. */
     suspend fun createSyncAccount(
         server: String,
+        name: String,
         invite: String? = null,
-    ): SyncAccount =
-        call(
-            "createSyncAccount",
-            buildMap {
-                put("server", text(server))
-                invite?.let { put("invite", text(it)) }
-            },
-            SyncAccount.serializer(),
-        )
+    ): SyncRecord =
+        client
+            .request(
+                "createSyncAccount",
+                buildMap {
+                    put("server", text(server))
+                    put("name", text(name))
+                    invite?.let { put("invite", text(it)) }
+                },
+            ).jsonObject
 
-    suspend fun syncNow(account: Joined): SyncReport = call("syncNow", account.fields(), SyncReport.serializer())
+    /** One sync round. When the report carries a `record`, store it and call again at once (`again`). */
+    suspend fun syncNow(record: SyncRecord): SyncReport =
+        call("syncNow", mapOf("record" to record), SyncReport.serializer())
 
-    /** Hands the account to the device showing `qr`; returns the code both screens must show. */
+    /** Vouches for the device showing `qr`; show the code big, the new device must show the same. Store the returned record. */
     suspend fun approvePairing(
-        account: Joined,
+        record: SyncRecord,
         qr: String,
-    ): String =
-        client
-            .request("approvePairing", account.fields() + ("qr" to text(qr)))
-            .jsonObject
-            .getValue("code")
-            .jsonPrimitive.content
+    ): ApprovedPairing =
+        call("approvePairing", mapOf("record" to record, "qr" to text(qr)), ApprovedPairing.serializer())
 
-    /** The kit is shown once and never stored. */
-    suspend fun createRecoveryKit(account: Joined): String =
-        client
-            .request("createRecoveryKit", account.fields())
-            .jsonObject
-            .getValue("kit")
-            .jsonPrimitive.content
+    /** The kit is shown once and never stored. Store the returned record. */
+    suspend fun createRecoveryKit(record: SyncRecord): RecoveryKitResult =
+        call("createRecoveryKit", mapOf("record" to record), RecoveryKitResult.serializer())
 
+    /** Joins the account a recovery kit belongs to; returns the record to store (then make a new kit). */
     suspend fun recover(
         server: String,
         kit: String,
-    ): Joined = call("recover", mapOf("server" to text(server), "kit" to text(kit)), Joined.serializer())
+        name: String,
+    ): SyncRecord =
+        client.request("recover", mapOf("server" to text(server), "kit" to text(kit), "name" to text(name))).jsonObject
 
-    private fun Joined.fields(): Map<String, JsonElement> =
-        mapOf("server" to text(server), "deviceToken" to text(deviceToken), "keys" to keys)
+    /** The account's members, fingerprint and epoch (see plans/core-protocol.md for the shape). */
+    suspend fun syncDevices(record: SyncRecord): JsonObject =
+        client.request("syncDevices", mapOf("record" to record)).jsonObject
+
+    /** What reporting [lost] would drop: `{devices, kits}`. */
+    suspend fun lostPreview(
+        record: SyncRecord,
+        lost: String,
+    ): JsonObject = client.request("lostPreview", mapOf("record" to record, "lost" to text(lost))).jsonObject
+
+    /** Returns the record to store. Put behind the OS re-authentication prompt. */
+    suspend fun removeDevice(
+        record: SyncRecord,
+        device: String,
+    ): SyncRecord = client.request("removeDevice", mapOf("record" to record, "device" to text(device))).jsonObject
+
+    /** Returns the record to store. Put behind the OS re-authentication prompt. */
+    suspend fun reportLost(
+        record: SyncRecord,
+        lost: String,
+        keep: List<String> = emptyList(),
+    ): SyncRecord =
+        client
+            .request(
+                "reportLost",
+                mapOf("record" to record, "lost" to text(lost), "keep" to JsonArray(keep.map(::text))),
+            ).jsonObject
+
+    /** Sends what is queued, then leaves the account; the caller deletes its stored record. Without [force] it fails while edits are unsent. */
+    suspend fun signOut(
+        record: SyncRecord,
+        force: Boolean = false,
+    ) {
+        client.request("signOut", mapOf("record" to record, "force" to JsonPrimitive(force)))
+    }
+
+    /** After a roster conflict: takes the server's roster, dropping what the user ticked. Returns the record to store. */
+    suspend fun useServerRoster(
+        record: SyncRecord,
+        drop: List<String> = emptyList(),
+    ): SyncRecord =
+        client
+            .request("useServerRoster", mapOf("record" to record, "drop" to JsonArray(drop.map(::text))))
+            .jsonObject
 }

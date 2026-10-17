@@ -241,15 +241,17 @@ class PlaybackView(
     fun failOver(error: String) = post(command("failOver") { put("error", error) })
 }
 
+/** `name` is how the account's other devices will show this one. */
 class PairingView(
     client: CoreClient,
     scope: CoroutineScope,
     server: String,
+    name: String,
 ) : RecordView<PairingSnapshot>(
         client,
         scope,
         "pairing",
-        JsonObject(mapOf("server" to JsonPrimitive(server))),
+        JsonObject(mapOf("server" to JsonPrimitive(server), "name" to JsonPrimitive(name))),
         PairingSnapshot.serializer(),
     ) {
     fun confirm() = post(command("confirm"))

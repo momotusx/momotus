@@ -1,7 +1,7 @@
-{"t":0,"dir":"out","msg":{"id":28,"op":"subscribe","view":"settings","params":{}}}
-{"t":0,"dir":"in","msg":{"id":28,"ok":true,"result":{"snapshot":{"autoplayNext":true,"streams":{"avoid":[],"languages":[],"maxHeight":null,"maxSizeBytes":null,"quality":"best"},"subtitleLanguages":[]},"sub":8}}}
-{"t":0,"dir":"out","msg":{"id":29,"op":"setPrefs","patch":{"autoplayNext":true,"streams":{"languages":["en"]}}}}
-{"t":1,"dir":"in","msg":{"id":29,"ok":true,"result":{"autoplayNext":true,"streams":{"avoid":[],"languages":["en"],"maxHeight":null,"maxSizeBytes":null,"quality":"best"},"subtitleLanguages":[]}}}
-{"t":21,"dir":"in","msg":{"sub":8,"updates":[{"autoplayNext":true,"streams":{"avoid":[],"languages":["en"],"maxHeight":null,"maxSizeBytes":null,"quality":"best"},"subtitleLanguages":[]}]}}
-{"t":301,"dir":"out","msg":{"id":30,"op":"unsubscribe","sub":8}}
-{"t":301,"dir":"in","msg":{"id":30,"ok":true,"result":{}}}
+{"t":0,"dir":"out","msg":{"id":34,"op":"subscribe","view":"settings","params":{}}}
+{"t":1,"dir":"in","msg":{"id":34,"ok":true,"result":{"snapshot":{"autoplayNext":true,"streams":{"avoid":[],"languages":[],"maxHeight":null,"maxSizeBytes":null,"quality":"best"},"subtitleLanguages":[]},"sub":10}}}
+{"t":1,"dir":"out","msg":{"id":35,"op":"setPrefs","patch":{"autoplayNext":true,"streams":{"languages":["en"]}}}}
+{"t":1,"dir":"in","msg":{"id":35,"ok":true,"result":{"autoplayNext":true,"streams":{"avoid":[],"languages":["en"],"maxHeight":null,"maxSizeBytes":null,"quality":"best"},"subtitleLanguages":[]}}}
+{"t":20,"dir":"in","msg":{"sub":10,"updates":[{"autoplayNext":true,"streams":{"avoid":[],"languages":["en"],"maxHeight":null,"maxSizeBytes":null,"quality":"best"},"subtitleLanguages":[]}]}}
+{"t":301,"dir":"out","msg":{"id":36,"op":"unsubscribe","sub":10}}
+{"t":301,"dir":"in","msg":{"id":36,"ok":true,"result":{}}}

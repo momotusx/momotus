@@ -1,0 +1,21 @@
+# The UniFFI binding generator as its own tiny program, pinned to the version the core uses
+# (Cargo.lock at the repo root). Building the core's own `uniffi-bindgen` bin would compile the
+# whole core for the host just to run a code generator.
+#
+#   cargo install --path apps/android/tools/uniffi-bindgen --locked --target-dir <scratch>
+[package]
+name = "uniffi-bindgen-cli"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+# Not a member of the repo workspace.
+[workspace]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "main.rs"
+
+[dependencies]
+uniffi = { version = "=0.32.2", features = ["cli"] }

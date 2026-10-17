@@ -10,6 +10,7 @@ import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.RowState
+import app.marquee.core.model.SyncReport
 import app.marquee.core.model.Tuple2
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
@@ -119,7 +120,32 @@ class ShapeDecodeTest {
     }
 
     @Test
+    fun `a sync report carries counters, the fingerprint and an optional record`() {
+        val report =
+            strict.decodeFromString(
+                SyncReport.serializer(),
+                """{"pushed":3,"stale":1,"refused":0,"waiting":2,"pulled":10,"applied":4,"unreadable":0,"newer":0,
+                    "parked":1,"oldEpochWrites":0,"clockGapMs":-1200,"rotationWaitMs":0,"fingerprint":"ab12cd34ef56",
+                    "record":{"server":"https://sync.example","deviceToken":"t"},"again":true}""",
+            )
+        assertEquals(-1200L, report.clockGapMs)
+        assertEquals(true, report.again)
+        assertEquals("SyncReport(pushed=3, pulled=10, applied=4, again=true)", report.toString())
+        assertEquals(
+            null,
+            strict.decodeFromString(SyncReport.serializer(), """{"pushed":0,"record":null,"again":false}""").record,
+        )
+    }
+
+    @Test
     fun `pairing phases decode`() {
+        val joined =
+            strict.decodeFromString(
+                PairingSnapshot.serializer(),
+                """{"phase":"joined","record":{"server":"s"}}""",
+            )
+        assertIs<PairingSnapshot.Joined>(joined)
+        assertEquals("Joined(record)", joined.toString()) // never prints the record
         assertIs<PairingSnapshot.Waiting>(
             strict.decodeFromString(
                 PairingSnapshot.serializer(),
