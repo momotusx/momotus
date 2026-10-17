@@ -10,6 +10,7 @@ name = "mq-bridge"
 path = "src/main.rs"
 
 [dependencies]
+mq-library = { path = "../mq-library" }
 mq-runtime = { path = "../mq-runtime" }
 mq-streams = { path = "../mq-streams" }
 mq-sync = { path = "../mq-sync" }

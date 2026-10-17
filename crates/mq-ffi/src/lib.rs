@@ -42,7 +42,9 @@ pub struct MarqueeCore {
 #[uniffi::export]
 impl MarqueeCore {
     /// Opens the core over `data_dir` and starts delivering messages to
-    /// `listener` from a core thread.
+    /// `listener` from a core thread. The session opens as the profile this
+    /// device last switched to, locked when it has a PIN; `profile` is only
+    /// the first-run choice (an unknown one opens the owner, `default`).
     #[uniffi::constructor]
     pub fn open(
         data_dir: String,
