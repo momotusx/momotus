@@ -318,24 +318,37 @@ fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
     }
 }
 
-/// The hero is the newest Continue Watching item with artwork, else the
-/// first catalog item that has a background.
+/// The hero is the newest Continue Watching item with artwork, else the first
+/// catalog item with a background. Once a catalog hero is shown it stays put
+/// while later rows arrive, so the screen does not shift under the user; only a
+/// Continue Watching item may replace it.
 fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObservable<HomeHeader>) {
     let rows = lock(rows);
-    let hero = rows.iter().find_map(|row| {
+    let candidate = rows.iter().find_map(|row| {
         let tile = row.tiles.iter().find(|t| t.background.is_some())?;
-        let reason = if row.row_id == CONTINUE_ROW_ID {
+        let from_continue = row.row_id == CONTINUE_ROW_ID;
+        let reason = if from_continue {
             "Pick up where you left off".to_owned()
         } else {
-            format!("Popular in {}", row.title)
+            format!("#1 in {} on {}", row.title, row.source)
         };
-        Some(Hero {
-            tile: tile.clone(),
-            reason,
-        })
+        Some((
+            from_continue,
+            Hero {
+                tile: tile.clone(),
+                reason,
+            },
+        ))
     });
-    if header.get().hero != hero {
-        header.set(HomeHeader { hero });
+    let current = header.get().hero;
+    let next = match (candidate, &current) {
+        (Some((true, hero)), _) => Some(hero),
+        (Some((false, _)), Some(existing)) => Some(existing.clone()),
+        (Some((false, hero)), None) => Some(hero),
+        (None, _) => None,
+    };
+    if current != next {
+        header.set(HomeHeader { hero: next });
     }
 }
 

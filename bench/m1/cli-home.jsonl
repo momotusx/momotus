@@ -1,0 +1,9 @@
+{"run":"home-warm","date":"2026-10-17T02:52:56Z","host":"arm64"}
+{"event":"home_open","ms":1,"rows":6}
+{"event":"row","first":"Carrie","ms":972,"source":"Cinemeta","state":{"state":"ready"},"tiles":20,"title":"Popular Series"}
+{"event":"row","first":"The Love Hypothesis","ms":1064,"source":"Cinemeta","state":{"state":"ready"},"tiles":20,"title":"Featured Movies"}
+{"event":"row","first":"Tulsa King","ms":1088,"source":"Cinemeta","state":{"state":"ready"},"tiles":20,"title":"Featured Series"}
+{"event":"row","first":"Dragon Ball Super: Beerus","ms":1174,"source":"Cinemeta","state":{"state":"ready"},"tiles":20,"title":"New Series"}
+{"event":"row","first":"Spider-Man: Brand New Day","ms":1824,"source":"Cinemeta","state":{"state":"ready"},"tiles":20,"title":"Popular Movies"}
+{"event":"row","first":"Animals","ms":1824,"source":"Cinemeta","state":{"state":"ready"},"tiles":20,"title":"New Movies"}
+{"event":"home_done","hero":{"name":"Carrie","reason":"#1 in Popular Series on Cinemeta"},"ms":1824}

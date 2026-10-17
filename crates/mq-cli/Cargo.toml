@@ -1,0 +1,20 @@
+[package]
+name = "mq-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "mq"
+path = "src/main.rs"
+
+[dependencies]
+mq-runtime = { path = "../mq-runtime" }
+mq-addons = { path = "../mq-addons" }
+mq-protocol = { path = "../mq-protocol" }
+clap = { version = "4", features = ["derive", "env"] }
+tokio = { workspace = true }
+futures-util = "0.3"
+serde.workspace = true
+serde_json.workspace = true
