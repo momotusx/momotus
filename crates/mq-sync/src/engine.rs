@@ -51,7 +51,7 @@ const FORK: &str = "fork";
 pub const SHAPES: u16 = 1;
 /// What this build can read. Raising it makes every device pull everything
 /// again once, to apply records an older build skipped.
-const READER: &str = "2";
+const READER: &str = "3";
 /// Sealed bytes sent in one push request.
 const PUSH_BYTES: usize = 4 * 1024 * 1024;
 /// After a relay restore, automatic rotations wait this long, so devices

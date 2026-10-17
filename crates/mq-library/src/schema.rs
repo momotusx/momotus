@@ -9,6 +9,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V5),
         M::up(V6),
         M::up(V7),
+        M::up(V8),
     ])
 }
 
@@ -190,5 +191,40 @@ CREATE TABLE tracker_state (
     key         TEXT NOT NULL,
     value       TEXT NOT NULL,
     PRIMARY KEY (profile_id, tracker, account, key)
+);
+"#;
+
+/// Profiles (plans/m11-profiles.md): the cosmetic register gains an avatar
+/// and a position; access (the PIN) and deletion are registers of their
+/// own, so an edit to one never carries a stale copy of another. A profile
+/// is usable once its lock register exists (`pin_hash` NULL: no PIN); a row
+/// in `profile_gone` removes it for good. `pin_attempts` and `device_state`
+/// (the active profile) stay on this device. The unused V1 columns go, so
+/// nothing writes access into the cosmetic register.
+const V8: &str = r#"
+ALTER TABLE profiles DROP COLUMN kids;
+ALTER TABLE profiles DROP COLUMN pin_hash;
+ALTER TABLE profiles ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE profile_lock (
+    profile_id  TEXT PRIMARY KEY,
+    pin_hash    TEXT,
+    hlc         TEXT NOT NULL
+);
+
+CREATE TABLE profile_gone (
+    profile_id  TEXT PRIMARY KEY,
+    hlc         TEXT NOT NULL
+);
+
+CREATE TABLE pin_attempts (
+    profile_id  TEXT PRIMARY KEY,
+    failures    INTEGER NOT NULL
+);
+
+CREATE TABLE device_state (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
 );
 "#;

@@ -5,7 +5,7 @@
 
 use crate::hlc::Hlc;
 use crate::store::{Library, LibraryError, LibraryItemRow, ProgressRow};
-use crate::sync::{coll, local, sql};
+use crate::sync::{coll, local, refuse_gone, sql};
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// Rows dated further ahead than this are deferred, not imported.
@@ -103,6 +103,9 @@ impl Library {
         now_ms: i64,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
+            if account.is_some() {
+                refuse_gone(c, profile)?;
+            }
             let old: Option<String> = c
                 .query_row(
                     "SELECT account FROM tracker_account WHERE profile_id = ?1 AND tracker = ?2",
@@ -323,6 +326,7 @@ impl Library {
         value: &str,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
+            refuse_gone(c, key.profile)?;
             c.execute(
                 "INSERT INTO tracker_state (profile_id, tracker, account, key, value) VALUES (?1, ?2, ?3, ?4, ?5)
                  ON CONFLICT(profile_id, tracker, account, key) DO UPDATE SET value = excluded.value",
@@ -347,6 +351,7 @@ impl Library {
         state: &[(TrackerKey<'_>, &str, &str)],
     ) -> Result<ImportReport, LibraryError> {
         self.write(|c| {
+            refuse_gone(c, profile)?;
             let mut report = ImportReport::default();
             let zero = Hlc::zero(0).encode();
             let mut latest: Vec<&ImportedPlay> = Vec::new();
@@ -476,6 +481,7 @@ fn put_intent(
     intent: NewIntent<'_>,
 ) -> rusqlite::Result<i64> {
     let k = intent.key;
+    refuse_gone(c, k.profile)?;
     // One counter per account that never goes down: a deleted row's
     // revision is never handed out again, so a late acknowledgement of it
     // cannot delete a newer write.

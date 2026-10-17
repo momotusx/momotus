@@ -660,8 +660,12 @@ async fn run(ops: Vec<Op>, slow: bool) {
     }
     // Equal is not enough: every register must hold its newest write. (A
     // relay with a slow clock restamps fresh edits at its own time, so there
-    // last-writer-wins falls back to push order; equality still holds.)
-    let synced: Vec<_> = first.iter().filter(|r| r.coll != coll::PROFILES).collect();
+    // last-writer-wins falls back to push order; equality still holds.) The
+    // profile and its lock register come from setup, outside the oracle.
+    let synced: Vec<_> = first
+        .iter()
+        .filter(|r| r.coll != coll::PROFILES && r.coll != coll::PROFILE_LOCK)
+        .collect();
     for r in synced.iter().filter(|_| !slow) {
         assert_eq!(
             Some(&r.hlc),

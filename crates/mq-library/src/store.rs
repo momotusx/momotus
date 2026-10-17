@@ -1,5 +1,5 @@
 use crate::schema::migrations;
-use crate::sync::{coll, local, queue, sql};
+use crate::sync::{Gone, coll, local, queue, refuse_gone, sql};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -10,11 +10,28 @@ use tokio::sync::broadcast;
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {
     #[error(transparent)]
-    Sqlite(#[from] rusqlite::Error),
+    Sqlite(rusqlite::Error),
     #[error(transparent)]
     Migration(#[from] rusqlite_migration::Error),
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
+    /// A write for a profile removed for good.
+    #[error("profile {0} was removed")]
+    ProfileGone(String),
+    #[error("the owner profile cannot be removed")]
+    OwnerProfile,
+}
+
+impl From<rusqlite::Error> for LibraryError {
+    fn from(e: rusqlite::Error) -> Self {
+        match e {
+            rusqlite::Error::ToSqlConversionFailure(e) => match e.downcast::<Gone>() {
+                Ok(gone) => Self::ProfileGone(gone.0),
+                Err(e) => Self::Sqlite(rusqlite::Error::ToSqlConversionFailure(e)),
+            },
+            e => Self::Sqlite(e),
+        }
+    }
 }
 
 /// Tables whose changes live views care about.
@@ -45,7 +62,8 @@ impl Table {
 
     fn from_name(name: &str) -> Option<Self> {
         Some(match name {
-            "profiles" => Table::Profiles,
+            // A profile's PIN and its removal show in its picker entry.
+            "profiles" | "profile_lock" | "profile_gone" => Table::Profiles,
             "addons" => Table::Addons,
             "library_items" => Table::LibraryItems,
             "progress" => Table::Progress,
@@ -182,13 +200,23 @@ impl Library {
         Ok(f(&conn)?)
     }
 
+    /// Creates the profile and its lock register (no PIN), each only when
+    /// missing. Called with the zero hlc, so versions synced from another
+    /// device win.
     pub fn ensure_profile(&self, id: &str, name: &str, hlc: &str) -> Result<(), LibraryError> {
         self.write(|c| {
+            refuse_gone(c, id)?;
             let added = c.execute(
                 "INSERT INTO profiles (id, name, hlc) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO NOTHING",
                 params![id, name, hlc],
             )?;
-            queue(c, added, coll::PROFILES, &[id])
+            queue(c, added, coll::PROFILES, &[id])?;
+            let added = c.execute(
+                "INSERT INTO profile_lock (profile_id, pin_hash, hlc) VALUES (?1, NULL, ?2)
+                 ON CONFLICT(profile_id) DO NOTHING",
+                params![id, hlc],
+            )?;
+            queue(c, added, coll::PROFILE_LOCK, &[id])
         })
     }
 
@@ -657,6 +685,7 @@ impl Library {
         used_ms: i64,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
+            refuse_gone(c, profile)?;
             c.execute(
                 "INSERT INTO search_history (profile_id, query, used_ms) VALUES (?1, ?2, ?3)
                  ON CONFLICT(profile_id, query) DO UPDATE SET used_ms = excluded.used_ms",

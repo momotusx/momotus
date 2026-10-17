@@ -18,10 +18,90 @@ pub mod coll {
     pub const WATCHED: u8 = 4;
     pub const SETTINGS: u8 = 5;
     pub const STREAM_MEMORY: u8 = 6;
+    pub const PROFILE_LOCK: u8 = 7;
+    pub const PROFILE_GONE: u8 = 8;
 }
+
+/// Every collection this build reads and writes, in export order.
+const ALL: [u8; 9] = [
+    coll::PROFILES,
+    coll::ADDONS,
+    coll::ITEMS,
+    coll::PROGRESS,
+    coll::WATCHED,
+    coll::SETTINGS,
+    coll::STREAM_MEMORY,
+    coll::PROFILE_LOCK,
+    coll::PROFILE_GONE,
+];
 
 /// Separates the parts of a register key; ids never contain it.
 const SEP: char = '\u{1f}';
+
+/// The owner profile: every device starts with it, it can never be gone.
+pub const OWNER: &str = "default";
+
+/// Whether the profile was removed for good.
+pub(crate) fn gone(c: &Connection, profile: &str) -> rusqlite::Result<bool> {
+    c.query_row(
+        "SELECT EXISTS (SELECT 1 FROM profile_gone WHERE profile_id = ?1)",
+        params![profile],
+        |r| r.get(0),
+    )
+}
+
+/// A write for a gone profile, refused (`Library::write` turns it into
+/// `LibraryError::ProfileGone`).
+#[derive(Debug)]
+pub(crate) struct Gone(pub String);
+
+impl std::fmt::Display for Gone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "profile {} was removed", self.0)
+    }
+}
+
+impl std::error::Error for Gone {}
+
+/// Fails the transaction when `profile` is gone, so no local writer (a
+/// view, an import, a tracker round) can bring it back.
+pub(crate) fn refuse_gone(c: &Connection, profile: &str) -> rusqlite::Result<()> {
+    if gone(c, profile)? {
+        return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(Gone(
+            profile.to_owned(),
+        ))));
+    }
+    Ok(())
+}
+
+/// Every row a profile has on this device, except its gone register.
+const PROFILE_TABLES: [&str; 13] = [
+    "profile_lock",
+    "addons",
+    "addon_list",
+    "library_items",
+    "progress",
+    "watched",
+    "stream_memory",
+    "settings",
+    "search_history",
+    "tracker_account",
+    "tracker_outbox",
+    "tracker_state",
+    "pin_attempts",
+];
+
+/// Deletes every row of a gone profile.
+pub(crate) fn purge(c: &Connection, profile: &str) -> rusqlite::Result<()> {
+    c.execute("DELETE FROM profiles WHERE id = ?1", params![profile])?;
+    for table in PROFILE_TABLES {
+        c.execute(
+            &format!("DELETE FROM {table} WHERE profile_id = ?1"),
+            params![profile],
+        )?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SyncRecord {
@@ -64,6 +144,24 @@ impl SyncRecord {
 struct ProfileValue {
     profile: String,
     name: String,
+    #[serde(default)]
+    avatar: String,
+    #[serde(default)]
+    position: i64,
+}
+
+/// Access: `None` is a profile without a PIN.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LockValue {
+    profile: String,
+    pin_hash: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GoneValue {
+    profile: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -154,15 +252,7 @@ impl Library {
     ) -> Result<Vec<SyncRecord>, LibraryError> {
         self.read(|c| {
             let mut out = Vec::new();
-            for coll in [
-                coll::PROFILES,
-                coll::ADDONS,
-                coll::ITEMS,
-                coll::PROGRESS,
-                coll::WATCHED,
-                coll::SETTINGS,
-                coll::STREAM_MEMORY,
-            ] {
+            for coll in ALL {
                 out.extend(export(c, coll, Filter::After(after, limit))?);
             }
             out.sort_by_cached_key(SyncRecord::cursor);
@@ -200,7 +290,8 @@ impl Library {
                    SELECT MAX(hlc) AS h FROM profiles UNION ALL SELECT MAX(hlc) FROM addon_list
                    UNION ALL SELECT MAX(hlc) FROM library_items UNION ALL SELECT MAX(hlc) FROM progress
                    UNION ALL SELECT MAX(hlc) FROM watched UNION ALL SELECT MAX(hlc) FROM settings
-                   UNION ALL SELECT MAX(hlc) FROM stream_memory)",
+                   UNION ALL SELECT MAX(hlc) FROM stream_memory UNION ALL SELECT MAX(hlc) FROM profile_lock
+                   UNION ALL SELECT MAX(hlc) FROM profile_gone)",
                 [],
                 |r| r.get(0),
             )
@@ -252,6 +343,8 @@ impl Library {
                    UNION ALL SELECT 4, profile_id || char(31) || video_id FROM watched
                    UNION ALL SELECT 5, profile_id || char(31) || key FROM settings
                    UNION ALL SELECT 6, profile_id || char(31) || item_id FROM stream_memory
+                   UNION ALL SELECT 7, profile_id FROM profile_lock
+                   UNION ALL SELECT 8, profile_id FROM profile_gone
                  ) AS r
                  WHERE NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.coll = r.coll AND o.key = r.key)",
             )
@@ -447,7 +540,12 @@ enum Filter<'a> {
 
 fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<SyncRecord>> {
     let (sql, key_expr) = match coll {
-        coll::PROFILES => ("SELECT id, name, hlc FROM profiles", "id"),
+        coll::PROFILES => ("SELECT id, name, avatar, position, hlc FROM profiles", "id"),
+        coll::PROFILE_LOCK => (
+            "SELECT profile_id, pin_hash, hlc FROM profile_lock",
+            "profile_id",
+        ),
+        coll::PROFILE_GONE => ("SELECT profile_id, hlc FROM profile_gone", "profile_id"),
         coll::ADDONS => ("SELECT profile_id, hlc FROM addon_list", "profile_id"),
         coll::ITEMS => (
             "SELECT profile_id, item_id, kind, name, poster, poster_shape, in_library, added_ms, hlc FROM library_items",
@@ -497,8 +595,25 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
                 let value = ProfileValue {
                     profile: profile.clone(),
                     name: r.get(1)?,
+                    avatar: r.get(2)?,
+                    position: r.get(3)?,
                 };
-                Ok(record(coll, key(&[&profile]), &value, r.get(2)?))
+                Ok(record(coll, key(&[&profile]), &value, r.get(4)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        coll::PROFILE_LOCK => stmt
+            .query_map(args, |r| {
+                let value = LockValue {
+                    profile: r.get(0)?,
+                    pin_hash: r.get(1)?,
+                };
+                Ok(record(coll, key(&[&value.profile]), &value, r.get(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        coll::PROFILE_GONE => stmt
+            .query_map(args, |r| {
+                let value = GoneValue { profile: r.get(0)? };
+                Ok(record(coll, key(&[&value.profile]), &value, r.get(1)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         coll::ADDONS => {
@@ -631,16 +746,30 @@ fn same_key(r: &SyncRecord, parts: &[&str]) -> Result<(), ApplyError> {
 fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
     let value = r.value.clone();
     let hlc = r.hlc.as_str();
+    // Remove wins: whatever arrives for a gone profile, in any order, is
+    // dropped (every key starts with its profile).
+    let profile = r.key.split(SEP).next().unwrap_or_default();
+    if r.coll != coll::PROFILE_GONE && gone(c, profile)? {
+        return Ok(0);
+    }
     Ok(match r.coll {
         coll::PROFILES => {
             let v: ProfileValue = serde_json::from_value(value)?;
             same_key(r, &[&v.profile])?;
-            c.execute(
-                "INSERT INTO profiles (id, name, hlc) VALUES (?1, ?2, ?3)
-                 ON CONFLICT(id) DO UPDATE SET name = excluded.name, hlc = excluded.hlc
-                 WHERE excluded.hlc > profiles.hlc",
-                params![v.profile, v.name, hlc],
-            )?
+            sql::set_profile(c, &v.profile, &v.name, &v.avatar, v.position, hlc)?
+        }
+        coll::PROFILE_LOCK => {
+            let v: LockValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile])?;
+            sql::set_lock(c, &v.profile, v.pin_hash.as_deref(), hlc)?
+        }
+        coll::PROFILE_GONE => {
+            let v: GoneValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile])?;
+            if v.profile == OWNER {
+                return Err(ApplyError::Shape("the owner profile cannot be gone".into()));
+            }
+            sql::set_gone(c, &v.profile, hlc)?
         }
         coll::ADDONS => {
             let v: AddonsValue = serde_json::from_value(value)?;
@@ -722,6 +851,8 @@ fn tables(coll: u8) -> &'static [(&'static str, &'static str)] {
         coll::WATCHED => &[("watched", "profile_id || char(31) || video_id")],
         coll::SETTINGS => &[("settings", "profile_id || char(31) || key")],
         coll::STREAM_MEMORY => &[("stream_memory", "profile_id || char(31) || item_id")],
+        coll::PROFILE_LOCK => &[("profile_lock", "profile_id")],
+        coll::PROFILE_GONE => &[("profile_gone", "profile_id")],
         _ => &[],
     }
 }
@@ -752,6 +883,7 @@ pub(crate) fn local(
     hlc: &str,
     write: impl Fn(&str) -> rusqlite::Result<usize>,
 ) -> rusqlite::Result<()> {
+    refuse_gone(c, parts[0])?;
     let mut changed = write(hlc)?;
     if changed == 0
         && let Some(mine) = Hlc::decode(hlc).filter(|h| h.wall_ms > 0 && h.device != 0)
@@ -784,6 +916,51 @@ pub(crate) fn queue(
 /// The one copy of each register write, shared by local writes and sync.
 pub(crate) mod sql {
     use super::*;
+
+    pub fn set_profile(
+        c: &Connection,
+        id: &str,
+        name: &str,
+        avatar: &str,
+        position: i64,
+        hlc: &str,
+    ) -> rusqlite::Result<usize> {
+        c.execute(
+            "INSERT INTO profiles (id, name, avatar, position, hlc) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name, avatar = excluded.avatar, position = excluded.position,
+               hlc = excluded.hlc
+             WHERE excluded.hlc > profiles.hlc",
+            params![id, name, avatar, position, hlc],
+        )
+    }
+
+    pub fn set_lock(
+        c: &Connection,
+        profile: &str,
+        pin_hash: Option<&str>,
+        hlc: &str,
+    ) -> rusqlite::Result<usize> {
+        c.execute(
+            "INSERT INTO profile_lock (profile_id, pin_hash, hlc) VALUES (?1, ?2, ?3)
+             ON CONFLICT(profile_id) DO UPDATE SET pin_hash = excluded.pin_hash, hlc = excluded.hlc
+             WHERE excluded.hlc > profile_lock.hlc",
+            params![profile, pin_hash, hlc],
+        )
+    }
+
+    /// Marks the profile gone and purges it. Never for the owner (callers
+    /// check). Returns 1 when the register changed.
+    pub fn set_gone(c: &Connection, profile: &str, hlc: &str) -> rusqlite::Result<usize> {
+        let changed = c.execute(
+            "INSERT INTO profile_gone (profile_id, hlc) VALUES (?1, ?2)
+             ON CONFLICT(profile_id) DO UPDATE SET hlc = excluded.hlc
+             WHERE excluded.hlc > profile_gone.hlc",
+            params![profile, hlc],
+        )?;
+        purge(c, profile)?;
+        Ok(changed)
+    }
 
     /// Replaces the list when `hlc` is newer than the list's register; local
     /// edits are guarded too, since a pull can apply a newer list between

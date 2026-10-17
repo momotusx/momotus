@@ -6,6 +6,7 @@
 //! row carries an `hlc` string that sorts in causal order.
 
 pub mod hlc;
+mod profiles;
 mod schema;
 mod store;
 mod sync;
@@ -13,9 +14,10 @@ mod tracker;
 
 pub use hlc::{Hlc, HlcClock};
 
+pub use profiles::ProfileRow;
 pub use store::{
     AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryEntry, LibraryError,
     LibraryItemRow, ProgressRow, Table,
 };
-pub use sync::{OutboxPage, SignedEntry, SyncCursor, SyncRecord, coll};
+pub use sync::{OWNER, OutboxPage, SignedEntry, SyncCursor, SyncRecord, coll};
 pub use tracker::{ImportReport, ImportedPlay, Intent, IntentOp, NewIntent, TrackerKey};
