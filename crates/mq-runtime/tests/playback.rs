@@ -301,15 +301,25 @@ async fn finds_subtitles_by_hash_size_and_filename() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     let s = done.expect("subtitles settled");
-    let urls: Vec<_> = s.subtitles.iter().map(|t| t.url.as_str()).collect();
-    // The preferred language comes first; the rest keep arrival order.
-    assert_eq!(
-        urls,
-        [
-            "https://subs.example/2.srt",
-            "https://own.example/en.srt",
-            "https://subs.example/1.srt"
-        ]
+    // The preferred language comes first; the rest keep arrival order (the
+    // stream's own track, then the addon's).
+    let order: Vec<_> = s
+        .subtitles
+        .iter()
+        .map(|t| (t.lang.as_str(), t.source.as_str()))
+        .collect();
+    assert_eq!(order[0].0, "tur");
+    assert_eq!(order[1], ("eng", "Subs"));
+    assert_eq!(order[2].0, "eng");
+    // Every track is served by the loopback server as WebVTT, one address
+    // per file.
+    let urls: std::collections::HashSet<_> = s.subtitles.iter().map(|t| &t.url).collect();
+    assert_eq!(urls.len(), 3);
+    assert!(
+        urls.iter().all(|u| u.starts_with("http://127.0.0.1:")
+            && u.contains("/sub/")
+            && u.ends_with(".vtt")),
+        "{urls:?}"
     );
     let path = asked.lock().unwrap()[0].clone();
     let hash = expected_hash(&video());

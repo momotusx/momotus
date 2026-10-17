@@ -3,6 +3,13 @@
 //! random bytes. Players never learn where bytes come from; today the source
 //! is an upstream HTTP(S) URL proxied with Range passthrough, later the
 //! torrent engine plugs in behind the same route.
+//!
+//! Subtitles get `http://127.0.0.1:<port>/sub/<token>/<lang>.vtt`: the
+//! addon's file fetched on request and served as UTF-8 WebVTT.
+
+mod subtitles;
+
+pub use subtitles::to_vtt;
 
 use axum::Router;
 use axum::body::Body;
@@ -28,10 +35,19 @@ pub enum Upstream {
     },
 }
 
+/// An addon's subtitle file, served converted.
+#[derive(Debug, Clone, PartialEq)]
+struct Subtitle {
+    url: String,
+    lang: String,
+    allow_private: bool,
+}
+
 #[derive(Clone)]
 struct AppState {
     http: HttpClient,
     sessions: Arc<Mutex<HashMap<String, Upstream>>>,
+    subtitles: Arc<Mutex<HashMap<String, Subtitle>>>,
     port: u16,
 }
 
@@ -49,10 +65,12 @@ impl StreamServer {
         let state = AppState {
             http,
             sessions: Arc::default(),
+            subtitles: Arc::default(),
             port: addr.port(),
         };
         let app = Router::new()
             .route("/s/{token}/{name}", get(serve).head(serve))
+            .route("/sub/{token}/{name}", get(serve_subtitle))
             .with_state(state.clone());
         let task = tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -72,14 +90,39 @@ impl StreamServer {
         format!("http://{}/s/{token}/{}", self.addr, sanitize(filename))
     }
 
-    /// Ends a playback; its URL stops working immediately.
+    /// Registers an addon's subtitle file and returns a URL that serves it as
+    /// UTF-8 WebVTT. The same file gets the same URL, so tracks compare by it.
+    pub fn register_subtitle(&self, url: &str, lang: &str, allow_private: bool) -> String {
+        let subtitle = Subtitle {
+            url: url.to_owned(),
+            lang: lang.to_owned(),
+            allow_private,
+        };
+        let mut subtitles = lock(&self.state.subtitles);
+        let token = match subtitles.iter().find(|(_, s)| **s == subtitle) {
+            Some((token, _)) => token.clone(),
+            None => {
+                let token = new_token();
+                subtitles.insert(token.clone(), subtitle);
+                token
+            }
+        };
+        format!("http://{}/sub/{token}/{}.vtt", self.addr, sanitize(lang))
+    }
+
+    /// Ends a playback or a subtitle; its URL stops working immediately.
     pub fn release(&self, url: &str) {
-        if let Some(token) = url
-            .split("/s/")
-            .nth(1)
-            .and_then(|rest| rest.split('/').next())
-        {
-            lock(&self.state.sessions).remove(token);
+        let token = |prefix| {
+            url.split(prefix)
+                .nth(1)
+                .and_then(|rest: &str| rest.split('/').next())
+                .map(str::to_owned)
+        };
+        if let Some(token) = token("/s/") {
+            lock(&self.state.sessions).remove(&token);
+        }
+        if let Some(token) = token("/sub/") {
+            lock(&self.state.subtitles).remove(&token);
         }
     }
 
@@ -127,20 +170,62 @@ const PASSTHROUGH: [header::HeaderName; 6] = [
     header::ETAG,
 ];
 
+/// DNS rebinding guard: only answer requests addressed to our loopback.
+fn host_ok(state: &AppState, headers: &HeaderMap) -> bool {
+    headers
+        .get(header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .is_some_and(|h| {
+            h == format!("127.0.0.1:{}", state.port) || h == format!("localhost:{}", state.port)
+        })
+}
+
+/// Fetches the addon's subtitle file and answers with UTF-8 WebVTT. Any
+/// origin may read it (a browser's `<track crossorigin>`); the token is the
+/// capability.
+async fn serve_subtitle(
+    State(state): State<AppState>,
+    Path((token, _name)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    if !host_ok(&state, &headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(subtitle) = lock(&state.subtitles).get(&token).cloned() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let opts = RequestOptions {
+        priority: Priority::Playback,
+        timeout: Duration::from_secs(20),
+        allow_private: subtitle.allow_private,
+        ..Default::default()
+    };
+    let body = match state.http.get(&subtitle.url, &opts).await {
+        Ok(response) => response.body,
+        Err(e) => {
+            tracing::warn!("subtitle upstream failed: {e}");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+    let Some(vtt) = to_vtt(&body, &subtitle.lang) else {
+        return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "text/vtt; charset=utf-8"),
+            (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+        ],
+        vtt,
+    )
+        .into_response()
+}
+
 async fn serve(
     State(state): State<AppState>,
     Path((token, _name)): Path<(String, String)>,
     request: Request<Body>,
 ) -> Response {
-    // DNS rebinding guard: only answer requests addressed to our loopback.
-    let host_ok = request
-        .headers()
-        .get(header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .is_some_and(|h| {
-            h == format!("127.0.0.1:{}", state.port) || h == format!("localhost:{}", state.port)
-        });
-    if !host_ok {
+    if !host_ok(&state, request.headers()) {
         return StatusCode::FORBIDDEN.into_response();
     }
     let Some(upstream) = lock(&state.sessions).get(&token).cloned() else {

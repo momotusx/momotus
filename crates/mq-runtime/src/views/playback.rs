@@ -221,16 +221,13 @@ impl PlaybackView {
             if s.snapshot.phase != PlaybackPhase::Ready {
                 return;
             }
-            if let (Some(url), Some(server)) = (s.snapshot.url.take(), &s.server) {
-                server.release(&url);
-            }
+            release_all(&mut s);
             if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
                 let attempt = attempt(stream, error);
                 s.snapshot.attempts.push(attempt);
             }
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
-            s.snapshot.subtitles.clear();
             s.snapshot.subtitles_pending = false;
             self.snapshot.set(s.snapshot.clone());
         }
@@ -286,8 +283,16 @@ impl Drop for PlaybackView {
             task.abort();
         }
         self.save();
-        let s = lock(&self.state);
-        if let (Some(url), Some(server)) = (&s.snapshot.url, &s.server) {
+        release_all(&mut lock(&self.state));
+    }
+}
+
+/// Ends the stream's and the subtitles' loopback URLs; they stop working.
+fn release_all(s: &mut State) {
+    let url = s.snapshot.url.take();
+    let subtitles = std::mem::take(&mut s.snapshot.subtitles);
+    if let Some(server) = &s.server {
+        for url in url.iter().chain(subtitles.iter().map(|t| &t.url)) {
             server.release(url);
         }
     }
@@ -396,6 +401,7 @@ async fn resolve_next(
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
                 let url = server.register(upstream.clone(), &name);
                 let wanted = core.prefs().subtitle_languages;
+                let Upstream::Http { allow_private, .. } = upstream;
                 {
                     let mut s = lock(&state);
                     s.snapshot.phase = PlaybackPhase::Ready;
@@ -406,7 +412,7 @@ async fn resolve_next(
                     s.snapshot.subtitles = stream
                         .subtitles
                         .iter()
-                        .map(|w| track(w, &stream.addon_name))
+                        .map(|w| track(w, &stream.addon_name, &server, allow_private))
                         .collect();
                     order_subtitles(&mut s.snapshot.subtitles, &wanted);
                     s.snapshot.subtitles_pending = true;
@@ -416,6 +422,7 @@ async fn resolve_next(
                 remember_stream(&core, &target, &stream);
                 let subtitles = find_subtitles(
                     &core,
+                    &server,
                     &target,
                     &upstream,
                     filename.as_deref(),
@@ -598,9 +605,16 @@ fn source_word(source: &Source) -> &'static str {
     }
 }
 
-fn track(w: &mq_protocol::WireSubtitle, source: &str) -> SubtitleTrack {
+/// A track served through the loopback server as UTF-8 WebVTT, whatever
+/// format and charset the addon's file has.
+fn track(
+    w: &mq_protocol::WireSubtitle,
+    source: &str,
+    server: &StreamServer,
+    allow_private: bool,
+) -> SubtitleTrack {
     SubtitleTrack {
-        url: w.url.to_string(),
+        url: server.register_subtitle(w.url.as_str(), &w.lang, allow_private),
         lang: w.lang.clone(),
         label: w.label.clone(),
         source: source.to_owned(),
@@ -614,6 +628,7 @@ fn track(w: &mq_protocol::WireSubtitle, source: &str) -> SubtitleTrack {
 /// tracks to the snapshot as each addon answers.
 async fn find_subtitles(
     core: &Core,
+    server: &StreamServer,
     target: &PlayTarget,
     upstream: &Upstream,
     filename: Option<&str>,
@@ -661,16 +676,17 @@ async fn find_subtitles(
         let mut s = lock(state);
         match event {
             AddonEvent::Arrived { addon_id, body, .. } => {
-                let source = addons
-                    .iter()
-                    .find(|a| a.id() == addon_id)
-                    .map_or(addon_id.clone(), |a| a.manifest.name.clone());
+                let addon = addons.iter().find(|a| a.id() == addon_id);
+                let source = addon.map_or(addon_id.clone(), |a| a.manifest.name.clone());
+                let private = addon.is_some_and(|a| a.allow_private);
                 let found = decode_subtitles(&body)
                     .map(|r| r.subtitles)
                     .unwrap_or_default();
                 for w in &found {
-                    if !s.snapshot.subtitles.iter().any(|t| t.url == w.url.as_str()) {
-                        s.snapshot.subtitles.push(track(w, &source));
+                    // One file, one loopback address: compare by it.
+                    let t = track(w, &source, server, private);
+                    if !s.snapshot.subtitles.iter().any(|known| known.url == t.url) {
+                        s.snapshot.subtitles.push(t);
                     }
                 }
                 order_subtitles(&mut s.snapshot.subtitles, &wanted);

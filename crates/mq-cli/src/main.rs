@@ -433,6 +433,27 @@ async fn play(
     emit(
         json!({ "event": "subtitles", "count": subs.len(), "languages": langs.len(), "first": langs.iter().take(8).collect::<Vec<_>>() }),
     );
+    // What a player gets for the first tracks: UTF-8 WebVTT from the loopback.
+    let loopback = mq_http::RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let mut files = Vec::new();
+    for t in subs.iter().take(5) {
+        let started = Instant::now();
+        files.push(match core.http().get(&t.url, &loopback).await {
+            Ok(r) => {
+                let text = String::from_utf8_lossy(&r.body);
+                json!({
+                    "lang": t.lang, "webvtt": text.starts_with("WEBVTT"),
+                    "cues": text.matches(" --> ").count(), "bytes": r.body.len(),
+                    "type": r.header("content-type"), "ms": ms(started.elapsed()),
+                })
+            }
+            Err(e) => json!({ "lang": t.lang, "error": e.to_string() }),
+        });
+    }
+    emit(json!({ "event": "subtitle_files", "files": files }));
     emit(json!({ "event": "done", "played": played, "total_ms": ms(started.elapsed()) }));
     Ok(())
 }

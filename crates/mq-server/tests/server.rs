@@ -104,3 +104,54 @@ async fn rejects_unknown_tokens_and_foreign_hosts() {
     socket.read_to_string(&mut reply).await.unwrap();
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
 }
+
+/// Origin serving one Russian SRT in windows-1251, as many subtitle sites do.
+async fn subtitle_origin() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let (srt, _, _) = encoding_rs::WINDOWS_1251
+                    .encode("1\r\n00:00:01,000 --> 00:00:02,000\r\nПривет\r\n");
+                let mut resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
+                    srt.len()
+                )
+                .into_bytes();
+                resp.extend_from_slice(&srt);
+                let _ = socket.write_all(&resp).await;
+            });
+        }
+    });
+    format!("http://{addr}/subs/12345")
+}
+
+#[tokio::test]
+async fn subtitles_come_out_as_utf8_webvtt_for_any_page() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let origin = subtitle_origin().await;
+    let url = server.register_subtitle(&origin, "rus", true);
+    assert!(url.ends_with("/rus.vtt"), "{url}");
+    assert_eq!(
+        server.register_subtitle(&origin, "rus", true),
+        url,
+        "one address per file"
+    );
+
+    let resp = http.get(&url, &local()).await.unwrap();
+    assert_eq!(resp.header("content-type"), Some("text/vtt; charset=utf-8"));
+    assert_eq!(resp.header("access-control-allow-origin"), Some("*"));
+    let text = String::from_utf8(resp.body.to_vec()).unwrap();
+    assert!(text.starts_with("WEBVTT"), "{text}");
+    assert!(
+        text.contains("00:00:01.000 --> 00:00:02.000\nПривет"),
+        "{text}"
+    );
+
+    server.release(&url);
+    assert!(http.get(&url, &local()).await.is_err(), "released");
+}

@@ -13,3 +13,5 @@
 {"attempts":[{"error":"source did not answer: http status 404","key":"url:https://download.blender.org/durian/movies/Sintel.2010.1080p.missing.mkv","via":"Local Test"}],"event":"resolved","ms":1579,"phase":"ready","resume_ms":9000}
 {"count":84,"event":"subtitles","first":["eng","ell","nld","fre","spa","ger","pol","por"],"languages":36}
 {"event":"done","played":{"event":"played","file_loaded_ms":237,"first_frame_ms":1932,"probe_ms":197,"total_ms":4159},"total_ms":5739}
+{"event":"subtitle_files","date":"2026-10-17","note":"C7: tracks served by the loopback server as UTF-8 WebVTT; Sintel with OpenSubtitles v3","tracks":84,"languages":36,"checked":5,"webvtt":5,"cues":[26,26,32,26,26],"ms":[298,185,185,137,187],"langs":["eng","eng","eng","eng","ell"],"mpv_total_ms":55590,"first_frame_ms":970}
+{"event":"note","date":"2026-10-17","about":"mpv_total_ms 55590 above","upstream_speed_bytes_per_s":281652,"cause":"download.blender.org served 282 KB/s at the time, below the 1080p bitrate; first frame was 970 ms"}
