@@ -1046,6 +1046,7 @@ async fn a_redirect_target_that_turns_private_is_refused() {
     let (_server, lease, http) = serve_url(origin).await;
     let url = lease.url.clone();
     assert_eq!(range(&http, &url, 0, 2).await, data[..2]);
+    assert_eq!(redirects.load(Ordering::Relaxed), 1, "one read so far");
     // The remembered target's name now answers the canary.
     mq_http::test_dns::set("memo.c23.test", &[canary.addr.ip()]);
     let far = 12u64 << 20;

@@ -703,17 +703,17 @@ async fn proxy_http(source: &ahead::Source, range: Option<String>, head_only: bo
         None => return StatusCode::NOT_FOUND.into_response(),
         Some(Ok(Ok(response))) => response,
         Some(Ok(Err(e))) => {
-            tracing::warn!("stream upstream failed: {}", e.kind());
+            tracing::warn!("plain proxy upstream failed: {}", e.kind());
             return StatusCode::BAD_GATEWAY.into_response();
         }
         Some(Err(_)) => {
-            tracing::warn!("stream upstream sent no answer in {:?}", ahead::OPEN);
+            tracing::warn!("plain proxy upstream sent no answer in {:?}", ahead::OPEN);
             return StatusCode::BAD_GATEWAY.into_response();
         }
     };
     let status = StatusCode::from_u16(upstream.status).unwrap_or(StatusCode::BAD_GATEWAY);
     if status.is_redirection() {
-        tracing::warn!("stream upstream answered a redirect it could not follow");
+        tracing::warn!("plain proxy upstream answered a redirect it could not follow");
         return StatusCode::BAD_GATEWAY.into_response();
     }
     if !status.is_success() {
