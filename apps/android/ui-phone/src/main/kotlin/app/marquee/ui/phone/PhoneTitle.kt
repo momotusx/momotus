@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -237,6 +238,9 @@ fun PhoneTitle(
 
 private const val HERO_RATIO = 1.45f
 
+/** The narrowest the title's primary gets beside Watched before Watched moves under it. */
+private val PRIMARY_MIN = 220.dp
+
 /** The artwork's height: the width at [HERO_RATIO], held to 60% of the window (landscape, tablets). */
 @Composable
 private fun heroHeight(): Dp {
@@ -332,59 +336,74 @@ private fun Info(
     ) {
         RatingLine(details.rating, TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)))
         details.description?.let { Synopsis(it) }
-        PrimaryButton(
-            label = primary.label,
-            icon =
-                when (primary) {
-                    is PrimaryAction.Play -> PlayFilled
-                    PrimaryAction.ChooseVersion -> Icons.Layers
-                    PrimaryAction.AddSource -> Icons.Plus
+        // As the web lays a phone title out: the primary with Watched beside it as a pill (movies),
+        // then the other actions as equal circles in one row, their words on up to two lines. On a
+        // small phone or with large text Watched moves under the primary rather than squeeze its words.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            PrimaryButton(
+                label = primary.label,
+                icon =
+                    when (primary) {
+                        is PrimaryAction.Play -> PlayFilled
+                        PrimaryAction.ChooseVersion -> Icons.Layers
+                        PrimaryAction.AddSource -> Icons.Plus
+                    },
+                modifier = Modifier.widthIn(min = PRIMARY_MIN).weight(1f),
+                enabled = primary !is PrimaryAction.Play || target != null,
+                onClick = {
+                    when {
+                        primary == PrimaryAction.AddSource -> onAddSource()
+                        target == null -> Unit
+                        primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
+                        else -> onPlay(recommended.key, target.videoId)
+                    }
                 },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = primary !is PrimaryAction.Play || target != null,
-            onClick = {
-                when {
-                    primary == PrimaryAction.AddSource -> onAddSource()
-                    target == null -> Unit
-                    primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
-                    else -> onPlay(recommended.key, target.videoId)
-                }
-            },
-        )
+            )
+            if (details.kind == "movie") {
+                SecondaryButton(
+                    label = if (header.watched) "Watched" else "Mark as watched",
+                    onClick = { title.setWatched(details.id, !header.watched) },
+                    icon = Icons.Check,
+                    selected = header.watched,
+                )
+            }
+        }
         if (target == null) {
             StatusNote("Nothing to play yet")
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }
         val context = LocalContext.current
-        // Wraps to a second line on a small phone or with large text: every action keeps its full
-        // label and its 48 dp target.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        ) {
+        Row(Modifier.fillMaxWidth().padding(top = Marquee.space.xs)) {
             if (target != null) {
-                RoundButton(Icons.Layers, "Versions", { onVersions(target.videoId) }, showLabel = true)
+                RoundButton(
+                    Icons.Layers,
+                    "Versions",
+                    { onVersions(target.videoId) },
+                    Modifier.weight(1f),
+                    showLabel = true,
+                )
             }
             details.trailers.firstOrNull()?.let { trailer ->
-                RoundButton(Icons.Film, "Trailer", { openLink(context, trailer.url) }, showLabel = true)
+                RoundButton(
+                    Icons.Film,
+                    "Trailer",
+                    { openLink(context, trailer.url) },
+                    Modifier.weight(1f),
+                    showLabel = true,
+                )
             }
             RoundButton(
                 icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
                 label = if (header.inLibrary) "In Library" else "Add to Library",
                 onClick = { title.setInLibrary(!header.inLibrary) },
+                modifier = Modifier.weight(1f),
                 selected = header.inLibrary,
                 showLabel = true,
             )
-            if (details.kind == "movie") {
-                RoundButton(
-                    icon = Icons.Check,
-                    label = if (header.watched) "Watched" else "Mark as watched",
-                    onClick = { title.setWatched(details.id, !header.watched) },
-                    selected = header.watched,
-                    showLabel = true,
-                )
-            }
         }
     }
 }

@@ -78,7 +78,16 @@ fun OnboardingScreen(
         error = null
         scope.launch {
             try {
-                session.ops.installAddon(CINEMETA)
+                // Installed and turned off (an empty Home sends people here): turning it on needs no
+                // network, so it is tried first; an addon that is not installed refuses it.
+                val turnedOn =
+                    try {
+                        session.ops.setAddonEnabled(CINEMETA, true)
+                        true
+                    } catch (e: CoreError) {
+                        false
+                    }
+                if (!turnedOn) session.ops.installAddon(CINEMETA)
                 onDone()
             } catch (e: CancellationException) {
                 throw e

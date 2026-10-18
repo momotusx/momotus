@@ -223,7 +223,7 @@ private fun Pick(
                     icon = Icons.CircleAlert,
                     actionLabel = "Try again",
                     onAction = onRetry,
-                    actionFocus = focus.requesterFor(PLAY),
+                    actionFocus = play,
                     modifier = Modifier.padding(0.dp),
                 )
             }
@@ -274,7 +274,7 @@ private fun Pick(
                     icon = PlayFilled,
                     onClick = { onPlay(best) },
                     modifier = Modifier.padding(top = Marquee.space.xs),
-                    focusRequester = focus.requesterFor(PLAY),
+                    focusRequester = play,
                     onFocusChange = focus.watch(null, PLAY),
                 )
                 Row(

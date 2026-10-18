@@ -101,6 +101,9 @@ fun TvHome(
     onSetup: () -> Unit,
     onAddons: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Catalogs exist and every one is hidden: the empty state points to Home rows, not setup. */
+    rowsHidden: Boolean = false,
+    onHomeRows: () -> Unit = {},
 ) {
     val safe = Marquee.safe
     val metrics = Marquee.tiles
@@ -141,7 +144,7 @@ fun TvHome(
         ) {
             val hero = home.hero
             if (hero != null) item(key = "hero") { TvHero(hero, state, onOpen, onPlay) }
-            if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons) }
+            if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows) }
             if (hero == null && home.rows.toList().allFailed()) {
                 item(key = "failed") { AllFailed(home, Modifier.padding(start = Marquee.safe.side)) }
             } else {
@@ -158,6 +161,8 @@ private fun HomeState(
     home: HomeView,
     onSetup: () -> Unit,
     onAddons: () -> Unit,
+    rowsHidden: Boolean,
+    onHomeRows: () -> Unit,
 ) {
     val inset = Marquee.safe.side
     when (val status = home.status) {
@@ -177,6 +182,19 @@ private fun HomeState(
         }
 
         ViewStatus.Open -> {
+            if (rowsHidden) {
+                // Catalogs exist and every one is hidden: setup would change nothing.
+                StateMessage(
+                    title = "Every Home row is hidden",
+                    body =
+                        "Your addons have catalogs, and each one is hidden from Home. " +
+                            "Show them again in Home rows.",
+                    actionLabel = "Show rows",
+                    onAction = onHomeRows,
+                    modifier = Modifier.padding(start = inset, top = Marquee.safe.top),
+                )
+                return
+            }
             // Open with no rows: no addon that is on has a catalog, or every row is hidden.
             StateMessage(
                 title = "Home fills up from your addons",

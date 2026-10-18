@@ -33,6 +33,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -79,6 +81,9 @@ fun PhoneHome(
     onSetup: () -> Unit,
     onAddons: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Catalogs exist and every one is hidden: the empty state points to Home rows, not setup. */
+    rowsHidden: Boolean = false,
+    onHomeRows: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val hasHero = home.hero != null
@@ -97,7 +102,7 @@ fun PhoneHome(
     ) {
         val hero = home.hero
         if (hero != null) item(key = "hero") { PhoneHero(hero, onOpen, onPlay) }
-        if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons) }
+        if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows) }
         if (hero == null && home.rows.toList().allFailed()) {
             item(key = "failed") { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }
         } else {
@@ -111,6 +116,8 @@ private fun HomeState(
     home: HomeView,
     onSetup: () -> Unit,
     onAddons: () -> Unit,
+    rowsHidden: Boolean,
+    onHomeRows: () -> Unit,
 ) {
     val side = Marquee.safe.side
     when (val status = home.status) {
@@ -130,6 +137,19 @@ private fun HomeState(
         }
 
         ViewStatus.Open -> {
+            if (rowsHidden) {
+                // Catalogs exist and every one is hidden: setup would change nothing.
+                StateMessage(
+                    title = "Every Home row is hidden",
+                    body =
+                        "Your addons have catalogs, and each one is hidden from Home. " +
+                            "Show them again in Home rows.",
+                    actionLabel = "Show rows",
+                    onAction = onHomeRows,
+                    modifier = Modifier.padding(horizontal = side),
+                )
+                return
+            }
             // Open with no rows: no addon that is on has a catalog, or every row is hidden.
             StateMessage(
                 title = "Home fills up from your addons",
@@ -176,6 +196,11 @@ private fun PhoneHero(
     // At least the art's proportion, and taller when the text needs it (a small phone, large
     // fonts): the card grows and the page scrolls it, nothing is cut.
     BoxWithConstraints(Modifier.padding(horizontal = Marquee.safe.side).fillMaxWidth()) {
+        val short =
+            with(LocalDensity.current) {
+                LocalWindowInfo.current.containerSize.height
+                    .toDp()
+            } < SHORT_WINDOW
         // Held to most of the window, so a landscape phone or a tablet still shows Play.
         val least = minOf(maxWidth / HERO_RATIO, LocalConfiguration.current.screenHeightDp.dp * HERO_WINDOW)
         Box(
@@ -212,7 +237,7 @@ private fun PhoneHero(
                 // The text starts no higher than a third down, where the scrim has darkened.
                 Modifier
                     .align(Alignment.BottomStart)
-                    .padding(top = least * 0.3f)
+                    .padding(top = least * if (short) 0.15f else 0.3f)
                     .padding(Marquee.space.m),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             ) {
@@ -220,14 +245,18 @@ private fun PhoneHero(
                 Logo(
                     tile.logo,
                     tile.name,
-                    height = 64.dp,
+                    height = if (short) 44.dp else 64.dp,
                     maxWidth = 240.dp,
                     role = TextRole.Title1,
                     color = Marquee.colors.text,
                 )
                 RatingLine(tile.rating, TileCopy.heroMeta(hero))
-                hero.description?.let {
-                    MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 3)
+                // A short window (a landscape phone) keeps Play above the bar: the synopsis waits on the
+                // title page.
+                if (!short) {
+                    hero.description?.let {
+                        MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 3)
+                    }
                 }
                 // The card is the control for screen readers (it opens the details); the buttons
                 // repeat it for sighted touch.
@@ -248,6 +277,9 @@ private const val HERO_RATIO = 0.95f
 
 /** The most of the window's height a hero takes. */
 private const val HERO_WINDOW = 0.6f
+
+/** Below this window height the hero drops its synopsis and shrinks its logo. */
+private val SHORT_WINDOW = 480.dp
 
 /** Continue Watching is a lane of 16:9 stills; catalogs keep the shape their first tile has. */
 private fun shapeOf(row: HomeRow): TileShape =

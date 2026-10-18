@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,12 +25,15 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +49,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -80,8 +85,10 @@ import app.marquee.design.SecondaryButton
 import app.marquee.design.Spinner
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
+import app.marquee.design.endFade
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
+import app.marquee.design.scrollByKey
 
 /** 3725 s as "1:02:05". */
 fun clockText(ms: Long): String = Format.clock(ms / 1000)
@@ -275,11 +282,33 @@ fun PlayerStatus(
                 MqIcon(Icons.CircleAlert, tint = colors.bad, size = if (tv) 36.dp else 22.dp)
                 MqText(problem ?: "Playback stopped", role = TextRole.Headline, weight = FontWeight.Medium)
             }
-            for (attempt in attempts) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                    MqText(attempt.via, role = TextRole.Callout, weight = FontWeight.SemiBold)
-                    // The core words the reason in plain sentences ("The link no longer exists (404)").
-                    MqText(attempt.error, role = TextRole.Callout, color = colors.muted)
+            // The history takes what is left above the recovery row and scrolls past that (on TV with
+            // Up and Down once it overflows), so many long failures never push the way out off screen.
+            val history = rememberScrollState()
+            val scope = rememberCoroutineScope()
+            val overflows = history.maxValue in 1 until Int.MAX_VALUE
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .then(
+                        if (tv && overflows) {
+                            Modifier
+                                .onPreviewKeyEvent { scrollByKey(it, history, scope) }
+                                .marqueeFocus(Marquee.radius.m, scale = 1f)
+                                .focusable()
+                        } else {
+                            Modifier
+                        },
+                    ).endFade(history.canScrollForward, vertical = true)
+                    .verticalScroll(history),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            ) {
+                for (attempt in attempts) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        MqText(attempt.via, role = TextRole.Callout, weight = FontWeight.SemiBold)
+                        // The core words the reason in plain sentences ("The link no longer exists (404)").
+                        MqText(attempt.error, role = TextRole.Callout, color = colors.muted)
+                    }
                 }
             }
             Row(

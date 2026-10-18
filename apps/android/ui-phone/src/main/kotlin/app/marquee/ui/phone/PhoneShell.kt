@@ -56,6 +56,7 @@ import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.TextRole
 import app.marquee.design.focusSelectable
+import app.marquee.design.marqueeFocus
 
 /**
  * How much of the bottom the floating bar covers (its height, margin and the system navigation
@@ -177,6 +178,8 @@ private fun PhoneBar(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    // A keyboard on a phone or a tablet sees where it is, apart from the selected place.
+                    .marqueeFocus(Marquee.radius.m, scale = 1f)
                     .clip(RoundedCornerShape(Marquee.radius.m))
                     .background(if (isSelected) colors.text.copy(alpha = 0.12f) else Color.Transparent)
                     .semantics { contentDescription = place.label }

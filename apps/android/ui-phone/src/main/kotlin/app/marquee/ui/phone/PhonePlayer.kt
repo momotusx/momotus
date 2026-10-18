@@ -107,6 +107,11 @@ fun PhonePlayer(
 ) {
     val stage = controller.stage
     val density = LocalDensity.current
+    val shortWindow =
+        with(density) {
+            LocalWindowInfo.current.containerSize.height
+                .toDp()
+        } < UP_NEXT_ROOM
     // Measured from the controls; 200 dp until they have shown once.
     var controlsHeight by remember { mutableStateOf(200.dp) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
@@ -327,7 +332,10 @@ fun PhonePlayer(
                     )
                 }
             }
-            if (showNext && !ended && next != null) {
+            // A short window has no room for the card above the controls (and a track panel needs the
+            // space): it waits until they hide, as they do on their timer while the episode plays.
+            val roomForNext = !showControls || !shortWindow
+            if (showNext && !ended && next != null && panel == null && roomForNext) {
                 UpNextCard(
                     next = next,
                     countdown = secondsLeft.takeIf { autoplayNext },
@@ -540,3 +548,6 @@ private fun Actions(
  * place above the scrubber, as on the web.
  */
 private val SHORT_HEIGHT = 360.dp
+
+/** Below this window height Up Next and the controls do not show together. */
+private val UP_NEXT_ROOM = 420.dp

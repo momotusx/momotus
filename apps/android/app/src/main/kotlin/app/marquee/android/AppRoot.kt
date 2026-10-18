@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -29,12 +30,14 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.marquee.core.Format
+import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
 import app.marquee.core.route.Route
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
+import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
 import app.marquee.design.Marquee
 import app.marquee.design.StateMessage
@@ -235,6 +238,15 @@ private fun AppNav(
                     }
                     entry<Route.Import> { ImportScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
+                        // An empty Home asks once whether catalogs exist and are all hidden.
+                        val empty = app.home.status == ViewStatus.Open && app.home.rows.isEmpty()
+                        val rowsHidden by produceState(false, empty) {
+                            value = empty &&
+                                runCatching { session.ops.homeCatalogs() }
+                                    .getOrNull()
+                                    ?.let { it.isNotEmpty() && it.all(HomeCatalog::hidden) } == true
+                        }
+                        val onHomeRows: () -> Unit = { backStack.add(Route.HomeRows) }
                         if (tv) {
                             TvHome(
                                 app.home,
@@ -243,6 +255,8 @@ private fun AppNav(
                                 onPlay = ::playTile,
                                 onSetup = { backStack.add(Route.Onboarding) },
                                 onAddons = { choose(Route.Settings) },
+                                rowsHidden = rowsHidden,
+                                onHomeRows = onHomeRows,
                             )
                         } else {
                             PhoneHome(
@@ -251,6 +265,8 @@ private fun AppNav(
                                 onPlay = ::playTile,
                                 onSetup = { backStack.add(Route.Onboarding) },
                                 onAddons = { choose(Route.Settings) },
+                                rowsHidden = rowsHidden,
+                                onHomeRows = onHomeRows,
                             )
                         }
                     }

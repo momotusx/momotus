@@ -586,7 +586,9 @@ fun RoundButton(
                 role = TextRole.Caption,
                 color = if (focused) colors.text else colors.muted,
                 weight = FontWeight.SemiBold,
-                maxLines = 1,
+                // A narrow slot (equal widths in a row, a large font) wraps the word under its ring.
+                maxLines = 2,
+                textAlign = TextAlign.Center,
             )
         }
     }
