@@ -22,7 +22,8 @@ enum DeviceCaps {
         ]
     }
 
-    private static let containers = ["mp4", "m4v", "mov"]
+    /// AVPlayer's files, and HLS playlists (`m3u8`), which it plays natively.
+    private static let containers = ["mp4", "m4v", "mov", "m3u8"]
 
     private static var decoders: [String] {
         var decoders = ["h264"]

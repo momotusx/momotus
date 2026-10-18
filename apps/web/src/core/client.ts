@@ -220,6 +220,8 @@ const AUDIO: [name: string, type: string][] = [
 const CONTAINERS: [name: string, type: string][] = [
   ["mp4", "video/mp4"],
   ["webm", "video/webm"],
+  // HLS where the browser plays it natively (Safari; others answer "").
+  ["m3u8", "application/vnd.apple.mpegurl"],
 ];
 
 // Codec names as the core's ranking expects them, with a probe for each.
