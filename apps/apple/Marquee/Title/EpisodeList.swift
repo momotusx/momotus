@@ -142,6 +142,7 @@ private struct SeasonFocus: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .pressVeil(Capsule(), pressed: pressed)
             .modifier(FocusRing(shape: Capsule(), active: focused))
             .scaleEffect(pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
             .animation(Theme.Motion.focus, value: pressed)

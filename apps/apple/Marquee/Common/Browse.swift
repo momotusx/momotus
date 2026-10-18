@@ -90,6 +90,7 @@ struct ChipStyle: ButtonStyle {
                 .padding(.vertical, 8)
                 .background(Capsule().fill(selected ? Theme.Palette.primary : .white.opacity(hovered ? 0.14 : 0.08)))
                 .contentShape(Capsule())
+                .pressVeil(Capsule(), pressed: configuration.isPressed)
                 .modifier(FocusRing(shape: Capsule(), active: focused))
                 .scaleEffect(configuration.isPressed ? 0.96 : 1)
                 .animation(Theme.Motion.focus, value: configuration.isPressed)

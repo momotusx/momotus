@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// How a link gets into the field: a remote types it, only a touch screen or
+/// a keyboard pastes one.
+#if os(tvOS)
+let linkVerb = "Type"
+#else
+let linkVerb = "Paste"
+#endif
+
 /// Installed addons in their order (earlier ones answer first), with a link
 /// field to install more. Addon URLs can hold API keys and are never shown.
 struct AddonsScreen: View {
@@ -22,7 +30,7 @@ struct AddonsScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Addons")
                 Text(sourcesOnly
-                    ? "A source is an addon that finds a playable stream for a title. Marquee does not include any: paste a source addon's link to add one."
+                    ? "A source is an addon that finds a playable stream for a title. Marquee does not include any: \(linkVerb.lowercased()) a source addon's link to add one."
                     : "Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.")
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
@@ -40,7 +48,7 @@ struct AddonsScreen: View {
                 // Moves use the index in the full list, which is the order the core keeps.
                 let shown = all.enumerated().filter { !sourcesOnly || $0.element.isSource }
                 if sourcesOnly, shown.isEmpty, addons.snapshot != nil {
-                    StateLine(symbol: "circle-slash", text: "No source yet. Paste a source addon's link above.")
+                    StateLine(symbol: "circle-slash", text: "No source yet. \(linkVerb) a source addon's link above.")
                 }
                 ForEach(shown, id: \.element.id) { index, addon in
                     AddonCard(

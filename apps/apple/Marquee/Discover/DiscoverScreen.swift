@@ -6,9 +6,9 @@ import SwiftUI
 struct DiscoverScreen: View {
     @State private var discover: LiveRecord<DiscoverSnapshot>
     @Environment(\.metrics) private var metrics
+    @Environment(SyncModel.self) private var sync
     private let core: CoreClient
-    @State private var showAddons = false
-    @FocusState private var addFocused: Bool
+    @State private var onboarding = false
 
     init(core: CoreClient) {
         self.core = core
@@ -34,7 +34,13 @@ struct DiscoverScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .task(id: discover.taskId) { discover.start() }
-        .navigationDestination(isPresented: $showAddons) { AddonsPage(core: core) }
+        .modifier(FullScreen(isPresented: $onboarding) {
+            NavigationStack {
+                OnboardingScreen(core: core) { onboarding = false }
+            }
+            .environment(\.metrics, metrics)
+            .environment(sync)
+        })
     }
 
     @ViewBuilder private func filters(_ s: DiscoverSnapshot) -> some View {
@@ -60,12 +66,10 @@ struct DiscoverScreen: View {
 
     @ViewBuilder private func content(_ s: DiscoverSnapshot) -> some View {
         if s.kinds.isEmpty {
-            // The way on takes the focus on TV.
-            StateLine(
-                symbol: "layers",
-                text: "Nothing to browse yet: Discover lists the catalogs of the addons you have on, and none of them has one.",
-                action: ("Add an addon", { showAddons = true }), focus: $addFocused)
-                .defaultFocus($addFocused, true)
+            CatalogSetup(
+                title: "Nothing to browse yet",
+                text: "Discover lists the catalogs of the addons you have on, and none of them has one. Set up Marquee adds the standard catalog in one step.",
+                titleSize: Theme.type.title2, core: core, setUp: { onboarding = true })
         } else if s.genreRequired && s.genre == nil {
             StateLine(symbol: "list-filter", text: "This catalog lists titles by genre. Pick one above.")
         }

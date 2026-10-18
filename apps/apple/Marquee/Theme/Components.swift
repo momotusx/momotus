@@ -94,6 +94,20 @@ extension EnvironmentValues {
 
 /// Shared interaction state for cards and pills: focus (tvOS, keyboard),
 /// hover (macOS, iPad pointer) and press.
+extension View {
+    /// The pressed state on a touch screen: a grey veil at a fifth over the
+    /// control's shape, as Android has it. It shows with Reduce Motion too,
+    /// where the press scale does not. Focus and the pointer have their own
+    /// states, so only iOS gets it.
+    @ViewBuilder func pressVeil(_ shape: some Shape, pressed: Bool) -> some View {
+        #if os(iOS)
+        overlay { shape.fill(Color.gray.opacity(pressed ? 0.2 : 0)).allowsHitTesting(false) }
+        #else
+        self
+        #endif
+    }
+}
+
 private struct Interactive<S: InsettableShape>: View {
     let configuration: ButtonStyleConfiguration
     let shape: S
@@ -109,6 +123,7 @@ private struct Interactive<S: InsettableShape>: View {
     var body: some View {
         content
             .environment(\.card, CardState(focused: focused, lit: focused || hovered))
+            .pressVeil(shape, pressed: configuration.isPressed)
             .modifier(FocusRing(shape: shape, active: focused && !card))
             .brightness(hovered && !focused && !card ? 0.04 : 0)
             .scaleEffect(reduceMotion ? 1 : scale, anchor: card ? .bottom : .center)
@@ -272,6 +287,7 @@ private struct RoundLabel<Icon: View, Title: View>: View {
                 .frame(width: Self.size, height: Self.size)
                 .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
                 .overlay(Circle().strokeBorder(edge, lineWidth: edgeWidth))
+                .pressVeil(Circle(), pressed: pressed)
                 .modifier(FocusRing(shape: Circle(), active: focused))
                 .scaleEffect(reduceMotion ? 1 : pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
             title
@@ -409,8 +425,6 @@ struct StateLine: View {
     let symbol: String
     let text: String
     var action: (title: String, run: () -> Void)?
-    /// Binds the fix's focus, for a page that makes it its focus target.
-    var focus: FocusState<Bool>.Binding?
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -428,8 +442,7 @@ struct StateLine: View {
 
     @ViewBuilder private var fix: some View {
         if let action {
-            let button = Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: true))
-            if let focus { button.focused(focus) } else { button }
+            Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: true))
         }
     }
 }

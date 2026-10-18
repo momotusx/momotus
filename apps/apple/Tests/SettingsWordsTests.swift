@@ -70,3 +70,18 @@ import Testing
     let two = try JSONDecoder().decode(SyncReport.self, from: JSONSerialization.data(withJSONObject: fields)).notes
     #expect(two.contains("2 edits wait for the sync server's clock to catch up."))
 }
+
+@Test func startFreshTurnsAnInstalledButOffCatalogBackOn() {
+    let url = "https://v3-cinemeta.strem.io/manifest.json"
+    func cinemeta(enabled: Bool) -> AddonInfo {
+        AddonInfo(
+            url: url, host: "v3-cinemeta.strem.io", name: "Cinemeta", description: nil, logo: nil, version: "3.0.14",
+            enabled: enabled, provides: ["catalog", "meta"], types: ["movie", "series"], configurable: false)
+    }
+    // Installed counts as installed and on: off is turned back on, never installed again or shown as done.
+    #expect(AddonSetup.step(url, in: [cinemeta(enabled: false)]) == .turnOn)
+    #expect(AddonSetup.step(url, in: [cinemeta(enabled: true)]) == .done)
+    #expect(AddonSetup.step(url, in: []) == .install)
+    // The list not read yet: install, and a core answering "already installed" has it turned on.
+    #expect(AddonSetup.step(url, in: nil) == .install)
+}

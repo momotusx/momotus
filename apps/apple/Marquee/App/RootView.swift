@@ -385,6 +385,7 @@ struct NavLinkStyle: ButtonStyle {
                     }
                 }
                 .contentShape(Capsule())
+                .pressVeil(Capsule(), pressed: configuration.isPressed)
                 .modifier(FocusRing(shape: Capsule(), active: focused))
                 .scaleEffect(focused ? Theme.Focus.scaleCard : configuration.isPressed ? 0.97 : 1)
                 .animation(Theme.Motion.focus, value: focused)

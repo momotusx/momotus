@@ -104,6 +104,23 @@ struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
     var id: String { url }
 }
 
+/// What makes a standard addon (Cinemeta for Start fresh and the setup
+/// check) count as added: installed and on. One installed but turned off
+/// (an empty Home sends people to setup) is turned back on, never installed
+/// again or shown as done.
+enum AddonSetup: Equatable {
+    case install
+    case turnOn
+    case done
+
+    /// From the installed list; nil (not read yet) means install, and a core
+    /// that answers "already installed" then has it turned on.
+    static func step(_ url: String, in addons: [AddonInfo]?) -> AddonSetup {
+        guard let addon = addons?.first(where: { $0.url == url }) else { return .install }
+        return addon.enabled ? .done : .turnOn
+    }
+}
+
 struct Prefs: Decodable, Hashable, Sendable {
     let streams: StreamPrefs
     /// Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first.

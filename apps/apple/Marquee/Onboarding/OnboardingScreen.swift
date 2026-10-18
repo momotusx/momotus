@@ -86,8 +86,10 @@ struct OnboardingScreen: View {
                 Button { showImport = true } label: {
                     Door(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
                 }
-                Button { step = .source } label: {
-                    Door(symbol: "sparkle", title: "Start fresh", text: "Browse catalogs right away. Add a source when you want to play.")
+                Button { Task { await startFresh() } } label: {
+                    Door(
+                        symbol: "sparkle", title: busy == Self.cinemeta.url ? "Adding the catalog" : "Start fresh",
+                        text: "Browse catalogs right away. Add a source when you want to play.")
                 }
                 if !sync.joined {
                     Button { showPairing = true } label: {
@@ -103,6 +105,9 @@ struct OnboardingScreen: View {
             } else {
                 VStack(spacing: 12) { doors }
             }
+            if let note, !note.ok {
+                StatusDot(tone: .bad, text: note.text)
+            }
             Text("A source is an addon that finds a playable stream for a title. Marquee does not include any.")
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
@@ -111,7 +116,7 @@ struct OnboardingScreen: View {
 
     private var sourceStep: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            stepHeading("Add a source", "A source is an addon that finds a playable stream for a title. Marquee does not include any. Paste a source addon's link, or skip this and add one later.")
+            stepHeading("Add a source", "A source is an addon that finds a playable stream for a title. Marquee does not include any. \(linkVerb) a source addon's link, or skip this and add one later.")
             InstallField(addons: addons, focusRequest: 1)
             let sources = (addons.snapshot?.addons ?? []).filter(\.isSource)
             ForEach(sources) { addon in
@@ -207,31 +212,60 @@ struct OnboardingScreen: View {
             Check(label: "Display", tone: .ok, text: DeviceCaps.displayWords),
             Check(
                 label: "Catalogs", tone: catalogs.isEmpty ? .idle : .ok, text: catalogs.isEmpty ? "None yet" : catalogs.joined(separator: ", "),
-                fix: catalogs.isEmpty ? ("Add Cinemeta", { Task { await add(Self.cinemeta.url, Self.cinemeta.name) } }) : nil),
+                fix: catalogs.isEmpty ? (fixWords(Self.cinemeta), { Task { await add(Self.cinemeta.url, Self.cinemeta.name) } }) : nil),
             Check(
                 label: "Sources", tone: sources.isEmpty ? .idle : .ok,
                 text: sources.isEmpty ? "None yet: titles cannot play" : sources.joined(separator: ", "),
                 fix: sources.isEmpty ? ("Add a source", { step = .source }) : nil),
             Check(
                 label: "Subtitles", tone: subtitles.isEmpty ? .idle : .ok, text: subtitles.isEmpty ? "None yet" : subtitles.joined(separator: ", "),
-                fix: subtitles.isEmpty ? ("Add OpenSubtitles", { Task { await add(Self.openSubtitles.url, Self.openSubtitles.name) } }) : nil),
+                fix: subtitles.isEmpty ? (fixWords(Self.openSubtitles), { Task { await add(Self.openSubtitles.url, Self.openSubtitles.name) } }) : nil),
         ]
+    }
+
+    /// "Add Cinemeta", or "Turn Cinemeta on" when it is installed but off.
+    private func fixWords(_ addon: (url: String, name: String)) -> String {
+        AddonSetup.step(addon.url, in: addons.snapshot?.addons) == .turnOn ? "Turn \(addon.name) on" : "Add \(addon.name)"
     }
 
     private func names(_ kind: String) -> [String] {
         (addons.snapshot?.addons ?? []).filter { $0.enabled && $0.provides.contains(kind) }.map(\.name)
     }
 
-    private func add(_ url: String, _ name: String) async {
-        guard busy == nil else { return }
+    /// Makes a standard addon count as added: installed and on. True once it is.
+    @discardableResult
+    private func add(_ url: String, _ name: String) async -> Bool {
+        guard busy == nil else { return false }
         busy = url
         note = nil
-        if await addons.perform("installAddon", ["url": url]) {
-            note = (true, "Installed \(name)")
-        } else {
-            note = (false, "Could not install \(name): \(addons.failure ?? "unknown error")")
+        defer { busy = nil }
+        var step = AddonSetup.step(url, in: addons.snapshot?.addons)
+        if step == .install {
+            if await addons.perform("installAddon", ["url": url]) {
+                note = (true, "Installed \(name)")
+                return true
+            }
+            // Installed after all (a list not read yet, an earlier try that timed out): turned on.
+            guard addons.failure?.contains("already installed") == true else {
+                note = (false, "Could not install \(name): \(addons.failure ?? "unknown error")")
+                return false
+            }
+            step = .turnOn
         }
-        busy = nil
+        if step == .turnOn {
+            guard await addons.perform("setAddonEnabled", ["url": url, "enabled": true]) else {
+                note = (false, "Could not turn \(name) on: \(addons.failure ?? "unknown error")")
+                return false
+            }
+            note = (true, "Turned \(name) on")
+        }
+        return true
+    }
+
+    /// Start fresh: the standard catalog in one press (turned back on when it
+    /// is installed but off), then a source.
+    private func startFresh() async {
+        if await add(Self.cinemeta.url, Self.cinemeta.name) { step = .source }
     }
 
     /// Liveness from the core itself, every few seconds while this screen is open.
