@@ -12,8 +12,10 @@ struct PlayerScreen: View {
     @State private var showNextVersions = false
     /// This title's Versions, after every source of the pick failed.
     @State private var showVersions = false
-    /// An OSD menu is open: the controls stay up.
-    @State private var menuOpen = false
+    /// When an OSD menu opened; a pick or the next touch clears it.
+    @State private var menuOpenedAt: ContinuousClock.Instant?
+    /// The controls stay up and Up Next waits while this holds (`PlayerLayout.menuHolds`).
+    private var menuOpen: Bool { PlayerLayout.menuHolds(openedAt: menuOpenedAt, now: .now) }
     /// TV: the invisible target that holds focus while the controls are hidden.
     @FocusState private var catcherFocused: Bool
     /// The real window's height, bars included (the player hides them).
@@ -82,7 +84,7 @@ struct PlayerScreen: View {
             StatusOverlay(model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true })
             if controlsShown {
                 PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
-                    menuOpen = open
+                    menuOpenedAt = open ? .now : nil
                     lastTouch = .now
                 }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 })
                     .transition(.opacity)
@@ -213,6 +215,7 @@ struct PlayerScreen: View {
 
     private func touched(toggle: Bool) {
         lastTouch = .now
+        menuOpenedAt = nil
         withAnimation(Theme.Motion.panel) { controls = toggle ? !controls : true }
     }
 

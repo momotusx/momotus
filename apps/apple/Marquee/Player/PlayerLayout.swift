@@ -22,6 +22,17 @@ enum PlayerLayout {
         due && !menuOpen && (!controlsShown || windowHeight >= upNextRoom)
     }
 
+    /// The longest an open menu holds the controls up and Up Next back.
+    static let menuHoldLimit: Duration = .seconds(10)
+
+    /// An OSD menu holds from when it opens until a pick or the next touch
+    /// clears `openedAt`. iOS never says when a menu closes, so one dismissed
+    /// by a tap outside lets go at the limit.
+    static func menuHolds(openedAt: ContinuousClock.Instant?, now: ContinuousClock.Instant) -> Bool {
+        guard let openedAt else { return false }
+        return now - openedAt < menuHoldLimit
+    }
+
     /// How far above the foot Skip and Up Next sit: just over the controls'
     /// measured height while they show, else near the foot.
     static func overlayBottom(controlsShown: Bool, controlsHeight: CGFloat) -> CGFloat {

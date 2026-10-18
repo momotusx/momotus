@@ -268,18 +268,18 @@ struct PlayerControls: View {
                     Choice(text: "As the file has it", selected: true)
                 }
                 ForEach(Array(model.audioTracks.enumerated()), id: \.offset) { index, name in
-                    Button { model.selectAudio(index) } label: {
+                    Button { model.selectAudio(index); hold(false) } label: {
                         Choice(text: name, selected: model.audioTrack == index)
                     }
                 }
             }
             .focused($focus, equals: .audio)
             menu("Subtitles", "captions", subtitleValue) {
-                Button { model.selectSubtitle(nil) } label: {
+                Button { model.selectSubtitle(nil); hold(false) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil)
                 }
                 ForEach(model.playback?.subtitles ?? []) { track in
-                    Button { model.selectSubtitle(track) } label: {
+                    Button { model.selectSubtitle(track); hold(false) } label: {
                         Choice(text: subtitleName(track), selected: model.subtitle == track)
                     }
                 }
@@ -288,7 +288,7 @@ struct PlayerControls: View {
             if let versions, let snapshot = versions.snapshot {
                 menu("Versions", "layers", currentQuality(snapshot)) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
-                        Button { model.switchVersion(row.key) } label: {
+                        Button { model.switchVersion(row.key); hold(false) } label: {
                             Choice(text: "\(VersionWords.line(row)), \(row.via)", selected: row.key == playingKey)
                         }
                     }
@@ -297,7 +297,7 @@ struct PlayerControls: View {
             }
             menu("Speed", "gauge", speedText(model.rate)) {
                 ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
-                    Button { model.rate = speed } label: {
+                    Button { model.rate = speed; hold(false) } label: {
                         Choice(text: speedText(speed), selected: model.rate == speed)
                     }
                 }
@@ -309,7 +309,9 @@ struct PlayerControls: View {
     }
 
     /// An OSD menu that keeps the controls up while it is open, so they never
-    /// hide (and close it) under the viewer's finger.
+    /// hide (and close it) under the viewer's finger. Each pick ends the hold;
+    /// iOS never calls the content's `onDisappear`, so a tap outside ends it
+    /// at the next touch or at `PlayerLayout.menuHoldLimit`.
     private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, @ViewBuilder items: () -> Items) -> some View {
         Menu {
             Group { items() }

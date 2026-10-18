@@ -113,6 +113,16 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(SeekRamp.run(after: 4, continuing: false) == 0)
 }
 
+@Test func aMenuHoldsTheControlsUntilAPickATouchOrItsLimit() {
+    let opened = ContinuousClock.now
+    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened))
+    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(9)))
+    // Dismissed by a tap outside, which iOS does not report: the hold lets go.
+    #expect(!PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(10)))
+    // A pick or a touch cleared it.
+    #expect(!PlayerLayout.menuHolds(openedAt: nil, now: opened))
+}
+
 @Test func captionsKeepTheAppFaceForTheSystemOne() {
     // The default styles name the system face privately: the app's Inter stands in.
     #expect(CaptionStyle.face(named: ".AppleSystemUIFontMedium") == nil)
