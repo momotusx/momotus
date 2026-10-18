@@ -276,11 +276,16 @@ struct PlayerControls: View {
             .focused($focus, equals: .audio)
             menu("Subtitles", "captions", subtitleValue) {
                 Button { model.selectSubtitle(nil); hold(false) } label: {
-                    Choice(text: "Off", selected: model.subtitle == nil)
+                    Choice(text: "Off", selected: model.subtitle == nil && model.textTrack == nil)
+                }
+                ForEach(Array(model.textTracks.enumerated()), id: \.offset) { index, name in
+                    Button { model.selectText(index); hold(false) } label: {
+                        Choice(text: name, selected: model.textTrack == index)
+                    }
                 }
                 ForEach(model.playback?.subtitles ?? []) { track in
                     Button { model.selectSubtitle(track); hold(false) } label: {
-                        Choice(text: subtitleName(track), selected: model.subtitle == track)
+                        Choice(text: subtitleName(track, source: true), selected: model.subtitle == track)
                     }
                 }
             }
@@ -341,16 +346,18 @@ struct PlayerControls: View {
     }
 
     private var subtitleValue: String {
-        let found = model.playback?.subtitles.count ?? 0
+        let found = (model.playback?.subtitles.count ?? 0) + model.textTracks.count
         if let track = model.subtitle { return subtitleName(track) }
+        if let index = model.textTrack, model.textTracks.indices.contains(index) { return model.textTracks[index] }
         if model.playback?.subtitlesPending == true && found == 0 { return "Looking" }
         return found == 0 ? "None found" : "Off, \(found) found"
     }
 
-    private func subtitleName(_ track: SubtitleTrack) -> String {
+    /// "English, SDH"; in the list also the addon it is from, so files in one language differ.
+    private func subtitleName(_ track: SubtitleTrack, source: Bool = false) -> String {
         let language = Locale.current.localizedString(forLanguageCode: track.lang) ?? track.lang
-        return [track.label ?? language, track.hearingImpaired ? "SDH" : nil, track.forced ? "Forced" : nil]
-            .compactMap { $0 }.joined(separator: ", ")
+        let parts = [track.label ?? language, track.hearingImpaired ? "SDH" : nil, track.forced ? "Forced" : nil]
+        return (parts + [source ? track.source : nil]).compactMap { $0 }.joined(separator: ", ")
     }
 
     private func currentQuality(_ snapshot: VersionsSnapshot) -> String {

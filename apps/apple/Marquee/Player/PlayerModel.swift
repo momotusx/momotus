@@ -43,6 +43,13 @@ final class PlayerModel {
     private(set) var audioTracks: [String] = []
     private(set) var audioTrack: Int?
     @ObservationIgnored private var audioGroup: AVMediaSelectionGroup?
+    /// The file's own subtitles (a stream's WebVTT renditions, a file's text
+    /// tracks) by name, and the index of the one on. AVKit draws them in the
+    /// viewer's caption style; an addon's subtitle is drawn by the app instead.
+    private(set) var textTracks: [String] = []
+    private(set) var textTrack: Int?
+    @ObservationIgnored private var textGroup: AVMediaSelectionGroup?
+    @ObservationIgnored private var textOptions: [AVMediaSelectionOption] = []
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
@@ -109,21 +116,48 @@ final class PlayerModel {
         audioTrack = index
     }
 
-    /// Reads the audio tracks once the file is open.
-    private func loadAudio(_ item: AVPlayerItem, generation: Int) {
+    /// Turns one of the file's own subtitles on, in place of an addon's.
+    func selectText(_ index: Int) {
+        guard let group = textGroup, textOptions.indices.contains(index) else { return }
+        selectSubtitle(nil)
+        player.currentItem?.select(textOptions[index], in: group)
+        textTrack = index
+    }
+
+    /// Reads the audio and subtitle tracks once the file is open.
+    private func loadTracks(_ item: AVPlayerItem, generation: Int) {
         (audioTracks, audioTrack, audioGroup) = ([], nil, nil)
+        (textTracks, textTrack, textGroup, textOptions) = ([], nil, nil, [])
         let asset = item.asset
         Task { [weak self] in
             guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
                   let self, generation == self.generation else { return }
             audioGroup = group
-            // A track tagged "und" (undetermined) or not at all would read "Unknown language".
-            audioTracks = group.options.enumerated().map { index, option in
-                let tag = option.extendedLanguageTag ?? option.locale?.identifier ?? ""
-                if !tag.isEmpty, !tag.hasPrefix("und") { return option.displayName }
-                return group.options.count == 1 ? "Default" : "Track \(index + 1)"
-            }
+            audioTracks = Self.names(group.options, one: "Default", many: "Track")
             audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
+        }
+        Task { [weak self] in
+            guard let group = try? await asset.loadMediaSelectionGroup(for: .legible),
+                  let self, generation == self.generation else { return }
+            // A forced-only track shows by itself where the film needs it; it is not a choice.
+            let options = AVMediaSelectionGroup.mediaSelectionOptions(
+                from: group.options, withoutMediaCharacteristics: [.containsOnlyForcedSubtitles])
+            (textGroup, textOptions) = (group, options)
+            textTracks = Self.names(options, one: "Subtitles", many: "Subtitles")
+            textTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { options.firstIndex(of: $0) }
+            #if DEBUG
+            if let index = DebugHooks.textTrack { selectText(index) }
+            #endif
+        }
+    }
+
+    /// The options' language names. One tagged "und" (undetermined) or not at
+    /// all would read "Unknown language", so it is named by its place instead.
+    private static func names(_ options: [AVMediaSelectionOption], one: String, many: String) -> [String] {
+        options.enumerated().map { index, option in
+            let tag = option.extendedLanguageTag ?? option.locale?.identifier ?? ""
+            if !tag.isEmpty, !tag.hasPrefix("und") { return option.displayName }
+            return options.count == 1 ? one : "\(many) \(index + 1)"
         }
     }
 
@@ -271,6 +305,10 @@ final class PlayerModel {
     func selectSubtitle(_ track: SubtitleTrack?) {
         subtitle = track
         cues = []
+        if textTrack != nil, let group = textGroup, group.allowsEmptySelection {
+            player.currentItem?.select(nil, in: group)
+            textTrack = nil
+        }
         guard let track, let url = URL(string: track.url) else { return }
         Task {
             guard let (data, _) = try? await URLSession.shared.data(from: url), subtitle == track else { return }
@@ -347,7 +385,7 @@ final class PlayerModel {
             }
             .store(in: &itemBag)
         player.replaceCurrentItem(with: item)
-        loadAudio(item, generation: generation)
+        loadTracks(item, generation: generation)
         pendingStart = start > 1 ? start : nil
         if start > 1 { position = start }
         seekToken += 1

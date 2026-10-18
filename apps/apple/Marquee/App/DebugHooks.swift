@@ -27,6 +27,11 @@ enum DebugHooks {
 
     @MainActor private static var seekTaken = false
 
+    /// `-MQText 0` turns that one of the file's own subtitles on once they are read.
+    static var textTrack: Int? {
+        UserDefaults.standard.object(forKey: "MQText") == nil ? nil : UserDefaults.standard.integer(forKey: "MQText")
+    }
+
     /// `-MQOnboarding YES` opens the first-run flow over Home, once.
     @MainActor static func takeOnboarding() -> Bool {
         guard !onboardingTaken, UserDefaults.standard.bool(forKey: "MQOnboarding") else { return false }
