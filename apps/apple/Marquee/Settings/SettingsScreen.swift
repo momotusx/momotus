@@ -92,7 +92,7 @@ struct SettingsScreen: View {
                     NavigationLink {
                         PairingScreen(core: core)
                     } label: {
-                        SettingsRow(symbol: "qr-code", title: "Pair this device", detail: "Join your sync account by scanning a code on a device that already syncs.")
+                        SettingsRow(symbol: "qr-code", title: "Pair this device", detail: "Show a code here, then approve this device from one that already syncs.")
                     }
                     .buttonStyle(.plain)
                 }

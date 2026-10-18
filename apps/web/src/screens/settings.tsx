@@ -154,7 +154,7 @@ export default function SettingsScreen() {
       <section class="set">
         <h2>Devices and sync</h2>
         <div class="links">
-          <LinkRow href="/pair" fkey="settings:pair" icon={<QrCode aria-hidden />} title="Pair this device" text="Join your sync account by scanning a code on a device that already syncs." />
+          <LinkRow href="/pair" fkey="settings:pair" icon={<QrCode aria-hidden />} title="Pair this device" text="Show a code here, then approve this device from one that already syncs." />
         </div>
       </section>
 

@@ -26,7 +26,7 @@ export default function Discover() {
         <Match when={d() && d()?.kinds.length === 0}>
           <section class="problem">
             <h2>Nothing to browse yet</h2>
-            <p>Discover lists the catalogs of your addons. None is installed.</p>
+            <p>Discover lists the catalogs of the addons you have on. None of them has one.</p>
             <A class="btn primary" href="/addons" data-f="discover:addons" data-autofocus>
               <Puzzle aria-hidden />
               Addons
