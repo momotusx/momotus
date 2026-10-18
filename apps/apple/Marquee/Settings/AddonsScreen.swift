@@ -168,11 +168,16 @@ private struct AddonCard: View {
             if addon.configurable, let url = configureURL {
                 Button("Configure", glyph: "settings") { openURL(url) }
             }
+            // Short words on screen, spoken with the addon's name: VoiceOver moves between several addons.
             Button("Move up", glyph: "arrow-up") { move(-1) }.disabled(first)
+                .accessibilityLabel("Move \(addon.name) up")
             Button("Move down", glyph: "arrow-down") { move(1) }.disabled(last)
+                .accessibilityLabel("Move \(addon.name) down")
             Button(addon.enabled ? "Turn off" : "Turn on", glyph: "power", action: toggle)
+                .accessibilityLabel(addon.enabled ? "Turn \(addon.name) off" : "Turn \(addon.name) on")
             Divider()
             Button("Remove", glyph: "trash", role: .destructive, action: remove)
+                .accessibilityLabel("Remove \(addon.name)")
         } label: {
             card
         }

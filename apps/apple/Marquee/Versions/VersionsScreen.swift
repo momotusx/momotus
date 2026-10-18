@@ -43,16 +43,25 @@ struct VersionsScreen: View {
 
     private var snapshot: VersionsSnapshot? { model.snapshot }
 
+    private var title: some View {
+        Text("Versions")
+            .display(Theme.type.title1)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var subject: some View {
+        Text("for \(heading)")
+            .font(.text(Theme.type.headline, relativeTo: .headline))
+            .foregroundStyle(Theme.Palette.muted)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text("Versions")
-                    .display(Theme.type.title1)
-                    .accessibilityAddTraits(.isHeader)
-                Text("for \(heading)")
-                    .font(.text(Theme.type.headline, relativeTo: .headline))
-                    .foregroundStyle(Theme.Palette.muted)
-                    .lineLimit(1)
+            // What the versions are for goes under the title, whole, when the two do not fit on one line.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) { title; subject }
+                VStack(alignment: .leading, spacing: 2) { title; subject }
             }
             .foregroundStyle(Theme.Palette.text)
             let progress = VersionWords.progress(snapshot)

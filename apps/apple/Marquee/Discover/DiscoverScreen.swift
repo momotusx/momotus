@@ -6,8 +6,12 @@ import SwiftUI
 struct DiscoverScreen: View {
     @State private var discover: LiveRecord<DiscoverSnapshot>
     @Environment(\.metrics) private var metrics
+    private let core: CoreClient
+    @State private var showAddons = false
+    @FocusState private var addFocused: Bool
 
     init(core: CoreClient) {
+        self.core = core
         _discover = State(initialValue: LiveRecord("discover", core: core))
     }
 
@@ -16,7 +20,8 @@ struct DiscoverScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Discover")
                 if let s = discover.snapshot {
-                    filters(s)
+                    // Without catalogs there is nothing to filter: only the way on shows.
+                    if !s.kinds.isEmpty { filters(s) }
                     content(s)
                 } else if let failure = discover.failure {
                     StateLine(symbol: "triangle-alert", text: failure)
@@ -29,6 +34,7 @@ struct DiscoverScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .task(id: discover.taskId) { discover.start() }
+        .navigationDestination(isPresented: $showAddons) { AddonsPage(core: core) }
     }
 
     @ViewBuilder private func filters(_ s: DiscoverSnapshot) -> some View {
@@ -54,7 +60,12 @@ struct DiscoverScreen: View {
 
     @ViewBuilder private func content(_ s: DiscoverSnapshot) -> some View {
         if s.kinds.isEmpty {
-            StateLine(symbol: "layers", text: "No addon with catalogs is installed yet. Add one in Settings, then Addons.")
+            // The way on takes the focus on TV.
+            StateLine(
+                symbol: "layers",
+                text: "Nothing to browse yet: Discover lists the catalogs of the addons you have on, and none of them has one.",
+                action: ("Add an addon", { showAddons = true }), focus: $addFocused)
+                .defaultFocus($addFocused, true)
         } else if s.genreRequired && s.genre == nil {
             StateLine(symbol: "list-filter", text: "This catalog lists titles by genre. Pick one above.")
         }

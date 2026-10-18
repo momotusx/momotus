@@ -54,7 +54,6 @@ struct TitleScreen: View {
             if DebugHooks.showVersions, key != nil { showVersions = true }
         }
         #endif
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > scrimAfter } action: { underBar = $1 }
         .fullBleedTop()
         .topScrim(underBar)
         .navigationDestination(item: $playing) { route in
@@ -139,11 +138,11 @@ struct TitleScreen: View {
         if model === versions { showVersions = true } else { showEpisodeVersions = true }
     }
 
-    /// The art runs under the bar at rest; past it, the page scrim takes over.
-    private var scrimAfter: CGFloat {
-        if !metrics.wide, details != nil, details?.background == nil { return 24 }
-        return max(24, heroHeight - 160)
-    }
+    /// The art runs under the bar at rest; the page scrim takes over once the
+    /// title's first words come this close to the top, so they never pass
+    /// bare under the status bar or the Dynamic Island (up to about 68 pt),
+    /// whatever the art's height and the text size.
+    nonisolated static let wordsClearance: CGFloat = 88
 
     private var heroHeight: CGFloat {
         #if os(tvOS)
@@ -183,6 +182,8 @@ struct TitleScreen: View {
         TitleLogo(
             logo: details?.logo, name: details?.name ?? model.route.name,
             maxWidth: metrics.wide ? 460 : 280, height: metrics.wide ? 120 : 96)
+            // The first words on the page: where they are decides the scrim.
+            .onGeometryChange(for: Bool.self) { $0.frame(in: .scrollView).minY < Self.wordsClearance } action: { underBar = $1 }
     }
 
     private var decision: some View {
@@ -419,8 +420,8 @@ private struct PlayBlock: View {
                     VersionLine(versions: versions)
                 }
             }
+            // Wraps whole on a small phone or a large text size: the status and source decide the pick.
             .font(.text(Theme.type.callout, relativeTo: .callout))
-            .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
         }
     }

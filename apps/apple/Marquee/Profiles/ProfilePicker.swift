@@ -36,6 +36,8 @@ struct ProfilePicker: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
+        // At large text sizes the grid scrolls: names never pass under the status bar bare.
+        .topScrim()
         .navigationDestination(isPresented: $showManage) { ManageProfiles(core: core) }
         .navigationDestination(isPresented: $showAdd) { EditProfile(profileId: nil) }
         .onChange(of: profiles.gone?.count) {

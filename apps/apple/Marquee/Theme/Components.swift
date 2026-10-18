@@ -402,22 +402,34 @@ struct ProgressLine: View {
     }
 }
 
-/// A short explanation for an empty or failed state, with an optional fix.
-/// It wraps rather than cut a reason off.
+/// A short explanation for an empty or failed state, with an optional fix
+/// in the primary style. It wraps rather than cut a reason off, and the fix
+/// moves under the reason when the two do not fit side by side.
 struct StateLine: View {
     let symbol: String
     let text: String
     var action: (title: String, run: () -> Void)?
+    /// Binds the fix's focus, for a page that makes it its focus target.
+    var focus: FocusState<Bool>.Binding?
 
     var body: some View {
-        HStack(spacing: Theme.Space.s) {
-            Label(text, glyph: symbol)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
-                .foregroundStyle(Theme.Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            if let action {
-                Button(action.title, action: action.run).buttonStyle(PillButtonStyle())
-            }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Space.s) { reason; fix }
+            VStack(alignment: .leading, spacing: Theme.Space.s) { reason; fix }
+        }
+    }
+
+    private var reason: some View {
+        Label(text, glyph: symbol)
+            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .foregroundStyle(Theme.Palette.muted)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var fix: some View {
+        if let action {
+            let button = Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: true))
+            if let focus { button.focused(focus) } else { button }
         }
     }
 }

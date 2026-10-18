@@ -12,6 +12,7 @@ struct HomeScreen: View {
     @State private var showProfiles = false
     /// Rows have scrolled under the status bar.
     @State private var underBar = false
+    @FocusState private var addFocused: Bool
 
     var body: some View {
         ScrollView(.vertical) {
@@ -70,7 +71,8 @@ struct HomeScreen: View {
         }
     }
 
-    /// The first run: no catalogs yet, so Home points to setup.
+    /// No rows: no addon that is on has a catalog, or every row is hidden.
+    /// One way on, which takes the focus on TV.
     private var setup: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             if !metrics.wide {
@@ -79,17 +81,17 @@ struct HomeScreen: View {
             Text("Home fills up from your addons")
                 .display(Theme.type.title1)
                 .foregroundStyle(Theme.Palette.text)
-            Text("No addon with catalogs is installed yet. Add one to see what is popular, new and featured.")
+            Text("None of the addons you have on shows a catalog here. Add one, or turn rows back on in Settings.")
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
-            FlowRow(spacing: 12) {
-                Button { onboarding = true } label: { Label("Set up Marquee", glyph: "wrench") }
-                    .buttonStyle(PillButtonStyle(prominent: true))
-                NavigationLink { AddonsPage(core: core) } label: { Label("Addons", glyph: "puzzle") }
-                    .buttonStyle(PillButtonStyle())
-            }
+                .fixedSize(horizontal: false, vertical: true)
+            NavigationLink { AddonsPage(core: core) } label: { Label("Add an addon", glyph: "puzzle") }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .focused($addFocused)
+                .padding(.top, 4)
         }
         .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xxl - 20)
+        .defaultFocus($addFocused, true)
     }
 
     /// The card's gap to the top: under the status bar on a phone, under
