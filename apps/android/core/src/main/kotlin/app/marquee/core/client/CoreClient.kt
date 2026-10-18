@@ -292,6 +292,10 @@ class CoreClient(
                     push(sub, updates.toString(), actions, groups)
                 } else if (message["core"]?.jsonPrimitive?.contentOrNull == "died") {
                     died(message["reason"]?.jsonPrimitive?.contentOrNull ?: "unknown", actions, completions)
+                } else if (message["core"]?.jsonPrimitive?.contentOrNull == "overflow") {
+                    // The app fell behind the core's output budget (core backlog C20): that session
+                    // ended, and a new core opens as after a death.
+                    died("overflow: the app fell behind the core's messages", actions, completions)
                 } else {
                     reply(message, actions, completions, groups)
                 }

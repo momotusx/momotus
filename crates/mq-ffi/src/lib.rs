@@ -11,7 +11,7 @@ mod logcat;
 #[cfg(target_vendor = "apple")]
 mod stderr_log;
 
-use mq_bridge::Session;
+use mq_bridge::{Outgoing, Output, Session};
 use mq_runtime::{Core, CoreConfig};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -99,11 +99,23 @@ impl MarqueeCore {
                 message: e.to_string(),
             })?;
 
-        let (out_tx, mut out_rx) = mpsc::unbounded_channel::<serde_json::Value>();
+        let (out_tx, mut out_rx) = Output::channel();
         let (in_tx, mut in_rx) = mpsc::unbounded_channel::<String>();
         let forward = runtime.spawn(async move {
             while let Some(message) = out_rx.recv().await {
-                listener.on_message(message.to_string());
+                match message {
+                    Outgoing::Message { text, held } => {
+                        listener.on_message(text);
+                        // Handed over: its share of the budget goes back.
+                        drop(held);
+                    }
+                    // The app stopped taking messages past the budget: it
+                    // opens a new core, as it does after a death.
+                    Outgoing::Overflow => {
+                        listener.on_message(r#"{"core":"overflow"}"#.to_owned());
+                        return;
+                    }
+                }
             }
         });
         let died = out_tx.clone();
@@ -119,7 +131,7 @@ impl MarqueeCore {
             if let Err(e) = session.await
                 && e.is_panic()
             {
-                let _ = died.send(serde_json::json!({ "core": "died", "reason": e.to_string() }));
+                let _ = died.send(&serde_json::json!({ "core": "died", "reason": e.to_string() }));
             }
         });
         Ok(Arc::new(Self {

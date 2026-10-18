@@ -2,7 +2,7 @@
 //! 9): the permission table, locked sessions, switching, and what happens to
 //! replies and views across a switch, a lock or a remote deletion.
 
-use mq_bridge::Session;
+use mq_bridge::{Outgoing, Output, Session};
 use mq_runtime::{Core, CoreConfig};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -11,14 +11,14 @@ use tokio::sync::mpsc;
 /// A session and the messages it sent: replies by id, pushes kept aside.
 struct Client {
     session: Session,
-    rx: mpsc::UnboundedReceiver<Value>,
+    rx: mpsc::UnboundedReceiver<Outgoing>,
     next_id: u64,
     pushes: Vec<Value>,
 }
 
 impl Client {
     fn new(core: Core) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = Output::channel();
         Self {
             session: Session::new(core, tx),
             rx,
@@ -32,6 +32,7 @@ impl Client {
             .await
             .expect("a message")
             .expect("open")
+            .json()
     }
 
     /// Sends `request` with a fresh id and waits for its reply.

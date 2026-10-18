@@ -3,15 +3,14 @@
 
 use axum::Router;
 use axum::extract::State;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use futures_util::{SinkExt, StreamExt};
-use mq_bridge::Session;
+use mq_bridge::{Outgoing, Output, Session};
 use mq_runtime::{Core, CoreConfig, StoreId};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() {
@@ -45,16 +44,24 @@ async fn ws(upgrade: WebSocketUpgrade, State(core): State<Core>) -> impl IntoRes
 
 async fn serve_socket(socket: WebSocket, core: Core) {
     let (mut sink, mut stream) = socket.split();
-    let (tx, mut rx) = mpsc::unbounded_channel::<serde_json::Value>();
+    let (tx, mut rx) = Output::channel();
     let writer = tokio::spawn(async move {
         while let Some(message) = rx.recv().await {
-            if sink
-                .send(Message::Text(message.to_string().into()))
-                .await
-                .is_err()
-            {
+            let Outgoing::Message { text, held } = message else {
+                // The client stopped reading past the session's budget: the
+                // session ends, and the client opens a new one.
+                let close = CloseFrame {
+                    code: close_code::AGAIN,
+                    reason: "overflow".into(),
+                };
+                let _ = sink.send(Message::Close(Some(close))).await;
+                return;
+            };
+            if sink.send(Message::Text(text.into())).await.is_err() {
                 return;
             }
+            // Written: its share of the budget goes back.
+            drop(held);
         }
     });
     let mut session = Session::new(core, tx);

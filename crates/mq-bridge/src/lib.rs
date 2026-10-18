@@ -36,7 +36,10 @@ use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::{broadcast, mpsc, watch};
+use tokio::sync::{broadcast, watch};
+
+pub mod output;
+pub use output::{Outgoing, Output, SendError};
 use tokio::task::JoinHandle;
 
 // No Debug: requests carry keys, PINs, recovery kits and sync records.
@@ -396,7 +399,7 @@ fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
 /// One client connection. Dropping it cancels every view it opened.
 pub struct Session {
     shared: Arc<Mutex<Shared>>,
-    out: mpsc::UnboundedSender<Value>,
+    out: Output,
     next_sub: u64,
     watcher: JoinHandle<()>,
 }
@@ -411,25 +414,21 @@ impl Session {
     /// Opens as the device's active profile (a stale one falls back to the
     /// owner), locked when that profile has a PIN: a cold start or a
     /// reconnect never resumes a protected profile.
-    pub fn new(core: Core, out: mpsc::UnboundedSender<Value>) -> Self {
+    pub fn new(core: Core, out: Output) -> Self {
         // Subscribed before the profile is chosen: a removal after this
         // reaches the watcher, one before it is in the list `start` reads.
         let changes = core.library().subscribe();
         Self::start(core.active(), changes, out)
     }
 
-    fn start(
-        core: Core,
-        changes: broadcast::Receiver<Vec<Table>>,
-        out: mpsc::UnboundedSender<Value>,
-    ) -> Self {
+    fn start(core: Core, changes: broadcast::Receiver<Vec<Table>>, out: Output) -> Self {
         let gone = core.library().gone_profiles().unwrap_or_default();
         // A profile removed after it was chosen starts locked.
         let locked = gone.iter().any(|id| id == core.profile()) || core.has_pin();
         // Removals made while the app was closed: it may still hold their
         // keystore entries.
         for id in &gone {
-            let _ = out.send(json!({ "profile": "gone", "id": id }));
+            let _ = out.send(&json!({ "profile": "gone", "id": id }));
         }
         let (state, _) = watch::channel((core.profile().to_owned(), locked));
         let shared = Arc::new(Mutex::new(Shared {
@@ -470,14 +469,23 @@ impl Session {
         };
         if lock(&self.shared).locked && !request.allowed_while_locked() {
             let refused = Failure::coded("locked", "the profile is locked: unlock it first");
-            let _ = self.out.send(message(id, Err(refused)));
+            send_answer(&self.out, id, Err(refused));
             return;
         }
         let core = self.core();
         match request {
             Request::Subscribe { id, view, params } => {
                 let result = self.subscribe(&view, &params);
-                self.reply(json!(id), result);
+                let sub = result.as_ref().ok().and_then(|r| r["sub"].as_u64());
+                let reply = message(json!(id), result.map_err(Failure::from));
+                if self.out.send(&reply) == Err(SendError::TooLarge) {
+                    // An oversized snapshot opens no view: the client gets a
+                    // failed subscribe it can show, never a partial view.
+                    if let Some(sub) = sub {
+                        lock(&self.shared).subs.remove(&sub);
+                    }
+                    let _ = self.out.send(&message(json!(id), Err(too_large())));
+                }
             }
             Request::Unsubscribe { id, sub } => {
                 let removed = lock(&self.shared).subs.remove(&sub);
@@ -723,7 +731,7 @@ impl Session {
             }
             Request::SwitchProfile { id, profile, pin } => {
                 let result = self.switch(&profile, pin.as_deref()).await;
-                let _ = self.out.send(message(json!(id), result));
+                send_answer(&self.out, json!(id), result);
             }
             Request::UnlockProfile { id, pin } => {
                 let result = self.unlock(pin.as_deref()).await;
@@ -742,7 +750,7 @@ impl Session {
     }
 
     fn reply(&self, id: Value, result: Result<Value, String>) {
-        let _ = self.out.send(message(id, result.map_err(Failure::from)));
+        send_answer(&self.out, id, result.map_err(Failure::from));
     }
 
     /// The picker's snapshot after a profile op, or the op's error.
@@ -751,7 +759,7 @@ impl Session {
             let shared = lock(&self.shared);
             json!(shared.core.profiles_snapshot(shared.locked))
         });
-        let _ = self.out.send(message(json!(id), result));
+        send_answer(&self.out, json!(id), result);
     }
 
     /// Moves the session to `profile` (its PIN when it has one). Refused
@@ -825,7 +833,7 @@ impl Session {
         let out = self.out.clone();
         tokio::spawn(async move {
             let result = run(work).await;
-            let _ = out.send(message(json!(id), result));
+            send_answer(&out, json!(id), result);
         });
     }
 
@@ -854,7 +862,7 @@ impl Session {
                     "the profile changed before this finished",
                 ))
             };
-            let _ = out.send(message(json!(id), result));
+            send_answer(&out, json!(id), result);
         });
     }
 
@@ -1197,6 +1205,18 @@ impl From<ProfileError> for Failure {
     }
 }
 
+/// Queues a reply. One over the size limit becomes a small error reply with
+/// `code: tooLarge`; a closed output drops it (the session is ending).
+fn send_answer(out: &Output, id: Value, result: Result<Value, Failure>) {
+    if out.send(&message(id.clone(), result)) == Err(SendError::TooLarge) {
+        let _ = out.send(&message(id, Err(too_large())));
+    }
+}
+
+fn too_large() -> Failure {
+    Failure::coded("tooLarge", "the answer is too large to send")
+}
+
 fn message(id: Value, result: Result<Value, Failure>) -> Value {
     match result {
         Ok(value) => json!({ "id": id, "ok": true, "result": value }),
@@ -1252,7 +1272,7 @@ fn answer<T: serde::Serialize>(result: Result<T, mq_sync::SyncError>) -> Result<
 /// which outlives switches and locks.
 type Fence = Option<(Weak<Mutex<Shared>>, u64)>;
 
-async fn forward<S, U>(sub: u64, mut updates: S, out: mpsc::UnboundedSender<Value>, fence: Fence)
+async fn forward<S, U>(sub: u64, mut updates: S, out: Output, fence: Fence)
 where
     S: futures_util::Stream<Item = Vec<U>> + Unpin,
     U: serde::Serialize,
@@ -1262,13 +1282,24 @@ where
             continue;
         };
         let push = json!({ "sub": sub, "updates": updates });
+        // A push over the size limit ends the session as an overflow does:
+        // the next session's snapshot of the view fails with `tooLarge`
+        // instead of looping.
+        let send = |push: &Value| match out.send(push) {
+            Ok(()) => true,
+            Err(SendError::TooLarge) => {
+                out.overflow();
+                false
+            }
+            Err(SendError::Closed) => false,
+        };
         let sent = match &fence {
-            None => out.send(push).is_ok(),
+            None => send(&push),
             // Checked and sent under the session lock: once a switch or a
             // lock has bumped the generation, nothing older goes out.
             Some((shared, generation)) => shared.upgrade().is_some_and(|shared| {
                 let shared = lock(&shared);
-                shared.generation == *generation && out.send(push).is_ok()
+                shared.generation == *generation && send(&push)
             }),
         };
         if !sent {
@@ -1285,7 +1316,7 @@ async fn watch_gone(
     core: Core,
     mut changes: broadcast::Receiver<Vec<Table>>,
     mut known: HashSet<String>,
-    out: mpsc::UnboundedSender<Value>,
+    out: Output,
 ) {
     loop {
         match changes.recv().await {
@@ -1308,7 +1339,7 @@ async fn watch_gone(
             closed = shared.transition(core, true);
         }
         for id in gone.iter().filter(|id| !known.contains(*id)) {
-            let _ = out.send(json!({ "profile": "gone", "id": id }));
+            let _ = out.send(&json!({ "profile": "gone", "id": id }));
         }
         drop(shared);
         drop(closed);
@@ -1430,13 +1461,13 @@ mod liveness {
 
     #[tokio::test]
     async fn ping_answers_and_a_panicking_request_still_gets_a_reply() {
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, mut rx) = Output::channel();
         let mut session = Session::new(Core::temporary("p").unwrap(), tx);
         session
             .handle_text(&json!({"id": 1, "op": "ping"}).to_string())
             .await;
         assert_eq!(
-            rx.recv().await.unwrap(),
+            rx.recv().await.unwrap().json(),
             json!({"id": 1, "ok": true, "result": {}})
         );
 
@@ -1448,7 +1479,8 @@ mod liveness {
         let reply = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
             .await
             .expect("a reply")
-            .unwrap();
+            .unwrap()
+            .json();
         assert_eq!(reply["id"], 2);
         assert_eq!(reply["ok"], false);
         assert!(
@@ -1467,7 +1499,7 @@ mod lifecycle {
 
     #[tokio::test]
     async fn lifecycle_events_are_accepted_and_unknown_ones_refused() {
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, mut rx) = Output::channel();
         let mut session = Session::new(Core::temporary("p").unwrap(), tx);
         for event in [
             "foreground",
@@ -1478,24 +1510,25 @@ mod lifecycle {
             session
                 .handle_text(&json!({"id": 1, "op": "lifecycle", "event": event}).to_string())
                 .await;
-            assert_eq!(rx.recv().await.unwrap()["ok"], true, "{event}");
+            assert_eq!(rx.recv().await.unwrap().json()["ok"], true, "{event}");
         }
         session
             .handle_text(&json!({"id": 2, "op": "lifecycle", "event": "sleep"}).to_string())
             .await;
-        assert_eq!(rx.recv().await.unwrap()["ok"], false);
+        assert_eq!(rx.recv().await.unwrap().json()["ok"], false);
     }
 }
 
 #[cfg(test)]
 mod fence {
     use super::*;
+    use tokio::sync::mpsc;
 
     /// A view task still running when a lock or switch moves the generation
     /// (the race the session lock closes) sends nothing older.
     #[tokio::test]
     async fn pushes_of_an_older_generation_never_go_out() {
-        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (tx, mut rx) = Output::channel();
         let session = Session::new(Core::temporary("p").unwrap(), tx);
         let generation = lock(&session.shared).generation;
         let (feed, mut updates) = mpsc::unbounded_channel::<Vec<u32>>();
@@ -1503,7 +1536,10 @@ mod fence {
         let fence = Some((Arc::downgrade(&session.shared), generation));
         let task = tokio::spawn(forward(7, stream, session.out.clone(), fence));
         feed.send(vec![1]).unwrap();
-        assert_eq!(rx.recv().await.unwrap(), json!({"sub": 7, "updates": [1]}));
+        assert_eq!(
+            rx.recv().await.unwrap().json(),
+            json!({"sub": 7, "updates": [1]})
+        );
 
         lock(&session.shared).generation += 1;
         feed.send(vec![2]).unwrap();
@@ -1520,7 +1556,7 @@ mod fence {
     async fn a_switch_whose_target_goes_during_the_pin_check_is_refused() {
         let core = Core::temporary("default").unwrap();
         let kid = core.create_profile("Kid", "fox").unwrap();
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let (tx, _rx) = Output::channel();
         let mut session = Session::new(core.clone(), tx);
         let target = core.for_profile(&kid);
         target.check_pin(&kid, None).await.unwrap();
@@ -1538,7 +1574,7 @@ mod fence {
         let core = Core::temporary("default").unwrap();
         let kid = core.create_profile("Kid", "fox").unwrap();
         core.delete_profile(&kid).unwrap();
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let (tx, _rx) = Output::channel();
         let session = Session::new(core.clone(), tx);
         lock(&session.shared).core = core.for_profile(&kid);
         core.update_profile("default", Some("Owner"), None, None)
@@ -1562,7 +1598,7 @@ mod closing {
     #[tokio::test]
     async fn a_lock_hands_back_the_views_it_closes() {
         let core = Core::temporary("default").unwrap();
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let (tx, _rx) = Output::channel();
         let mut session = Session::new(core.clone(), tx);
         for (id, view) in [(1, "home"), (2, "profiles"), (3, "addons")] {
             let open = json!({"id": id, "op": "subscribe", "view": view});
@@ -1591,7 +1627,7 @@ mod startup {
         let changes = core.library().subscribe();
         let chosen = core.for_profile(&kid);
         core.delete_profile(&kid).unwrap();
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let (tx, _rx) = Output::channel();
         let session = Session::start(chosen, changes, tx);
         let shared = lock(&session.shared);
         assert_eq!((shared.core.profile(), shared.locked), (kid.as_str(), true));

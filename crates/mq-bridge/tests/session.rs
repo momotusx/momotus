@@ -1,20 +1,21 @@
-use mq_bridge::Session;
+use mq_bridge::{Outgoing, Output, Session};
 use mq_runtime::Core;
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-async fn next(rx: &mut mpsc::UnboundedReceiver<Value>) -> Value {
+async fn next(rx: &mut mpsc::UnboundedReceiver<Outgoing>) -> Value {
     tokio::time::timeout(Duration::from_secs(5), rx.recv())
         .await
         .expect("reply")
         .expect("open")
+        .json()
 }
 
 #[tokio::test]
 async fn subscribe_command_unsubscribe_and_errors() {
     let core = Core::temporary("p").unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = Output::channel();
     let mut session = Session::new(core, tx);
 
     session
@@ -65,7 +66,7 @@ async fn subscribe_command_unsubscribe_and_errors() {
 #[ignore = "network"]
 async fn live_home_and_title_over_the_protocol() {
     let core = Core::temporary("p").unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = Output::channel();
     let mut session = Session::new(core, tx);
     session.handle_text(&json!({"id": 1, "op": "installAddon", "url": "https://v3-cinemeta.strem.io/manifest.json"}).to_string()).await;
     assert_eq!(next(&mut rx).await["result"]["name"], "Cinemeta");
@@ -114,7 +115,7 @@ async fn local_addon() -> String {
 
 /// Waits for a push on `sub` whose last update satisfies `done`.
 async fn push_until(
-    rx: &mut mpsc::UnboundedReceiver<Value>,
+    rx: &mut mpsc::UnboundedReceiver<Outgoing>,
     sub: u64,
     done: impl Fn(&Value) -> bool,
 ) -> Value {
@@ -133,7 +134,7 @@ async fn push_until(
 async fn versions_then_playback_then_progress() {
     let base = local_addon().await;
     let core = Core::temporary("p").unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = Output::channel();
     let mut session = Session::new(core.clone(), tx);
     let request = |v: Value| v.to_string();
 
@@ -206,7 +207,7 @@ async fn versions_then_playback_then_progress() {
 async fn addons_view_follows_disable_and_remove() {
     let base = local_addon().await;
     let core = Core::temporary("p").unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = Output::channel();
     let mut session = Session::new(core, tx);
     let url = format!("{base}/manifest.json");
     session
@@ -255,7 +256,7 @@ async fn sync_account_then_two_devices_share_preferences() {
     let server = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
 
-    let (tx_a, mut rx_a) = mpsc::unbounded_channel();
+    let (tx_a, mut rx_a) = Output::channel();
     let mut a = Session::new(Core::temporary("p").unwrap(), tx_a);
     a.handle_text(
         &json!({"id": 1, "op": "createSyncAccount", "server": server, "name": "Phone"}).to_string(),
@@ -288,7 +289,7 @@ async fn sync_account_then_two_devices_share_preferences() {
         "{report}"
     );
 
-    let (tx_b, mut rx_b) = mpsc::unbounded_channel();
+    let (tx_b, mut rx_b) = Output::channel();
     let core_b = Core::temporary("p").unwrap();
     let mut b = Session::new(core_b.clone(), tx_b);
     let mut pull = sync.clone();
@@ -322,7 +323,7 @@ async fn a_hanging_sync_does_not_block_other_requests() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = Output::channel();
     let mut session = Session::new(Core::temporary("p").unwrap(), tx);
     session
         .handle_text(
@@ -356,7 +357,7 @@ async fn a_hanging_sync_does_not_block_other_requests() {
 /// Sends `request` and returns the result of its successful reply.
 async fn ok(
     session: &mut Session,
-    rx: &mut mpsc::UnboundedReceiver<Value>,
+    rx: &mut mpsc::UnboundedReceiver<Outgoing>,
     request: Value,
 ) -> Value {
     session.handle_text(&request.to_string()).await;
@@ -368,7 +369,7 @@ async fn ok(
 #[tokio::test]
 async fn debrid_records_round_trip_through_the_bridge() {
     let core = Core::temporary("p").unwrap();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = Output::channel();
     let mut session = Session::new(core, tx);
     let (s, rx) = (&mut session, &mut rx);
     let reply = ok(s, rx, json!({"id": 1, "op": "subscribe", "view": "debrid"})).await;
@@ -441,4 +442,63 @@ async fn debrid_records_round_trip_through_the_bridge() {
     )
     .await;
     assert_eq!(next(rx).await["ok"], false);
+}
+
+/// C19: a consumer that never reads under a burst. The reserved bytes stay
+/// within the budget, the output closes with `overflow` once, and nothing is
+/// queued after it; the session keeps answering requests without growing.
+#[tokio::test]
+async fn a_stalled_consumer_never_holds_more_than_the_budget() {
+    const BUDGET: usize = 64 * 1024;
+    let (tx, mut rx) = Output::with_limits(BUDGET, 4 * 1024);
+    let out = tx.clone();
+    let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+    let mut most = 0;
+    for id in 1..=10_000 {
+        session
+            .handle_text(&json!({ "id": id, "op": "ping" }).to_string())
+            .await;
+        most = most.max(out.reserved());
+    }
+    assert!(most <= BUDGET, "reserved {most} of {BUDGET}");
+    assert!(out.is_closed());
+    let mut messages = 0;
+    let mut overflow = 0;
+    while let Ok(message) = rx.try_recv() {
+        match message {
+            Outgoing::Message { .. } => messages += 1,
+            Outgoing::Overflow => overflow += 1,
+        }
+    }
+    assert_eq!(overflow, 1);
+    assert!(messages < 10_000, "{messages} queued");
+    assert_eq!(out.reserved(), 0, "everything given back once dropped");
+    // After the overflow nothing more is queued.
+    session
+        .handle_text(&json!({ "id": 10_001, "op": "ping" }).to_string())
+        .await;
+    assert!(rx.try_recv().is_err());
+}
+
+/// C19: a snapshot over the message limit opens no view; the client gets a
+/// failed subscribe with `code: tooLarge`.
+#[tokio::test]
+async fn an_oversized_snapshot_opens_no_view() {
+    // Small enough that the profiles picker's snapshot does not fit.
+    let (tx, mut rx) = Output::with_limits(1024 * 1024, 120);
+    let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+    session
+        .handle_text(
+            &json!({ "id": 1, "op": "subscribe", "view": "profiles", "params": {} }).to_string(),
+        )
+        .await;
+    let reply = next(&mut rx).await;
+    assert_eq!(reply["id"], 1);
+    assert_eq!(reply["ok"], false);
+    assert_eq!(reply["code"], "tooLarge");
+    // The view was not kept: unsubscribing its would-be id finds nothing.
+    session
+        .handle_text(&json!({ "id": 2, "op": "unsubscribe", "sub": 1 }).to_string())
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], false);
 }

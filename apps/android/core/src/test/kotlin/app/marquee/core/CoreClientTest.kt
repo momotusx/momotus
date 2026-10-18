@@ -425,6 +425,23 @@ class CoreClientTest {
         }
 
     @Test
+    fun `an overflowed core is opened again like a dead one`() =
+        runBlocking {
+            val died = CopyOnWriteArrayList<String>()
+            client.onCoreDied = { died += it }
+            client.attach(homeCore(CopyOnWriteArrayList(), CopyOnWriteArrayList(), 10))
+            val view = HomeView(client, scope).also { it.open() }
+            view.opened.await()
+
+            client.onMessage("""{"core":"overflow"}""")
+
+            until("reported") { died.singleOrNull()?.startsWith("overflow") == true }
+            until("the view shows it") { view.status == ViewStatus.Failed("The core stopped.") }
+            assertFailsWith<CoreError> { client.request("setPrefs") }
+            Unit
+        }
+
+    @Test
     fun `a view that failed because the core never started comes back when one is attached`() =
         runBlocking {
             client.attachFailed("The core could not start: no library")
