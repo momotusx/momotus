@@ -971,6 +971,14 @@ async fn an_error_page_is_not_passed_on() {
     let (head, body) = raw_full(&server, &url, "bytes=0-").await;
     assert!(head.starts_with("http/1.1 403"), "{head}");
     assert!(body.is_empty(), "{}", String::from_utf8_lossy(&body));
+    // A read past the end keeps the length players end the file by.
+    let past = "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */4\r\nContent-Type: text/html\r\nContent-Length: 20\r\nConnection: close\r\n\r\n<html>beyond</html>\n";
+    let origin = scripted(vec![WHOLE_FILE.into(), past.into()]).await;
+    let lease = server.register(local_upstream(origin), "v.mkv");
+    let (head, body) = raw_full(&server, &lease.url, "bytes=4-").await;
+    assert!(head.starts_with("http/1.1 416"), "{head}");
+    assert!(head.contains("\r\ncontent-range: bytes */4"), "{head}");
+    assert!(body.is_empty(), "{}", String::from_utf8_lossy(&body));
 }
 
 #[tokio::test]
