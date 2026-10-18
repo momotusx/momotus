@@ -3,6 +3,8 @@ package app.marquee.core.secrets
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import app.marquee.core.client.CoreLog
+import app.marquee.core.model.DebridRecord
+import app.marquee.core.model.DebridTombstone
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -82,18 +84,26 @@ class SecretStore(
     enum class Health { Ok, Reset, MemoryOnly }
 
     data class Secrets(
-        /** `(service, key)`, the first is the default. */
+        /** Legacy `(service, key)` pairs from before debrid records; moved to records once (C10 3a). */
         val debridKeys: List<Pair<String, String>> = emptyList(),
         val syncRecord: JsonObject? = null,
+        /** One record per connected debrid service (plans/c10-handoff.md A1). */
+        val debridRecords: List<DebridRecord> = emptyList(),
+        /** Written before a disconnect is sent: a record with this generation is never restored. */
+        val debridTombstones: List<DebridTombstone> = emptyList(),
     ) {
         // The default would print every key and token.
-        override fun toString() = "Secrets(debridKeys=${debridKeys.size}, syncRecord=${syncRecord != null})"
+        override fun toString() =
+            "Secrets(debridKeys=${debridKeys.size}, syncRecord=${syncRecord != null}, " +
+                "debridRecords=${debridRecords.size}, debridTombstones=${debridTombstones.size})"
     }
 
     @Serializable
     private data class Blob(
         val debridKeys: List<List<String>> = emptyList(),
         val syncRecord: JsonObject? = null,
+        val debridRecords: List<DebridRecord> = emptyList(),
+        val debridTombstones: List<DebridTombstone> = emptyList(),
     )
 
     @Volatile
@@ -133,7 +143,12 @@ class SecretStore(
             cipher.updateAAD(AAD)
             val plain = cipher.doFinal(sealed, 1 + IV_BYTES, sealed.size - 1 - IV_BYTES)
             val blob = json.decodeFromString(Blob.serializer(), plain.decodeToString())
-            Secrets(blob.debridKeys.mapNotNull { if (it.size == 2) it[0] to it[1] else null }, blob.syncRecord)
+            Secrets(
+                blob.debridKeys.mapNotNull { if (it.size == 2) it[0] to it[1] else null },
+                blob.syncRecord,
+                blob.debridRecords,
+                blob.debridTombstones,
+            )
         } catch (e: Exception) {
             if (e.cannotOpenForGood()) {
                 CoreLog.w("the stored secrets cannot be opened, clearing them: ${CoreLog.describe(e)}")
@@ -160,7 +175,13 @@ class SecretStore(
         retry: Boolean,
     ) {
         try {
-            val blob = Blob(secrets.debridKeys.map { listOf(it.first, it.second) }, secrets.syncRecord)
+            val blob =
+                Blob(
+                    secrets.debridKeys.map { listOf(it.first, it.second) },
+                    secrets.syncRecord,
+                    secrets.debridRecords,
+                    secrets.debridTombstones,
+                )
             val plain = json.encodeToString(Blob.serializer(), blob).encodeToByteArray()
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, keys.key())

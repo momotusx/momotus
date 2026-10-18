@@ -270,13 +270,19 @@ fun SettingsScreen(
         }
         item(key = "debrid") {
             val count =
-                session.secrets
-                    .load()
-                    .debridKeys.size
+                session.debrid.snapshot
+                    ?.accounts
+                    ?.size ?: 0
             LinkRow(
                 Icons.KeyRound,
                 "Debrid services",
-                if (count == 0) "Play torrents as fast direct links with a debrid key." else DebridCopy.inUse(count),
+                if (count ==
+                    0
+                ) {
+                    "Play torrents as fast direct links with a debrid account."
+                } else {
+                    DebridCopy.inUse(count)
+                },
                 onDebrid,
             )
         }

@@ -1,6 +1,7 @@
 package app.marquee.core.views
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,6 +10,9 @@ import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonsSnapshot
 import app.marquee.core.model.CalendarSnapshot
+import app.marquee.core.model.DebridLoginSnapshot
+import app.marquee.core.model.DebridRecord
+import app.marquee.core.model.DebridSnapshot
 import app.marquee.core.model.DiscoverSnapshot
 import app.marquee.core.model.Episode
 import app.marquee.core.model.Hero
@@ -128,8 +132,13 @@ open class RecordView<S>(
     var snapshot: S? by mutableStateOf(null)
         private set
 
+    /** How many opening snapshots arrived: one per subscription, so a new core's first one shows. */
+    var opens by mutableIntStateOf(0)
+        private set
+
     override fun applySnapshot(snapshot: S) {
         this.snapshot = snapshot
+        opens++
     }
 
     override fun applyUpdates(updates: List<S>) {
@@ -219,6 +228,37 @@ class SettingsView(
     client: CoreClient,
     scope: CoroutineScope,
 ) : RecordView<Prefs>(client, scope, "settings", NO_PARAMS, Prefs.serializer())
+
+/** The device's debrid accounts and the records the app has not stored yet. */
+class DebridView(
+    client: CoreClient,
+    scope: CoroutineScope,
+    /** Every snapshot's pending records, on the state thread, as they arrive (not once per frame). */
+    private val onPending: (List<DebridRecord>) -> Unit,
+) : RecordView<DebridSnapshot>(client, scope, "debrid", NO_PARAMS, DebridSnapshot.serializer()) {
+    override fun applySnapshot(snapshot: DebridSnapshot) {
+        super.applySnapshot(snapshot)
+        onPending(snapshot.pending)
+    }
+
+    override fun applyUpdates(updates: List<DebridSnapshot>) {
+        super.applyUpdates(updates)
+        updates.lastOrNull()?.let { onPending(it.pending) }
+    }
+}
+
+/** A sign-in by code for one service: the code and its QR, then done or why not. */
+class DebridLoginView(
+    client: CoreClient,
+    scope: CoroutineScope,
+    service: String,
+) : RecordView<DebridLoginSnapshot>(
+        client,
+        scope,
+        "debridLogin",
+        JsonObject(mapOf("service" to JsonPrimitive(service))),
+        DebridLoginSnapshot.serializer(),
+    )
 
 /** The picker's view: the session's profile, whether it is locked, and every profile. */
 class ProfilesView(

@@ -1,44 +1,42 @@
 package app.marquee.core
 
+import app.marquee.core.model.AccountState
+import app.marquee.core.model.DebridLoginSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class DebridCopyTest {
     @Test
-    fun `keys follow the services' order, a blank key removes, an unknown service stays last`() {
-        val start = listOf("premiumize" to "p", "elsewhere" to "e")
-        val added = DebridCopy.change(start, "torbox", "  t  ")
-        assertEquals(listOf("torbox" to "t", "premiumize" to "p", "elsewhere" to "e"), added)
-        assertEquals(
-            listOf("torbox" to "t2", "premiumize" to "p", "elsewhere" to "e"),
-            DebridCopy.change(added, "torbox", "t2"),
-        )
-        assertEquals(listOf("premiumize" to "p", "elsewhere" to "e"), DebridCopy.change(added, "torbox", " "))
-        assertEquals(listOf("torbox" to "t", "elsewhere" to "e"), DebridCopy.change(added, "premiumize", null))
-    }
-
-    @Test
-    fun `the core's count and the key page read as words`() {
+    fun `the count and the key page read as words`() {
         assertEquals("No debrid service in use.", DebridCopy.inUse(0))
         assertEquals("1 debrid service in use.", DebridCopy.inUse(1))
         assertEquals("2 debrid services in use.", DebridCopy.inUse(2))
         assertEquals("premiumize.me/account", DebridCopy.page(DebridCopy.services[3]))
+        assertEquals("real-debrid.com/device", DebridCopy.address("https://real-debrid.com/device/"))
     }
 
     @Test
-    fun `storing and handing over are told apart`() {
-        assertEquals("1 debrid service in use.", DebridCopy.outcome(stored = true, inUse = 1))
+    fun `a card says connected only once its record is stored`() {
+        assertNull(DebridCopy.state(null, pending = false, durable = true))
+        assertEquals("Connected", DebridCopy.state(AccountState.Ok, pending = false, durable = true))
+        assertEquals("Saving", DebridCopy.state(AccountState.Ok, pending = true, durable = true))
+        assertEquals("Kept for this session", DebridCopy.state(AccountState.Ok, pending = true, durable = false))
         assertEquals(
-            "1 debrid service in use. Kept for this session only: this device could not store it.",
-            DebridCopy.outcome(stored = false, inUse = 1),
+            "Sign in again: the service asked for it",
+            DebridCopy.state(AccountState.Reconnect, pending = false, durable = true),
         )
         assertEquals(
-            "The core did not take it: closed. Kept for this session only: this device could not store it.",
-            DebridCopy.outcome(stored = false, inUse = null, refused = "closed"),
+            "Not answering, trying again",
+            DebridCopy.state(AccountState.Failing, pending = false, durable = true),
         )
-        assertEquals(
-            "The core did not take it: closed.",
-            DebridCopy.outcome(stored = true, inUse = null, refused = "closed"),
-        )
+    }
+
+    @Test
+    fun `every sign-in phase has its words`() {
+        assertEquals("Getting a code", DebridCopy.login(DebridLoginSnapshot.Starting))
+        assertEquals("Another sign-in or key took its place.", DebridCopy.login(DebridLoginSnapshot.Used))
+        assertEquals("The code ran out before it was entered.", DebridCopy.login(DebridLoginSnapshot.Expired))
+        assertEquals("no network", DebridCopy.login(DebridLoginSnapshot.Failed("no network")))
     }
 }

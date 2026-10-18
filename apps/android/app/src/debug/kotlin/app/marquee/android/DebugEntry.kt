@@ -57,9 +57,22 @@ object DebugEntry {
      * (scripts/sintel-addon.ts over `adb reverse`) before there is a screen to do it from.
      * `kill_core_after=<seconds>` hands the app the message a panicking core sends, that long
      * after launch, to walk what the app does across a core death and its restart.
+     * `legacy_debrid=<service>:<key>` stores a debrid key the way builds before records did; the next
+     * core open moves it to a record.
      */
     fun launched(activity: ComponentActivity) {
         val session = (activity.application as MarqueeApp).session
+        val legacy = activity.intent.getStringExtra("legacy_debrid")?.split(":", limit = 2)
+        if (legacy?.size == 2) {
+            val (service, key) = legacy
+            session.secrets.update { s ->
+                s.copy(
+                    debridKeys =
+                        s.debridKeys.filter { it.first != service } + (service to key),
+                )
+            }
+            CoreLog.d("debug: a legacy $service key stored")
+        }
         val killAfter = activity.intent.getIntExtra("kill_core_after", 0)
         if (killAfter > 0) {
             session.scope.launch {

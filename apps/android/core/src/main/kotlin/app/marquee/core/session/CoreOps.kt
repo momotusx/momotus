@@ -2,6 +2,8 @@ package app.marquee.core.session
 
 import app.marquee.core.client.CoreClient
 import app.marquee.core.model.ApprovedPairing
+import app.marquee.core.model.DebridRecord
+import app.marquee.core.model.DebridTombstone
 import app.marquee.core.model.Devices
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.InstalledAddon
@@ -9,6 +11,7 @@ import app.marquee.core.model.LostPreview
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RecoveryKitResult
+import app.marquee.core.model.RestoreAnswer
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
 import kotlinx.serialization.KSerializer
@@ -159,6 +162,52 @@ class CoreOps(
 
     /** Nested objects merge, e.g. `{"streams": {"languages": ["tr"]}}`. Returns the full prefs. */
     suspend fun setPrefs(patch: JsonObject): Prefs = call("setPrefs", mapOf("patch" to patch), Prefs.serializer())
+
+    /** At start, before any view: what the keystore holds. The answer names tombstones the app may drop. */
+    suspend fun restoreDebrid(
+        records: List<DebridRecord>,
+        tombstones: List<DebridTombstone>,
+    ): RestoreAnswer =
+        call(
+            "restoreDebrid",
+            mapOf(
+                "records" to client.json.encodeToJsonElement(ListSerializer(DebridRecord.serializer()), records),
+                "tombstones" to
+                    client.json.encodeToJsonElement(ListSerializer(DebridTombstone.serializer()), tombstones),
+            ),
+            RestoreAnswer.serializer(),
+        )
+
+    /** The app stored this pending record. */
+    suspend fun ackDebrid(
+        service: String,
+        generation: String,
+        revision: Long,
+    ) {
+        client.request(
+            "ackDebrid",
+            mapOf("service" to text(service), "generation" to text(generation), "revision" to JsonPrimitive(revision)),
+        )
+    }
+
+    /** A typed key: a new connection; its record arrives as pending in the `debrid` view. Returns its generation. */
+    suspend fun setDebridKey(
+        service: String,
+        key: String,
+    ): String =
+        client
+            .request("setDebridKey", mapOf("service" to text(service), "key" to text(key)))
+            .jsonObject
+            .getValue("generation")
+            .jsonPrimitive.content
+
+    /** Sent after the app wrote the tombstone for this generation. */
+    suspend fun disconnectDebrid(
+        service: String,
+        generation: String,
+    ) {
+        client.request("disconnectDebrid", mapOf("service" to text(service), "generation" to text(generation)))
+    }
 
     /** Replaces the debrid accounts; the first key is the default. Returns how many stores were set. */
     suspend fun setDebridKeys(keys: List<Pair<String, String>>): Int {

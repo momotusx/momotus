@@ -13,11 +13,17 @@ import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.ffi.CoreListener
 import app.marquee.core.ffi.MarqueeCore
+import app.marquee.core.model.DebridRecord
+import app.marquee.core.model.DebridTombstone
+import app.marquee.core.secrets.DebridCore
 import app.marquee.core.secrets.DeviceId
 import app.marquee.core.secrets.KeystoreKeySource
+import app.marquee.core.secrets.SecretDebridKeystore
 import app.marquee.core.secrets.SecretStore
 import app.marquee.core.views.AddonsView
 import app.marquee.core.views.CalendarView
+import app.marquee.core.views.DebridLoginView
+import app.marquee.core.views.DebridView
 import app.marquee.core.views.DiscoverView
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ImportView
@@ -36,6 +42,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
@@ -74,6 +81,34 @@ class CoreSession(
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val ops = CoreOps(client)
     val secrets = SecretStore(File(context.noBackupFilesDir, "secrets.bin"), KeystoreKeySource())
+
+    /** The device's debrid accounts: restored on every core open, before any screen opens a view. */
+    val debridAccounts =
+        DebridAccounts(
+            SecretDebridKeystore(secrets),
+            object : DebridCore {
+                override suspend fun restore(
+                    records: List<DebridRecord>,
+                    tombstones: List<DebridTombstone>,
+                ) = ops.restoreDebrid(records, tombstones)
+
+                override suspend fun ack(
+                    service: String,
+                    generation: String,
+                    revision: Long,
+                ) = ops.ackDebrid(service, generation, revision)
+
+                override suspend fun disconnect(
+                    service: String,
+                    generation: String,
+                ) = ops.disconnectDebrid(service, generation)
+            },
+            connect = { service, key -> ops.setDebridKey(service, key) },
+            scope,
+        )
+
+    /** The `debrid` view for the app's life: the accounts for Settings, the pending records for the keystore. */
+    val debrid: DebridView by lazy { DebridView(client, scope, debridAccounts::pushed).also { it.open() } }
 
     /** Completes when the core first opens, or fails with why it could not. */
     val ready = CompletableDeferred<Unit>()
@@ -129,13 +164,16 @@ class CoreSession(
                         logFilter = if (debuggable) "debug" else null,
                     )
                 core = opened
+                // Pushes from a revived `debrid` view wait for this core's restore.
+                debridAccounts.pause()
                 client.attach { text -> opened.send(text) }
+                // Accounts come back before anything may play (plans/c10-handoff.md, phase 3a).
+                runBlocking { debridAccounts.opened { debrid.snapshot?.pending } }
                 openMillis = (System.nanoTime() - started) / 1_000_000
                 CoreLog.d("core open $openMillis ms, version ${opened.version()}")
                 // A core that died again while this one was opening keeps the state its death set.
                 if (client.epoch == deaths) health = CoreHealth.Running
                 ready.complete(Unit)
-                restoreSecrets()
             } catch (t: Throwable) {
                 CoreLog.e("core failed to open", t)
                 val reason = "The core could not start: ${t.message ?: t.javaClass.simpleName}"
@@ -173,23 +211,6 @@ class CoreSession(
         }
     }
 
-    /** The core keeps no secrets: hand it the debrid accounts again at every start, with one retry. */
-    private fun restoreSecrets() {
-        val keys = secrets.load().debridKeys
-        if (keys.isEmpty()) return
-        scope.launch {
-            for (attempt in 1..2) {
-                try {
-                    ops.setDebridKeys(keys)
-                    return@launch
-                } catch (e: Exception) {
-                    CoreLog.w("debrid keys not applied (attempt $attempt): ${CoreLog.describe(e)}")
-                    delay(2_000)
-                }
-            }
-        }
-    }
-
     fun home() = HomeView(client, scope).also { it.open() }
 
     fun title(
@@ -213,6 +234,8 @@ class CoreSession(
     fun import() = ImportView(client, scope).also { it.open() }
 
     fun profiles() = ProfilesView(client, scope).also { it.open() }
+
+    fun debridLogin(service: String) = DebridLoginView(client, scope, service).also { it.open() }
 
     fun pairing(
         server: String,
