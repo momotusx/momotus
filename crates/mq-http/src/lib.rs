@@ -453,9 +453,10 @@ pub mod test_dns {
 
     static PUBLIC: LazyLock<Mutex<HashMap<String, Vec<IpAddr>>>> = LazyLock::new(Default::default);
 
-    /// Answers `name` with `addrs` for the unscoped public-only clients, and
-    /// lets them through as if they were public: a loopback fixture then
-    /// stands for a public origin, so redirects from it can be tested.
+    /// Answers `name` with `addrs` for the unscoped public-only clients, as
+    /// if they were public: a loopback fixture then stands for a public
+    /// origin. The name's `set` answers come first and are filtered as
+    /// usual, so a test can mix private answers in.
     pub fn set_public(name: &str, addrs: &[IpAddr]) {
         let mut names = PUBLIC.lock().unwrap_or_else(|e| e.into_inner());
         names.insert(name.to_ascii_lowercase(), addrs.to_vec());
@@ -464,6 +465,52 @@ pub mod test_dns {
     pub(crate) fn public(name: &str) -> Option<Vec<IpAddr>> {
         let names = PUBLIC.lock().unwrap_or_else(|e| e.into_inner());
         names.get(&name.to_ascii_lowercase()).cloned()
+    }
+
+    /// An https origin on loopback, with the self-signed certificate test
+    /// builds accept: every request gets `answer(path)` as its whole
+    /// response, then the connection closes. Returns its port.
+    pub fn https(answer: impl Fn(&str) -> String + Send + Sync + 'static) -> u16 {
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+        use std::io::{Read, Write};
+        let cert = CertificateDer::from(&include_bytes!("../tests/fixtures/tls/cert.der")[..]);
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../tests/fixtures/tls/key.der")[..]);
+        let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+        let config = rustls::ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .and_then(|b| {
+                b.with_no_client_auth()
+                    .with_single_cert(vec![cert], PrivateKeyDer::Pkcs8(key))
+            })
+            .expect("the fixture certificate");
+        let config = std::sync::Arc::new(config);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+        let port = listener.local_addr().expect("bound").port();
+        let answer = std::sync::Arc::new(answer);
+        std::thread::spawn(move || {
+            for socket in listener.incoming().flatten() {
+                let (config, answer) = (config.clone(), answer.clone());
+                std::thread::spawn(move || {
+                    let Ok(conn) = rustls::ServerConnection::new(config) else {
+                        return;
+                    };
+                    let mut tls = rustls::StreamOwned::new(conn, socket);
+                    let (mut head, mut buf) = (Vec::new(), [0u8; 1024]);
+                    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match tls.read(&mut buf) {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => head.extend_from_slice(&buf[..n]),
+                        }
+                    }
+                    let head = String::from_utf8_lossy(&head).into_owned();
+                    let path = head.split(' ').nth(1).unwrap_or_default();
+                    let _ = tls.write_all(answer(path).as_bytes());
+                    tls.conn.send_close_notify();
+                    let _ = tls.flush();
+                });
+            }
+        });
+        port
     }
 }
 
@@ -474,20 +521,30 @@ struct PublicOnly;
 impl reqwest::dns::Resolve for PublicOnly {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         Box::pin(async move {
-            #[cfg(any(test, feature = "test-dns"))]
-            if let Some(found) = test_dns::public(name.as_str()) {
-                let found = found.into_iter().map(|ip| SocketAddr::new(ip, 0));
-                return Ok(Box::new(found) as reqwest::dns::Addrs);
-            }
-            let found = lookup(name.as_str()).await?.into_iter();
-            let public: Vec<std::net::SocketAddr> =
-                found.filter(|a| !is_private_ip(a.ip())).collect();
+            let (found, stand_ins) = public_lookup(name.as_str()).await?;
+            let public: Vec<SocketAddr> = found
+                .into_iter()
+                .filter(|a| stand_ins.contains(&a.ip()) || !is_private_ip(a.ip()))
+                .collect();
             if public.is_empty() {
                 return Err(format!("{} resolves only to private addresses", name.as_str()).into());
             }
             Ok(Box::new(public.into_iter()) as reqwest::dns::Addrs)
         })
     }
+}
+
+/// `lookup`, and the answers a test lets stand for public addresses
+/// (`test_dns::set_public`), after the name's other test answers.
+async fn public_lookup(name: &str) -> std::io::Result<(Vec<SocketAddr>, Vec<IpAddr>)> {
+    #[cfg(any(test, feature = "test-dns"))]
+    if let Some(stand_ins) = test_dns::public(name) {
+        let others = test_dns::get(name).unwrap_or_default();
+        let found = others.iter().chain(&stand_ins);
+        let found = found.map(|ip| SocketAddr::new(*ip, 0)).collect();
+        return Ok((found, stand_ins));
+    }
+    Ok((lookup(name).await?, Vec::new()))
 }
 
 static CRYPTO: Once = Once::new();
@@ -528,10 +585,14 @@ fn redirect_allowed(first: &Url, next: &Url) -> bool {
 
 /// What every client shares, scoped or not.
 fn builder(config: &ClientConfig) -> reqwest::ClientBuilder {
-    reqwest::Client::builder()
+    let builder = reqwest::Client::builder()
         .user_agent(config.user_agent.clone())
         .connect_timeout(config.connect_timeout)
-        .pool_idle_timeout(Duration::from_secs(90))
+        .pool_idle_timeout(Duration::from_secs(90));
+    // Test builds only: `test_dns::https` serves a self-signed certificate.
+    #[cfg(any(test, feature = "test-dns"))]
+    let builder = builder.tls_danger_accept_invalid_certs(true);
+    builder
 }
 
 impl HttpClient {

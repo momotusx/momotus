@@ -696,20 +696,24 @@ fn listed() -> RequestOptions {
 async fn the_listed_path_never_connects_to_a_private_address() {
     let origin = Origin::ok(0).await;
     let port = origin.addr.port();
+    let canary = Canary::start(port).await;
     let http = quick_client();
+    // Mixed answers, the private one first: it is never tried, and the
+    // answer standing for a public address serves the request.
+    test_dns::set("mixed.m12.test", &[canary.addr.ip()]);
+    test_dns::set_public("mixed.m12.test", &[LOOPBACK]);
+    let url = format!("http://mixed.m12.test:{port}/");
+    let answer = within("mixed", http.get(&url, &listed()))
+        .await
+        .unwrap_or_else(|e| panic!("the public answer was not reached: {e}"));
+    assert_eq!(&answer.body[..], b"ok");
     // Only private answers: nothing is left to connect to.
-    test_dns::set("private.m12.test", &[LOOPBACK]);
+    test_dns::set("private.m12.test", &[canary.addr.ip()]);
     let url = format!("http://private.m12.test:{port}/");
     within("private", http.get(&url, &listed()))
         .await
         .expect_err("only private answers");
-    // Mixed answers, the private one first: only the public one is tried,
-    // and nothing serves it.
-    test_dns::set("mixed.m12.test", &[LOOPBACK, ip("192.0.2.1")]);
-    let url = format!("http://mixed.m12.test:{port}/");
-    within("mixed", http.get(&url, &listed()))
-        .await
-        .expect_err("the public answer serves nothing");
+    assert_eq!(canary.accepted(), 0, "a private answer was tried");
     // A name the system resolver itself answers with loopback, its trailing
     // dot and all.
     let url = format!("http://localhost.:{port}/");
@@ -722,7 +726,33 @@ async fn the_listed_path_never_connects_to_a_private_address() {
         .await
         .expect_err("a private literal");
     assert_eq!(err.kind(), "blocked address");
-    assert!(origin.heads().is_empty(), "{:?}", origin.heads());
+    assert_eq!(origin.heads().len(), 1, "{:?}", origin.heads());
+}
+
+#[tokio::test]
+async fn the_listed_path_never_follows_https_to_http() {
+    let target = Origin::ok(0).await;
+    test_dns::set_public("plain.m12.test", &[LOOPBACK]);
+    test_dns::set_public("secure.m12.test", &[LOOPBACK]);
+    let location = format!(
+        "Location: http://plain.m12.test:{}/downgraded\r\n",
+        target.addr.port()
+    );
+    let port = test_dns::https(move |path| match path {
+        "/down" => reply("302 Found", &location, ""),
+        _ => reply("200 OK", "", "secure"),
+    });
+    let http = quick_client();
+    let base = format!("https://secure.m12.test:{port}");
+    // The fixture answers over https.
+    let answer = within("https", http.get(&format!("{base}/ok"), &listed()))
+        .await
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(&answer.body[..], b"secure");
+    within("downgrade", http.get(&format!("{base}/down"), &listed()))
+        .await
+        .expect_err("an https to http redirect");
+    assert!(target.heads().is_empty(), "{:?}", target.heads());
 }
 
 #[tokio::test]
