@@ -147,7 +147,7 @@ struct VersionsScreen: View {
             ForEach(groups, id: \.0) { group, rows in
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text(VersionWords.group(group).uppercased())
+                        Text(caps: VersionWords.group(group))
                             .tracking(1.6)
                         Spacer()
                         Text("\(rows.count)").monospacedDigit()
@@ -221,7 +221,7 @@ private struct PickCard: View {
     var focus: FocusState<Bool>.Binding
 
     static var kicker: some View {
-        Text("RECOMMENDED FOR THIS SCREEN")
+        Text(caps: "Recommended for this screen")
             .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
             .tracking(1.6)
             .foregroundStyle(Theme.Palette.muted)
@@ -281,7 +281,7 @@ private struct PickCard: View {
 
     private func fact(_ label: String, _ value: String, dot: Color? = nil) -> some View {
         GridRow {
-            Text(label.uppercased())
+            Text(caps: label)
                 .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                 .tracking(1.4)
                 .foregroundStyle(Theme.Palette.muted)

@@ -132,7 +132,7 @@ struct EndCard: View {
     }
 
     private func kicker(_ text: String) -> some View {
-        Text(text.uppercased())
+        Text(caps: text)
             .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
             .tracking(1.6)
             .foregroundStyle(.white.opacity(0.7))

@@ -44,7 +44,7 @@ struct ChipRow<ID: Hashable>: View {
     }
 
     private var caption: some View {
-        Text(label.uppercased())
+        Text(caps: label)
             .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
             .tracking(1.6)
             .foregroundStyle(Theme.Palette.muted)

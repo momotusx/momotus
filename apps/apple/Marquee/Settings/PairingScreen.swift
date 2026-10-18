@@ -108,7 +108,7 @@ struct PairingScreen: View {
 
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased())
+            Text(caps: label)
                 .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
@@ -243,7 +243,7 @@ private struct JoinedState: View {
             }
             if let counts {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("NOW ON THIS DEVICE")
+                    Text(caps: "Now on this device")
                         .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                         .tracking(1.6)
                         .foregroundStyle(Theme.Palette.muted)

@@ -84,7 +84,7 @@ struct SearchScreen: View {
             StateLine(symbol: "search", text: "Search finds titles in every catalog your addons offer.")
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                Text("RECENT")
+                Text(caps: "Recent")
                     .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                     .tracking(1.6)
                     .foregroundStyle(Theme.Palette.muted)

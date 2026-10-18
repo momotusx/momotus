@@ -157,7 +157,7 @@ struct Eyebrow: View {
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        Text(text.uppercased())
+        Text(caps: text)
             .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
             .tracking(Theme.type.caption * 0.14)
             .foregroundStyle(Theme.Palette.accent)

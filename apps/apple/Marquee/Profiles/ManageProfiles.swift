@@ -262,7 +262,7 @@ struct EditProfile: View {
     }
 
     private func caps(_ text: String) -> some View {
-        Text(text.uppercased())
+        Text(caps: text)
             .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
             .tracking(1.6)
             .foregroundStyle(Theme.Palette.muted)

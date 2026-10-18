@@ -90,7 +90,7 @@ private struct SeasonPicker: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                Text("SEASON")
+                Text(caps: "Season")
                     .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
                     .tracking(Theme.type.caption * 0.12)
                     .foregroundStyle(Theme.Palette.muted)

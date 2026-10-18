@@ -117,7 +117,7 @@ struct InstallField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("ADDON LINK")
+            Text(caps: "Addon link")
                 .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)

@@ -95,6 +95,14 @@ extension Font {
     }
 }
 
+extension Text {
+    /// Eyebrows, kickers and field labels: capitals on screen, the plain words
+    /// for VoiceOver, which can spell out a word set in capitals.
+    init(caps words: String) {
+        self = Text(words.uppercased()).accessibilityLabel(words)
+    }
+}
+
 extension Font.Weight {
     /// Bold Text (Settings, Accessibility, Display & Text Size): SwiftUI bolds
     /// the system font for it, never a custom one, so the bundled faces step
