@@ -379,6 +379,8 @@ export function EditProfile() {
   const [touched, setTouched] = createSignal(false);
   const [said, setSaid] = createSignal<{ text: string; bad: boolean } | null>(null);
   const [flow, setFlow] = createSignal<PinFlow | null>(null);
+  // The stored PIN came from a newer version: it can only be removed (the core lets its owner do that without it).
+  const [unreadable, setUnreadable] = createSignal(false);
   const [confirmDelete, setConfirmDelete] = createSignal(false);
   // Filled once from the stored profile (or a fresh avatar for a new one), never again on later pushes.
   let filled = false;
@@ -432,6 +434,16 @@ export function EditProfile() {
       setSaid({ text: t.kind === "problem" ? t.text : "That did not work.", bad: true });
     }
   };
+  const removeUnreadable = async () => {
+    try {
+      await op("setPin", { profile: p()!.id, pin: null });
+      setUnreadable(false);
+      setSaid({ text: "PIN removed", bad: false });
+    } catch (err) {
+      const t = tried(err);
+      setSaid({ text: t.kind === "problem" ? t.text : "That did not work.", bad: true });
+    }
+  };
   const remove = async () => {
     try {
       await op("deleteProfile", { profile: p()!.id });
@@ -452,6 +464,11 @@ export function EditProfile() {
           <PinSteps
             flow={flow()!}
             profile={p()!}
+            onUnreadable={() => {
+              setFlow(null);
+              setUnreadable(true);
+              queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="pedit:pin:unreadable"]')));
+            }}
             onDone={(text) => {
               setFlow(null);
               if (text) setSaid({ text, bad: false });
@@ -541,7 +558,15 @@ export function EditProfile() {
               <Show when={cur().syncing}>
                 <p class="note small">Waiting for this profile's lock to arrive from your other devices.</p>
               </Show>
-              <Show when={!cur().syncing && mine()}>
+              <Show when={!cur().syncing && mine() && unreadable()}>
+                <p class="note small">{profileProblem("pinUnreadable", "")}</p>
+                <div class="acts">
+                  <button class="btn" data-f="pedit:pin:unreadable" onClick={() => void removeUnreadable()}>
+                    Remove PIN
+                  </button>
+                </div>
+              </Show>
+              <Show when={!cur().syncing && mine() && !unreadable()}>
                 <div class="acts">
                   <Show
                     when={cur().hasPin}
@@ -621,7 +646,7 @@ function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () =
 }
 
 /** The keypad steps for your own PIN, by the core's rules: change and remove ask the current one first. */
-function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onDone: (said?: string) => void }) {
+function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: () => void; onDone: (said?: string) => void }) {
   const steps = props.flow === "set" ? ["new", "again"] : props.flow === "change" ? ["current", "new", "again"] : ["current"];
   const [step, setStep] = createSignal(0);
   let current: string | undefined;
@@ -657,6 +682,10 @@ function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onDone: (said?: 
       if (props.flow === "remove") await op("setPin", { profile: props.profile.id, pin: null, currentPin: pin });
       else await op("setPin", { profile: props.profile.id, pin: fresh, currentPin: current });
     } catch (e) {
+      if (e instanceof BridgeError && e.code === "pinUnreadable") {
+        props.onUnreadable();
+        return { kind: "ok" };
+      }
       const t = tried(e);
       // A wrong current PIN starts the change again from the current one.
       if (t.kind === "wrong" && props.flow === "change") setStep(0);

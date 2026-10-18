@@ -864,6 +864,16 @@ fun EditProfileScreen(
     var touched by remember(id) { mutableStateOf(false) }
     var said by remember { mutableStateOf<Pair<String, Status>?>(null) }
     var flow by remember { mutableStateOf<PinFlow?>(null) }
+    // The stored PIN came from a newer version: it can only be removed (the core lets its owner do
+    // that without it).
+    var unreadable by remember(id) { mutableStateOf(false) }
+    val removeUnreadable = remember { FocusRequester() }
+    LaunchedEffect(unreadable) {
+        if (unreadable) {
+            withFrameNanos { }
+            runCatching { removeUnreadable.requestFocus() }
+        }
+    }
     var confirmDelete by remember { mutableStateOf(false) }
 
     // The page leaves once: a delete from here also removes the profile from the snapshot.
@@ -891,7 +901,10 @@ fun EditProfileScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                PinSteps(session, p!!, f) { text ->
+                PinSteps(session, p!!, f, onUnreadable = {
+                    flow = null
+                    unreadable = true
+                }) { text ->
                     flow = null
                     if (text != null) said = text to Status.Ok
                 }
@@ -1025,6 +1038,24 @@ fun EditProfileScreen(
                             Note("Waiting for this profile's lock to arrive from your other devices.", side = 0.dp)
                         }
 
+                        mine && unreadable -> {
+                            Note(ProfileCopy.problem("pinUnreadable", ""), side = 0.dp)
+                            SecondaryButton("Remove PIN", focusRequester = removeUnreadable, onClick = {
+                                scope.launch {
+                                    said =
+                                        try {
+                                            session.ops.setPin(p.id, null)
+                                            unreadable = false
+                                            "PIN removed" to Status.Ok
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to Status.Bad
+                                        }
+                                }
+                            })
+                        }
+
                         mine && !p.hasPin -> {
                             SecondaryButton("Set a PIN", { flow = PinFlow.Set }, icon = Icons.Lock)
                         }
@@ -1126,6 +1157,7 @@ private fun PinSteps(
     session: CoreSession,
     p: ProfileInfo,
     flow: PinFlow,
+    onUnreadable: () -> Unit,
     onDone: (String?) -> Unit,
 ) {
     val steps =
@@ -1188,6 +1220,10 @@ private fun PinSteps(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        if ((e as? CoreError)?.code == "pinUnreadable") {
+                            onUnreadable()
+                            return@Keypad Tried.Ok
+                        }
                         val t = tried(e)
                         if (t == Tried.Wrong && flow == PinFlow.Change) step = 0
                         if ((e as? CoreError)?.code == "weakPin") step = steps.indexOf("new")

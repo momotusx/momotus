@@ -32,6 +32,8 @@ export function profileProblem(code: string | undefined, fallback: string): stri
       return "Something is still open. Try again.";
     case "unknownProfile":
       return "That profile was removed on another device.";
+    case "pinUnreadable":
+      return "This PIN was set by a newer version. Remove it, then set a new one.";
     default:
       return fallback;
   }

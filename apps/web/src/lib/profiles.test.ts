@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { startsOnPicker, waitText } from "./profiles";
+import { profileProblem, startsOnPicker, waitText } from "./profiles";
 
 const one = [{ id: "default" }];
 const two = [{ id: "default" }, { id: "p2" }];
@@ -16,4 +16,10 @@ test("the wait reads as minutes and seconds and never shows zero while waiting",
   expect(waitText(1)).toBe("0:01");
   expect(waitText(0)).toBe("0:00");
   expect(waitText(3_600_000)).toBe("60:00");
+});
+
+test("the core's profile codes read as words, and an unknown one keeps its own message", () => {
+  expect(profileProblem("pinUnreadable", "x")).toBe("This PIN was set by a newer version. Remove it, then set a new one.");
+  expect(profileProblem("weakPin", "x")).toBe("Pick a less obvious PIN: no repeats, runs or 1234.");
+  expect(profileProblem("somethingNew", "the core's text")).toBe("the core's text");
 });
