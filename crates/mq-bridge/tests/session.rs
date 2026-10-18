@@ -204,6 +204,19 @@ async fn versions_then_playback_then_progress() {
     )
     .await;
     assert!(moved.is_err(), "{moved:?}");
+    // The player reports what failed; the attempt list has the core's words.
+    let current = ready["attempt"].as_u64().unwrap();
+    session
+        .handle_text(&request(json!({"id": 44, "op": "command", "sub": playback,
+            "command": {"type": "failOver", "attempt": current, "kind": "http", "status": 404,
+                        "error": "The source answered with HTTP 404"}})))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    let failed = push_until(&mut rx, playback, |s| s["phase"] == "failed").await;
+    assert_eq!(
+        failed["attempts"][0]["error"], "The link no longer exists (404)",
+        "{failed}"
+    );
     session
         .handle_text(&request(
             json!({"id": 5, "op": "unsubscribe", "sub": playback}),

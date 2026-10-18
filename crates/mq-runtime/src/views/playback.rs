@@ -271,7 +271,18 @@ impl PlaybackView {
     /// to the next candidate. A late report about a source already given up
     /// on is ignored, so it never drops the one playing now, even when both
     /// have one `key`.
-    pub fn fail_over(&self, failed: Option<u64>, error: &str) {
+    ///
+    /// `kind`, `status` and `error` are what the player reports; the attempt
+    /// list gets the core's words for them (`mq_server::failure_words`).
+    pub fn fail_over(
+        &self,
+        failed: Option<u64>,
+        kind: Option<&str>,
+        status: Option<u16>,
+        error: &str,
+    ) {
+        let error = mq_server::failure_words(kind, status, error);
+        let error = error.as_str();
         {
             let mut s = lock(&self.state);
             let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);

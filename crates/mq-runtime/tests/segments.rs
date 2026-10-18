@@ -246,7 +246,7 @@ async fn a_late_answer_never_lands_on_the_next_source() {
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(lookups(&seen), 1, "lookup in flight");
 
-    view.fail_over(None, "decoder error");
+    view.fail_over(None, None, None, "decoder error");
     let second = wait_for(&view, |s| {
         s.phase == PlaybackPhase::Ready && s.key.is_some() && s.key != first.key
     })

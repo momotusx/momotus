@@ -1097,7 +1097,10 @@ impl Session {
             (View::Playback(playback), "failOver") => {
                 let error = param(command, "error").unwrap_or_else(|_| "player error".into());
                 let attempt = command.get("attempt").and_then(Value::as_u64);
-                playback.fail_over(attempt, &error);
+                let kind = command.get("kind").and_then(Value::as_str);
+                let status = command.get("status").and_then(Value::as_u64);
+                let status = status.and_then(|s| u16::try_from(s).ok());
+                playback.fail_over(attempt, kind, status, &error);
             }
             (_, other) => return Err(format!("unknown command: {other}")),
         }

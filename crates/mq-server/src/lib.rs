@@ -174,9 +174,9 @@ impl StreamServer {
                 }
                 Ok(Err(ahead::Refusal::Failed(reason))) => {
                     tracing::info!("stream source unreachable: {reason}");
-                    Some("The source could not be reached".into())
+                    Some(UNREACHABLE.into())
                 }
-                Err(_) => Some("The source did not answer in time".into()),
+                Err(_) => Some(SILENT.into()),
             };
             if let Some(error) = error {
                 playback.release();
@@ -590,18 +590,46 @@ async fn serve(
     }
 }
 
+const UNREACHABLE: &str = "The source could not be reached";
+const SILENT: &str = "The source did not answer in time";
+
 /// A source's error answer in plain words for the attempt list, with the
 /// status kept for support.
 fn refused(status: StatusCode) -> String {
-    let code = status.as_u16();
-    let words = match code {
+    status_words(status.as_u16())
+}
+
+/// An HTTP status in the attempt list's words, with the status kept for
+/// support: what the stream server says at open, and what a player's
+/// `failOver` with that status says.
+pub fn status_words(status: u16) -> String {
+    let words = match status {
         404 | 410 => "The link no longer exists",
         401 | 403 => "The source refused access",
         429 => "The source is busy, try again soon",
         500..=599 => "The source had an error",
         _ => "The source answered with an error",
     };
-    format!("{words} ({code})")
+    format!("{words} ({status})")
+}
+
+/// Why a player gave a source up, in the attempt list's words, from what its
+/// `failOver` reports: `kind` (`http` with `status`, `network`, `timeout`,
+/// `unreadable`, `decode`, `audio`, `other`) and the player's own `error`.
+/// The stream server's sentences where it has one for the same cause. With
+/// no kind (an older client), `other` or one not known here, `error` stays
+/// as the player wrote it.
+pub fn failure_words(kind: Option<&str>, status: Option<u16>, error: &str) -> String {
+    match (kind, status) {
+        (Some("http"), Some(status)) => status_words(status),
+        (Some("http"), None) => "The source answered with an error".into(),
+        (Some("network"), _) => UNREACHABLE.into(),
+        (Some("timeout"), _) => SILENT.into(),
+        (Some("unreadable"), _) => "The file could not be read".into(),
+        (Some("decode"), _) => "This device cannot decode the video".into(),
+        (Some("audio"), _) => "The audio output failed".into(),
+        _ => error.to_owned(),
+    }
 }
 
 /// `bytes=a-b`, `bytes=a-` or `bytes=-n` against `len`, as `[start, end)`.
@@ -935,6 +963,51 @@ async fn proxy_http(source: &ahead::Source, range: Option<String>, head_only: bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_players_failure_is_said_as_the_server_says_it() {
+        let word = |kind, status, error| failure_words(Some(kind), status, error);
+        let raw = "MEDIA_ELEMENT_ERROR: Format error";
+        let rows = [
+            (
+                word("http", Some(404), raw),
+                "The link no longer exists (404)",
+            ),
+            (
+                word("http", Some(403), raw),
+                "The source refused access (403)",
+            ),
+            (
+                word("http", Some(503), raw),
+                "The source had an error (503)",
+            ),
+            (word("http", None, raw), "The source answered with an error"),
+            (
+                word("network", None, raw),
+                "The source could not be reached",
+            ),
+            (
+                word("timeout", None, raw),
+                "The source did not answer in time",
+            ),
+            (word("unreadable", None, raw), "The file could not be read"),
+            (
+                word("decode", None, raw),
+                "This device cannot decode the video",
+            ),
+            (word("audio", None, raw), "The audio output failed"),
+            (word("other", None, raw), raw),
+            (word("someday", None, raw), raw),
+            (failure_words(None, Some(404), raw), raw),
+        ];
+        for (got, want) in rows {
+            assert_eq!(got, want);
+        }
+        // The same sentences the server gives at open.
+        assert_eq!(refused(StatusCode::NOT_FOUND), word("http", Some(404), raw));
+        assert_eq!(UNREACHABLE, word("network", None, raw));
+        assert_eq!(SILENT, word("timeout", None, raw));
+    }
 
     #[test]
     fn parses_single_byte_ranges() {

@@ -407,7 +407,7 @@ async fn falls_over_to_the_first_source_that_answers() {
     assert_eq!(&resp.body[..], b"M");
 
     // A player error moves on; with nothing left the view says so.
-    view.fail_over(None, "decoder error");
+    view.fail_over(None, None, None, "decoder error");
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Failed);
     assert_eq!(s.attempts.last().unwrap().error, "decoder error");
@@ -476,21 +476,30 @@ async fn a_late_fail_over_never_drops_the_next_source() {
     let view = PlaybackView::open(&core, setup(&core, &streams), target());
     let first = settled(&view).await;
     assert_eq!(first.phase, PlaybackPhase::Ready, "{first:?}");
-    view.fail_over(Some(first.attempt), "decoder error");
+    // The player reports facts; the attempt list gets the core's words.
+    let http = (Some("http"), Some(404), "The source answered with HTTP 404");
+    view.fail_over(Some(first.attempt), http.0, http.1, http.2);
     let second = settled(&view).await;
     assert_eq!(second.phase, PlaybackPhase::Ready, "{second:?}");
     assert_eq!(second.key, first.key);
     assert!(second.attempt > first.attempt, "{second:?}");
+    let failed: Vec<_> = second.attempts.iter().map(|a| a.error.as_str()).collect();
+    assert_eq!(failed, ["The link no longer exists (404)"]);
     // The first source's player reports a second error after the move.
-    view.fail_over(Some(first.attempt), "decoder error");
+    view.fail_over(Some(first.attempt), Some("decode"), None, "late");
     let now = view.snapshot();
     assert_eq!(
         (now.phase, now.attempt),
         (PlaybackPhase::Ready, second.attempt)
     );
     // The source playing now can still fail over.
-    view.fail_over(Some(second.attempt), "decoder error");
-    assert_eq!(settled(&view).await.phase, PlaybackPhase::Failed);
+    view.fail_over(Some(second.attempt), Some("decode"), None, "decoder error");
+    let last = settled(&view).await;
+    assert_eq!(last.phase, PlaybackPhase::Failed);
+    assert_eq!(
+        last.attempts.last().map(|a| a.error.as_str()),
+        Some("This device cannot decode the video")
+    );
 }
 
 /// A 200 KiB file with Range support plus a subtitles addon that records the
