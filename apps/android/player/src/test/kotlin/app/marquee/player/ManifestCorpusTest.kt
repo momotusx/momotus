@@ -114,8 +114,8 @@ class ManifestCorpusTest {
     /**
      * Every URL Media3 may fetch from [manifest]: `Location`s, the `UTCTiming` URLs it reads the
      * time from, the information URL, license URLs, and for every Representation each base URL with
-     * the initialization, index and segments resolved on it (every listed segment, the first
-     * [SEGMENTS] of a template).
+     * the initialization, index and segments resolved on it: every segment a SegmentList or
+     * SegmentTimeline lists, and of a template the first [SEGMENTS] and the last.
      */
     private fun exposedDash(manifest: DashManifest): List<String> {
         val urls = mutableListOf<String>()
@@ -140,8 +140,14 @@ class ManifestCorpusTest {
                     representation.indexUri?.let { urls += it.resolveUriString(base) }
                     representation.index?.let { index ->
                         val count = index.getSegmentCount(manifest.getPeriodDurationUs(p))
-                        val walked = if (count < 0) SEGMENTS else minOf(count, SEGMENTS)
-                        for (n in index.firstSegmentNum until index.firstSegmentNum + walked) {
+                        val first = index.firstSegmentNum
+                        val numbers =
+                            when {
+                                index.isExplicit -> (first until first + count).toList()
+                                count < 0 -> (first until first + SEGMENTS).toList()
+                                else -> (first until first + minOf(count, SEGMENTS)) + (first + count - 1)
+                            }
+                        for (n in numbers) {
                             urls += index.getSegmentUrl(n).resolveUriString(base)
                         }
                     }
@@ -258,7 +264,7 @@ class ManifestCorpusTest {
         const val CORE = "http://127.0.0.1:7777/"
         const val CANARY = "http://canary.invalid/"
 
-        /** Segments of each Representation the DASH walk resolves. */
+        /** Segments of each template the DASH walk resolves before its last. */
         const val SEGMENTS = 50L
     }
 }
