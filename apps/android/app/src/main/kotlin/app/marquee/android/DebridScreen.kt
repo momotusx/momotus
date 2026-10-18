@@ -23,9 +23,12 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -236,6 +239,7 @@ private fun Service(
                     (!byCode && (account == null || account.state == AccountState.Reconnect))
             )
     val draft = holder.drafts[service.id].orEmpty()
+    val keyFocus = remember { FocusRequester() }
     val save = {
         keyboard?.hide()
         holder.saveKey(service.id)
@@ -313,9 +317,17 @@ private fun Service(
                         color = Marquee.colors.muted,
                     )
                 }
+                // The button that opened it is gone: focus goes to the field, not to the page's top.
+                LaunchedEffect(Unit) {
+                    if (holder.keyOpen[service.id] == true) {
+                        withFrameNanos { }
+                        runCatching { keyFocus.requestFocus() }
+                    }
+                }
                 MqTextField(
                     draft,
                     { holder.drafts[service.id] = it },
+                    modifier = Modifier.focusRequester(keyFocus),
                     label = "${service.name} API key",
                     placeholder = "API key",
                     keyboardOptions =
@@ -366,10 +378,13 @@ private fun SignIn(
     val context = LocalContext.current
     val colors = Marquee.colors
     val phase = view.snapshot ?: DebridLoginSnapshot.Starting
-    val stored = account != null && !pending
+    // The connection this sign-in replaces, if any: done counts only for a new one, stored. An old
+    // account (reconnecting) must not pass for the new one before its record arrives.
+    val before = remember(view) { account?.generation }
+    val done = DebridCopy.signedIn(phase == DebridLoginSnapshot.Done, account?.generation, before, pending)
     // Done counts once the record is stored: then the sheet closes and the card says Connected.
-    LaunchedEffect(phase, stored) {
-        if (phase == DebridLoginSnapshot.Done && stored) {
+    LaunchedEffect(done) {
+        if (done) {
             holder.closeLogin()
             holder.connected(service.id)
         }

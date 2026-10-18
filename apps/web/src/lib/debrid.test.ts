@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { address, inUse, loginWords, stateWords } from "./debrid";
+import { address, inUse, loginWords, signedIn, stateWords } from "./debrid";
 
 test("a card says connected only once its record is stored", () => {
   expect(stateWords(undefined, false)).toBeNull();
@@ -16,4 +16,12 @@ test("every sign-in phase has its words, and addresses read as typed", () => {
   expect(address("https://real-debrid.com/device/")).toBe("real-debrid.com/device");
   expect(inUse(0)).toBe("No debrid service in use.");
   expect(inUse(2)).toBe("2 debrid services in use.");
+});
+
+test("a sign-in counts only for its own new connection, once stored", () => {
+  expect(signedIn("done", "g2", "g1", false)).toBe(true);
+  expect(signedIn("done", "g1", "g1", false)).toBe(false); // the old account, reconnecting
+  expect(signedIn("done", "g2", "g1", true)).toBe(false); // not stored yet
+  expect(signedIn("done", "g1", undefined, false)).toBe(true);
+  expect(signedIn("code", "g2", "g1", false)).toBe(false);
 });

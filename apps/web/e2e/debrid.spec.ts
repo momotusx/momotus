@@ -22,8 +22,14 @@ test("debrid: a key connects, is counted, can be replaced and disconnects", asyn
   await page.locator('[data-f="debrid:premiumize:field"]').fill(KEY);
   await page.locator('[data-f="debrid:premiumize:save"]').click();
   await expect(card.locator(".dcard-head .st")).toHaveText("Connected");
-  // Connected: a new key without a disconnect first.
+  // Connected: a new key without a disconnect first; the field takes focus.
   await expect(page.locator('[data-f="debrid:premiumize:key"]')).toHaveText("Replace the key");
+  await page.locator('[data-f="debrid:premiumize:key"]').click();
+  await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("debrid:premiumize:field");
+  await page.keyboard.type(`${KEY}B`);
+  await page.locator('[data-f="debrid:premiumize:save"]').click();
+  await expect(page.locator('[data-f="debrid:premiumize:field"]')).toHaveCount(0);
+  await expect(card.locator(".dcard-head .st")).toHaveText("Connected");
 
   await page.locator('[data-f="nav:/settings"]').click();
   await expect(page.locator('[data-f="settings:debrid"]')).toContainText("1 debrid service in use.");

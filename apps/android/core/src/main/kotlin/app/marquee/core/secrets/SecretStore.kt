@@ -116,6 +116,12 @@ class SecretStore(
     private var current: Secrets? = null
     private var protectExistingFile = false
 
+    /**
+     * The file on disk was sealed with the key there now (it was read or written with it). From then
+     * on a failed write never resets the key: that would leave the file's accounts unreadable.
+     */
+    private var keyHoldsFile = false
+
     @Synchronized
     fun load(): Secrets {
         current?.let { return it }
@@ -161,6 +167,7 @@ class SecretStore(
             cipher.updateAAD(AAD)
             val plain = cipher.doFinal(sealed, 1 + IV_BYTES, sealed.size - 1 - IV_BYTES)
             val blob = json.decodeFromString(Blob.serializer(), plain.decodeToString())
+            keyHoldsFile = true
             Secrets(
                 blob.debridKeys.mapNotNull { if (it.size == 2) it[0] to it[1] else null },
                 blob.syncRecord,
@@ -213,10 +220,13 @@ class SecretStore(
                 it.fd.sync()
             }
             check(temp.renameTo(file)) { "rename of the secrets file failed" }
+            keyHoldsFile = true
             if (health == Health.MemoryOnly) health = Health.Ok
         } catch (e: Exception) {
-            if (retry && (e is GeneralSecurityException || e is ProviderException)) {
-                // A Keystore entry that is present but broken keeps every write failing: make a new key once.
+            // A Keystore entry that is present but broken keeps every write failing: make a new key
+            // once. Never when the file on disk was sealed with it: a busy Keystore would then cost
+            // every account stored there, while this write fails into memory only.
+            if (retry && !keyHoldsFile && (e is GeneralSecurityException || e is ProviderException)) {
                 keys.reset()
                 writeToDisk(secrets, retry = false)
                 return

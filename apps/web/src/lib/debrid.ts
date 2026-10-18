@@ -47,6 +47,11 @@ export function loginWords(phase: DebridLoginSnapshot): string {
   }
 }
 
+/** A sign-in by code is done once its own new connection is stored: the account it replaces
+ * (reconnecting) never passes for it before the new record arrives. */
+export const signedIn = (phase: string, generation: string | undefined, before: string | undefined, pending: boolean) =>
+  phase === "done" && !!generation && generation !== before && !pending;
+
 /** "real-debrid.com/device": the sign-in page as a person types it. */
 export const address = (url: string) => url.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
 

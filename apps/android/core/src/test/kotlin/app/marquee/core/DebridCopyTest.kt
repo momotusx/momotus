@@ -33,6 +33,15 @@ class DebridCopyTest {
     }
 
     @Test
+    fun `a sign-in counts only for its own new connection, once stored`() {
+        assertEquals(true, DebridCopy.signedIn(done = true, generation = "g2", before = "g1", pending = false))
+        assertEquals(false, DebridCopy.signedIn(done = true, generation = "g1", before = "g1", pending = false))
+        assertEquals(false, DebridCopy.signedIn(done = true, generation = "g2", before = "g1", pending = true))
+        assertEquals(true, DebridCopy.signedIn(done = true, generation = "g1", before = null, pending = false))
+        assertEquals(false, DebridCopy.signedIn(done = false, generation = "g2", before = "g1", pending = false))
+    }
+
+    @Test
     fun `every sign-in phase has its words`() {
         assertEquals("Getting a code", DebridCopy.login(DebridLoginSnapshot.Starting))
         assertEquals("Another sign-in or key took its place.", DebridCopy.login(DebridLoginSnapshot.Used))

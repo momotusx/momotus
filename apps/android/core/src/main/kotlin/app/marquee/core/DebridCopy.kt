@@ -60,6 +60,17 @@ object DebridCopy {
             else -> "$count debrid services in use."
         }
 
+    /**
+     * A sign-in by code is done once its own new connection is stored: the account it replaces
+     * (reconnecting) never passes for it before the new record arrives.
+     */
+    fun signedIn(
+        done: Boolean,
+        generation: String?,
+        before: String?,
+        pending: Boolean,
+    ) = done && generation != null && generation != before && !pending
+
     /** "real-debrid.com/device": the sign-in page as a person types it. */
     fun address(url: String) =
         url

@@ -9,7 +9,7 @@ import KeyRound from "lucide-solid/icons/key-round";
 import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Trash from "lucide-solid/icons/trash";
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { Qr } from "../components/qr";
 import { liveView, op, reasonOf } from "../core/client";
 import { debridAccounts, debridStore } from "../core/debrid";
@@ -17,7 +17,7 @@ import type { DebridAccount } from "../core/generated/DebridAccount";
 import type { DebridLoginSnapshot } from "../core/generated/DebridLoginSnapshot";
 import { autoFocus } from "../focus/dom";
 import { form } from "../form";
-import { address, CODE_SERVICES, type DebridService, loginWords, SERVICES, stateWords } from "../lib/debrid";
+import { address, CODE_SERVICES, type DebridService, loginWords, SERVICES, signedIn, stateWords } from "../lib/debrid";
 import { waitText } from "../lib/profiles";
 import "./browse.css";
 import "./settings.css";
@@ -85,6 +85,11 @@ function Card(props: {
   const state = () => stateWords(props.account?.state, props.pending);
   const tone = () => (props.account?.state === "reconnect" ? "bad" : props.account?.state === "failing" || props.pending ? "warn" : "ok");
 
+  // The button that opened the field is gone: focus goes to the field, not to the page's top.
+  const openKey = () => {
+    setKeyOpen(true);
+    queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(`[data-f="debrid:${id()}:field"]`)));
+  };
   const save = async (e: Event) => {
     e.preventDefault();
     const key = draft().trim();
@@ -139,7 +144,7 @@ function Card(props: {
               {props.account ? "Sign in again" : "Sign in with a code"}
             </button>
             <Show when={!keyOpen()}>
-              <button class="btn" data-f={`debrid:${id()}:key`} aria-label={`Use a key for ${props.service.name} instead`} onClick={() => setKeyOpen(true)}>
+              <button class="btn" data-f={`debrid:${id()}:key`} aria-label={`Use a key for ${props.service.name} instead`} onClick={openKey}>
                 <KeyRound aria-hidden />
                 Use a key instead
               </button>
@@ -148,7 +153,7 @@ function Card(props: {
           <Show when={props.account}>
             {/* A connected account can take a new key without being disconnected first. */}
             <Show when={!keyOpen() && props.account?.state !== "reconnect"}>
-              <button class="btn" data-f={`debrid:${id()}:key`} aria-label={`Use a new key for ${props.service.name}`} onClick={() => setKeyOpen(true)}>
+              <button class="btn" data-f={`debrid:${id()}:key`} aria-label={`Use a new key for ${props.service.name}`} onClick={openKey}>
                 <KeyRound aria-hidden />
                 {byCode() ? "Use a key instead" : "Replace the key"}
               </button>
@@ -214,9 +219,11 @@ function SignIn(props: { service: DebridService; account: DebridAccount | undefi
   createEffect(() => {
     if (phase().phase === "code") setNow(Date.now());
   });
-  // Done counts once the record is stored: then the card says Connected.
+  // The connection this sign-in replaces, if any: done counts only for a new one, stored. An old
+  // account (reconnecting) must not pass for the new one before its record arrives.
+  const before = untrack(() => props.account?.generation);
   createEffect(() => {
-    if (phase().phase === "done" && props.account && !props.pending) props.onClose("Connected");
+    if (signedIn(phase().phase, props.account?.generation, before, props.pending)) props.onClose("Connected");
   });
   const failed = () => view().state.status.state === "failed";
   const why = () => {

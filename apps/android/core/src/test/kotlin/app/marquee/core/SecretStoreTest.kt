@@ -144,6 +144,26 @@ class SecretStoreTest {
     }
 
     @Test
+    fun `a busy Keystore during a write never costs the stored accounts`() {
+        var busy = false
+        val keys = SoftwareKeys()
+        val source =
+            object : KeySource {
+                override fun key(): SecretKey = if (busy) throw ProviderException("keystore is busy") else keys.key()
+
+                override fun reset() = keys.reset()
+            }
+        SecretStore(file, source).update { it.copy(debridKeys = listOf("torbox" to "TB")) }
+        val store = SecretStore(file, source)
+        assertEquals(listOf("torbox" to "TB"), store.load().debridKeys)
+        busy = true
+        assertFalse(store.updateDurably { it.copy(syncRecord = record) })
+        busy = false
+        // The key that sealed the file is still the one there: its accounts open after a restart.
+        assertEquals(listOf("torbox" to "TB"), SecretStore(file, source).load().debridKeys)
+    }
+
+    @Test
     fun `printing the secrets never shows them`() {
         val text = SecretStore.Secrets(listOf("realdebrid" to "RD-SECRET-KEY"), record).toString()
         assertFalse(text.contains("RD-SECRET-KEY"))
