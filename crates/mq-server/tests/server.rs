@@ -1393,7 +1393,6 @@ async fn steering_origin(data: Arc<Vec<u8>>, to: String) -> String {
 
 #[tokio::test]
 async fn the_in_process_reader_keeps_the_playbacks_scope() {
-    use mq_media::RangeReader;
     let canary = Canary::start(0).await;
     let len = 16u64 << 20;
     let origin = steering_origin(file(len as usize), format!("http://{}/tail", canary.addr)).await;
