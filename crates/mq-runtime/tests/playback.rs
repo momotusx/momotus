@@ -1,5 +1,5 @@
-use mq_http::{ClientConfig, HttpClient, RequestOptions};
-use mq_library::AddonRow;
+use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
+use mq_library::{AddonRow, CachedResponse};
 use mq_protocol::decode_streams;
 use mq_runtime::{Core, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView};
 use mq_streams::{ParsedStream, normalize};
@@ -269,6 +269,103 @@ async fn subtitle_tracks_take_their_reach_from_their_install() {
         let body = served.unwrap_or_else(|e| panic!("{}'s track: {e}", track.source));
         assert!(String::from_utf8_lossy(&body.body).contains("Hello"));
     }
+}
+
+/// A loopback origin whose video ignores `Range` (so no subtitle hash is
+/// sent and the subtitles request has no extras) and which serves
+/// `/pub.srt`, counting requests for it.
+async fn passthrough_origin() -> (String, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let srt = Arc::new(AtomicUsize::new(0));
+    let count = srt.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let count = count.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let body = if head.starts_with("GET /pub.srt") {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    "1\n00:00:01,000 --> 00:00:02,000\nHello\n"
+                } else {
+                    "M"
+                };
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    (base, srt)
+}
+
+#[tokio::test]
+async fn a_public_subtitles_answer_gets_no_reach() {
+    let (base, srt) = passthrough_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let public = "https://pubsubs.example/manifest.json";
+    let stream_addon = format!("{base}/manifest.json");
+    install(
+        &core,
+        &[
+            row(public, "pubsubs", "subtitles", false),
+            row(&stream_addon, "own", "stream", true),
+        ],
+    );
+    // The public install really answers, from the response cache, with a
+    // track on the loopback origin.
+    let answer = serde_json::json!({"subtitles": [{"id": "1", "lang": "eng", "url": format!("{base}/pub.srt")}]});
+    let cached = CachedResponse {
+        body: answer.to_string().into_bytes(),
+        stored_ms: mq_library::hlc::now_ms() as i64,
+        max_age_s: 3600,
+        stale_revalidate_s: 0,
+        stale_error_s: 0,
+    };
+    let key = "https://pubsubs.example/subtitles/movie/tt1727587.json";
+    let removals = core.library().removals();
+    assert!(core.library().cache_put(key, &cached, removals).unwrap());
+    let streams = format!(r#"{{"streams":[{{"url":"{base}/video.mkv"}}]}}"#);
+    let view = PlaybackView::open(
+        &core,
+        listed(&stream_addon, "own", "Own", &streams),
+        target(),
+    );
+    let mut done = None;
+    for _ in 0..1500 {
+        let s = view.snapshot();
+        if s.phase != PlaybackPhase::Resolving && !s.subtitles_pending {
+            done = Some(s);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let s = done.expect("subtitles settled");
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    let track = s
+        .subtitles
+        .iter()
+        .find(|t| t.source == "pubsubs")
+        .unwrap_or_else(|| panic!("the public install answered: {s:?}"));
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let served = http.get(&track.url, &local).await;
+    assert!(
+        matches!(served, Err(HttpError::Status { status: 502, .. })),
+        "{served:?}"
+    );
+    assert_eq!(
+        srt.load(Ordering::SeqCst),
+        0,
+        "the loopback file was fetched"
+    );
 }
 
 #[tokio::test]

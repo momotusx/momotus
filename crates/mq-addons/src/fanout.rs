@@ -35,9 +35,12 @@ pub enum AddonEvent {
     },
     Slow {
         addon_ids: Vec<String>,
+        /// The same installs, in the same order.
+        transport_urls: Vec<Url>,
     },
     Failed {
         addon_id: String,
+        transport_url: Url,
         error: AddonError,
     },
     /// Emitted once, after every addon has arrived, failed or timed out.
@@ -105,19 +108,20 @@ async fn drive(
                 pending.retain(|(url, _)| url != &transport_url);
                 let event = match result {
                     Ok(f) => AddonEvent::Arrived { addon_id, transport_url, body: f.body, from_cache: f.from_cache, latency: f.latency },
-                    Err(error) => AddonEvent::Failed { addon_id, error },
+                    Err(error) => AddonEvent::Failed { addon_id, transport_url, error },
                 };
                 if tx.send(event).is_err() { return; }
             }
             _ = &mut soft, if !soft_fired => {
                 soft_fired = true;
                 let addon_ids = pending.iter().map(|(_, id)| id.clone()).collect();
-                if tx.send(AddonEvent::Slow { addon_ids }).is_err() { return; }
+                let transport_urls = pending.iter().map(|(url, _)| url.clone()).collect();
+                if tx.send(AddonEvent::Slow { addon_ids, transport_urls }).is_err() { return; }
             }
             _ = &mut hard => {
                 calls.abort_all();
-                for (_, addon_id) in pending.drain(..) {
-                    let _ = tx.send(AddonEvent::Failed { addon_id, error: AddonError::TimedOut });
+                for (transport_url, addon_id) in pending.drain(..) {
+                    let _ = tx.send(AddonEvent::Failed { addon_id, transport_url, error: AddonError::TimedOut });
                 }
             }
         }

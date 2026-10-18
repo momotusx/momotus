@@ -360,10 +360,12 @@ async fn streams(core: &Core, kind: String, id: String) -> Result<(), String> {
                     "error": decoded.err(),
                 }));
             }
-            AddonEvent::Slow { addon_ids } => {
+            AddonEvent::Slow { addon_ids, .. } => {
                 emit(json!({ "event": "slow", "addons": addon_ids, "ms": ms(started.elapsed()) }))
             }
-            AddonEvent::Failed { addon_id, error } => emit(
+            AddonEvent::Failed {
+                addon_id, error, ..
+            } => emit(
                 json!({ "event": "failed", "addon": addon_id, "error": error.to_string(), "ms": ms(started.elapsed()) }),
             ),
             AddonEvent::Done => break,

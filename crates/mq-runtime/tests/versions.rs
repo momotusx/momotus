@@ -6,6 +6,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 async fn stream_addon(id: &str, delay: Duration, body: &'static str) -> AddonRow {
+    named_addon(id, id, delay, body).await
+}
+
+async fn named_addon(id: &str, name: &str, delay: Duration, body: &'static str) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -27,7 +31,7 @@ async fn stream_addon(id: &str, delay: Duration, body: &'static str) -> AddonRow
         }
     });
     let manifest = serde_json::json!({
-        "id": id, "version": "1.0.0", "name": id,
+        "id": id, "version": "1.0.0", "name": name,
         "types": ["series"], "resources": ["stream"], "catalogs": [], "idPrefixes": ["tt"]
     });
     AddonRow {
@@ -115,6 +119,87 @@ async fn ranks_union_progressively_and_freezes_the_pick() {
         })
         .collect();
     assert_eq!(listed_by, installs);
+}
+
+const FIRST: &str = r#"{"streams":[
+ {"name":"First","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-AAA","infoHash":"1111111111111111111111111111111111111111","fileIdx":0}
+]}"#;
+const SECOND: &str = r#"{"streams":[
+ {"name":"Second","title":"Game.of.Thrones.S01E01.1080p.WEB-DL.x264-BBB","infoHash":"2222222222222222222222222222222222222222","fileIdx":0}
+]}"#;
+
+#[tokio::test]
+async fn installs_sharing_a_manifest_id_keep_their_own_name_rank_and_progress() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let first = named_addon("same", "First", Duration::ZERO, FIRST).await;
+    let second = named_addon("same", "Second", Duration::from_millis(500), SECOND).await;
+    let (first_url, second_url) = (first.transport_url.clone(), second.transport_url.clone());
+    // A third install of the same id that nobody serves: it fails.
+    let manifest = serde_json::json!({
+        "id": "same", "version": "1.0.0", "name": "Broken",
+        "types": ["series"], "resources": ["stream"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    let broken = AddonRow {
+        transport_url: "http://127.0.0.1:9/manifest.json".into(),
+        manifest_json: manifest.to_string(),
+        position: 1,
+        enabled: true,
+        allow_private: true,
+    };
+    let second = AddonRow {
+        position: 2,
+        ..second
+    };
+    core.library()
+        .set_addons("p", &[first, broken, second], &core.hlc())
+        .unwrap();
+
+    let view = VersionsView::open(&core, params());
+    let (first_snapshot, mut updates) = view.subscribe();
+    use futures_util::StreamExt;
+    let mut seen = vec![first_snapshot];
+    while !seen.last().unwrap().done {
+        let batch = tokio::time::timeout(Duration::from_secs(15), updates.next())
+            .await
+            .expect("update")
+            .expect("stream open");
+        seen.extend(batch);
+    }
+    // The first install answered first: only the second is still pending.
+    assert!(
+        seen.iter().any(|s| s.pending_addons == ["Second"]),
+        "{:?}",
+        seen.iter().map(|s| &s.pending_addons).collect::<Vec<_>>()
+    );
+    let last = seen.last().unwrap();
+    assert!(last.pending_addons.is_empty() && last.slow_addons.is_empty());
+    assert_eq!(last.failed_addons, ["Broken"]);
+    // Every candidate carries its own install's URL, name and rank.
+    let keys = last
+        .recommended
+        .iter()
+        .chain(&last.rows)
+        .map(|r| r.key.clone());
+    let candidates: Vec<_> = keys.flat_map(|k| view.candidates(&k)).collect();
+    let mut by_install: Vec<(String, String, u16)> = candidates
+        .iter()
+        .map(|c| {
+            let url = c
+                .addon_url
+                .as_ref()
+                .map(|u| u.to_string())
+                .unwrap_or_default();
+            (url, c.addon_name.clone(), c.addon_rank)
+        })
+        .collect();
+    by_install.sort();
+    let mut want = vec![
+        (first_url, "First".to_owned(), 0),
+        (second_url, "Second".to_owned(), 2),
+    ];
+    want.sort();
+    assert_eq!(by_install, want);
 }
 
 #[tokio::test]

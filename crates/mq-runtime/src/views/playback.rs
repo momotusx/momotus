@@ -1086,6 +1086,29 @@ mod tests {
     }
 
     #[test]
+    fn only_a_private_install_host_grants_reach() {
+        let reach = |url: Option<&str>| private_reach(url.map(|u| Url::parse(u).unwrap()).as_ref());
+        for local in [
+            "http://127.0.0.1:9/manifest.json",
+            "http://[::1]:9/manifest.json",
+            "http://[fd00::5]/manifest.json",
+            "http://localhost:9/manifest.json",
+            "http://192.168.1.5/manifest.json",
+        ] {
+            assert!(reach(Some(local)), "{local}");
+        }
+        // A public literal (a VPS) or a name grants nothing, nor does no URL.
+        for public in [
+            "http://203.0.113.9/manifest.json",
+            "http://[2001:db8::9]/manifest.json",
+            "https://name.example/manifest.json",
+        ] {
+            assert!(!reach(Some(public)), "{public}");
+        }
+        assert!(!reach(None));
+    }
+
+    #[test]
     fn debrid_requests_follow_the_stream() {
         let resolve = stream(
             r#"{"clientResolve":{"type":"debrid","service":"torbox","infoHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","fileIdx":3,"filename":"Show.S01E02.mkv","episode":2}}"#,

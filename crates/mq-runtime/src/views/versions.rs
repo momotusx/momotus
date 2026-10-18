@@ -19,6 +19,7 @@ use serde::Serialize;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use tokio::task::JoinSet;
+use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -95,9 +96,11 @@ struct State {
     ranked: Ranked,
     recommended: Option<RankedRow>,
     frozen: bool,
-    pending: Vec<String>,
-    slow: Vec<String>,
-    failed: Vec<String>,
+    /// Installs by transport URL, with their names: two installs may share a
+    /// manifest id, and each keeps its own progress.
+    pending: Vec<(Url, String)>,
+    slow: Vec<(Url, String)>,
+    failed: Vec<(Url, String)>,
     done: bool,
     /// The pick's debrid link was warmed (once per view).
     prefetched: bool,
@@ -144,7 +147,10 @@ impl VersionsView {
             ranked: Ranked::default(),
             recommended: None,
             frozen: false,
-            pending: eligible.iter().map(|a| a.manifest.name.clone()).collect(),
+            pending: eligible
+                .iter()
+                .map(|a| (a.transport_url.clone(), a.manifest.name.clone()))
+                .collect(),
             slow: Vec::new(),
             failed: Vec::new(),
             done: eligible.is_empty(),
@@ -232,11 +238,18 @@ async fn collect(
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<VersionsSnapshot>,
 ) {
-    let names: std::collections::HashMap<String, (String, u16)> = addons
+    // Name and rank by transport URL: two installs may share a manifest id.
+    let names: std::collections::HashMap<Url, (String, u16)> = addons
         .iter()
         .enumerate()
-        .map(|(i, a)| (a.id().to_owned(), (a.manifest.name.clone(), i as u16)))
+        .map(|(i, a)| (a.transport_url.clone(), (a.manifest.name.clone(), i as u16)))
         .collect();
+    let name_of = |url: &Url, id: &str| {
+        let name = names
+            .get(url)
+            .map_or_else(|| id.to_owned(), |(n, _)| n.clone());
+        (url.clone(), name)
+    };
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     let params = Arc::new(params);
     let mut next_index = 0u32;
@@ -250,7 +263,7 @@ async fn collect(
                 ..
             } => {
                 let (name, rank_index) = names
-                    .get(addon_id)
+                    .get(transport_url)
                     .cloned()
                     .unwrap_or((addon_id.clone(), u16::MAX));
                 let (addon_id, body, start) = (addon_id.clone(), body.clone(), next_index);
@@ -285,34 +298,29 @@ async fn collect(
         };
         let mut s = lock(&state);
         match event {
-            AddonEvent::Arrived { addon_id, .. } => {
-                let name = names
-                    .get(&addon_id)
-                    .map(|(n, _)| n.clone())
-                    .unwrap_or(addon_id);
+            AddonEvent::Arrived { transport_url, .. } => {
                 s.streams.extend(parsed);
-                s.pending.retain(|p| p != &name);
-                s.slow.retain(|p| p != &name);
+                s.pending.retain(|(url, _)| *url != transport_url);
+                s.slow.retain(|(url, _)| *url != transport_url);
             }
-            AddonEvent::Slow { addon_ids } => {
-                s.slow = addon_ids
+            AddonEvent::Slow {
+                addon_ids,
+                transport_urls,
+            } => {
+                s.slow = transport_urls
                     .iter()
-                    .map(|id| {
-                        names
-                            .get(id)
-                            .map(|(n, _)| n.clone())
-                            .unwrap_or_else(|| id.clone())
-                    })
+                    .zip(&addon_ids)
+                    .map(|(url, id)| name_of(url, id))
                     .collect();
             }
-            AddonEvent::Failed { addon_id, .. } => {
-                let name = names
-                    .get(&addon_id)
-                    .map(|(n, _)| n.clone())
-                    .unwrap_or(addon_id);
-                s.pending.retain(|p| p != &name);
-                s.slow.retain(|p| p != &name);
-                s.failed.push(name);
+            AddonEvent::Failed {
+                addon_id,
+                transport_url,
+                ..
+            } => {
+                s.pending.retain(|(url, _)| *url != transport_url);
+                s.slow.retain(|(url, _)| *url != transport_url);
+                s.failed.push(name_of(&transport_url, &addon_id));
             }
             AddonEvent::Done => s.done = true,
         }
@@ -349,6 +357,10 @@ fn rerank(s: &mut State, params: &VersionsParams) {
     }
 }
 
+fn names(installs: &[(Url, String)]) -> Vec<String> {
+    installs.iter().map(|(_, name)| name.clone()).collect()
+}
+
 fn render(s: &State) -> VersionsSnapshot {
     let recommended_key = s.recommended.as_ref().map(|r| r.stream.key.clone());
     let rows = s
@@ -372,9 +384,9 @@ fn render(s: &State) -> VersionsSnapshot {
             count: s.ranked.hidden.len() as u32,
             by_reason,
         },
-        pending_addons: s.pending.clone(),
-        slow_addons: s.slow.clone(),
-        failed_addons: s.failed.clone(),
+        pending_addons: names(&s.pending),
+        slow_addons: names(&s.slow),
+        failed_addons: names(&s.failed),
         done: s.done,
         frozen: s.frozen,
     }

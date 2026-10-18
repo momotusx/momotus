@@ -65,11 +65,13 @@ async fn fast_slow_and_timed_out_addons() {
     while let Some(event) = fanout.next().await {
         let entry = match event {
             AddonEvent::Arrived { addon_id, .. } => format!("arrived:{addon_id}"),
-            AddonEvent::Slow { mut addon_ids } => {
+            AddonEvent::Slow { mut addon_ids, .. } => {
                 addon_ids.sort();
                 format!("slow:{}", addon_ids.join(","))
             }
-            AddonEvent::Failed { addon_id, error } => format!("failed:{addon_id}:{error}"),
+            AddonEvent::Failed {
+                addon_id, error, ..
+            } => format!("failed:{addon_id}:{error}"),
             AddonEvent::Done => "done".into(),
         };
         log.push(entry);
