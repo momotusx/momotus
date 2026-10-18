@@ -196,3 +196,21 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(startLanded(finished: true, sameItem: true, pending: nil) == nil)
 }
 
+@Test func aSeekInFlightHoldsUntilItLands() {
+    // B seeks to its 900 s start; the viewer seeks to 1200 s; a stale tick says 0; B fails.
+    var pending: Double? = 900
+    var position = 0.0
+    pending = 1200; position = 1200
+    let stale = ticked(time: 0, pending: pending)
+    if let now = stale.position { position = now }
+    pending = stale.pending
+    #expect(position == 1200)
+    #expect(stoppedPosition(pendingStart: pending, position: position) == 1200)
+    // The player reaches the target: the wait ends.
+    let landed = ticked(time: 1200.2, pending: pending)
+    #expect(landed.position == 1200.2)
+    #expect(landed.pending == nil)
+    // No seek in flight: every tick counts.
+    #expect(ticked(time: 42, pending: nil).position == 42)
+}
+

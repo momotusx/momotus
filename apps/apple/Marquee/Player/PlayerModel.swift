@@ -50,9 +50,11 @@ final class PlayerModel {
     @ObservationIgnored private var loadedURL: String?
     /// Where a failed source stopped, so the next one continues there.
     @ObservationIgnored private var stoppedAt: Double?
-    /// The start of the loaded source while the seek to it has not landed:
-    /// the player says 0 until then, and a failure keeps this instead.
+    /// Where a seek in flight goes (the source's start or the viewer's), until it
+    /// lands: the player may still report where it was, and a failure keeps this.
     @ObservationIgnored private var pendingStart: Double?
+    /// Bumped per seek, so only the latest seek's completion hands over.
+    @ObservationIgnored private var seekToken = 0
     /// The core's attempt number of the source that plays, named in failOver so
     /// the core ignores a late error, even from another source of the same key.
     @ObservationIgnored private var loadedAttempt: Int64?
@@ -232,12 +234,24 @@ final class PlayerModel {
     func seek(to seconds: Double) {
         let target = CMTime(seconds: max(0, min(seconds, duration > 0 ? duration : seconds)), preferredTimescale: 600)
         position = target.seconds
-        // The viewer's seek replaces a start that has not landed yet.
-        pendingStart = nil
+        // The viewer's seek replaces a start that has not landed yet, and stays pending itself.
+        pendingStart = target.seconds
         ended = false
+        seekToken += 1
+        let (token, generation) = (seekToken, generation)
         player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] done in
-            guard done else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.report(); self?.publishNowPlaying() } }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, let landed = startLanded(
+                        finished: done, sameItem: generation == self.generation && token == self.seekToken,
+                        pending: self.pendingStart
+                    ) else { return }
+                    self.position = landed
+                    self.pendingStart = nil
+                    self.report()
+                    self.publishNowPlaying()
+                }
+            }
         }
     }
 
@@ -335,6 +349,8 @@ final class PlayerModel {
         player.replaceCurrentItem(with: item)
         loadAudio(item, generation: generation)
         pendingStart = start > 1 ? start : nil
+        seekToken += 1
+        let token = seekToken
         if start > 1 {
             let at = CMTime(seconds: start, preferredTimescale: 600)
             // Only a seek that landed hands over, and the cached position takes the start
@@ -343,7 +359,8 @@ final class PlayerModel {
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         guard let self, let landed = startLanded(
-                            finished: finished, sameItem: generation == self.generation, pending: self.pendingStart
+                            finished: finished, sameItem: generation == self.generation && token == self.seekToken,
+                            pending: self.pendingStart
                         ) else { return }
                         self.position = landed
                         self.pendingStart = nil
@@ -404,7 +421,9 @@ final class PlayerModel {
 
     private func tick(_ time: CMTime) {
         guard time.isNumeric else { return }
-        position = time.seconds
+        let (now, pending) = ticked(time: time.seconds, pending: pendingStart)
+        if let now { position = now }
+        pendingStart = pending
         if let total = player.currentItem?.duration, total.isNumeric { duration = total.seconds }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
