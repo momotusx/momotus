@@ -643,6 +643,24 @@ mod tests {
         assert_eq!(plays(&caps), [mq_server::Format::Hls]);
     }
 
+    /// Apple's real container list, read from its source: HLS, never DASH.
+    #[test]
+    fn apples_caps_play_hls_and_refuse_dash() {
+        let swift = include_str!("../../../../apps/apple/Marquee/Player/DeviceCaps.swift");
+        let line = swift
+            .lines()
+            .find(|l| l.contains("static let containers"))
+            .expect("Apple's containers");
+        let list = &line[line.find('[').unwrap() + 1..line.rfind(']').unwrap()];
+        let mut caps = DeviceCaps::basic_1080p();
+        caps.containers = list
+            .split(',')
+            .map(|c| c.trim().trim_matches('"').to_owned())
+            .collect();
+        assert!(caps.containers.contains(&"m3u8".to_owned()), "{caps:?}");
+        assert_eq!(plays(&caps), [mq_server::Format::Hls]);
+    }
+
     #[test]
     fn a_device_plays_dash_when_its_caps_list_mpd() {
         let mut caps = DeviceCaps::basic_1080p();
