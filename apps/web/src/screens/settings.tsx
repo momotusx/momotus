@@ -5,7 +5,7 @@ import Download from "lucide-solid/icons/download";
 import KeyRound from "lucide-solid/icons/key-round";
 import PackageSearch from "lucide-solid/icons/package-search";
 import Puzzle from "lucide-solid/icons/puzzle";
-import QrCode from "lucide-solid/icons/qr-code";
+import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Rows3 from "lucide-solid/icons/rows-3";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, type JSX, Show } from "solid-js";
@@ -14,7 +14,8 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { Prefs } from "../core/generated/Prefs";
 import type { QualityPref } from "../core/generated/QualityPref";
 import { chooseForm, type Form, form } from "../form";
-import { findAddons, languageName } from "../lib/words";
+import { findAddons, languageName, syncWords } from "../lib/words";
+import * as sync from "../core/sync";
 import "./browse.css";
 import "./settings.css";
 import UserPen from "lucide-solid/icons/user-pen";
@@ -72,7 +73,7 @@ function Choice<T>(props: {
   );
 }
 
-function LinkRow(props: { href: string; icon: JSX.Element; title: string; text: string; fkey: string }) {
+export function LinkRow(props: { href: string; icon: JSX.Element; title: string; text: string; fkey: string }) {
   return (
     <A class="link-row" href={props.href} data-f={props.fkey} data-autofocus={props.fkey === "settings:addons" ? "" : undefined}>
       {props.icon}
@@ -98,6 +99,12 @@ export default function SettingsScreen() {
   const count = () => addons.state.data?.addons.length ?? 0;
   const sources = () => addons.state.data?.addons.filter((a) => a.enabled && a.provides.includes("stream")).map((a) => a.name) ?? [];
   const me = () => profiles()?.profiles.find((x) => x.id === profiles()?.active);
+  const syncLine = () => {
+    if (!sync.joined()) return syncWords.offLine;
+    const at = sync.syncedAt();
+    if (sync.problem()) return sync.problem()?.words ?? "";
+    return at ? `On. Synced at ${new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.` : "On.";
+  };
 
   return (
     <main class="browse page settings-page" data-vscroll>
@@ -156,7 +163,7 @@ export default function SettingsScreen() {
       <section class="set">
         <h2>Devices and sync</h2>
         <div class="links">
-          <LinkRow href="/pair" fkey="settings:pair" icon={<QrCode aria-hidden />} title="Pair this device" text="Show a code here, then approve this device from one that already syncs." />
+          <LinkRow href="/sync" fkey="settings:sync" icon={<MonitorSmartphone aria-hidden />} title={syncWords.title} text={syncLine()} />
         </div>
       </section>
 

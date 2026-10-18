@@ -1,4 +1,5 @@
 import Check from "lucide-solid/icons/check";
+import Copy from "lucide-solid/icons/copy";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
@@ -11,23 +12,25 @@ import { liveView } from "../core/client";
 import { autoFocus } from "../focus/dom";
 import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapshot";
 import { form } from "../form";
-import { pairingProblem, plainAddress, serverHost } from "../lib/words";
+import * as sync from "../core/sync";
+import { pairingProblem, plainAddress, serverHost, syncWords } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
-
-const SERVER_KEY = "mq.syncServer";
-const read = (k: string) => {
-  try {
-    return localStorage.getItem(k) ?? "";
-  } catch {
-    return "";
-  }
-};
 
 function Session(props: { server: string; name: string; onDone: () => void; onJoined: () => void }) {
   const view = liveView<Pairing>("pairing", { server: props.server, name: props.name });
   const p = () => view.state.data;
   // When the code stops working, as a time of day ("1:54 PM").
+  const [copied, setCopied] = createSignal(false);
+  // The join is stored the moment it arrives, once, as a copy: the view's store may change it.
+  let took = false;
+  createEffect(() => {
+    const s = p();
+    if (s?.phase !== "joined" || took) return;
+    took = true;
+    sync.join(JSON.parse(JSON.stringify(s.record)));
+    props.onJoined();
+  });
   const until = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   // Each step that asks something takes focus to its answer: on a TV the remote is never left
   // on the form below while "Yes, they match" waits.
@@ -59,11 +62,34 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
               <Qr text={w().qr} label="Pairing QR code" />
             </div>
             <div class="pair-steps">
-              <p class="step">On a device that already syncs, open Settings, then add a device, and scan this code.</p>
+              <p class="step">On a device that already syncs, open Settings, then Devices and sync, then Add a device, and scan this code.</p>
               <p class="st warn live">
                 <i class="dot" />
-                Waiting for the other device. The code works until <span class="num">{until(w().expiresMs)}</span>.
+                {/* One text box: the dot's flex row would split the time and the period into columns. */}
+                <span>
+                  Waiting for the other device. The code works until <span class="num">{until(w().expiresMs)}</span>.
+                </span>
               </p>
+              <Show when={form() !== "tv"}>
+                <p class="note small">{syncWords.copyHelp}</p>
+                <div class="acts">
+                  <button
+                    class="btn"
+                    data-f="pair:copy"
+                    onClick={() =>
+                      void navigator.clipboard.writeText(w().qr).then(
+                        () => setCopied(true),
+                        () => setCopied(false),
+                      )
+                    }
+                  >
+                    <Show when={copied()} fallback={<Copy aria-hidden />}>
+                      <Check aria-hidden />
+                    </Show>
+                    {copied() ? syncWords.copied : syncWords.copyCode}
+                  </button>
+                </div>
+              </Show>
             </div>
           </div>
         )}
@@ -89,25 +115,18 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
         )}
       </Match>
       <Match when={p()?.phase === "joined"}>
-        {(() => {
-          props.onJoined();
-          return (
-            <section class="summary">
-              <h2>
-                <Check aria-hidden />
-                This device joined the account
-              </h2>
-              <p class="note small">
-                The sync record stays in memory for this session only: a browser has no system keystore. The desktop and TV apps keep it in the keystore.
-              </p>
-              <div class="acts">
-                <A class="btn primary" href="/" data-f="pair:done" data-autofocus>
-                  Done
-                </A>
-              </div>
-            </section>
-          );
-        })()}
+        <section class="summary">
+          <h2>
+            <Check aria-hidden />
+            This device joined the account
+          </h2>
+          <p class="note small">{syncWords.tabOnly}</p>
+          <div class="acts">
+            <A class="btn primary" href="/sync" data-f="pair:done" data-autofocus>
+              Done
+            </A>
+          </div>
+        </section>
       </Match>
       <Match when={p()?.phase === "expired" || p()?.phase === "failed"}>
         <section class="problem">
@@ -128,10 +147,9 @@ export default function PairingScreen() {
   // nothing is typed. The fields live under Advanced, open only when no
   // server is known yet.
   // A remembered address with a user name or password (an older version saved it) is not used.
-  const stored = read(SERVER_KEY).trim();
-  const known = plainAddress(stored) ? stored : "";
+  const known = sync.rememberedServer();
   const [server, setServer] = createSignal(known);
-  const [name, setName] = createSignal(`Marquee ${form() === "tv" ? "TV" : form() === "phone" ? "phone" : "desktop"}`);
+  const [name, setName] = createSignal(sync.defaultDeviceName());
   const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known ? { server: known, name: name(), n: 1 } : null);
   const [advanced, setAdvanced] = createSignal(!known);
   // Once joined, the page is the result and Done: no second pairing starts from it.
@@ -143,11 +161,7 @@ export default function PairingScreen() {
     // An address with a user name or password is never kept or sent.
     setBad(s !== "" && !plainAddress(s));
     if (!s || bad()) return;
-    try {
-      localStorage.setItem(SERVER_KEY, s);
-    } catch {
-      // Remembered for this page only.
-    }
+    sync.remember(s, name().trim() || "Marquee");
     setRun({ server: s, name: name().trim() || "Marquee", n: (run()?.n ?? 0) + 1 });
   };
   return (

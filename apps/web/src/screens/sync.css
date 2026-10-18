@@ -1,0 +1,81 @@
+/* Devices and sync: the state card, the device list, the forms and the kit.
+ * Glass panels with a hairline edge, as Find addons; the type tokens carry the
+ * phone sizes, so phone rules only tighten spacing. */
+
+.sync-page .set { max-width: 1400px; }
+.sync-lead { margin: -8px 0 24px; max-width: 1100px; }
+.sync-page > .st, .sync-page .set > .st { margin-bottom: 20px; font: 500 var(--type-callout) / 1.35 var(--font-text); }
+
+.sync-card { display: grid; gap: 28px; padding: 30px 34px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
+.sync-state { display: grid; gap: 14px; }
+.sync-state .st { font: 600 var(--type-headline) / 1.3 var(--font-text); }
+.sync-note { display: flex; gap: 14px; align-items: flex-start; max-width: 1100px; font: 400 var(--type-callout) / 1.45 var(--font-text); color: var(--text); }
+.sync-note svg { flex: none; width: 28px; height: 28px; margin-top: 2px; color: var(--warn); }
+.sync-compare { display: grid; gap: 10px; padding-top: 24px; border-top: 1px solid var(--edge); }
+.sync-fp { font: 600 44px / 1.1 var(--font-mono); letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+.sync-compare .note.small { margin-top: 0; }
+.sync-callout { margin: 0 0 44px; color: var(--text); }
+.sync-callout svg { color: var(--warn); }
+
+.sync-members { display: grid; gap: 12px; }
+.sync-member { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 28px; width: 100%; padding: 22px 30px; border-radius: var(--radius-l);
+  background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-align: left; }
+.sync-member.me { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .26); }
+.sync-mtext { flex: 1 1 420px; min-width: 0; display: grid; gap: 6px; }
+.sync-mtext h3, .sync-mtext b { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font: 650 var(--type-body) / 1.25 var(--font-text); overflow-wrap: anywhere; }
+.sync-mtext p, .sync-mtext small { font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
+.sync-mtext .st { margin-top: 6px; font: 500 var(--type-callout) / 1.35 var(--font-text); color: var(--text); }
+.sync-tag { padding: 6px 14px; border-radius: var(--radius-pill); font: 650 var(--type-caption) / 1 var(--font-text); color: var(--text);
+  background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
+/* Actions sit under the text, left, in line with Sync now: a remote moving down meets them. */
+.sync-macts { flex-basis: 100%; gap: 12px; }
+.sync-page .acts .btn, .sync-form .btn { height: 64px; padding: 0 26px; font-size: var(--type-callout); gap: 12px; }
+.sync-page .acts .btn svg, .sync-form .btn svg { width: 26px; height: 26px; }
+.sync-ask { flex: 1 1 100%; display: grid; gap: 16px; padding-top: 18px; border-top: 1px solid var(--edge); }
+.sync-ask p { font: 500 var(--type-callout) / 1.45 var(--font-text); max-width: 1100px; }
+.sync-page .btn i.spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgba(127, 127, 127, .35); border-top-color: currentColor; }
+
+/* A choice the user unticks: the whole row is the checkbox. */
+.sync-check { cursor: pointer; transition: transform var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
+.sync-box { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; box-shadow: inset 0 0 0 2px var(--control); }
+.sync-check[aria-checked="true"] .sync-box { background: var(--primary); color: var(--on-primary); box-shadow: none; }
+.sync-box svg { width: 28px; height: 28px; }
+.sync-check:focus-visible, [data-form="tv"] .sync-check:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
+@media (hover: hover) { [data-form="desktop"] .sync-check:hover { background: var(--raised); } }
+.sync-lost-acts { margin-top: 12px; }
+
+/* A row a TV only reads: it says where to do the thing. */
+.link-row.elsewhere { color: var(--muted); }
+.link-row.elsewhere b { color: var(--text); }
+.link-row.elsewhere:focus-visible, [data-form="tv"] .link-row.elsewhere:focus { background: var(--raised); }
+
+.sync-form { margin-top: 8px; }
+.field-hint { font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); margin-top: -14px; }
+.field-line input.mono { font-family: var(--font-mono); letter-spacing: .04em; }
+.sync-form > .st { flex-basis: 100%; font: 500 var(--type-callout) / 1.35 var(--font-text); }
+.sync-scan-open { margin-bottom: 32px; }
+.sync-scan { display: grid; gap: 18px; justify-items: start; margin-bottom: 32px; }
+.sync-scan video { width: min(100%, 560px); aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-l); background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); }
+
+.sync-kit { gap: 20px; }
+.sync-kit-text { font: 600 48px / 1.3 var(--font-mono); letter-spacing: .06em; overflow-wrap: anywhere; user-select: all; max-width: 1200px; }
+.sync-kit .sync-callout { margin: 0; }
+
+[data-form="phone"] .sync-card { gap: 16px; padding: 16px; border-radius: 14px; }
+[data-form="phone"] .sync-note svg, [data-form="phone"] .sync-callout svg { width: 18px; height: 18px; }
+[data-form="phone"] .sync-fp { font-size: 24px; }
+[data-form="phone"] .sync-compare { padding-top: 14px; gap: 6px; }
+[data-form="phone"] .sync-callout { margin-bottom: 24px; }
+[data-form="phone"] .sync-member { gap: 10px 14px; padding: 14px 16px; border-radius: 14px; }
+[data-form="phone"] .sync-mtext { flex-basis: 200px; }
+[data-form="phone"] .sync-page .acts .btn, [data-form="phone"] .sync-form .btn { height: 44px; padding: 0 16px; gap: 8px; }
+[data-form="phone"] .sync-page .acts .btn svg, [data-form="phone"] .sync-form .btn svg { width: 18px; height: 18px; }
+[data-form="phone"] .sync-box { width: 26px; height: 26px; border-radius: 7px; }
+[data-form="phone"] .sync-box svg { width: 18px; height: 18px; }
+[data-form="phone"] .field-hint { margin-top: 0; }
+[data-form="phone"] .sync-kit-text { font-size: 22px; }
+[data-form="phone"] .sync-page .btn i.spin { width: 16px; height: 16px; border-width: 2px; }
+
+/* Forms stack their fields: server, kit or invite, then this device's name. */
+.sync-form { max-width: 1100px; }
+.sync-form .field-line { flex: 1 1 100%; }

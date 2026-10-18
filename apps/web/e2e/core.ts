@@ -11,44 +11,62 @@ import { fileURLToPath } from "node:url";
 import { BBB_ID } from "./source";
 
 export const PORTS = { bridge: 17801, vite: 15301, source: 17802 };
+/** The sync spec's own: a relay and one core per device, so the shared core never joins an account. */
+export const SYNC_PORTS = { relay: 17803, a: 17804, b: 17805, c: 17806 };
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 const targetDir = process.env.CARGO_TARGET_DIR ?? join(homedir(), ".cargo-targets/marquee-web");
 
-/** The bridge to test. MQ_BRIDGE_BIN names one explicitly; otherwise this
- * checkout's sources are always built first (a no-op build takes about a
- * second), so a stale binary is never what the tests run against. */
-export function bridgeBinary(): string {
-  const explicit = process.env.MQ_BRIDGE_BIN;
+/** A binary to test. MQ_BRIDGE_BIN (or MQ_SYNC_SERVER_BIN) names one
+ * explicitly; otherwise this checkout's sources are always built first (a
+ * no-op build takes about a second), so a stale binary is never what the
+ * tests run against. */
+function binary(pkg: "mq-bridge" | "mq-sync-server", env: string): string {
+  const explicit = process.env[env];
   if (explicit) {
-    if (!existsSync(explicit)) throw new Error(`MQ_BRIDGE_BIN does not exist: ${explicit}`);
+    if (!existsSync(explicit)) throw new Error(`${env} does not exist: ${explicit}`);
     return explicit;
   }
-  const r = spawnSync("cargo", ["build", "-p", "mq-bridge", "-j", "4"], {
+  const r = spawnSync("cargo", ["build", "-p", pkg, "-j", "4"], {
     cwd: repo,
     stdio: "inherit",
     env: { ...process.env, CARGO_TARGET_DIR: targetDir, CARGO_INCREMENTAL: "0" },
   });
-  if (r.status !== 0) throw new Error("cargo build -p mq-bridge failed");
-  return join(targetDir, "debug/mq-bridge");
+  if (r.status !== 0) throw new Error(`cargo build -p ${pkg} failed`);
+  return join(targetDir, `debug/${pkg}`);
 }
 
-export function startBridge(): Promise<{ proc: ChildProcess; data: string }> {
+export const bridgeBinary = () => binary("mq-bridge", "MQ_BRIDGE_BIN");
+
+export function startBridge(port = PORTS.bridge): Promise<{ proc: ChildProcess; data: string }> {
   const data = mkdtempSync(join(tmpdir(), "mq-e2e-"));
   const proc = spawn(bridgeBinary(), [], {
-    env: { ...process.env, MQ_DATA: data, MQ_BRIDGE_PORT: String(PORTS.bridge) },
+    env: { ...process.env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],
   });
+  return ready(proc, "bridge_ready", data);
+}
+
+/** A sync server (crates/mq-sync-server) on loopback, where plain http is allowed, with a database of its own. */
+export function startRelay(port: number): Promise<{ proc: ChildProcess; data: string }> {
+  const data = mkdtempSync(join(tmpdir(), "mq-relay-"));
+  const proc = spawn(binary("mq-sync-server", "MQ_SYNC_SERVER_BIN"), ["--db", join(data, "relay.sqlite"), "--listen", `127.0.0.1:${port}`], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  return ready(proc, "sync_server_ready", data);
+}
+
+function ready(proc: ChildProcess, word: string, data: string): Promise<{ proc: ChildProcess; data: string }> {
   return new Promise((ok, fail) => {
-    const timer = setTimeout(() => fail(new Error("mq-bridge did not print bridge_ready in 30 s")), 30_000);
+    const timer = setTimeout(() => fail(new Error(`no ${word} in 30 s`)), 30_000);
     proc.stdout?.on("data", (chunk: Buffer) => {
-      if (chunk.toString().includes("bridge_ready")) {
+      if (chunk.toString().includes(word)) {
         clearTimeout(timer);
         ok({ proc, data });
       }
     });
-    proc.on("exit", (code) => fail(new Error(`mq-bridge exited with ${code}`)));
+    proc.on("exit", (code) => fail(new Error(`${word.split("_")[0]} exited with ${code}`)));
   });
 }
 

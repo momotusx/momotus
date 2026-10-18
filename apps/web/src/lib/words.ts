@@ -5,6 +5,7 @@ import type { Group } from "../core/generated/Group";
 import type { HiddenSummary } from "../core/generated/HiddenSummary";
 import type { HideReason } from "../core/generated/HideReason";
 import type { Reason } from "../core/generated/Reason";
+import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
 import type { VersionStatus } from "../core/generated/VersionStatus";
 
@@ -188,3 +189,177 @@ export const findAddons = {
   turnOn: "Turn on",
   fromHost: "from {host}",
 } as const;
+
+/** Devices and sync copy (plans/m7-sync.md). No protocol words: a device
+ * list, not a roster; "the 12 characters to compare", not a fingerprint. */
+export const syncWords = {
+  title: "Devices and sync",
+  lede: "Sync keeps your library, progress, addons and settings the same on all your devices. The sync server stores them sealed and cannot read them.",
+  offLine: "Keep your library, progress and addons the same on every device.",
+  tabOnly: "A browser has no safe place for this device's sync key, so it lasts until this tab closes or reloads. The apps keep it in the device's secure storage.",
+  pairTitle: "Pair this device",
+  pairText: "Show a code here and approve it on a device that already syncs.",
+  startTitle: "Start a sync account",
+  startText: "For your first device. Other devices join it with a code, so nothing is typed on them.",
+  recoverTitle: "Use a recovery kit",
+  recoverText: "Join your account again when you have none of your devices.",
+  server: "Sync server",
+  serverHint: "https://sync.example.org",
+  device: "This device",
+  invite: "Invite code",
+  inviteHint: "Only if your sync server asks for one",
+  kit: "Recovery kit",
+  kitHint: "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX",
+  badAddress: "Enter the address without a user name or password.",
+  startButton: "Start the account",
+  starting: "Starting the account",
+  recoverButton: "Join with the kit",
+  recovering: "Joining",
+  wrongKit: "The sync server does not know this kit. Check the letters and try again.",
+  syncNow: "Sync now",
+  syncing: "Syncing",
+  notSynced: "Not synced yet",
+  compareLabel: "Compare on each device",
+  compareHelp: "Once they have synced, all your devices show these same 12 characters. If one shows different ones, the sync server may be hiding a device change.",
+  devices: "Devices",
+  loadingDevices: "Asking the sync server for your devices",
+  thisDevice: "This device",
+  unnamed: "Unnamed device",
+  kitName: "Recovery kit",
+  remove: "Remove",
+  reportLost: "Report lost",
+  cancel: "Cancel",
+  addTitle: "Add a device",
+  addText: "Approve a new device with the code it shows.",
+  kitTitle: "Make a recovery kit",
+  kitText: "Get your account back if you lose all your devices.",
+  noKit: "This account has no recovery kit. If you lose all your devices, your synced data cannot be read again. Make one and keep it somewhere private.",
+  afterRecover: "You joined with a recovery kit. Make a new one now, and remove the device you lost.",
+  tvOnly: "On your phone or computer",
+  tvAdd: "Add devices from your phone or computer: a TV has no camera to scan the code.",
+  tvKit: "Make recovery kits on your phone or computer: on a TV, anyone in the room can read one.",
+  leaveTitle: "Stop syncing on this device",
+  leaveText: "Your library stays here. Edits not sent yet go out first.",
+  leaveButton: "Stop syncing",
+  leaveAnyway: "Stop anyway",
+  syncAgain: "Sync again",
+  left: "This device no longer syncs. Your library stays here.",
+  useServer: "Use the server's device list",
+  // Add a device
+  addLede: "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code.",
+  addWarning: "Approve only a code on a screen in front of you. Whoever controls that screen gets your account.",
+  scan: "Scan the code",
+  scanning: "Point the camera at the code on the other device.",
+  noCamera: "The camera is not available. Paste the code instead.",
+  pasteLabel: "Or paste the code",
+  pasteHint: "marquee:pair?...",
+  approve: "Approve",
+  approving: "Approving",
+  approvedStep: "The new device now shows six digits. They must be these:",
+  approvedHelp: "If they match, confirm on the new device. If they differ, say so there, and nothing is added.",
+  done: "Done",
+  // The joining device's side
+  copyCode: "Copy the code",
+  copied: "Copied",
+  copyHelp: "No camera? Copy the code, then paste it on the other device under Add a device.",
+  // Recovery kit
+  kitLede: "A recovery kit gets your account back when you have none of your devices. Anyone who has it can join your account, so keep it somewhere private, like a password manager.",
+  kitOnce: "Marquee shows the kit once and keeps no copy.",
+  makeKit: "Make the kit",
+  makingKit: "Making the kit",
+  kitShown: "Your recovery kit",
+  kitWarning: "Save it now. It is not shown again, and anyone who has it can join your account.",
+  copyKit: "Copy",
+  savedKit: "I saved it",
+  // Remove and report lost
+  removeKitAsk: "Remove this recovery kit? It stops working.",
+  lostLede: "{name} is removed from your account and cannot read anything you change from now on.",
+  lostAdded: "Devices added through {name}",
+  lostAddedHelp: "Whoever has {name} may have these too, so they are removed as well. Untick the ones you still have.",
+  lostChecking: "Checking what {name} added",
+  removed: "Removed",
+} as const;
+
+/** Fills `{name}` in a sync line. */
+export const named = (line: string, name: string) => line.replaceAll("{name}", name);
+
+/** "1 device" or "3 devices". */
+export const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The confirm line for removing another device. */
+export const removeDeviceAsk = (name: string) => `Remove ${name}? It stops syncing and cannot read anything you change from now on. Devices it added stay.`;
+
+/** The button that confirms a lost report: it names how many devices go. */
+export const lostButton = (devices: number) => `Remove ${count(devices, "device", "devices")}`;
+
+/** The kits a lost report removes, always. */
+export const lostKits = (kits: number) =>
+  `${kits === 1 ? "1 recovery kit made on these devices stops" : `${kits} recovery kits made on these devices stop`} working. Make a new one afterwards.`;
+
+/** A member's second line: when it was added, and through which device. */
+export function addedLine(kit: boolean, addedMs: number, by: string | null): string {
+  const day = new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(addedMs);
+  if (kit) return by ? `Made ${day} on ${by}` : `Made ${day}`;
+  return by ? `Added ${day} through ${by}` : `Added ${day}, the first device`;
+}
+
+/** A sync failure in words, by the core's `code` first (as Apple's
+ * `SyncProblem` and Android's `SyncCopy` word them). The core's own sentences
+ * are kept; anything that may name the server's address is replaced. */
+export function syncProblem(code: string | undefined, message: string): string {
+  switch (code) {
+    case "dropped":
+      return "This device was removed from your sync account. Your library stays here as local data.";
+    case "fork":
+      return "The sync server lists different devices than this device knows. Use the server's list to keep syncing.";
+    case "wrongRelay":
+      return "This is not the sync server this device joined. Pair this device again.";
+    case "relayBehind":
+      return "The sync server lost device changes it cannot get back. Pair this device again from one that still syncs.";
+    case "notJoined":
+      return "This device has not joined a sync account yet.";
+    case "unsent":
+      return "Some changes have not been sent yet. Sync again first, or stop anyway and they stay only here.";
+    case "insecure":
+      return "The sync server address must start with https.";
+  }
+  if (message.startsWith("roster: ")) return pairingProblem(`pairing: ${message.slice("roster: ".length)}`);
+  if (message.startsWith("pairing: ") || message.startsWith("invalid url") || message.startsWith("blocked private address") || message.startsWith("the relay must use https"))
+    return pairingProblem(message);
+  return "The sync server did not answer. Your changes wait here and go out on the next sync.";
+}
+
+/** What a sync round's facts mean for the user (plans/core-protocol.md, `syncNow`). */
+export function reportNotes(r: Pick<SyncReport, "clockGapMs" | "waiting" | "parked" | "oldEpochWrites" | "rotationWaitMs" | "blocked">): string[] {
+  const notes: string[] = [];
+  const gap = Math.abs(r.clockGapMs);
+  if (gap > 600_000) {
+    const minutes = Math.round(gap / 60_000);
+    notes.push(`The sync server's clock and this device's disagree by ${count(minutes, "minute", "minutes")}, so edits sync in the order they are sent.`);
+  }
+  if (r.waiting > 0) notes.push(`${r.waiting === 1 ? "1 edit waits" : `${r.waiting} edits wait`} for the sync server's clock to catch up. Nothing is lost.`);
+  if (r.parked > 0) notes.push(`${r.parked === 1 ? "1 change from another device waits" : `${r.parked} changes from other devices wait`} until this device catches up with a device change.`);
+  if (r.oldEpochWrites > 0) notes.push("The sync server may be hiding a device change. Compare the 12 characters below on each device.");
+  if (r.rotationWaitMs > 0) {
+    const minutes = Math.max(1, Math.ceil(r.rotationWaitMs / 60_000));
+    notes.push(`Edits wait ${count(minutes, "minute", "minutes")} more: the sync server was restored, and other devices get a chance to catch up first.`);
+  }
+  if (r.blocked === "rotationPending") notes.push("Edits wait until the account finishes a device change.");
+  if (r.blocked === "notActive") notes.push("The sync server does not take edits from this device yet, so they were not sent.");
+  if (r.blocked === "relayDisagrees") notes.push("The sync server disagrees about your device list, so edits were not sent. Compare the 12 characters below on each device.");
+  return notes;
+}
+
+/** A failure while joining or approving, where the step tells a status apart:
+ * an invite on start, an unknown kit on recover, a used code on approve. */
+export function joinProblem(code: string | undefined, message: string, step: "start" | "recover" | "approve"): string {
+  if (code) return syncProblem(code, message);
+  if (step === "start" && message === "http status 403") return "This sync server needs an invite code, or the one entered is wrong.";
+  if (step === "recover" && message === "http status 404") return syncWords.wrongKit;
+  if (step === "approve") {
+    if (message === "http status 404" || message === "http status 410") return "This code expired or was used already. Ask the new device for a new one.";
+    if (!message.startsWith("pairing: ") && !message.startsWith("roster: ")) return "The sync server did not answer. Try again in a moment.";
+    return syncProblem(undefined, message);
+  }
+  return pairingProblem(message);
+}

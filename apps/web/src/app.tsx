@@ -30,6 +30,7 @@ import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/p
 import Player from "./screens/player";
 import Search from "./screens/search";
 import SettingsScreen from "./screens/settings";
+import SyncScreen, { AddDevice, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
 import { Stub } from "./screens/stub";
 import Title from "./screens/title";
 import Versions from "./screens/versions";
@@ -44,8 +45,8 @@ const destinations: Destination[] = [
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid"];
-const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/");
+const settingsPages = ["/settings", "/addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid", "/sync"];
+const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
 
@@ -55,6 +56,7 @@ export function parentOf(path: string): string | null {
   if (parts[0] === "title" && parts[3] === "versions") return `/${parts.slice(0, 3).join("/")}`;
   if (parts[0] === "play" && parts[2]) return `/title/${parts[1]}/${parts[2]}`;
   if (path.startsWith("/profiles/edit/") || path === "/profiles/new") return "/profiles/manage";
+  if (path.startsWith("/sync/") || path === "/pair") return "/sync";
   if (isSettingsPage(path) && path !== "/settings") return "/settings";
   return path === "/" ? null : "/";
 }
@@ -232,6 +234,12 @@ export function App() {
       <Route path="/find-addons" component={FindAddons} />
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />
+      <Route path="/sync" component={SyncScreen} />
+      <Route path="/sync/start" component={StartAccount} />
+      <Route path="/sync/recover" component={RecoverAccount} />
+      <Route path="/sync/add" component={AddDevice} />
+      <Route path="/sync/kit" component={MakeKit} />
+      <Route path="/sync/lost/:id" component={ReportLost} />
       <Route path="/home-rows" component={HomeRows} />
       <Route path="/debrid" component={Debrid} />
       <Route path="/profiles" component={ProfilesScreen} />
