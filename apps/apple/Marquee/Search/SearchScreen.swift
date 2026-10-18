@@ -17,7 +17,7 @@ struct SearchScreen: View {
             VStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 field.padding(.horizontal, metrics.gutter)
                 if let failure = search.failure {
-                    StateLine(symbol: "triangle-alert", text: failure).padding(.horizontal, metrics.gutter)
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", search.retry)).padding(.horizontal, metrics.gutter)
                 }
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     recent.padding(.horizontal, metrics.gutter)

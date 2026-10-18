@@ -340,6 +340,24 @@ extension View {
     }
 }
 
+/// TV: words with no action of their own (a movie's facts, About, the hidden
+/// versions) take focus, ringed, so the page scrolls to them: a remote
+/// scrolls only by moving focus. Elsewhere they stay plain.
+struct ReadableOnTV: ViewModifier {
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content
+            .focusable()
+            .focused($focused)
+            .modifier(FocusRing(shape: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous), active: focused))
+        #else
+        content
+        #endif
+    }
+}
+
 /// A control drawn by its own label (a settings row, a door, a key, a
 /// transport glyph, an OSD menu): the shared focus ring, halo and lift on TV
 /// and with a Mac keyboard, the press veil on a touch screen. Anything a

@@ -27,9 +27,10 @@ import Testing
     let blocks = readingBlocks(text, size: 50)
     // Every word arrives, in order.
     #expect(blocks.joined(separator: " ").split(separator: " ") == text.split(separator: " "))
-    // Short sentences share a block up to the size; a long one stands alone.
+    // Short sentences share a block up to the size; a long one goes in pieces of whole words.
     #expect(blocks.first == "One sentence here. Another one follows!")
-    #expect(blocks.count == 3)
+    #expect(blocks.allSatisfy { $0.count <= 50 })
+    #expect(blocks.count > 3)
     #expect(readingBlocks("").isEmpty)
 }
 

@@ -249,11 +249,14 @@ struct TitleScreen: View {
             .buttonStyle(RoundButtonStyle())
             .disabled(versions == nil)
             .frame(maxWidth: column)
+            // Not on TV: it has no browser, and a YouTube link may open nothing.
+            #if !os(tvOS)
             if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
                 Button { openURL(url) } label: { Label("Trailer", glyph: "film") }
                     .buttonStyle(RoundButtonStyle())
                     .frame(maxWidth: column)
             }
+            #endif
             Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
                 Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
             }
@@ -275,7 +278,7 @@ struct TitleScreen: View {
             let series = !(model.header?.seasons.isEmpty ?? true)
             if metrics.wide && series && (width == 0 || WideLayout.creditsBesideEpisodes(page: width - 2 * metrics.gutter)) {
                 HStack(alignment: .top, spacing: Theme.Space.xl) {
-                    Credits(details: details, series: true).frame(width: 360, alignment: .leading)
+                    Credits(details: details, series: true).frame(width: 360, alignment: .leading).modifier(ReadableOnTV())
                     episodes
                 }
                 .padding(.horizontal, metrics.gutter)
@@ -283,7 +286,7 @@ struct TitleScreen: View {
                 // Phone: what to watch first, then who made it.
                 VStack(alignment: .leading, spacing: Theme.Space.l) {
                     if series { episodes }
-                    Credits(details: details, series: series)
+                    Credits(details: details, series: series).modifier(ReadableOnTV())
                 }
                 .frame(maxWidth: 760, alignment: .leading)
                 .padding(.horizontal, metrics.gutter)

@@ -58,8 +58,15 @@ struct ImportScreen: View {
                         .foregroundStyle(Theme.Palette.text)
                         .selectableText()
                     if let url = URL(string: link) {
+                        #if os(tvOS)
+                        // A TV has no browser: the address to type on a phone or computer, beside its QR.
+                        Label(url.host() ?? link, glyph: "external-link")
+                            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                            .foregroundStyle(Theme.Palette.text)
+                        #else
                         Button { openURL(url) } label: { Label(url.host() ?? link, glyph: "external-link") }
                             .buttonStyle(PillButtonStyle(prominent: true))
+                        #endif
                     }
                     Label("Waiting for the link. This page moves on by itself.", glyph: "clock")
                         .font(.text(Theme.type.callout, relativeTo: .callout))

@@ -172,9 +172,12 @@ private struct AddonCard: View {
 
     var body: some View {
         Menu {
+            // A configure page is a web page: not on TV, which has no browser.
+            #if !os(tvOS)
             if addon.configurable, let url = configureURL {
                 Button("Configure", glyph: "settings") { openURL(url) }
             }
+            #endif
             // Short words on screen, spoken with the addon's name: VoiceOver moves between several addons.
             Button("Move up", glyph: "arrow-up") { move(-1) }.disabled(first)
                 .accessibilityLabel("Move \(addon.name) up")

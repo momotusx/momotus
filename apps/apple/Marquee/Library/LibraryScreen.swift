@@ -39,7 +39,7 @@ struct LibraryScreen: View {
                     }
                     PosterGrid(tiles: s.items, caption: caption)
                 } else if let failure = library.failure {
-                    StateLine(symbol: "triangle-alert", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", library.retry))
                 }
             }
             .padding(.horizontal, metrics.gutter)

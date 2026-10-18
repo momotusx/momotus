@@ -12,6 +12,7 @@ struct VersionsScreen: View {
     @State private var expanded: Set<String> = []
     /// TV: the page enters on the pick's Play.
     @FocusState private var pickFocused: Bool
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// The page's width, for the layouts below.
     @State private var width: CGFloat = 0
 
@@ -64,7 +65,9 @@ struct VersionsScreen: View {
 
     /// The table's columns only with room for them; else each row reads in two lines.
     private var columns: Bool {
-        metrics.wide && WideLayout.tableColumns(table: sideBySide ? page - Self.pickWidth - Theme.Space.l : page)
+        // Fixed columns do not grow with the text: at the accessibility sizes rows read in two lines.
+        metrics.wide && !typeSize.isAccessibilitySize
+            && WideLayout.tableColumns(table: sideBySide ? page - Self.pickWidth - Theme.Space.l : page)
     }
 
     private var title: some View {
@@ -192,6 +195,7 @@ struct VersionsScreen: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                .modifier(ReadableOnTV())
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

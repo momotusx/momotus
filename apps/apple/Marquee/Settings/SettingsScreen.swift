@@ -101,7 +101,7 @@ struct SettingsScreen: View {
                     playback(p)
                 }
                 if let failure = prefs.failure ?? addons.failure {
-                    StateLine(symbol: "triangle-alert", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { prefs.retry(); addons.retry() }))
                 }
                 section("About").padding(.top, Theme.Space.s)
                 Text("Marquee \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""), core \(core.version)")
@@ -112,6 +112,7 @@ struct SettingsScreen: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                    .modifier(ReadableOnTV())
             }
             .frame(maxWidth: 880, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)

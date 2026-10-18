@@ -25,7 +25,7 @@ struct CalendarScreen: View {
                             DaySection(day: day, today: s.today).id(day.date)
                         }
                     } else if let failure = calendar.failure {
-                        StateLine(symbol: "triangle-alert", text: failure)
+                        StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", calendar.retry))
                     }
                 }
                 .frame(maxWidth: 880, alignment: .leading)

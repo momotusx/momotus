@@ -24,7 +24,7 @@ struct DiscoverScreen: View {
                     if !s.kinds.isEmpty { filters(s) }
                     content(s)
                 } else if let failure = discover.failure {
-                    StateLine(symbol: "triangle-alert", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", discover.retry))
                 }
             }
             .padding(.horizontal, metrics.gutter)

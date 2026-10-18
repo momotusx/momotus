@@ -55,15 +55,26 @@ func readingBlocks(_ text: String, size: Int = 240) -> [String] {
             sentences.append(sentence)
         }
     }
-    var blocks: [String] = []
-    for sentence in sentences {
-        if let last = blocks.last, last.count + 1 + sentence.count <= size {
-            blocks[blocks.count - 1] = last + " " + sentence
+    // A sentence longer than a block goes in pieces of whole words, so no
+    // block outgrows the screen.
+    let pieces = sentences.flatMap { sentence in
+        sentence.count <= size ? [sentence] : join(sentence.split(separator: " ").map(String.init), size: size)
+    }
+    return join(pieces, size: size)
+}
+
+/// Parts joined with spaces into runs of at most `size` characters; a part
+/// longer than that stands alone.
+private func join(_ parts: [String], size: Int) -> [String] {
+    var runs: [String] = []
+    for part in parts {
+        if let last = runs.last, last.count + 1 + part.count <= size {
+            runs[runs.count - 1] = last + " " + part
         } else {
-            blocks.append(sentence)
+            runs.append(part)
         }
     }
-    return blocks
+    return runs
 }
 
 /// What Resume says after its label: "36 min left" from what the file has
