@@ -1300,3 +1300,61 @@ async fn dropping_the_server_ends_keep_alive_connections() {
         );
     }
 }
+
+/// An origin that serves `data` from its start and redirects every other
+/// range to `to`, one request per connection.
+async fn steering_origin(data: Arc<Vec<u8>>, to: String) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let (data, to) = (data.clone(), to.clone());
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
+                if !head.contains("range: bytes=0-") {
+                    let reply = format!(
+                        "HTTP/1.1 302 Found\r\nLocation: {to}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    let _ = socket.write_all(reply.as_bytes()).await;
+                    return;
+                }
+                let len = data.len();
+                let reply = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-{}/{len}\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n",
+                    len - 1
+                );
+                if socket.write_all(reply.as_bytes()).await.is_ok() {
+                    let _ = socket.write_all(&data).await;
+                }
+            });
+        }
+    });
+    format!("http://{addr}/v.mkv")
+}
+
+#[tokio::test]
+async fn the_in_process_reader_keeps_the_playbacks_scope() {
+    use mq_media::RangeReader;
+    let canary = Canary::start(0).await;
+    let len = 16u64 << 20;
+    let origin = steering_origin(file(len as usize), format!("http://{}/tail", canary.addr)).await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    let lease = server
+        .open(local_upstream(origin), "v.mkv", Duration::from_secs(5))
+        .await
+        .unwrap();
+    let reader = lease.reader().expect("a ranged file reads in process");
+    // The hash's tail read opens its own upstream read, which the origin
+    // sends off its host.
+    let tail = tokio::time::timeout(
+        Duration::from_secs(10),
+        reader.read_at(len - 65_536, 65_536),
+    )
+    .await
+    .expect("the read ended");
+    assert!(tail.is_err(), "the tail came from somewhere");
+    assert_eq!(canary.accepted(), 0);
+}
