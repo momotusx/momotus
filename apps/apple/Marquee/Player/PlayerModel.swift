@@ -62,12 +62,17 @@ final class PlayerModel {
     /// Version keys whose duration the core has heard: it looks up skip
     /// segments once per version, and a failover is a new key.
     @ObservationIgnored private var durationSent: Set<String> = []
+    /// The Lock Screen and Control Center side of this playback.
+    @ObservationIgnored private let nowPlaying = NowPlaying()
+    @ObservationIgnored private var publishedDuration: Double = 0
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         self.route = route
         self.versions = versions
         self.core = core
         prefs = LiveRecord("settings", core: core)
+        // A video pauses in the background by default; the sound goes on with the screen locked.
+        player.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
         observePlayer()
     }
 
@@ -174,6 +179,9 @@ final class PlayerModel {
         let run = runs
         durationSent = []
         prefs.start()
+        nowPlaying.stop()
+        nowPlaying.start(self)
+        Task { await nowPlaying.loadArtwork(route.target.poster) }
         defer { if run == runs { stop() } }
         let target = route.target
         var params: [String: any Sendable] = [
@@ -216,7 +224,7 @@ final class PlayerModel {
         ended = false
         player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] done in
             guard done else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.report() } }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.report(); self?.publishNowPlaying() } }
         }
     }
 
@@ -308,6 +316,7 @@ final class PlayerModel {
         player.replaceCurrentItem(with: item)
         loadAudio(item, generation: generation)
         if start > 1 { player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
+        NowPlaying.activate()
         player.play()
     }
 
@@ -335,6 +344,7 @@ final class PlayerModel {
                 MainActor.assumeIsolated {
                     self?.playing = status == .playing
                     self?.waiting = status == .waitingToPlayAtSpecifiedRate
+                    self?.publishNowPlaying()
                 }
             }
             .store(in: &bag)
@@ -357,6 +367,7 @@ final class PlayerModel {
         guard time.isNumeric else { return }
         position = time.seconds
         if let total = player.currentItem?.duration, total.isNumeric { duration = total.seconds }
+        if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
     }
 
@@ -368,6 +379,14 @@ final class PlayerModel {
         core.commandNow(sub, ["type": "progress", "positionMs": Int(position * 1000), "durationMs": Int(duration * 1000)])
     }
 
+    /// The Lock Screen's title, episode, length, playhead and speed (0 while paused).
+    private func publishNowPlaying() {
+        let target = route.target
+        publishedDuration = duration
+        let episode = target.season.flatMap { season in target.episode.map { "S\(season):E\($0)" } }
+        nowPlaying.update(title: target.title, episode: episode, duration: duration, position: position, rate: playing ? rate : 0)
+    }
+
     /// Saves the position before the view goes away (Back, close).
     func close() {
         report()
@@ -376,6 +395,8 @@ final class PlayerModel {
 
     private func stop() {
         report()
+        nowPlaying.stop()
+        NowPlaying.deactivate()
         itemBag = []
         player.pause()
         player.replaceCurrentItem(with: nil)

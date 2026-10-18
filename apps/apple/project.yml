@@ -60,6 +60,14 @@ targets:
   Marquee-iOS:
     templates: [App]
     platform: iOS
+    # A film keeps playing with the screen locked (and in Picture in Picture).
+    info:
+      path: Generated/Info-iOS.plist
+      properties:
+        UIBackgroundModes: [audio]
+        # xcodegen writes 1.0 and 1 otherwise, over the build settings.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
