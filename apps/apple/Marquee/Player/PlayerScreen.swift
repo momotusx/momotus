@@ -320,7 +320,7 @@ private struct StatusOverlay: View {
     var body: some View {
         if model.playback?.phase == "failed" {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                Text("This could not play")
+                Text("None of the sources could be played")
                     .display(Theme.type.title1)
                 ForEach(FailedSources.group(model.playback?.attempts ?? []), id: \.self) { failed in
                     Label("\(failed.via): \(failed.words)", glyph: "circle-x")
