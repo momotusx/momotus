@@ -51,7 +51,12 @@ struct PlayerScreen: View {
                 .contentShape(Rectangle())
                 .ignoresSafeArea()
                 .onTapGesture { touched(toggle: true) }
-                .accessibilityHidden(true)
+                // With the controls hidden, VoiceOver finds one element that brings them back.
+                .accessibilityElement()
+                .accessibilityLabel("Show controls")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { touched(toggle: false) }
+                .accessibilityHidden(controls)
             #endif
             if let text = model.subtitleText {
                 GeometryReader { geo in
@@ -116,6 +121,9 @@ struct PlayerScreen: View {
         #endif
         .task(id: model.taskId) { await model.run() }
         .task { await autoHide() }
+        // VoiceOver: a two-finger double tap plays or pauses; the scrub gesture leaves.
+        .accessibilityAction(.magicTap) { model.togglePlay() }
+        .accessibilityAction(.escape) { close() }
         .onAppear { immersion.active = true }
         .onDisappear {
             immersion.active = false
@@ -172,14 +180,25 @@ struct PlayerScreen: View {
         withAnimation(Theme.Motion.panel) { controls = toggle ? !controls : true }
     }
 
-    /// Hides the controls after three quiet seconds of playback.
+    /// Hides the controls after three quiet seconds of playback, never while
+    /// VoiceOver or Switch Control runs: their cursor is no touch, and the
+    /// controls would go from under it.
     private func autoHide() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(500))
-            if controls, model.playing, !menuOpen, ContinuousClock.now - lastTouch > .seconds(3) {
+            if controls, model.playing, !menuOpen, !assistiveTechRunning, ContinuousClock.now - lastTouch > .seconds(3) {
                 withAnimation(Theme.Motion.panel) { controls = false }
             }
         }
+    }
+
+    /// Read live, as either can start while the player is up.
+    private var assistiveTechRunning: Bool {
+        #if os(macOS)
+        NSWorkspace.shared.isVoiceOverEnabled || NSWorkspace.shared.isSwitchControlEnabled
+        #else
+        UIAccessibility.isVoiceOverRunning || UIAccessibility.isSwitchControlRunning
+        #endif
     }
 }
 
