@@ -71,9 +71,9 @@ struct PlayerScreen: View {
                     // The bottom of the picture as fitted on screen, kept clear of the controls.
                     let picture = fittedHeight(geo.size)
                     let bottom = min((geo.size.height + picture) / 2 - 16, geo.size.height - (controlsShown ? controlsHeight + 16 : 40))
+                    // Its foot stays put; a larger caption style or a second line grows upward.
                     SubtitleLine(text: text)
-                        .frame(maxWidth: .infinity)
-                        .position(x: geo.size.width / 2, y: bottom - 30)
+                        .frame(width: geo.size.width, height: max(bottom - 10, 0), alignment: .bottom)
                 }
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -264,18 +264,23 @@ private struct BareStyle: ButtonStyle {
 }
 #endif
 
-/// Subtitle text on a dark box so it reads on any picture.
+/// Subtitle text in the viewer's caption style: by default white on a dark
+/// box so it reads on any picture.
 private struct SubtitleLine: View {
     let text: String
 
     var body: some View {
+        let style = CaptionStyle.current
+        let size = (Theme.type.headline + 3) * style.scale
         Text(text)
-            .font(.text(Theme.type.headline + 3, weight: .semibold, relativeTo: .title3))
-            .foregroundStyle(.white)
+            .font(style.face.map { .custom($0, size: size, relativeTo: .title3) } ?? .text(size, weight: .semibold, relativeTo: .title3))
+            .foregroundStyle(style.text)
+            .modifier(CaptionEdge(edge: style.edge))
+            .background(style.highlight)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.black.opacity(0.62)))
+            .background(RoundedRectangle(cornerRadius: style.radius).fill(style.window))
             .padding(.horizontal, Theme.Space.l)
     }
 }

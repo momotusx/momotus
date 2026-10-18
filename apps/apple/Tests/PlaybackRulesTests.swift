@@ -112,3 +112,11 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     // A pause or the other direction starts over at 10 s.
     #expect(SeekRamp.run(after: 4, continuing: false) == 0)
 }
+
+@Test func captionsKeepTheAppFaceForTheSystemOne() {
+    // The default styles name the system face privately: the app's Inter stands in.
+    #expect(CaptionStyle.face(named: ".AppleSystemUIFontMedium") == nil)
+    #expect(CaptionStyle.face(named: nil) == nil)
+    // A face the viewer picked is used as is.
+    #expect(CaptionStyle.face(named: "Menlo-Regular") == "Menlo-Regular")
+}
