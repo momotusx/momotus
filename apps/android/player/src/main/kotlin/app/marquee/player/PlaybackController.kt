@@ -158,16 +158,6 @@ class PlaybackController(
     private var noticeJob: Job? = null
     private val marks = LinkedHashMap<String, Long>()
 
-    /**
-     * A subtitle the viewer chose. After the media item changes it is found again by its address
-     * (an addon's file), else by language, so the right track is on even when several share a language.
-     */
-    private data class TextPick(
-        val language: String,
-        val external: Boolean,
-        val url: String? = null,
-    )
-
     private val listener =
         object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) = stateChanged(playbackState)
@@ -541,6 +531,8 @@ class PlaybackController(
                         language = format.language.orEmpty(),
                         external = id.startsWith(EXTERNAL),
                         url = id.takeIf { it.startsWith(EXTERNAL) }?.let { externalUrl(format.id) },
+                        group = group.mediaTrackGroup.id,
+                        kind = format.codecs ?: format.sampleMimeType,
                     )
                 player.trackSelectionParameters =
                     params
@@ -660,54 +652,37 @@ class PlaybackController(
     /** The address of the addon subtitle file behind a loaded track's `ext:N` id, or null. */
     private fun externalUrl(formatId: String?): String? = externalIndex(formatId)?.let { loadedSubs.getOrNull(it)?.url }
 
-    /** One text track of the current media item. */
-    private class TextTrack(
-        val group: Tracks.Group,
-        val index: Int,
-        val external: Boolean,
-        val url: String?,
-        val language: String?,
-        val selected: Boolean,
-    )
-
     /**
-     * After a new media item (a failover or a reload) the viewer's subtitle is found again: first by
-     * the address of the addon file they chose, else by language (an addon's file before an
-     * embedded track when that is what they had). Does nothing when it is already the one on.
+     * When the tracks change (a failover, a reload, or the track list of this item filling in) the
+     * viewer's subtitle is found again with [findPick]. Does nothing when it is already the one on.
      */
     private fun applyPick(tracks: Tracks) {
         val wanted = pick ?: return
-        val found = ArrayList<TextTrack>()
+        val refs = ArrayList<Pair<Tracks.Group, Int>>()
+        val found = ArrayList<TextCandidate>()
         tracks.groups.forEach { group ->
             if (group.type != C.TRACK_TYPE_TEXT) return@forEach
             for (ti in 0 until group.length) {
                 if (!group.isTrackSupported(ti)) continue
                 val format = group.getTrackFormat(ti)
+                refs += group to ti
                 found +=
-                    TextTrack(
-                        group,
-                        ti,
+                    TextCandidate(
                         external = externalIndex(format.id) != null,
                         url = externalUrl(format.id),
+                        group = group.mediaTrackGroup.id,
+                        kind = format.codecs ?: format.sampleMimeType,
                         language = format.language,
-                        selected = group.isTrackSelected(ti),
                     )
             }
         }
-        val same = { t: TextTrack ->
-            wanted.language.isNotEmpty() && t.language?.let { sameLanguage(it, wanted.language) } == true
-        }
-        val target =
-            found.firstOrNull { wanted.url != null && it.url == wanted.url }
-                ?: found.firstOrNull { same(it) && it.external == wanted.external }
-                ?: found.firstOrNull(same)
-                ?: return
-        if (target.selected) return
+        val (group, index) = findPick(wanted, found)?.let(refs::get) ?: return
+        if (group.isTrackSelected(index)) return
         player.trackSelectionParameters =
             player.trackSelectionParameters
                 .buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .setOverrideForType(TrackSelectionOverride(target.group.mediaTrackGroup, target.index))
+                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
                 .build()
     }
 

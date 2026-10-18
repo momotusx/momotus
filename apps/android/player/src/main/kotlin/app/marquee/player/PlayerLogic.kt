@@ -238,6 +238,58 @@ fun upfrontSubtitles(
     return listOfNotNull(carried)
 }
 
+/** A subtitle the viewer chose, as [findPick] looks for it again when the tracks change. */
+data class TextPick(
+    val language: String,
+    val external: Boolean,
+    /** The addon file's address. */
+    val url: String? = null,
+    /**
+     * The track group's id: the same item keeps it, so the one track chosen stays on even when another
+     * in its language comes first (English captions in the video and an English WebVTT rendition).
+     */
+    val group: String? = null,
+    /** The track's type (`text/vtt`, `application/cea-608`), to tell such tracks apart in a new item. */
+    val kind: String? = null,
+)
+
+/** A text track of the playing item, for [findPick]. */
+data class TextCandidate(
+    val external: Boolean,
+    val url: String?,
+    val group: String,
+    val kind: String?,
+    val language: String?,
+)
+
+/**
+ * Which of [found] carries the viewer's [pick] after the tracks change: the addon file they chose, else
+ * the very track (same group), else one in their language of the same type and origin, else one of the
+ * same origin, else any in their language. Null when none fits.
+ */
+fun findPick(
+    pick: TextPick,
+    found: List<TextCandidate>,
+): Int? {
+    val same = { t: TextCandidate ->
+        pick.language.isNotEmpty() &&
+            t.language?.let { sameLanguage(it, pick.language) } == true
+    }
+    val rules =
+        listOf<(TextCandidate) -> Boolean>(
+            { pick.url != null && it.url == pick.url },
+            { pick.group != null && it.group == pick.group },
+            { same(it) && it.external == pick.external && it.kind == pick.kind },
+            { same(it) && it.external == pick.external },
+            same,
+        )
+    for (rule in rules) {
+        val at = found.indexOfFirst(rule)
+        if (at >= 0) return at
+    }
+    return null
+}
+
 /** "eng" and "en" are the same language. */
 fun sameLanguage(
     a: String,

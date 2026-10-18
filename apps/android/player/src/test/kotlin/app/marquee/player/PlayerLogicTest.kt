@@ -201,6 +201,33 @@ class PlayerLogicTest {
     }
 
     @Test
+    fun `the subtitle chosen stays on when another in its language comes first`() {
+        val captions =
+            TextCandidate(
+                external = false,
+                url = null,
+                group = "main:cc",
+                kind = "application/cea-608",
+                language = "en",
+            )
+        val webvtt =
+            TextCandidate(external = false, url = null, group = "subtitle:English", kind = "text/vtt", language = "en")
+        val addon = TextCandidate(external = true, url = "u1", group = "1:0", kind = "text/vtt", language = "en")
+        val pick = TextPick("en", external = false, group = "subtitle:English", kind = "text/vtt")
+        assertEquals(1, findPick(pick, listOf(captions, webvtt, addon)))
+        // A new item renames the groups: the same type and origin in that language still wins.
+        val renamed = listOf(captions.copy(group = "0:main:cc"), webvtt.copy(group = "0:subtitle:English"), addon)
+        assertEquals(1, findPick(pick, renamed))
+        // An addon file is found by its address before anything else.
+        assertEquals(2, findPick(TextPick("en", external = true, url = "u1"), listOf(captions, webvtt, addon)))
+        assertEquals(0, findPick(TextPick("eng", external = false), listOf(captions, webvtt)))
+        assertNull(findPick(TextPick("fr", external = false), listOf(captions, webvtt)))
+        // Two English WebVTT renditions (one for the hard of hearing): the chosen group, not the first.
+        val sdh = webvtt.copy(group = "subtitle:English SDH")
+        assertEquals(1, findPick(pick.copy(group = "subtitle:English SDH"), listOf(webvtt, sdh)))
+    }
+
+    @Test
     fun `an addon subtitle is known by its id with or without Media3's source index`() {
         assertEquals(0, externalIndex("ext:0"))
         assertEquals(7, externalIndex("1:ext:7"))
