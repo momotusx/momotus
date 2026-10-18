@@ -1118,13 +1118,16 @@ fn identifiers(template: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// `0Nd`, with `N` of one or two digits and at most `MAX_WIDTH`.
+/// `0Nd`: one zero flag, then a width `N` from 1 to `MAX_WIDTH` with no
+/// leading zero. `String.format` refuses a second zero flag (`%00d`,
+/// `%001d`: DuplicateFormatFlagsException), so Media3 would fail on it.
 fn width(format: &str) -> bool {
     let digits = format.strip_prefix('0').and_then(|f| f.strip_suffix('d'));
     digits.is_some_and(|d| {
         (1..=2).contains(&d.len())
+            && !d.starts_with('0')
             && d.bytes().all(|b| b.is_ascii_digit())
-            && d.parse::<u32>().is_ok_and(|w| w <= MAX_WIDTH)
+            && d.parse::<u32>().is_ok_and(|w| (1..=MAX_WIDTH).contains(&w))
     })
 }
 
@@ -2178,6 +2181,10 @@ mod tests {
         for media in [
             "s-$Number%01000000000d$.m4s",
             "s-$Number%033d$.m4s",
+            "s-$Number%00d$.m4s",
+            "s-$Number%000d$.m4s",
+            "s-$Number%001d$.m4s",
+            "s-$Time%0032d$.m4s",
             "s-$Number%5d$.m4s",
             "s-$Number%05x$.m4s",
             "s-$RepresentationID%05d$.m4s",
@@ -2215,6 +2222,9 @@ mod tests {
         };
         accepted(&media(MAX_VALUE));
         assert!(rewrite(&media(MAX_VALUE + 1)).is_err());
+        let location = |n: usize| mpd(&format!("<Location>{}</Location><Period/>", long(n)));
+        accepted(&location(MAX_VALUE));
+        assert!(rewrite(&location(MAX_VALUE + 1)).is_err());
         let label = |n: usize| {
             mpd(&format!(
                 "<Period><AdaptationSet><Label>{}</Label></AdaptationSet></Period>",
@@ -2277,6 +2287,11 @@ mod tests {
         let events = mpd(&"<Period/>".repeat(3000));
         assert!(run(&events, usize::MAX).is_ok());
         assert_eq!(run(&events, 3), Err("out of time"));
+        // One element's long attribute list looks again every 1,024.
+        let names: String = (0..2000).map(|i| format!(" a{i}=\"\"")).collect();
+        let attributes = mpd(&format!("<Period{names}/>"));
+        assert!(run(&attributes, usize::MAX).is_ok());
+        assert_eq!(run(&attributes, 3), Err("out of time"));
     }
 
     /// Text and values are decoded with the five XML entities and character
