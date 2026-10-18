@@ -12,6 +12,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::name::{Namespace, ResolveResult};
 use quick_xml::reader::NsReader;
 use quick_xml::writer::Writer;
+use std::rc::Rc;
 use url::Position;
 
 const DASH_NS: &[u8] = b"urn:mpeg:dash:schema:mpd:2011";
@@ -22,6 +23,20 @@ const SCTE_NS: &[u8] = b"urn:scte:dash:scte214-extensions";
 const MAX_DEPTH: usize = 32;
 /// Base alternatives one level may resolve to.
 const MAX_BASES: usize = 16;
+/// The longest `BaseURL`, `Location` or `Label` text and URL-bearing
+/// attribute value; longer refuses the MPD.
+const MAX_VALUE: usize = 8 * 1024;
+/// The longest `Representation@id` (it is expanded into templates).
+const MAX_ID: usize = 1024;
+/// Identifiers in one template: with `MAX_VALUE`, `MAX_ID` and widths of at
+/// most `MAX_WIDTH`, an expanded URL stays under 8 KiB plus 16 KiB.
+const MAX_IDENTIFIERS: usize = 16;
+const MAX_WIDTH: u32 = 32;
+/// Segment timeline elements Media3 1.11.1 builds for one MPD (it builds
+/// each `S` repeat as an object while parsing).
+const MAX_TIMELINE: i64 = 100_000;
+/// Media3's `C.TIME_UNSET`, the `t` and `d` of an `S` without them.
+const TIME_UNSET: i64 = i64::MIN + 1;
 
 const MPD: &[&str] = &[
     "id",
@@ -239,18 +254,12 @@ const UTC_URLS: &[&str] = &[
 struct Frame {
     kept: &'static Kept,
     /// The parent level's bases (absolute upstream URLs) when this one
-    /// started.
-    inherited: Vec<Url>,
+    /// started, shared with its siblings.
+    inherited: Rc<Vec<Url>>,
     /// This level's own `BaseURL`s, resolved.
     own: Vec<Url>,
     /// A child that consumes bases started: no `BaseURL` after it.
     consumed: bool,
-    /// A `Representation`'s id.
-    id: Option<String>,
-    /// A relative template naming `$RepresentationID$` applies below.
-    by_id: bool,
-    /// The ids of the Representations seen below.
-    ids: Vec<Option<String>>,
     /// Kept attributes, written at the end for text elements.
     attrs: Vec<(String, String)>,
     /// The text of a `BaseURL`, `Location` or `Label`.
@@ -259,13 +268,22 @@ struct Frame {
 
 impl Frame {
     /// This level's bases: its own, else its parent's.
-    fn bases(&self) -> &[Url] {
+    fn bases(&self) -> Rc<Vec<Url>> {
         if self.own.is_empty() {
-            &self.inherited
+            self.inherited.clone()
         } else {
-            &self.own
+            Rc::new(self.own.clone())
         }
     }
+}
+
+/// Media3 1.11.1's `parseSegmentTimeline`, followed only to count the
+/// elements it builds: the start time it carries from `S` to `S` and the
+/// last `S` read, whose count needs the next one's `t`.
+#[derive(Default)]
+struct Timeline {
+    start: i64,
+    previous: Option<(i64, i32)>,
 }
 
 /// Rewrites an MPD (`base`: its final URL after redirects) for the core, or
@@ -287,6 +305,10 @@ pub(crate) fn rewrite_dash(
         skip: 0,
         root: Root::Before,
         inserted: false,
+        by_id: false,
+        ids: Vec::new(),
+        timeline: None,
+        timeline_total: 0,
     };
     rewrite.write(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
     let mut reader = NsReader::from_str(text);
@@ -324,6 +346,16 @@ struct Rewrite<'b> {
     root: Root,
     /// The MPD's own `BaseURL` was inserted (it had none).
     inserted: bool,
+    /// A relative template names `$RepresentationID$` somewhere in the MPD,
+    /// so every Representation id is checked (rule 9), wherever it sits:
+    /// Media3 may attribute a template to another element than the core
+    /// does.
+    by_id: bool,
+    /// The Representation ids seen before that, to check when it turns.
+    ids: Vec<Option<String>>,
+    /// The open `SegmentTimeline`, and what every one so far builds.
+    timeline: Option<Timeline>,
+    timeline_total: i64,
 }
 
 impl Rewrite<'_> {
@@ -380,6 +412,9 @@ impl Rewrite<'_> {
             && frame.kept.text != Text::None
         {
             frame.text.push_str(text);
+            if frame.text.len() > MAX_VALUE {
+                return Err("a text longer than 8 KiB");
+            }
         }
         Ok(())
     }
@@ -412,6 +447,8 @@ impl Rewrite<'_> {
                 return Err("no MPD");
             }
             self.root = Root::In;
+        } else if dash && local == "MPD" {
+            return Err("a nested MPD");
         }
         if dash && matches!(local, "PatchLocation" | "ContentProtection") {
             return Err(if local == "PatchLocation" {
@@ -419,6 +456,17 @@ impl Rewrite<'_> {
             } else {
                 "protected content"
             });
+        }
+        // Media3 ends a descriptor at the first end tag of its name and a
+        // timeline at the first `</SegmentTimeline>`, whatever is inside: an
+        // element in one would sit elsewhere in its tree than in the core's.
+        if let Some(parent) = self.stack.last() {
+            if parent.kept.plain == DESCRIPTOR {
+                return Err("an element inside a descriptor");
+            }
+            if parent.kept.name == "S" || (parent.kept.name == "SegmentTimeline" && local != "S") {
+                return Err("an element inside a timeline other than S");
+            }
         }
         // A text element takes no elements: refused, but in a label dropped.
         match self.stack.last().map(|parent| parent.kept.text) {
@@ -449,8 +497,9 @@ impl Rewrite<'_> {
         kept: &'static Kept,
         children: &mut Children<'_>,
     ) -> Result<Vec<(String, String)>, &'static str> {
-        let mut out = Vec::new();
-        for attr in e.attributes() {
+        let mut out: Vec<(String, String)> = Vec::new();
+        for (n, attr) in e.attributes().enumerate() {
+            checkpoint(n, children.alive)?;
             let attr = attr.map_err(|_| "a malformed attribute")?;
             let key = attr.key.as_ref();
             if key == b"xmlns" || key.starts_with(b"xmlns:") {
@@ -483,18 +532,34 @@ impl Rewrite<'_> {
             if kept.name == "BaseURL" && name == "byteRange" {
                 return Err("a BaseURL byteRange");
             }
+            // Two prefixes for one namespace would write one name twice.
+            if out.iter().any(|(n, _)| *n == name) {
+                return Err("a duplicate attribute");
+            }
             if kept.name == "UTCTiming" {
+                if value.len() > MAX_VALUE {
+                    return Err("a value longer than 8 KiB");
+                }
                 out.push((name, value.into_owned()));
                 continue;
             }
             if kept.references.contains(&name.as_str()) {
+                if value.len() > MAX_VALUE {
+                    return Err("a value longer than 8 KiB");
+                }
                 let template = kept.name == "SegmentTemplate";
+                if template {
+                    identifiers(&value)?;
+                }
                 let rewritten = self.reference(&value, template, children)?;
                 if template && is_relative(value.trim()) && value.contains("$RepresentationID$") {
                     self.by_id()?;
                 }
                 out.push((name, rewritten));
                 continue;
+            }
+            if kept.name == "Representation" && name == "id" && value.len() > MAX_ID {
+                return Err("a Representation id longer than 1 KiB");
             }
             if name.contains(':') || kept.plain.contains(&name.as_str()) {
                 if kept.plain == DESCRIPTOR || kept.plain == CONTENT_COMPONENT {
@@ -575,16 +640,76 @@ impl Rewrite<'_> {
     }
 
     /// A relative template naming `$RepresentationID$` (rule 9): every
-    /// Representation it applies to needs a plain id.
+    /// Representation of the MPD needs a plain id, those seen so far and
+    /// those to come.
     fn by_id(&mut self) -> Result<(), &'static str> {
-        let Some(owner) = self.stack.last_mut() else {
+        self.by_id = true;
+        let ids = std::mem::take(&mut self.ids);
+        ids.iter().try_for_each(|id| check_id(id.as_deref()))
+    }
+
+    /// An `S`: what Media3 builds for the one before it, now that its end
+    /// is known.
+    fn segment(&mut self, attrs: &[(String, String)]) -> Result<(), &'static str> {
+        let get = |name: &str| {
+            attrs
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        };
+        // Media3 parses these with Long.parseLong and Integer.parseInt.
+        let long = |name: &str| {
+            get(name).map_or(Ok(TIME_UNSET), |v| {
+                v.parse::<i64>().map_err(|_| "a bad S value")
+            })
+        };
+        let t = long("t")?;
+        let d = long("d")?;
+        let r = get("r").map_or(Ok(0), |v| v.parse::<i32>().map_err(|_| "a bad S value"))?;
+        let Some(mut timeline) = self.timeline.take() else {
             return Ok(());
         };
-        if owner.kept.name == "Representation" {
-            return check_id(owner.id.as_deref());
+        if let Some((d, r)) = timeline.previous {
+            timeline.start = self.repeat(timeline.start, d, r, Some(t))?;
         }
-        owner.by_id = true;
-        owner.ids.iter().try_for_each(|id| check_id(id.as_deref()))
+        if t != TIME_UNSET {
+            timeline.start = t;
+        }
+        timeline.previous = Some((d, r));
+        self.timeline = Some(timeline);
+        Ok(())
+    }
+
+    /// Media3's `addSegmentTimelineElementsToList` (Java arithmetic, which
+    /// wraps): how many elements one `S` builds, counted against
+    /// `MAX_TIMELINE`; returns the next start. `end` is the next `S`'s `t`,
+    /// `None` for the last `S`, whose end is the period's duration as
+    /// Media3 computes it: a negative repeat there refuses the MPD.
+    fn repeat(
+        &mut self,
+        start: i64,
+        d: i64,
+        r: i32,
+        end: Option<i64>,
+    ) -> Result<i64, &'static str> {
+        let count = if r >= 0 {
+            1i32.wrapping_add(r)
+        } else {
+            let end = end.ok_or("a negative repeat in the last S")?;
+            if d == 0 {
+                return Err("a negative repeat with no duration");
+            }
+            let numerator = end.wrapping_sub(start).wrapping_add(d).wrapping_sub(1);
+            numerator.wrapping_div(d) as i32
+        };
+        if count <= 0 {
+            return Ok(start);
+        }
+        self.timeline_total += i64::from(count);
+        if self.timeline_total > MAX_TIMELINE {
+            return Err("a segment timeline longer than 100,000");
+        }
+        Ok(start.wrapping_add(i64::from(count).wrapping_mul(d)))
     }
 
     fn open(
@@ -601,8 +726,8 @@ impl Rewrite<'_> {
             return Ok(());
         }
         let inherited = match self.stack.last() {
-            Some(parent) => parent.bases().to_vec(),
-            None => vec![self.base.clone()],
+            Some(parent) if kept.name != "MPD" => parent.bases(),
+            _ => Rc::new(vec![self.base.clone()]),
         };
         if let Some(parent) = self.stack.last_mut() {
             if kept.name == "BaseURL" && parent.consumed {
@@ -615,30 +740,27 @@ impl Rewrite<'_> {
                 }
             }
         }
-        let id = attrs
-            .iter()
-            .find(|(n, _)| n == "id")
-            .map(|(_, v)| v.clone());
         if kept.name == "Representation" {
-            for frame in &mut self.stack {
-                if frame.by_id {
-                    check_id(id.as_deref())?;
-                }
-                frame.ids.push(id.clone());
+            let id = attrs
+                .iter()
+                .find(|(n, _)| n == "id")
+                .map(|(_, v)| v.clone());
+            if self.by_id {
+                check_id(id.as_deref())?;
+            } else {
+                self.ids.push(id);
             }
+        }
+        match kept.name {
+            "SegmentTimeline" => self.timeline = Some(Timeline::default()),
+            "S" => self.segment(&attrs)?,
+            _ => {}
         }
         let frame = Frame {
             kept,
-            inherited: if kept.name == "MPD" {
-                vec![self.base.clone()]
-            } else {
-                inherited
-            },
+            inherited,
             own: Vec::new(),
             consumed: false,
-            id,
-            by_id: false,
-            ids: Vec::new(),
             attrs,
             text: String::new(),
         };
@@ -685,6 +807,12 @@ impl Rewrite<'_> {
             Text::None => {
                 if name == "MPD" {
                     self.insert_base(children)?;
+                }
+                if name == "SegmentTimeline"
+                    && let Some(timeline) = self.timeline.take()
+                    && let Some((d, r)) = timeline.previous
+                {
+                    self.repeat(timeline.start, d, r, None)?;
                 }
                 self.write(Event::End(BytesEnd::new(name)))?;
             }
@@ -809,6 +937,47 @@ fn dot_segments(reference: &str) -> Result<(), &'static str> {
         }
     }
     Ok(())
+}
+
+/// A template's identifiers, as Media3's `UrlTemplate` expands them:
+/// `$$`, `$RepresentationID$`, and `$Number$`, `$Time$` and `$Bandwidth$`
+/// with an optional `%0Nd` width of at most `MAX_WIDTH`; at most
+/// `MAX_IDENTIFIERS` of them. Anything else refuses the MPD: Media3 hands a
+/// width to `String.format`, which allocates it.
+fn identifiers(template: &str) -> Result<(), &'static str> {
+    let parts: Vec<&str> = template.split('$').collect();
+    if parts.len().is_multiple_of(2) {
+        return Err("an unclosed template identifier");
+    }
+    let names: Vec<&str> = parts.iter().skip(1).step_by(2).copied().collect();
+    if names.len() > MAX_IDENTIFIERS {
+        return Err("too many template identifiers");
+    }
+    for name in names {
+        let (name, format) = match name.split_once('%') {
+            Some((name, format)) => (name, Some(format)),
+            None => (name, None),
+        };
+        let ok = match name {
+            "" | "RepresentationID" => format.is_none(),
+            "Number" | "Time" | "Bandwidth" => format.is_none_or(width),
+            _ => false,
+        };
+        if !ok {
+            return Err("a template identifier the player may not expand");
+        }
+    }
+    Ok(())
+}
+
+/// `0Nd`, with `N` of one or two digits and at most `MAX_WIDTH`.
+fn width(format: &str) -> bool {
+    let digits = format.strip_prefix('0').and_then(|f| f.strip_suffix('d'));
+    digits.is_some_and(|d| {
+        (1..=2).contains(&d.len())
+            && d.bytes().all(|b| b.is_ascii_digit())
+            && d.parse::<u32>().is_ok_and(|w| w <= MAX_WIDTH)
+    })
 }
 
 /// A Representation id a relative `$RepresentationID$` template may carry
@@ -1569,8 +1738,8 @@ mod tests {
         assert!(rewrite(&product(5)).is_err());
         // Depth 32, and 33.
         let nested = |depth: usize| {
-            let open = "<Period>".to_owned() + &"<Role>".repeat(depth - 2);
-            let close = "</Role>".repeat(depth - 2) + "</Period>";
+            let open = "<Period>".to_owned() + &"<Foo>".repeat(depth - 2);
+            let close = "</Foo>".repeat(depth - 2) + "</Period>";
             mpd(&format!("{open}{close}"))
         };
         accepted(&nested(32));
@@ -1664,5 +1833,267 @@ mod tests {
             let body = std::fs::read(dir.join("control").join(name)).unwrap();
             assert!(corpus_rewrite(name, &body).is_err(), "{name} was accepted");
         }
+    }
+
+    /// Rule 9 holds wherever Media3 attributes the template: one relative
+    /// `$RepresentationID$` template anywhere checks every id in the MPD,
+    /// before or after it, in another AdaptationSet or Period.
+    #[test]
+    fn dash_ids_are_checked_across_the_mpd() {
+        let relative = "<SegmentTemplate media=\"$RepresentationID$/s-$Number$.m4s\"/>";
+        let bad = "<Representation id=\"http://canary.test/x\" bandwidth=\"1\"/>";
+        let good = "<Representation id=\"v1\" bandwidth=\"1\"/>";
+        for inner in [
+            format!(
+                "<Period><AdaptationSet>{relative}{good}</AdaptationSet><AdaptationSet>{bad}</AdaptationSet></Period>"
+            ),
+            format!(
+                "<Period><AdaptationSet>{bad}</AdaptationSet></Period><Period><AdaptationSet>{relative}{good}</AdaptationSet></Period>"
+            ),
+            format!(
+                "<Period><AdaptationSet><Representation id=\"v1\" bandwidth=\"1\">{relative}</Representation>{bad}</AdaptationSet></Period>"
+            ),
+        ] {
+            assert!(rewrite(&mpd(&inner)).is_err(), "accepted: {inner}");
+        }
+        // With no relative template naming it, any id goes.
+        let absolute = "<SegmentTemplate media=\"https://t.example/a/$RepresentationID$/s.m4s\"/>";
+        accepted(&mpd(&format!(
+            "<Period><AdaptationSet>{absolute}{bad}</AdaptationSet></Period>"
+        )));
+    }
+
+    /// Media3 ends a descriptor at the first end tag of its name, whatever
+    /// is inside: an element inside one refuses the MPD.
+    #[test]
+    fn dash_descriptors_take_no_elements() {
+        for descriptor in [
+            "Role",
+            "Accessibility",
+            "EssentialProperty",
+            "SupplementalProperty",
+            "AudioChannelConfiguration",
+            "InbandEventStream",
+        ] {
+            let inner = format!(
+                "<Period><AdaptationSet><{descriptor} schemeIdUri=\"urn:x\" value=\"y\"><{descriptor} schemeIdUri=\"urn:x\"/></{descriptor}></AdaptationSet></Period>"
+            );
+            assert!(
+                rewrite(&mpd(&inner)).is_err(),
+                "{descriptor} took an element"
+            );
+            let foreign = format!(
+                "<Period><AdaptationSet><{descriptor} schemeIdUri=\"urn:x\"><Foo/></{descriptor}></AdaptationSet></Period>"
+            );
+            assert!(
+                rewrite(&mpd(&foreign)).is_err(),
+                "{descriptor} took an unknown element"
+            );
+        }
+        accepted(&mpd(
+            "<Period><AdaptationSet><Role schemeIdUri=\"urn:x\" value=\"y\">\n</Role></AdaptationSet></Period>",
+        ));
+    }
+
+    /// Media3 1.11.1 builds every `S` repeat while it parses: the MPD is
+    /// refused past 100,000 of them, counted with Media3's own (wrapping)
+    /// arithmetic.
+    #[test]
+    fn dash_timelines_are_bounded() {
+        let timeline = |s: &str| {
+            mpd(&format!(
+                "<Period><AdaptationSet><SegmentTemplate media=\"s-$Time$.m4s\" timescale=\"1\">\
+                 <SegmentTimeline>{s}</SegmentTimeline></SegmentTemplate></AdaptationSet></Period>"
+            ))
+        };
+        accepted(&timeline("<S t=\"0\" d=\"1\" r=\"99999\"/>"));
+        assert!(rewrite(&timeline("<S t=\"0\" d=\"1\" r=\"100000\"/>")).is_err());
+        assert!(rewrite(&timeline("<S d=\"1\" r=\"2147483646\"/>")).is_err());
+        // Two timelines count together.
+        let two = |r: u32| {
+            let one = format!(
+                "<SegmentTemplate media=\"s-$Time$.m4s\"><SegmentTimeline><S d=\"1\" r=\"{r}\"/></SegmentTimeline></SegmentTemplate>"
+            );
+            mpd(&format!(
+                "<Period><AdaptationSet>{one}</AdaptationSet><AdaptationSet>{one}</AdaptationSet></Period>"
+            ))
+        };
+        accepted(&two(49999));
+        assert!(rewrite(&two(50000)).is_err());
+        // A negative repeat runs to the next S's start.
+        accepted(&timeline(
+            "<S t=\"0\" d=\"1\" r=\"-1\"/><S t=\"99999\" d=\"1\"/>",
+        ));
+        assert!(
+            rewrite(&timeline(
+                "<S t=\"0\" d=\"1\" r=\"-1\"/><S t=\"100000\" d=\"1\"/>"
+            ))
+            .is_err()
+        );
+        // In the last S it runs to a period end Media3 derives: refused.
+        assert!(rewrite(&timeline("<S t=\"0\" d=\"1\" r=\"-1\"/>")).is_err());
+        // Followed by an S with no t, Media3 counts to C.TIME_UNSET, wrapping:
+        // this start makes it 2^31 - 1.
+        let start = TIME_UNSET.wrapping_sub(0x7fff_ffff);
+        let wrapped = timeline(&format!("<S t=\"{start}\" d=\"1\" r=\"-1\"/><S d=\"1\"/>"));
+        assert!(rewrite(&wrapped).is_err(), "the wrapped count was not seen");
+        // Values Media3 cannot parse.
+        assert!(rewrite(&timeline("<S d=\"1\" r=\"2147483648\"/>")).is_err());
+        assert!(rewrite(&timeline("<S d=\"one\"/>")).is_err());
+        // An element in a timeline other than S, or inside an S.
+        assert!(
+            rewrite(&timeline(
+                "<S d=\"1\"/><SegmentTimeline><S d=\"1\" r=\"99999\"/></SegmentTimeline>"
+            ))
+            .is_err()
+        );
+        assert!(rewrite(&timeline("<S d=\"1\"><S d=\"1\"/></S>")).is_err());
+    }
+
+    /// Template identifiers Media3 expands, with widths `String.format`
+    /// allocates: only the four names, `$$`, and `%0Nd` up to 32.
+    #[test]
+    fn dash_template_identifiers_are_checked() {
+        let template = |media: &str| {
+            mpd(&format!(
+                "<Period><SegmentTemplate media=\"{media}\"/></Period>"
+            ))
+        };
+        for media in [
+            "s-$Number$.m4s",
+            "s-$Number%05d$.m4s",
+            "s-$Time%032d$-$Bandwidth$.m4s",
+            "$RepresentationID$/s$$-$Number$.m4s",
+            "https://t.example/a/$Number%09d$.m4s",
+        ] {
+            accepted(&template(media));
+        }
+        for media in [
+            "s-$Number%01000000000d$.m4s",
+            "s-$Number%033d$.m4s",
+            "s-$Number%5d$.m4s",
+            "s-$Number%05x$.m4s",
+            "s-$RepresentationID%05d$.m4s",
+            "s-$SubNumber$.m4s",
+            "s-$Number.m4s",
+            "https://t.example/a/$Number%01000000000d$.m4s",
+        ] {
+            assert!(rewrite(&template(media)).is_err(), "{media} was accepted");
+        }
+        let many = "$Number$".repeat(16);
+        accepted(&template(&many));
+        assert!(rewrite(&template(&format!("{many}$Time$"))).is_err());
+    }
+
+    /// URL-bearing text and values, and ids, have a length bound.
+    #[test]
+    fn dash_values_are_bounded() {
+        let long = |n: usize| "a".repeat(n);
+        accepted(&mpd(&format!(
+            "<BaseURL>{}/</BaseURL><Period/>",
+            long(MAX_VALUE - 1)
+        )));
+        assert!(
+            rewrite(&mpd(&format!(
+                "<BaseURL>{}/</BaseURL><Period/>",
+                long(MAX_VALUE)
+            )))
+            .is_err()
+        );
+        let media = |n: usize| {
+            mpd(&format!(
+                "<Period><SegmentList><SegmentURL media=\"{}\"/></SegmentList></Period>",
+                long(n)
+            ))
+        };
+        accepted(&media(MAX_VALUE));
+        assert!(rewrite(&media(MAX_VALUE + 1)).is_err());
+        let label = |n: usize| {
+            mpd(&format!(
+                "<Period><AdaptationSet><Label>{}</Label></AdaptationSet></Period>",
+                long(n)
+            ))
+        };
+        accepted(&label(MAX_VALUE));
+        assert!(rewrite(&label(MAX_VALUE + 1)).is_err());
+        let id = |n: usize| {
+            mpd(&format!(
+                "<Period><AdaptationSet><Representation id=\"{}\" bandwidth=\"1\"/></AdaptationSet></Period>",
+                long(n)
+            ))
+        };
+        accepted(&id(MAX_ID));
+        assert!(rewrite(&id(MAX_ID + 1)).is_err());
+    }
+
+    /// An output past `OUTPUT_MAX` refuses the MPD: escaping can make it
+    /// six times its input.
+    #[test]
+    fn dash_output_has_a_budget() {
+        let quotes = "'".repeat(3 << 20);
+        let body = mpd(&format!(
+            "<Period><AdaptationSet><Role schemeIdUri=\"urn:x\" value=\"{quotes}\"/></AdaptationSet></Period>"
+        ));
+        assert_eq!(rewrite(&body), Err("output too large"));
+        let fits = "'".repeat(1 << 20);
+        accepted(&mpd(&format!(
+            "<Period><AdaptationSet><Role schemeIdUri=\"urn:x\" value=\"{fits}\"/></AdaptationSet></Period>"
+        )));
+    }
+
+    /// A rewrite looks at its time on entry, every 1,024 events and in
+    /// every element's attributes.
+    #[test]
+    fn dash_rewrite_stops_when_its_time_is_up() {
+        let run = |body: &str, live: usize| {
+            let calls = std::cell::Cell::new(0);
+            let alive = || {
+                calls.set(calls.get() + 1);
+                calls.get() <= live
+            };
+            let mut table = Table::default();
+            let mut children = Children {
+                core: "http://127.0.0.1:7777/",
+                prefix: PREFIX,
+                templates: TEMPLATES,
+                table: &mut table,
+                alive: &alive,
+            };
+            let base = Url::parse(MAIN).unwrap();
+            rewrite_dash(body.as_bytes(), &base, &mut children).map(|r| r.text)
+        };
+        let short = mpd("<Period/>");
+        assert_eq!(run(&short, 0), Err("out of time"));
+        // Past the entry, the MPD element's attributes look first.
+        assert_eq!(run(&short, 1), Err("out of time"));
+        // A body of many events with no attributes after the root.
+        let events = mpd(&"<Period/>".repeat(3000));
+        assert!(run(&events, usize::MAX).is_ok());
+        assert_eq!(run(&events, 3), Err("out of time"));
+    }
+
+    /// Text and values are decoded with the five XML entities and character
+    /// references only.
+    #[test]
+    fn dash_unknown_entities_refuse() {
+        for body in [
+            mpd("<BaseURL>a&foo;/</BaseURL><Period/>"),
+            mpd("<BaseURL>a&#xZZ;/</BaseURL><Period/>"),
+            mpd("<Period id=\"a&foo;\"/>"),
+            mpd("<Period><SegmentList><SegmentURL media=\"a&#0;.m4s\"/></SegmentList></Period>"),
+        ] {
+            assert!(rewrite(&body).is_err(), "accepted: {body}");
+        }
+        accepted(&mpd("<BaseURL>a&amp;b&#47;c/</BaseURL><Period/>"));
+    }
+
+    /// One namespace under two prefixes would write one attribute twice; a
+    /// second MPD inside the first is refused, not cut short.
+    #[test]
+    fn dash_output_stays_well_formed() {
+        let twice = "<BaseURL xmlns:d2=\"urn:dvb:dash:dash-extensions:2014-1\" dvb:priority=\"1\" d2:priority=\"2\">a/</BaseURL><Period/>";
+        assert_eq!(rewrite(&mpd(twice)), Err("a duplicate attribute"));
+        let nested = mpd("<Period/><MPD><Period/></MPD><Period/>");
+        assert_eq!(rewrite(&nested), Err("a nested MPD"));
     }
 }

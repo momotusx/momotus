@@ -24,6 +24,8 @@ const MAX_ENTRIES: usize = 131_072;
 const MAX_TEXT: usize = 32 << 20;
 /// `/t/` entries a playback keeps before the least recently used tenth goes.
 const MAX_TEMPLATES: usize = 1024;
+/// Bytes of origins, prefixes and queries the `/t/` entries hold.
+const MAX_TEMPLATE_TEXT: usize = 4 << 20;
 
 /// What a body's first bytes are.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,7 +143,8 @@ pub(crate) fn declared(content_type: Option<&str>, urls: &[&str]) -> Option<Decl
             | "audio/mpegurl"
             | "audio/x-mpegurl",
         ) => return Some(Declared::Hls),
-        Some("application/dash+xml") => return Some(Declared::Dash),
+        // `video/vnd.mpeg.dash.mpd` is the IANA registration of DASH too.
+        Some("application/dash+xml" | "video/vnd.mpeg.dash.mpd") => return Some(Declared::Dash),
         _ => {}
     }
     urls.iter().find_map(|url| {
@@ -190,14 +193,18 @@ type Key = (Arc<str>, Box<str>, Option<Arc<str>>);
 /// A `/t/` entry: an origin, a path prefix ending in `/` and an optional
 /// query (3.3, DASH rule 4). Immutable, as resources are.
 struct Template {
-    /// `scheme://host[:port]`.
-    origin: Box<str>,
-    prefix: Box<str>,
-    query: Option<Box<str>>,
+    /// `scheme://host[:port]`, the prefix and the query, shared with the
+    /// index.
+    key: TemplateKey,
     used: u64,
 }
 
-type TemplateKey = (Box<str>, Box<str>, Option<Box<str>>);
+type TemplateKey = (Arc<str>, Arc<str>, Option<Arc<str>>);
+
+/// The bytes a `/t/` entry holds.
+fn template_bytes((origin, prefix, query): &TemplateKey) -> usize {
+    origin.len() + prefix.len() + query.as_ref().map_or(0, |q| q.len())
+}
 
 /// One playback's children, by id. An id's URL and role never change, and
 /// ids are never reused, so after an eviction an old id answers 404 and
@@ -229,6 +236,8 @@ pub(crate) struct Table {
     /// `/t/` entries, by id (ids shared with `entries`, never reused).
     templates: HashMap<u32, Template>,
     template_ids: HashMap<TemplateKey, u32>,
+    /// What the `/t/` entries hold, in bytes.
+    template_text: usize,
 }
 
 impl Table {
@@ -337,15 +346,14 @@ impl Table {
         }
         let id = self.next;
         self.next += 1;
+        self.template_text += template_bytes(&key);
         let template = Template {
-            origin: key.0.clone(),
-            prefix: key.1.clone(),
-            query: key.2.clone(),
+            key: key.clone(),
             used: self.tick,
         };
         self.templates.insert(id, template);
         self.template_ids.insert(key, id);
-        if self.templates.len() > MAX_TEMPLATES {
+        while self.templates.len() > MAX_TEMPLATES || self.template_text > MAX_TEMPLATE_TEXT {
             let floor = self.floor;
             let mut by_use: Vec<(u64, u32)> = self
                 .templates
@@ -360,7 +368,8 @@ impl Table {
             let count = (self.templates.len() / 10).clamp(1, by_use.len());
             for &(_, id) in &by_use[..count] {
                 if let Some(t) = self.templates.remove(&id) {
-                    self.template_ids.remove(&(t.origin, t.prefix, t.query));
+                    self.template_text -= template_bytes(&t.key);
+                    self.template_ids.remove(&t.key);
                 }
             }
         }
@@ -372,10 +381,11 @@ impl Table {
         self.tick += 1;
         let t = self.templates.get_mut(&id)?;
         t.used = self.tick;
+        let (origin, prefix, query) = &t.key;
         Some((
-            t.origin.to_string(),
-            t.prefix.to_string(),
-            t.query.as_deref().map(str::to_owned),
+            origin.to_string(),
+            prefix.to_string(),
+            query.as_deref().map(str::to_owned),
         ))
     }
 
@@ -886,6 +896,68 @@ mod tests {
         assert_eq!(sniff(b"<html>"), Sniffed::File);
     }
 
+    /// Past 1,024 `/t/` entries or 4 MiB of their text, the least recently
+    /// used tenth of those earlier rewrites named goes; a rewrite that names
+    /// more itself is refused, and an id is never reused.
+    #[test]
+    fn templates_evict_least_recently_used() {
+        let mut table = Table::default();
+        table.begin();
+        let ids: Vec<u32> = (0..MAX_TEMPLATES)
+            .map(|i| {
+                table
+                    .register_template("https://a.example", &format!("/{i}/"), None)
+                    .unwrap()
+            })
+            .collect();
+        // A rewrite that names one more entry itself: nothing may go.
+        assert_eq!(
+            table.register_template("https://a.example", "/more/", None),
+            Err("too many templates")
+        );
+        table.begin();
+        assert!(table.template(ids[0]).is_some(), "the oldest, used again");
+        let new = table
+            .register_template("https://a.example", "/new/", None)
+            .unwrap();
+        assert!(!ids.contains(&new));
+        assert!(
+            table.template(ids[0]).is_some(),
+            "a recently used entry went"
+        );
+        assert!(
+            table.template(ids[1]).is_none(),
+            "the least recently used stayed"
+        );
+        assert!(table.templates.len() <= MAX_TEMPLATES);
+        // Bytes: 64 KiB prefixes, far fewer than 1,024 of them.
+        let mut table = Table::default();
+        let big = |i: usize| format!("/{i}{}/", "p".repeat(64 << 10));
+        table.begin();
+        for i in 0..60 {
+            table
+                .register_template("https://a.example", &big(i), None)
+                .unwrap();
+        }
+        table.begin();
+        for i in 60..120 {
+            table
+                .register_template("https://a.example", &big(i), None)
+                .unwrap();
+        }
+        assert!(
+            table.template_text <= MAX_TEMPLATE_TEXT,
+            "{}",
+            table.template_text
+        );
+        assert!(table.templates.len() < 120);
+        // One rewrite naming more than the byte budget is refused.
+        let mut table = Table::default();
+        table.begin();
+        let named = (0..80).map(|i| table.register_template("https://a.example", &big(i), None));
+        assert_eq!(named.last(), Some(Err("too many templates")));
+    }
+
     #[test]
     fn declared_by_type_or_path() {
         let hls = Some(Declared::Hls);
@@ -896,6 +968,11 @@ mod tests {
         assert_eq!(declared(None, &["https://a.example/x/index.m3u8?t=1"]), hls);
         assert_eq!(
             declared(None, &["https://a.example/v", "https://b.example/v.mpd"]),
+            Some(Declared::Dash)
+        );
+        // IANA's other DASH type.
+        assert_eq!(
+            declared(Some("video/vnd.mpeg.dash.mpd"), &[]),
             Some(Declared::Dash)
         );
         assert_eq!(

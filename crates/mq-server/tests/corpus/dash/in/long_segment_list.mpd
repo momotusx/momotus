@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:full:2011" type="static" mediaPresentationDuration="PT240S" minBufferTime="PT2S">
+  <Period>
+    <AdaptationSet mimeType="video/mp4">
+      <Representation id="list" codecs="avc1.4d401f" width="854" height="480" bandwidth="900000">
+        <SegmentList timescale="1000" duration="4000">
+          <Initialization sourceURL="https://edge.example/v/init.mp4"/>
+          <SegmentURL media="https://edge.example/v/seg-1.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-2.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-3.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-4.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-5.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-6.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-7.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-8.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-9.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-10.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-11.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-12.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-13.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-14.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-15.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-16.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-17.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-18.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-19.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-20.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-21.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-22.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-23.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-24.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-25.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-26.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-27.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-28.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-29.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-30.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-31.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-32.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-33.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-34.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-35.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-36.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-37.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-38.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-39.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-40.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-41.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-42.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-43.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-44.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-45.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-46.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-47.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-48.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-49.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-50.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-51.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-52.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-53.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-54.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-55.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-56.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-57.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-58.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-59.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-60.m4s"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
