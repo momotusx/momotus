@@ -160,4 +160,27 @@ class PlayerLogicTest {
         assertEquals(1_000 + 60_000L, endsAt(1_000, 40_000, 100_000, 1f))
         assertEquals(1_000 + 30_000L, endsAt(1_000, 40_000, 100_000, 2f))
     }
+
+    @Test
+    fun `sources that failed alike are said once with their count, in first order`() {
+        val gone = "The link no longer exists (404)"
+        val slow = "The source did not answer in time"
+        val attempts =
+            listOf(
+                app.marquee.core.model
+                    .Attempt(key = "a", via = "Torrentio", error = slow),
+                app.marquee.core.model
+                    .Attempt(key = "b", via = "Torrentio", error = gone),
+                app.marquee.core.model
+                    .Attempt(key = "c", via = "Local", error = gone),
+                app.marquee.core.model
+                    .Attempt(key = "d", via = "Torrentio", error = gone),
+            )
+        val grouped = groupFailures(attempts)
+        assertEquals(
+            listOf("Torrentio" to slow, "Torrentio" to gone, "Local" to gone),
+            grouped.map { it.via to it.error },
+        )
+        assertEquals(listOf(slow, "$gone · 2 sources", gone), grouped.map { it.words })
+    }
 }

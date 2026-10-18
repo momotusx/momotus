@@ -23,7 +23,7 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
-import { bytes, clock, decoded, episodeLabel, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
+import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
 import { languageName, qualityCell, qualityText } from "../lib/words";
 import "./player.css";
 
@@ -399,11 +399,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 </p>
                 <Show when={snap()?.attempts.length}>
                   <ul class="attempts">
-                    <For each={snap()?.attempts}>
+                    <For each={groupFailures(snap()?.attempts ?? [])}>
                       {(a) => (
                         <li>
                           <b>{a.via}</b>
-                          <span>{a.error}</span>
+                          <span>{a.words}</span>
                         </li>
                       )}
                     </For>

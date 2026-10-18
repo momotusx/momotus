@@ -73,3 +73,15 @@ export function releaseParts(name: string): string[] {
 export function seasonName(season: number): string {
   return season === 0 ? "Specials" : `Season ${season}`;
 }
+
+/** Sources that failed the same way, from one addon, once each in first order, with their count. */
+export function groupFailures(attempts: readonly { via: string; error: string }[]): { via: string; words: string }[] {
+  const seen = new Map<string, { via: string; error: string; count: number }>();
+  for (const a of attempts) {
+    const id = `${a.via}\u0000${a.error}`;
+    const found = seen.get(id);
+    if (found) found.count += 1;
+    else seen.set(id, { via: a.via, error: a.error, count: 1 });
+  }
+  return [...seen.values()].map((f) => ({ via: f.via, words: f.count > 1 ? `${f.error} · ${f.count} sources` : f.error }));
+}

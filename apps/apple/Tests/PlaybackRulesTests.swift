@@ -130,3 +130,17 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     // A face the viewer picked is used as is.
     #expect(CaptionStyle.face(named: "Menlo-Regular") == "Menlo-Regular")
 }
+
+@Test func sourcesThatFailedAlikeAreSaidOnceInFirstOrder() throws {
+    let gone = "The link no longer exists (404)"
+    let slow = "The source did not answer in time"
+    let attempts = [
+        Attempt(key: "a", via: "Torrentio", error: slow),
+        Attempt(key: "b", via: "Torrentio", error: gone),
+        Attempt(key: "c", via: "Local", error: gone),
+        Attempt(key: "d", via: "Torrentio", error: gone),
+    ]
+    let grouped = FailedSources.group(attempts)
+    #expect(grouped.map(\.via) == ["Torrentio", "Torrentio", "Local"])
+    #expect(grouped.map(\.words) == [slow, "\(gone) · 2 sources", gone])
+}

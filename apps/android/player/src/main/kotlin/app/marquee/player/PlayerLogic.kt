@@ -1,6 +1,7 @@
 package app.marquee.player
 
 import androidx.media3.common.PlaybackException
+import app.marquee.core.model.Attempt
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
 
@@ -169,3 +170,19 @@ fun subtitleMime(url: String): String {
         else -> "application/x-subrip"
     }
 }
+
+/** Sources that failed the same way, from one addon, said once. */
+data class FailedSources(
+    val via: String,
+    val error: String,
+    val count: Int,
+) {
+    /** "The link no longer exists (404) · 8 sources". */
+    val words: String get() = if (count > 1) "$error · $count sources" else error
+}
+
+/** The failure history with each addon and reason once, in the order they first failed. */
+fun groupFailures(attempts: List<Attempt>): List<FailedSources> =
+    attempts
+        .groupBy { it.via to it.error }
+        .map { (reason, all) -> FailedSources(reason.first, reason.second, all.size) }

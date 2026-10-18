@@ -142,6 +142,29 @@ struct Attempt: Decodable, Hashable, Sendable {
     let error: String
 }
 
+/// Sources that failed the same way, from one addon, said once.
+struct FailedSources: Hashable, Sendable {
+    let via: String
+    let error: String
+    let count: Int
+
+    /// "The link no longer exists (404) · 8 sources".
+    var words: String { count > 1 ? "\(error) · \(count) sources" : error }
+
+    /// The failure history with each addon and reason once, in the order they first failed.
+    static func group(_ attempts: [Attempt]) -> [FailedSources] {
+        var order: [FailedSources] = []
+        for attempt in attempts {
+            if let i = order.firstIndex(where: { $0.via == attempt.via && $0.error == attempt.error }) {
+                order[i] = FailedSources(via: attempt.via, error: attempt.error, count: order[i].count + 1)
+            } else {
+                order.append(FailedSources(via: attempt.via, error: attempt.error, count: 1))
+            }
+        }
+        return order
+    }
+}
+
 struct SubtitleTrack: Decodable, Hashable, Sendable, Identifiable {
     let url: String
     /// As the addon gives it, usually ISO 639-2 ("eng").

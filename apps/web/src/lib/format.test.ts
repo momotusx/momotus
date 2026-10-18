@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bytes, clock, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
+import { bytes, clock, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
 
 test("bytes", () => {
   expect(bytes(8.4e9)).toBe("8.4 GB");
@@ -31,5 +31,22 @@ test("release names break between tokens only", () => {
     "DDP5.1.",
     "H.265",
     "-FLUX",
+  ]);
+});
+
+test("groupFailures says sources that failed alike once, in first order", () => {
+  const gone = "The link no longer exists (404)";
+  const slow = "The source did not answer in time";
+  expect(
+    groupFailures([
+      { via: "Torrentio", error: slow },
+      { via: "Torrentio", error: gone },
+      { via: "Local", error: gone },
+      { via: "Torrentio", error: gone },
+    ]),
+  ).toEqual([
+    { via: "Torrentio", words: slow },
+    { via: "Torrentio", words: `${gone} · 2 sources` },
+    { via: "Local", words: gone },
   ]);
 });
