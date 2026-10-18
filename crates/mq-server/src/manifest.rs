@@ -958,6 +958,29 @@ mod tests {
     }
 
     #[test]
+    fn tables_evict_past_their_text_limit() {
+        // Signed URLs of about 1 KB, each with its own signature: 32,000
+        // fit; past 32 MiB of text the least recently used tenth goes.
+        let signed = |i: usize| {
+            let sig = format!("{i:06}{}", "x".repeat(900));
+            Url::parse(&format!("https://cdn.example/v/seg-{i:06}.m4s?sig={sig}")).unwrap()
+        };
+        let mut table = Table::default();
+        table.begin();
+        for i in 0..32_000 {
+            table.register(&signed(i), Role::Media).unwrap();
+        }
+        assert_eq!(table.len(), 32_000);
+        table.begin();
+        for i in 32_000..40_000 {
+            table.register(&signed(i), Role::Media).unwrap();
+        }
+        assert!(table.len() < 40_000, "the text limit evicted nothing");
+        assert!(table.text <= MAX_TEXT);
+        assert!(table.get(0).is_none());
+    }
+
+    #[test]
     fn target_durations_go_with_their_playlists() {
         let url = |i: usize| Url::parse(&format!("https://cdn.example/v/{i}.m3u8")).unwrap();
         let mut table = Table::default();

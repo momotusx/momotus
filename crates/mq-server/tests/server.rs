@@ -1835,8 +1835,16 @@ async fn an_hls_playback_is_served_entirely_through_loopback() {
         ("/subs/en.vtt", "text/vtt", b"WEBVTT\n".to_vec()),
     ]))
     .await;
-    let http = HttpClient::new(ClientConfig::default()).unwrap();
-    let server = StreamServer::start(http.clone()).await.unwrap();
+    let server = StreamServer::start(HttpClient::new(ClientConfig::default()).unwrap())
+        .await
+        .unwrap();
+    // The player has a user agent of its own, so the origins' logs tell its
+    // requests from the core's.
+    let player = ClientConfig {
+        user_agent: "test-player/1".into(),
+        ..ClientConfig::default()
+    };
+    let http = HttpClient::new(player).unwrap();
     let lease = open_hls(&server, format!("{base}/v/master.m3u8")).await;
     let core = format!("http://{}/", server.addr());
     // Walk every playlist; every URL in them is the core's.
@@ -2265,6 +2273,34 @@ async fn declared_playlists_never_pass_raw() {
 }
 
 #[tokio::test]
+async fn a_playlist_path_after_a_redirect_declares_it() {
+    // A video's type and size, so only the final URL's `.m3u8` makes it a
+    // playlist; declared, its body is no playlist, so it never opens raw.
+    let mkv = file(4 << 20);
+    let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
+        "/ranged" | "/plain" => Reply {
+            status: 302,
+            headers: vec![("Location", format!("{}.m3u8", asked.path))],
+            ..Reply::default()
+        },
+        "/ranged.m3u8" => Reply::ranged(asked, "video/x-matroska", &mkv),
+        _ => Reply::ok("video/x-matroska", mkv.to_vec()),
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    for path in ["/ranged", "/plain"] {
+        let upstream = local_upstream(format!("{base}{path}"));
+        let opened = server.open(upstream, "v.mkv", Duration::from_secs(5)).await;
+        assert_eq!(
+            opened.unwrap_err(),
+            "The stream's playlist could not be read",
+            "{path}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn chunk_split_signatures_are_found() {
     let (base, _) = hls_origin(|asked| {
         let mut reply = Reply {
@@ -2425,29 +2461,34 @@ async fn a_slow_rewrite_ends_at_its_deadline_and_holds_up_nothing() {
 
 #[tokio::test]
 async fn a_video_file_is_never_sniffed() {
+    // A video type, and a size no playlist has under a type that says
+    // nothing: both are files at once.
     let mkv = file(4 << 20);
+    let big = file((8 << 20) + 1);
     let (base, log) = hls_origin(move |asked| {
-        let mut reply = Reply::ranged(asked, "video/x-matroska", &mkv);
+        let mut reply = match asked.path.as_str() {
+            "/v.mkv" => Reply::ranged(asked, "video/x-matroska", &mkv),
+            _ => Reply::ranged(asked, "application/octet-stream", &big),
+        };
         reply.gap = Duration::from_secs(2);
         reply
     })
     .await;
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http).await.unwrap();
-    let started = std::time::Instant::now();
-    let lease = server
-        .open(
-            local_upstream(format!("{base}/v.mkv")),
-            "v.mkv",
-            Duration::from_secs(5),
-        )
-        .await
-        .unwrap();
-    assert!(
-        started.elapsed() < Duration::from_millis(500),
-        "{:?}",
-        started.elapsed()
-    );
-    assert_eq!(lease.format, None);
-    assert_eq!(log.lock().unwrap().len(), 1, "only the prefetch request");
+    for path in ["/v.mkv", "/v.bin"] {
+        let started = std::time::Instant::now();
+        let lease = server
+            .open(
+                local_upstream(format!("{base}{path}")),
+                "v.mkv",
+                Duration::from_secs(5),
+            )
+            .await
+            .unwrap();
+        let took = started.elapsed();
+        assert!(took < Duration::from_millis(500), "{path}: {took:?}");
+        assert_eq!(lease.format, None);
+    }
+    assert_eq!(log.lock().unwrap().len(), 2, "only the prefetch requests");
 }
