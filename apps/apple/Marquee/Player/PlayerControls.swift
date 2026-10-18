@@ -22,6 +22,12 @@ struct PlayerControls: View {
     var activity: () -> Void = {}
     /// iOS: Picture in Picture, when the system says it is possible.
     var pip: PipControl?
+    /// The real window's height: below `PlayerLayout.shortHeight` the transport joins the actions.
+    var windowHeight: CGFloat = 0
+    /// The bottom controls' height with their foot padding, for Skip and Up Next.
+    var measured: (CGFloat) -> Void = { _ in }
+    @State private var actionsWidth: CGFloat = 0
+    @State private var moreAfter = false
     @Environment(\.metrics) private var metrics
     @State private var scrub: Double?
     /// Which control has focus: TV enters on Play/Pause, and every move keeps the controls up.
@@ -169,18 +175,25 @@ struct PlayerControls: View {
                 HStack(alignment: .center) {
                     Spacer().frame(maxWidth: .infinity)
                     transport
-                    HStack {
-                        Spacer()
-                        actions
-                    }
-                    .frame(maxWidth: .infinity)
+                    actions.frame(maxWidth: .infinity)
+                }
+            } else if PlayerLayout.joinsTransport(windowHeight: windowHeight) {
+                // A short window (a small phone in landscape): one row, so the
+                // controls stay clear of the title and the status line.
+                HStack(spacing: 16) {
+                    transport
+                    actions
                 }
             } else {
                 transport
                 actions.padding(.top, 6)
             }
         }
+        // Skip and Up Next sit just over this, the controls' own height and their foot padding.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured($0 + footPadding) }
     }
+
+    private var footPadding: CGFloat { metrics.wide ? Theme.Space.m : Theme.Space.s }
 
     private var transport: some View {
         // Play/Pause is the white circle; only focus draws a ring.
@@ -204,7 +217,31 @@ struct PlayerControls: View {
     }
 
     /// Audio, Subtitles, Versions, Speed: each a word with its current value.
+    /// The actions keep their spread when they fit; past the width (a small
+    /// phone, a large text size, long track names) the row scrolls, with a
+    /// fade at the end while more is out of sight.
     private var actions: some View {
+        ScrollView(.horizontal) {
+            actionRow
+                .fixedSize(horizontal: true, vertical: false)
+                // Room for a focus ring and the lift, which the scroll view would clip.
+                .padding(.vertical, metrics.wide ? 14 : 4)
+                .padding(.horizontal, metrics.wide ? 14 : 2)
+                .frame(minWidth: actionsWidth, alignment: metrics.wide ? .trailing : .center)
+        }
+        .scrollIndicators(.hidden)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { actionsWidth = $0 }
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.x + $0.containerSize.width < $0.contentSize.width - 1 } action: { moreAfter = $1 }
+        .mask {
+            HStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: moreAfter ? 32 : 0)
+            }
+        }
+    }
+
+    private var actionRow: some View {
         HStack(spacing: metrics.wide ? 26 : 16) {
             menu("Audio", "volume-2", audioValue) {
                 if model.audioTracks.isEmpty {
@@ -249,7 +286,6 @@ struct PlayerControls: View {
         }
         .menuStyle(.button)
         .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
-        .fixedSize()
     }
 
     /// An OSD menu that keeps the controls up while it is open, so they never
@@ -268,7 +304,10 @@ struct PlayerControls: View {
         VStack(spacing: 3) {
             Glyph(symbol, size: 18)
             Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
+            // Capped: a long track name ("English Audio Description") must not widen the row without end.
             Text(value).font(.text(Theme.type.caption, relativeTo: .caption)).foregroundStyle(.white.opacity(0.75))
+                .lineLimit(1)
+                .frame(maxWidth: metrics.wide ? 220 : 120)
         }
         .foregroundStyle(.white)
         .accessibilityElement(children: .combine)

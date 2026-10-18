@@ -4,6 +4,8 @@ import SwiftUI
 /// countdown when it starts on its own, Play now and Cancel.
 struct UpNextCard: View {
     let model: PlayerModel
+    /// A short window: the still goes, so the card takes less height.
+    var short = false
     @Environment(\.metrics) private var metrics
     /// Play now takes focus when the card appears, so a remote can press it at once.
     @FocusState private var playFocused: Bool
@@ -13,9 +15,11 @@ struct UpNextCard: View {
             // The buttons sit under the still and the words, so neither squeezes the other.
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: Theme.Space.s) {
-                    ArtImage(url: next.thumbnail, maxPixels: 640, fallback: next.title)
-                        .frame(width: metrics.wide ? 192 : 120, height: metrics.wide ? 108 : 68)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
+                    if !short {
+                        ArtImage(url: next.thumbnail, maxPixels: 640, fallback: next.title)
+                            .frame(width: metrics.wide ? 192 : 120, height: metrics.wide ? 108 : 68)
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
+                    }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("NEXT EPISODE")
                             .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
@@ -37,14 +41,11 @@ struct UpNextCard: View {
                         }
                     }
                 }
-                HStack(spacing: 10) {
-                    Button { Task { await model.playNext() } } label: { Label("Play now", glyph: "skip-forward") }
-                        .buttonStyle(PillButtonStyle(prominent: true))
-                        .focused($playFocused)
-                    Button("Cancel", action: model.cancelNext)
-                        .buttonStyle(PillButtonStyle())
+                // Side by side when they fit, else stacked with Play now first.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { buttons }
+                    VStack(alignment: .leading, spacing: 10) { buttons }
                 }
-                .fixedSize()
                 .disabled(model.startingNext)
             }
             .padding(Theme.Space.s)
@@ -54,6 +55,14 @@ struct UpNextCard: View {
             .accessibilityLabel("Up next")
             .onAppear { playFocused = true }
         }
+    }
+
+    @ViewBuilder private var buttons: some View {
+        Button { Task { await model.playNext() } } label: { Label("Play now", glyph: "skip-forward") }
+            .buttonStyle(PillButtonStyle(prominent: true))
+            .focused($playFocused)
+        Button("Cancel", action: model.cancelNext)
+            .buttonStyle(PillButtonStyle())
     }
 }
 

@@ -109,6 +109,7 @@ targets:
       - path: Marquee/Core/DebridStore.swift
       - path: Marquee/Core/DebridAccounts.swift
       - path: Marquee/Player/WebVTT.swift
+      - path: Marquee/Player/PlayerLayout.swift
       - path: Marquee/Sync/SyncWords.swift
       - path: Marquee/Theme/ArtLoader.swift
     settings:

@@ -16,6 +16,10 @@ struct PlayerScreen: View {
     @State private var menuOpen = false
     /// TV: the invisible target that holds focus while the controls are hidden.
     @FocusState private var catcherFocused: Bool
+    /// The real window's height, bars included (the player hides them).
+    @State private var windowHeight: CGFloat = 0
+    /// The bottom controls' measured height; a guess until they have shown once.
+    @State private var controlsHeight: CGFloat = 200
     #if os(iOS)
     @State private var pip = PictureInPicture()
     #endif
@@ -66,7 +70,7 @@ struct PlayerScreen: View {
                 GeometryReader { geo in
                     // The bottom of the picture as fitted on screen, kept clear of the controls.
                     let picture = fittedHeight(geo.size)
-                    let bottom = min((geo.size.height + picture) / 2 - 16, geo.size.height - (controls ? 190 : 40))
+                    let bottom = min((geo.size.height + picture) / 2 - 16, geo.size.height - (controlsShown ? controlsHeight + 16 : 40))
                     SubtitleLine(text: text)
                         .frame(maxWidth: .infinity)
                         .position(x: geo.size.width / 2, y: bottom - 30)
@@ -80,7 +84,7 @@ struct PlayerScreen: View {
                 PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
                     menuOpen = open
                     lastTouch = .now
-                }, activity: { lastTouch = .now }, pip: pipControl)
+                }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 })
                     .transition(.opacity)
             }
             if let segment = model.segment, model.playback?.phase != "failed", !model.showEndCard {
@@ -90,15 +94,15 @@ struct PlayerScreen: View {
                     .id(segment)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, Theme.Space.m)
-                    .padding(.bottom, 212)
+                    .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
                     .transition(.opacity)
             }
-            if model.showNext {
-                // Docked 16 pt clear of the scrubber when the controls show.
-                UpNextCard(model: model)
+            if PlayerLayout.showsUpNext(due: model.showNext, controlsShown: controlsShown, menuOpen: menuOpen, windowHeight: windowHeight) {
+                // Just over the measured controls while they show; on a short window it waits for them to hide.
+                UpNextCard(model: model, short: windowHeight > 0 && windowHeight < PlayerLayout.upNextRoom)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.horizontal, Theme.Space.m)
-                    .padding(.bottom, controls ? 212 : Theme.Space.l)
+                    .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     .animation(Theme.Motion.panel, value: controls)
             }
@@ -107,6 +111,7 @@ struct PlayerScreen: View {
                     .transition(.opacity)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height + $0.safeAreaInsets.top + $0.safeAreaInsets.bottom } action: { windowHeight = $0 }
         .animation(Theme.Motion.panel, value: model.showNext)
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)

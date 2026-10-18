@@ -81,3 +81,19 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(try calendar("2026-10-30", ["2026-10-12", "2026-10-17"]).startDay == "2026-10-17")
     #expect(try calendar("2026-10-30", []).startDay == nil)
 }
+
+@Test func thePhonePlayerPlacesItsPartsByTheRealWindow() {
+    // A 320 pt class phone in landscape: the transport joins the actions; from 360 it stays centered.
+    #expect(PlayerLayout.joinsTransport(windowHeight: 320))
+    #expect(!PlayerLayout.joinsTransport(windowHeight: 360))
+    #expect(!PlayerLayout.joinsTransport(windowHeight: 0), "before the window is measured")
+    // Up Next waits while the controls show on a short window, and while a track menu is open.
+    #expect(!PlayerLayout.showsUpNext(due: true, controlsShown: true, menuOpen: false, windowHeight: 402))
+    #expect(PlayerLayout.showsUpNext(due: true, controlsShown: false, menuOpen: false, windowHeight: 402))
+    #expect(PlayerLayout.showsUpNext(due: true, controlsShown: true, menuOpen: false, windowHeight: 874))
+    #expect(!PlayerLayout.showsUpNext(due: true, controlsShown: false, menuOpen: true, windowHeight: 874))
+    #expect(!PlayerLayout.showsUpNext(due: false, controlsShown: false, menuOpen: false, windowHeight: 874))
+    // Skip and Up Next sit just over the measured controls, else near the foot.
+    #expect(PlayerLayout.overlayBottom(controlsShown: true, controlsHeight: 180) == 188)
+    #expect(PlayerLayout.overlayBottom(controlsShown: false, controlsHeight: 180) == 24)
+}
