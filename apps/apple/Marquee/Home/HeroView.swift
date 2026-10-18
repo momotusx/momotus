@@ -189,7 +189,7 @@ struct MetaLine: View {
             if let rating {
                 HStack(spacing: size * 0.3) {
                     Glyph("star-fill", size: size * 0.9, relativeTo: .callout).foregroundStyle(Theme.Palette.star)
-                    Text(rating).fontWeight(.bold).foregroundStyle(Theme.Palette.text)
+                    Text(rating).fontWeight(Font.Weight.bold.legible).foregroundStyle(Theme.Palette.text)
                 }
             }
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in

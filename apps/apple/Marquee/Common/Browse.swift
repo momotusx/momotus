@@ -58,7 +58,7 @@ struct ChipRow<ID: Hashable>: View {
                     if isSelected(chip.id) { Glyph("check", size: Theme.type.callout, relativeTo: .callout) }
                     Text(chip.title)
                     if let detail = chip.detail {
-                        Text(detail).fontWeight(.regular).opacity(0.7)
+                        Text(detail).fontWeight(Font.Weight.regular.legible).opacity(0.7)
                     }
                 }
             }

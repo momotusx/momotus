@@ -33,7 +33,7 @@ struct ProfileAvatar: View {
             .overlay {
                 if avatar.glyph == "letter" {
                     Text(ProfileRules.initial(name))
-                        .font(.system(size: size * 0.46, weight: .heavy))
+                        .font(.text(size * 0.46, weight: .heavy))
                 } else {
                     Image(avatar.glyph == "gamepad" ? "gamepad-2" : avatar.glyph)
                         .renderingMode(.template)

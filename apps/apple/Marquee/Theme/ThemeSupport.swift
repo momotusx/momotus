@@ -80,18 +80,43 @@ enum Fonts {
 extension Font {
     /// Inter at the display weight: titles and headings. Use `View.display`
     /// for its tracking too.
-    static func display(_ size: CGFloat, relativeTo style: Font.TextStyle = .title) -> Font {
-        .custom(Theme.Family.display, size: size, relativeTo: style).weight(Font.Weight(token: Theme.Weight.display))
+    @MainActor static func display(_ size: CGFloat, relativeTo style: Font.TextStyle = .title) -> Font {
+        .custom(Theme.Family.display, size: size, relativeTo: style).weight(Font.Weight(token: Theme.Weight.display).legible)
     }
 
     /// Inter: everything the user reads to decide.
-    static func text(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
-        .custom(Theme.Family.text, size: size, relativeTo: style).weight(weight)
+    @MainActor static func text(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
+        .custom(Theme.Family.text, size: size, relativeTo: style).weight(weight.legible)
     }
 
     /// IBM Plex Mono: release names and technical lines.
-    static func mono(_ size: CGFloat) -> Font {
-        .custom("IBMPlexMono-Regular", size: size, relativeTo: .caption)
+    @MainActor static func mono(_ size: CGFloat) -> Font {
+        .custom(Font.Weight.boldText ? "IBMPlexMono-Medium" : "IBMPlexMono-Regular", size: size, relativeTo: .caption)
+    }
+}
+
+extension Font.Weight {
+    /// Bold Text (Settings, Accessibility, Display & Text Size): SwiftUI bolds
+    /// the system font for it, never a custom one, so the bundled faces step
+    /// up a weight themselves.
+    @MainActor static var boldText: Bool {
+        #if os(iOS) || os(tvOS)
+        UIAccessibility.isBoldTextEnabled
+        #else
+        false
+        #endif
+    }
+
+    /// This weight, one step heavier under Bold Text.
+    @MainActor var legible: Font.Weight {
+        guard Font.Weight.boldText else { return self }
+        switch self {
+        case .ultraLight, .thin, .light: return .regular
+        case .regular, .medium: return .semibold
+        case .semibold: return .bold
+        case .bold: return .heavy
+        default: return .black
+        }
     }
 }
 

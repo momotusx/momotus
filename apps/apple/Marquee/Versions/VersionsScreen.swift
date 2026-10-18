@@ -186,7 +186,7 @@ struct VersionsScreen: View {
             if let hidden = snapshot?.hidden, hidden.count > 0 {
                 Label {
                     let reasons = Text(VersionWords.hidden(hidden)).foregroundStyle(Theme.Palette.muted)
-                    Text("\(Text("Hidden (\(hidden.count))").fontWeight(.semibold))  \(reasons)")
+                    Text("\(Text("Hidden (\(hidden.count))").fontWeight(Font.Weight.semibold.legible))  \(reasons)")
                 } icon: {
                     Glyph("eye-off")
                 }
