@@ -162,12 +162,28 @@ pub(crate) struct Table {
     /// The tick the running rewrite began at: what it named since is its
     /// output's, and never evicted while it runs.
     floor: u64,
+    /// The last `#EXT-X-TARGETDURATION` of each playlist (`None`: the main
+    /// one), for how long a blocking reload may wait; a child's goes when
+    /// its entry goes.
+    targets: HashMap<Option<u32>, u64>,
 }
 
 impl Table {
     /// Starts a rewrite: entries it names from now on stay until it ends.
     pub(crate) fn begin(&mut self) {
         self.floor = self.tick + 1;
+    }
+
+    /// The target duration a playlist's last rewrite saw.
+    pub(crate) fn target(&self, id: Option<u32>) -> Option<u64> {
+        self.targets.get(&id).copied()
+    }
+
+    /// Keeps a playlist's target duration while its entry lasts.
+    pub(crate) fn set_target(&mut self, id: Option<u32>, target: u64) {
+        if id.is_none_or(|id| self.entries.contains_key(&id)) {
+            self.targets.insert(id, target);
+        }
     }
 
     /// The id that serves `url` in `role`. A URL named before in another
@@ -257,6 +273,7 @@ impl Table {
         by_use.sort_unstable();
         let count = (self.entries.len() / 10).clamp(1, by_use.len());
         for &(_, id) in &by_use[..count] {
+            self.targets.remove(&Some(id));
             if let Some(entry) = self.entries.remove(&id) {
                 self.text -= entry.last.len();
                 self.ids.remove(&(entry.dir, entry.last, entry.query));
@@ -880,6 +897,36 @@ mod tests {
         let url = Url::parse("https://cdn.example/v/new.m4s").unwrap();
         assert_eq!(table.register(&url, Role::Media), Ok(last + 1));
         assert!(table.get(1).is_none());
+    }
+
+    #[test]
+    fn target_durations_go_with_their_playlists() {
+        let url = |i: usize| Url::parse(&format!("https://cdn.example/v/{i}.m3u8")).unwrap();
+        let mut table = Table::default();
+        table.begin();
+        let first = table.register(&url(0), Role::Playlist).unwrap();
+        table.set_target(Some(first), 4);
+        table.set_target(None, 6);
+        assert_eq!(table.target(Some(first)), Some(4));
+        // Later reloads fill the table: the first playlist goes, and its
+        // target duration with it.
+        table.begin();
+        for i in 1..=MAX_ENTRIES {
+            table.register(&url(i), Role::Media).unwrap();
+        }
+        assert!(table.get(first).is_none());
+        assert_eq!(
+            table.target(Some(first)),
+            None,
+            "an evicted playlist's target stayed"
+        );
+        table.set_target(Some(first), 4);
+        assert_eq!(
+            table.target(Some(first)),
+            None,
+            "a target for a gone playlist"
+        );
+        assert_eq!(table.target(None), Some(6));
     }
 
     #[test]

@@ -127,9 +127,6 @@ struct Hls {
     /// Held by a rewrite for its whole run on a blocking thread; a child's
     /// lookup waits for it without holding a runtime worker.
     table: Arc<tokio::sync::Mutex<manifest::Table>>,
-    /// The last `#EXT-X-TARGETDURATION` of each playlist (`None`: the main
-    /// one), for how long a blocking reload may wait.
-    targets: Mutex<HashMap<Option<u32>, u64>>,
 }
 
 impl Hls {
@@ -341,19 +338,15 @@ impl StreamServer {
             prefix: format!("{core}c/{token}/"),
             core,
             table: Arc::default(),
-            targets: Mutex::default(),
         });
         let (body, base) = fetch_playlist(&hls, &hls.url, &[], MANIFEST_DEADLINE)
             .await
             .map_err(|e| error_words(&e))?;
         // A dry run: the ids it registers stay valid for the real requests.
-        let rewritten = rewrite(&hls, body, base, false, released, end).await;
-        let rewritten = rewritten.map_err(|reason| {
+        let rewritten = rewrite(&hls, body, base, None, released, end).await;
+        if let Err(reason) = rewritten {
             tracing::info!("stream playlist refused: {reason}");
-            UNREADABLE_PLAYLIST.to_owned()
-        })?;
-        if let Some(target) = rewritten.target_duration {
-            lock(&hls.targets).insert(None, target);
+            return Err(UNREADABLE_PLAYLIST.to_owned());
         }
         Ok(Some(hls))
     }
@@ -942,8 +935,12 @@ async fn serve_playlist(
 ) -> Response {
     let directives = hls_directives(query);
     let blocking = directives.iter().any(|(name, _)| name == "_HLS_msn");
-    let target = blocking.then(|| lock(&hls.targets).get(&id).copied());
-    let deadline = reload_deadline(target.flatten());
+    let target = if blocking {
+        hls.table.lock().await.target(id)
+    } else {
+        None
+    };
+    let deadline = reload_deadline(target);
     let end = Instant::now() + deadline;
     let fetch = fetch_playlist(hls, &url, &directives, deadline);
     let (body, base) = match playback.released.run_until_cancelled(fetch).await {
@@ -955,7 +952,7 @@ async fn serve_playlist(
         }
     };
     let released = &playback.released;
-    let rewritten = rewrite(hls, body, base, id.is_some(), released, end).await;
+    let rewritten = rewrite(hls, body, base, id, released, end).await;
     let rewritten = match rewritten {
         Ok(rewritten) => rewritten,
         Err(reason) => {
@@ -963,9 +960,6 @@ async fn serve_playlist(
             return StatusCode::BAD_GATEWAY.into_response();
         }
     };
-    if let Some(target) = rewritten.target_duration {
-        lock(&hls.targets).insert(id, target);
-    }
     (
         [
             (header::CONTENT_TYPE, "application/vnd.apple.mpegurl"),
@@ -976,15 +970,15 @@ async fn serve_playlist(
         .into_response()
 }
 
-/// Rewrites a fetched playlist (`rewrite_hls`) on a blocking thread, holding
-/// the playback's table, and gives up at `end` or at release: the rewrite is
-/// CPU work no `await` interrupts, so it checks the time itself and runs
-/// where it holds no runtime worker.
+/// Rewrites a fetched playlist (`id`: a child's, `None`: the main one) on a
+/// blocking thread, holding the playback's table, and gives up at `end` or
+/// at release: the rewrite is CPU work no `await` interrupts, so it checks
+/// the time itself and runs where it holds no runtime worker.
 async fn rewrite(
     hls: &Arc<Hls>,
     body: Bytes,
     base: Url,
-    media_only: bool,
+    id: Option<u32>,
     released: &CancellationToken,
     end: Instant,
 ) -> Result<manifest::Rewritten, &'static str> {
@@ -1001,7 +995,11 @@ async fn rewrite(
             table: &mut table,
             alive: &alive,
         };
-        manifest::rewrite_hls(&body, &base, media_only, &mut children)
+        let rewritten = manifest::rewrite_hls(&body, &base, id.is_some(), &mut children)?;
+        if let Some(target) = rewritten.target_duration {
+            table.set_target(id, target);
+        }
+        Ok(rewritten)
     });
     match tokio::time::timeout_at(deadline, work).await {
         Ok(Ok(rewritten)) => rewritten,
