@@ -2450,6 +2450,13 @@ async fn manifest_limits_and_deadlines() {
             gap: Duration::from_millis(500),
             ..Reply::default()
         },
+        // A source whose first bytes come at once (the ranged reads) but
+        // whose playlist fetch never answers: past its own 10 s timeout.
+        "/held.m3u8" if asked.range().is_some() => Reply::ranged(
+            asked,
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n",
+        ),
         // A source that never answers.
         _ => Reply {
             hold: Some(Arc::default()),
@@ -2465,6 +2472,7 @@ async fn manifest_limits_and_deadlines() {
         ("/huge.m3u8", s(5), unreadable),
         ("/repeated.m3u8", s(5), unreadable),
         ("/trickle.m3u8", s(2), unreadable),
+        ("/held.m3u8", s(15), unreadable),
         ("/silent", s(2), "The source did not answer in time"),
     ] {
         let opened = server
