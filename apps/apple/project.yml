@@ -85,6 +85,9 @@ targets:
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "3"
+        # A plain launch screen, and dark from it on (the keyboard and alerts too), as on iOS.
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
     scheme: {}
   # Pure model tests: decoding of recorded core JSON and applyDiffs. No host app.
   MarqueeTests:
