@@ -30,6 +30,8 @@ enum class Start { Loading, Onboarding, Home }
 class AppState(
     private val session: CoreSession,
     caps: CapsSource,
+    /** The gate's shuts before this state existed (a new activity in a running process): nothing to reset. */
+    shutsBefore: Int,
 ) : ViewModel() {
     var start: Start by mutableStateOf(Start.Loading)
         private set
@@ -54,19 +56,31 @@ class AppState(
         }
 
     /** The gate's shut this state last answered. */
-    var resetAt = 0
+    var resetAt = shutsBefore
         private set
 
-    /** A switch or a lock: the screens, Home, Versions and the TV focus memory belong to the old profile. */
-    fun resetProfile(shut: Int) {
+    /** A switch or a lock sent the app Home: the start decision no longer applies. */
+    private var sentHome = false
+
+    /**
+     * A switch, a lock or a core that stopped: the screens, Home, Versions and the TV focus memory
+     * belong to the old core or profile. A switch or a lock opens the next profile on Home, as a cold
+     * start of a known user would; a restart keeps where the app started (onboarding stays onboarding).
+     */
+    fun resetProfile(
+        shut: Int,
+        home: Boolean,
+    ) {
         resetAt = shut
         screens.viewModelStore.clear()
         versions.closeAll()
         homeView?.close()
         homeView = null
         tvHome = TvHomeState()
-        // The next profile opens on Home, as a cold start of a known user would.
-        start = Start.Home
+        if (home) {
+            sentHome = true
+            start = Start.Home
+        }
     }
 
     /** Where [decide] waits, for the log when it takes too long. */
@@ -79,8 +93,8 @@ class AppState(
                 withTimeoutOrNull(START_WAIT_MS) { decide() } ?: Start.Home.also {
                     CoreLog.w("start: no decision in $START_WAIT_MS ms at \"$step\", opening Home")
                 }
-            // A reset meanwhile (a lock at start) already chose Home for the next profile.
-            if (resetAt == 0) start = decided
+            // A switch or a lock meanwhile (a lock at start) already chose Home for the next profile.
+            if (!sentHome) start = decided
         }
     }
 

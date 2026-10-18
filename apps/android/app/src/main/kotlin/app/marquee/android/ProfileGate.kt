@@ -12,6 +12,7 @@ import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ProfilesView
+import app.marquee.core.views.ViewStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -36,8 +37,15 @@ class ProfileGate(
 ) {
     private var view: ProfilesView? by mutableStateOf(null)
 
-    /** The picker's snapshot, or null until the core sent it (nothing profile-bound opens before). */
-    val snapshot: ProfilesSnapshot? get() = view?.snapshot
+    /**
+     * The picker's snapshot, from the core that runs now: null until it sent one, and from a core's
+     * death until the next core's own snapshot (nothing profile-bound shows meanwhile).
+     */
+    val snapshot: ProfilesSnapshot? get() = view?.snapshot?.takeIf { current }
+
+    /** Why the profiles could not be read, while the gate tries again. */
+    var problem: String? by mutableStateOf(null)
+        private set
 
     /** The start picker was answered this launch (a cold start with more than one profile asks once). */
     var chosen by mutableStateOf(false)
@@ -62,6 +70,13 @@ class ProfileGate(
     var shutCount by mutableIntStateOf(0)
         private set
 
+    /** The last shut was a core that stopped: the app keeps where it started (onboarding stays onboarding). */
+    var restarted = false
+        private set
+
+    /** What [chosen] was when the switch began: Cancel goes back to it (the start picker stays a question). */
+    private var chosenBefore = false
+
     private var resetCount by mutableIntStateOf(0)
 
     /** Whether the app may show profile content, or only the picker. */
@@ -77,19 +92,23 @@ class ProfileGate(
             snapshotFlow { session.health }.first { it == CoreHealth.Running }
             val v = session.profiles()
             view = v
-            val first = snapshotFlow { v.snapshot }.filterNotNull().first()
+            awaitSnapshot(v, 0)
+            val first = v.snapshot ?: return@launch
             if (!ProfileCopy.startsOnPicker(first)) chosen = true
             current = true
             // A core that stops shuts the gate; the next core's own snapshot opens it (a protected
-            // profile starts that core locked).
+            // profile starts that core locked). The count of snapshots is taken at the shut: nothing
+            // from the dead core raises it after that, and the new core's view may come back before
+            // this collector hears that it runs.
+            var mark = v.opens
             launch {
                 snapshotFlow { session.health == CoreHealth.Running }.collect { running ->
                     if (!running && current) {
+                        mark = v.opens
                         current = false
-                        shut()
+                        shut(restart = true)
                     } else if (running && !current) {
-                        val mark = v.opens
-                        snapshotFlow { v.opens }.first { it > mark }
+                        awaitSnapshot(v, mark)
                         current = true
                     }
                 }
@@ -105,7 +124,27 @@ class ProfileGate(
         }
     }
 
-    private fun shut(): Int {
+    /**
+     * Waits for a snapshot after [mark] of them. A view that failed (its resubscribes ran out, or a
+     * subscribe timed out) tries again every two seconds, with the reason in [problem] meanwhile.
+     */
+    private suspend fun awaitSnapshot(
+        v: ProfilesView,
+        mark: Int,
+    ) {
+        while (true) {
+            snapshotFlow { v.opens > mark || v.status is ViewStatus.Failed }.first { it }
+            if (v.opens > mark) break
+            problem = (v.status as? ViewStatus.Failed)?.reason
+            CoreLog.w("profiles view failed, trying again: $problem")
+            delay(2_000)
+            v.retry()
+        }
+        problem = null
+    }
+
+    private fun shut(restart: Boolean = false): Int {
+        restarted = restart
         shutCount++
         return shutCount
     }
@@ -140,6 +179,7 @@ class ProfileGate(
     ): Boolean {
         if (inFlight) return false
         inFlight = true
+        if (switching == null) chosenBefore = chosen
         switching = profile
         switchProblem = null
         val count = shut()
@@ -181,11 +221,14 @@ class ProfileGate(
         }
     }
 
-    /** A refused switch given up: the current profile opens again, on Home. Not while a request is out. */
+    /**
+     * A refused switch given up. From the app, the current profile opens again, on Home; from the
+     * start picker, the picker asks again. Not while a request is out.
+     */
     fun cancelSwitch() {
         if (inFlight) return
         switching = null
         switchProblem = null
-        chosen = true
+        chosen = chosenBefore
     }
 }

@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -436,7 +437,8 @@ fun PickerScreen(
     val owner = me?.isOwner == true
     // The profile whose keypad is open: picked here, or a switch the gate holds as refused (its
     // keypad opens again with the reason, whichever picker asked).
-    var picked by remember { mutableStateOf<String?>(null) }
+    // Kept across a rotation, which the device's lock screen can bring while a reset waits.
+    var picked by rememberSaveable { mutableStateOf<String?>(null) }
     val target = picked ?: gate.switching.takeIf { gate.switchProblem != null }
     var said by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
@@ -707,8 +709,17 @@ private fun ForgotPin(
                 said =
                     try {
                         session.ops.resetOwnerPin()
-                        if (unlocksSession) gate.unlock(null) else gate.switchTo(owner.id, null)
-                        ""
+                        if (unlocksSession) {
+                            gate.unlock(null)
+                            ""
+                        } else if (gate.switchTo(owner.id, null)) {
+                            ""
+                        } else {
+                            // The PIN is gone; only the switch was refused (or one was already out).
+                            val refused = gate.switchProblem
+                            "The PIN was removed. " +
+                                ProfileCopy.problem(refused?.code, refused?.message ?: "Choose the profile again.")
+                        }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -883,6 +894,23 @@ fun EditProfileScreen(
         }
     }
     var confirmDelete by remember { mutableStateOf(false) }
+    // The confirmation opens on Keep, never on Delete: a held OK cannot delete a profile, and
+    // closing it gives focus back to "Delete profile".
+    val keep = remember { FocusRequester() }
+    val askDelete = remember { FocusRequester() }
+    // A swap shows both for a frame: focus moves to the new button before the focused one leaves,
+    // or Android would hand it to the first field (the name, and its keyboard).
+    var swapping by remember { mutableStateOf(false) }
+    val swapDelete = { ask: Boolean ->
+        confirmDelete = ask
+        swapping = true
+    }
+    LaunchedEffect(confirmDelete, swapping) {
+        if (!swapping) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { if (confirmDelete) keep.requestFocus() else askDelete.requestFocus() }
+        swapping = false
+    }
 
     // The page leaves once: a delete from here also removes the profile from the snapshot.
     var left by remember { mutableStateOf(false) }
@@ -1104,9 +1132,15 @@ fun EditProfileScreen(
                     Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
                 ) {
-                    if (!confirmDelete) {
-                        SecondaryButton("Delete profile", { confirmDelete = true }, icon = Icons.Trash)
-                    } else {
+                    if (!confirmDelete || swapping) {
+                        SecondaryButton(
+                            "Delete profile",
+                            { swapDelete(true) },
+                            icon = Icons.Trash,
+                            focusRequester = askDelete,
+                        )
+                    }
+                    if (confirmDelete || swapping) {
                         MqText(
                             "Delete ${p.name}? Their library, progress and settings are removed from this device now " +
                                 "and from your other devices when they next sync.",
@@ -1123,11 +1157,11 @@ fun EditProfileScreen(
                                     } catch (e: Exception) {
                                         said =
                                             ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to Status.Bad
-                                        confirmDelete = false
+                                        swapDelete(false)
                                     }
                                 }
                             }, icon = Icons.Trash)
-                            SecondaryButton("Keep", { confirmDelete = false })
+                            SecondaryButton("Keep", { swapDelete(false) }, focusRequester = keep)
                         }
                     }
                 }

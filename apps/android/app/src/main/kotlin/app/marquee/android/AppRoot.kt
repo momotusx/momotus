@@ -37,6 +37,7 @@ import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Form
 import app.marquee.design.Marquee
+import app.marquee.design.StateMessage
 import app.marquee.ui.phone.PhoneHome
 import app.marquee.ui.phone.PhoneShell
 import app.marquee.ui.tv.TvHome
@@ -55,18 +56,26 @@ fun MarqueeRoot(
     debugStack: List<Route>? = null,
 ) {
     val marquee = LocalContext.current.applicationContext as MarqueeApp
-    val app = viewModel<AppState>(factory = viewModelFactory { initializer { AppState(session, marquee.deviceCaps) } })
     val gate = marquee.profiles
+    val app =
+        viewModel<AppState>(
+            factory = viewModelFactory { initializer { AppState(session, marquee.deviceCaps, gate.shutCount) } },
+        )
     // Each shut of the gate (a switch, a lock, a core that stopped): once the screens have left
     // composition, everything of the old profile goes, and the gate hears so. The count lives in
     // AppState, so a configuration change between the shut and this effect still resets once.
     LaunchedEffect(gate.shutCount) {
-        if (gate.shutCount > app.resetAt) app.resetProfile(gate.shutCount)
+        if (gate.shutCount > app.resetAt) app.resetProfile(gate.shutCount, home = !gate.restarted)
         gate.resetDone(app.resetAt)
     }
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         val locked = gate.snapshot?.locked == true
         when {
+            gate.snapshot == null && gate.problem != null -> {
+                // The profiles view failed to come back; the gate tries again meanwhile.
+                StateMessage(title = "Profiles did not load", body = "${gate.problem}. Trying again.")
+            }
+
             app.start == Start.Loading || gate.snapshot == null -> {
                 Unit
             }
