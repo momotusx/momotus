@@ -39,6 +39,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
@@ -237,7 +238,10 @@ impl StreamServer {
         };
         let source = source.clone();
         let end = Instant::now() + deadline;
-        let detect = self.detect(&source, &token, &playback.released, end);
+        // Set once the source answered with a playlist (declared or sniffed):
+        // from then on, too slow is the playlist's fault, not the source's.
+        let playlist = AtomicBool::new(false);
+        let detect = self.detect(&source, &token, &playback.released, end, &playlist);
         match tokio::time::timeout_at(end.into(), detect).await {
             Ok(Ok(None)) => Ok(self.lease(token, playback, &file_name(filename), None)),
             Ok(Ok(Some(hls))) => {
@@ -256,7 +260,11 @@ impl StreamServer {
             }
             Err(_) => {
                 playback.release();
-                Err(SILENT.into())
+                if playlist.load(Ordering::Relaxed) {
+                    Err(UNREADABLE_PLAYLIST.into())
+                } else {
+                    Err(SILENT.into())
+                }
             }
         }
     }
@@ -272,6 +280,7 @@ impl StreamServer {
         token: &str,
         released: &CancellationToken,
         end: Instant,
+        playlist: &AtomicBool,
     ) -> Result<Option<Arc<Hls>>, String> {
         let listed = source.url().to_owned();
         let (declared, prefix) = match source.meta(0).await {
@@ -282,6 +291,7 @@ impl StreamServer {
                 if declared.is_none() && !manifest::candidate(content_type, Some(meta.len)) {
                     return Ok(None);
                 }
+                playlist.store(declared.is_some(), Ordering::Relaxed);
                 let want = meta.len.min(manifest::SNIFF as u64);
                 let mut prefix = BytesMut::new();
                 while (prefix.len() as u64) < want {
@@ -308,6 +318,7 @@ impl StreamServer {
                 if declared.is_none() && !manifest::candidate(content_type, None) {
                     return Ok(None);
                 }
+                playlist.store(declared.is_some(), Ordering::Relaxed);
                 let mut prefix = BytesMut::new();
                 while prefix.len() < manifest::SNIFF {
                     match upstream.next_chunk().await {
@@ -327,7 +338,7 @@ impl StreamServer {
             }
         };
         match (manifest::sniff(&prefix), declared) {
-            (Sniffed::Hls, None | Some(Declared::Hls)) => {}
+            (Sniffed::Hls, None | Some(Declared::Hls)) => playlist.store(true, Ordering::Relaxed),
             (Sniffed::Dash, None | Some(Declared::Dash)) => return Err(NO_DASH.into()),
             (Sniffed::File, None) => return Ok(None),
             // Declared but not that format, a DASH patch, a DOCTYPE: a
@@ -348,7 +359,12 @@ impl StreamServer {
         });
         let (body, base) = fetch_playlist(&hls, &hls.url, &[], MANIFEST_DEADLINE)
             .await
-            .map_err(|e| error_words(&e))?;
+            .map_err(|e| match e {
+                // The source answered with a playlist: too slow is the
+                // playlist's.
+                HttpError::Timeout(_) => UNREADABLE_PLAYLIST.to_owned(),
+                e => error_words(&e),
+            })?;
         // A dry run: the ids it registers stay valid for the real requests.
         let rewritten = rewrite(&hls, body, base, None, released, end).await;
         if let Err(reason) = rewritten {
