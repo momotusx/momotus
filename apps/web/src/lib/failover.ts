@@ -60,9 +60,18 @@ export function pendingStart() {
     set(sec: number) {
       pending = sec > 0 ? sec : null;
     },
-    /** The element went to the start. */
-    applied() {
+    /** The start to apply now that the metadata is in, once. */
+    take(): number | null {
+      const at = pending;
       pending = null;
+      return at;
+    },
+    /** A viewer's seek before the metadata: it becomes the start, so the
+     * metadata does not undo it. False when no start is pending. */
+    retarget(sec: number): boolean {
+      if (pending == null) return false;
+      pending = Math.max(0, sec);
+      return true;
     },
     /** The playhead, given the element's `currentTime`. */
     position(current: number): number {

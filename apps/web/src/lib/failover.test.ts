@@ -58,8 +58,20 @@ test("the playhead is the start until the element applied it", () => {
   start.set(900);
   // A source that fails before its metadata stopped at its start, not at 0.
   expect(start.position(0)).toBe(900);
-  start.applied();
+  expect(start.take()).toBe(900);
+  expect(start.take()).toBeNull();
   expect(start.position(903.5)).toBe(903.5);
   start.set(0);
   expect(start.position(2)).toBe(2);
+});
+
+test("a seek before the metadata becomes the start, and none is pending after it", () => {
+  const start = pendingStart();
+  expect(start.retarget(30)).toBe(false);
+  start.set(900);
+  expect(start.retarget(1200)).toBe(true);
+  // Progress reports and the metadata both see the viewer's position, not the old start.
+  expect(start.position(0)).toBe(1200);
+  expect(start.take()).toBe(1200);
+  expect(start.retarget(5)).toBe(false);
 });

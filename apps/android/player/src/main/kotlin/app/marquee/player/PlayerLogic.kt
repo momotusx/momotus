@@ -114,6 +114,22 @@ data class Failure(
     val status: Int? = null,
 )
 
+/**
+ * A source's error status in the core's words (mq-server `status_words`), so the line shown while the
+ * next source opens matches the failure history the core keeps.
+ */
+fun statusWords(status: Int): String {
+    val words =
+        when (status) {
+            404, 410 -> "The link no longer exists"
+            401, 403 -> "The source refused access"
+            429 -> "The source is busy, try again soon"
+            in 500..599 -> "The source had an error"
+            else -> "The source answered with an error"
+        }
+    return "$words ($status)"
+}
+
 /** Sorts a Media3 error code into what failed, with a sentence a viewer can read. */
 fun classifyFailure(
     code: Int,
@@ -123,7 +139,7 @@ fun classifyFailure(
         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
             Failure(
                 FailureKind.Http,
-                httpStatus?.let { "The source answered with HTTP $it" } ?: "The source refused the request",
+                httpStatus?.let(::statusWords) ?: "The source refused the request",
                 httpStatus,
             )
         }

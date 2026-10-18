@@ -186,3 +186,13 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(sourceStart(stoppedAt: 312.5, resumeMs: 30_000) == 312.5)
     #expect(sourceStart(stoppedAt: nil, resumeMs: nil) == 0)
 }
+
+@Test func onlyALandedStartSeekHandsOver() {
+    #expect(startLanded(finished: true, sameItem: true, pending: 900) == 900)
+    // An interrupted seek, or one for an item already replaced, keeps the start pending.
+    #expect(startLanded(finished: false, sameItem: true, pending: 900) == nil)
+    #expect(startLanded(finished: true, sameItem: false, pending: 900) == nil)
+    // A viewer's seek already cleared it.
+    #expect(startLanded(finished: true, sameItem: true, pending: nil) == nil)
+}
+

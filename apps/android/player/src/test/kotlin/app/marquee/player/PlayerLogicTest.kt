@@ -58,7 +58,7 @@ class PlayerLogicTest {
     @Test
     fun `errors are sorted into what failed, with the status and a sentence`() {
         assertEquals(
-            Failure(FailureKind.Http, "The source answered with HTTP 404", 404),
+            Failure(FailureKind.Http, "The link no longer exists (404)", 404),
             classifyFailure(PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS, 404),
         )
         val kinds =
@@ -188,5 +188,14 @@ class PlayerLogicTest {
             grouped.map { it.via to it.error },
         )
         assertEquals(listOf(slow, "$gone · 2 sources", gone), grouped.map { it.words })
+    }
+
+    @Test
+    fun `status words match the core's`() {
+        assertEquals("The link no longer exists (410)", statusWords(410))
+        assertEquals("The source refused access (403)", statusWords(403))
+        assertEquals("The source is busy, try again soon (429)", statusWords(429))
+        assertEquals("The source had an error (502)", statusWords(502))
+        assertEquals("The source answered with an error (400)", statusWords(400))
     }
 }

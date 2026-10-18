@@ -36,7 +36,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
 
   const known = () => Number.isFinite(video?.duration) && video.duration > 0;
   const seek = (sec: number) => {
-    if (video) video.currentTime = Math.max(0, sec);
+    if (video && !start.retarget(sec)) video.currentTime = Math.max(0, sec);
   };
   const play = () => void video?.play().catch(() => setPaused(true));
 
@@ -93,8 +93,8 @@ export function createVideoEngine(events: EngineEvents): Engine {
       video.src = url;
       const applyStart = () => {
         onMetadata = null;
-        if (startSec > 0) video.currentTime = startSec;
-        start.applied();
+        const at = start.take();
+        if (at != null && at > 0) video.currentTime = at;
         readTracks();
         events.onLoaded();
       };

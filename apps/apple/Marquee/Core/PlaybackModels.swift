@@ -115,6 +115,14 @@ func sourceStart(stoppedAt: Double?, resumeMs: Int64?) -> Double {
 
 /// Where a failed source stopped: its start while the seek to it has not
 /// landed (the player still says 0 there), else the playhead.
+/// The start seek's completion: the position it landed at when it finished
+/// for the item still loaded and the start is still pending (no viewer seek
+/// took over), else nil and the start stays pending.
+func startLanded(finished: Bool, sameItem: Bool, pending: Double?) -> Double? {
+    guard finished, sameItem else { return nil }
+    return pending
+}
+
 func stoppedPosition(pendingStart: Double?, position: Double) -> Double {
     pendingStart ?? position
 }

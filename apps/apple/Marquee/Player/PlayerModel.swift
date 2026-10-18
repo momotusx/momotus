@@ -337,10 +337,15 @@ final class PlayerModel {
         pendingStart = start > 1 ? start : nil
         if start > 1 {
             let at = CMTime(seconds: start, preferredTimescale: 600)
-            player.seek(to: at, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            // Only a seek that landed hands over, and the cached position takes the start
+            // at once: a failure before the next tick then still stops at the start.
+            player.seek(to: at, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
-                        guard let self, generation == self.generation else { return }
+                        guard let self, let landed = startLanded(
+                            finished: finished, sameItem: generation == self.generation, pending: self.pendingStart
+                        ) else { return }
+                        self.position = landed
                         self.pendingStart = nil
                     }
                 }
