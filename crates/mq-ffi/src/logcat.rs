@@ -23,7 +23,7 @@ pub fn init() {
     ONCE.call_once(|| {
         let filter = std::env::var("MARQUEE_LOG")
             .ok()
-            .and_then(|spec| spec.parse::<Targets>().ok())
+            .and_then(|spec| crate::log_filter::targets(&spec))
             .unwrap_or_else(|| Targets::new().with_default(Level::INFO));
         let layer = tracing_subscriber::fmt::layer()
             .with_writer(Logcat)

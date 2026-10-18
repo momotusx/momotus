@@ -6,6 +6,8 @@
 //! code. Messages are batched per frame by the core, so the per-call cost of
 //! the binding is paid once per batch, not per item.
 
+#[cfg(any(target_os = "android", target_vendor = "apple"))]
+mod log_filter;
 #[cfg(target_os = "android")]
 mod logcat;
 #[cfg(target_vendor = "apple")]

@@ -5,7 +5,6 @@
 //! Errors already redact URLs and keys (`mq_http::redact_url`).
 
 use std::sync::Once;
-use tracing_subscriber::filter::Targets;
 use tracing_subscriber::prelude::*;
 
 /// Installs the stderr subscriber once per process, if asked for.
@@ -14,7 +13,7 @@ pub fn init() {
     ONCE.call_once(|| {
         let Some(filter) = std::env::var("MARQUEE_LOG")
             .ok()
-            .and_then(|spec| spec.parse::<Targets>().ok())
+            .and_then(|spec| crate::log_filter::targets(&spec))
         else {
             return;
         };
