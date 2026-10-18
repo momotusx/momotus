@@ -95,7 +95,7 @@ struct PlayerControls: View {
                 }
             }
             Spacer()
-            if model.duration > 0 {
+            if model.duration > 0, model.playback?.phase != "failed" {
                 Text("Ends at \(endsAt.formatted(date: .omitted, time: .shortened))")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(.white.opacity(0.8))

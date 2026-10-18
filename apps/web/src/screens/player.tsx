@@ -212,7 +212,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
 
   const remaining = () => Math.max(0, duration() - time());
   const endsAt = () => {
-    if (!duration()) return null;
+    // Nothing ends once every source failed.
+    if (!duration() || snap()?.phase === "failed") return null;
     const at = new Date(Date.now() + (remaining() / rate()) * 1000);
     return at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   };
