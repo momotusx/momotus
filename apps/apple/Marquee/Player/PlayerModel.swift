@@ -174,6 +174,7 @@ final class PlayerModel {
         versions = model
         route = pick
         (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure, nextVersions) = (nil, false, nil, nil, false, false, nil, nil)
+        loadedAttempt = nil
         (position, duration, skippedAt) = (0, 0, nil)
         selectSubtitle(nil)
     }
@@ -216,6 +217,7 @@ final class PlayerModel {
         report()
         route = PlayRoute(versionsSub: route.versionsSub, key: key, target: route.target, tapped: .now)
         (loadedURL, rendered, firstFrameMs, playback) = (nil, false, nil, nil)
+        loadedAttempt = nil
     }
 
     func togglePlay() {
@@ -274,7 +276,7 @@ final class PlayerModel {
             #if DEBUG
             if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
             #endif
-            load(url, key: snapshot.key ?? route.key, attempt: snapshot.attempt, at: start)
+            load(url, key: snapshot.key, attempt: snapshot.attempt, at: start)
         case "failed":
             player.pause()
             notice = nil
@@ -284,8 +286,9 @@ final class PlayerModel {
     }
 
     /// `key`: the version this URL plays, for its `duration`; `attempt`: the
-    /// core's number for this source, for `failOver`.
-    private func load(_ url: String, key: String, attempt: Int64?, at start: Double) {
+    /// core's number for this source, for `failOver`. Neither falls back to
+    /// the picked version: an unknown one is not sent.
+    private func load(_ url: String, key: String?, attempt: Int64?, at start: Double) {
         guard let address = URL(string: url) else { return }
         generation += 1
         let generation = generation
@@ -312,8 +315,8 @@ final class PlayerModel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] time in
                 MainActor.assumeIsolated {
-                    guard let self, time.isNumeric, time.seconds > 0, generation == self.generation, let sub = self.sub,
-                          self.durationSent.insert(key).inserted else { return }
+                    guard let self, let key, time.isNumeric, time.seconds > 0, generation == self.generation,
+                          let sub = self.sub, self.durationSent.insert(key).inserted else { return }
                     let ms = Int(time.seconds * 1000)
                     Task { try? await self.core.command(sub, ["type": "duration", "key": key, "durationMs": ms]) }
                 }
@@ -334,10 +337,9 @@ final class PlayerModel {
         generation += 1
         player.pause()
         player.replaceCurrentItem(with: nil)
-        loadedURL = nil
+        let command = failOverCommand(error: reason, attempt: loadedAttempt)
+        (loadedURL, loadedAttempt) = (nil, nil)
         guard let sub else { return }
-        var command: [String: any Sendable] = ["type": "failOver", "error": reason]
-        if let loadedAttempt { command["attempt"] = loadedAttempt }
         Task { [command] in try? await core.command(sub, command) }
     }
 

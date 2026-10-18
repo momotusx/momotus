@@ -144,3 +144,17 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(grouped.map(\.via) == ["Torrentio", "Torrentio", "Local"])
     #expect(grouped.map(\.words) == [slow, "\(gone) · 2 sources", gone])
 }
+
+@Test func aFailoverNamesTheAttemptThatWasLoaded() {
+    let command = failOverCommand(error: "decoder error", attempt: 3)
+    #expect(command["type"] as? String == "failOver")
+    #expect(command["error"] as? String == "decoder error")
+    #expect(command["attempt"] as? Int64 == 3)
+    #expect(command.count == 3)
+}
+
+@Test func anUnknownAttemptIsLeftOutOfTheFailover() {
+    let command = failOverCommand(error: "decoder error", attempt: nil)
+    #expect(command["attempt"] == nil)
+    #expect(command.count == 2)
+}

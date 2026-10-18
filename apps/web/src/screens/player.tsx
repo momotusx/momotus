@@ -23,6 +23,7 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
+import { loadedSource } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
 import { languageName, qualityCell, qualityText } from "../lib/words";
 import "./player.css";
@@ -100,9 +101,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const [subError, setSubError] = createSignal<string | null>(null);
   const [ended, setEnded] = createSignal(false);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
-  // The core's attempt number of the source the engine plays, named in failOver so the core
-  // ignores a late error, even from another source of the same key.
-  let loadedAttempt: number | null = null;
+  // The source the engine plays, named in failOver so the core ignores a late error.
+  const loaded = loadedSource(snap);
 
   // Whatever decodes the picture (player/engine.ts); the screen only talks to it.
   const engine = createVideoEngine({
@@ -112,7 +112,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       report();
     },
     onEnded: () => onEnded(),
-    onError: (why) => void playback()?.command({ type: "failOver", attempt: loadedAttempt ?? undefined, error: why }),
+    onError: (why) => void playback()?.command(loaded.failOver(why)),
     onLoaded: () => sendDuration(),
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
@@ -181,7 +181,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   createEffect(
     on(url, (u, prev) => {
       if (!u) return;
-      loadedAttempt = snap()?.attempt ?? null;
+      loaded.load();
       engine.load(u, prev ? engine.position() : (snap()?.resumeMs ?? 0) / 1000);
     }),
   );

@@ -104,6 +104,15 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let nextAtMs: Int64?
 }
 
+/// The `failOver` command for the source the player loaded as `attempt` (the
+/// snapshot's when it was loaded). An unknown attempt is left out, and the
+/// core then acts on the current source.
+func failOverCommand(error: String, attempt: Int64?) -> [String: any Sendable] {
+    var command: [String: any Sendable] = ["type": "failOver", "error": error]
+    if let attempt { command["attempt"] = attempt }
+    return command
+}
+
 extension PlaybackSnapshot {
     /// Up Next shows from the release-matched credits start when the core
     /// knows it, else in the last 20 s; at once after Skip credits, and at the end.

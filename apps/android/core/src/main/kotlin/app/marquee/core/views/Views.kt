@@ -283,6 +283,19 @@ class VersionsView(
     }
 }
 
+/**
+ * The `failOver` command for the source the player loaded as [attempt]. An unknown attempt names
+ * none, and the core then acts on the current source.
+ */
+internal fun failOverCommand(
+    error: String,
+    attempt: Long?,
+): JsonObject =
+    command("failOver") {
+        put("error", error)
+        if (attempt != null) put("attempt", attempt)
+    }
+
 class PlaybackView(
     client: CoreClient,
     scope: CoroutineScope,
@@ -313,12 +326,7 @@ class PlaybackView(
     fun failOver(
         error: String,
         attempt: Long?,
-    ) = post(
-        command("failOver") {
-            put("error", error)
-            if (attempt != null) put("attempt", attempt)
-        },
-    )
+    ) = post(failOverCommand(error, attempt))
 
     /**
      * Tell the core how long the version that plays is, as soon as the player knows: it looks up
