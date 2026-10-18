@@ -158,3 +158,9 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(command["attempt"] == nil)
     #expect(command.count == 2)
 }
+
+@Test func aFailoverContinuesWhereTheFailedSourceStopped() {
+    #expect(sourceStart(stoppedAt: nil, resumeMs: 30_000) == 30)
+    #expect(sourceStart(stoppedAt: 312.5, resumeMs: 30_000) == 312.5)
+    #expect(sourceStart(stoppedAt: nil, resumeMs: nil) == 0)
+}

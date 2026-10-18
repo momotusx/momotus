@@ -107,6 +107,12 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
 /// The `failOver` command for the source the player loaded as `attempt` (the
 /// snapshot's when it was loaded). An unknown attempt is left out, and the
 /// core then acts on the current source.
+/// Where a source starts: where the last one stopped when a failover
+/// replaced it, else the saved position.
+func sourceStart(stoppedAt: Double?, resumeMs: Int64?) -> Double {
+    stoppedAt ?? Double(resumeMs ?? 0) / 1000
+}
+
 func failOverCommand(error: String, attempt: Int64?) -> [String: any Sendable] {
     var command: [String: any Sendable] = ["type": "failOver", "error": error]
     if let attempt { command["attempt"] = attempt }

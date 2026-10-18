@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
-import { loadedSource } from "./failover";
+import { loadedSource, sourceStart } from "./failover";
 
 test("a failover names the source the engine loaded, not the one the core moved to", () => {
   let snapshot = { attempt: 1 } as PlaybackSnapshot;
@@ -15,4 +15,12 @@ test("with no source loaded the command names none", () => {
   expect(loaded.failOver("decoder error")).toEqual({ type: "failOver", error: "decoder error" });
   loaded.load();
   expect(loaded.failOver("decoder error")).toEqual({ type: "failOver", error: "decoder error" });
+});
+
+test("a failover starts the next source where the failed one stopped, a first start at the saved position", () => {
+  const start = sourceStart();
+  expect(start.next(30)).toBe(30);
+  start.stop(312.5);
+  expect(start.next(30)).toBe(312.5);
+  expect(start.next(30)).toBe(30);
 });

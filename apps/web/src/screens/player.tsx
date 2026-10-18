@@ -23,7 +23,7 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
-import { loadedSource } from "../lib/failover";
+import { loadedSource, sourceStart } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
 import { languageName, qualityCell, qualityText } from "../lib/words";
 import "./player.css";
@@ -178,11 +178,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   });
 
   // A new source (first start or failover) keeps the position.
+  const start = sourceStart();
   createEffect(
     on(url, (u, prev) => {
-      if (!u) return;
+      if (!u) {
+        if (prev) start.stop(engine.position());
+        return;
+      }
       loaded.load();
-      engine.load(u, prev ? engine.position() : (snap()?.resumeMs ?? 0) / 1000);
+      engine.load(u, prev ? engine.position() : start.next((snap()?.resumeMs ?? 0) / 1000));
     }),
   );
 

@@ -19,3 +19,22 @@ export function loadedSource(current: () => PlaybackSnapshot | null) {
     },
   };
 }
+
+/** Where each source starts. The first at the saved position; after a
+ * failover, where the failed one stopped: the core passes through a moment
+ * with no source, so the next one cannot tell it from a first start. */
+export function sourceStart() {
+  let stoppedAt: number | null = null;
+  return {
+    /** The playing source went away at `at` seconds. */
+    stop(at: number) {
+      stoppedAt = at;
+    },
+    /** Where the next source starts, given the saved position in seconds. */
+    next(savedSec: number): number {
+      const at = stoppedAt ?? savedSec;
+      stoppedAt = null;
+      return at;
+    },
+  };
+}

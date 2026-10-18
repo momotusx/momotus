@@ -48,6 +48,8 @@ final class PlayerModel {
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
     @ObservationIgnored private var sub: UInt64?
     @ObservationIgnored private var loadedURL: String?
+    /// Where a failed source stopped, so the next one continues there.
+    @ObservationIgnored private var stoppedAt: Double?
     /// The core's attempt number of the source that plays, named in failOver so
     /// the core ignores a late error, even from another source of the same key.
     @ObservationIgnored private var loadedAttempt: Int64?
@@ -174,7 +176,7 @@ final class PlayerModel {
         versions = model
         route = pick
         (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure, nextVersions) = (nil, false, nil, nil, false, false, nil, nil)
-        loadedAttempt = nil
+        (loadedAttempt, stoppedAt) = (nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
         selectSubtitle(nil)
     }
@@ -217,7 +219,7 @@ final class PlayerModel {
         report()
         route = PlayRoute(versionsSub: route.versionsSub, key: key, target: route.target, tapped: .now)
         (loadedURL, rendered, firstFrameMs, playback) = (nil, false, nil, nil)
-        loadedAttempt = nil
+        (loadedAttempt, stoppedAt) = (nil, nil)
     }
 
     func togglePlay() {
@@ -272,7 +274,8 @@ final class PlayerModel {
                 coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public)")
             }
             // The first source starts at the saved position; a failover resumes where the last one stopped.
-            var start = loadedURL == nil ? Double(snapshot.resumeMs ?? 0) / 1000 : position
+            var start = loadedURL == nil ? sourceStart(stoppedAt: stoppedAt, resumeMs: snapshot.resumeMs) : position
+            stoppedAt = nil
             #if DEBUG
             if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
             #endif
@@ -338,6 +341,7 @@ final class PlayerModel {
         player.pause()
         player.replaceCurrentItem(with: nil)
         let command = failOverCommand(error: reason, attempt: loadedAttempt)
+        stoppedAt = position
         (loadedURL, loadedAttempt) = (nil, nil)
         guard let sub else { return }
         Task { [command] in try? await core.command(sub, command) }
