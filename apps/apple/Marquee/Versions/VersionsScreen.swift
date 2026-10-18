@@ -21,7 +21,7 @@ struct VersionsScreen: View {
                 header
                 if sideBySide {
                     HStack(alignment: .top, spacing: Theme.Space.l) {
-                        pick.frame(width: 360)
+                        pick.frame(width: Self.pickWidth)
                         table
                     }
                 } else {
@@ -52,12 +52,19 @@ struct VersionsScreen: View {
     /// The page inside its gutters, before the first width arrives the size class's guess.
     private var page: CGFloat { width > 0 ? width - 2 * metrics.gutter : (metrics.wide ? 1180 : 360) }
 
+    /// The pick card beside the table: wider on TV, where its type is twice the size.
+    #if os(tvOS)
+    static let pickWidth: CGFloat = 600
+    #else
+    static let pickWidth: CGFloat = 360
+    #endif
+
     /// The pick beside the table only with room for both (not an iPad in portrait).
     private var sideBySide: Bool { metrics.wide && WideLayout.pickBesideTable(page: page) }
 
     /// The table's columns only with room for them; else each row reads in two lines.
     private var columns: Bool {
-        metrics.wide && WideLayout.tableColumns(table: sideBySide ? page - 360 - Theme.Space.l : page)
+        metrics.wide && WideLayout.tableColumns(table: sideBySide ? page - Self.pickWidth - Theme.Space.l : page)
     }
 
     private var title: some View {
@@ -131,6 +138,9 @@ struct VersionsScreen: View {
 
     private var table: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if columns, !groups.isEmpty {
+                ColumnHeadings()
+            }
             ForEach(groups, id: \.0) { group, rows in
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
@@ -219,6 +229,11 @@ private struct PickCard: View {
             Text(VersionWords.pickHeading(row))
                 .display(Theme.type.title1 + 6)
                 .foregroundStyle(Theme.Palette.text)
+            #if os(tvOS)
+            // TV: Play under the heading, where the page enters, so it is in
+            // view whatever the details below run to.
+            playButton
+            #endif
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
                 ForEach(VersionWords.facts(row), id: \.key) { fact in
                     self.fact(fact.key, fact.value, dot: fact.key == "Status" ? VersionWords.tone(row.status).color : nil)
@@ -240,12 +255,9 @@ private struct PickCard: View {
             Text(row.releaseName.replacingOccurrences(of: ".", with: ".\u{200B}"))
                 .font(.mono(Theme.type.caption + 1))
                 .foregroundStyle(Theme.Palette.muted)
-            Button(action: play) {
-                Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(PillButtonStyle(prominent: true))
-            .focused(focus)
-            .padding(.top, 6)
+            #if !os(tvOS)
+            playButton.padding(.top, 6)
+            #endif
             Label(VersionWords.failover(row), glyph: "refresh-cw")
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
@@ -253,6 +265,14 @@ private struct PickCard: View {
         .padding(Theme.Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+    }
+
+    private var playButton: some View {
+        Button(action: play) {
+            Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(PillButtonStyle(prominent: true))
+        .focused(focus)
     }
 
     private func fact(_ label: String, _ value: String, dot: Color? = nil) -> some View {
@@ -271,13 +291,40 @@ private struct PickCard: View {
     }
 }
 
-/// One alternative: quality, features, size, status and source; the full
-/// release name shows where there is room or on hover.
+/// The wide table's column names, over the same widths as its rows.
+private struct ColumnHeadings: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("Quality").frame(width: VersionRowView.qualityWidth, alignment: .leading)
+            Text("Features").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Size").frame(width: VersionRowView.sizeWidth, alignment: .trailing)
+            Text("Status").frame(width: VersionRowView.statusWidth, alignment: .leading)
+            Text("Via").frame(width: VersionRowView.viaWidth, alignment: .leading)
+        }
+        .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+        .foregroundStyle(Theme.Palette.muted)
+        .padding(.horizontal, 14)
+        .accessibilityHidden(true)
+    }
+}
+
+/// One alternative: quality, features, size, status and source; on a wide
+/// table, focus or the pointer opens it to its release name, languages and
+/// sources (a remote has no hover).
 private struct VersionRowView: View {
     let row: VersionRow
     let wide: Bool
     let play: () -> Void
     @State private var hovered = false
+    @FocusState private var focused: Bool
+
+    #if os(tvOS)
+    static let qualityWidth: CGFloat = 120, sizeWidth: CGFloat = 150, statusWidth: CGFloat = 330, viaWidth: CGFloat = 220
+    #else
+    static let qualityWidth: CGFloat = 80, sizeWidth: CGFloat = 90, statusWidth: CGFloat = 200, viaWidth: CGFloat = 120
+    #endif
+
+    private var open: Bool { hovered || focused }
 
     var body: some View {
         Button(action: play) {
@@ -286,14 +333,14 @@ private struct VersionRowView: View {
                     HStack(spacing: 16) {
                         Text(VersionWords.cell(row.quality))
                             .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                            .frame(width: 80, alignment: .leading)
+                            .frame(width: Self.qualityWidth, alignment: .leading)
                         Text(row.features.joined(separator: "  "))
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text(VersionWords.size(row.sizeBytes) ?? "")
                             .monospacedDigit()
-                            .frame(width: 90, alignment: .trailing)
-                        status.frame(width: 200, alignment: .leading)
-                        Text(row.via).foregroundStyle(Theme.Palette.muted).frame(width: 120, alignment: .leading)
+                            .frame(width: Self.sizeWidth, alignment: .trailing)
+                        status.frame(width: Self.statusWidth, alignment: .leading)
+                        Text(row.via).foregroundStyle(Theme.Palette.muted).frame(width: Self.viaWidth, alignment: .leading)
                     }
                 } else {
                     // Phone: two lines, "720p · HDR10 · 1.2 GB" over "Torrent, 12 seeds · Torrentio".
@@ -305,13 +352,18 @@ private struct VersionRowView: View {
                         Text("\(VersionWords.status(row.status)) \u{B7} \(row.via)")
                     }
                 }
-                if !wide || hovered {
-                    // One line on a phone, cut in the middle so the name never splits inside a token.
+                if !wide || open {
+                    // One line on a phone, cut in the middle so the name never splits inside a token;
+                    // an opened wide row shows it whole.
                     Text(row.releaseName)
                         .font(.mono(Theme.type.caption))
                         .foregroundStyle(Theme.Palette.muted)
-                        .lineLimit(1)
+                        .lineLimit(wide ? 3 : 1)
                         .truncationMode(.middle)
+                }
+                if wide && open {
+                    Text(VersionWords.detail(row))
+                        .foregroundStyle(Theme.Palette.muted)
                 }
             }
             .font(.text(Theme.type.callout, relativeTo: .callout))
@@ -322,6 +374,7 @@ private struct VersionRowView: View {
             .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(.white.opacity(hovered ? 0.06 : 0)))
         }
         .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
+        .focused($focused)
         #if !os(tvOS)
         .onHover { hovered = $0 }
         #endif

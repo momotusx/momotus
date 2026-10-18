@@ -128,6 +128,13 @@ enum VersionWords {
     }
 
     /// The line under Play: how many sources back this release up.
+    /// What an opened row adds under its release name, as Android's
+    /// `VersionsCopy.detail`: "English, 2 sources", or "Language not stated".
+    static func detail(_ row: VersionRow) -> String {
+        let parts = [languages(row), row.failoverCount > 0 ? "\(row.failoverCount + 1) sources" : ""].filter { !$0.isEmpty }
+        return parts.isEmpty ? "Language not stated" : parts.joined(separator: ", ")
+    }
+
     static func failover(_ row: VersionRow) -> String {
         row.failoverCount > 0
             ? "\(row.failoverCount + 1) sources. If one fails, the next starts on its own."

@@ -79,6 +79,13 @@ private func snapshot(
     #expect(VersionWords.languageName("qqq") == "QQQ")
 }
 
+@Test func anOpenedRowSaysItsLanguagesAndSources() {
+    #expect(VersionWords.detail(row(languages: ["en"], failover: 1)) == "English, 2 sources")
+    #expect(VersionWords.detail(row(languages: ["en", "fr"])) == "English, French")
+    #expect(VersionWords.detail(row(failover: 2)) == "3 sources")
+    #expect(VersionWords.detail(row()) == "Language not stated")
+}
+
 @Test func oneSeedIsSingular() {
     #expect(VersionWords.status(.torrent(seeds: 1)) == "Torrent, 1 seed")
     #expect(VersionWords.status(.torrent(seeds: 153)) == "Torrent, 153 seeds")
