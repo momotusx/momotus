@@ -102,7 +102,11 @@ fn setup(core: &Core, base: &str) -> Vec<ParsedStream> {
         .streams
         .iter()
         .enumerate()
-        .map(|(i, w)| normalize(w, "local", "Local", 0, i as u32))
+        .map(|(i, w)| ParsedStream {
+            // As Versions sets it: the install that listed the stream.
+            addon_url: "http://127.0.0.1:9/manifest.json".parse().ok(),
+            ..normalize(w, "local", "Local", 0, i as u32)
+        })
         .collect()
 }
 

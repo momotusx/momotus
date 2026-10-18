@@ -58,6 +58,8 @@ pub fn normalize(
             })
             .unwrap_or_default(),
         subtitles: wire.subtitles.clone(),
+        // The caller knows which install answered.
+        addon_url: None,
         release: facts.release,
         raw_name: name,
         raw_description: description,

@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use stremio_core::types::addon::ExtraValue;
 use tokio::task::JoinHandle;
+use url::Url;
 
 /// Progress is written at most this often while playing.
 const SAVE_EVERY: Duration = Duration::from_secs(5);
@@ -562,7 +563,8 @@ async fn resolve_next(
         match opened {
             Ok((upstream, filename, size, url)) => {
                 let wanted = core.prefs().subtitle_languages;
-                let allow_private = addon_allows_private(&core, &stream.addon_id);
+                // The stream's own tracks come from its addon.
+                let allow_private = private_reach(stream.addon_url.as_ref());
                 {
                     let mut s = lock(&state);
                     clear_segments(&mut s);
@@ -612,13 +614,17 @@ async fn resolve_next(
 
 type Opened = (Upstream, Option<String>, Option<u64>);
 
-/// Whether the addon that listed a stream may reach private addresses (a
-/// local addon); its stream and subtitle URLs get the same allowance.
-fn addon_allows_private(core: &Core, addon_id: &str) -> bool {
-    core.installed_addons()
-        .unwrap_or_default()
-        .iter()
-        .any(|a| a.id() == addon_id && a.allow_private)
+/// Whether an addon's stream and subtitle URLs may reach private addresses:
+/// only when its own install host, from the transport URL the candidate
+/// carries, has a private address in its scope (`local_addrs`). Neither the
+/// installed row's bit, which sync may set, nor the manifest id, which any
+/// addon may declare, is read. No URL, no reach.
+fn private_reach(addon_url: Option<&Url>) -> bool {
+    addon_url.and_then(Url::host_str).is_some_and(|host| {
+        mq_http::local_addrs(host)
+            .into_iter()
+            .any(mq_http::is_private_ip)
+    })
 }
 
 /// Resolves one stream to an upstream.
@@ -627,13 +633,13 @@ async fn open_source(
     stream: &ParsedStream,
     target: &PlayTarget,
 ) -> Result<Opened, String> {
-    let allow_private = addon_allows_private(core, &stream.addon_id);
-    let (url, headers, filename, size) = match &stream.source {
+    let (url, headers, filename, size, allow_private) = match &stream.source {
         Source::Http { url } => (
             url.to_string(),
             stream.headers.clone(),
             stream.filename.clone(),
             stream.size_bytes,
+            private_reach(stream.addon_url.as_ref()),
         ),
         Source::Torrent {
             info_hash,
@@ -679,7 +685,8 @@ async fn open_source(
                     .map_err(|p2p| format!("{e}; peer to peer: {p2p}"));
             }
             let link = resolved?;
-            (link.url, Vec::new(), Some(link.filename), link.size)
+            // The provider's link, not the addon's: no private reach.
+            (link.url, Vec::new(), Some(link.filename), link.size, false)
         }
         other => return Err(format!("{} streams cannot play here", source_word(other))),
     };
@@ -959,10 +966,15 @@ async fn find_subtitles(
     while let Some(event) = fanout.next().await {
         let mut s = lock(state);
         match event {
-            AddonEvent::Arrived { addon_id, body, .. } => {
-                let addon = addons.iter().find(|a| a.id() == addon_id);
+            AddonEvent::Arrived {
+                addon_id,
+                transport_url,
+                body,
+                ..
+            } => {
+                let addon = addons.iter().find(|a| a.transport_url == transport_url);
                 let source = addon.map_or(addon_id.clone(), |a| a.manifest.name.clone());
-                let private = addon.is_some_and(|a| a.allow_private);
+                let private = private_reach(Some(&transport_url));
                 let found = decode_subtitles(&body)
                     .map(|r| r.subtitles)
                     .unwrap_or_default();

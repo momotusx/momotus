@@ -14,3 +14,4 @@ mq-protocol = { path = "../mq-protocol" }
 mq-relparse = { path = "../mq-relparse" }
 serde.workspace = true
 serde_json.workspace = true
+url.workspace = true

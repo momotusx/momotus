@@ -243,12 +243,18 @@ async fn collect(
     while let Some(event) = fanout.next().await {
         // Parsing is CPU work: keep it off the async threads that feed UIs.
         let parsed = match &event {
-            AddonEvent::Arrived { addon_id, body, .. } => {
+            AddonEvent::Arrived {
+                addon_id,
+                transport_url,
+                body,
+                ..
+            } => {
                 let (name, rank_index) = names
                     .get(addon_id)
                     .cloned()
                     .unwrap_or((addon_id.clone(), u16::MAX));
                 let (addon_id, body, start) = (addon_id.clone(), body.clone(), next_index);
+                let addon_url = transport_url.clone();
                 let parsed = tokio::task::spawn_blocking(move || {
                     decode_streams(&body)
                         .map(|r| {
@@ -256,7 +262,15 @@ async fn collect(
                                 .iter()
                                 .enumerate()
                                 .map(|(i, w)| {
-                                    normalize(w, &addon_id, &name, rank_index, start + i as u32)
+                                    let mut stream = normalize(
+                                        w,
+                                        &addon_id,
+                                        &name,
+                                        rank_index,
+                                        start + i as u32,
+                                    );
+                                    stream.addon_url = Some(addon_url.clone());
+                                    stream
                                 })
                                 .collect::<Vec<_>>()
                         })

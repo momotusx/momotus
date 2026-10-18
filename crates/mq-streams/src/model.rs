@@ -119,6 +119,10 @@ pub struct ParsedStream {
     /// Subtitles the stream itself carries (`subtitles` on the stream object).
     #[serde(skip)]
     pub subtitles: Vec<mq_protocol::WireSubtitle>,
+    /// The transport URL of the install that listed this stream, which alone
+    /// decides the stream's private reach. Never sent: it can carry a key.
+    #[serde(skip)]
+    pub addon_url: Option<url::Url>,
     pub raw_name: String,
     pub raw_description: String,
 }

@@ -69,6 +69,7 @@ async fn ranks_union_progressively_and_freezes_the_pick() {
     let core = Core::temporary("p").unwrap();
     let torrents = stream_addon("torrents", Duration::ZERO, TORRENTS).await;
     let debrid = stream_addon("debrid", Duration::from_millis(800), DEBRID).await;
+    let installs = [debrid.transport_url.clone(), torrents.transport_url.clone()];
     core.library()
         .set_addons("p", &[torrents, debrid], &core.hlc())
         .unwrap();
@@ -102,6 +103,18 @@ async fn ranks_union_progressively_and_freezes_the_pick() {
         "the torrent duplicate collapsed into the pick"
     );
     assert_eq!(&view.snapshot(), last, "the stream ends on the view state");
+    // The pick and its failover each carry the install that listed them.
+    let listed_by: Vec<String> = view
+        .candidates(&best.key)
+        .iter()
+        .map(|c| {
+            c.addon_url
+                .as_ref()
+                .map(|u| u.to_string())
+                .unwrap_or_default()
+        })
+        .collect();
+    assert_eq!(listed_by, installs);
 }
 
 #[tokio::test]

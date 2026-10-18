@@ -3,10 +3,12 @@ use mq_library::AddonRow;
 use mq_protocol::decode_streams;
 use mq_runtime::{Core, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView};
 use mq_streams::{ParsedStream, normalize};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+use url::Url;
 
 /// Origin with a live file that needs `x-key: 1` and a dead one.
 async fn origin() -> String {
@@ -41,33 +43,121 @@ async fn origin() -> String {
     format!("http://{addr}")
 }
 
+const LOCAL_ADDON: &str = "http://127.0.0.1:9/manifest.json";
+
 /// Installs a local addon (so its LAN URLs are allowed) and returns the
 /// parsed candidates in the order given.
 fn setup(core: &Core, streams: &str) -> Vec<ParsedStream> {
+    install(core, &[row(LOCAL_ADDON, "local", "stream", true)]);
+    listed(LOCAL_ADDON, "local", "Local", streams)
+}
+
+/// An installed addon serving `resource`, named after its id.
+fn row(transport_url: &str, id: &str, resource: &str, allow_private: bool) -> AddonRow {
     let manifest = serde_json::json!({
-        "id": "local", "version": "1.0.0", "name": "Local",
-        "types": ["movie"], "resources": ["stream"], "catalogs": []
+        "id": id, "version": "1.0.0", "name": id,
+        "types": ["movie"], "resources": [resource], "catalogs": []
     });
+    AddonRow {
+        transport_url: transport_url.into(),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private,
+    }
+}
+
+/// Installs `rows` in this order.
+fn install(core: &Core, rows: &[AddonRow]) {
+    let rows: Vec<AddonRow> = (0..)
+        .zip(rows)
+        .map(|(position, r)| AddonRow {
+            position,
+            ..r.clone()
+        })
+        .collect();
     core.library()
-        .set_addons(
-            core.profile(),
-            &[AddonRow {
-                transport_url: "http://127.0.0.1:9/manifest.json".into(),
-                manifest_json: manifest.to_string(),
-                position: 0,
-                enabled: true,
-                allow_private: true,
-            }],
-            &core.hlc(),
-        )
+        .set_addons(core.profile(), &rows, &core.hlc())
         .unwrap();
+}
+
+/// Candidates as Versions builds them: each carries the transport URL of the
+/// install that listed it.
+fn listed(addon_url: &str, id: &str, name: &str, streams: &str) -> Vec<ParsedStream> {
+    let addon_url = Url::parse(addon_url).unwrap();
     decode_streams(streams.as_bytes())
         .unwrap()
         .streams
         .iter()
         .enumerate()
-        .map(|(i, w)| normalize(w, "local", "Local", 0, i as u32))
+        .map(|(i, w)| ParsedStream {
+            addon_url: Some(addon_url.clone()),
+            ..normalize(w, id, name, 0, i as u32)
+        })
         .collect()
+}
+
+/// An origin that serves a one-byte file to anyone and counts the requests.
+async fn counted_origin() -> (String, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let asked = Arc::new(AtomicUsize::new(0));
+    let count = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            count.fetch_add(1, Ordering::SeqCst);
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let _ = socket
+                    .write_all(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/10\r\nContent-Length: 1\r\nConnection: close\r\n\r\nM")
+                    .await;
+            });
+        }
+    });
+    (base, asked)
+}
+
+/// What the view says when the server refuses a private address.
+const UNREACHABLE: &str = "The source could not be reached";
+
+#[tokio::test]
+async fn a_public_install_never_borrows_a_local_ones_reach() {
+    let (base, asked) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    install(&core, &[row(LOCAL_ADDON, "local", "stream", true)]);
+    // Another install declares the local addon's manifest id.
+    let streams = format!(r#"{{"streams":[{{"name":"Dup","url":"{base}/ok.mkv"}}]}}"#);
+    let candidates = listed(
+        "https://dup.example/manifest.json",
+        "local",
+        "Local",
+        &streams,
+    );
+    let view = PlaybackView::open(&core, candidates, target());
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+    assert_eq!(s.attempts[0].error, UNREACHABLE);
+    assert_eq!(asked.load(Ordering::SeqCst), 0, "the origin was asked");
+}
+
+#[tokio::test]
+async fn a_synced_bit_grants_nothing() {
+    let (base, asked) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    // A row with a public transport URL that arrived with the bit set.
+    let synced = "https://synced.example/manifest.json";
+    install(&core, &[row(synced, "synced", "stream", true)]);
+    let streams = format!(r#"{{"streams":[{{"name":"Synced","url":"{base}/ok.mkv"}}]}}"#);
+    let view = PlaybackView::open(
+        &core,
+        listed(synced, "synced", "Synced", &streams),
+        target(),
+    );
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+    assert_eq!(s.attempts[0].error, UNREACHABLE);
+    assert_eq!(asked.load(Ordering::SeqCst), 0, "the origin was asked");
 }
 
 fn target() -> PlayTarget {
@@ -89,6 +179,96 @@ async fn settled(view: &PlaybackView) -> PlaybackSnapshot {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     panic!("playback never settled: {:?}", view.snapshot());
+}
+
+/// A loopback origin with a one-byte video, a subtitles answer naming
+/// `/addon.srt` on itself, and two SubRip files.
+async fn subtitle_origin() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let own = base.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let base = own.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let (status, body) = if head.starts_with("GET /subtitles/") {
+                    let url = format!("{base}/addon.srt");
+                    let list =
+                        serde_json::json!({"subtitles": [{"id": "1", "lang": "eng", "url": url}]});
+                    ("200 OK", list.to_string())
+                } else if head.starts_with("GET /video.mkv") {
+                    (
+                        "206 Partial Content\r\nContent-Range: bytes 0-0/10",
+                        "M".into(),
+                    )
+                } else {
+                    ("200 OK", "1\n00:00:01,000 --> 00:00:02,000\nHello\n".into())
+                };
+                let reply = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    base
+}
+
+#[tokio::test]
+async fn subtitle_tracks_take_their_reach_from_their_install() {
+    let base = subtitle_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let stream_addon = format!("{base}/own/manifest.json");
+    install(
+        &core,
+        &[
+            // First: a public install with the subtitles addon's id.
+            row(
+                "https://pub.invalid/manifest.json",
+                "subs",
+                "subtitles",
+                false,
+            ),
+            row(&format!("{base}/manifest.json"), "subs", "subtitles", true),
+            // The stream's install arrived without the bit; its URL decides.
+            row(&stream_addon, "own", "stream", false),
+        ],
+    );
+    let streams = format!(
+        r#"{{"streams":[{{"url":"{base}/video.mkv","subtitles":[{{"id":"own","lang":"eng","url":"{base}/own.srt"}}]}}]}}"#
+    );
+    let view = PlaybackView::open(
+        &core,
+        listed(&stream_addon, "own", "Own", &streams),
+        target(),
+    );
+    let mut done = None;
+    for _ in 0..1500 {
+        let s = view.snapshot();
+        if s.phase != PlaybackPhase::Resolving && !s.subtitles_pending {
+            done = Some(s);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let s = done.expect("subtitles settled");
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    let sources: Vec<_> = s.subtitles.iter().map(|t| t.source.as_str()).collect();
+    assert_eq!(sources, ["Own", "subs"]);
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    for track in &s.subtitles {
+        let served = http.get(&track.url, &local).await;
+        let body = served.unwrap_or_else(|e| panic!("{}'s track: {e}", track.source));
+        assert!(String::from_utf8_lossy(&body.body).contains("Hello"));
+    }
 }
 
 #[tokio::test]
@@ -292,12 +472,7 @@ async fn finds_subtitles_by_hash_size_and_filename() {
         r#"{{"streams":[{{"url":"{base}/video.mkv","behaviorHints":{{"filename":"Sintel.2010.mkv"}},
              "subtitles":[{{"id":"own","lang":"eng","url":"https://own.example/en.srt"}}]}}]}}"#
     );
-    let candidates: Vec<ParsedStream> = decode_streams(streams.as_bytes())
-        .unwrap()
-        .streams
-        .iter()
-        .map(|w| normalize(w, "subs", "Subs", 0, 0))
-        .collect();
+    let candidates = listed(&format!("{base}/manifest.json"), "subs", "Subs", &streams);
     let view = PlaybackView::open(&core, candidates, target());
     let mut done = None;
     for _ in 0..500 {
@@ -398,12 +573,7 @@ async fn offers_the_next_released_episode_and_the_binge_group() {
     let streams = format!(
         r#"{{"streams":[{{"url":"{base}/video.mkv","behaviorHints":{{"bingeGroup":"show|1080p|NTb"}}}}]}}"#
     );
-    let candidates: Vec<ParsedStream> = decode_streams(streams.as_bytes())
-        .unwrap()
-        .streams
-        .iter()
-        .map(|w| normalize(w, "show", "Show", 0, 0))
-        .collect();
+    let candidates = listed(&format!("{base}/manifest.json"), "show", "Show", &streams);
     let play = |episode: u32| PlayTarget {
         kind: "series".into(),
         item_id: "tt9".into(),

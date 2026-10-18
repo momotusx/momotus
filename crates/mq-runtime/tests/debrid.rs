@@ -742,3 +742,71 @@ async fn the_default_store_follows_the_services_order() {
     core.set_debrid_key(StoreId::RealDebrid, "RDKEY");
     assert_eq!(services(&core), ["realdebrid", "torbox"]);
 }
+
+/// A local addon lists an infoHash; Real-Debrid resolves it to a link on a
+/// loopback origin. The link is the provider's, so the addon's private reach
+/// does not carry over to it.
+#[tokio::test]
+async fn a_resolved_debrid_link_gets_no_private_reach() {
+    use mq_runtime::{PlayTarget, PlaybackPhase, PlaybackView};
+    let origin = Server::start(vec![route("GET", "/Movie.mkv", 200, "M")]).await;
+    let link = format!(
+        r#"{{"filename":"Movie.mkv","filesize":1000,"download":"{}/Movie.mkv"}}"#,
+        origin.base
+    );
+    let rd = Server::start(vec![
+        route(
+            "POST",
+            "/rest/1.0/torrents/addMagnet",
+            201,
+            r#"{"id":"RD1"}"#,
+        ),
+        route("GET", "/rest/1.0/torrents/info/RD1", 200, RD_READY),
+        route("POST", "/rest/1.0/unrestrict/link", 200, &link),
+    ])
+    .await;
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&rd.base);
+    core.restore_debrid(vec![rd_record(G1, "TOKEN", now_ms())], vec![])
+        .unwrap();
+    // The local addon and its candidates, as tests/playback.rs builds them.
+    let local = "http://127.0.0.1:9/manifest.json";
+    let manifest = r#"{"id":"local","version":"1.0.0","name":"Local","types":["movie"],"resources":["stream"],"catalogs":[]}"#;
+    let row = mq_library::AddonRow {
+        transport_url: local.into(),
+        manifest_json: manifest.into(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    core.library()
+        .set_addons(core.profile(), &[row], &core.hlc())
+        .unwrap();
+    let streams =
+        br#"{"streams":[{"name":"RD","infoHash":"dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c"}]}"#;
+    let candidates: Vec<_> = mq_protocol::decode_streams(streams)
+        .unwrap()
+        .streams
+        .iter()
+        .map(|w| mq_streams::ParsedStream {
+            addon_url: local.parse().ok(),
+            ..mq_streams::normalize(w, "local", "Local", 0, 0)
+        })
+        .collect();
+    let target = PlayTarget {
+        kind: "movie".into(),
+        item_id: "tt1727587".into(),
+        video_id: "tt1727587".into(),
+        ..PlayTarget::default()
+    };
+    let view = PlaybackView::open(&core, candidates, target);
+    until("playback settles", || {
+        view.snapshot().phase != PlaybackPhase::Resolving
+    })
+    .await;
+    let s = view.snapshot();
+    assert_eq!(rd.count("POST", "/rest/1.0/unrestrict/link"), 1, "{s:?}");
+    assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+    assert_eq!(s.attempts[0].error, "The source could not be reached");
+    assert_eq!(origin.count("GET", "/Movie.mkv"), 0, "the origin was asked");
+}

@@ -89,6 +89,41 @@ async fn fast_slow_and_timed_out_addons() {
 }
 
 #[tokio::test]
+async fn duplicate_manifest_ids_keep_their_installs() {
+    // Two installs (two transport URLs) of one manifest id; the second answers
+    // later, after the first left the pending list.
+    let first = addon("same", Duration::ZERO, r#"{"streams":[]}"#).await;
+    let second = addon("same", Duration::from_millis(150), r#"{"streams":[]}"#).await;
+    let urls = [first.transport_url.clone(), second.transport_url.clone()];
+    let client = AddonClient::new(HttpClient::new(ClientConfig::default()).unwrap());
+    let deadlines = Deadlines {
+        soft: Duration::from_secs(2),
+        hard: Duration::from_secs(4),
+    };
+    let mut fanout = client.fan_out(&[first, second], &stream_path(), deadlines);
+    let mut arrived = Vec::new();
+    while let Some(event) = tokio::time::timeout(Duration::from_secs(5), fanout.next())
+        .await
+        .expect("the fan-out ends within 5 s")
+    {
+        match event {
+            AddonEvent::Arrived {
+                addon_id,
+                transport_url,
+                ..
+            } => arrived.push((addon_id, transport_url)),
+            AddonEvent::Done => break,
+            other => panic!("{other:?}"),
+        }
+    }
+    assert_eq!(
+        arrived,
+        urls.map(|url| ("same".to_owned(), url)),
+        "both installs answer, each under its own URL"
+    );
+}
+
+#[tokio::test]
 async fn unsupported_addons_are_skipped_and_cache_serves_repeat_calls() {
     let cached = addon(
         "cached",

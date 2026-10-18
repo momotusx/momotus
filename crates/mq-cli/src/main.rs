@@ -346,6 +346,7 @@ async fn streams(core: &Core, kind: String, id: String) -> Result<(), String> {
                 body,
                 from_cache,
                 latency,
+                ..
             } => {
                 let decoded = decode_streams(&body).map_err(|e| e.to_string());
                 let (count, skipped, kinds) = match &decoded {
