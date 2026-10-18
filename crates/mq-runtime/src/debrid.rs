@@ -17,7 +17,7 @@ use mq_debrid::{
     AllDebrid, Auth, BoxFuture, Credential, Credentials, DebridError, Login, LoginPoll, Premiumize,
     RealDebrid, Resolver, ResolverConfig, StoreId, TorBox,
 };
-use mq_http::HttpClient;
+use mq_http::{HttpClient, HttpError};
 use mq_library::hlc::now_ms;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -531,8 +531,16 @@ impl Accounts {
             tokio::spawn(keep_fresh(conn.clone()));
         }
         state.conns.insert(service, conn);
+        // One order, the services' own, live and after a restore alike: which
+        // store is the default never depends on which connected first.
         if !state.order.contains(&service) {
-            state.order.push(service);
+            let rank = |s: &StoreId| StoreId::ALL.iter().position(|x| x == s);
+            let at = state
+                .order
+                .iter()
+                .position(|s| rank(s) > rank(&service))
+                .unwrap_or(state.order.len());
+            state.order.insert(at, service);
         }
     }
 
@@ -882,9 +890,11 @@ async fn login(
     };
     // A connection the service dropped gets one more try before the sheet
     // says it could not reach it (seen on Real-Debrid from one of its hosts).
+    // Only the network: an answer it could not read, a blocked address or a
+    // timeout is said at once.
     let first_or_again = async {
         match start().await {
-            Err(DebridError::Http(_)) => {
+            Err(DebridError::Http(HttpError::Network(_))) => {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 start().await
             }

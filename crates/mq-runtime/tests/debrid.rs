@@ -650,10 +650,12 @@ async fn polling_through_network_failures_ends_at_expiry() {
     assert!(server.count("POST", TB_PATH) >= 1, "kept polling");
 }
 
-/// A service that drops the first connection without answering (seen on one
-/// of Real-Debrid's hosts): the sign-in tries once more and shows its code.
-#[tokio::test]
-async fn a_dropped_start_is_tried_once_more() {
+/// A raw service: `drops` connections are closed unanswered, every later one
+/// gets `body` with status 200. Returns its origin and how many it accepted.
+async fn raw_service(
+    drops: usize,
+    body: &'static str,
+) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -669,17 +671,26 @@ async fn a_dropped_start_is_tried_once_more() {
             tokio::spawn(async move {
                 let mut buf = [0u8; 4096];
                 let _ = socket.read(&mut buf).await;
-                if n == 0 {
+                if n < drops {
                     return;
                 }
                 let reply = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{TB_START}",
-                    TB_START.len()
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
                 );
                 let _ = socket.write_all(reply.as_bytes()).await;
             });
         }
     });
+    (base, accepted)
+}
+
+/// A service that drops the first connection without answering (seen on one
+/// of Real-Debrid's hosts): the sign-in starts exactly twice and shows its code.
+#[tokio::test]
+async fn a_dropped_start_is_tried_once_more() {
+    use std::sync::atomic::Ordering;
+    let (base, accepted) = raw_service(1, TB_START).await;
     let core = Core::temporary("owner").unwrap();
     core.set_debrid_origin(&base);
     let login = DebridLoginView::open(&core, StoreId::TorBox);
@@ -687,5 +698,47 @@ async fn a_dropped_start_is_tried_once_more() {
         matches!(login.snapshot(), DebridLoginSnapshot::Code { .. })
     })
     .await;
-    assert!(accepted.load(Ordering::SeqCst) >= 2);
+    // The first poll waits the code's interval (1 s): only the two starts so far.
+    assert_eq!(accepted.load(Ordering::SeqCst), 2);
+}
+
+/// An answer the app cannot read is not the network: one start, then why.
+#[tokio::test]
+async fn an_unreadable_start_is_not_tried_again() {
+    use std::sync::atomic::Ordering;
+    let (base, accepted) = raw_service(0, "not json").await;
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&base);
+    let login = DebridLoginView::open(&core, StoreId::TorBox);
+    until("failed", || {
+        matches!(login.snapshot(), DebridLoginSnapshot::Failed { .. })
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(accepted.load(Ordering::SeqCst), 1);
+}
+
+/// Closing the sign-in while it waits to try again: no second start.
+#[tokio::test]
+async fn closing_during_the_wait_starts_nothing_more() {
+    use std::sync::atomic::Ordering;
+    let (base, accepted) = raw_service(1, TB_START).await;
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&base);
+    let login = DebridLoginView::open(&core, StoreId::TorBox);
+    until("the first start", || accepted.load(Ordering::SeqCst) == 1).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    drop(login);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(accepted.load(Ordering::SeqCst), 1);
+}
+
+/// The default store follows the services' order, not which connected first,
+/// so a restore (which hands records in that order) keeps it.
+#[tokio::test]
+async fn the_default_store_follows_the_services_order() {
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_key(StoreId::TorBox, "TBKEY");
+    core.set_debrid_key(StoreId::RealDebrid, "RDKEY");
+    assert_eq!(services(&core), ["realdebrid", "torbox"]);
 }
