@@ -23,5 +23,6 @@ serde_json.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+mq-http = { path = "../mq-http", features = ["test-dns"] }
 tokio-tungstenite = "0.28"
 mq-sync-server = { path = "../mq-sync-server" }

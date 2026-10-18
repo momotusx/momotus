@@ -3,15 +3,15 @@
 //! IPC channel.
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
-//! "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
+//! "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" |
 //! "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" | "setPin" |
 //! "switchProfile" | "unlockProfile" | "lockSession",
 //! ...}`.
-//! Views: home, search, discover, library, title, versions, playback, addons, import,
-//! settings, pairing, profiles, debrid, debridLogin.
+//! Views: home, search, discover, library, title, versions, playback, addons, addonCatalog,
+//! import, settings, pairing, profiles, debrid, debridLogin.
 //! Replies carry the request `id`; view pushes carry `sub` and `updates`.
 //!
 //! A session runs as one profile (plans/m11-profiles.md section 5): it opens
@@ -23,10 +23,11 @@
 use futures_util::StreamExt;
 use mq_library::Table;
 use mq_runtime::{
-    AddonsView, CalendarView, Core, DebridLoginView, DebridRecord, DebridTombstone, DebridView,
-    DiscoverView, HomeView, ImportView, LibrarySort, LibraryView, PairingView, PlayTarget,
-    PlaybackView, ProfileError, ProfilesView, SearchView, SessionState, SettingsView, StoreId,
-    StremioEndpoints, TitleView, VersionsParams, VersionsView,
+    AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
+    DebridTombstone, DebridView, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
+    ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView,
+    SearchView, SessionState, SettingsView, StoreId, StremioEndpoints, TitleView, VersionsParams,
+    VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -64,6 +65,11 @@ enum Request {
     InstallAddon {
         id: u64,
         url: String,
+    },
+    /// An entry an open `addonCatalog` view shows, by its `key`.
+    InstallListed {
+        id: u64,
+        key: String,
     },
     RemoveAddon {
         id: u64,
@@ -318,6 +324,7 @@ enum View {
     Pairing(PairingView),
     Settings { _view: SettingsView },
     Addons { _view: AddonsView },
+    AddonCatalog(AddonCatalogView),
     Import { _view: ImportView },
     Profiles { _view: ProfilesView },
     Debrid { _view: DebridView },
@@ -338,6 +345,7 @@ impl View {
             View::Pairing(_) => "pairing",
             View::Settings { .. } => "settings",
             View::Addons { .. } => "addons",
+            View::AddonCatalog(_) => "addonCatalog",
             View::Import { .. } => "import",
             View::Profiles { .. } => "profiles",
             View::Debrid { .. } => "debrid",
@@ -402,6 +410,10 @@ pub struct Session {
     out: Output,
     next_sub: u64,
     watcher: JoinHandle<()>,
+    /// Tests only: where `addonCatalog` reads its lists instead of Cinemeta.
+    /// No request can set it, so an app cannot point the lists elsewhere.
+    #[cfg(test)]
+    catalog_source: Option<String>,
 }
 
 impl Drop for Session {
@@ -450,7 +462,18 @@ impl Session {
             out,
             next_sub: 1,
             watcher,
+            #[cfg(test)]
+            catalog_source: None,
         }
+    }
+
+    /// Cinemeta, where `addonCatalog` reads its lists.
+    fn catalog_source(&self) -> String {
+        #[cfg(test)]
+        if let Some(source) = &self.catalog_source {
+            return source.clone();
+        }
+        mq_runtime::CINEMETA.to_owned()
     }
 
     fn core(&self) -> Core {
@@ -699,6 +722,28 @@ impl Session {
                         .map_err(|e| e.to_string())
                 });
             }
+            Request::InstallListed { id, key } => {
+                // Only a link an open list shows, with the id it named.
+                let entry = lock(&self.shared)
+                    .subs
+                    .values()
+                    .find_map(|s| match &s.view {
+                        View::AddonCatalog(view) => view.listed_entry(&key).ok(),
+                        _ => None,
+                    });
+                match entry {
+                    // Bound to the profile, as installAddon.
+                    Some(entry) => self.spawn_fenced(id, async move {
+                        core.install_listed(&entry)
+                            .await
+                            .map(|(id, name)| json!({ "id": id, "name": name }))
+                    }),
+                    None => {
+                        let refused = ListedError::Refused(ListedFailure::NotListed);
+                        send_answer(&self.out, json!(id), Err(refused.into()));
+                    }
+                }
+            }
             Request::CreateProfile { id, name, avatar } => {
                 let result = core.create_profile(&name, &avatar).map(drop);
                 self.reply_profiles(id, result);
@@ -938,6 +983,13 @@ impl Session {
                     to_value(&snapshot)?,
                     forward,
                 )
+            }
+            "addonCatalog" => {
+                let fresh = params.get("fresh").and_then(Value::as_bool) == Some(true);
+                let catalog = AddonCatalogView::open_from(&core, &self.catalog_source(), fresh);
+                let (snapshot, updates) = catalog.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (View::AddonCatalog(catalog), to_value(&snapshot)?, forward)
             }
             "import" => {
                 let import = ImportView::open(&core, StremioEndpoints::default());
@@ -1191,6 +1243,15 @@ impl From<mq_sync::SyncError> for Failure {
             code: e.code(),
             error: e.to_string(),
             extra: Value::Null,
+        }
+    }
+}
+
+impl From<ListedError> for Failure {
+    fn from(e: ListedError) -> Self {
+        match e {
+            ListedError::Refused(failure) => Failure::coded(failure.code(), failure.words()),
+            ListedError::Core(e) => Failure::from(e.to_string()),
         }
     }
 }
@@ -1635,5 +1696,165 @@ mod startup {
         let session = Session::start(chosen, changes, tx);
         let shared = lock(&session.shared);
         assert_eq!((shared.core.profile(), shared.locked), (kid.as_str(), true));
+    }
+}
+
+#[cfg(test)]
+mod catalog {
+    use super::*;
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio::sync::mpsc::UnboundedReceiver;
+
+    /// A local Cinemeta whose lists hold one entry, an addon at a name that
+    /// stands for a public host (`set_public`) and accepts connections but
+    /// never answers: an install of it stays in flight.
+    async fn source() -> String {
+        let hang = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = hang.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = hang.accept().await {
+                held.push(socket);
+            }
+        });
+        let localhost = std::net::Ipv4Addr::LOCALHOST.into();
+        mq_http::test_dns::set_public("hang.m12.test", &[localhost]);
+        let list = json!({"addons": [{
+            "transportUrl": format!("https://hang.m12.test:{port}/manifest.json"),
+            "transportName": "http",
+            "manifest": {
+                "id": "hang", "version": "1.0.0", "name": "Hang",
+                "resources": ["subtitles"], "types": ["movie"], "catalogs": []
+            }
+        }]})
+        .to_string();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let list = list.clone();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 4096];
+                    let _ = socket.read(&mut buf).await;
+                    let reply = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{list}",
+                        list.len()
+                    );
+                    let _ = socket.write_all(reply.as_bytes()).await;
+                });
+            }
+        });
+        format!("http://{addr}/manifest.json")
+    }
+
+    /// The next message for `pick`, skipping the others.
+    async fn next(rx: &mut UnboundedReceiver<Outgoing>, pick: impl Fn(&Value) -> bool) -> Value {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let message = rx.recv().await.expect("the session is open").json();
+                if pick(&message) {
+                    return message;
+                }
+            }
+        })
+        .await
+        .expect("the message arrives")
+    }
+
+    async fn reply(rx: &mut UnboundedReceiver<Outgoing>, id: u64) -> Value {
+        next(rx, |m| m["id"] == id).await
+    }
+
+    async fn send(session: &mut Session, request: Value) {
+        session.handle_text(&request.to_string()).await;
+    }
+
+    /// Opens the view and waits for both lists; returns the entry's key.
+    async fn open(
+        session: &mut Session,
+        rx: &mut UnboundedReceiver<Outgoing>,
+        id: u64,
+    ) -> (u64, String) {
+        send(
+            session,
+            json!({"id": id, "op": "subscribe", "view": "addonCatalog"}),
+        )
+        .await;
+        let opened = reply(rx, id).await;
+        let sub = opened["result"]["sub"].as_u64().expect("a sub");
+        let ready = |lists: &Value| {
+            lists
+                .as_array()
+                .is_some_and(|l| l.iter().all(|list| list["state"]["state"] == "ready"))
+        };
+        let lists = if ready(&opened["result"]["snapshot"]["lists"]) {
+            opened["result"]["snapshot"]["lists"].clone()
+        } else {
+            let push = next(rx, |m| {
+                m["sub"] == sub
+                    && m["updates"]
+                        .as_array()
+                        .and_then(|u| u.last())
+                        .is_some_and(|s| ready(&s["lists"]))
+            })
+            .await;
+            push["updates"].as_array().unwrap().last().unwrap()["lists"].clone()
+        };
+        let key = lists[0]["entries"][0]["key"].as_str().unwrap().to_owned();
+        (sub, key)
+    }
+
+    #[tokio::test]
+    async fn install_listed_takes_only_what_an_open_list_shows() {
+        let core = Core::temporary("default").unwrap();
+        let kid = core.create_profile("Kid", "fox").unwrap();
+        let (tx, mut rx) = Output::channel();
+        let mut session = Session::new(core.clone(), tx);
+        session.catalog_source = Some(source().await);
+        // Nothing open: refused with its code.
+        let key = "https://hang.m12.test/manifest.json";
+        send(
+            &mut session,
+            json!({"id": 1, "op": "installListed", "key": key}),
+        )
+        .await;
+        let refused = reply(&mut rx, 1).await;
+        assert_eq!(refused["code"], "notListed", "{refused}");
+        assert_eq!(refused["error"], "This addon is no longer in the list");
+        // Open: the entry is taken, and its install is in flight (the addon
+        // never answers).
+        let (sub, key) = open(&mut session, &mut rx, 2).await;
+        send(
+            &mut session,
+            json!({"id": 3, "op": "installListed", "key": key}),
+        )
+        .await;
+        // Closed: the same key is refused again.
+        send(
+            &mut session,
+            json!({"id": 4, "op": "unsubscribe", "sub": sub}),
+        )
+        .await;
+        assert_eq!(reply(&mut rx, 4).await["ok"], true);
+        send(
+            &mut session,
+            json!({"id": 5, "op": "installListed", "key": key}),
+        )
+        .await;
+        assert_eq!(reply(&mut rx, 5).await["code"], "notListed");
+        // A switch while the install is in flight: its answer is `switched`
+        // and nothing is written for either profile.
+        send(
+            &mut session,
+            json!({"id": 6, "op": "switchProfile", "profile": kid}),
+        )
+        .await;
+        assert_eq!(reply(&mut rx, 6).await["ok"], true);
+        let in_flight = reply(&mut rx, 3).await;
+        assert_eq!(in_flight["code"], "switched", "{in_flight}");
+        assert!(core.library().addons("default").unwrap().is_empty());
+        assert!(core.library().addons(&kid).unwrap().is_empty());
     }
 }
