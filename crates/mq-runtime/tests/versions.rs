@@ -132,8 +132,10 @@ const SECOND: &str = r#"{"streams":[
 async fn installs_sharing_a_manifest_id_keep_their_own_name_rank_and_progress() {
     mq_relparse::warm_up();
     let core = Core::temporary("p").unwrap();
-    let first = named_addon("same", "First", Duration::ZERO, FIRST).await;
-    let second = named_addon("same", "Second", Duration::from_millis(500), SECOND).await;
+    // The first install answers after the fan-out's 2.5 s soft deadline, so
+    // it alone becomes slow; it is not the last install with that id.
+    let first = named_addon("same", "First", Duration::from_secs(3), FIRST).await;
+    let second = named_addon("same", "Second", Duration::ZERO, SECOND).await;
     let (first_url, second_url) = (first.transport_url.clone(), second.transport_url.clone());
     // A third install of the same id that nobody serves: it fails.
     let manifest = serde_json::json!({
@@ -166,11 +168,19 @@ async fn installs_sharing_a_manifest_id_keep_their_own_name_rank_and_progress() 
             .expect("stream open");
         seen.extend(batch);
     }
-    // The first install answered first: only the second is still pending.
+    // The others answered or failed first: only the first is still pending,
+    // then slow, until its own arrival clears it.
+    let progress: Vec<_> = seen
+        .iter()
+        .map(|s| (&s.pending_addons, &s.slow_addons))
+        .collect();
     assert!(
-        seen.iter().any(|s| s.pending_addons == ["Second"]),
-        "{:?}",
-        seen.iter().map(|s| &s.pending_addons).collect::<Vec<_>>()
+        seen.iter().any(|s| s.pending_addons == ["First"]),
+        "{progress:?}"
+    );
+    assert!(
+        seen.iter().any(|s| s.slow_addons == ["First"]),
+        "{progress:?}"
     );
     let last = seen.last().unwrap();
     assert!(last.pending_addons.is_empty() && last.slow_addons.is_empty());

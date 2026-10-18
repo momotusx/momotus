@@ -54,6 +54,8 @@ async fn fast_slow_and_timed_out_addons() {
     let fast = addon("fast", Duration::ZERO, r#"{"streams":[]}"#).await;
     let slow = addon("slow", Duration::from_millis(250), r#"{"streams":[]}"#).await;
     let dead = addon("dead", Duration::from_secs(30), r#"{"streams":[]}"#).await;
+    let mut late = [slow.transport_url.clone(), dead.transport_url.clone()];
+    late.sort();
     let client = AddonClient::new(HttpClient::new(ClientConfig::default()).unwrap());
     let deadlines = Deadlines {
         soft: Duration::from_millis(120),
@@ -65,7 +67,13 @@ async fn fast_slow_and_timed_out_addons() {
     while let Some(event) = fanout.next().await {
         let entry = match event {
             AddonEvent::Arrived { addon_id, .. } => format!("arrived:{addon_id}"),
-            AddonEvent::Slow { mut addon_ids, .. } => {
+            AddonEvent::Slow {
+                mut addon_ids,
+                mut transport_urls,
+            } => {
+                // The same installs as the ids, by their own URLs.
+                transport_urls.sort();
+                assert_eq!(transport_urls, late);
                 addon_ids.sort();
                 format!("slow:{}", addon_ids.join(","))
             }
