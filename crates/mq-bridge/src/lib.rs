@@ -1707,40 +1707,35 @@ mod catalog {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::sync::mpsc::UnboundedReceiver;
+    use tokio::sync::oneshot;
 
-    /// A local Cinemeta whose lists hold one entry, an addon at a name that
-    /// stands for a public host (`set_public`) and accepts connections but
-    /// never answers: an install of it stays in flight.
-    async fn source() -> String {
-        let hang = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = hang.local_addr().unwrap().port();
-        tokio::spawn(async move {
-            let mut held = Vec::new();
-            while let Ok((socket, _)) = hang.accept().await {
-                held.push(socket);
-            }
-        });
-        let localhost = std::net::Ipv4Addr::LOCALHOST.into();
-        mq_http::test_dns::set_public("hang.m12.test", &[localhost]);
-        let list = json!({"addons": [{
-            "transportUrl": format!("https://hang.m12.test:{port}/manifest.json"),
+    const LOCALHOST: std::net::IpAddr = std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+
+    /// A list of one entry, an addon at `https://{host}:{port}`.
+    fn one_entry(host: &str, port: u16, id: &str) -> Value {
+        json!({"addons": [{
+            "transportUrl": format!("https://{host}:{port}/manifest.json"),
             "transportName": "http",
             "manifest": {
-                "id": "hang", "version": "1.0.0", "name": "Hang",
+                "id": id, "version": "1.0.0", "name": id,
                 "resources": ["subtitles"], "types": ["movie"], "catalogs": []
             }
         }]})
-        .to_string();
+    }
+
+    /// A local Cinemeta answering both lists with what `list` holds at the
+    /// time, cacheable for an hour as Cinemeta's are.
+    async fn cinemeta(list: Arc<Mutex<Value>>) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
-                let list = list.clone();
+                let list = list.lock().unwrap().to_string();
                 tokio::spawn(async move {
                     let mut buf = vec![0u8; 4096];
                     let _ = socket.read(&mut buf).await;
                     let reply = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{list}",
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: public, max-age=3600\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{list}",
                         list.len()
                     );
                     let _ = socket.write_all(reply.as_bytes()).await;
@@ -1748,6 +1743,29 @@ mod catalog {
             }
         });
         format!("http://{addr}/manifest.json")
+    }
+
+    /// An addon at `host` (standing for a public one, `set_public`) that
+    /// accepts connections and never answers, until `release`: then every
+    /// connection, and any later one, fails.
+    async fn hanging(host: &str) -> (u16, oneshot::Sender<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (release, mut released) = oneshot::channel();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            loop {
+                tokio::select! {
+                    accepted = listener.accept() => match accepted {
+                        Ok((socket, _)) => held.push(socket),
+                        Err(_) => return,
+                    },
+                    _ = &mut released => return,
+                }
+            }
+        });
+        mq_http::test_dns::set_public(host, &[LOCALHOST]);
+        (port, release)
     }
 
     /// The next message for `pick`, skipping the others.
@@ -1772,15 +1790,17 @@ mod catalog {
         session.handle_text(&request.to_string()).await;
     }
 
-    /// Opens the view and waits for both lists; returns the entry's key.
+    /// Opens the view (`fresh` as given) and waits for both lists; returns
+    /// the sub and the first list's entries.
     async fn open(
         session: &mut Session,
         rx: &mut UnboundedReceiver<Outgoing>,
         id: u64,
-    ) -> (u64, String) {
+        fresh: bool,
+    ) -> (u64, Value) {
         send(
             session,
-            json!({"id": id, "op": "subscribe", "view": "addonCatalog"}),
+            json!({"id": id, "op": "subscribe", "view": "addonCatalog", "params": {"fresh": fresh}}),
         )
         .await;
         let opened = reply(rx, id).await;
@@ -1803,8 +1823,11 @@ mod catalog {
             .await;
             push["updates"].as_array().unwrap().last().unwrap()["lists"].clone()
         };
-        let key = lists[0]["entries"][0]["key"].as_str().unwrap().to_owned();
-        (sub, key)
+        (sub, lists[0]["entries"].clone())
+    }
+
+    fn key(entries: &Value) -> String {
+        entries[0]["key"].as_str().unwrap().to_owned()
     }
 
     #[tokio::test]
@@ -1813,20 +1836,24 @@ mod catalog {
         let kid = core.create_profile("Kid", "fox").unwrap();
         let (tx, mut rx) = Output::channel();
         let mut session = Session::new(core.clone(), tx);
-        session.catalog_source = Some(source().await);
+        let (port, release) = hanging("hang.m12.test").await;
+        let list = one_entry("hang.m12.test", port, "hang");
+        session.catalog_source = Some(cinemeta(Arc::new(Mutex::new(list))).await);
         // Nothing open: refused with its code.
-        let key = "https://hang.m12.test/manifest.json";
+        let key_url = format!("https://hang.m12.test:{port}/manifest.json");
         send(
             &mut session,
-            json!({"id": 1, "op": "installListed", "key": key}),
+            json!({"id": 1, "op": "installListed", "key": key_url}),
         )
         .await;
         let refused = reply(&mut rx, 1).await;
         assert_eq!(refused["code"], "notListed", "{refused}");
         assert_eq!(refused["error"], "This addon is no longer in the list");
         // Open: the entry is taken, and its install is in flight (the addon
-        // never answers).
-        let (sub, key) = open(&mut session, &mut rx, 2).await;
+        // does not answer yet).
+        let (sub, entries) = open(&mut session, &mut rx, 2, false).await;
+        let key = key(&entries);
+        assert_eq!(key, key_url);
         send(
             &mut session,
             json!({"id": 3, "op": "installListed", "key": key}),
@@ -1845,17 +1872,146 @@ mod catalog {
         )
         .await;
         assert_eq!(reply(&mut rx, 5).await["code"], "notListed");
-        // A switch while the install is in flight: its answer is `switched`
-        // and nothing is written for either profile.
+        // A switch while the install is in flight, then the addon fails
+        // it: the answer is `switched`, not the old profile's failure.
         send(
             &mut session,
             json!({"id": 6, "op": "switchProfile", "profile": kid}),
         )
         .await;
         assert_eq!(reply(&mut rx, 6).await["ok"], true);
+        release.send(()).unwrap();
         let in_flight = reply(&mut rx, 3).await;
         assert_eq!(in_flight["code"], "switched", "{in_flight}");
         assert!(core.library().addons("default").unwrap().is_empty());
         assert!(core.library().addons(&kid).unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn fresh_opens_past_the_cache() {
+        let core = Core::temporary("default").unwrap();
+        let (tx, mut rx) = Output::channel();
+        let mut session = Session::new(core, tx);
+        let list = Arc::new(Mutex::new(one_entry("old.m12.test", 443, "old")));
+        session.catalog_source = Some(cinemeta(list.clone()).await);
+        let (sub, entries) = open(&mut session, &mut rx, 1, false).await;
+        assert_eq!(entries[0]["id"], "old");
+        send(
+            &mut session,
+            json!({"id": 2, "op": "unsubscribe", "sub": sub}),
+        )
+        .await;
+        reply(&mut rx, 2).await;
+        // Cinemeta's list changes: a plain open still shows the cached one,
+        // Refresh the new one.
+        *list.lock().unwrap() = one_entry("new.m12.test", 443, "new");
+        let (sub, entries) = open(&mut session, &mut rx, 3, false).await;
+        assert_eq!(entries[0]["id"], "old");
+        send(
+            &mut session,
+            json!({"id": 4, "op": "unsubscribe", "sub": sub}),
+        )
+        .await;
+        reply(&mut rx, 4).await;
+        let (_, entries) = open(&mut session, &mut rx, 5, true).await;
+        assert_eq!(entries[0]["id"], "new");
+    }
+
+    #[tokio::test]
+    async fn install_listed_installs_over_the_wire() {
+        let core = Core::temporary("default").unwrap();
+        let (tx, mut rx) = Output::channel();
+        let mut session = Session::new(core.clone(), tx);
+        let manifest = json!({
+            "id": "ok", "version": "1.0.0", "name": "Ok Subtitles",
+            "resources": ["subtitles"], "types": ["movie"], "catalogs": []
+        })
+        .to_string();
+        let port = mq_http::test_dns::https(move |path| match path {
+            "/manifest.json" => format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{manifest}",
+                manifest.len()
+            ),
+            _ => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        });
+        mq_http::test_dns::set_public("ok.m12.test", &[LOCALHOST]);
+        let list = one_entry("ok.m12.test", port, "ok");
+        session.catalog_source = Some(cinemeta(Arc::new(Mutex::new(list))).await);
+        let (sub, entries) = open(&mut session, &mut rx, 1, false).await;
+        assert_eq!(entries[0]["installed"], "absent");
+        let key = key(&entries);
+        send(
+            &mut session,
+            json!({"id": 2, "op": "installListed", "key": key}),
+        )
+        .await;
+        let installed = reply(&mut rx, 2).await;
+        assert_eq!(installed["ok"], true, "{installed}");
+        assert_eq!(
+            installed["result"],
+            json!({"id": "ok", "name": "Ok Subtitles"})
+        );
+        let rows = core.library().addons("default").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].transport_url, key);
+        // The open list shows it on.
+        let push = next(&mut rx, |m| {
+            m["sub"] == sub
+                && m["updates"]
+                    .as_array()
+                    .and_then(|u| u.last())
+                    .is_some_and(|s| s["lists"][0]["entries"][0]["installed"] == "on")
+        })
+        .await;
+        assert_eq!(push["sub"], sub);
+    }
+
+    #[test]
+    fn install_failures_carry_their_code_and_words() {
+        let wire = [
+            (
+                ListedFailure::Timeout,
+                "timeout",
+                "This addon's server did not answer in time",
+            ),
+            (
+                ListedFailure::Unreachable,
+                "unreachable",
+                "This addon's server could not be reached",
+            ),
+            (
+                ListedFailure::NeedsSetup,
+                "needsSetup",
+                "This addon now needs setup first",
+            ),
+            (
+                ListedFailure::Mismatch,
+                "mismatch",
+                "This addon is not the one the list named",
+            ),
+            (
+                ListedFailure::Adult,
+                "adult",
+                "This addon is for adults and is not shown",
+            ),
+            (
+                ListedFailure::NotListed,
+                "notListed",
+                "This addon is no longer in the list",
+            ),
+            (
+                ListedFailure::Changed,
+                "changed",
+                "Another device changed your addons first",
+            ),
+        ];
+        for (failure, code, words) in wire {
+            let failure = Failure::from(ListedError::Refused(failure));
+            let sent = message(json!(7), Err(failure));
+            assert_eq!(
+                sent,
+                json!({"id": 7, "ok": false, "code": code, "error": words})
+            );
+        }
     }
 }

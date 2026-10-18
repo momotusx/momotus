@@ -298,6 +298,8 @@ async fn a_locked_session_answers_only_the_picker_unlocking_and_sync() {
         json!({"op": "removeAddon", "url": "https://a.example/manifest.json"}),
         json!({"op": "moveAddon", "url": "https://a.example/manifest.json", "to": 0}),
         json!({"op": "setAddonEnabled", "url": "https://a.example/manifest.json", "enabled": false}),
+        json!({"op": "subscribe", "view": "addonCatalog"}),
+        json!({"op": "installListed", "key": "https://a.example/manifest.json"}),
         json!({"op": "setPrefs", "patch": {}}),
         json!({"op": "homeCatalogs"}),
         json!({"op": "setHomeRow", "rowId": "x", "hidden": true}),
