@@ -123,13 +123,11 @@ func startLanded(finished: Bool, sameItem: Bool, pending: Double?) -> Double? {
     return pending
 }
 
-/// A periodic time while a seek is in flight: the player can still report
-/// where it was, so the time counts only once it reaches the target, which
-/// also ends the wait. Returns the position to show (nil keeps the current
-/// one) and what stays pending.
-func ticked(time: Double, pending: Double?) -> (position: Double?, pending: Double?) {
-    guard let pending else { return (time, nil) }
-    return abs(time - pending) < 1 ? (time, nil) : (nil, pending)
+/// The position to keep from a periodic time: none while a seek is in flight,
+/// since the player can still report where it was. Only the seek's own
+/// completion ends the wait (`startLanded`).
+func ticked(time: Double, pending: Double?) -> Double? {
+    pending == nil ? time : nil
 }
 
 func stoppedPosition(pendingStart: Double?, position: Double) -> Double {

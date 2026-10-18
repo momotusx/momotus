@@ -197,20 +197,16 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 }
 
 @Test func aSeekInFlightHoldsUntilItLands() {
-    // B seeks to its 900 s start; the viewer seeks to 1200 s; a stale tick says 0; B fails.
-    var pending: Double? = 900
-    var position = 0.0
-    pending = 1200; position = 1200
-    let stale = ticked(time: 0, pending: pending)
-    if let now = stale.position { position = now }
-    pending = stale.pending
+    // B seeks to its 900 s start; the viewer seeks to 1200 s; stale ticks say 1199.5 and 0; B fails.
+    var pending: Double? = 1200
+    var position = 1200.0
+    for stale in [1199.5, 0, 900] {
+        if let now = ticked(time: stale, pending: pending) { position = now }
+    }
     #expect(position == 1200)
     #expect(stoppedPosition(pendingStart: pending, position: position) == 1200)
-    // The player reaches the target: the wait ends.
-    let landed = ticked(time: 1200.2, pending: pending)
-    #expect(landed.position == 1200.2)
-    #expect(landed.pending == nil)
-    // No seek in flight: every tick counts.
-    #expect(ticked(time: 42, pending: nil).position == 42)
+    // Only the seek's own completion hands over.
+    #expect(startLanded(finished: true, sameItem: true, pending: pending) == 1200)
+    pending = nil
+    #expect(ticked(time: 1203, pending: pending) == 1203)
 }
-

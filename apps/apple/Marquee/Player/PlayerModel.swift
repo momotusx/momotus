@@ -349,6 +349,7 @@ final class PlayerModel {
         player.replaceCurrentItem(with: item)
         loadAudio(item, generation: generation)
         pendingStart = start > 1 ? start : nil
+        if start > 1 { position = start }
         seekToken += 1
         let token = seekToken
         if start > 1 {
@@ -421,9 +422,7 @@ final class PlayerModel {
 
     private func tick(_ time: CMTime) {
         guard time.isNumeric else { return }
-        let (now, pending) = ticked(time: time.seconds, pending: pendingStart)
-        if let now { position = now }
-        pendingStart = pending
+        if let now = ticked(time: time.seconds, pending: pendingStart) { position = now }
         if let total = player.currentItem?.duration, total.isNumeric { duration = total.seconds }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
@@ -434,7 +433,8 @@ final class PlayerModel {
     private func report() {
         guard rendered, let sub, duration > 0, position > 0 else { return }
         lastReport = .now
-        core.commandNow(sub, ["type": "progress", "positionMs": Int(position * 1000), "durationMs": Int(duration * 1000)])
+        let at = stoppedPosition(pendingStart: pendingStart, position: position)
+        core.commandNow(sub, ["type": "progress", "positionMs": Int(at * 1000), "durationMs": Int(duration * 1000)])
     }
 
     /// The Lock Screen's title, episode, length, playhead and speed (0 while paused).
