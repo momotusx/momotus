@@ -41,7 +41,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// Where the bytes of one playback come from.
@@ -117,11 +117,16 @@ impl Playback {
 /// An HLS playback: the stream URL's playlist and the children its
 /// rewrites named, all fetched through the playback's scoped handle.
 struct Hls {
-    url: String,
+    url: Url,
     http: HttpClient,
     /// The stream's `proxyHeaders`: in full only to the stream URL's origin.
     headers: Vec<(String, String)>,
-    table: Mutex<manifest::Table>,
+    /// `http://127.0.0.1:{port}/`, and `{core}c/{token}/` where children go.
+    core: String,
+    prefix: String,
+    /// Held by a rewrite for its whole run on a blocking thread; a child's
+    /// lookup waits for it without holding a runtime worker.
+    table: Arc<tokio::sync::Mutex<manifest::Table>>,
     /// The last `#EXT-X-TARGETDURATION` of each playlist (`None`: the main
     /// one), for how long a blocking reload may wait.
     targets: Mutex<HashMap<Option<u32>, u64>>,
@@ -132,7 +137,7 @@ impl Hls {
         RequestOptions {
             priority: Priority::Playback,
             headers: self.headers.clone(),
-            owner: Url::parse(&self.url).ok(),
+            owner: Some(self.url.clone()),
             ..Default::default()
         }
     }
@@ -229,7 +234,9 @@ impl StreamServer {
             return Ok(self.lease(token, playback, &file_name(filename), None));
         };
         let source = source.clone();
-        match tokio::time::timeout(deadline, self.detect(&source, &token)).await {
+        let end = Instant::now() + deadline;
+        let detect = self.detect(&source, &token, &playback.released, end);
+        match tokio::time::timeout_at(end.into(), detect).await {
             Ok(Ok(None)) => Ok(self.lease(token, playback, &file_name(filename), None)),
             Ok(Ok(Some(hls))) => {
                 // The cursors stop: every request fetches the playlist fresh.
@@ -261,6 +268,8 @@ impl StreamServer {
         &self,
         source: &ahead::Source,
         token: &str,
+        released: &CancellationToken,
+        end: Instant,
     ) -> Result<Option<Arc<Hls>>, String> {
         let listed = source.url().to_owned();
         let (declared, prefix) = match source.meta(0).await {
@@ -323,28 +332,22 @@ impl StreamServer {
             // declared body is never served raw.
             _ => return Err(UNREADABLE_PLAYLIST.into()),
         }
+        let url = Url::parse(&listed).map_err(|_| UNREADABLE_PLAYLIST.to_owned())?;
+        let core = format!("http://{}/", self.shared.addr);
         let hls = Arc::new(Hls {
-            url: listed,
+            url,
             http: source.http().clone(),
             headers: source.headers().to_vec(),
-            table: Mutex::default(),
+            prefix: format!("{core}c/{token}/"),
+            core,
+            table: Arc::default(),
             targets: Mutex::default(),
         });
-        let first = Url::parse(&hls.url).map_err(|_| UNREADABLE_PLAYLIST.to_owned())?;
-        let (body, base) = fetch_playlist(&hls, &first, &[], MANIFEST_DEADLINE)
+        let (body, base) = fetch_playlist(&hls, &hls.url, &[], MANIFEST_DEADLINE)
             .await
             .map_err(|e| error_words(&e))?;
-        let core = format!("http://{}/", self.shared.addr);
         // A dry run: the ids it registers stay valid for the real requests.
-        let prefix = format!("{core}c/{token}/");
-        let mut table = lock(&hls.table);
-        let mut children = Children {
-            core: &core,
-            prefix: &prefix,
-            table: &mut table,
-        };
-        let rewritten = manifest::rewrite_hls(&body, &base, false, &mut children);
-        drop(table);
+        let rewritten = rewrite(&hls, body, base, false, released, end).await;
         let rewritten = rewritten.map_err(|reason| {
             tracing::info!("stream playlist refused: {reason}");
             UNREADABLE_PLAYLIST.to_owned()
@@ -786,12 +789,8 @@ async fn serve(
         Content::Http(source) => serve_http(source.clone(), range, head_only).await,
         Content::Hls(hls) => {
             let query = request.uri().query();
-            let main = Url::parse(&hls.url).ok();
-            let Some(main) = main else {
-                return StatusCode::BAD_GATEWAY.into_response();
-            };
-            let out = serve_playlist(&shared, &token, &playback, hls, None, main, query).await;
-            cors(out)
+            let main = hls.url.clone();
+            cors(serve_playlist(&playback, hls, None, main, query).await)
         }
         #[cfg(feature = "torrent")]
         Content::Torrent {
@@ -830,10 +829,16 @@ async fn serve_child(
     let Content::Hls(hls) = &playback.body else {
         return cors(StatusCode::NOT_FOUND.into_response());
     };
-    let found = parse_id(&id).and_then(|id| {
-        let id = u32::try_from(id).ok()?;
-        lock(&hls.table).get(id).map(|(url, role)| (id, url, role))
-    });
+    let id = parse_id(&id).and_then(|id| u32::try_from(id).ok());
+    let found = match id {
+        Some(id) => hls
+            .table
+            .lock()
+            .await
+            .get(id)
+            .map(|(url, role)| (id, url, role)),
+        None => None,
+    };
     let Some((id, url, role)) = found else {
         return cors(StatusCode::NOT_FOUND.into_response());
     };
@@ -841,7 +846,7 @@ async fn serve_child(
     let out = match role {
         Role::Playlist => {
             let query = request.uri().query();
-            serve_playlist(&shared, &token, &playback, hls, Some(id), url, query).await
+            serve_playlist(&playback, hls, Some(id), url, query).await
         }
         Role::Media => {
             let range = request
@@ -917,10 +922,8 @@ async fn fetch_playlist(
 /// rewritten: never cached, as a live one changes with every reload. A
 /// blocking reload (`_HLS_msn`) may wait three of its target durations.
 async fn serve_playlist(
-    shared: &Shared,
-    token: &str,
     playback: &Playback,
-    hls: &Hls,
+    hls: &Arc<Hls>,
     id: Option<u32>,
     url: Url,
     query: Option<&str>,
@@ -932,6 +935,7 @@ async fn serve_playlist(
     {
         deadline = deadline.max(Duration::from_secs(target.saturating_mul(3)));
     }
+    let end = Instant::now() + deadline;
     let fetch = fetch_playlist(hls, &url, &directives, deadline);
     let (body, base) = match playback.released.run_until_cancelled(fetch).await {
         None => return StatusCode::NOT_FOUND.into_response(),
@@ -941,16 +945,8 @@ async fn serve_playlist(
             return StatusCode::BAD_GATEWAY.into_response();
         }
     };
-    let core = format!("http://{}/", shared.addr);
-    let prefix = format!("{core}c/{token}/");
-    let mut table = lock(&hls.table);
-    let mut children = Children {
-        core: &core,
-        prefix: &prefix,
-        table: &mut table,
-    };
-    let rewritten = manifest::rewrite_hls(&body, &base, id.is_some(), &mut children);
-    drop(table);
+    let released = &playback.released;
+    let rewritten = rewrite(hls, body, base, id.is_some(), released, end).await;
     let rewritten = match rewritten {
         Ok(rewritten) => rewritten,
         Err(reason) => {
@@ -969,6 +965,40 @@ async fn serve_playlist(
         rewritten.text,
     )
         .into_response()
+}
+
+/// Rewrites a fetched playlist (`rewrite_hls`) on a blocking thread, holding
+/// the playback's table, and gives up at `end` or at release: the rewrite is
+/// CPU work no `await` interrupts, so it checks the time itself and runs
+/// where it holds no runtime worker.
+async fn rewrite(
+    hls: &Arc<Hls>,
+    body: Bytes,
+    base: Url,
+    media_only: bool,
+    released: &CancellationToken,
+    end: Instant,
+) -> Result<manifest::Rewritten, &'static str> {
+    let deadline = tokio::time::Instant::from_std(end);
+    let table = tokio::time::timeout_at(deadline, hls.table.clone().lock_owned());
+    let mut table = table.await.map_err(|_| "out of time")?;
+    let hls = hls.clone();
+    let released = released.clone();
+    let work = tokio::task::spawn_blocking(move || {
+        let alive = || Instant::now() < end && !released.is_cancelled();
+        let mut children = Children {
+            core: &hls.core,
+            prefix: &hls.prefix,
+            table: &mut table,
+            alive: &alive,
+        };
+        manifest::rewrite_hls(&body, &base, media_only, &mut children)
+    });
+    match tokio::time::timeout_at(deadline, work).await {
+        Ok(Ok(rewritten)) => rewritten,
+        Ok(Err(_)) => Err("the rewrite failed"),
+        Err(_) => Err("out of time"),
+    }
 }
 
 /// A key, read whole: at most `SMALL_MAX`, else 502.

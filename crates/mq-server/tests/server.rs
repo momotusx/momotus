@@ -2318,21 +2318,12 @@ async fn doctype_and_patch_are_refused() {
 async fn manifest_limits_and_deadlines() {
     let mut huge = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n".to_vec();
     huge.resize((8 << 20) + 1, b'\n');
-    let mut wide = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
-    for i in 0..180_000 {
-        wide.push_str(&format!("#EXTINF:1,\n{i}\n"));
-    }
-    assert!(wide.len() < 8 << 20);
     // Accepted at 8 MiB, but every line becomes a 100 byte core URL.
     let mut repeated = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n".to_vec();
-    repeated.resize(8 << 20, b'\n');
-    for pair in repeated[32..].chunks_exact_mut(2) {
-        pair[0] = b'a';
-    }
+    repeated.extend("a\n".repeat(((8 << 20) - repeated.len()) / 2).bytes());
     let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
         "/huge.m3u8" => Reply::playlist(huge.clone()),
         "/repeated.m3u8" => Reply::playlist(repeated.clone()),
-        "/wide.m3u8" => Reply::playlist(wide.clone()),
         _ => Reply {
             status: 200,
             headers: vec![("Content-Type", "application/vnd.apple.mpegurl".into())],
@@ -2347,8 +2338,6 @@ async fn manifest_limits_and_deadlines() {
     .await;
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http).await.unwrap();
-    // The wide one is rewritten in full before it is refused: in a debug
-    // build that alone takes several seconds.
     let s = Duration::from_secs;
     for (path, deadline, words) in [
         (
@@ -2361,11 +2350,6 @@ async fn manifest_limits_and_deadlines() {
             s(5),
             "The stream's playlist could not be read",
         ),
-        (
-            "/wide.m3u8",
-            s(30),
-            "The stream's playlist could not be read",
-        ),
         ("/trickle.m3u8", s(3), "The source did not answer in time"),
     ] {
         let started = std::time::Instant::now();
@@ -2376,6 +2360,48 @@ async fn manifest_limits_and_deadlines() {
         let took = started.elapsed();
         assert!(took < deadline + s(1), "{path} took {took:?}");
     }
+}
+
+#[tokio::test]
+async fn a_slow_rewrite_ends_at_its_deadline_and_holds_up_nothing() {
+    // Within every limit (120,000 resources, 14 MB rewritten), but 1.5 s of
+    // work in a debug build.
+    let mut wide = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+    for i in 0..120_000 {
+        wide.push_str(&format!("#EXTINF:1,\n{i}.ts\n"));
+    }
+    let small = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n";
+    let kind = "application/vnd.apple.mpegurl";
+    let (base, _) = hls_origin(pages(vec![
+        ("/wide.m3u8", kind, wide.into_bytes()),
+        ("/small.m3u8", kind, small.to_vec()),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    let deadline = Duration::from_secs(1);
+    let started = std::time::Instant::now();
+    let wide = async {
+        let upstream = local_upstream(format!("{base}/wide.m3u8"));
+        let opened = server.open(upstream, "v.mkv", deadline).await;
+        (opened, started.elapsed())
+    };
+    // Opens while the wide one is being rewritten, and must not wait for it.
+    let small = async {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        open_hls(&server, format!("{base}/small.m3u8")).await;
+        started.elapsed()
+    };
+    let ((opened, wide_took), small_took) = tokio::join!(wide, small);
+    assert_eq!(
+        opened.unwrap_err(),
+        "The stream's playlist could not be read"
+    );
+    assert!(
+        wide_took < deadline + Duration::from_secs(1),
+        "{wide_took:?}"
+    );
+    assert!(small_took < Duration::from_millis(800), "{small_took:?}");
 }
 
 #[tokio::test]

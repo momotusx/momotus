@@ -342,7 +342,13 @@ pub(crate) struct Children<'a> {
     /// `http://127.0.0.1:{port}/c/{token}/`.
     pub(crate) prefix: &'a str,
     pub(crate) table: &'a mut Table,
+    /// False once the rewrite's deadline has passed or its playback ended;
+    /// asked every `CHECK_EVERY` lines.
+    pub(crate) alive: &'a dyn Fn() -> bool,
 }
+
+/// How many lines a rewrite handles between two looks at `alive`.
+const CHECK_EVERY: usize = 1024;
 
 impl Children<'_> {
     fn link(&mut self, url: &Url, role: Role) -> Result<String, &'static str> {
@@ -394,7 +400,10 @@ pub(crate) fn rewrite_hls(
     let mut out = String::from("#EXTM3U\n");
     let mut variant = false;
     let mut target_duration = None;
-    for &line in lines {
+    for (n, &line) in lines.iter().enumerate() {
+        if n % CHECK_EVERY == 0 && !(children.alive)() {
+            return Err("out of time");
+        }
         if !line.starts_with('#') {
             let role = if master {
                 if !variant {
@@ -601,6 +610,7 @@ mod tests {
             core: CORE,
             prefix: PREFIX,
             table: &mut table,
+            alive: &|| true,
         };
         rewrite_hls(body.as_bytes(), &base, media_only, &mut children)
     }
@@ -746,6 +756,30 @@ mod tests {
     }
 
     #[test]
+    fn a_rewrite_stops_when_its_time_is_up() {
+        let base = Url::parse("https://cdn.example/v/live.m3u8").unwrap();
+        let mut table = Table::default();
+        let asked = std::cell::Cell::new(0);
+        let alive = || {
+            asked.set(asked.get() + 1);
+            asked.get() < 3
+        };
+        let mut children = Children {
+            core: CORE,
+            prefix: PREFIX,
+            table: &mut table,
+            alive: &alive,
+        };
+        let body = format!(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n{}",
+            "#EXTINF:4,\ns.ts\n".repeat(CHECK_EVERY * 2)
+        );
+        let refused = rewrite_hls(body.as_bytes(), &base, true, &mut children);
+        assert_eq!(refused.unwrap_err(), "out of time");
+        assert_eq!(asked.get(), 3, "asked once every {CHECK_EVERY} lines");
+    }
+
+    #[test]
     fn resources_keep_their_role() {
         let url = |s: &str| Url::parse(s).unwrap();
         let mut table = Table::default();
@@ -773,6 +807,7 @@ mod tests {
             core: CORE,
             prefix: PREFIX,
             table: &mut table,
+            alive: &|| true,
         };
         let first = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns1.ts\n";
         let a = rewrite_hls(first.as_bytes(), &base, true, &mut children).unwrap();
@@ -840,6 +875,7 @@ mod tests {
                 core: CORE,
                 prefix: &prefix,
                 table: &mut table,
+                alive: &|| true,
             };
             let out = rewrite_hls(&body, &base, false, &mut children)
                 .unwrap_or_else(|e| panic!("{name}: {e}"))
