@@ -2,7 +2,7 @@ use mq_protocol::ResourcePath;
 use percent_encoding::utf8_percent_encode;
 use stremio_core::constants::{ADDON_LEGACY_PATH, ADDON_MANIFEST_PATH, URI_COMPONENT_ENCODE_SET};
 use stremio_core::types::query_params_encode;
-use url::Url;
+use url::{Position, Url};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AddonError {
@@ -19,15 +19,17 @@ pub enum AddonError {
 }
 
 /// Accepts `stremio://` and `http(s)://` manifest URLs and returns the https
-/// form ending in `/manifest.json`.
+/// form ending in `/manifest.json`, without a fragment (one link, one addon:
+/// a fragment never reaches the server).
 pub fn normalize_transport_url(raw: &str) -> Result<Url, AddonError> {
     let raw = raw.trim();
     let raw = match raw.strip_prefix("stremio://") {
         Some(rest) => format!("https://{rest}"),
         None => raw.to_owned(),
     };
-    let url =
+    let mut url =
         Url::parse(&raw).map_err(|_| AddonError::InvalidTransportUrl("it is not a web address"))?;
+    url.set_fragment(None);
     if !matches!(url.scheme(), "http" | "https") {
         return Err(AddonError::InvalidTransportUrl(
             "it must start with https://, http:// or stremio://",
@@ -64,18 +66,31 @@ pub fn resource_url(transport_url: &Url, path: &ResourcePath) -> Result<String, 
         ));
     }
     suffix.push_str(".json");
-    let base = transport_url.as_str();
-    match base.rfind(ADDON_MANIFEST_PATH) {
-        Some(at) => Ok(format!(
-            "{}{}{}",
-            &base[..at],
-            suffix,
-            &base[at + ADDON_MANIFEST_PATH.len()..]
-        )),
-        None => Err(AddonError::InvalidTransportUrl(
+    in_place_of_manifest(transport_url, &suffix)
+}
+
+/// The addon's configure page: `/configure` in place of `/manifest.json`, the
+/// query kept (Stremio's convention).
+pub fn configure_url(transport_url: &Url) -> Result<String, AddonError> {
+    in_place_of_manifest(transport_url, "/configure")
+}
+
+/// `transport_url` with its last path segment, `manifest.json`, replaced by
+/// `suffix`; the query stays and the fragment goes. Only the path's last
+/// segment: a query or an earlier segment holding `manifest.json` is not it.
+fn in_place_of_manifest(transport_url: &Url, suffix: &str) -> Result<String, AddonError> {
+    let dir = transport_url
+        .path()
+        .strip_suffix(ADDON_MANIFEST_PATH)
+        .ok_or(AddonError::InvalidTransportUrl(
             "it does not end with /manifest.json",
-        )),
+        ))?;
+    let mut out = format!("{}{dir}{suffix}", &transport_url[..Position::BeforePath]);
+    if let Some(query) = transport_url.query() {
+        out.push('?');
+        out.push_str(query);
     }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -119,6 +134,45 @@ mod tests {
             .unwrap(),
             "https://v3-cinemeta.strem.io/catalog/movie/top/search=the%20office&skip=100.json"
         );
+    }
+
+    #[test]
+    fn only_the_last_path_segment_is_the_manifest() {
+        let path = path("stream", "movie", "tt1", &[]);
+        let query =
+            Url::parse("https://a.example/cfg/manifest.json?next=/x/manifest.json").unwrap();
+        assert_eq!(
+            resource_url(&query, &path).unwrap(),
+            "https://a.example/cfg/stream/movie/tt1.json?next=/x/manifest.json"
+        );
+        assert_eq!(
+            configure_url(&query).unwrap(),
+            "https://a.example/cfg/configure?next=/x/manifest.json"
+        );
+        let configured =
+            Url::parse("https://a.example/manifest.json/eyJrZXkiOiJ2In0/manifest.json").unwrap();
+        assert_eq!(
+            resource_url(&configured, &path).unwrap(),
+            "https://a.example/manifest.json/eyJrZXkiOiJ2In0/stream/movie/tt1.json"
+        );
+        assert_eq!(
+            configure_url(&configured).unwrap(),
+            "https://a.example/manifest.json/eyJrZXkiOiJ2In0/configure"
+        );
+        let root = Url::parse("https://a.example/manifest.json").unwrap();
+        assert_eq!(configure_url(&root).unwrap(), "https://a.example/configure");
+        let other = Url::parse("https://a.example/manifest.json?x=1/other.json").unwrap();
+        assert!(configure_url(&other).is_ok(), "the query is not the path");
+        let not = Url::parse("https://a.example/x/manifest.jsonp").unwrap();
+        assert!(configure_url(&not).is_err());
+    }
+
+    #[test]
+    fn a_fragment_is_no_part_of_the_link() {
+        let url = normalize_transport_url("stremio://a.example/cfg/manifest.json#one").unwrap();
+        assert_eq!(url.as_str(), "https://a.example/cfg/manifest.json");
+        let same = normalize_transport_url("https://a.example/cfg/manifest.json#two").unwrap();
+        assert_eq!(url, same);
     }
 
     #[test]
