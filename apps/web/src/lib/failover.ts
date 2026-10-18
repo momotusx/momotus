@@ -49,6 +49,28 @@ export function loadedSource(current: () => PlaybackSnapshot | null) {
   };
 }
 
+/** A start position the `<video>` element has not applied yet: until a new
+ * source's metadata arrives the element says 0, so the playhead is the start
+ * (a failure before then resumes the next source there, and no progress
+ * report says 0). */
+export function pendingStart() {
+  let pending: number | null = null;
+  return {
+    /** A new source starts at `sec` once its metadata is in. */
+    set(sec: number) {
+      pending = sec > 0 ? sec : null;
+    },
+    /** The element went to the start. */
+    applied() {
+      pending = null;
+    },
+    /** The playhead, given the element's `currentTime`. */
+    position(current: number): number {
+      return pending ?? current;
+    },
+  };
+}
+
 /** Where each source starts. The first at the saved position; after a
  * failover, where the failed one stopped: the core passes through a moment
  * with no source, so the next one cannot tell it from a first start. */

@@ -113,6 +113,12 @@ func sourceStart(stoppedAt: Double?, resumeMs: Int64?) -> Double {
     stoppedAt ?? Double(resumeMs ?? 0) / 1000
 }
 
+/// Where a failed source stopped: its start while the seek to it has not
+/// landed (the player still says 0 there), else the playhead.
+func stoppedPosition(pendingStart: Double?, position: Double) -> Double {
+    pendingStart ?? position
+}
+
 /// What failed, as `failOver` reports it: the core words `kind` for the
 /// attempt list, and keeps `error` (the player's own words) only for "other".
 struct PlayerFailure: Equatable, Sendable {

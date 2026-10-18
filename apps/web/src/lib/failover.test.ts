@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
-import { loadedSource, mediaFailure, sourceStart } from "./failover";
+import { loadedSource, mediaFailure, pendingStart, sourceStart } from "./failover";
 
 test("a failover names the source the engine loaded, not the one the core moved to", () => {
   let snapshot = { attempt: 1 } as PlaybackSnapshot;
@@ -50,4 +50,16 @@ test("a failover starts the next source where the failed one stopped, a first st
   start.stop(312.5);
   expect(start.next(30)).toBe(312.5);
   expect(start.next(30)).toBe(30);
+});
+
+test("the playhead is the start until the element applied it", () => {
+  const start = pendingStart();
+  expect(start.position(0)).toBe(0);
+  start.set(900);
+  // A source that fails before its metadata stopped at its start, not at 0.
+  expect(start.position(0)).toBe(900);
+  start.applied();
+  expect(start.position(903.5)).toBe(903.5);
+  start.set(0);
+  expect(start.position(2)).toBe(2);
 });

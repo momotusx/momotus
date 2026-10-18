@@ -50,6 +50,9 @@ final class PlayerModel {
     @ObservationIgnored private var loadedURL: String?
     /// Where a failed source stopped, so the next one continues there.
     @ObservationIgnored private var stoppedAt: Double?
+    /// The start of the loaded source while the seek to it has not landed:
+    /// the player says 0 until then, and a failure keeps this instead.
+    @ObservationIgnored private var pendingStart: Double?
     /// The core's attempt number of the source that plays, named in failOver so
     /// the core ignores a late error, even from another source of the same key.
     @ObservationIgnored private var loadedAttempt: Int64?
@@ -176,7 +179,7 @@ final class PlayerModel {
         versions = model
         route = pick
         (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure, nextVersions) = (nil, false, nil, nil, false, false, nil, nil)
-        (loadedAttempt, stoppedAt) = (nil, nil)
+        (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
         selectSubtitle(nil)
     }
@@ -219,7 +222,7 @@ final class PlayerModel {
         report()
         route = PlayRoute(versionsSub: route.versionsSub, key: key, target: route.target, tapped: .now)
         (loadedURL, rendered, firstFrameMs, playback) = (nil, false, nil, nil)
-        (loadedAttempt, stoppedAt) = (nil, nil)
+        (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
     }
 
     func togglePlay() {
@@ -229,6 +232,8 @@ final class PlayerModel {
     func seek(to seconds: Double) {
         let target = CMTime(seconds: max(0, min(seconds, duration > 0 ? duration : seconds)), preferredTimescale: 600)
         position = target.seconds
+        // The viewer's seek replaces a start that has not landed yet.
+        pendingStart = nil
         ended = false
         player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] done in
             guard done else { return }
@@ -274,7 +279,9 @@ final class PlayerModel {
                 coreLog.notice("metric playback_ready_ms=\(ms, privacy: .public) host=\(host, privacy: .public)")
             }
             // The first source starts at the saved position; a failover resumes where the last one stopped.
-            var start = loadedURL == nil ? sourceStart(stoppedAt: stoppedAt, resumeMs: snapshot.resumeMs) : position
+            var start = loadedURL == nil
+                ? sourceStart(stoppedAt: stoppedAt, resumeMs: snapshot.resumeMs)
+                : stoppedPosition(pendingStart: pendingStart, position: position)
             stoppedAt = nil
             #if DEBUG
             if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
@@ -327,7 +334,18 @@ final class PlayerModel {
             .store(in: &itemBag)
         player.replaceCurrentItem(with: item)
         loadAudio(item, generation: generation)
-        if start > 1 { player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) }
+        pendingStart = start > 1 ? start : nil
+        if start > 1 {
+            let at = CMTime(seconds: start, preferredTimescale: 600)
+            player.seek(to: at, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self, generation == self.generation else { return }
+                        self.pendingStart = nil
+                    }
+                }
+            }
+        }
         NowPlaying.activate()
         player.play()
     }
@@ -342,7 +360,8 @@ final class PlayerModel {
         player.pause()
         player.replaceCurrentItem(with: nil)
         let command = failOverCommand(failure, attempt: loadedAttempt)
-        stoppedAt = position
+        stoppedAt = stoppedPosition(pendingStart: pendingStart, position: position)
+        pendingStart = nil
         (loadedURL, loadedAttempt) = (nil, nil)
         guard let sub else { return }
         Task { [command] in try? await core.command(sub, command) }

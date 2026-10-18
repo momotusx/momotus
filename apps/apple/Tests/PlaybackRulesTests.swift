@@ -176,6 +176,11 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(playerFailure(nil).kind == "other")
 }
 
+@Test func aSourceThatFailsBeforeItsStartSeekKeepsTheStart() {
+    #expect(stoppedPosition(pendingStart: 900, position: 0) == 900)
+    #expect(stoppedPosition(pendingStart: nil, position: 912.5) == 912.5)
+}
+
 @Test func aFailoverContinuesWhereTheFailedSourceStopped() {
     #expect(sourceStart(stoppedAt: nil, resumeMs: 30_000) == 30)
     #expect(sourceStart(stoppedAt: 312.5, resumeMs: 30_000) == 312.5)

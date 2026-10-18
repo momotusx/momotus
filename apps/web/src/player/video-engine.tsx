@@ -3,7 +3,7 @@
  * crossorigin, so both load directly. */
 
 import { createSignal, Show } from "solid-js";
-import { mediaFailure } from "../lib/failover";
+import { mediaFailure, pendingStart } from "../lib/failover";
 import type { Engine, EngineEvents, Track } from "./engine";
 
 export function createVideoEngine(events: EngineEvents): Engine {
@@ -28,6 +28,11 @@ export function createVideoEngine(events: EngineEvents): Engine {
         : [],
     );
   };
+
+  const start = pendingStart();
+  // The listener that applies the loading source's start; a source that
+  // fails before its metadata must not leave it to seek the next one.
+  let onMetadata: (() => void) | null = null;
 
   const known = () => Number.isFinite(video?.duration) && video.duration > 0;
   const seek = (sec: number) => {
@@ -75,7 +80,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
     kind: "video",
     view,
     time,
-    position: () => video?.currentTime ?? 0,
+    position: () => start.position(video?.currentTime ?? 0),
     duration,
     paused,
     buffered,
@@ -83,18 +88,18 @@ export function createVideoEngine(events: EngineEvents): Engine {
     rate,
     tracks,
     load(url, startSec) {
+      if (onMetadata) video.removeEventListener("loadedmetadata", onMetadata);
+      start.set(startSec);
       video.src = url;
-      let resumed = false;
-      video.addEventListener(
-        "loadedmetadata",
-        () => {
-          if (!resumed && startSec > 0) video.currentTime = startSec;
-          resumed = true;
-          readTracks();
-          events.onLoaded();
-        },
-        { once: true },
-      );
+      const applyStart = () => {
+        onMetadata = null;
+        if (startSec > 0) video.currentTime = startSec;
+        start.applied();
+        readTracks();
+        events.onLoaded();
+      };
+      onMetadata = applyStart;
+      video.addEventListener("loadedmetadata", applyStart, { once: true });
       play();
     },
     play,
