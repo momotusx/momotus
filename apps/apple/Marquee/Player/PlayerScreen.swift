@@ -135,9 +135,17 @@ struct PlayerScreen: View {
         .accessibilityAction(.magicTap) { model.togglePlay() }
         #endif
         .accessibilityAction(.escape) { close() }
-        .onAppear { immersion.active = true }
+        .onAppear {
+            immersion.active = true
+            #if os(iOS)
+            PlayerOrientation.enter()
+            #endif
+        }
         .onDisappear {
             immersion.active = false
+            #if os(iOS)
+            PlayerOrientation.leave()
+            #endif
             model.close()
         }
         .preferredColorScheme(.dark)

@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct MarqueeApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
     @State private var core: CoreClient
     @State private var profiles: ProfileSession
     @State private var system: SystemEvents
