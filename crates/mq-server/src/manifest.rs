@@ -159,9 +159,17 @@ pub(crate) struct Table {
     text: usize,
     next: u32,
     tick: u64,
+    /// The tick the running rewrite began at: what it named since is its
+    /// output's, and never evicted while it runs.
+    floor: u64,
 }
 
 impl Table {
+    /// Starts a rewrite: entries it names from now on stay until it ends.
+    pub(crate) fn begin(&mut self) {
+        self.floor = self.tick + 1;
+    }
+
     /// The id that serves `url` in `role`. A URL named before in another
     /// role refuses the playlist naming it now, whichever came first.
     pub(crate) fn register(&mut self, url: &Url, role: Role) -> Result<u32, &'static str> {
@@ -198,7 +206,7 @@ impl Table {
         self.entries.insert(id, entry);
         self.ids.insert((dir, last.into(), query), id);
         if self.entries.len() > MAX_ENTRIES || self.text > MAX_TEXT {
-            self.evict();
+            self.evict()?;
         }
         Ok(id)
     }
@@ -231,14 +239,23 @@ impl Table {
         s
     }
 
-    /// Drops the least recently used tenth.
+    /// Drops the least recently used tenth, but none the running rewrite
+    /// named: when only those are left, the rewrite does not fit.
     /// ponytail: a scan per eviction; a linked list if evictions ever show
     /// in profiles.
-    fn evict(&mut self) {
-        let mut by_use: Vec<(u64, u32)> =
-            self.entries.iter().map(|(&id, e)| (e.used, id)).collect();
+    fn evict(&mut self) -> Result<(), &'static str> {
+        let floor = self.floor;
+        let mut by_use: Vec<(u64, u32)> = self
+            .entries
+            .iter()
+            .filter(|(_, e)| e.used < floor)
+            .map(|(&id, e)| (e.used, id))
+            .collect();
+        if by_use.is_empty() {
+            return Err("too many resources");
+        }
         by_use.sort_unstable();
-        let count = (by_use.len() / 10).max(1);
+        let count = (self.entries.len() / 10).clamp(1, by_use.len());
         for &(_, id) in &by_use[..count] {
             if let Some(entry) = self.entries.remove(&id) {
                 self.text -= entry.last.len();
@@ -253,6 +270,7 @@ impl Table {
             }
             kept
         });
+        Ok(())
     }
 }
 
@@ -397,6 +415,7 @@ pub(crate) fn rewrite_hls(
     if master && media_only {
         return Err("a master playlist named as a media playlist");
     }
+    children.table.begin();
     let mut out = String::from("#EXTM3U\n");
     let mut variant = false;
     let mut target_duration = None;
@@ -823,6 +842,7 @@ mod tests {
     #[test]
     fn tables_evict_least_recently_used() {
         let mut table = Table::default();
+        table.begin();
         // 32,000 signed URLs of about 1 KB with one shared query fit.
         let sig = "x".repeat(900);
         for i in 0..32_000 {
@@ -832,8 +852,10 @@ mod tests {
         }
         assert_eq!(table.len(), 32_000);
         assert_eq!(table.get(0).map(|(_, role)| role), Some(Role::Media));
-        // Past the entry limit the least recently used tenth goes: id 1 was
-        // never asked for again, id 0 was just asked for.
+        // Past the entry limit the least recently used tenth of what earlier
+        // rewrites named goes: id 1 was never asked for again, id 0 was just
+        // asked for.
+        table.begin();
         let mut last = 0;
         for i in 32_000..=MAX_ENTRIES {
             let url = Url::parse(&format!("https://cdn.example/v/seg-{i:06}.m4s")).unwrap();
@@ -846,6 +868,60 @@ mod tests {
         let url = Url::parse("https://cdn.example/v/new.m4s").unwrap();
         assert_eq!(table.register(&url, Role::Media), Ok(last + 1));
         assert!(table.get(1).is_none());
+    }
+
+    #[test]
+    fn a_rewrite_never_evicts_its_own_resources() {
+        let base = Url::parse("https://cdn.example/v/live.m3u8").unwrap();
+        let media = |names: std::ops::Range<usize>, tag: &str| {
+            let mut body = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+            for i in names {
+                body.push_str(&format!("{tag}{i}\n"));
+            }
+            body
+        };
+        let mut table = Table::default();
+        let mut children = Children {
+            core: CORE,
+            prefix: PREFIX,
+            table: &mut table,
+            alive: &|| true,
+        };
+        // An earlier reload's 5,000 make room for this one's 127,000: the
+        // limit takes only theirs, so every id this one names still answers.
+        rewrite_hls(media(0..5_000, "a").as_bytes(), &base, true, &mut children).unwrap();
+        let fits = media(0..127_000, "b");
+        let text = rewrite_hls(fits.as_bytes(), &base, true, &mut children)
+            .unwrap()
+            .text;
+        let first: u32 = text
+            .lines()
+            .nth(2)
+            .unwrap()
+            .rsplit('/')
+            .nth(1)
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(
+            children.table.get(first).map(|(_, role)| role),
+            Some(Role::Media)
+        );
+        assert!(
+            children.table.get(0).is_none(),
+            "an earlier reload's entry stayed"
+        );
+        // One playlist naming more than the limit holds does not fit at all.
+        let mut table = Table::default();
+        let mut children = Children {
+            core: CORE,
+            prefix: PREFIX,
+            table: &mut table,
+            alive: &|| true,
+        };
+        let wide = media(0..MAX_ENTRIES + 1, "c");
+        let refused = rewrite_hls(wide.as_bytes(), &base, true, &mut children);
+        assert_eq!(refused.unwrap_err(), "too many resources");
     }
 
     /// The golden outputs Media3 parses in the Android `ManifestCorpusTest`:
