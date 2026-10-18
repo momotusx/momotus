@@ -62,9 +62,10 @@ final class CoreClient {
     /// it: until it is open, requests and messages queue in order behind it.
     private func openCore() {
         let router = CoreRouter()
-        router.onDied { [weak self] reason in
+        // Weak: the router keeps this handler, so a strong hold would keep every replaced router.
+        router.onDied { [weak self, weak router] reason in
             Task { @MainActor in
-                guard let self, self.router === router else { return }
+                guard let self, let router, self.router === router else { return }
                 // Falling behind is no crash: a new core opens at once.
                 if reason.hasPrefix("overflow") { self.restart() } else { self.failure = "The core stopped (\(reason))." }
             }

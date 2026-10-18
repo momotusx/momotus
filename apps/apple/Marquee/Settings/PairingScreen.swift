@@ -294,7 +294,7 @@ enum SyncRecord {
     }
 
     static func load() -> JSONValue? {
-        Keychain.read("syncRecord").flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }
+        (try? Keychain.read("syncRecord")).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }
     }
 
     static func delete() {

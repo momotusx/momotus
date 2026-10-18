@@ -5,13 +5,16 @@ import Foundation
 
 /// Small named secrets: the Keychain in the app, a dictionary in tests.
 protocol SecretItems: Sendable {
-    func read(_ account: String) -> Data?
+    /// Nil when there is no such item; throws when the store could not be
+    /// read, which never counts as absent.
+    func read(_ account: String) throws -> Data?
     /// False when the store refused it.
     func write(_ account: String, _ data: Data) -> Bool
     /// False when the store refused it; an absent item is removed already.
     func delete(_ account: String) -> Bool
-    /// The names of the stored items that start with `prefix`.
-    func accounts(prefix: String) -> [String]
+    /// The names of the stored items that start with `prefix`; throws when
+    /// the store could not list them.
+    func accounts(prefix: String) throws -> [String]
 }
 
 enum DebridKeystoreError: Error {
@@ -40,27 +43,29 @@ struct ItemDebridKeystore: DebridKeystore {
 
     // In the services' order, the order the legacy keys kept: `restoreDebrid`
     // makes the first the default, so a refresh never changes which one it is.
+    // A read or a listing that fails throws: a record that could not be read
+    // is never taken for one that is gone, so its tombstone stays.
     func records() async throws -> [DebridRecord] {
-        let found = items.accounts(prefix: "debrid.record.").compactMap { items.read($0) }
+        let found = try items.accounts(prefix: "debrid.record.").compactMap { try items.read($0) }
             .compactMap { try? JSONDecoder().decode(DebridRecord.self, from: $0) }
         return Self.inServiceOrder(found)
     }
 
     func tombstones() async throws -> [DebridTombstone] {
-        items.accounts(prefix: "debrid.tombstone.").compactMap { items.read($0) }
+        try items.accounts(prefix: "debrid.tombstone.").compactMap { try items.read($0) }
             .compactMap { try? JSONDecoder().decode(DebridTombstone.self, from: $0) }
     }
 
     /// `(service, key)` pairs from before records, still to move, in the
     /// services' order. A service with a record or a tombstone has moved (or
-    /// was disconnected): its key is skipped and deleted.
+    /// was disconnected): its key is skipped and deleted. When the records or
+    /// tombstones cannot be read, nothing moves: one of them may be newer.
     func legacy() async -> [(service: String, key: String)] {
-        let stored = (try? await records()) ?? []
-        let buried = (try? await tombstones()) ?? []
+        guard let stored = try? await records(), let buried = try? await tombstones() else { return [] }
         let taken = Set(stored.map(\.service) + buried.map(\.service))
         var left: [(service: String, key: String)] = []
         for service in DebridWords.services {
-            guard let data = items.read(Self.legacy(service.id)) else { continue }
+            guard let data = try? items.read(Self.legacy(service.id)) else { continue }
             if taken.contains(service.id) {
                 _ = items.delete(Self.legacy(service.id))
             } else {
@@ -83,7 +88,7 @@ struct ItemDebridKeystore: DebridKeystore {
 
     func deleteRecord(service: String, generation: String) async throws {
         let name = Self.record(service)
-        guard let data = items.read(name), (try? JSONDecoder().decode(DebridRecord.self, from: data))?.generation == generation else { return }
+        guard let data = try items.read(name), (try? JSONDecoder().decode(DebridRecord.self, from: data))?.generation == generation else { return }
         guard items.delete(name) else { throw DebridKeystoreError.refused }
     }
 

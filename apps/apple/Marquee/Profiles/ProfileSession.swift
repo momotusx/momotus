@@ -147,6 +147,12 @@ final class ProfileSession {
         for _ in 0..<50 where shellOnScreen {
             try? await Task.sleep(for: .milliseconds(100))
         }
+        // Still there after 5 s: the switch is not sent; the picker says so, with Cancel.
+        if shellOnScreen {
+            coreLog.error("switch: the old profile's screens did not leave in 5 s")
+            switchProblem = CoreError("The old profile's screens did not close.", code: "viewsOpen")
+            return false
+        }
         for attempt in 1...10 {
             do {
                 try await core.perform("switchProfile", fields)

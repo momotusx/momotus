@@ -13,11 +13,15 @@ enum Keychain {
         ]
     }
 
-    static func read(_ account: String) -> Data? {
+    /// The value, or nil when there is none. Throws when the Keychain did not
+    /// answer, which is not the same as absent.
+    static func read(_ account: String) throws -> Data? {
         var query = query(account)
         query[kSecReturnData as String] = true
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw KeychainError(status: status) }
         return result as? Data
     }
 
@@ -45,8 +49,9 @@ enum Keychain {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 
-    /// The names of the app's items that start with `prefix`.
-    static func accounts(prefix: String) -> [String] {
+    /// The names of the app's items that start with `prefix`. Throws when the
+    /// Keychain could not list them.
+    static func accounts(prefix: String) throws -> [String] {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "app.marquee",
@@ -55,25 +60,31 @@ enum Keychain {
             kSecReturnAttributes as String: true,
         ]
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let items = result as? [[String: Any]] else { return [] }
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else { throw KeychainError(status: status) }
         return items.compactMap { $0[kSecAttrAccount as String] as? String }.filter { $0.hasPrefix(prefix) }.sorted()
     }
 }
 
+/// A Keychain answer other than found or not found.
+struct KeychainError: Error {
+    let status: OSStatus
+}
+
 /// The debrid keystore's items in the Keychain.
 struct KeychainItems: SecretItems {
-    func read(_ account: String) -> Data? { Keychain.read(account) }
+    func read(_ account: String) throws -> Data? { try Keychain.read(account) }
     func write(_ account: String, _ data: Data) -> Bool { Keychain.write(account, data) }
     func delete(_ account: String) -> Bool { Keychain.delete(account) }
-    func accounts(prefix: String) -> [String] { Keychain.accounts(prefix: prefix) }
+    func accounts(prefix: String) throws -> [String] { try Keychain.accounts(prefix: prefix) }
 }
 
 /// This install's sync device id, kept in the Keychain.
 enum DeviceId {
     static func current(fallbackDirectory: URL) -> UInt64 {
         let file = fallbackDirectory.appending(path: "device-id")
-        let stored = Keychain.read("deviceId") ?? (try? Data(contentsOf: file))
+        let stored = (try? Keychain.read("deviceId")) ?? (try? Data(contentsOf: file))
         if let stored, let id = UInt64(String(decoding: stored, as: UTF8.self)) {
             return id
         }
