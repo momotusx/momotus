@@ -2722,6 +2722,14 @@ async fn a_dash_playback_is_served_entirely_through_loopback() {
     let init = mpd_attrs(&mpd, "initialization")[0].clone();
     assert_eq!(read(under(&media)).await.body[..], b"segment one"[..]);
     assert_eq!(read(under(&init)).await.body[..], b"init section"[..]);
+    // A file the origin does not have: the error is readable by any page too.
+    let missing = raw(&server, &under("seg-9.m4s"), "GET", None).await;
+    let missing = missing.to_ascii_lowercase();
+    assert!(!missing.starts_with("http/1.1 200"), "{missing}");
+    assert!(
+        missing.contains("access-control-allow-origin: *"),
+        "{missing}"
+    );
     // The file base: ranges, with its signed query.
     let ranged = http.get_range(&bases[2], 100, 50, &local()).await.unwrap();
     assert_eq!(ranged.status, 206);
