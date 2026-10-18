@@ -88,10 +88,16 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
   expect((await picker()).active).toBe(kid);
 
-  // The browser's own Back never reopens Main's pages under Kid, across a reload too.
+  // The browser's own Back never reopens Main's pages under Kid, across a reload too, and the app
+  // goes on from there without bouncing back Home.
   await page.goBack();
   await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
   await expect(page).not.toHaveURL(/\/profiles\/edit\/default/);
+  await page.locator('[data-f="nav:/library"]').click();
+  await expect(page).toHaveURL(/\/library/);
+  await page.locator('[data-f="nav:/settings"]').click();
+  await expect(page).toHaveURL(/\/settings/);
+  await expect(page.locator('[data-f="settings:profiles"]')).toContainText("Kid");
 
   // Back to Main needs its PIN: a wrong one says so, the right one switches.
   await page.goto("/profiles?form=tv");
@@ -125,7 +131,10 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   // Deleting asks first; Escape keeps the profile, and the page behind waits meanwhile.
   await page.locator('[data-f="pedit:delete"]').click();
   await expect(page.locator(".topnav")).toHaveJSProperty("inert", true);
+  // It opens on Keep: a held OK can never delete.
+  await expect.poll(() => focused(page)).toBe("pedit:delete:no");
   await page.keyboard.press("Escape");
+  await expect.poll(() => focused(page)).toBe("pedit:delete");
   await expect(page.locator('[data-f="pedit:delete:yes"]')).toHaveCount(0);
   await expect(page.locator(".topnav")).toHaveJSProperty("inert", false);
   await page.locator('[data-f="pedit:delete"]').click();

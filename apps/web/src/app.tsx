@@ -6,10 +6,10 @@ import House from "lucide-solid/icons/house";
 import LibraryBig from "lucide-solid/icons/library-big";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
-import { type Component, createEffect, For, on, Show } from "solid-js";
+import { type Component, createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import { AvatarArt } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
-import { gateOpen, launchProfile, profiles, profilesFailed } from "./core/profiles";
+import { gateOpen, launchProfile, profiles, profilesFailed, rememberShown } from "./core/profiles";
 import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
 import { historyBase, historyDepth, resetHistoryBase } from "./history";
@@ -115,8 +115,6 @@ function Tabs() {
 }
 
 let focusInstalled = false;
-// The profile the current route and history were opened under (none known: a fresh tab).
-let routeProfile = launchProfile;
 
 function Shell(props: RouteSectionProps) {
   const location = useLocation();
@@ -136,28 +134,38 @@ function Shell(props: RouteSectionProps) {
     focusInstalled = true;
     installFocus(back);
   }
-  // A route belongs to the profile it was opened under: once another profile
+  // A route belongs to the profile it was opened under. Once another profile
   // shows (a switch, a reload after another tab switched, the remembered one
-  // removed), the app opens on Home and Back stops at it.
+  // removed), Home opens as a new entry: the old profile's entries end below
+  // the history base, and the push drops any forward ones. Its page never
+  // renders in between.
+  const [routeProfile, setRouteProfile] = createSignal(launchProfile);
+  const shown = () => (gateOpen() ? profiles()?.active : undefined);
+  const foreign = createMemo(() => {
+    const active = shown();
+    const owner = routeProfile();
+    return !!active && !!owner && owner !== active;
+  });
   createEffect(
-    on(
-      () => (gateOpen() ? profiles()?.active : undefined),
-      (active) => {
-        if (!active) return;
-        if (routeProfile && routeProfile !== active) {
-          resetHistoryBase();
-          navigate("/", { replace: true });
-        }
-        routeProfile = active;
-      },
-    ),
+    on(shown, (active) => {
+      if (!active) return;
+      rememberShown(active);
+      if (foreign()) {
+        resetHistoryBase(historyDepth() + 1);
+        navigate("/");
+      }
+      setRouteProfile(active);
+    }),
   );
   createEffect(
     on(
       () => location.pathname,
       () => {
-        // The browser's own Back reached an entry of an earlier profile.
+        // The browser's own Back reached an entry of an earlier profile: Home
+        // replaces it, and the base comes down to it, so the app's own pages
+        // from here on count as this profile's.
         if (historyDepth() < historyBase() && location.pathname !== "/") {
+          resetHistoryBase();
           navigate("/", { replace: true });
           return;
         }
@@ -177,12 +185,14 @@ function Shell(props: RouteSectionProps) {
       <Show when={link() !== "closed"}>
         <Show when={profiles()} fallback={<Show when={profilesFailed()}>{(r) => <p class="banner bad">{r()}</p>}</Show>}>
           <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
+            <Show when={!foreign()}>
             <Show when={nav() && form() !== "phone"}>
               <TopNav />
             </Show>
             <div class="screen">{props.children}</div>
             <Show when={nav() && form() === "phone"}>
               <Tabs />
+            </Show>
             </Show>
           </Show>
         </Show>

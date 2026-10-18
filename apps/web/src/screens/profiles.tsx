@@ -28,6 +28,8 @@ const isBack = (e: KeyboardEvent) => e.key === "Escape" || e.key === "GoBack" ||
  * the page's main and only the navigation goes inert. */
 function holdModal(inside?: () => HTMLElement) {
   const before = document.activeElement as HTMLElement | null;
+  // The opener is often rebuilt when the dialog closes: it is found again by its key.
+  const key = before?.dataset.f;
   const held: HTMLElement[] = [];
   onMount(() => {
     const keep = inside?.();
@@ -40,7 +42,10 @@ function holdModal(inside?: () => HTMLElement) {
   });
   onCleanup(() => {
     for (const el of held) el.inert = false;
-    if (before?.isConnected) queueMicrotask(() => before.focus());
+    queueMicrotask(() => {
+      const back = before?.isConnected ? before : key ? document.querySelector<HTMLElement>(`[data-f="${key}"]`) : null;
+      back?.focus();
+    });
   });
 }
 
@@ -52,6 +57,9 @@ function siblingsUpTo(el: HTMLElement): HTMLElement[] {
   }
   return out;
 }
+
+/** How long a PIN try may wait for the core before the keypad lets go. */
+const PIN_WAIT_MS = 20_000;
 
 /** What a PIN try came to. */
 type Tried = { kind: "ok" } | { kind: "wrong" } | { kind: "wait"; ms: number } | { kind: "problem"; text: string };
@@ -99,7 +107,11 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
   const submit = async (pin: string) => {
     setBusy(true);
     const mine = ++attempt;
-    const result = await props.onSubmit(pin);
+    // A core that never answers must not hold the keypad (and its Cancel) for good.
+    const silent = new Promise<Tried>((done) =>
+      setTimeout(() => done({ kind: "problem", text: "The core did not answer. Try again." }), PIN_WAIT_MS),
+    );
+    const result = await Promise.race([props.onSubmit(pin), silent]);
     if (!alive || mine !== attempt) return;
     setBusy(false);
     setDigits("");
@@ -620,8 +632,15 @@ export function EditProfile() {
 function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () => void }) {
   let root!: HTMLDivElement;
   holdModal(() => root);
+  // A held OK repeats: only the first press counts while it is open. Backspace,
+  // the app's Back, keeps the profile like Escape.
   const onKey = (e: KeyboardEvent) => {
-    if (!isBack(e)) return;
+    if (e.repeat && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (!isBack(e) && e.key !== "Backspace") return;
     e.preventDefault();
     e.stopPropagation();
     props.onKeep();
@@ -634,10 +653,10 @@ function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () =
                   Delete {props.name}? Their library, progress and settings are removed from this device now and from your other devices when they next sync.
                 </p>
                 <div class="acts">
-                  <button class="btn danger" data-f="pedit:delete:yes" data-autofocus onClick={() => props.onDelete()}>
+                  <button class="btn danger" data-f="pedit:delete:yes" onClick={() => props.onDelete()}>
                     Delete {props.name}
                   </button>
-                  <button class="btn" data-f="pedit:delete:no" onClick={() => props.onKeep()}>
+                  <button class="btn" data-f="pedit:delete:no" data-autofocus onClick={() => props.onKeep()}>
                     Keep
                   </button>
                 </div>

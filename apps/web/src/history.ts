@@ -15,12 +15,18 @@ const stored = (() => {
     return null;
   }
 })();
-let base = stored === null ? historyDepth() : Number(stored);
+// Only a reload or a return through history is the same visit; a page loaded
+// anew starts its own base.
+const sameVisit = (() => {
+  const nav = performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined;
+  return nav?.type === "reload" || nav?.type === "back_forward";
+})();
+let base = stored === null || !sameVisit ? historyDepth() : Number(stored);
 export const historyBase = () => base;
 
-/** After a profile switch: the entries below this one belong to the old profile. */
-export function resetHistoryBase() {
-  base = historyDepth();
+/** After a profile switch: the entries below [depth] (this one by default) belong to the old profile. */
+export function resetHistoryBase(depth = historyDepth()) {
+  base = depth;
   try {
     sessionStorage.setItem(BASE, String(base));
   } catch {

@@ -54,10 +54,13 @@ export class Bridge {
   // with no listener belongs to a closed view and is dropped.
   private early = new Map<number, unknown[][]>();
   private opening = 0;
+  /** The transport closed for good: every later request fails at once instead of waiting forever. */
+  private closed = false;
 
   constructor(private transport: Transport) {
     transport.onMessage((text) => this.receive(text));
     transport.onClose(() => {
+      this.closed = true;
       for (const { reject } of this.pending.values()) reject(new BridgeError("connection closed"));
       this.pending.clear();
       this.early.clear();
@@ -101,6 +104,7 @@ export class Bridge {
   }
 
   request<T>(op: string, fields: Record<string, unknown> = {}, onResult?: (result: T) => void): Promise<T> {
+    if (this.closed) return Promise.reject(new BridgeError("connection closed"));
     const id = this.nextId++;
     const opens = op === "subscribe";
     if (opens) this.opening++;

@@ -34,9 +34,30 @@ const rememberedChoice = () => {
     return null;
   }
 };
-/** The profile this tab showed before a reload: its route and history belong to that profile. */
-export const launchProfile = rememberedChoice();
 export const markChosen = () => choose(profiles()?.active);
+
+// Which profile the tab's routes and history belong to, kept apart from the
+// start picker's answer: a one-profile tab never chose, but its routes still
+// belong to the profile it showed.
+const SHOWN = "mq.profileShown";
+
+/** The profile this tab showed before a reload: its routes and history belong to that profile. */
+export const launchProfile = (() => {
+  try {
+    return sessionStorage.getItem(SHOWN);
+  } catch {
+    return null;
+  }
+})();
+
+/** The profile the open app shows now. */
+export function rememberShown(active: string) {
+  try {
+    sessionStorage.setItem(SHOWN, active);
+  } catch {
+    // Kept for this page only.
+  }
+}
 
 /** Whether the app may show profile content, or only the picker. */
 export function gateOpen(): boolean {

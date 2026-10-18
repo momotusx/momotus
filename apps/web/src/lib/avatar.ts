@@ -22,11 +22,13 @@ export function parseAvatar(stored: string): Avatar {
 
 export const formatAvatar = (a: { glyph: Glyph; color: AvatarColor }) => `${a.glyph}:${a.color}`;
 
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+// Older TV browsers have no Segmenter: they draw the first code point instead.
+const graphemes = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
 
 /** The name's first grapheme (a letter with its accents, a joined emoji), as the letter avatar draws it. */
 export function initial(name: string): string {
-  const first = graphemes.segment(name.trim())[Symbol.iterator]().next().value?.segment;
+  const text = name.trim();
+  const first = graphemes ? graphemes.segment(text)[Symbol.iterator]().next().value?.segment : [...text][0];
   return first ? first.toLocaleUpperCase() : "?";
 }
 
