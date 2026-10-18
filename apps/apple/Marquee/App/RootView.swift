@@ -102,6 +102,7 @@ struct MainShell: View {
     @State private var home: HomeModel
     @State private var tab = AppTab.home
     @State private var homePath: [TitleRoute] = []
+    @State private var settingsPath: [SettingsPage] = []
     @State private var immersion = Immersion()
     @Environment(ProfileSession.self) private var profiles
     /// Home has scrolled off its top row (TV Back takes it there first).
@@ -138,6 +139,10 @@ struct MainShell: View {
             .onAppear {
                 if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }
                 if let start = DebugHooks.tab { select(start) }
+                if let page = DebugHooks.takeSettingsPage() {
+                    select(.settings)
+                    settingsPath = [page]
+                }
             }
             .task {
                 for url in DebugHooks.installAddons {
@@ -237,7 +242,7 @@ struct MainShell: View {
         case .calendar:
             NavigationStack { CalendarScreen(core: core).root(of: .calendar, covered: coveredBinding).withTitleRoutes(core: core) }
         case .settings:
-            NavigationStack { SettingsScreen(core: core).root(of: .settings, covered: coveredBinding) }
+            NavigationStack(path: $settingsPath) { SettingsScreen(core: core).root(of: .settings, covered: coveredBinding) }
         }
     }
 

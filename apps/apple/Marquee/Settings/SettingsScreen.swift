@@ -1,6 +1,12 @@
 import Foundation
 import SwiftUI
 
+/// A Settings page opened by value (the debug launch hooks).
+enum SettingsPage: Hashable {
+    case findAddons
+    case pairing
+}
+
 /// Sources (addons) and the few playback choices worth making; everything
 /// else has a device-aware default.
 struct SettingsScreen: View {
@@ -11,10 +17,6 @@ struct SettingsScreen: View {
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @Environment(DebridSession.self) private var debrid
-    #if DEBUG
-    @State private var previewPairing = false
-    @State private var openFindAddons = false
-    #endif
 
     init(core: CoreClient) {
         self.core = core
@@ -131,18 +133,12 @@ struct SettingsScreen: View {
         .topScrim()
         .task(id: prefs.taskId) { prefs.start() }
         .task(id: addons.taskId) { addons.start() }
-        #if DEBUG
-        .navigationDestination(isPresented: $previewPairing) { PairingScreen(core: core) }
-        .navigationDestination(isPresented: $openFindAddons) { FindAddonsScreen(core: core) }
-        .task {
-            if DebugHooks.takePairedPreview() { previewPairing = true }
-            if DebugHooks.takeOpenScreen("findAddons") {
-                // After the stack's first frames: pushed during them, SwiftUI updates the page without end.
-                try? await Task.sleep(for: .milliseconds(500))
-                openFindAddons = true
+        .navigationDestination(for: SettingsPage.self) { page in
+            switch page {
+            case .findAddons: FindAddonsScreen(core: core)
+            case .pairing: PairingScreen(core: core)
             }
         }
-        #endif
     }
 
     private func section(_ title: String) -> some View {

@@ -46,23 +46,19 @@ enum DebugHooks {
     /// stored and no sync starts: a live join needs a second device and a relay.
     static var pairedPreview: Bool { UserDefaults.standard.bool(forKey: "MQPairedPreview") }
 
-    @MainActor static func takePairedPreview() -> Bool {
-        guard !pairedPreviewTaken, pairedPreview else { return false }
-        pairedPreviewTaken = true
-        return true
+    /// The Settings page to open once at launch: `-MQOpenScreen findAddons`
+    /// (SwiftUI menus do not open under idb's synthetic taps), or the pairing
+    /// preview. It goes on the Settings stack's path, as `-MQOpenTitle` does on
+    /// Home's: an `isPresented` destination turned on from Settings' first
+    /// task kept SwiftUI updating at full CPU for 20 to 60 s.
+    @MainActor static func takeSettingsPage() -> SettingsPage? {
+        guard !settingsPageTaken else { return nil }
+        settingsPageTaken = true
+        if UserDefaults.standard.string(forKey: "MQOpenScreen") == "findAddons" { return .findAddons }
+        return pairedPreview ? .pairing : nil
     }
 
-    @MainActor private static var pairedPreviewTaken = false
-
-    /// `-MQTab settings -MQOpenScreen findAddons` opens that page from Settings
-    /// once at launch: SwiftUI menus do not open under idb's synthetic taps.
-    @MainActor static func takeOpenScreen(_ name: String) -> Bool {
-        guard !openScreenTaken, UserDefaults.standard.string(forKey: "MQOpenScreen") == name else { return false }
-        openScreenTaken = true
-        return true
-    }
-
-    @MainActor private static var openScreenTaken = false
+    @MainActor private static var settingsPageTaken = false
 
     /// `-MQKillCoreAfter 12`: that many seconds after launch the app gets the
     /// message a panicking core sends, to walk a core death and its restart.
