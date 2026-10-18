@@ -1999,11 +1999,6 @@ mod catalog {
                 "notListed",
                 "This addon is no longer in the list",
             ),
-            (
-                ListedFailure::Changed,
-                "changed",
-                "Another device changed your addons first",
-            ),
         ];
         for (failure, code, words) in wire {
             let failure = Failure::from(ListedError::Refused(failure));

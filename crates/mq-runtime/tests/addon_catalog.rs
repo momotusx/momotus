@@ -9,7 +9,7 @@ use mq_runtime::views::addon_catalog::{
 };
 use mq_runtime::{
     AddonCatalogSnapshot, AddonCatalogView, AddonList, AddonsView, Configuration, Core, CoreConfig,
-    CoreError, Installed, ListState, ListedAddon, ListedEntry, ListedError, ListedFailure,
+    Installed, ListState, ListedAddon, ListedEntry, ListedError, ListedFailure,
 };
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -826,31 +826,6 @@ async fn concurrent_addon_edits_all_land() {
         task.await.unwrap();
     }
     assert_eq!(core.library().addons("p").unwrap().len(), 160);
-}
-
-#[tokio::test]
-async fn an_edit_a_newer_list_overrules_never_reads_as_done() {
-    let core = Core::temporary("p").unwrap();
-    // A list stamped at the highest clock (a device far ahead): no local
-    // write wins over it.
-    let kept = row("https://kept.example/manifest.json", "kept", true);
-    let newest = "f".repeat(32);
-    core.library()
-        .set_addons("p", std::slice::from_ref(&kept), &newest)
-        .unwrap();
-    let entry = ListedEntry {
-        key: Url::parse("https://a.example/manifest.json").unwrap(),
-        id: "a".into(),
-    };
-    let result =
-        install_listed_with(&core, &entry, |_| async { Ok(manifest("a", json!({}))) }).await;
-    assert_eq!(refused(result), ListedFailure::Changed);
-    let toggled = core.set_addon_enabled(&kept.transport_url, false);
-    assert!(
-        matches!(toggled, Err(CoreError::AddonsChanged)),
-        "{toggled:?}"
-    );
-    assert_eq!(core.library().addons("p").unwrap(), [kept]);
 }
 
 #[tokio::test]

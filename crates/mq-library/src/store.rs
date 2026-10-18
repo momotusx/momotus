@@ -304,9 +304,8 @@ impl Library {
         })
     }
 
-    /// Replaces the profile's addon list in one transaction, keeping order.
-    /// Last writer wins like every register: a newer list pulled meanwhile is
-    /// kept.
+    /// Replaces the profile's addon list with `addons` in one transaction,
+    /// keeping order. An edit of the stored list goes through `edit_addons`.
     pub fn set_addons(
         &self,
         profile: &str,
@@ -320,23 +319,34 @@ impl Library {
         })
     }
 
+    /// Edits the profile's addon list in one write transaction: `edit` gets
+    /// the list as stored and what it leaves is written, positions in its
+    /// order. Nothing (a pull, another edit) lands between the read and the
+    /// write, so the edit never rewrites a list it did not see. An error
+    /// from `edit` writes nothing and is returned.
+    pub fn edit_addons<E: From<LibraryError>>(
+        &self,
+        profile: &str,
+        hlc: &str,
+        edit: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let mut refused = None;
+        self.write(|c| {
+            refuse_gone(c, profile)?;
+            let mut rows = addon_rows(c, profile)?;
+            if let Err(e) = edit(&mut rows) {
+                refused = Some(e);
+                return Ok(());
+            }
+            local(c, coll::ADDONS, &[profile], hlc, |h| {
+                sql::set_addons(c, profile, &rows, h)
+            })
+        })?;
+        refused.map_or(Ok(()), Err)
+    }
+
     pub fn addons(&self, profile: &str) -> Result<Vec<AddonRow>, LibraryError> {
-        self.read(|c| {
-            let mut stmt = c.prepare(
-                "SELECT transport_url, manifest_json, position, enabled, allow_private
-                 FROM addons WHERE profile_id = ?1 ORDER BY position",
-            )?;
-            stmt.query_map(params![profile], |r| {
-                Ok(AddonRow {
-                    transport_url: r.get(0)?,
-                    manifest_json: r.get(1)?,
-                    position: r.get(2)?,
-                    enabled: r.get(3)?,
-                    allow_private: r.get(4)?,
-                })
-            })?
-            .collect()
-        })
+        self.read(|c| addon_rows(c, profile))
     }
 
     pub fn upsert_item(
@@ -548,6 +558,24 @@ fn open_connection(target: &str) -> Result<Connection, LibraryError> {
 /// Collects touched tables during a transaction and broadcasts them on commit.
 /// One write transaction: committed when `f` succeeds, rolled back (on
 /// drop) otherwise.
+/// The profile's addons in their order.
+fn addon_rows(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AddonRow>> {
+    let mut stmt = c.prepare(
+        "SELECT transport_url, manifest_json, position, enabled, allow_private
+         FROM addons WHERE profile_id = ?1 ORDER BY position",
+    )?;
+    stmt.query_map(params![profile], |r| {
+        Ok(AddonRow {
+            transport_url: r.get(0)?,
+            manifest_json: r.get(1)?,
+            position: r.get(2)?,
+            enabled: r.get(3)?,
+            allow_private: r.get(4)?,
+        })
+    })?
+    .collect()
+}
+
 fn commit<T>(
     conn: &mut Connection,
     f: impl FnOnce(&Connection) -> rusqlite::Result<T>,

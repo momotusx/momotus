@@ -188,6 +188,58 @@ fn a_local_addon_edit_lands_above_a_newer_pulled_list_and_is_queued() {
 }
 
 #[test]
+fn a_pull_during_an_addon_edit_lands_after_it_and_keeps_the_other_devices_addon() {
+    let a = Library::temporary().unwrap();
+    let b = Library::temporary().unwrap();
+    let row = |url: &str| AddonRow {
+        transport_url: url.into(),
+        manifest_json: "{}".into(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    let urls = |lib: &Library| -> Vec<String> {
+        lib.addons("p")
+            .unwrap()
+            .into_iter()
+            .map(|r| r.transport_url)
+            .collect()
+    };
+    let (x, y, z) = (
+        "https://x/manifest.json",
+        "https://y/manifest.json",
+        "https://z/manifest.json",
+    );
+    a.set_addons("p", &[row(x)], &hlc(1, 1)).unwrap();
+    b.apply(&all(&a)).unwrap();
+    // A adds y; B, whose clock is behind, installs z. A's list reaches B
+    // after B's edit read [x] and before it wrote.
+    a.set_addons("p", &[row(x), row(y)], &hlc(9, 1)).unwrap();
+    let pulled = all(&a);
+    std::thread::scope(|s| {
+        b.edit_addons("p", &hlc(5, 2), |rows| {
+            assert_eq!(*rows, [row(x)]);
+            let (done, applied) = std::sync::mpsc::channel();
+            let (b, pulled) = (&b, &pulled);
+            s.spawn(move || {
+                b.apply(pulled).unwrap();
+                let _ = done.send(());
+            });
+            // Time enough for the pull to land if anything let it: the
+            // edit's transaction holds it until the write commits.
+            let landed = applied.recv_timeout(std::time::Duration::from_millis(250));
+            assert!(landed.is_err(), "the pull landed inside the edit");
+            rows.push(row(z));
+            Ok::<_, mq_library::LibraryError>(())
+        })
+        .unwrap();
+    });
+    // The pull applied after the edit, and A's newer list won as a whole:
+    // y is kept, never overwritten by an edit of the list before it.
+    assert_eq!(urls(&b), [x, y]);
+}
+
+#[test]
 fn cache_and_import_writes_never_override_a_real_edit() {
     let lib = Library::temporary().unwrap();
     lib.upsert_item("p", &item("tt1"), true, &hlc(50, 7))

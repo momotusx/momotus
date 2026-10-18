@@ -171,8 +171,6 @@ pub enum ListedFailure {
     Mismatch,
     Adult,
     NotListed,
-    /// The write did not land: a newer list from another device won.
-    Changed,
 }
 
 impl ListedFailure {
@@ -184,7 +182,6 @@ impl ListedFailure {
             Self::Mismatch => "mismatch",
             Self::Adult => "adult",
             Self::NotListed => "notListed",
-            Self::Changed => "changed",
         }
     }
 
@@ -196,7 +193,6 @@ impl ListedFailure {
             Self::Mismatch => "This addon is not the one the list named",
             Self::Adult => "This addon is for adults and is not shown",
             Self::NotListed => "This addon is no longer in the list",
-            Self::Changed => "Another device changed your addons first",
         }
     }
 }
@@ -351,7 +347,6 @@ where
     });
     match written {
         Ok(()) | Err(CoreError::AlreadyInstalled(_)) => Ok((manifest.id, manifest.name)),
-        Err(CoreError::AddonsChanged) => Err(ListedFailure::Changed.into()),
         Err(e) => Err(e.into()),
     }
 }

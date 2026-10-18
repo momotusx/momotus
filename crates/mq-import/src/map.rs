@@ -187,18 +187,17 @@ fn map_addons(
         }
     }
     report.addons_imported = rows.len();
-    let local = lib.addons(profile_id)?;
-    for row in &mut rows {
-        if let Some(existing) = local.iter().find(|e| e.transport_url == row.transport_url) {
-            row.enabled = existing.enabled;
+    // Merged with the list as stored, in the same transaction as the write.
+    lib.edit_addons(profile_id, hlc, |local: &mut Vec<AddonRow>| {
+        for row in &mut rows {
+            if let Some(existing) = local.iter().find(|e| e.transport_url == row.transport_url) {
+                row.enabled = existing.enabled;
+            }
         }
-    }
-    rows.extend(
-        local
-            .into_iter()
-            .filter(|e| !seen.contains(&e.transport_url)),
-    );
-    lib.set_addons(profile_id, &rows, hlc)
+        rows.extend(local.drain(..).filter(|e| !seen.contains(&e.transport_url)));
+        *local = rows;
+        Ok::<_, LibraryError>(())
+    })
 }
 
 fn map_items(
