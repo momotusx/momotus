@@ -68,6 +68,14 @@ class CoreOps(
     suspend fun installAddon(url: String): InstalledAddon =
         call("installAddon", mapOf("url" to text(url)), InstalledAddon.serializer())
 
+    /**
+     * Installs an entry of an open `addonCatalog` view by its `key`. A refusal is a [CoreError] whose
+     * `code` is `timeout`, `unreachable`, `needsSetup`, `mismatch`, `adult`, `notListed` or
+     * `switched`, with the core's words for the card as its message.
+     */
+    suspend fun installListed(key: String): InstalledAddon =
+        call("installListed", mapOf("key" to text(key)), InstalledAddon.serializer())
+
     suspend fun removeAddon(url: String) {
         client.request("removeAddon", mapOf("url" to text(url)))
     }

@@ -17,6 +17,7 @@ object CoreTimeouts {
     private val networkOps =
         setOf(
             "installAddon",
+            "installListed",
             "syncNow",
             "approvePairing",
             "createRecoveryKit",

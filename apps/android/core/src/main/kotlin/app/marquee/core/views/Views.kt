@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreLog
+import app.marquee.core.model.AddonCatalogSnapshot
 import app.marquee.core.model.AddonsSnapshot
 import app.marquee.core.model.CalendarSnapshot
 import app.marquee.core.model.DebridLoginSnapshot
@@ -223,6 +224,22 @@ class AddonsView(
     client: CoreClient,
     scope: CoroutineScope,
 ) : RecordView<AddonsSnapshot>(client, scope, "addons", NO_PARAMS, AddonsSnapshot.serializer())
+
+/**
+ * Find addons: Cinemeta's Official and Community lists, read at open. [fresh] waits for the network
+ * instead of the addon cache (Refresh and Try again close the view and open it with it).
+ */
+class AddonCatalogView(
+    client: CoreClient,
+    scope: CoroutineScope,
+    fresh: Boolean,
+) : RecordView<AddonCatalogSnapshot>(
+        client,
+        scope,
+        "addonCatalog",
+        if (fresh) JsonObject(mapOf("fresh" to JsonPrimitive(true))) else NO_PARAMS,
+        AddonCatalogSnapshot.serializer(),
+    )
 
 class SettingsView(
     client: CoreClient,

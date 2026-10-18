@@ -20,6 +20,7 @@ import app.marquee.core.secrets.DeviceId
 import app.marquee.core.secrets.KeystoreKeySource
 import app.marquee.core.secrets.SecretDebridKeystore
 import app.marquee.core.secrets.SecretStore
+import app.marquee.core.views.AddonCatalogView
 import app.marquee.core.views.AddonsView
 import app.marquee.core.views.CalendarView
 import app.marquee.core.views.DebridLoginView
@@ -230,6 +231,8 @@ class CoreSession(
     fun addons() = AddonsView(client, scope).also { it.open() }
 
     fun settings() = SettingsView(client, scope).also { it.open() }
+
+    fun addonCatalog(fresh: Boolean = false) = AddonCatalogView(client, scope, fresh).also { it.open() }
 
     fun import() = ImportView(client, scope).also { it.open() }
 

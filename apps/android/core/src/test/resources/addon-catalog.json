@@ -1,0 +1,203 @@
+{
+ "lists": [
+  {
+   "id": "official",
+   "name": "Official",
+   "state": {
+    "state": "ready"
+   },
+   "entries": [
+    {
+     "key": "https://v3-cinemeta.strem.io/manifest.json",
+     "id": "com.linvo.cinemeta",
+     "host": "v3-cinemeta.strem.io",
+     "name": "Cinemeta",
+     "description": "The official addon for movie and series catalogs",
+     "types": [
+      "movie",
+      "series"
+     ],
+     "provides": [
+      "catalog",
+      "meta",
+      "addon_catalog"
+     ],
+     "configuration": "none",
+     "configureUrl": "https://v3-cinemeta.strem.io/configure",
+     "installed": "on",
+     "copyKey": null
+    },
+    {
+     "key": "https://v3-channels.strem.io/manifest.json",
+     "id": "com.linvo.stremiochannels",
+     "host": "v3-channels.strem.io",
+     "name": "YouTube",
+     "description": "Watch your favourite YouTube channels ad-free and get notified when they upload new videos.",
+     "types": [
+      "channel"
+     ],
+     "provides": [
+      "catalog",
+      "meta"
+     ],
+     "configuration": "none",
+     "configureUrl": "https://v3-channels.strem.io/configure",
+     "installed": "absent",
+     "copyKey": null
+    },
+    {
+     "key": "https://watchhub.strem.io/manifest.json",
+     "id": "org.stremio.watchhub",
+     "host": "watchhub.strem.io",
+     "name": "WatchHub",
+     "description": "Find where to stream your favorite movies and shows amongst Netflix, iTunes, Hulu, Amazon, HBO GO and many others. Supports many countries.",
+     "types": [
+      "movie",
+      "series"
+     ],
+     "provides": [
+      "stream"
+     ],
+     "configuration": "none",
+     "configureUrl": "https://watchhub.strem.io/configure",
+     "installed": "off",
+     "copyKey": null
+    },
+    {
+     "key": "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json",
+     "id": "org.stremio.pubdomainmovies",
+     "host": "caching.stremio.net",
+     "name": "Public Domain Movies",
+     "description": "Torrents for public domain movies. Includes a collection of more then 500 public domain movies.",
+     "types": [
+      "movie"
+     ],
+     "provides": [
+      "catalog",
+      "stream"
+     ],
+     "configuration": "none",
+     "configureUrl": "https://caching.stremio.net/publicdomainmovies.now.sh/configure",
+     "installed": "copyOff",
+     "copyKey": "https://caching.stremio.net/publicdomainmovies.now.sh/configured/manifest.json"
+    },
+    {
+     "key": "https://opensubtitles-v3.strem.io/manifest.json",
+     "id": "org.stremio.opensubtitlesv3",
+     "host": "opensubtitles-v3.strem.io",
+     "name": "OpenSubtitles v3",
+     "description": "OpenSubtitles v3 Addon for Stremio",
+     "types": [
+      "movie",
+      "series"
+     ],
+     "provides": [
+      "subtitles"
+     ],
+     "configuration": "none",
+     "configureUrl": "https://opensubtitles-v3.strem.io/configure",
+     "installed": "copyOn",
+     "copyKey": null
+    }
+   ]
+  },
+  {
+   "id": "community",
+   "name": "Community",
+   "state": {
+    "state": "ready"
+   },
+   "entries": [
+    {
+     "key": "https://stremio-cast-search.onrender.com/manifest.json",
+     "id": "org.community.cast-search",
+     "host": "stremio-cast-search.onrender.com",
+     "name": "Cast Search",
+     "description": "Makes cast members clickable and searchable on Android TV",
+     "types": [
+      "movie",
+      "series"
+     ],
+     "provides": [
+      "stream"
+     ],
+     "configuration": "optional",
+     "configureUrl": "https://stremio-cast-search.onrender.com/configure",
+     "installed": "absent",
+     "copyKey": null
+    },
+    {
+     "key": "https://plexio.stream/manifest.json",
+     "id": "com.stremio.plexio",
+     "host": "plexio.stream",
+     "name": "Plexio",
+     "description": "Play movies and series from plex.tv.",
+     "types": [
+      "movie",
+      "series"
+     ],
+     "provides": [
+      "stream",
+      "catalog",
+      "meta"
+     ],
+     "configuration": "required",
+     "configureUrl": "https://plexio.stream/configure",
+     "installed": "absent",
+     "copyKey": null
+    },
+    {
+     "key": "https://sub.scary.network/manifest.json",
+     "id": "community.hebrew.subs",
+     "host": "sub.scary.network",
+     "name": "כתוביות בעברית",
+     "description": "אדון כתוביות בעברית מ-7 מקורות: Wizdom, OpenSubtitles (כולל hash), SubDL, YIFY, Podnapisi, Subsource, Ktuvit. תמיד תהיה כתובית.",
+     "types": [
+      "movie",
+      "series"
+     ],
+     "provides": [
+      "subtitles"
+     ],
+     "configuration": "none",
+     "configureUrl": "https://sub.scary.network/configure",
+     "installed": "absent",
+     "copyKey": null
+    },
+    {
+     "key": "https://statusio.elfhosted.com/manifest.json",
+     "id": "a1337user.statusio.tv.compatible",
+     "host": "statusio.elfhosted.com",
+     "name": "Statusio",
+     "description": "Shows premium status & days remaining across multiple debrid providers.",
+     "types": [
+      "movie",
+      "series"
+     ],
+     "provides": [
+      "stream"
+     ],
+     "configuration": "optional",
+     "configureUrl": "https://statusio.elfhosted.com/configure",
+     "installed": "copyOff",
+     "copyKey": null
+    },
+    {
+     "key": "https://2ecbbd610840-trakt.baby-beamup.club/manifest.json",
+     "id": "community.trakt-tv",
+     "host": "2ecbbd610840-trakt.baby-beamup.club",
+     "name": "Trakt Tv",
+     "description": "Addon for getting Trakt's public and user lists, recommendations and watch list.",
+     "types": [],
+     "provides": [
+      "meta"
+     ],
+     "configuration": "optional",
+     "configureUrl": "https://2ecbbd610840-trakt.baby-beamup.club/configure",
+     "installed": "absent",
+     "copyKey": null
+    }
+   ]
+  }
+ ]
+}
