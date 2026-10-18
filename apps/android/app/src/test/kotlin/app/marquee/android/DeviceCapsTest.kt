@@ -8,6 +8,7 @@ import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DeviceCapsTest {
     private val hardwareAvc = DecoderInfo(listOf("video/avc"), hardware = true)
@@ -45,6 +46,13 @@ class DeviceCapsTest {
         val baseline = DeviceCaps.baseline()
         assertEquals(listOf("h264"), baseline.decoders)
         assertEquals(false, baseline.hasFallbackEngine)
+    }
+
+    @Test
+    fun `Media3 plays HLS and DASH through the core, so the caps list both`() {
+        val containers = DeviceCaps.baseline().containers.orEmpty()
+        assertTrue("m3u8" in containers, "$containers")
+        assertTrue("mpd" in containers, "$containers")
     }
 
     @Test

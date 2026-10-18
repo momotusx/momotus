@@ -2,6 +2,9 @@ package app.marquee.player
 
 import android.net.Uri
 import androidx.media3.common.util.UriUtil
+import androidx.media3.exoplayer.dash.manifest.DashManifest
+import androidx.media3.exoplayer.dash.manifest.DashManifestParser
+import androidx.media3.exoplayer.dash.manifest.Representation
 import androidx.media3.exoplayer.hls.playlist.HlsMediaPlaylist
 import androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist
 import androidx.media3.exoplayer.hls.playlist.HlsPlaylist
@@ -12,20 +15,22 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The core's rewritten playlists, read by the Media3 the app ships. The corpus is written by
- * `corpus_matches_the_rewriter` in crates/mq-server/src/manifest.rs (benign layouts and every
- * hostile input the rewrite keeps), for a core at [CORE]. Every URL Media3 exposes must be the
- * core's: a playlist that points anywhere else would let the player fetch from an origin.
+ * The core's rewritten playlists and MPDs, read by the Media3 the app ships. The corpus is written
+ * by `corpus_matches_the_rewriter` in crates/mq-server/src/manifest.rs and
+ * `dash_corpus_matches_the_rewriter` in crates/mq-server/src/manifest/dash.rs (benign layouts and
+ * every hostile input the rewrite keeps), for a core at [CORE]. Every URL Media3 exposes must be
+ * the core's: a manifest that points anywhere else would let the player fetch from an origin.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class ManifestCorpusTest {
     @Test
     fun `every URL Media3 reads from a rewritten playlist is the core's`() {
-        val files = corpus("out")
+        val files = corpus("hls", "out")
         for (file in files) {
             val base = "${CORE}s/token/${file.name}"
             val playlist = parse(file, base)
@@ -49,23 +54,117 @@ class ManifestCorpusTest {
      */
     @Test
     fun `Media3 reads the canary from every control the core refuses`() {
-        for (file in corpus("control")) {
+        for (file in corpus("hls", "control")) {
             val base = "https://cdn.example/hls/${file.name}"
             val read = exposed(parse(file, base)).map { UriUtil.resolve(base, it.first) }
             assertTrue(read.any { it.startsWith(CANARY) }, "${file.name}: $read")
         }
     }
 
-    private fun corpus(sub: String): List<File> {
-        val dir = File("../../../crates/mq-server/tests/corpus/hls/$sub")
+    @Test
+    fun `every URL Media3 reads from a rewritten MPD is the core's`() {
+        for (file in corpus("dash", "out")) {
+            val manifest = parseDash(file, "${CORE}s/token/${file.name}")
+            val read = exposedDash(manifest)
+            assertTrue(read.isNotEmpty(), "${file.name}: no URL read")
+            for (url in read) {
+                assertTrue(url.startsWith(CORE), "${file.name}: $url")
+            }
+            assertNull(manifest.programInformation?.moreInformationURL, file.name)
+            // Media3 reads as much from the rewrite as from the origin's MPD.
+            val input = File(file.parentFile?.parentFile, "in/${file.name}")
+            val origin = parseDash(input, "https://cdn.example/dash/${file.name}")
+            assertEquals(shapeDash(origin), shapeDash(manifest), "${file.name}: read from the input, then the output")
+        }
+    }
+
+    /**
+     * The DASH controls the core refuses (`dash_controls_are_refused` in manifest/dash.rs): Media3
+     * reads the canary from each. A Media3 that stops doing so fails here.
+     */
+    @Test
+    fun `Media3 reads the canary from every DASH control the core refuses`() {
+        for (file in corpus("dash", "control")) {
+            val read = exposedDash(parseDash(file, "http://cdn.example/dash/${file.name}"))
+            assertTrue(read.any { it.startsWith(CANARY) }, "${file.name}: $read")
+        }
+    }
+
+    private fun corpus(
+        format: String,
+        sub: String,
+    ): List<File> {
+        val dir = File("../../../crates/mq-server/tests/corpus/$format/$sub")
+        val extension = if (format == "hls") ".m3u8" else ".mpd"
         val files =
             dir
                 .listFiles()
                 .orEmpty()
-                .filter { it.name.endsWith(".m3u8") }
+                .filter { it.name.endsWith(extension) }
                 .sortedBy { it.name }
         assertTrue(files.isNotEmpty(), "no corpus in ${dir.absolutePath}")
         return files
+    }
+
+    private fun parseDash(
+        file: File,
+        base: String,
+    ): DashManifest = file.inputStream().use { DashManifestParser().parse(Uri.parse(base), it) }
+
+    /**
+     * Every URL Media3 may fetch from [manifest]: `Location`s, the `UTCTiming` URLs it reads the
+     * time from, the information URL, license URLs, and for every Representation each base URL with
+     * the initialization, index and first segment resolved on it.
+     */
+    private fun exposedDash(manifest: DashManifest): List<String> {
+        val urls = mutableListOf<String>()
+        manifest.location?.let { urls += it.toString() }
+        manifest.locations.forEach { urls += it.url.toString() }
+        manifest.utcTiming?.takeIf { it.schemeIdUri.contains(":http-") }?.let { timing ->
+            urls += timing.value.trim().split(Regex("\\s+"))
+        }
+        manifest.programInformation?.moreInformationURL?.let { urls += it }
+        for (period in (0 until manifest.periodCount).map(manifest::getPeriod)) {
+            for (representation in period.adaptationSets.flatMap { it.representations }) {
+                representation.format.drmInitData?.let { drm ->
+                    (0 until drm.schemeDataCount).mapNotNullTo(urls) { drm.get(it).licenseServerUrl }
+                }
+                if (representation is Representation.SingleSegmentRepresentation) {
+                    urls += representation.uri.toString()
+                }
+                for (base in representation.baseUrls.map { it.url }) {
+                    urls += base
+                    representation.initializationUri?.let { urls += it.resolveUriString(base) }
+                    representation.indexUri?.let { urls += it.resolveUriString(base) }
+                    representation.index?.let { index ->
+                        urls += index.getSegmentUrl(index.firstSegmentNum).resolveUriString(base)
+                    }
+                }
+            }
+        }
+        return urls
+    }
+
+    /**
+     * How many of each thing Media3 read: periods, adaptation sets, representations, base URLs,
+     * representations with an initialization, an index and a segment index, `Location`s and
+     * `UTCTiming`. A rewrite that makes Media3 skip one changes it.
+     */
+    private fun shapeDash(manifest: DashManifest): List<Int> {
+        val periods = (0 until manifest.periodCount).map(manifest::getPeriod)
+        val sets = periods.flatMap { it.adaptationSets }
+        val representations = sets.flatMap { it.representations }
+        return listOf(
+            periods.size,
+            sets.size,
+            representations.size,
+            representations.sumOf { it.baseUrls.size },
+            representations.count { it.initializationUri != null },
+            representations.count { it.indexUri != null },
+            representations.count { it.index != null },
+            listOfNotNull(manifest.location).size + manifest.locations.size,
+            listOfNotNull(manifest.utcTiming).size,
+        )
     }
 
     private fun parse(

@@ -65,11 +65,11 @@ object DeviceCaps {
         )
 
     /**
-     * Containers Media3's extractors read (MKV, MP4 and fragmented MP4, WebM, MPEG-TS, MOV), and HLS
-     * playlists (`m3u8`, through media3-exoplayer-hls and the core's rewrite); anything else needs the
-     * fallback engine.
+     * Containers Media3's extractors read (MKV, MP4 and fragmented MP4, WebM, MPEG-TS, MOV), HLS
+     * playlists (`m3u8`, through media3-exoplayer-hls) and DASH manifests (`mpd`, through
+     * media3-exoplayer-dash), both rewritten by the core; anything else needs the fallback engine.
      */
-    private val containers = listOf("mkv", "mp4", "m4v", "webm", "ts", "m2ts", "mov", "m3u8")
+    private val containers = listOf("mkv", "mp4", "m4v", "webm", "ts", "m2ts", "mov", "m3u8", "mpd")
 
     private val hdrTypes =
         mapOf(
