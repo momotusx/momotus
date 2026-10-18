@@ -240,10 +240,13 @@ private struct FindAddonCard: View {
     }
 
     private var mark: some View {
-        let size = (metrics.wide ? 80 : 48) * markScale
+        // Decoration: it grows with the text a little, never into the text's room.
+        let size = (metrics.wide ? 80 : 48) * min(markScale, 1.3)
         let shape = RoundedRectangle(cornerRadius: metrics.wide ? Theme.Radius.card : 12, style: .continuous)
         return Text(entry.initial)
             .display(metrics.wide ? 38 : 22)
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
             .foregroundStyle(Theme.Palette.text)
             .frame(width: size, height: size)
             .background(shape.fill(LinearGradient(colors: [Theme.Palette.raised, Theme.Palette.surface], startPoint: .topLeading, endPoint: .bottomTrailing)))

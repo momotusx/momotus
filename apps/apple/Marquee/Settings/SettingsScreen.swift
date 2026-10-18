@@ -136,7 +136,11 @@ struct SettingsScreen: View {
         .navigationDestination(isPresented: $openFindAddons) { FindAddonsScreen(core: core) }
         .task {
             if DebugHooks.takePairedPreview() { previewPairing = true }
-            if DebugHooks.takeOpenScreen("findAddons") { openFindAddons = true }
+            if DebugHooks.takeOpenScreen("findAddons") {
+                // After the stack's first frames: pushed during them, SwiftUI updates the page without end.
+                try? await Task.sleep(for: .milliseconds(500))
+                openFindAddons = true
+            }
         }
         #endif
     }
