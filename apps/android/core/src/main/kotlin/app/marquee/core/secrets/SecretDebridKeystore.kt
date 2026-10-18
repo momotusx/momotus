@@ -70,14 +70,11 @@ class SecretDebridKeystore(
     override suspend fun deleteTombstone(tombstone: DebridTombstone) =
         change { s -> s.copy(debridTombstones = s.debridTombstones - tombstone) }
 
+    // On disk or not at all: a write that fails leaves memory as it was, so nothing the helper was
+    // told failed can reach the file later with another write.
     private suspend fun change(edit: (SecretStore.Secrets) -> SecretStore.Secrets) =
         withContext(Dispatchers.IO) {
-            secrets.update(edit)
-            if (secrets.health ==
-                SecretStore.Health.MemoryOnly
-            ) {
-                throw IOException("the keystore kept it in memory only")
-            }
+            if (!secrets.updateDurably(edit)) throw IOException("the keystore could not store it")
         }
 
     companion object {

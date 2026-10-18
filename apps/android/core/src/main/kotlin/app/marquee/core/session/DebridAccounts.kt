@@ -40,6 +40,9 @@ class DebridAccounts(
      */
     suspend fun opened(current: () -> List<DebridRecord>?) {
         ready = false
+        // What the last core left queued is stored first: the restore then reads the newest record
+        // of each service, never one a queued write was about to replace.
+        store.idle()
         for (attempt in 1..2) {
             try {
                 store.start()

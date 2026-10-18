@@ -286,6 +286,15 @@ private fun Service(
                         }
                     }
                     if (account != null) {
+                        // A connected account can take a new key without being disconnected first.
+                        if (holder.keyOpen[service.id] != true && account.state != AccountState.Reconnect) {
+                            SecondaryButton(
+                                if (byCode) "Use a key instead" else "Replace the key",
+                                { holder.keyOpen[service.id] = true },
+                                Modifier.semantics { contentDescription = "Use a new key for ${service.name}" },
+                                icon = Icons.KeyRound,
+                            )
+                        }
                         SecondaryButton(
                             "Disconnect",
                             { holder.disconnect(account) },

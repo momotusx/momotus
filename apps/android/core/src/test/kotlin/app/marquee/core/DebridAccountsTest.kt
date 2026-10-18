@@ -6,12 +6,16 @@ import app.marquee.core.model.DebridTombstone
 import app.marquee.core.model.RestoreAnswer
 import app.marquee.core.secrets.DebridCore
 import app.marquee.core.secrets.KeySource
+import app.marquee.core.secrets.LegacyDebridKeystore
 import app.marquee.core.secrets.SecretDebridKeystore
 import app.marquee.core.secrets.SecretStore
 import app.marquee.core.session.DebridAccounts
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Files
@@ -32,6 +36,7 @@ class DebridAccountsTest {
     /** Hands out generations for keys and remembers what it was asked, the way the core answers. */
     private class Core : DebridCore {
         val restores = mutableListOf<List<String>>()
+        val restoredGenerations = mutableListOf<List<String>>()
         val acks = mutableListOf<String>()
         val connects = mutableListOf<String>()
         var failConnectAfter = Int.MAX_VALUE
@@ -52,6 +57,7 @@ class DebridAccountsTest {
             tombstones: List<DebridTombstone>,
         ): RestoreAnswer {
             restores += records.map { it.service }
+            restoredGenerations += records.map { it.generation }
             return RestoreAnswer(refused = emptyList(), tombstones = emptyList())
         }
 
@@ -163,5 +169,30 @@ class DebridAccountsTest {
             accounts.store.idle()
             assertEquals(listOf("alldebrid a1"), core.acks)
             assertEquals(listOf("alldebrid"), secrets.load().debridRecords.map { it.service })
+        }
+
+    @Test
+    fun `a restart waits for the write the last core left queued`() =
+        runBlocking {
+            val gate = CompletableDeferred<Unit>()
+            val gated =
+                object : LegacyDebridKeystore by keystore {
+                    override suspend fun writeRecord(record: DebridRecord) {
+                        if (record.generation == "g2") gate.await()
+                        keystore.writeRecord(record)
+                    }
+                }
+            val accounts = DebridAccounts(gated, core, connect = { _, _ -> }, scope)
+            keystore.writeRecord(DebridRecord("realdebrid", "g1", 1, DebridCredential.Key("old")))
+            accounts.opened { null }
+            // The core replaced the connection; its record is queued, and the core dies before it is stored.
+            accounts.pushed(listOf(DebridRecord("realdebrid", "g2", 1, DebridCredential.Key("new"))))
+            accounts.pause()
+            val restart = scope.launch { accounts.opened { null } }
+            delay(300)
+            assertEquals(1, core.restores.size, "the restore waits for the queued write")
+            gate.complete(Unit)
+            restart.join()
+            assertEquals(listOf("g2"), core.restoredGenerations.last())
         }
 }

@@ -123,6 +123,27 @@ class SecretStoreTest {
     }
 
     @Test
+    fun `a durable change that cannot be stored leaves memory as it was`() {
+        var failing = false
+        val keys = SoftwareKeys()
+        val switchable =
+            object : KeySource {
+                override fun key(): SecretKey = if (failing) throw ProviderException("keystore is busy") else keys.key()
+
+                override fun reset() = Unit
+            }
+        val store = SecretStore(file, switchable)
+        store.update { it.copy(syncRecord = record) }
+        failing = true
+        assertFalse(store.updateDurably { it.copy(debridKeys = listOf("torbox" to "TB")) })
+        assertTrue(store.load().debridKeys.isEmpty())
+        // A later write of something else never stores the refused change by accident.
+        failing = false
+        assertTrue(store.updateDurably { it.copy(syncRecord = null) })
+        assertTrue(SecretStore(file, switchable).load().debridKeys.isEmpty())
+    }
+
+    @Test
     fun `printing the secrets never shows them`() {
         val text = SecretStore.Secrets(listOf("realdebrid" to "RD-SECRET-KEY"), record).toString()
         assertFalse(text.contains("RD-SECRET-KEY"))

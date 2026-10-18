@@ -2,6 +2,9 @@ package app.marquee.core.secrets
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridTombstone
@@ -106,8 +109,8 @@ class SecretStore(
         val debridTombstones: List<DebridTombstone> = emptyList(),
     )
 
-    @Volatile
-    var health: Health = Health.Ok
+    /** Observable, so a screen that says "kept for this session" updates when a write fails. */
+    var health: Health by mutableStateOf(Health.Ok)
         private set
 
     private var current: Secrets? = null
@@ -131,6 +134,21 @@ class SecretStore(
             writeToDisk(next, retry = true)
         }
         return next
+    }
+
+    /**
+     * A change that counts only once it is on disk: when the file cannot be written, memory stays as
+     * it was too, so a later write of something else never stores it by accident (a tombstone whose
+     * disconnect was refused, say). Returns whether it was stored.
+     */
+    @Synchronized
+    fun updateDurably(change: (Secrets) -> Secrets): Boolean {
+        if (protectExistingFile) return false
+        val next = change(load())
+        writeToDisk(next, retry = true)
+        if (health == Health.MemoryOnly) return false
+        current = next
+        return true
     }
 
     private fun readFromDisk(): Secrets {
