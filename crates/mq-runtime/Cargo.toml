@@ -44,5 +44,6 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+mq-http = { path = "../mq-http", features = ["test-dns"] }
 mq-relparse = { path = "../mq-relparse" }
 mq-streams = { path = "../mq-streams" }

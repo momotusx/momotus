@@ -532,6 +532,65 @@ async fn a_listed_install_writes_only_a_checked_manifest() {
     assert_eq!(one(&snapshot, id).installed, Installed::On);
 }
 
+/// A local addon answering its manifest, and the name that stands for it as
+/// a public host on the listed path (`set_public`).
+async fn manifest_origin(name: &str, id: &str) -> (String, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let hits = Arc::new(AtomicUsize::new(0));
+    let count = hits.clone();
+    let body = json!({
+        "id": id, "version": "1.0.0", "name": "Listed", "resources": ["subtitles"],
+        "types": ["movie"], "catalogs": []
+    })
+    .to_string();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            count.fetch_add(1, Ordering::SeqCst);
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    let localhost = std::net::Ipv4Addr::LOCALHOST.into();
+    mq_http::test_dns::set_public(name, &[localhost]);
+    (format!("{}:{}", name, addr.port()), hits)
+}
+
+#[tokio::test]
+async fn the_listed_path_fetches_public_addresses_only() {
+    let core = Core::temporary("p").unwrap();
+    // A name standing for a public host: fetched, checked, written.
+    let (origin, hits) = manifest_origin("listed.m12.test", "listed").await;
+    let entry = ListedEntry {
+        key: Url::parse(&format!("http://{origin}/manifest.json")).unwrap(),
+        id: "listed".into(),
+    };
+    let installed = core.install_listed(&entry).await.unwrap();
+    assert_eq!(installed.0, "listed");
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+    let rows = core.library().addons("p").unwrap();
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].allow_private);
+    // The same addon at its private address: never fetched.
+    let port = origin.rsplit(':').next().unwrap();
+    let private = ListedEntry {
+        key: Url::parse(&format!("http://127.0.0.1:{port}/manifest.json")).unwrap(),
+        id: "listed".into(),
+    };
+    let result = core.install_listed(&private).await;
+    assert_eq!(refused(result), ListedFailure::Unreachable);
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+    assert_eq!(core.library().addons("p").unwrap().len(), 1);
+}
+
 #[tokio::test]
 async fn installed_addons_carry_their_configure_page() {
     let core = Core::temporary("p").unwrap();
