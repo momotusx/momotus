@@ -889,14 +889,14 @@ impl Canary {
 
 /// An origin that answers its `n`th request with `replies[n]`, the last one
 /// from then on, one request per connection.
-async fn scripted(replies: Vec<&'static str>) -> String {
+async fn scripted(replies: Vec<String>) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let served = Arc::new(AtomicU64::new(0));
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             let n = served.fetch_add(1, Ordering::SeqCst) as usize;
-            let reply = replies[n.min(replies.len() - 1)];
+            let reply = replies[n.min(replies.len() - 1)].clone();
             tokio::spawn(async move {
                 let mut buf = [0u8; 4096];
                 let _ = socket.read(&mut buf).await;
@@ -945,14 +945,14 @@ async fn the_player_never_sees_a_redirect() {
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http).await.unwrap();
     // The first answer of a registered playback (the cache path).
-    let origin = scripted(vec![REDIRECT_WITHOUT_LOCATION]).await;
+    let origin = scripted(vec![REDIRECT_WITHOUT_LOCATION.into()]).await;
     let lease = server.register(local_upstream(origin), "v.mkv");
     let url = lease.url.clone();
     let (head, _) = raw_full(&server, &url, "bytes=0-").await;
     assert!(head.starts_with("http/1.1 502"), "{head}");
     assert!(!head.contains("location"), "{head}");
     // A later answer of an origin proxied plainly.
-    let origin = scripted(vec![WHOLE_FILE, REDIRECT_WITHOUT_LOCATION]).await;
+    let origin = scripted(vec![WHOLE_FILE.into(), REDIRECT_WITHOUT_LOCATION.into()]).await;
     let lease = server.register(local_upstream(origin), "v.mkv");
     let url = lease.url.clone();
     let (head, _) = raw_full(&server, &url, "bytes=0-").await;
@@ -965,12 +965,36 @@ async fn an_error_page_is_not_passed_on() {
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http).await.unwrap();
     let page = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\nContent-Length: 20\r\nConnection: close\r\n\r\n<html>denied</html>\n";
-    let origin = scripted(vec![WHOLE_FILE, page]).await;
+    let origin = scripted(vec![WHOLE_FILE.into(), page.into()]).await;
     let lease = server.register(local_upstream(origin), "v.mkv");
     let url = lease.url.clone();
     let (head, body) = raw_full(&server, &url, "bytes=0-").await;
     assert!(head.starts_with("http/1.1 403"), "{head}");
     assert!(body.is_empty(), "{}", String::from_utf8_lossy(&body));
+}
+
+#[tokio::test]
+async fn the_plain_proxy_keeps_the_playbacks_scope() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    let canary = Canary::start(0).await;
+    mq_http::test_dns::set("proxy-canary.c23.test", &[canary.addr.ip()]);
+    let port = canary.addr.port();
+    for target in [
+        format!("http://{}/x", canary.addr),
+        format!("http://proxy-canary.c23.test:{port}/x"),
+    ] {
+        // The first answer makes the playback a plain proxy; the player's
+        // request then meets the redirect.
+        let redirect = format!(
+            "HTTP/1.1 302 Found\r\nLocation: {target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        );
+        let origin = scripted(vec![WHOLE_FILE.into(), redirect]).await;
+        let lease = server.register(local_upstream(origin), "v.mkv");
+        let (head, _) = raw_full(&server, &lease.url, "bytes=0-").await;
+        assert!(head.starts_with("http/1.1 502"), "{target}: {head}");
+    }
+    assert_eq!(canary.accepted(), 0);
 }
 
 #[tokio::test]
