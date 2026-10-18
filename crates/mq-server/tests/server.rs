@@ -2418,48 +2418,6 @@ async fn manifest_limits_and_deadlines() {
 }
 
 #[tokio::test]
-async fn a_slow_rewrite_ends_at_its_deadline_and_holds_up_nothing() {
-    // Within every limit (120,000 resources, 14 MB rewritten), but 1.5 s of
-    // work in a debug build.
-    let mut wide = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
-    for i in 0..120_000 {
-        wide.push_str(&format!("#EXTINF:1,\n{i}.ts\n"));
-    }
-    let small = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n";
-    let kind = "application/vnd.apple.mpegurl";
-    let (base, _) = hls_origin(pages(vec![
-        ("/wide.m3u8", kind, wide.into_bytes()),
-        ("/small.m3u8", kind, small.to_vec()),
-    ]))
-    .await;
-    let http = HttpClient::new(ClientConfig::default()).unwrap();
-    let server = StreamServer::start(http).await.unwrap();
-    let deadline = Duration::from_secs(1);
-    let started = std::time::Instant::now();
-    let wide = async {
-        let upstream = local_upstream(format!("{base}/wide.m3u8"));
-        let opened = server.open(upstream, "v.mkv", deadline).await;
-        (opened, started.elapsed())
-    };
-    // Opens while the wide one is being rewritten, and must not wait for it.
-    let small = async {
-        tokio::time::sleep(Duration::from_millis(400)).await;
-        open_hls(&server, format!("{base}/small.m3u8")).await;
-        started.elapsed()
-    };
-    let ((opened, wide_took), small_took) = tokio::join!(wide, small);
-    assert_eq!(
-        opened.unwrap_err(),
-        "The stream's playlist could not be read"
-    );
-    assert!(
-        wide_took < deadline + Duration::from_secs(1),
-        "{wide_took:?}"
-    );
-    assert!(small_took < Duration::from_millis(800), "{small_took:?}");
-}
-
-#[tokio::test]
 async fn a_video_file_is_never_sniffed() {
     // A video type, and a size no playlist has under a type that says
     // nothing: both are files at once.

@@ -125,8 +125,13 @@ struct Hls {
     core: String,
     prefix: String,
     /// Held by a rewrite for its whole run on a blocking thread; a child's
-    /// lookup waits for it without holding a runtime worker.
+    /// lookup waits for it without holding a runtime worker, and no longer
+    /// than a playlist request may take.
     table: Arc<tokio::sync::Mutex<manifest::Table>>,
+    /// Tests only: runs as a rewrite starts on its blocking thread, holding
+    /// the table, so a test can hold it there.
+    #[cfg(test)]
+    hook: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl Hls {
@@ -338,6 +343,8 @@ impl StreamServer {
             prefix: format!("{core}c/{token}/"),
             core,
             table: Arc::default(),
+            #[cfg(test)]
+            hook: None,
         });
         let (body, base) = fetch_playlist(&hls, &hls.url, &[], MANIFEST_DEADLINE)
             .await
@@ -811,17 +818,14 @@ async fn serve_child(
     let Content::Hls(hls) = &playback.body else {
         return cors(StatusCode::NOT_FOUND.into_response());
     };
-    let id = parse_id(&id).and_then(|id| u32::try_from(id).ok());
-    let found = match id {
-        Some(id) => hls
-            .table
-            .lock()
-            .await
-            .get(id)
-            .map(|(url, role)| (id, url, role)),
-        None => None,
+    let Some(id) = parse_id(&id).and_then(|id| u32::try_from(id).ok()) else {
+        return cors(StatusCode::NOT_FOUND.into_response());
     };
-    let Some((id, url, role)) = found else {
+    let found = match table_within(hls, &playback.released, MANIFEST_DEADLINE).await {
+        Ok(mut table) => table.get(id),
+        Err(status) => return cors(status.into_response()),
+    };
+    let Some((url, role)) = found else {
         return cors(StatusCode::NOT_FOUND.into_response());
     };
     let released = playback.released.clone();
@@ -929,16 +933,22 @@ async fn serve_playlist(
     url: Url,
     query: Option<&str>,
 ) -> Response {
+    // The request's clock starts here: a wait for the table counts against
+    // its deadline (a lookup never waits past `MANIFEST_DEADLINE`).
+    let started = Instant::now();
     let directives = hls_directives(query);
     let blocking = directives.iter().any(|(name, _)| name == "_HLS_msn");
     let target = if blocking {
-        hls.table.lock().await.target(id)
+        match table_within(hls, &playback.released, MANIFEST_DEADLINE).await {
+            Ok(table) => table.target(id),
+            Err(status) => return status.into_response(),
+        }
     } else {
         None
     };
-    let deadline = reload_deadline(target);
-    let end = Instant::now() + deadline;
-    let fetch = fetch_playlist(hls, &url, &directives, deadline);
+    let end = started + reload_deadline(target);
+    let left = end.saturating_duration_since(Instant::now());
+    let fetch = fetch_playlist(hls, &url, &directives, left);
     let (body, base) = match playback.released.run_until_cancelled(fetch).await {
         None => return StatusCode::NOT_FOUND.into_response(),
         Some(Ok(fetched)) => fetched,
@@ -966,10 +976,38 @@ async fn serve_playlist(
         .into_response()
 }
 
+/// The playback's table, for a request that reads it: the wait for a
+/// rewrite that holds it ends at `bound` (503) or at release (404).
+async fn table_within<'a>(
+    hls: &'a Hls,
+    released: &CancellationToken,
+    bound: Duration,
+) -> Result<tokio::sync::MutexGuard<'a, manifest::Table>, StatusCode> {
+    let table = tokio::time::timeout(bound, hls.table.lock());
+    match released.run_until_cancelled(table).await {
+        None => Err(StatusCode::NOT_FOUND),
+        Some(Err(_)) => Err(StatusCode::SERVICE_UNAVAILABLE),
+        Some(Ok(table)) => Ok(table),
+    }
+}
+
+/// The table guard on its way to a rewrite's blocking work. The work takes
+/// it when it starts; until then it stays here, and when the request gives
+/// up (its deadline, release, or a dropped request) this takes it back, so
+/// work still queued for a blocking thread never holds the table.
+struct Handoff(Arc<Mutex<Option<tokio::sync::OwnedMutexGuard<manifest::Table>>>>);
+
+impl Drop for Handoff {
+    fn drop(&mut self) {
+        lock(&self.0).take();
+    }
+}
+
 /// Rewrites a fetched playlist (`id`: a child's, `None`: the main one) on a
-/// blocking thread, holding the playback's table, and gives up at `end` or
-/// at release: the rewrite is CPU work no `await` interrupts, so it checks
-/// the time itself and runs where it holds no runtime worker.
+/// blocking thread, holding the playback's table, and gives up at `end`, at
+/// release, or when the request is dropped: the rewrite is CPU work no
+/// `await` interrupts, so it checks for those itself and runs where it holds
+/// no runtime worker.
 async fn rewrite(
     hls: &Arc<Hls>,
     body: Bytes,
@@ -980,11 +1018,23 @@ async fn rewrite(
 ) -> Result<manifest::Rewritten, &'static str> {
     let deadline = tokio::time::Instant::from_std(end);
     let table = tokio::time::timeout_at(deadline, hls.table.clone().lock_owned());
-    let mut table = table.await.map_err(|_| "out of time")?;
+    let table = table.await.map_err(|_| "out of time")?;
+    let slot = Arc::new(Mutex::new(Some(table)));
+    let _handoff = Handoff(slot.clone());
+    // Cancelled when this future ends, however it ends.
+    let gone = CancellationToken::new();
+    let _gone = gone.clone().drop_guard();
     let hls = hls.clone();
     let released = released.clone();
     let work = tokio::task::spawn_blocking(move || {
-        let alive = || Instant::now() < end && !released.is_cancelled();
+        let Some(mut table) = lock(&slot).take() else {
+            return Err("out of time");
+        };
+        #[cfg(test)]
+        if let Some(hook) = &hls.hook {
+            hook();
+        }
+        let alive = || Instant::now() < end && !released.is_cancelled() && !gone.is_cancelled();
         let mut children = Children {
             core: &hls.core,
             prefix: &hls.prefix,
@@ -1518,5 +1568,189 @@ mod tests {
         assert_eq!(file_name("Movie.2010.mkv"), "Movie.2010.mkv");
         assert_eq!(hls_name("tt1727587.mkv"), "tt1727587.m3u8");
         assert!(lease.url.ends_with("/v.mkv"));
+    }
+}
+
+/// The rewrite's lifetime, proved with a hook that holds it on its blocking
+/// thread rather than with timings.
+#[cfg(test)]
+mod rewrites {
+    use super::*;
+    use std::sync::mpsc;
+
+    type Hook = Arc<dyn Fn() + Send + Sync>;
+
+    fn hls(hook: Option<Hook>) -> Arc<Hls> {
+        let core = "http://127.0.0.1:7777/".to_owned();
+        Arc::new(Hls {
+            url: base(),
+            http: HttpClient::new(mq_http::ClientConfig::default()).unwrap(),
+            headers: Vec::new(),
+            prefix: format!("{core}c/token/"),
+            core,
+            table: Arc::default(),
+            hook,
+        })
+    }
+
+    fn base() -> Url {
+        Url::parse("https://cdn.example/v/live.m3u8").unwrap()
+    }
+
+    fn media(segments: usize) -> Bytes {
+        let mut body = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+        for i in 0..segments {
+            body.push_str(&format!("#EXTINF:4,\ns{i}.ts\n"));
+        }
+        Bytes::from(body)
+    }
+
+    /// A hook that says when the rewrite reached it, then holds it until the
+    /// test lets go (or 5 s pass), and records which of the two it was.
+    struct Held {
+        entered: tokio::sync::oneshot::Receiver<()>,
+        go: mpsc::Sender<()>,
+        /// `Some(true)`: the test let go; `Some(false)`: 5 s passed.
+        let_go: Arc<Mutex<Option<bool>>>,
+    }
+
+    fn held() -> (Hook, Held) {
+        let (entered_tx, entered) = tokio::sync::oneshot::channel();
+        let entered_tx = Mutex::new(Some(entered_tx));
+        let (go, wait) = mpsc::channel::<()>();
+        let wait = Mutex::new(wait);
+        let let_go = Arc::new(Mutex::new(None));
+        let record = let_go.clone();
+        let hook = move || {
+            if let Some(entered) = lock(&entered_tx).take() {
+                let _ = entered.send(());
+            }
+            let ok = lock(&wait).recv_timeout(Duration::from_secs(5)).is_ok();
+            *lock(&record) = Some(ok);
+        };
+        (
+            Arc::new(hook),
+            Held {
+                entered,
+                go,
+                let_go,
+            },
+        )
+    }
+
+    fn far() -> Instant {
+        Instant::now() + Duration::from_secs(60)
+    }
+
+    #[tokio::test]
+    async fn a_rewrite_holds_no_runtime_worker() {
+        let (hook, held) = held();
+        let first = hls(Some(hook));
+        let token = CancellationToken::new();
+        let task = {
+            let (first, token) = (first.clone(), token.clone());
+            tokio::spawn(
+                async move { rewrite(&first, media(10), base(), None, &token, far()).await },
+            )
+        };
+        held.entered.await.unwrap();
+        // The rewrite is held on its blocking thread, and this runtime's one
+        // thread still runs work: another playback's rewrite completes.
+        let other = hls(None);
+        rewrite(&other, media(10), base(), None, &token, far())
+            .await
+            .unwrap();
+        held.go.send(()).unwrap();
+        task.await.unwrap().unwrap();
+        assert_eq!(
+            *lock(&held.let_go),
+            Some(true),
+            "the rewrite held the runtime thread"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_rewrite_past_its_deadline_gives_up_and_stops() {
+        let (hook, held) = held();
+        let hls = hls(Some(hook));
+        let token = CancellationToken::new();
+        let end = Instant::now() + Duration::from_millis(100);
+        let result = rewrite(&hls, media(10), base(), None, &token, end).await;
+        // The request gave up at its deadline while the rewrite was held.
+        assert_eq!(result.unwrap_err(), "out of time");
+        assert_eq!(
+            *lock(&held.let_go),
+            None,
+            "the request waited for the held rewrite"
+        );
+        held.go.send(()).unwrap();
+        // Let go, the rewrite looks at its time before any work: it names
+        // nothing and lets the table go.
+        let table = tokio::time::timeout(Duration::from_secs(5), hls.table.lock())
+            .await
+            .expect("the table is free");
+        assert_eq!(table.len(), 0, "the rewrite went on past its deadline");
+    }
+
+    #[tokio::test]
+    async fn a_dropped_request_stops_its_rewrite() {
+        let (hook, held) = held();
+        let hls = hls(Some(hook));
+        let token = CancellationToken::new();
+        let task = {
+            let (hls, token) = (hls.clone(), token.clone());
+            tokio::spawn(async move { rewrite(&hls, media(10), base(), None, &token, far()).await })
+        };
+        held.entered.await.unwrap();
+        task.abort();
+        let _ = task.await;
+        held.go.send(()).unwrap();
+        let table = tokio::time::timeout(Duration::from_secs(5), hls.table.lock())
+            .await
+            .expect("the table is free");
+        assert_eq!(table.len(), 0, "the rewrite went on after its request");
+    }
+
+    /// The only blocking thread is busy: a rewrite's work waits in the queue
+    /// past its deadline, and the table it was given goes back.
+    #[test]
+    fn queued_rewrite_work_never_keeps_the_table() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (busy, wait) = mpsc::channel::<()>();
+            let occupied = tokio::task::spawn_blocking(move || {
+                let _ = wait.recv_timeout(Duration::from_secs(10));
+            });
+            let hls = hls(None);
+            let token = CancellationToken::new();
+            let end = Instant::now() + Duration::from_millis(100);
+            let result = rewrite(&hls, media(10), base(), None, &token, end).await;
+            assert_eq!(result.unwrap_err(), "out of time");
+            assert!(hls.table.try_lock().is_ok(), "queued work kept the table");
+            busy.send(()).unwrap();
+            occupied.await.unwrap();
+        });
+    }
+
+    #[tokio::test]
+    async fn a_reader_waits_for_the_table_no_longer_than_its_bound() {
+        let hls = hls(None);
+        let _rewriting = hls.table.clone().lock_owned().await;
+        let token = CancellationToken::new();
+        let bounded = table_within(&hls, &token, Duration::from_millis(50));
+        let gave_up = tokio::time::timeout(Duration::from_secs(5), bounded)
+            .await
+            .expect("the wait ended at its bound");
+        assert_eq!(gave_up.err(), Some(StatusCode::SERVICE_UNAVAILABLE));
+        token.cancel();
+        let released = table_within(&hls, &token, Duration::from_secs(60));
+        let gone = tokio::time::timeout(Duration::from_secs(5), released)
+            .await
+            .expect("the wait ended at release");
+        assert_eq!(gone.err(), Some(StatusCode::NOT_FOUND));
     }
 }
