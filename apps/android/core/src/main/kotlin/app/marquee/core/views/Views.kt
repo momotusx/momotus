@@ -306,7 +306,16 @@ class PlaybackView(
         )
     }
 
-    fun failOver(error: String) = post(command("failOver") { put("error", error) })
+    /** [key] is the source that failed (the snapshot's), so the core ignores a late error. */
+    fun failOver(
+        error: String,
+        key: String?,
+    ) = post(
+        command("failOver") {
+            put("error", error)
+            if (key != null) put("key", key)
+        },
+    )
 
     /**
      * Tell the core how long the version that plays is, as soon as the player knows: it looks up

@@ -48,6 +48,8 @@ final class PlayerModel {
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
     @ObservationIgnored private var sub: UInt64?
     @ObservationIgnored private var loadedURL: String?
+    /// The source that plays, named in failOver so the core ignores a late error.
+    @ObservationIgnored private var loadedKey: String?
     /// Bumped per URL so a late error from a dead source is ignored.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var rendered = false
@@ -286,6 +288,7 @@ final class PlayerModel {
         generation += 1
         let generation = generation
         loadedURL = url
+        loadedKey = key
         notice = nil
         itemBag = []
         let item = AVPlayerItem(url: address)
@@ -331,7 +334,9 @@ final class PlayerModel {
         player.replaceCurrentItem(with: nil)
         loadedURL = nil
         guard let sub else { return }
-        Task { try? await core.command(sub, ["type": "failOver", "error": reason]) }
+        var command: [String: any Sendable] = ["type": "failOver", "error": reason]
+        if let loadedKey { command["key"] = loadedKey }
+        Task { [command] in try? await core.command(sub, command) }
     }
 
     /// For the model's lifetime: the player goes with it, so nothing removes these.

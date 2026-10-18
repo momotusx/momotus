@@ -100,6 +100,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const [subError, setSubError] = createSignal<string | null>(null);
   const [ended, setEnded] = createSignal(false);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  // The source the engine plays, named in failOver so the core ignores a late error.
+  let loadedKey: string | null = null;
 
   // Whatever decodes the picture (player/engine.ts); the screen only talks to it.
   const engine = createVideoEngine({
@@ -109,7 +111,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       report();
     },
     onEnded: () => onEnded(),
-    onError: (why) => void playback()?.command({ type: "failOver", error: why }),
+    onError: (why) => void playback()?.command({ type: "failOver", key: loadedKey ?? undefined, error: why }),
     onLoaded: () => sendDuration(),
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
@@ -177,7 +179,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // A new source (first start or failover) keeps the position.
   createEffect(
     on(url, (u, prev) => {
-      if (u) engine.load(u, prev ? engine.position() : (snap()?.resumeMs ?? 0) / 1000);
+      if (!u) return;
+      loadedKey = snap()?.key ?? null;
+      engine.load(u, prev ? engine.position() : (snap()?.resumeMs ?? 0) / 1000);
     }),
   );
 

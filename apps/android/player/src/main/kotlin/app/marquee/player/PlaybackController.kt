@@ -405,7 +405,7 @@ class PlaybackController(
         player.clearMediaItems()
         stage = Stage.Buffering
         status = "${failure.message}, trying the next source"
-        playback.failOver(failure.message)
+        playback.failOver(failure.message, playingKey)
     }
 
     private suspend fun tickLoop() {
