@@ -66,7 +66,16 @@ impl HttpError {
 
 fn redact_error(e: reqwest::Error) -> String {
     let url = e.url().map(redact_url);
-    let text = e.without_url().to_string();
+    let e = e.without_url();
+    // The causes say what failed (a refused connection, a certificate the
+    // device does not trust); none of them carries the address.
+    let mut text = e.to_string();
+    let mut cause = std::error::Error::source(&e);
+    while let Some(c) = cause {
+        text.push_str(": ");
+        text.push_str(&c.to_string());
+        cause = c.source();
+    }
     match url {
         Some(url) => format!("{text} ({url})"),
         None => text,
@@ -507,6 +516,29 @@ mod tests {
         let name = "localhost".parse().unwrap();
         let err = PublicOnly.resolve(name).await.err().expect("refused");
         assert!(err.to_string().contains("private"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_network_error_says_why_and_never_the_address() {
+        let client = HttpClient::new(ClientConfig::default()).unwrap();
+        // A loopback port with nothing listening: the connection is refused.
+        let err = client
+            .get(
+                "http://127.0.0.1:9/secret-path?token=abc",
+                &RequestOptions {
+                    allow_private: true,
+                    ..RequestOptions::default()
+                },
+            )
+            .await
+            .expect_err("refused");
+        let text = err.to_string();
+        assert!(
+            !text.contains("secret-path") && !text.contains("token=abc"),
+            "{text}"
+        );
+        // The cause after the top line ("error sending request").
+        assert!(text.matches(": ").count() >= 2, "{text}");
     }
 
     #[test]

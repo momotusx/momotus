@@ -838,6 +838,12 @@ impl Drop for Accounts {
 }
 
 fn failed(e: &DebridError) -> DebridLoginSnapshot {
+    // The kind, and for the network its text with addresses redacted: never a
+    // code, a key or a token.
+    match e {
+        DebridError::Http(http) => tracing::warn!(error = %http, "debrid sign-in failed"),
+        e => tracing::warn!(error = kind(e), "debrid sign-in failed"),
+    }
     let reason = match e {
         DebridError::Http(_) | DebridError::Timeout => {
             "Could not reach the service. Check the connection and try again.".to_owned()
@@ -862,7 +868,7 @@ async fn login(
     snapshot: SharedObservable<DebridLoginSnapshot>,
 ) {
     let set = |state: DebridLoginSnapshot| drop(snapshot.set(state));
-    let start = async {
+    let start = || async {
         match accounts.origin() {
             Some(origin) => {
                 let base = match service {
@@ -874,9 +880,20 @@ async fn login(
             None => Login::start(&accounts.http, service).await,
         }
     };
+    // A connection the service dropped gets one more try before the sheet
+    // says it could not reach it (seen on Real-Debrid from one of its hosts).
+    let first_or_again = async {
+        match start().await {
+            Err(DebridError::Http(_)) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                start().await
+            }
+            other => other,
+        }
+    };
     let login = tokio::select! {
         () = cancel.cancelled() => return,
-        login = start => match login {
+        login = first_or_again => match login {
             Ok(login) => login,
             Err(e) => return set(failed(&e)),
         },

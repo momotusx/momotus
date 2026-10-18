@@ -649,3 +649,43 @@ async fn polling_through_network_failures_ends_at_expiry() {
     .await;
     assert!(server.count("POST", TB_PATH) >= 1, "kept polling");
 }
+
+/// A service that drops the first connection without answering (seen on one
+/// of Real-Debrid's hosts): the sign-in tries once more and shows its code.
+#[tokio::test]
+async fn a_dropped_start_is_tried_once_more() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let accepted = Arc::new(AtomicUsize::new(0));
+    let seen = accepted.clone();
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let n = seen.fetch_add(1, Ordering::SeqCst);
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                if n == 0 {
+                    return;
+                }
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{TB_START}",
+                    TB_START.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    let core = Core::temporary("owner").unwrap();
+    core.set_debrid_origin(&base);
+    let login = DebridLoginView::open(&core, StoreId::TorBox);
+    until("the code", || {
+        matches!(login.snapshot(), DebridLoginSnapshot::Code { .. })
+    })
+    .await;
+    assert!(accepted.load(Ordering::SeqCst) >= 2);
+}
