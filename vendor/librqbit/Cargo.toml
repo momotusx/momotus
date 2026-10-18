@@ -58,8 +58,10 @@ postgres = [
     "home",
 ]
 prometheus = ["metrics-exporter-prometheus"]
+# Marquee fork: TLS through the process's rustls provider (ring, installed by
+# mq-http), not reqwest's bundled aws-lc one (core backlog C11).
 rust-tls = [
-    "reqwest/rustls",
+    "reqwest/rustls-no-provider",
     "sha1w/sha1-ring",
     "librqbit-core/sha1-ring",
 ]
