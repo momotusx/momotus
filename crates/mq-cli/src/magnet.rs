@@ -78,8 +78,8 @@ async fn timed_read(http: &HttpClient, url: &str, offset: u64, want: u64) -> Val
         priority: Priority::Playback,
         timeout: READY_TIMEOUT,
         // A torrent read may wait long for its first piece: the header wait
-        // gets the read's own limit.
-        hop_headers: READY_TIMEOUT,
+        // gets the read's own limit, not a stream's default.
+        hop_headers: Some(READY_TIMEOUT),
         allow_private: true,
         ..Default::default()
     };

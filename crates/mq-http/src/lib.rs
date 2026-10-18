@@ -110,9 +110,11 @@ pub struct RequestOptions {
     /// A buffered request's total limit, over every redirect hop and the
     /// body; a stream's idle limit between body chunks.
     pub timeout: Duration,
-    /// How long each hop may wait for its response headers, buffered or
-    /// streamed. Unscoped requests follow redirects inside one hop.
-    pub hop_headers: Duration,
+    /// How long each hop may wait for its response headers. Unset: a
+    /// buffered request's own `timeout`, and `STREAM_HEADERS` for a stream,
+    /// which has no total limit. Unscoped requests follow redirects inside
+    /// one hop.
+    pub hop_headers: Option<Duration>,
     pub max_bytes: usize,
     pub allow_private: bool,
     pub headers: Vec<(String, String)>,
@@ -126,7 +128,7 @@ impl Default for RequestOptions {
         Self {
             priority: Priority::Addon,
             timeout: Duration::from_secs(10),
-            hop_headers: Duration::from_secs(10),
+            hop_headers: None,
             max_bytes: 8 * 1024 * 1024,
             allow_private: false,
             headers: Vec::new(),
@@ -681,7 +683,7 @@ impl HttpClient {
     /// connecting (names go through `Allowed`), its headers follow
     /// `headers_for`, and `next_hop` decides where it leads, at most
     /// `MAX_REDIRECTS` times, with `Range` kept and methods as RFC 9110 15.4
-    /// says. Each hop waits at most `opts.hop_headers` for its headers; a
+    /// says. Each hop's wait for headers is bounded (`header_limit`); a
     /// buffered request's total limit spans the whole chain. Release before
     /// acquire: a hop's answer and host slot are dropped before the next hop
     /// asks for a slot, since holding both deadlocks same-host redirects at
@@ -746,8 +748,22 @@ struct Request {
     timeout: Option<Duration>,
 }
 
+/// A stream's default wait for one hop's response headers. Streams had no
+/// header bound before; buffered requests keep their own total.
+const STREAM_HEADERS: Duration = Duration::from_secs(10);
+
+/// How long one hop may wait for its response headers.
+fn header_limit(req: &Request, opts: &RequestOptions) -> Duration {
+    let default = if req.timeout.is_some() {
+        opts.timeout
+    } else {
+        STREAM_HEADERS
+    };
+    opts.hop_headers.unwrap_or(default)
+}
+
 /// Sends one hop. Its wait for response headers is bounded by
-/// `opts.hop_headers`; when that passes, the hop's future is dropped.
+/// `header_limit`; when that passes, the hop's future is dropped.
 async fn open(
     client: &reqwest::Client,
     req: &Request,
@@ -766,9 +782,10 @@ async fn open(
         request = request.body(bytes);
     }
     let sent = request.headers(headers).send();
-    match tokio::time::timeout(opts.hop_headers, sent).await {
+    let limit = header_limit(req, opts);
+    match tokio::time::timeout(limit, sent).await {
         Ok(answer) => answer.map_err(|e| HttpError::from_reqwest(e, opts.timeout)),
-        Err(_) => Err(HttpError::Timeout(opts.hop_headers)),
+        Err(_) => Err(HttpError::Timeout(limit)),
     }
 }
 

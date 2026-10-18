@@ -922,7 +922,7 @@ async fn a_stalled_hop_times_out_and_frees_its_slot() {
     let origin = slow_origin().await;
     let http = one_slot();
     let opts = RequestOptions {
-        hop_headers: Duration::from_millis(300),
+        hop_headers: Some(Duration::from_millis(300)),
         ..playback()
     };
     let started = Instant::now();
@@ -952,7 +952,7 @@ async fn a_long_chain_of_quick_hops_succeeds() {
     let origin = slow_origin().await;
     let http = scoped(&[LOOPBACK]);
     let opts = RequestOptions {
-        hop_headers: Duration::from_millis(300),
+        hop_headers: Some(Duration::from_millis(300)),
         ..playback()
     };
     // Five redirects of 200 ms each: longer than one header deadline in all.
@@ -961,6 +961,24 @@ async fn a_long_chain_of_quick_hops_succeeds() {
         .await
         .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(&end.body[..], b"end");
+}
+
+#[tokio::test]
+async fn a_slow_buffered_answer_within_its_timeout_succeeds() {
+    // An addon or sync request as callers make it today: its headers come
+    // after the streams' 10 s default, within its own 15 s.
+    let origin = slow_origin().await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let opts = RequestOptions {
+        timeout: Duration::from_secs(15),
+        ..local_opts()
+    };
+    let url = origin.url("/hop/11000/0/0");
+    let answer = tokio::time::timeout(Duration::from_secs(20), http.get(&url, &opts))
+        .await
+        .expect("finishes within 20 s")
+        .unwrap_or_else(|e| panic!("refused before its own timeout: {e}"));
+    assert_eq!(&answer.body[..], b"end");
 }
 
 #[tokio::test]
