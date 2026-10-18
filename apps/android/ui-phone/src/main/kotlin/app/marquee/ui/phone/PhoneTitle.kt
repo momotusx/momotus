@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -135,7 +135,7 @@ fun PhoneTitle(
                 modifier.fillMaxSize().padding(horizontal = side),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
-                Skeleton(Modifier.fillMaxWidth().aspectRatio(HERO_RATIO))
+                Skeleton(Modifier.fillMaxWidth().height(heroHeight()))
                 Skeleton(Modifier.size(200.dp, 24.dp))
                 Skeleton(Modifier.size(300.dp, 80.dp))
             }
@@ -237,6 +237,13 @@ fun PhoneTitle(
 
 private const val HERO_RATIO = 1.45f
 
+/** The artwork's height: the width at [HERO_RATIO], held to 60% of the window (landscape, tablets). */
+@Composable
+private fun heroHeight(): Dp {
+    val window = LocalConfiguration.current
+    return minOf(window.screenWidthDp.dp / HERO_RATIO, window.screenHeightDp.dp * 0.6f)
+}
+
 /**
  * The artwork behind the logo, running under the status bar. A dark scrim holds the logo and the
  * bar icons; the last [HERO_FADE] fades into the page color, so there is no hard edge in either theme.
@@ -266,7 +273,7 @@ private fun Hero(
         return
     }
     val page = Marquee.colors.bg
-    Box(Modifier.fillMaxWidth().aspectRatio(HERO_RATIO)) {
+    Box(Modifier.fillMaxWidth().height(heroHeight())) {
         Backdrop(art, Modifier.matchParentSize())
         // Dark in both themes: the logo and the status bar icons are light.
         Box(

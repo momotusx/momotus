@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,13 +19,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,13 +42,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.core.route.TOP_LEVEL
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
+import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.TextRole
@@ -68,6 +76,8 @@ fun PhoneShell(
     modifier: Modifier = Modifier,
     /** False for a page whose artwork runs under the status bar and handles the bar itself. */
     statusStrip: Boolean = true,
+    /** False for the player, whose picture runs edge to edge and keeps its own cutout padding. */
+    insetSides: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
@@ -76,7 +86,11 @@ fun PhoneShell(
     val inset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val space: Dp = if (showBar) BAR_HEIGHT + BAR_MARGIN * 2 + inset else 0.dp
     Box(modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalBarSpace provides space) { content() }
+        // In landscape the navigation bar and a camera cutout can sit at a side: pages keep clear of both.
+        val sides = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+        Box(if (insetSides) Modifier.windowInsetsPadding(sides) else Modifier) {
+            CompositionLocalProvider(LocalBarSpace provides space) { content() }
+        }
         // Pages start below the status bar but scroll under it: a strip of page color keeps the
         // text off the clock and icons. At rest it covers only the page's own background.
         if (statusStrip) {
@@ -130,8 +144,20 @@ private fun PhoneBar(
     modifier: Modifier,
 ) {
     val colors = Marquee.colors
-    // Narrow screens and large text keep the icons; each keeps its label as its spoken name.
-    val compact = LocalConfiguration.current.screenWidthDp < 360 || LocalDensity.current.fontScale > 1.3f
+    // The labels show only when the widest fits its slot at the current text size; otherwise the bar
+    // keeps the icons (each keeps its label as its spoken name), never a cut word.
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val caption = Marquee.type.caption
+    val widest =
+        remember(measurer, caption, density.fontScale) {
+            val style = TextStyle(fontSize = caption, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.Bold)
+            places.values.maxOf { measurer.measure(it.label, style, maxLines = 1).size.width }
+        }
+    val width = LocalConfiguration.current.screenWidthDp.dp
+    // The bar's widest margins (16 dp a side) and its inner padding (6 dp a side).
+    val slot = (width - 32.dp - 12.dp) / TOP_LEVEL.size
+    val compact = with(density) { widest.toDp() } > slot - 4.dp
     val shape = RoundedCornerShape(Marquee.radius.l)
     Row(
         modifier

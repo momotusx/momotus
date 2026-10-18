@@ -218,7 +218,11 @@ fun SettingsScreen(
             }
 
             addons.isEmpty() && holder.addons.snapshot != null -> {
-                item(key = "addons-none") { Note("No addon yet. Paste an addon link below to add one.") }
+                item(key = "addons-none") {
+                    // A remote types; only a phone can paste.
+                    val verb = if (Marquee.form == Form.Tv) "Type" else "Paste"
+                    Note("No addon yet. $verb an addon link below to add one.")
+                }
             }
         }
         itemsIndexed(addons, key = { _, addon -> "addon:${addon.url}" }) { index, addon ->

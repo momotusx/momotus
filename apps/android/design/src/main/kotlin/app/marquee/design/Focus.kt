@@ -2,9 +2,14 @@ package app.marquee.design
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.Composable
@@ -22,18 +27,26 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlin.math.pow
 
 /**
@@ -133,7 +146,52 @@ fun Modifier.lifted(raised: MutableState<Boolean>): Modifier =
         }
     }
 
-/** Focusable and clickable (D-pad center and Enter click on TV) without the system ripple. */
+/**
+ * Touch gets a pressed state, TV none (its focus ring says where the press goes). A grey veil at
+ * a fifth: it darkens the white primary and lightens a dark surface, so it reads on both.
+ */
+@Composable
+private fun pressIndication(): IndicationNodeFactory? = if (Marquee.form == Form.Tv) null else PressVeil
+
+private object PressVeil : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode = PressVeilNode(interactionSource)
+
+    override fun equals(other: Any?): Boolean = other === this
+
+    override fun hashCode(): Int = 1
+}
+
+private class PressVeilNode(
+    private val source: InteractionSource,
+) : Modifier.Node(),
+    DrawModifierNode {
+    private var pressed = false
+
+    override fun onAttach() {
+        coroutineScope.launch {
+            var held = 0
+            source.interactions.collect {
+                when (it) {
+                    is PressInteraction.Press -> held++
+                    is PressInteraction.Release, is PressInteraction.Cancel -> held--
+                }
+                if ((held > 0) != pressed) {
+                    pressed = held > 0
+                    invalidateDraw()
+                }
+            }
+        }
+    }
+
+    override fun ContentDrawScope.draw() {
+        drawContent()
+        if (pressed) drawRect(PRESS_VEIL)
+    }
+}
+
+private val PRESS_VEIL = Color(0x33808080)
+
+/** Focusable and clickable (D-pad center and Enter click on TV), with no ripple and a pressed state on touch. */
 @Composable
 fun Modifier.focusClickable(
     onClick: () -> Unit,
@@ -145,7 +203,7 @@ fun Modifier.focusClickable(
     if (onLongClick == null) {
         clickable(
             interactionSource = remember { MutableInteractionSource() },
-            indication = null,
+            indication = pressIndication(),
             enabled = enabled,
             role = role,
             onClick = onClick,
@@ -154,7 +212,7 @@ fun Modifier.focusClickable(
         // Holding select on a remote, or pressing and holding on a touch screen.
         combinedClickable(
             interactionSource = remember { MutableInteractionSource() },
-            indication = null,
+            indication = pressIndication(),
             enabled = enabled,
             role = role,
             onLongClickLabel = longClickLabel,
@@ -173,7 +231,7 @@ fun Modifier.focusSelectable(
     selectable(
         selected = selected,
         interactionSource = remember { MutableInteractionSource() },
-        indication = null,
+        indication = pressIndication(),
         role = role,
         onClick = onClick,
     )
@@ -190,7 +248,7 @@ fun Modifier.focusToggleable(
     toggleable(
         value = on,
         interactionSource = remember { MutableInteractionSource() },
-        indication = null,
+        indication = pressIndication(),
         role = Role.Switch,
         onValueChange = { onToggle() },
     )
@@ -212,3 +270,26 @@ fun Modifier.dpadExits(): Modifier {
         }
     }
 }
+
+/**
+ * Up and Down scroll [state] by about a quarter of a TV screen while it can move that way; at an
+ * edge they pass on, so focus moves out as usual. For a focusable block of text that may run long.
+ */
+fun scrollByKey(
+    event: KeyEvent,
+    state: ScrollState,
+    scope: CoroutineScope,
+): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    val down =
+        when (event.key) {
+            Key.DirectionDown -> true
+            Key.DirectionUp -> false
+            else -> return false
+        }
+    val can = if (down) state.canScrollForward else state.canScrollBackward
+    if (can) scope.launch { state.animateScrollBy(if (down) SCROLL_STEP else -SCROLL_STEP) }
+    return can
+}
+
+private const val SCROLL_STEP = 240f

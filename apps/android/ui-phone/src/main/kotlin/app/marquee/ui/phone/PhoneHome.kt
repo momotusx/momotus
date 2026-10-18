@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -43,6 +44,7 @@ import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.RowNotice
 import app.marquee.core.model.Tile
+import app.marquee.core.model.allFailed
 import app.marquee.core.model.notice
 import app.marquee.core.model.playable
 import app.marquee.core.model.tileKeys
@@ -74,6 +76,7 @@ fun PhoneHome(
     home: HomeView,
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
+    onSetup: () -> Unit,
     onAddons: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -94,14 +97,19 @@ fun PhoneHome(
     ) {
         val hero = home.hero
         if (hero != null) item(key = "hero") { PhoneHero(hero, onOpen, onPlay) }
-        if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onAddons) }
-        itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row -> PhoneRow(row, onOpen) }
+        if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons) }
+        if (hero == null && home.rows.toList().allFailed()) {
+            item(key = "failed") { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }
+        } else {
+            itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row -> PhoneRow(row, onOpen) }
+        }
     }
 }
 
 @Composable
 private fun HomeState(
     home: HomeView,
+    onSetup: () -> Unit,
     onAddons: () -> Unit,
 ) {
     val side = Marquee.safe.side
@@ -127,13 +135,31 @@ private fun HomeState(
                 title = "Home fills up from your addons",
                 body =
                     "None of the addons you have on shows a catalog here. " +
-                        "Add one, or turn rows back on in Settings.",
-                actionLabel = "Add an addon",
-                onAction = onAddons,
+                        "Set up Marquee adds the standard catalog in one step, or add an addon yourself.",
+                actionLabel = "Set up Marquee",
+                onAction = onSetup,
+                secondaryLabel = "Add an addon",
+                onSecondary = onAddons,
                 modifier = Modifier.padding(horizontal = side),
             )
         }
     }
+}
+
+/** Every lane failed and none has a tile (most often no network): one way on instead of a column of failures. */
+@Composable
+private fun AllFailed(
+    home: HomeView,
+    modifier: Modifier = Modifier,
+) {
+    StateMessage(
+        title = "Home could not load",
+        body = "None of your addons answered. Check the network, then try again.",
+        icon = Icons.CircleAlert,
+        actionLabel = "Try again",
+        onAction = home::retry,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -150,7 +176,8 @@ private fun PhoneHero(
     // At least the art's proportion, and taller when the text needs it (a small phone, large
     // fonts): the card grows and the page scrolls it, nothing is cut.
     BoxWithConstraints(Modifier.padding(horizontal = Marquee.safe.side).fillMaxWidth()) {
-        val least = maxWidth / HERO_RATIO
+        // Held to most of the window, so a landscape phone or a tablet still shows Play.
+        val least = minOf(maxWidth / HERO_RATIO, LocalConfiguration.current.screenHeightDp.dp * HERO_WINDOW)
         Box(
             Modifier
                 .fillMaxWidth()
@@ -218,6 +245,9 @@ private fun PhoneHero(
 }
 
 private const val HERO_RATIO = 0.95f
+
+/** The most of the window's height a hero takes. */
+private const val HERO_WINDOW = 0.6f
 
 /** Continue Watching is a lane of 16:9 stills; catalogs keep the shape their first tile has. */
 private fun shapeOf(row: HomeRow): TileShape =

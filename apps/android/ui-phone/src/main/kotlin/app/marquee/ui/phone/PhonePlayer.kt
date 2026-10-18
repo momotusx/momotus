@@ -40,8 +40,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.NextEpisode
@@ -54,6 +54,7 @@ import app.marquee.design.PlayFilled
 import app.marquee.design.RoundButton
 import app.marquee.design.Spinner
 import app.marquee.design.TextRole
+import app.marquee.design.endFade
 import app.marquee.player.ActionButton
 import app.marquee.player.EndCard
 import app.marquee.player.PlaybackController
@@ -145,7 +146,7 @@ fun PhonePlayer(
     // The controls hide four seconds after the last touch while playing; `wake` is read here and not in
     // composition, so a touch recomposes nothing.
     LaunchedEffect(osd, stage, panel, showNext) {
-        if (osd && stage == Stage.Playing && panel == null && !showNext) {
+        if (osd && stage == Stage.Playing && panel == null) {
             snapshotFlow { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
@@ -335,7 +336,7 @@ fun PhonePlayer(
                         Modifier
                             .align(Alignment.BottomEnd)
                             .windowInsetsPadding(WindowInsets.displayCutout)
-                            .padding(end = 16.dp, bottom = controlsHeight + 8.dp),
+                            .padding(end = 16.dp, bottom = if (showControls) controlsHeight + 8.dp else 24.dp),
                 )
             }
             if (showEnd) {
@@ -386,7 +387,12 @@ private fun Controls(
 ) {
     var dragging by remember { mutableStateOf<Long?>(null) }
     val playing = controller.offersPause
-    val short = LocalConfiguration.current.screenHeightDp < SHORT_HEIGHT_DP
+    // The window's real height: the configuration's leaves out the system bars the player hides.
+    val short =
+        with(LocalDensity.current) {
+            LocalWindowInfo.current.containerSize.height
+                .toDp()
+        } < SHORT_HEIGHT
     Column(
         modifier
             .fillMaxWidth()
@@ -509,8 +515,10 @@ private fun Actions(
     onTouch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scroll = rememberScrollState()
+    // A fade at the end says the row goes on when the later actions are out of sight.
     Row(
-        modifier.horizontalScroll(rememberScrollState()),
+        modifier.endFade(scroll.canScrollForward).horizontalScroll(scroll),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         if (controller.audio.isNotEmpty()) {
@@ -527,7 +535,8 @@ private fun Actions(
 }
 
 /**
- * Below this height (every phone, as the player is landscape) the transport joins the actions' row,
- * as on TV, so the controls stay low; a tablet keeps it above the scrubber.
+ * Below this height (a 320 dp class phone in the landscape player) the transport joins the actions'
+ * row, so the controls stay clear of the title and the status line; from 360 dp it keeps its centered
+ * place above the scrubber, as on the web.
  */
-private const val SHORT_HEIGHT_DP = 420
+private val SHORT_HEIGHT = 360.dp

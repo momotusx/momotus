@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -321,13 +322,16 @@ fun UpNextCard(
         horizontalArrangement = Arrangement.spacedBy(if (tv) 28.dp else 12.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        RemoteImage(
-            url = next.thumbnail,
-            width = if (tv) 320.dp else 120.dp,
-            height = if (tv) 180.dp else 68.dp,
-            fallbackText = next.title,
-            modifier = Modifier.clip(RoundedCornerShape(Marquee.radius.m)),
-        )
+        // A short landscape phone keeps the card to its words and button.
+        if (tv || LocalConfiguration.current.screenHeightDp >= SHORT_PHONE_DP) {
+            RemoteImage(
+                url = next.thumbnail,
+                width = if (tv) 320.dp else 120.dp,
+                height = if (tv) 180.dp else 68.dp,
+                fallbackText = next.title,
+                modifier = Modifier.clip(RoundedCornerShape(Marquee.radius.m)),
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             MqText("Next episode", role = TextRole.Caption, color = colors.muted)
             MqText(
@@ -506,6 +510,8 @@ fun ActionButton(
         detail?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 1) }
     }
 }
+
+private const val SHORT_PHONE_DP = 420
 
 /** 1.0 as "1x", 1.25 as "1.25x". */
 fun speedText(speed: Float): String = if (speed % 1f == 0f) "${speed.toInt()}x" else "${speed}x"

@@ -241,6 +241,7 @@ private fun AppNav(
                                 app.tvHome,
                                 onOpen = ::open,
                                 onPlay = ::playTile,
+                                onSetup = { backStack.add(Route.Onboarding) },
                                 onAddons = { choose(Route.Settings) },
                             )
                         } else {
@@ -248,12 +249,20 @@ private fun AppNav(
                                 app.home,
                                 onOpen = ::open,
                                 onPlay = ::playTile,
+                                onSetup = { backStack.add(Route.Onboarding) },
                                 onAddons = { choose(Route.Settings) },
                             )
                         }
                     }
                     entry<Route.Search> { SearchScreen(session, ::open) }
-                    entry<Route.Discover> { DiscoverScreen(session, ::open, onAddons = { choose(Route.Settings) }) }
+                    entry<Route.Discover> {
+                        DiscoverScreen(
+                            session,
+                            ::open,
+                            onSetup = { backStack.add(Route.Onboarding) },
+                            onAddons = { choose(Route.Settings) },
+                        )
+                    }
                     entry<Route.Library> { LibraryScreen(session, ::open) }
                     entry<Route.Calendar> {
                         CalendarScreen(
@@ -300,7 +309,9 @@ private fun AppNav(
                         // From onboarding, a join is the way in: Done goes Home. From Settings it goes back.
                         PairingScreen(session, sync, onDone = {
                             when {
-                                backStack.firstOrNull() == Route.Onboarding -> arrive()
+                                // Also when setup was opened again from an empty Home or Discover.
+                                Route.Onboarding in backStack -> arrive()
+
                                 backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
                             }
                         })
@@ -388,6 +399,7 @@ private fun AppNav(
             showTabs = framed,
             onSelect = ::choose,
             statusStrip = top !is Route.Title && top !is Route.Player,
+            insetSides = top !is Route.Player,
             content = content,
         )
     }

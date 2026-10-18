@@ -9,6 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,21 +35,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -297,7 +306,11 @@ fun StatusLine(
 
 enum class Status { Ok, Warn, Bad, Idle }
 
-/** The explained empty or failed state: what happened, why, and a fix. */
+/**
+ * The explained empty or failed state: what happened, why, and a fix. A second way out
+ * ([secondaryLabel]) sits beside the fix as a secondary button.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun StateMessage(
     title: String,
@@ -307,6 +320,8 @@ fun StateMessage(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     actionFocus: FocusRequester? = null,
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     Column(
@@ -321,9 +336,19 @@ fun StateMessage(
             MqText(title, role = TextRole.Title3)
         }
         MqText(body, role = TextRole.Callout, color = Marquee.colors.muted)
-        // The fix is the state's one action: the white pill, as on the web.
-        if (actionLabel != null && onAction != null) {
-            PrimaryButton(actionLabel, onAction, focusRequester = actionFocus)
+        // The fix is the state's one primary: the white pill, as on the web. Coming into the
+        // buttons from anywhere (Down from the TV pill) lands on it, not on its nearest neighbour.
+        val primary = actionFocus ?: remember { FocusRequester() }
+        val hasPrimary = actionLabel != null && onAction != null
+        FlowRow(
+            modifier = Modifier.focusProperties { if (hasPrimary) enter = { primary } }.focusGroup(),
+            horizontalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
+            verticalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
+        ) {
+            if (actionLabel != null && onAction != null) {
+                PrimaryButton(actionLabel, onAction, focusRequester = primary)
+            }
+            if (secondaryLabel != null && onSecondary != null) SecondaryButton(secondaryLabel, onSecondary)
         }
     }
 }
@@ -547,8 +572,17 @@ fun RoundButton(
         if (showLabel) {
             MqText(
                 label,
-                // Spoken once, as the ring's name.
-                modifier = Modifier.clearAndSetSemantics { },
+                // Spoken once, as the ring's name; on touch the word presses the button too.
+                modifier =
+                    Modifier
+                        .clearAndSetSemantics { }
+                        .then(
+                            if (!tv && enabled) {
+                                Modifier.pointerInput(onClick) { detectTapGestures { onClick() } }
+                            } else {
+                                Modifier
+                            },
+                        ),
                 role = TextRole.Caption,
                 color = if (focused) colors.text else colors.muted,
                 weight = FontWeight.SemiBold,
@@ -615,7 +649,8 @@ fun Eyebrow(
         role = TextRole.Caption,
         color = colors.accent,
         weight = FontWeight.Bold,
-        maxLines = 1,
+        // A phone takes a second line rather than lose the subject ("#1 IN POPULAR MOVI...").
+        maxLines = if (tv) 1 else 2,
         letterSpacing = 0.14.em,
     )
 }
@@ -710,7 +745,8 @@ fun FactsGrid(
             Row(
                 Modifier.semantics(mergeDescendants = true) {},
                 horizontalArrangement = Arrangement.spacedBy(if (tv) 20.dp else 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                // A label stays on the first line of a value that wraps.
+                verticalAlignment = Alignment.Top,
             ) {
                 MqText(
                     label,
@@ -766,3 +802,29 @@ fun GlassBar(
         content = content,
     )
 }
+
+/**
+ * Fades the last [length] of the content toward its end (right, or bottom when [vertical]) while
+ * [on]: the sign that a row or a block scrolls on.
+ */
+fun Modifier.endFade(
+    on: Boolean,
+    vertical: Boolean = false,
+    length: Dp = 32.dp,
+): Modifier =
+    if (!on) {
+        this
+    } else {
+        graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+            drawContent()
+            val px = length.toPx()
+            val fade = listOf(Color.Black, Color.Transparent)
+            val brush =
+                if (vertical) {
+                    Brush.verticalGradient(fade, startY = size.height - px, endY = size.height)
+                } else {
+                    Brush.horizontalGradient(fade, startX = size.width - px, endX = size.width)
+                }
+            drawRect(brush, blendMode = BlendMode.DstIn)
+        }
+    }

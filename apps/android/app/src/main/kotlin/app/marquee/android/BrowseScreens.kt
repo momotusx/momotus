@@ -375,6 +375,7 @@ internal fun Poster(
 fun DiscoverScreen(
     session: CoreSession,
     onOpen: (Tile) -> Unit,
+    onSetup: () -> Unit,
     onAddons: () -> Unit,
 ) {
     val holder =
@@ -427,16 +428,18 @@ fun DiscoverScreen(
 
             snapshot.kinds.isEmpty() -> {
                 full("empty") {
-                    // The way out, as on the web: Settings holds the addons. On TV it is the
-                    // page's one control, so focus has somewhere to land.
-                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        Note(
-                            "Nothing to browse yet: Discover lists the catalogs of the addons you have on, " +
-                                "and none of them has one.",
-                            side = 0.dp,
-                        )
-                        PrimaryButton("Add an addon", onAddons, icon = Icons.Puzzle)
-                    }
+                    // The ways out, as on Home: setup adds the standard catalog in one step (no typing
+                    // with a remote), Settings holds the addons. On TV focus lands on the first.
+                    StateMessage(
+                        title = "Nothing to browse yet",
+                        body =
+                            "Discover lists the catalogs of the addons you have on, and none of them has one. " +
+                                "Set up Marquee adds the standard catalog in one step.",
+                        actionLabel = "Set up Marquee",
+                        onAction = onSetup,
+                        secondaryLabel = "Add an addon",
+                        onSecondary = onAddons,
+                    )
                 }
             }
 

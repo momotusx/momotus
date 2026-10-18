@@ -83,9 +83,15 @@ fun OnboardingScreen(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: CoreError) {
-                // An earlier try that timed out may have installed it after all.
+                // Installed already: by an earlier try that timed out, or turned off since (an empty
+                // Home sends people here). Either way it is turned on, so Home has its catalog.
                 if (e.message?.contains("already", ignoreCase = true) == true) {
-                    onDone()
+                    runCatching { session.ops.setAddonEnabled(CINEMETA, true) }
+                        .onSuccess { onDone() }
+                        .onFailure {
+                            error = it.message ?: "Cinemeta could not be turned on"
+                            busy = false
+                        }
                 } else {
                     error = e.message
                     busy = false

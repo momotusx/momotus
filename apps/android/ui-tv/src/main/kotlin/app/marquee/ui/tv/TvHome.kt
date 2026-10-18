@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -43,6 +42,7 @@ import app.marquee.core.model.HomeRow
 import app.marquee.core.model.RowNotice
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
+import app.marquee.core.model.allFailed
 import app.marquee.core.model.notice
 import app.marquee.core.model.playable
 import app.marquee.core.model.tileKeys
@@ -98,14 +98,19 @@ fun TvHome(
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
+    onSetup: () -> Unit,
     onAddons: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safe = Marquee.safe
     val metrics = Marquee.tiles
-    SideEffect {
-        state.focus.firstRow = startRow(home.rows.toList(), home.hero)
-        state.focus.refresh()
+    // Read from the snapshot, not in a SideEffect: lanes arrive without recomposing this function,
+    // and a stale start row would make every Back refocus the same tile.
+    LaunchedEffect(state) {
+        snapshotFlow { startRow(home.rows.toList(), home.hero) }.collect {
+            state.focus.firstRow = it
+            state.focus.refresh()
+        }
     }
     LaunchedEffect(state) { restoreFocus(home, state, state.focus.focusedKey) }
     // On the first lane the hero shows above it: the page rests at its top. This waits for the
@@ -136,9 +141,13 @@ fun TvHome(
         ) {
             val hero = home.hero
             if (hero != null) item(key = "hero") { TvHero(hero, state, onOpen, onPlay) }
-            if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onAddons) }
-            itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row ->
-                TvRow(row, state, onOpen)
+            if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons) }
+            if (hero == null && home.rows.toList().allFailed()) {
+                item(key = "failed") { AllFailed(home, Modifier.padding(start = Marquee.safe.side)) }
+            } else {
+                itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row ->
+                    TvRow(row, state, onOpen)
+                }
             }
         }
     }
@@ -147,6 +156,7 @@ fun TvHome(
 @Composable
 private fun HomeState(
     home: HomeView,
+    onSetup: () -> Unit,
     onAddons: () -> Unit,
 ) {
     val inset = Marquee.safe.side
@@ -172,13 +182,31 @@ private fun HomeState(
                 title = "Home fills up from your addons",
                 body =
                     "None of the addons you have on shows a catalog here. " +
-                        "Add one, or turn rows back on in Settings.",
-                actionLabel = "Add an addon",
-                onAction = onAddons,
+                        "Set up Marquee adds the standard catalog in one step, or add an addon yourself.",
+                actionLabel = "Set up Marquee",
+                onAction = onSetup,
+                secondaryLabel = "Add an addon",
+                onSecondary = onAddons,
                 modifier = Modifier.padding(start = inset, top = Marquee.safe.top),
             )
         }
     }
+}
+
+/** Every lane failed and none has a tile (most often no network): one way on instead of a column of failures. */
+@Composable
+private fun AllFailed(
+    home: HomeView,
+    modifier: Modifier = Modifier,
+) {
+    StateMessage(
+        title = "Home could not load",
+        body = "None of your addons answered. Check the network, then try again.",
+        icon = Icons.CircleAlert,
+        actionLabel = "Try again",
+        onAction = home::retry,
+        modifier = modifier,
+    )
 }
 
 @Composable

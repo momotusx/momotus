@@ -4,6 +4,7 @@ import app.marquee.core.model.HomeRow
 import app.marquee.core.model.RowNotice
 import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
+import app.marquee.core.model.allFailed
 import app.marquee.core.model.notice
 import app.marquee.core.model.tileKeys
 import app.marquee.core.route.Route
@@ -70,5 +71,17 @@ class RouteTest {
         assertNull(row(RowState.Failed("late"), "a").notice())
         assertNull(row(RowState.Loading, "a").notice())
         assertNull(row(RowState.Ready, "a").notice())
+    }
+
+    @Test
+    fun `Home offers one Try again only when every lane ended with nothing and one failed`() {
+        val failed = row(RowState.Failed("offline"))
+        assertTrue(listOf(failed, failed).allFailed())
+        assertTrue(listOf(failed, row(RowState.Empty)).allFailed())
+        assertFalse(listOf(failed, row(RowState.Loading)).allFailed(), "a lane still on its way")
+        assertFalse(listOf(failed, row(RowState.Ready, "a")).allFailed(), "a lane with tiles")
+        assertFalse(listOf(row(RowState.Failed("late"), "a")).allFailed(), "tiles that arrived before the failure")
+        assertFalse(listOf(row(RowState.Empty)).allFailed(), "empty, not failed")
+        assertFalse(emptyList<HomeRow>().allFailed())
     }
 }

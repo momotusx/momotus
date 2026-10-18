@@ -2,12 +2,10 @@
 
 package app.marquee.ui.tv
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,7 +39,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -77,10 +74,10 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
+import app.marquee.design.endFade
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import app.marquee.design.scrollByKey
 
 private const val PLAY = "play"
 private const val ADD = "add"
@@ -206,8 +203,11 @@ private fun Pick(
     val colors = Marquee.colors
     val shape = RoundedCornerShape(Marquee.radius.l)
     val best = snapshot?.recommended
+    val play = focus.requesterFor(PLAY)
     Column(
         Modifier
+            // Entering the card from the list lands on Play, never on the details above it.
+            .then(if (best != null) Modifier.focusProperties { enter = { play } }.focusGroup() else Modifier)
             .width(620.dp)
             .clip(shape)
             .background(colors.glassStrong)
@@ -235,11 +235,13 @@ private fun Pick(
                 // where the key moves focus on as usual.
                 val details = rememberScrollState()
                 val scope = rememberCoroutineScope()
+                // maxValue is Int.MAX_VALUE until the first measure: not an overflow yet.
+                val overflows = details.maxValue in 1 until Int.MAX_VALUE
                 Column(
                     Modifier
                         .weight(1f, fill = false)
                         .then(
-                            if (details.maxValue > 0) {
+                            if (overflows) {
                                 Modifier
                                     .onPreviewKeyEvent { scrollByKey(it, details, scope) }
                                     .marqueeFocus(Marquee.radius.m, scale = 1f)
@@ -247,7 +249,8 @@ private fun Pick(
                             } else {
                                 Modifier
                             },
-                        ).verticalScroll(details),
+                        ).endFade(details.canScrollForward, vertical = true, length = 48.dp)
+                        .verticalScroll(details),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
                 ) {
                     CapsLabel("Recommended for this screen")
@@ -306,26 +309,6 @@ private fun Pick(
         }
     }
 }
-
-/** Up and Down scroll [state] by a third of a screen while it can move that way; at an edge they pass on. */
-private fun scrollByKey(
-    event: KeyEvent,
-    state: ScrollState,
-    scope: CoroutineScope,
-): Boolean {
-    if (event.type != KeyEventType.KeyDown) return false
-    val down =
-        when (event.key) {
-            Key.DirectionDown -> true
-            Key.DirectionUp -> false
-            else -> return false
-        }
-    val can = if (down) state.value < state.maxValue else state.value > 0
-    if (can) scope.launch { state.animateScrollBy(if (down) SCROLL_STEP else -SCROLL_STEP) }
-    return can
-}
-
-private const val SCROLL_STEP = 240f
 
 /** A release name in monospace, broken at its dots so it wraps whole. */
 @Composable

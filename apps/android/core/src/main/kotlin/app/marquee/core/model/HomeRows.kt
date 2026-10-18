@@ -74,3 +74,12 @@ fun HomeRow.notice(): RowNotice? =
             }
         }
     }
+
+/**
+ * Every lane has ended and none has a tile, and at least one failed (most often no network): the
+ * page has nothing to focus or open, so it offers one Try again instead of a column of failures.
+ */
+fun List<HomeRow>.allFailed(): Boolean =
+    isNotEmpty() &&
+        none { it.tiles.isNotEmpty() || it.state == RowState.Loading || it.state == RowState.Slow } &&
+        any { it.state is RowState.Failed }

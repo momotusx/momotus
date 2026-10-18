@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,12 +23,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -42,6 +46,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.PrimaryAction
@@ -76,10 +82,12 @@ import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.endFade
 import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
+import app.marquee.design.scrollByKey
 
 private const val PLAY = "play"
 private const val EPISODES = "episodes"
@@ -211,14 +219,18 @@ fun TvTitle(
 
 /**
  * Five lines of the synopsis. As on the web, a synopsis that is cut takes focus (Up from the
- * actions) and shows whole on glass while it has it; one that fits is plain text.
+ * actions) and shows whole on glass while it has it; one that fits is plain text. Open, it is held
+ * to [OPEN_MAX] and scrolls with Up and Down, so a long one is read to its end before focus moves on.
  */
 @Composable
 private fun Synopsis(text: String) {
     var cut by remember(text) { mutableStateOf(false) }
     var open by remember { mutableStateOf(false) }
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val shape = RoundedCornerShape(Marquee.radius.m)
     val inset = 14.dp
+    LaunchedEffect(open) { if (!open) scroll.scrollTo(0) }
     MqText(
         text,
         // Half the screen: the scrim is dark enough for text only that far. The inset is pulled
@@ -231,10 +243,15 @@ private fun Synopsis(text: String) {
                     if (cut || open) {
                         Modifier
                             .onFocusChanged { open = it.isFocused }
+                            .onPreviewKeyEvent { open && scrollByKey(it, scroll, scope) }
+                            .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
                             .marqueeFocus(Marquee.radius.m, scale = 1f)
                             .clip(shape)
                             .background(if (open) Marquee.colors.glassStrong else Color.Transparent)
                             .focusable()
+                            .heightIn(max = OPEN_MAX)
+                            .endFade(open && scroll.canScrollForward, vertical = true, length = 48.dp)
+                            .verticalScroll(scroll, enabled = false)
                     } else {
                         Modifier
                     },
@@ -244,6 +261,9 @@ private fun Synopsis(text: String) {
         onTextLayout = { if (!open) cut = it.hasVisualOverflow },
     )
 }
+
+/** The open synopsis' height: from under a two-line title to the safe foot of a 1080 canvas. */
+private val OPEN_MAX = 600.dp
 
 @Composable
 private fun Info(

@@ -931,8 +931,8 @@ fun EditProfileScreen(
         if (!swapping) return@LaunchedEffect
         withFrameNanos { }
         runCatching { if (confirmDelete) keep.requestFocus() else askDelete.requestFocus() }
-        // Before the flag changes: clearing it restarts this effect and would cancel the scroll.
-        if (confirmDelete) deleteView.bringIntoView()
+        // In the page's scope: clearing the flag restarts this effect, and a touch may interrupt it.
+        if (confirmDelete) scope.launch { runCatching { deleteView.bringIntoView() } }
         swapping = false
     }
 
