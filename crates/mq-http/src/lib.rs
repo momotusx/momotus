@@ -529,7 +529,8 @@ impl HttpClient {
     /// is used, and headers go in full only to their owner's origin
     /// (`headers_for`). `allow_private` is ignored. The device's own addresses
     /// and the on-link prefixes of its interfaces count as private, re-read on
-    /// every call. Handles with the same addresses share one client and its
+    /// every call; a `local` with a loopback address also reaches the own
+    /// addresses, since its install runs on this device. Handles with the same addresses share one client and its
     /// connections while the snapshot stays the same, and every handle shares
     /// this client's budget.
     pub fn scoped(&self, local: &[IpAddr]) -> HttpClient {

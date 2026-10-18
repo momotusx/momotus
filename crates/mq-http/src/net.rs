@@ -83,10 +83,16 @@ pub fn local_addrs(host: &str) -> Vec<IpAddr> {
 }
 
 /// Whether a playback hop may connect to `ip`: it is in `local` (canonical),
-/// or it is public and not on the device's own network.
+/// or it is public and not on the device's own network. A loopback scope is
+/// an install running on this device, so the device's own network addresses
+/// are its host too (an addon advertising its LAN address); the rest of their
+/// on-link prefixes are not, and loopback addresses stay as `local` names
+/// them (a literal itself, `localhost` both).
 pub(crate) fn permitted(ip: IpAddr, local: &[IpAddr], device: &Device) -> bool {
     let ip = ip.to_canonical();
-    local.contains(&ip) || !is_private_ip(ip) && !device.holds(ip)
+    let on_device =
+        local.iter().any(IpAddr::is_loopback) && !ip.is_loopback() && device.own.contains(&ip);
+    local.contains(&ip) || on_device || !is_private_ip(ip) && !device.holds(ip)
 }
 
 /// What playback treats as private beyond the classifier: the device's own

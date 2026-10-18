@@ -731,6 +731,33 @@ async fn own_and_on_link_addresses_are_private_for_playback() {
 }
 
 #[tokio::test]
+async fn a_loopback_install_reaches_the_devices_own_addresses() {
+    let http = quick_client();
+    let lo = Interface {
+        loopback: true,
+        ..interface("::1/128", false)
+    };
+    let lan = interface("2001:db8:1:2::abcd/64", false);
+    test_dns::set_interfaces(&http, Ok(vec![lo, lan]));
+    test_dns::set("own.c23.test", &[ip("2001:db8:1:2::abcd")]);
+    // An addon on this device whose streams name its LAN address.
+    for host in ["127.0.0.1", "[::1]", "localhost"] {
+        let addon = http.scoped(&local_addrs(host));
+        not_refused(&addon, "http://[2001:db8:1:2::abcd]:9/").await;
+        not_refused(&addon, "http://own.c23.test:9/").await;
+        // The rest of the link stays out.
+        refused(&addon, "http://[2001:db8:1:2::1]:9/").await;
+    }
+    // A loopback literal still scopes exactly itself.
+    let v4 = http.scoped(&local_addrs("127.0.0.1"));
+    refused(&v4, "http://[::1]:9/").await;
+    // An install on another private host does not run here.
+    let lan = http.scoped(&local_addrs("192.168.1.20"));
+    refused(&lan, "http://[2001:db8:1:2::abcd]:9/").await;
+    refused(&lan, "http://own.c23.test:9/").await;
+}
+
+#[tokio::test]
 async fn a_failed_interface_read_keeps_the_snapshot() {
     // The log lines it writes are checked in tests/logs.rs.
     let http = quick_client();
