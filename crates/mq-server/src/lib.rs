@@ -20,9 +20,9 @@ use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use futures_util::stream;
-use mq_http::{HttpClient, Priority, RequestOptions};
+use mq_http::{HttpClient, Priority, RequestOptions, Url};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -33,7 +33,10 @@ pub enum Upstream {
         url: String,
         /// Request headers from the stream's `proxyHeaders`.
         headers: Vec<(String, String)>,
-        allow_private: bool,
+        /// The transport URL of the install that listed the stream: its own
+        /// host is the only private address the playback may reach. `None`
+        /// (a debrid link) reaches public addresses only.
+        addon_url: Option<Url>,
     },
     #[cfg(feature = "torrent")]
     Torrent {
@@ -48,7 +51,17 @@ pub enum Upstream {
 struct Subtitle {
     url: String,
     lang: String,
-    allow_private: bool,
+    /// The install whose answer named the file: its scope, no headers.
+    addon_url: Option<Url>,
+}
+
+/// The addresses an install's own host adds to its playbacks' scope
+/// (`mq_http::local_addrs`); none without an install.
+fn scope(addon_url: Option<&Url>) -> Vec<IpAddr> {
+    addon_url
+        .and_then(Url::host_str)
+        .map(mq_http::local_addrs)
+        .unwrap_or_default()
 }
 
 /// A registered playback.
@@ -114,10 +127,10 @@ impl StreamServer {
             Upstream::Http {
                 url,
                 headers,
-                allow_private,
+                addon_url,
             } => {
-                let source =
-                    ahead::Source::new(self.state.http.clone(), url, headers, allow_private);
+                let http = self.state.http.scoped(&scope(addon_url.as_ref()));
+                let source = ahead::Source::new(http, url, headers);
                 source.prefetch();
                 Session::Http(source)
             }
@@ -157,6 +170,9 @@ impl StreamServer {
         let error = match tokio::time::timeout(deadline, source.meta(0)).await {
             Ok(Ok(_) | Err(ahead::Refusal::Passthrough)) => return Ok(url),
             Ok(Err(ahead::Refusal::Status(status, _))) => refused(status),
+            Ok(Err(ahead::Refusal::Blocked)) => {
+                "The source points to a private network address".into()
+            }
             Ok(Err(ahead::Refusal::Failed(reason))) => {
                 tracing::info!("stream source unreachable: {reason}");
                 "The source could not be reached".into()
@@ -169,11 +185,13 @@ impl StreamServer {
 
     /// Registers an addon's subtitle file and returns a URL that serves it as
     /// UTF-8 WebVTT. The same file gets the same URL, so tracks compare by it.
-    pub fn register_subtitle(&self, url: &str, lang: &str, allow_private: bool) -> String {
+    /// `addon_url` is the install whose answer named the file: the fetch
+    /// reaches only its own host among private addresses.
+    pub fn register_subtitle(&self, url: &str, lang: &str, addon_url: Option<&Url>) -> String {
         let subtitle = Subtitle {
             url: url.to_owned(),
             lang: lang.to_owned(),
-            allow_private,
+            addon_url: addon_url.cloned(),
         };
         let mut subtitles = lock(&self.state.subtitles);
         let token = match subtitles.iter().find(|(_, s)| **s == subtitle) {
@@ -276,13 +294,13 @@ async fn serve_subtitle(
     let opts = RequestOptions {
         priority: Priority::Playback,
         timeout: Duration::from_secs(20),
-        allow_private: subtitle.allow_private,
         ..Default::default()
     };
-    let body = match state.http.get(&subtitle.url, &opts).await {
+    let http = state.http.scoped(&scope(subtitle.addon_url.as_ref()));
+    let body = match http.get(&subtitle.url, &opts).await {
         Ok(response) => response.body,
         Err(e) => {
-            tracing::warn!("subtitle upstream failed: {e}");
+            tracing::warn!("subtitle upstream failed: {}", e.kind());
             return StatusCode::BAD_GATEWAY.into_response();
         }
     };
@@ -317,7 +335,7 @@ async fn serve(
         .map(str::to_owned);
     let head_only = request.method() == Method::HEAD;
     match session {
-        Session::Http(source) => serve_http(&state.http, source, range, head_only).await,
+        Session::Http(source) => serve_http(source, range, head_only).await,
         #[cfg(feature = "torrent")]
         Session::Torrent {
             engine,
@@ -473,13 +491,12 @@ mod torrent {
 
 /// Serves a range from the playback's read-ahead cache.
 async fn serve_http(
-    http: &HttpClient,
     source: Arc<ahead::Source>,
     range: Option<String>,
     head_only: bool,
 ) -> Response {
     if source.passthrough() {
-        return proxy_http(http, &source, range, head_only).await;
+        return proxy_http(&source, range, head_only).await;
     }
     let first = range
         .as_deref()
@@ -496,10 +513,12 @@ async fn serve_http(
     let meta = match source.meta(first).await {
         Ok(meta) => meta,
         Err(ahead::Refusal::Passthrough) => {
-            return proxy_http(http, &source, range, head_only).await;
+            return proxy_http(&source, range, head_only).await;
         }
         Err(ahead::Refusal::Status(status, headers)) => return (status, headers).into_response(),
-        Err(ahead::Refusal::Failed(_)) => return StatusCode::BAD_GATEWAY.into_response(),
+        Err(ahead::Refusal::Blocked | ahead::Refusal::Failed(_)) => {
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
     };
     let mut out = meta.headers.clone();
     out.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
@@ -532,27 +551,20 @@ async fn serve_http(
 }
 
 /// Plain proxy with Range passthrough, for origins that ignore ranges or
-/// give no length.
-async fn proxy_http(
-    http: &HttpClient,
-    source: &ahead::Source,
-    range: Option<String>,
-    head_only: bool,
-) -> Response {
-    let opts = RequestOptions {
-        priority: Priority::Playback,
-        timeout: Duration::from_secs(30),
-        allow_private: source.allow_private(),
-        headers: source.headers().to_vec(),
-        ..Default::default()
-    };
+/// give no length. A redirect the client did not follow answers 502, and an
+/// error status goes on with its `Content-Range` but without its body.
+async fn proxy_http(source: &ahead::Source, range: Option<String>, head_only: bool) -> Response {
+    let opts = source.options();
     let released = source.released().clone();
-    let open = tokio::time::timeout(ahead::OPEN, http.stream(source.url(), range, &opts));
+    let open = tokio::time::timeout(
+        ahead::OPEN,
+        source.http().stream(source.url(), range, &opts),
+    );
     let upstream = match released.run_until_cancelled(open).await {
         None => return StatusCode::NOT_FOUND.into_response(),
         Some(Ok(Ok(response))) => response,
         Some(Ok(Err(e))) => {
-            tracing::warn!("stream upstream failed: {e}");
+            tracing::warn!("stream upstream failed: {}", e.kind());
             return StatusCode::BAD_GATEWAY.into_response();
         }
         Some(Err(_)) => {
@@ -561,6 +573,17 @@ async fn proxy_http(
         }
     };
     let status = StatusCode::from_u16(upstream.status).unwrap_or(StatusCode::BAD_GATEWAY);
+    if status.is_redirection() {
+        tracing::warn!("stream upstream answered a redirect it could not follow");
+        return StatusCode::BAD_GATEWAY.into_response();
+    }
+    if !status.is_success() {
+        let mut out = HeaderMap::new();
+        if let Some(value) = upstream.headers.get(header::CONTENT_RANGE) {
+            out.insert(header::CONTENT_RANGE, value.clone());
+        }
+        return (status, out).into_response();
+    }
     let mut out = HeaderMap::new();
     for name in PASSTHROUGH {
         if let Some(value) = upstream.headers.get(&name) {

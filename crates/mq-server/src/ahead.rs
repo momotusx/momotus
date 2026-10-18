@@ -35,15 +35,6 @@ pub(crate) const OPEN: Duration = Duration::from_secs(20);
 const STALL: Duration = Duration::from_secs(6);
 /// Cursor failures in a row that end a response.
 const RETRIES: u32 = 3;
-/// Request headers that never follow a redirect to another origin, as
-/// reqwest drops them on the hop itself.
-const CREDENTIALS: [&str; 5] = [
-    "authorization",
-    "cookie",
-    "cookie2",
-    "proxy-authorization",
-    "www-authenticate",
-];
 
 /// Why a playback cannot be served from the cache.
 #[derive(Debug, Clone)]
@@ -53,8 +44,12 @@ pub(crate) enum Refusal {
     /// The origin's own error answer, passed on to the player with its
     /// `Content-Range` (a 416 names the length).
     Status(StatusCode, HeaderMap),
-    /// No answer; the reason, for the playback's attempt list.
-    Failed(String),
+    /// The URL, a redirect hop or a DNS answer is an address outside the
+    /// playback's scope.
+    Blocked,
+    /// No answer; a fixed word for logs (`HttpError::kind`), never an
+    /// address.
+    Failed(&'static str),
 }
 
 /// What the first upstream answer told about the file.
@@ -134,22 +129,19 @@ impl Drop for Exit {
     }
 }
 
-/// Where the origin's redirect led, with the request headers that go there.
-struct Redirect {
-    url: String,
-    headers: Vec<(String, String)>,
-}
-
-/// What cursor tasks share with the source.
+/// What cursor tasks share with the source: the playback's fetch context.
 struct Shared {
+    /// Scoped to the playback (`HttpClient::scoped`): every hop, the memo
+    /// target included, connects only within it.
     http: HttpClient,
     url: String,
+    /// The stream's `proxyHeaders`. They go in full only to the stream
+    /// URL's origin; `headers_for` gives every other origin the safe list.
     headers: Vec<(String, String)>,
-    allow_private: bool,
     /// The redirect target an earlier read reached, so later reads skip the
     /// hop. It may carry a short-lived token, so it lives only as long as
     /// this playback.
-    redirect: Mutex<Option<Arc<Redirect>>>,
+    redirect: Mutex<Option<Arc<str>>>,
     cache: ByteCache,
     meta: OnceLock<Arc<Meta>>,
     passthrough: AtomicBool,
@@ -174,18 +166,13 @@ impl Drop for Source {
 }
 
 impl Source {
-    pub(crate) fn new(
-        http: HttpClient,
-        url: String,
-        headers: Vec<(String, String)>,
-        allow_private: bool,
-    ) -> Arc<Self> {
+    /// `http` is the playback's scoped handle.
+    pub(crate) fn new(http: HttpClient, url: String, headers: Vec<(String, String)>) -> Arc<Self> {
         Arc::new(Self {
             shared: Arc::new(Shared {
                 http,
                 url,
                 headers,
-                allow_private,
                 redirect: Mutex::default(),
                 cache: ByteCache::new(CACHE_BYTES),
                 meta: OnceLock::new(),
@@ -220,12 +207,13 @@ impl Source {
         &self.shared.url
     }
 
-    pub(crate) fn headers(&self) -> &[(String, String)] {
-        &self.shared.headers
+    /// The playback's scoped handle.
+    pub(crate) fn http(&self) -> &HttpClient {
+        &self.shared.http
     }
 
-    pub(crate) fn allow_private(&self) -> bool {
-        self.shared.allow_private
+    pub(crate) fn options(&self) -> RequestOptions {
+        self.shared.options()
     }
 
     pub(crate) fn passthrough(&self) -> bool {
@@ -246,7 +234,7 @@ impl Source {
         if let Some(meta) = self.shared.meta.get() {
             return Ok(meta.clone());
         }
-        let released = || Refusal::Failed("playback released".into());
+        let released = || Refusal::Failed("playback released");
         let cursor = self.cursor_at(pos).ok_or_else(released)?;
         let mut rx = cursor.progress.subscribe();
         let _ = rx.wait_for(|p| p.phase != Phase::Opening).await;
@@ -394,39 +382,33 @@ impl Shared {
     /// anything but the range (an expired link, a refusal, no connection).
     async fn request(&self, start: u64) -> Result<StreamingResponse, HttpError> {
         let range = Some(format!("bytes={start}-"));
+        let opts = self.options();
         let redirect = lock(&self.redirect).clone();
-        if let Some(redirect) = redirect {
-            let answer = self
-                .http
-                .stream(
-                    &redirect.url,
-                    range.clone(),
-                    &self.options(&redirect.headers),
-                )
-                .await;
-            match answer {
+        if let Some(target) = redirect {
+            // Through the same scoped handle, with the stream URL as the
+            // headers' owner: another origin gets only the safe list.
+            match self.http.stream(&target, range.clone(), &opts).await {
                 Ok(upstream) if upstream.status == 206 => return Ok(upstream),
                 Ok(upstream) => tracing::info!(
                     "stream redirect target answered {}; asking the original URL",
                     upstream.status
                 ),
-                Err(e) => {
-                    tracing::info!("stream redirect target failed: {e}; asking the original URL")
-                }
+                Err(e) => tracing::info!(
+                    "stream redirect target failed: {}; asking the original URL",
+                    e.kind()
+                ),
             }
             *lock(&self.redirect) = None;
         }
-        self.http
-            .stream(&self.url, range, &self.options(&self.headers))
-            .await
+        self.http.stream(&self.url, range, &opts).await
     }
 
-    fn options(&self, headers: &[(String, String)]) -> RequestOptions {
+    fn options(&self) -> RequestOptions {
         RequestOptions {
             priority: Priority::Playback,
             timeout: Duration::from_secs(30),
-            allow_private: self.allow_private,
-            headers: headers.to_vec(),
+            headers: self.headers.clone(),
+            owner: Url::parse(&self.url).ok(),
             ..Default::default()
         }
     }
@@ -434,39 +416,27 @@ impl Shared {
     /// Keeps where the original URL's redirect led for this playback's later
     /// reads.
     fn remember(&self, target: &Url) {
-        let Ok(first) = Url::parse(&self.url) else {
-            return;
-        };
-        if *target == first {
-            return;
+        if Url::parse(&self.url).is_ok_and(|first| *target != first) {
+            *lock(&self.redirect) = Some(target.as_str().into());
         }
-        let cross = target.scheme() != first.scheme()
-            || target.host_str() != first.host_str()
-            || target.port_or_known_default() != first.port_or_known_default();
-        let headers = self
-            .headers
-            .iter()
-            .filter(|(name, _)| !cross || !CREDENTIALS.iter().any(|c| name.eq_ignore_ascii_case(c)))
-            .cloned()
-            .collect();
-        *lock(&self.redirect) = Some(Arc::new(Redirect {
-            url: target.to_string(),
-            headers,
-        }));
     }
 
     async fn open(&self, start: u64) -> Result<StreamingResponse, Refusal> {
         let upstream = match tokio::time::timeout(OPEN, self.request(start)).await {
             Ok(Ok(upstream)) => upstream,
+            Ok(Err(HttpError::BlockedPrivate(_))) => {
+                tracing::warn!("stream upstream refused: blocked address");
+                return Err(Refusal::Blocked);
+            }
             Ok(Err(e)) => {
-                tracing::warn!("stream upstream failed: {e}");
-                return Err(Refusal::Failed(e.to_string()));
+                tracing::warn!("stream upstream failed: {}", e.kind());
+                return Err(Refusal::Failed(e.kind()));
             }
             Err(_) => {
                 tracing::warn!("stream upstream sent no answer in {OPEN:?}");
                 // A target that never answers is not asked again.
                 *lock(&self.redirect) = None;
-                return Err(Refusal::Failed("no answer in time".into()));
+                return Err(Refusal::Failed("no answer in time"));
             }
         };
         let len = match upstream.status {
@@ -477,6 +447,12 @@ impl Shared {
                 .map(|(_, _, len)| len),
             // The whole file for a range: the origin ignores ranges.
             200 => None,
+            // A redirect the client did not follow (no `Location`, or one it
+            // refuses to follow) never reaches the player.
+            300..=399 => {
+                tracing::warn!("stream upstream answered a redirect it could not follow");
+                return Err(Refusal::Failed("redirect"));
+            }
             status => {
                 let mut headers = HeaderMap::new();
                 if let Some(value) = upstream.headers.get(header::CONTENT_RANGE) {
@@ -513,7 +489,7 @@ impl Shared {
             });
         if changed {
             tracing::warn!("stream upstream changed during playback");
-            return Err(Refusal::Failed("the file changed during playback".into()));
+            return Err(Refusal::Failed("the file changed during playback"));
         }
         self.remember(&upstream.final_url);
         Ok(upstream)

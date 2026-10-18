@@ -564,7 +564,7 @@ async fn resolve_next(
             Ok((upstream, filename, size, url)) => {
                 let wanted = core.prefs().subtitle_languages;
                 // The stream's own tracks come from its addon.
-                let allow_private = private_reach(stream.addon_url.as_ref());
+                let addon_url = stream.addon_url.as_ref();
                 {
                     let mut s = lock(&state);
                     clear_segments(&mut s);
@@ -576,7 +576,7 @@ async fn resolve_next(
                     s.snapshot.subtitles = stream
                         .subtitles
                         .iter()
-                        .map(|w| track(w, &stream.addon_name, &server, allow_private))
+                        .map(|w| track(w, &stream.addon_name, &server, addon_url))
                         .collect();
                     order_subtitles(&mut s.snapshot.subtitles, &wanted);
                     s.snapshot.subtitles_pending = true;
@@ -614,32 +614,21 @@ async fn resolve_next(
 
 type Opened = (Upstream, Option<String>, Option<u64>);
 
-/// Whether an addon's stream and subtitle URLs may reach private addresses:
-/// only when its own install host, from the transport URL the candidate
-/// carries, has a private address in its scope (`local_addrs`). Neither the
-/// installed row's bit, which sync may set, nor the manifest id, which any
-/// addon may declare, is read. No URL, no reach.
-fn private_reach(addon_url: Option<&Url>) -> bool {
-    addon_url.and_then(Url::host_str).is_some_and(|host| {
-        mq_http::local_addrs(host)
-            .into_iter()
-            .any(mq_http::is_private_ip)
-    })
-}
-
-/// Resolves one stream to an upstream.
+/// Resolves one stream to an upstream. Its scope is the install that listed
+/// it (the candidate's `addon_url`); neither the installed row's bit, which
+/// sync may set, nor the manifest id, which any addon may declare, is read.
 async fn open_source(
     core: &Core,
     stream: &ParsedStream,
     target: &PlayTarget,
 ) -> Result<Opened, String> {
-    let (url, headers, filename, size, allow_private) = match &stream.source {
+    let (url, headers, filename, size, addon_url) = match &stream.source {
         Source::Http { url } => (
             url.to_string(),
             stream.headers.clone(),
             stream.filename.clone(),
             stream.size_bytes,
-            private_reach(stream.addon_url.as_ref()),
+            stream.addon_url.clone(),
         ),
         Source::Torrent {
             info_hash,
@@ -685,8 +674,8 @@ async fn open_source(
                     .map_err(|p2p| format!("{e}; peer to peer: {p2p}"));
             }
             let link = resolved?;
-            // The provider's link, not the addon's: no private reach.
-            (link.url, Vec::new(), Some(link.filename), link.size, false)
+            // The provider's link, not the addon's: no install scope.
+            (link.url, Vec::new(), Some(link.filename), link.size, None)
         }
         other => return Err(format!("{} streams cannot play here", source_word(other))),
     };
@@ -695,7 +684,7 @@ async fn open_source(
         Upstream::Http {
             url,
             headers,
-            allow_private,
+            addon_url,
         },
         filename,
         size,
@@ -887,10 +876,10 @@ fn track(
     w: &mq_protocol::WireSubtitle,
     source: &str,
     server: &StreamServer,
-    allow_private: bool,
+    addon_url: Option<&Url>,
 ) -> SubtitleTrack {
     SubtitleTrack {
-        url: server.register_subtitle(w.url.as_str(), &w.lang, allow_private),
+        url: server.register_subtitle(w.url.as_str(), &w.lang, addon_url),
         lang: w.lang.clone(),
         label: w.label.clone(),
         source: source.to_owned(),
@@ -915,16 +904,21 @@ async fn find_subtitles(
         Upstream::Http {
             url,
             headers,
-            allow_private,
-        } => Box::new(
-            HttpRangeReader::new(
-                core.http().clone(),
+            addon_url,
+        } => {
+            // The playback's own scope, as the stream server uses it.
+            let local = addon_url
+                .as_ref()
+                .and_then(Url::host_str)
+                .map(mq_http::local_addrs)
+                .unwrap_or_default();
+            Box::new(HttpRangeReader::new(
+                core.http().scoped(&local),
                 url,
                 headers.clone(),
                 Arc::new(ByteCache::new(512 * 1024)),
-            )
-            .allow_private(*allow_private),
-        ),
+            ))
+        }
         #[cfg(feature = "torrent")]
         Upstream::Torrent {
             engine,
@@ -974,13 +968,13 @@ async fn find_subtitles(
             } => {
                 let addon = addons.iter().find(|a| a.transport_url == transport_url);
                 let source = addon.map_or(addon_id.clone(), |a| a.manifest.name.clone());
-                let private = private_reach(Some(&transport_url));
                 let found = decode_subtitles(&body)
                     .map(|r| r.subtitles)
                     .unwrap_or_default();
                 for w in &found {
-                    // One file, one loopback address: compare by it.
-                    let t = track(w, &source, server, private);
+                    // One file, one loopback address: compare by it. The
+                    // fetch has the scope of the install that answered.
+                    let t = track(w, &source, server, Some(&transport_url));
                     if !s.snapshot.subtitles.iter().any(|known| known.url == t.url) {
                         s.snapshot.subtitles.push(t);
                     }
@@ -1083,29 +1077,6 @@ mod tests {
         let body = format!(r#"{{"streams":[{json}]}}"#);
         let wire = mq_protocol::decode_streams(body.as_bytes()).unwrap();
         mq_streams::normalize(&wire.streams[0], "a", "A", 0, 0)
-    }
-
-    #[test]
-    fn only_a_private_install_host_grants_reach() {
-        let reach = |url: Option<&str>| private_reach(url.map(|u| Url::parse(u).unwrap()).as_ref());
-        for local in [
-            "http://127.0.0.1:9/manifest.json",
-            "http://[::1]:9/manifest.json",
-            "http://[fd00::5]/manifest.json",
-            "http://localhost:9/manifest.json",
-            "http://192.168.1.5/manifest.json",
-        ] {
-            assert!(reach(Some(local)), "{local}");
-        }
-        // A public literal (a VPS) or a name grants nothing, nor does no URL.
-        for public in [
-            "http://203.0.113.9/manifest.json",
-            "http://[2001:db8::9]/manifest.json",
-            "https://name.example/manifest.json",
-        ] {
-            assert!(!reach(Some(public)), "{public}");
-        }
-        assert!(!reach(None));
     }
 
     #[test]

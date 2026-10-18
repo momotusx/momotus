@@ -24,5 +24,7 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+mq-http = { path = "../mq-http", features = ["test-dns"] }
 tokio = { workspace = true, features = ["net", "io-util"] }
 tempfile = "3"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }

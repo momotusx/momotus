@@ -1,6 +1,7 @@
 //! Serves one HTTP(S) URL through the loopback proxy and prints the local
 //! URL, for timing players against it: `cargo run -p mq-server --example
-//! serve -- <url> [name]`. Loopback and LAN origins are allowed.
+//! serve -- <url> [name]`. The URL's own host is in scope, as an install's
+//! is, so a loopback or LAN literal plays.
 
 use mq_http::{ClientConfig, HttpClient};
 use mq_server::{StreamServer, Upstream};
@@ -13,9 +14,9 @@ async fn main() {
     let http = HttpClient::new(ClientConfig::default()).expect("http client");
     let server = StreamServer::start(http).await.expect("bind");
     let upstream = Upstream::Http {
+        addon_url: url.parse().ok(),
         url,
         headers: Vec::new(),
-        allow_private: true,
     };
     println!("{}", server.register(upstream, &name));
     std::future::pending::<()>().await;

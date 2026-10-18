@@ -1,4 +1,4 @@
-use mq_http::{ClientConfig, HttpClient, RequestOptions};
+use mq_http::{ClientConfig, HttpClient, RequestOptions, Url};
 use mq_server::{StreamServer, Upstream};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -13,11 +13,17 @@ struct Seen {
     sent: Arc<AtomicU64>,
     /// Requests that carried an `Authorization` header.
     credentials: Arc<AtomicU64>,
+    /// Every request head, lowercased.
+    heads: Arc<Mutex<Vec<String>>>,
 }
 
 impl Seen {
     fn ranges(&self) -> Vec<String> {
         self.ranges.lock().unwrap().clone()
+    }
+
+    fn heads(&self) -> Vec<String> {
+        self.heads.lock().unwrap().clone()
     }
 }
 
@@ -74,6 +80,7 @@ async fn answer(mut socket: TcpStream, data: Arc<Vec<u8>>, how: Behaviour, seen:
         }
     }
     let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+    seen.heads.lock().unwrap().push(head.clone());
     if head.contains("\r\nauthorization:") {
         seen.credentials.fetch_add(1, Ordering::Relaxed);
     }
@@ -207,7 +214,7 @@ async fn serve_url(origin: String) -> (StreamServer, String, HttpClient) {
         Upstream::Http {
             url: origin,
             headers: vec![("Authorization".into(), "Bearer origin-only".into())],
-            allow_private: true,
+            addon_url: Some(local_addon()),
         },
         "video.mkv",
     );
@@ -222,6 +229,11 @@ fn local() -> RequestOptions {
     }
 }
 
+/// An install on this machine: its playbacks may reach 127.0.0.1.
+fn local_addon() -> Url {
+    Url::parse("http://127.0.0.1:9/manifest.json").unwrap()
+}
+
 async fn serve(data: &Arc<Vec<u8>>, how: Behaviour) -> (StreamServer, String, Seen, HttpClient) {
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http.clone()).await.unwrap();
@@ -230,7 +242,7 @@ async fn serve(data: &Arc<Vec<u8>>, how: Behaviour) -> (StreamServer, String, Se
         Upstream::Http {
             url: origin,
             headers: vec![("x-token".into(), "abc".into())],
-            allow_private: true,
+            addon_url: Some(local_addon()),
         },
         "video.mkv",
     );
@@ -300,7 +312,7 @@ async fn proxies_ranges_with_injected_headers_and_releases_tokens() {
         Upstream::Http {
             url: origin,
             headers: vec![("x-token".into(), "abc".into())],
-            allow_private: true,
+            addon_url: Some(local_addon()),
         },
         "Show S01E01 2160p.mkv",
     );
@@ -475,7 +487,7 @@ async fn rejects_unknown_tokens_and_foreign_hosts() {
         Upstream::Http {
             url: origin,
             headers: vec![],
-            allow_private: true,
+            addon_url: Some(local_addon()),
         },
         "x.mkv",
     );
@@ -523,10 +535,10 @@ async fn subtitles_come_out_as_utf8_webvtt_for_any_page() {
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http.clone()).await.unwrap();
     let origin = subtitle_origin().await;
-    let url = server.register_subtitle(&origin, "rus", true);
+    let url = server.register_subtitle(&origin, "rus", Some(&local_addon()));
     assert!(url.ends_with("/rus.vtt"), "{url}");
     assert_eq!(
-        server.register_subtitle(&origin, "rus", true),
+        server.register_subtitle(&origin, "rus", Some(&local_addon())),
         url,
         "one address per file"
     );
@@ -556,7 +568,7 @@ async fn live_redirecting_origin_range_times() {
         Upstream::Http {
             url: "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4".into(),
             headers: vec![],
-            allow_private: false,
+            addon_url: None,
         },
         "bbb.mp4",
     );
@@ -749,7 +761,7 @@ async fn open_checks_the_origin_with_the_read_that_serves_the_player() {
     let upstream = |url: &str| Upstream::Http {
         url: url.to_owned(),
         headers: vec![],
-        allow_private: true,
+        addon_url: Some(local_addon()),
     };
     let started = std::time::Instant::now();
     let url = server
@@ -803,4 +815,212 @@ async fn a_stuck_upstream_is_replaced_quickly() {
     let took = started.elapsed();
     assert!(took < Duration::from_secs(12), "took {took:?}");
     assert!(seen.ranges().len() >= 2, "{:?}", seen.ranges());
+}
+
+// C23 in the server (plans/c21-c23-loopback.md 3.1, 3.4).
+
+/// A listener on a not-public address no scope here allows, counting the
+/// connections it accepts: `127.0.0.3` on Linux, `[::1]` on macOS (lo0 has
+/// only 127.0.0.1 and ::1). `port` 0 picks one.
+struct Canary {
+    addr: std::net::SocketAddr,
+    accepted: Arc<AtomicU64>,
+}
+
+impl Canary {
+    async fn start(port: u16) -> Canary {
+        let ip: std::net::IpAddr = if cfg!(target_os = "linux") {
+            std::net::Ipv4Addr::new(127, 0, 0, 3).into()
+        } else {
+            std::net::Ipv6Addr::LOCALHOST.into()
+        };
+        let listener = TcpListener::bind((ip, port))
+            .await
+            .expect("the canary must bind");
+        let addr = listener.local_addr().unwrap();
+        let accepted = Arc::new(AtomicU64::new(0));
+        let count = accepted.clone();
+        tokio::spawn(async move {
+            while let Ok((socket, _)) = listener.accept().await {
+                count.fetch_add(1, Ordering::SeqCst);
+                drop(socket);
+            }
+        });
+        Canary { addr, accepted }
+    }
+
+    fn accepted(&self) -> u64 {
+        self.accepted.load(Ordering::SeqCst)
+    }
+}
+
+/// An origin that answers its `n`th request with `replies[n]`, the last one
+/// from then on, one request per connection.
+async fn scripted(replies: Vec<&'static str>) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let served = Arc::new(AtomicU64::new(0));
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let n = served.fetch_add(1, Ordering::SeqCst) as usize;
+            let reply = replies[n.min(replies.len() - 1)];
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}/v.mkv")
+}
+
+/// A raw request; returns the reply's head and body.
+async fn raw_full(server: &StreamServer, url: &str, range: &str) -> (String, Vec<u8>) {
+    let base = format!("http://{}", server.addr());
+    let path = url.trim_start_matches(&base);
+    let mut socket = TcpStream::connect(server.addr()).await.unwrap();
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {}\r\nRange: {range}\r\nConnection: close\r\n\r\n",
+        server.addr()
+    );
+    socket.write_all(request.as_bytes()).await.unwrap();
+    let mut reply = Vec::new();
+    socket.read_to_end(&mut reply).await.unwrap();
+    let end = reply.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+    let head = String::from_utf8_lossy(&reply[..end]).to_ascii_lowercase();
+    (head, reply[end + 4..].to_vec())
+}
+
+fn local_upstream(url: String) -> Upstream {
+    Upstream::Http {
+        url,
+        headers: vec![],
+        addon_url: Some(local_addon()),
+    }
+}
+
+const REDIRECT_WITHOUT_LOCATION: &str =
+    "HTTP/1.1 302 Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+/// The whole file for a range request: the origin is proxied plainly.
+const WHOLE_FILE: &str = "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd";
+
+#[tokio::test]
+async fn the_player_never_sees_a_redirect() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    // The first answer of a registered playback (the cache path).
+    let origin = scripted(vec![REDIRECT_WITHOUT_LOCATION]).await;
+    let url = server.register(local_upstream(origin), "v.mkv");
+    let (head, _) = raw_full(&server, &url, "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 502"), "{head}");
+    assert!(!head.contains("location"), "{head}");
+    // A later answer of an origin proxied plainly.
+    let origin = scripted(vec![WHOLE_FILE, REDIRECT_WITHOUT_LOCATION]).await;
+    let url = server.register(local_upstream(origin), "v.mkv");
+    let (head, _) = raw_full(&server, &url, "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 502"), "{head}");
+    assert!(!head.contains("location"), "{head}");
+}
+
+#[tokio::test]
+async fn an_error_page_is_not_passed_on() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    let page = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\nContent-Length: 20\r\nConnection: close\r\n\r\n<html>denied</html>\n";
+    let origin = scripted(vec![WHOLE_FILE, page]).await;
+    let url = server.register(local_upstream(origin), "v.mkv");
+    let (head, body) = raw_full(&server, &url, "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 403"), "{head}");
+    assert!(body.is_empty(), "{}", String::from_utf8_lossy(&body));
+}
+
+#[tokio::test]
+async fn subtitles_obey_their_addons_scope() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let canary = Canary::start(0).await;
+    mq_http::test_dns::set("sub-canary.c23.test", &[canary.addr.ip()]);
+    let port = canary.addr.port();
+    let (redirect, _) = redirector(vec![format!("http://{}/b.srt", canary.addr)]).await;
+    for track in [
+        // A local install's track on another private address, by literal
+        // and by name.
+        format!("http://{}/a.srt", canary.addr),
+        format!("http://sub-canary.c23.test:{port}/a.srt"),
+        // A track on the install's own host that redirects off it.
+        redirect,
+    ] {
+        let url = server.register_subtitle(&track, "eng", Some(&local_addon()));
+        let err = http.get(&url, &local()).await.unwrap_err();
+        assert!(
+            matches!(err, mq_http::HttpError::Status { status: 502, .. }),
+            "{track}: {err:?}"
+        );
+    }
+    assert_eq!(canary.accepted(), 0);
+}
+
+#[tokio::test]
+async fn a_redirect_target_that_turns_private_is_refused() {
+    let data = file(16 << 20);
+    let (target, _seen) = range_origin(data.clone(), Behaviour::default()).await;
+    let port = Url::parse(&target).unwrap().port().unwrap();
+    // The canary listens on the target's port, where the name will point.
+    let canary = Canary::start(port).await;
+    mq_http::test_dns::set("memo.c23.test", &["127.0.0.1".parse().unwrap()]);
+    let (origin, redirects) =
+        redirector(vec![format!("http://memo.c23.test:{port}/video.mkv")]).await;
+    let (_server, url, http) = serve_url(origin).await;
+    assert_eq!(range(&http, &url, 0, 2).await, data[..2]);
+    // The remembered target's name now answers the canary.
+    mq_http::test_dns::set("memo.c23.test", &[canary.addr.ip()]);
+    let far = 12u64 << 20;
+    let read = http.get_range(&url, far, 1000, &local()).await;
+    assert!(read.is_err(), "{read:?}");
+    assert!(
+        redirects.load(Ordering::Relaxed) >= 2,
+        "the fallback asked the original URL"
+    );
+    assert_eq!(canary.accepted(), 0);
+}
+
+#[tokio::test]
+async fn secrets_stay_with_their_origin() {
+    let data = file(16 << 20);
+    let (target, seen) = range_origin(data.clone(), Behaviour::default()).await;
+    let (origin, redirects) = redirector(vec![target]).await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let headers = [
+        ("X-Api-Key", "k1"),
+        ("Authorization", "Bearer t1"),
+        ("Referer", "https://site.example/"),
+    ]
+    .map(|(n, v)| (n.to_owned(), v.to_owned()))
+    .to_vec();
+    let url = server.register(
+        Upstream::Http {
+            url: origin,
+            headers,
+            addon_url: Some(local_addon()),
+        },
+        "video.mkv",
+    );
+    assert_eq!(range(&http, &url, 0, 2).await, data[..2]);
+    // A seek: the second read goes to the remembered target directly.
+    let far = 12usize << 20;
+    assert_eq!(
+        range(&http, &url, far as u64, 1000).await,
+        data[far..far + 1000]
+    );
+    assert_eq!(redirects.load(Ordering::Relaxed), 1);
+    let heads = seen.heads();
+    assert_eq!(heads.len(), 2, "{heads:?}");
+    for head in heads {
+        assert!(head.contains("referer: https://site.example/"), "{head}");
+        assert!(
+            !head.contains("x-api-key") && !head.contains("authorization"),
+            "{head}"
+        );
+    }
 }

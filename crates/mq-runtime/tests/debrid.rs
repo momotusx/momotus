@@ -807,6 +807,9 @@ async fn a_resolved_debrid_link_gets_no_private_reach() {
     let s = view.snapshot();
     assert_eq!(rd.count("POST", "/rest/1.0/unrestrict/link"), 1, "{s:?}");
     assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
-    assert_eq!(s.attempts[0].error, "The source could not be reached");
+    assert_eq!(
+        s.attempts[0].error,
+        "The source points to a private network address"
+    );
     assert_eq!(origin.count("GET", "/Movie.mkv"), 0, "the origin was asked");
 }

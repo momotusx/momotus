@@ -119,7 +119,7 @@ async fn counted_origin() -> (String, Arc<AtomicUsize>) {
 }
 
 /// What the view says when the server refuses a private address.
-const UNREACHABLE: &str = "The source could not be reached";
+const PRIVATE: &str = "The source points to a private network address";
 
 #[tokio::test]
 async fn a_public_install_never_borrows_a_local_ones_reach() {
@@ -137,7 +137,7 @@ async fn a_public_install_never_borrows_a_local_ones_reach() {
     let view = PlaybackView::open(&core, candidates, target());
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
-    assert_eq!(s.attempts[0].error, UNREACHABLE);
+    assert_eq!(s.attempts[0].error, PRIVATE);
     assert_eq!(asked.load(Ordering::SeqCst), 0, "the origin was asked");
 }
 
@@ -156,7 +156,7 @@ async fn a_synced_bit_grants_nothing() {
     );
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
-    assert_eq!(s.attempts[0].error, UNREACHABLE);
+    assert_eq!(s.attempts[0].error, PRIVATE);
     assert_eq!(asked.load(Ordering::SeqCst), 0, "the origin was asked");
 }
 
