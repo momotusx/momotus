@@ -1,6 +1,7 @@
 package app.marquee.player
 
 import android.net.Uri
+import androidx.media3.common.C
 import androidx.media3.common.util.UriUtil
 import androidx.media3.exoplayer.dash.manifest.DashManifest
 import androidx.media3.exoplayer.dash.manifest.DashManifestParser
@@ -88,6 +89,29 @@ class ManifestCorpusTest {
             val read = exposedDash(parseDash(file, "http://cdn.example/dash/${file.name}"))
             assertTrue(read.any { it.startsWith(CANARY) }, "${file.name}: $read")
         }
+    }
+
+    /**
+     * The core bounds the timeline elements Media3 builds by repeating its arithmetic
+     * (`dash_timelines_are_bounded` in manifest/dash.rs): a negative repeat in the last `S` runs
+     * to `Period@duration` (not the MPD's), scaled by the timescale the template inherits, and
+     * with no `Period@duration` from 0 at timescale 90,000 Media3 builds nothing.
+     */
+    @Test
+    fun `Media3 counts a last negative repeat as the core does`() {
+        val count = { period: String, timescale: Int ->
+            val mpd =
+                """<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static"
+                    mediaPresentationDuration="PT200S"><Period$period><AdaptationSet mimeType="video/mp4">
+                    <SegmentTemplate timescale="$timescale"/><Representation id="v" bandwidth="1">
+                    <SegmentTemplate media="s-${'$'}Time${'$'}.m4s"><SegmentTimeline><S t="0" d="1" r="-1"/>
+                    </SegmentTimeline></SegmentTemplate></Representation></AdaptationSet></Period></MPD>"""
+            val manifest = DashManifestParser().parse(Uri.parse("https://cdn.example/m.mpd"), mpd.byteInputStream())
+            val representation = manifest.getPeriod(0).adaptationSets[0].representations[0]
+            representation.index!!.getSegmentCount(C.TIME_UNSET)
+        }
+        assertEquals(100L, count(" duration=\"P0DT0H1M40S\"", 1))
+        assertEquals(0L, count("", 90_000))
     }
 
     private fun corpus(
