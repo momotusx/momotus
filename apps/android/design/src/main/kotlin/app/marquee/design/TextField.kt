@@ -49,6 +49,8 @@ fun MqTextField(
         modifier
             .fillMaxWidth()
             .height(if (tv) 72.dp else 48.dp)
+            // The shared ring, halo and lift, driven by the text input's own focus: never color alone.
+            .marqueeFocus(Marquee.radius.pill, Tokens.FOCUS_SCALE_TILE, forced = focused)
             .clip(shape)
             .background(colors.raised)
             .border(2.dp, if (focused) colors.accent else colors.control, shape)

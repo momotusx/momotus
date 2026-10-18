@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -36,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -143,9 +145,17 @@ fun PhoneTitle(
             val hasArt = details.background != null || details.poster != null
             var menuFor by remember { mutableStateOf<Episode?>(null) }
             val list = rememberLazyListState()
-            // Light icons only while the artwork is under the bar: scrolled away, the page is under it.
-            val atTop by remember { derivedStateOf { list.firstVisibleItemIndex == 0 } }
-            if (hasArt && atTop) LightStatusBarIcons()
+            val bar = WindowInsets.statusBars.getTop(LocalDensity.current)
+            // The page reaches the status bar once the artwork has scrolled out from under it (without
+            // artwork, at the first scroll). From then on a strip of page color sits behind the bar,
+            // so its icons never cross the text, and they take the page's colors.
+            val underBar by remember(bar, hasArt) {
+                derivedStateOf {
+                    val first = list.layoutInfo.visibleItemsInfo.firstOrNull() ?: return@derivedStateOf false
+                    first.index > 0 || if (hasArt) first.offset + first.size < bar else first.offset < 0
+                }
+            }
+            if (hasArt && !underBar) LightStatusBarIcons()
             menuFor?.let { episode ->
                 ActionMenu(
                     title = TitleCopy.episode(episode).removePrefix("Watched, "),
@@ -160,55 +170,65 @@ fun PhoneTitle(
                     onDismiss = { menuFor = null },
                 )
             }
-            LazyColumn(
-                state = list,
-                modifier = modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = Marquee.space.xl),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
-            ) {
-                item(
-                    key = "art",
-                ) { Hero(details.background ?: details.poster, details.logo, details.name, hasArt, side) }
-                item(key = "info") { Info(title, versions, versionsFailed, onPlay, onVersions, onAddSource) }
-                if (header.seasons.isNotEmpty()) {
-                    item(key = "seasons") {
-                        val compact = TitleCopy.compactSeasons(header.seasons)
-                        val order = TitleCopy.seasonOrder(header.seasons)
-                        val seasons = rememberLazyListState()
-                        val selected = order.indexOf(header.selectedSeason)
-                        KeepInView(seasons, if (selected < 0 || !compact) selected else selected + 1)
-                        LazyRow(
-                            state = seasons,
-                            contentPadding = PaddingValues(horizontal = side),
-                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (compact) {
-                                item(
-                                    key = "label",
-                                ) { MqText("Season", role = TextRole.Callout, color = Marquee.colors.muted) }
-                            }
-                            items(order, key = { it }) { season ->
-                                Chip(
-                                    label = TitleCopy.seasonLabel(season, compact),
-                                    selected = season == header.selectedSeason,
-                                    onClick = { title.selectSeason(season) },
-                                )
+            Box(modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = list,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = Marquee.space.xl),
+                    verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
+                ) {
+                    item(
+                        key = "art",
+                    ) { Hero(details.background ?: details.poster, details.logo, details.name, hasArt, side) }
+                    item(key = "info") { Info(title, versions, versionsFailed, onPlay, onVersions, onAddSource) }
+                    if (header.seasons.isNotEmpty()) {
+                        item(key = "seasons") {
+                            val compact = TitleCopy.compactSeasons(header.seasons)
+                            val order = TitleCopy.seasonOrder(header.seasons)
+                            val seasons = rememberLazyListState()
+                            val selected = order.indexOf(header.selectedSeason)
+                            KeepInView(seasons, if (selected < 0 || !compact) selected else selected + 1)
+                            LazyRow(
+                                state = seasons,
+                                contentPadding = PaddingValues(horizontal = side),
+                                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (compact) {
+                                    item(
+                                        key = "label",
+                                    ) { MqText("Season", role = TextRole.Callout, color = Marquee.colors.muted) }
+                                }
+                                items(order, key = { it }) { season ->
+                                    Chip(
+                                        label = TitleCopy.seasonLabel(season, compact),
+                                        selected = season == header.selectedSeason,
+                                        onClick = { title.selectSeason(season) },
+                                    )
+                                }
                             }
                         }
                     }
+                    items(title.episodes, key = { it.videoId }) { episode ->
+                        EpisodeRow(
+                            episode,
+                            details.runtime,
+                            onClick = { onEpisode(episode) },
+                            onMore = { menuFor = episode },
+                        )
+                    }
+                    val facts = TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons))
+                    if (facts.isNotEmpty()) {
+                        item(key = "details") { FactsTable(facts, Modifier.padding(horizontal = side).fillMaxWidth()) }
+                    }
                 }
-                items(title.episodes, key = { it.videoId }) { episode ->
-                    EpisodeRow(
-                        episode,
-                        details.runtime,
-                        onClick = { onEpisode(episode) },
-                        onMore = { menuFor = episode },
+                if (underBar) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .windowInsetsTopHeight(WindowInsets.statusBars)
+                            .background(Marquee.colors.bg),
                     )
-                }
-                val facts = TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons))
-                if (facts.isNotEmpty()) {
-                    item(key = "details") { FactsTable(facts, Modifier.padding(horizontal = side).fillMaxWidth()) }
                 }
             }
         }
@@ -330,7 +350,12 @@ private fun Info(
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }
         val context = LocalContext.current
-        Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
+        // Wraps to a second line on a small phone or with large text: every action keeps its full
+        // label and its 48 dp target.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        ) {
             if (target != null) {
                 RoundButton(Icons.Layers, "Versions", { onVersions(target.videoId) }, showLabel = true)
             }

@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -220,21 +222,28 @@ private fun Pick(
             }
 
             best != null -> {
-                CapsLabel("Recommended for this screen")
-                MqText(VersionsCopy.pickHeading(best), role = TextRole.Title1, maxLines = 1)
-                FactsGrid(VersionsCopy.facts(best), tones = mapOf("Status" to statusTone(best)))
-                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-                    for (reason in best.reasons.take(3)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            MqIcon(Icons.Check, tint = colors.ok, size = 26.dp)
-                            MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
+                // The details scroll when they run long (features, languages, three reasons, a long
+                // release name); Play and its fallback line keep their place at the card's foot.
+                Column(
+                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                ) {
+                    CapsLabel("Recommended for this screen")
+                    MqText(VersionsCopy.pickHeading(best), role = TextRole.Title1, maxLines = 1)
+                    FactsGrid(VersionsCopy.facts(best), tones = mapOf("Status" to statusTone(best)))
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                        for (reason in best.reasons.take(3)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                MqIcon(Icons.Check, tint = colors.ok, size = 26.dp)
+                                MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
+                            }
                         }
                     }
+                    Release(best.releaseName, maxLines = 3)
                 }
-                Release(best.releaseName, maxLines = 3)
                 PrimaryButton(
                     label = "Play this version",
                     icon = PlayFilled,

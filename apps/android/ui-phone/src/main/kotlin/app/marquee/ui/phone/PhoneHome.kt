@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -136,58 +138,71 @@ private fun PhoneHero(
     // the accent eyebrow sits in its own chip.
     val scrim = Marquee.colors.bg
     val tile = hero.tile
-    Box(
-        Modifier
-            .padding(horizontal = Marquee.safe.side)
-            .fillMaxWidth()
-            .aspectRatio(HERO_RATIO)
-            .clip(RoundedCornerShape(Marquee.radius.hero))
-            .border(1.dp, Marquee.colors.edge, RoundedCornerShape(Marquee.radius.hero))
-            .semantics {
-                // The buttons on the card are hidden from screen readers, so Play is an action of the card.
-                if (tile.playable()) {
-                    customActions = listOf(CustomAccessibilityAction("Play ${tile.name}") { onPlay(tile).let { true } })
-                }
-            }.clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}", onClick = { onOpen(tile) }),
-    ) {
-        Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
+    // At least the art's proportion, and taller when the text needs it (a small phone, large
+    // fonts): the card grows and the page scrolls it, nothing is cut.
+    BoxWithConstraints(Modifier.padding(horizontal = Marquee.safe.side).fillMaxWidth()) {
+        val least = maxWidth / HERO_RATIO
         Box(
             Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.3f to scrim.copy(alpha = 0.8f),
-                        1f to scrim.copy(alpha = 0.96f),
-                    ),
+                .fillMaxWidth()
+                .heightIn(min = least)
+                .clip(RoundedCornerShape(Marquee.radius.hero))
+                .border(1.dp, Marquee.colors.edge, RoundedCornerShape(Marquee.radius.hero))
+                .semantics {
+                    // The buttons on the card are hidden from screen readers, so Play is an action of the card.
+                    if (tile.playable()) {
+                        val play = CustomAccessibilityAction("Play ${tile.name}") { onPlay(tile).let { true } }
+                        customActions = listOf(play)
+                    }
+                }.clickable(
+                    role = Role.Button,
+                    onClickLabel = "Details of ${tile.name}",
+                    onClick = { onOpen(tile) },
                 ),
-        )
-        Column(
-            Modifier.align(Alignment.BottomStart).padding(Marquee.space.m),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
-            Eyebrow(hero.reason, overArt = true)
-            Logo(
-                tile.logo,
-                tile.name,
-                height = 64.dp,
-                maxWidth = 240.dp,
-                role = TextRole.Title1,
-                color = Marquee.colors.text,
+            Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.3f to scrim.copy(alpha = 0.8f),
+                            1f to scrim.copy(alpha = 0.96f),
+                        ),
+                    ),
             )
-            RatingLine(tile.rating, TileCopy.heroMeta(hero))
-            hero.description?.let {
-                MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 3)
-            }
-            // The card is the control for screen readers (it opens the details); the buttons
-            // repeat it for sighted touch.
-            Row(
-                Modifier.padding(top = Marquee.space.xs).clearAndSetSemantics { },
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                verticalAlignment = Alignment.Top,
+            Column(
+                // The text starts no higher than a third down, where the scrim has darkened.
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(top = least * 0.3f)
+                    .padding(Marquee.space.m),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             ) {
-                if (tile.playable()) PrimaryButton(label = "Play", icon = PlayFilled, onClick = { onPlay(tile) })
-                RoundButton(Icons.Info, "Details", { onOpen(tile) }, showLabel = true)
+                Eyebrow(hero.reason, overArt = true)
+                Logo(
+                    tile.logo,
+                    tile.name,
+                    height = 64.dp,
+                    maxWidth = 240.dp,
+                    role = TextRole.Title1,
+                    color = Marquee.colors.text,
+                )
+                RatingLine(tile.rating, TileCopy.heroMeta(hero))
+                hero.description?.let {
+                    MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 3)
+                }
+                // The card is the control for screen readers (it opens the details); the buttons
+                // repeat it for sighted touch.
+                Row(
+                    Modifier.padding(top = Marquee.space.xs).clearAndSetSemantics { },
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    if (tile.playable()) PrimaryButton(label = "Play", icon = PlayFilled, onClick = { onPlay(tile) })
+                    RoundButton(Icons.Info, "Details", { onOpen(tile) }, showLabel = true)
+                }
             }
         }
     }

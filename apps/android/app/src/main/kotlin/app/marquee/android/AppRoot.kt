@@ -242,7 +242,7 @@ private fun AppNav(
                         }
                     }
                     entry<Route.Search> { SearchScreen(session, ::open) }
-                    entry<Route.Discover> { DiscoverScreen(session, ::open) }
+                    entry<Route.Discover> { DiscoverScreen(session, ::open, onAddons = { choose(Route.Settings) }) }
                     entry<Route.Library> { LibraryScreen(session, ::open) }
                     entry<Route.Calendar> {
                         CalendarScreen(

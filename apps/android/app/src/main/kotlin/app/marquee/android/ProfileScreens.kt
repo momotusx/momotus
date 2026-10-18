@@ -640,9 +640,10 @@ private fun ProfileTile(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(if (tv) 16.dp else 10.dp),
     ) {
+        // The focus treatment follows the clickable tile around it (the box itself never takes focus).
         Box(
             Modifier
-                .marqueeFocus(Marquee.radius.l)
+                .marqueeFocus(size * 0.2f, forced = focused)
                 .border(
                     if (focused) 4.dp else 0.dp,
                     if (focused) colors.text else Color.Transparent,
@@ -681,7 +682,7 @@ private fun AddTile(onClick: () -> Unit) {
         val shape = RoundedCornerShape(size * 0.2f)
         Box(
             Modifier
-                .marqueeFocus(Marquee.radius.l)
+                .marqueeFocus(size * 0.2f, forced = focused)
                 .size(size)
                 .clip(shape)
                 .background(colors.raised)

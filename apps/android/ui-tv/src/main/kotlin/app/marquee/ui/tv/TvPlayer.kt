@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -519,9 +521,12 @@ private fun Controls(
                 )
             }
             Spacer(Modifier.height(34.dp))
-            Box(Modifier.fillMaxWidth()) {
+            // Three regions: the transport in the middle and the actions in the right one, so five
+            // actions with long track names never cover Forward or Play. Actions that do not fit
+            // their region scroll, and focus brings each into view.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
                 Row(
-                    Modifier.align(Alignment.Center),
                     horizontalArrangement = Arrangement.spacedBy(26.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -535,32 +540,40 @@ private fun Controls(
                     )
                     RoundButton(Icons.RotateCw, "Forward 10 seconds", { controller.seekBy(SEEK_MS) }, badge = "10")
                 }
-                Row(Modifier.align(Alignment.CenterEnd), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Audio, Subtitles, Versions, Speed, then Episodes: the design audit's order for every platform.
-                    if (controller.audio.isNotEmpty()) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    Row(
+                        Modifier
+                            .horizontalScroll(rememberScrollState())
+                            // Room for the focus halos at the scrolling edges.
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        // Audio, Subtitles, Versions, Speed, then Episodes: the design audit's order for every platform.
+                        if (controller.audio.isNotEmpty()) {
+                            ActionButton(
+                                Icons.Volume2,
+                                "Audio",
+                                controller.audioDetail(),
+                                onAudio,
+                                focusRequester = audioAction,
+                            )
+                        }
                         ActionButton(
-                            Icons.Volume2,
-                            "Audio",
-                            controller.audioDetail(),
-                            onAudio,
-                            focusRequester = audioAction,
+                            Icons.Captions,
+                            "Subtitles",
+                            controller.subtitlesDetail(),
+                            onSubtitles,
+                            focusRequester = subtitlesAction,
                         )
+                        ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
+                        ActionButton(
+                            Icons.Gauge,
+                            "Speed",
+                            speedText(controller.speed),
+                            { controller.changeSpeed(nextSpeed(controller.speed)) },
+                        )
+                        onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
                     }
-                    ActionButton(
-                        Icons.Captions,
-                        "Subtitles",
-                        controller.subtitlesDetail(),
-                        onSubtitles,
-                        focusRequester = subtitlesAction,
-                    )
-                    ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
-                    ActionButton(
-                        Icons.Gauge,
-                        "Speed",
-                        speedText(controller.speed),
-                        { controller.changeSpeed(nextSpeed(controller.speed)) },
-                    )
-                    onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
                 }
             }
         }

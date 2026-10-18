@@ -295,7 +295,7 @@ fun SettingsScreen(
                 LinkRow(
                     Icons.QrCode,
                     "Pair this device",
-                    "Join your sync account by scanning a code on a device that already syncs.",
+                    "Show a code here, then approve this device from one that already syncs.",
                     onSync,
                 )
             }

@@ -75,13 +75,16 @@ import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.PosterTile
+import app.marquee.design.PrimaryButton
 import app.marquee.design.RowHeader
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.Tokens
 import app.marquee.design.dpadExits
 import app.marquee.design.laneHeight
+import app.marquee.design.marqueeFocus
 import app.marquee.ui.phone.LocalBarSpace
 import app.marquee.ui.tv.tvContentTop
 
@@ -274,6 +277,8 @@ private fun SearchField(
             .padding(horizontal = Marquee.safe.side)
             .fillMaxWidth()
             .height(if (tv) 80.dp else 52.dp)
+            // The shared ring, halo and lift, driven by the text input's own focus: never color alone.
+            .marqueeFocus(Marquee.radius.pill, Tokens.FOCUS_SCALE_TILE, forced = focused)
             .clip(shape)
             .background(colors.raised)
             .border(2.dp, if (focused) colors.accent else colors.control, shape)
@@ -370,6 +375,7 @@ internal fun Poster(
 fun DiscoverScreen(
     session: CoreSession,
     onOpen: (Tile) -> Unit,
+    onAddons: () -> Unit,
 ) {
     val holder =
         viewModel<DiscoverHolder>(
@@ -421,10 +427,16 @@ fun DiscoverScreen(
 
             snapshot.kinds.isEmpty() -> {
                 full("empty") {
-                    Note(
-                        "Nothing to browse yet: Discover lists the catalogs of your addons, and none is installed.",
-                        side = 0.dp,
-                    )
+                    // The way out, as on the web: Settings holds the addons. On TV it is the
+                    // page's one control, so focus has somewhere to land.
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        Note(
+                            "Nothing to browse yet: Discover lists the catalogs of the addons you have on, " +
+                                "and none of them has one.",
+                            side = 0.dp,
+                        )
+                        PrimaryButton("Add an addon", onAddons, icon = Icons.Puzzle)
+                    }
                 }
             }
 
