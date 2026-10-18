@@ -74,9 +74,14 @@ class ViewBinding<S, U>(
     val sink: ViewSink<S, U>,
 )
 
+/** What the client queues when its inbox overflows: handled as the core's own overflow message. */
+private const val OVERFLOW = """{"core":"overflow"}"""
+
 private class Raw(
     val text: String,
     val arrivedNs: Long,
+    /** Counted against the inbox budget (the overflow marker is not). */
+    val counted: Boolean = true,
 )
 
 private sealed interface Pending {
@@ -115,9 +120,19 @@ class CoreClient(
     val json: Json = CoreJson,
     private val metrics: BridgeMetrics? = null,
     private val nanoTime: () -> Long = System::nanoTime,
+    /**
+     * Characters the inbox may hold before the state thread takes them (core backlog C26, as the
+     * core's own output budget): past it, that core's session ends as an overflow and a new core
+     * opens, so an app that stalls never piles up the core's messages without bound.
+     */
+    private val inboxBudget: Long = 8L * 1024 * 1024,
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val inbox = Channel<Raw>(Channel.UNLIMITED)
+    private val queued = AtomicLong(0)
+
+    @Volatile
+    private var overflowed = false
     private val nextId = AtomicLong(1)
     private val pending = ConcurrentHashMap<Long, Pending>()
     private val subs = ConcurrentHashMap<Long, ViewBinding<*, *>>()
@@ -150,6 +165,7 @@ class CoreClient(
      * after the core died and was opened anew: the views it left open subscribe again.
      */
     fun attach(transport: CoreTransport) {
+        overflowed = false
         if (attached.complete(transport)) return
         attached = CompletableDeferred<CoreTransport>().also { it.complete(transport) }
         scope.launch { revive() }
@@ -162,6 +178,15 @@ class CoreClient(
 
     /** Entry point for the core's listener. Never blocks, never parses. */
     fun onMessage(text: String) {
+        // After an overflow, the rest of that core's messages are dropped until a new one attaches.
+        if (overflowed) return
+        val size = text.length.toLong()
+        if (queued.addAndGet(size) > inboxBudget) {
+            queued.addAndGet(-size)
+            overflowed = true
+            inbox.trySend(Raw(OVERFLOW, nanoTime(), counted = false))
+            return
+        }
         inbox.trySend(Raw(text, nanoTime()))
     }
 
@@ -263,6 +288,7 @@ class CoreClient(
             val batch = ArrayList<Raw>()
             batch.add(first)
             while (true) batch.add(inbox.tryReceive().getOrNull() ?: break)
+            queued.addAndGet(-batch.sumOf { if (it.counted) it.text.length.toLong() else 0L })
             try {
                 process(batch)
             } catch (e: Exception) {

@@ -425,6 +425,29 @@ class CoreClientTest {
         }
 
     @Test
+    fun `an app that stalls past its inbox budget ends that core like an overflow`() =
+        runBlocking {
+            val stalled = Executors.newSingleThreadExecutor { Thread(it, "stalled-state") }
+            val small = CoreClient(stalled.asCoroutineDispatcher(), inboxBudget = 1_000)
+            try {
+                val died = CopyOnWriteArrayList<String>()
+                small.onCoreDied = { died += it }
+                small.attach(homeCore(CopyOnWriteArrayList(), CopyOnWriteArrayList(), 10))
+                // The state thread is busy: nothing leaves the inbox while the core keeps sending.
+                val gate = java.util.concurrent.CountDownLatch(1)
+                stalled.submit { gate.await() }
+                val push = """{"sub":99,"updates":[${"0,".repeat(40)}0]}"""
+                repeat(100) { small.onMessage(push) }
+                gate.countDown()
+                until("reported") { died.singleOrNull()?.startsWith("overflow") == true }
+                Unit
+            } finally {
+                small.close()
+                stalled.shutdownNow()
+            }
+        }
+
+    @Test
     fun `an overflowed core is opened again like a dead one`() =
         runBlocking {
             val died = CopyOnWriteArrayList<String>()
