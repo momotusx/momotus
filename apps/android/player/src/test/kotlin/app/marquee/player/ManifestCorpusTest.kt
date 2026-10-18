@@ -111,8 +111,8 @@ class ManifestCorpusTest {
 
     /**
      * How many of each thing Media3 read: variants and renditions, or segments, parts, trailing
-     * parts, init sections, keys and rendition reports. A rewrite that makes Media3 skip one
-     * changes it.
+     * parts, the init sections and keys of each of those three, and rendition reports. A rewrite
+     * that makes Media3 skip one, or drop a key or init section anywhere, changes it.
      */
     private fun shape(playlist: HlsPlaylist): List<Int> =
         when (playlist) {
@@ -128,12 +128,18 @@ class ManifestCorpusTest {
 
             is HlsMediaPlaylist -> {
                 val segments = playlist.segments
+                val parts = segments.flatMap { it.parts }
+                val trailing = playlist.trailingParts
                 listOf(
                     segments.size,
-                    segments.sumOf { it.parts.size },
-                    playlist.trailingParts.size,
+                    parts.size,
+                    trailing.size,
                     segments.count { it.initializationSegment != null },
                     segments.count { it.fullSegmentEncryptionKeyUri != null },
+                    parts.count { it.initializationSegment != null },
+                    parts.count { it.fullSegmentEncryptionKeyUri != null },
+                    trailing.count { it.initializationSegment != null },
+                    trailing.count { it.fullSegmentEncryptionKeyUri != null },
                     playlist.renditionReports.size,
                 )
             }
