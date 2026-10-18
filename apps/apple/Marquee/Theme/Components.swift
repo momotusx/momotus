@@ -469,6 +469,8 @@ struct StateLine: View {
     let symbol: String
     let text: String
     var action: (title: String, run: () -> Void)?
+    /// False inside a page that has its own primary (a failed row on a working Home).
+    var primary = true
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -486,7 +488,7 @@ struct StateLine: View {
 
     @ViewBuilder private var fix: some View {
         if let action {
-            Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: true))
+            Button(action.title, action: action.run).buttonStyle(PillButtonStyle(prominent: primary))
         }
     }
 }

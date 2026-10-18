@@ -26,8 +26,8 @@ struct HomeScreen: View {
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
-                // Without catalogs there is no art to show: setup takes the top.
-                if !model.needsSetup {
+                // Without catalogs, or with none answering, there is no art to show.
+                if !model.needsSetup && !model.allFailed {
                     HeroView(hero: model.header.hero, height: heroHeight, startScope: startScopeID)
                         // Phone: the profile button sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
@@ -55,7 +55,7 @@ struct HomeScreen: View {
         // The card runs up under the window toolbar, where the navigation pill floats over it.
         .fullBleedTop()
         #endif
-        .topScrim(underBar || model.needsSetup)
+        .topScrim(underBar || model.needsSetup || model.allFailed)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         #if DEBUG
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
@@ -81,12 +81,35 @@ struct HomeScreen: View {
         case .failed(let message):
             StateLine(symbol: "triangle-alert", text: message, action: ("Try again", model.reload))
                 .padding(.horizontal, metrics.gutter)
+        case .ready where model.allFailed:
+            couldNotLoad.padding(.horizontal, metrics.gutter)
         case .ready:
             ForEach(model.rows, id: \.rowId) { row in
                 RowView(row: row, retry: model.reload)
             }
             if model.needsSetup { setup.padding(.horizontal, metrics.gutter) }
         }
+    }
+
+    /// Every lane ended with nothing and one failed: one state, one primary.
+    private var couldNotLoad: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            if !metrics.wide {
+                Wordmark(size: 22).padding(.bottom, Theme.Space.l)
+            }
+            Text("Home could not load")
+                .display(Theme.type.title1)
+                .foregroundStyle(Theme.Palette.text)
+                .accessibilityAddTraits(.isHeader)
+            Text("None of your addons answered. Check the network, then try again.")
+                .font(.text(Theme.type.body))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Try again", action: model.reload)
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .padding(.top, 4)
+        }
+        .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xxl - 20)
     }
 
     /// No rows: no addon that is on has a catalog, or every row is hidden.

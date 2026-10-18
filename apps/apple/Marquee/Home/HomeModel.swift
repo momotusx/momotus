@@ -47,6 +47,11 @@ final class HomeModel {
         phase == .ready && !rows.contains { $0.rowId != "continue-watching" }
     }
 
+    /// Nothing answered: one "could not load" with one Try again, no hero.
+    var allFailed: Bool {
+        phase == .ready && header.hero == nil && rows.allFailed
+    }
+
     /// Applies one core batch with a single assignment per property.
     private func apply(_ event: ViewEvent<HomeSnapshot, HomeUpdate>) {
         switch event {

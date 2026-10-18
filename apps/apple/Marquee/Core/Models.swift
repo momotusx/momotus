@@ -64,6 +64,18 @@ struct HomeRow: Decodable, Hashable, Sendable {
     let tiles: [Tile]
 }
 
+extension [HomeRow] {
+    /// Every lane ended with nothing to show and at least one failed, as
+    /// Android's `allFailed`: Home says it could not load, with one Try
+    /// again, instead of a failed row each. A lane still loading or holding
+    /// tiles (even ones that came before a failure) keeps the rows.
+    var allFailed: Bool {
+        !isEmpty
+            && !contains { !$0.tiles.isEmpty || $0.state == .loading || $0.state == .slow }
+            && contains { if case .failed = $0.state { true } else { false } }
+    }
+}
+
 struct HomeSnapshot: Decodable, Sendable {
     let header: HomeHeader
     let rows: [HomeRow]

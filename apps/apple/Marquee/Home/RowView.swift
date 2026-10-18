@@ -18,7 +18,8 @@ struct RowView: View {
                 StateLine(symbol: "inbox", text: "Nothing in this catalog right now.")
                     .padding(.horizontal, metrics.gutter)
             case .failed(let reason):
-                StateLine(symbol: "triangle-alert", text: "\(row.source) did not answer: \(reason)", action: ("Try again", retry))
+                // Secondary: the page's primary is the hero's Play, or the one Try again when nothing answered.
+                StateLine(symbol: "triangle-alert", text: "\(row.source) did not answer: \(reason)", action: ("Try again", retry), primary: false)
                     .padding(.horizontal, metrics.gutter)
             case .ready:
                 strip
