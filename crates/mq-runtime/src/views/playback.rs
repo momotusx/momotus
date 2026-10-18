@@ -14,7 +14,7 @@ use mq_addons::{AddonEvent, Deadlines};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{FINISHED_RATIO, LibraryItemRow, ProgressRow};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
-use mq_server::{Lease, SubtitleSlot, Upstream};
+use mq_server::{Format, Lease, SubtitleSlot, Upstream};
 use mq_streams::ParsedStream;
 use serde::Serialize;
 use std::pin::Pin;
@@ -189,6 +189,8 @@ struct State {
 pub struct PlaybackView {
     core: Core,
     target: Arc<PlayTarget>,
+    /// The playlist formats the player plays (its caps).
+    plays: Arc<[Format]>,
     snapshot: SharedObservable<PlaybackSnapshot>,
     state: Arc<Mutex<State>>,
     /// The resolve task and its run.
@@ -231,7 +233,20 @@ impl State {
 }
 
 impl PlaybackView {
+    /// `open_for` a player that plays HLS.
     pub fn open(core: &Core, candidates: Vec<ParsedStream>, target: PlayTarget) -> Self {
+        Self::open_for(core, candidates, target, &[Format::Hls])
+    }
+
+    /// Opens the candidates in turn for a player that plays the playlist
+    /// formats `plays` names (`VersionsView::plays`): a playlist it cannot
+    /// play fails over like any source that does not open.
+    pub fn open_for(
+        core: &Core,
+        candidates: Vec<ParsedStream>,
+        target: PlayTarget,
+        plays: &[Format],
+    ) -> Self {
         let resume_ms = core
             .library()
             .progress(core.profile(), &target.video_id)
@@ -245,6 +260,7 @@ impl PlaybackView {
         let view = Self {
             core: core.clone(),
             target: Arc::new(target),
+            plays: plays.into(),
             snapshot: SharedObservable::new(state.snapshot.clone()),
             state: Arc::new(Mutex::new(state)),
             task: Mutex::new(None),
@@ -392,6 +408,7 @@ impl PlaybackView {
         let task = tokio::spawn(resolve_next(
             self.core.clone(),
             self.target.clone(),
+            self.plays.clone(),
             self.state.clone(),
             self.snapshot.clone(),
             run,
@@ -599,6 +616,7 @@ fn save_progress(
 async fn resolve_next(
     core: Core,
     target: Arc<PlayTarget>,
+    plays: Arc<[Format]>,
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<PlaybackSnapshot>,
     run: u64,
@@ -634,7 +652,7 @@ async fn resolve_next(
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
                 server
-                    .open(upstream.clone(), &name, PROBE_TIMEOUT)
+                    .open_for(upstream.clone(), &name, PROBE_TIMEOUT, &plays)
                     .await
                     .map(|lease| (upstream, filename, size, lease))
             }

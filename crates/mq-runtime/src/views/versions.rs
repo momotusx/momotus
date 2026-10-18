@@ -110,6 +110,8 @@ struct State {
 
 pub struct VersionsView {
     core: Core,
+    /// The playlist formats the device plays, from its caps.
+    plays: Vec<mq_server::Format>,
     episode: (Option<u32>, Option<u32>),
     snapshot: SharedObservable<VersionsSnapshot>,
     state: Arc<Mutex<State>>,
@@ -136,6 +138,7 @@ impl VersionsView {
                 .flatten();
         }
         let episode = (params.target.season, params.target.episode);
+        let plays = plays(&params.caps);
         // Subscribe before the first read so no addon change slips in between.
         let changes = core.library().subscribe();
         let path = ResourcePath {
@@ -172,6 +175,7 @@ impl VersionsView {
         ));
         Self {
             core: core.clone(),
+            plays,
             episode,
             snapshot,
             state,
@@ -206,6 +210,11 @@ impl VersionsView {
         state.frozen = true;
         maybe_prefetch(&self.core, &mut state, self.episode);
         self.snapshot.set(render(&state));
+    }
+
+    /// The playlist formats the device plays, for `PlaybackView::open_for`.
+    pub fn plays(&self) -> Vec<mq_server::Format> {
+        self.plays.clone()
     }
 
     /// The stream for row `key` followed by its failover chain, for playback.
@@ -431,6 +440,16 @@ fn maybe_prefetch(core: &Core, s: &mut State, (season, episode): (Option<u32>, O
     }
 }
 
+/// The playlist formats caps list as containers: `m3u8` for HLS.
+fn plays(caps: &DeviceCaps) -> Vec<mq_server::Format> {
+    let lists = |name: &str| caps.containers.iter().any(|c| c.eq_ignore_ascii_case(name));
+    if lists("m3u8") {
+        vec![mq_server::Format::Hls]
+    } else {
+        Vec::new()
+    }
+}
+
 fn rerank(s: &mut State, params: &VersionsParams) {
     let input = RankInput {
         caps: &params.caps,
@@ -606,4 +625,17 @@ fn first_line(description: &str, name: &str) -> String {
         .unwrap_or(name)
         .trim()
         .to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_device_plays_hls_when_its_caps_list_m3u8() {
+        let mut caps = DeviceCaps::basic_1080p();
+        assert!(plays(&caps).is_empty());
+        caps.containers.push("M3U8".into());
+        assert_eq!(plays(&caps), [mq_server::Format::Hls]);
+    }
 }

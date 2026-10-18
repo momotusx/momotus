@@ -157,6 +157,8 @@ pub enum Format {
 const UNREADABLE_PLAYLIST: &str = "The stream's playlist could not be read";
 /// DASH is not served until its rewrite exists (phase 6 of the plan).
 const NO_DASH: &str = "This player cannot play DASH streams";
+/// HLS on a player whose caps do not list `m3u8`.
+const NO_HLS: &str = "This player cannot play HLS streams";
 /// A playlist's fetch, unless a blocking reload may wait longer.
 const MANIFEST_DEADLINE: Duration = Duration::from_secs(10);
 
@@ -220,12 +222,26 @@ impl StreamServer {
     /// once within the same deadline, and then served as one (`format`); a
     /// declared one that is not a playlist, and DASH, fail. The token exists
     /// only once all that is done: dropping this future first leaves none,
-    /// and stops the reads.
+    /// and stops the reads. A player that plays HLS: see `open_for`.
     pub async fn open(
         &self,
         upstream: Upstream,
         filename: &str,
         deadline: Duration,
+    ) -> Result<Lease, String> {
+        self.open_for(upstream, filename, deadline, &[Format::Hls])
+            .await
+    }
+
+    /// `open` for a player that plays the formats `plays` names (its device
+    /// caps): a playlist of another format fails with its words, whether
+    /// its type or path declared it or its first bytes did.
+    pub async fn open_for(
+        &self,
+        upstream: Upstream,
+        filename: &str,
+        deadline: Duration,
+        plays: &[Format],
     ) -> Result<Lease, String> {
         let playback = self.playback(upstream);
         // The token goes in the map only at the end, but a playlist's dry run
@@ -241,7 +257,7 @@ impl StreamServer {
         // Set once the source answered with a playlist (declared or sniffed):
         // from then on, too slow is the playlist's fault, not the source's.
         let playlist = AtomicBool::new(false);
-        let detect = self.detect(&source, &token, &playback.released, end, &playlist);
+        let detect = self.detect(&source, &token, &playback.released, end, &playlist, plays);
         match tokio::time::timeout_at(end.into(), detect).await {
             Ok(Ok(None)) => Ok(self.lease(token, playback, &file_name(filename), None)),
             Ok(Ok(Some(hls))) => {
@@ -281,6 +297,7 @@ impl StreamServer {
         released: &CancellationToken,
         end: Instant,
         playlist: &AtomicBool,
+        plays: &[Format],
     ) -> Result<Option<Arc<Hls>>, String> {
         let listed = source.url().to_owned();
         let (declared, prefix) = match source.meta(0).await {
@@ -344,6 +361,9 @@ impl StreamServer {
             // Declared but not that format, a DASH patch, a DOCTYPE: a
             // declared body is never served raw.
             _ => return Err(UNREADABLE_PLAYLIST.into()),
+        }
+        if !plays.contains(&Format::Hls) {
+            return Err(NO_HLS.into());
         }
         let url = Url::parse(&listed).map_err(|_| UNREADABLE_PLAYLIST.to_owned())?;
         let core = format!("http://{}/", self.shared.addr);

@@ -2337,6 +2337,29 @@ async fn a_playlist_path_after_a_redirect_declares_it() {
 }
 
 #[tokio::test]
+async fn hls_opens_only_for_a_player_that_plays_it() {
+    let media = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n".to_vec();
+    let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
+        // Declared by its path, and found by its first bytes only.
+        "/live.m3u8" => Reply::playlist(media.clone()),
+        _ => Reply::ok("application/octet-stream", media.clone()),
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    for path in ["/live.m3u8", "/stream"] {
+        let open = |plays: &'static [mq_server::Format]| {
+            let upstream = local_upstream(format!("{base}{path}"));
+            server.open_for(upstream, "v.mkv", Duration::from_secs(5), plays)
+        };
+        let refused = open(&[]).await.unwrap_err();
+        assert_eq!(refused, "This player cannot play HLS streams", "{path}");
+        let lease = open(&[mq_server::Format::Hls]).await.unwrap();
+        assert_eq!(lease.format, Some(mq_server::Format::Hls), "{path}");
+    }
+}
+
+#[tokio::test]
 async fn chunk_split_signatures_are_found() {
     let (base, _) = hls_origin(|asked| {
         let mut reply = Reply {

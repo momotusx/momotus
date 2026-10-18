@@ -707,6 +707,21 @@ async fn every_ready_url_is_a_loopback_url() {
     );
 }
 
+#[tokio::test]
+async fn a_player_without_hls_never_gets_a_playlist() {
+    // Its caps list no m3u8: the playlist fails over with the words, whether
+    // its path declared it or not.
+    let hls = hls_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(r#"{{"streams":[{{"name":"HLS","url":"{hls}/hls/index.m3u8"}}]}}"#);
+    let view = PlaybackView::open_for(&core, setup(&core, &streams), target(), &[]);
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+    assert_eq!(s.url, None);
+    let words: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
+    assert_eq!(words, ["This player cannot play HLS streams"]);
+}
+
 /// An HLS origin: a media playlist naming one segment.
 async fn hls_origin() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

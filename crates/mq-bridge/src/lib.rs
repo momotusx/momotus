@@ -1178,6 +1178,7 @@ impl Session {
             return Err(format!("no versions subscription {versions_sub}"));
         };
         let candidates = versions.candidates(&param(params, "key")?);
+        let plays = versions.plays();
         drop(shared);
         if candidates.is_empty() {
             return Err("that version is no longer listed".into());
@@ -1192,7 +1193,7 @@ impl Session {
             season: num("season"),
             episode: num("episode"),
         };
-        Ok(PlaybackView::open(core, candidates, target))
+        Ok(PlaybackView::open_for(core, candidates, target, &plays))
     }
 }
 
