@@ -13,7 +13,8 @@ class ProfileCopyTest {
         assertEquals(ProfileCopy.Avatar("popcorn", "amber"), ProfileCopy.parseAvatar("popcorn:amber"))
         assertEquals(ProfileCopy.Avatar("letter", "amber"), ProfileCopy.parseAvatar("hologram:amber"))
         assertEquals(ProfileCopy.Avatar("popcorn", null), ProfileCopy.parseAvatar("popcorn:ultraviolet"))
-        assertEquals(ProfileCopy.Avatar("letter", null), ProfileCopy.parseAvatar(""))
+        assertEquals(ProfileCopy.Avatar("letter", "ember"), ProfileCopy.parseAvatar(""))
+        assertEquals(ProfileCopy.Avatar("letter", null), ProfileCopy.parseAvatar(":"))
     }
 
     @Test
@@ -22,6 +23,7 @@ class ProfileCopyTest {
         assertEquals("?", ProfileCopy.initial(""))
         assertEquals("letter:ember", ProfileCopy.nextAvatar(emptyList()))
         assertEquals("letter:moss", ProfileCopy.nextAvatar(listOf("cat:ember", "letter:amber")))
+        assertEquals("letter:amber", ProfileCopy.nextAvatar(listOf("")))
         assertEquals("letter:ember", ProfileCopy.nextAvatar(ProfileCopy.COLORS.map { "letter:$it" }))
     }
 

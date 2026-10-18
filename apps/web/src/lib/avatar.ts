@@ -12,8 +12,10 @@ export type Avatar = { glyph: Glyph; color: AvatarColor | null };
 const isGlyph = (s: string): s is Glyph => (GLYPHS as readonly string[]).includes(s);
 const isColor = (s: string): s is AvatarColor => (COLORS as readonly string[]).includes(s);
 
-/** A stored avatar; unknown or empty parts fall back to the name's letter on `raised` (color null). */
+/** A stored avatar. Never chosen (empty): the letter on ember. An unknown part falls back to the
+ * letter, or to `raised` (color null) for an unknown color. */
 export function parseAvatar(stored: string): Avatar {
+  if (stored === "") return { glyph: "letter", color: "ember" };
   const [g = "", c = ""] = stored.split(":");
   return { glyph: isGlyph(g) ? g : "letter", color: isColor(c) ? c : null };
 }

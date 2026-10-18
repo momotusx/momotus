@@ -28,13 +28,17 @@ object ProfileCopy {
         )
     val COLORS = listOf("ember", "amber", "moss", "teal", "sky", "plum", "rose", "graphite")
 
-    /** A stored avatar; an unknown or empty glyph is the letter, an unknown color is null (drawn on `raised`). */
+    /**
+     * A stored avatar. Never chosen (empty): the letter on ember. An unknown glyph is the letter, an
+     * unknown color is null (drawn on `raised`).
+     */
     data class Avatar(
         val glyph: String,
         val color: String?,
     )
 
     fun parseAvatar(stored: String): Avatar {
+        if (stored.isEmpty()) return Avatar("letter", "ember")
         val parts = stored.split(":")
         val glyph = parts.getOrNull(0)?.takeIf { it in GLYPHS } ?: "letter"
         val color = parts.getOrNull(1)?.takeIf { it in COLORS }
