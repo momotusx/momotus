@@ -412,3 +412,48 @@ async fn a_frozen_pick_stays_until_its_addon_goes() {
     })
     .await;
 }
+
+/// A write that leaves the stream addons as they were (a sync rewriting the
+/// same list, a catalog addon added) keeps the rows: they never empty and
+/// refill under the user.
+#[tokio::test]
+async fn unrelated_addon_writes_keep_the_rows() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let first = stream_addon("first", Duration::ZERO, FIRST).await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&first), &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    until(&view, "the first pick", |s| {
+        s.done && s.recommended.is_some()
+    })
+    .await;
+    let (_, mut updates) = view.subscribe();
+
+    let catalogs = AddonRow {
+        transport_url: "http://127.0.0.1:9/catalogs/manifest.json".into(),
+        manifest_json: serde_json::json!({
+            "id": "catalogs", "version": "1.0.0", "name": "Catalogs",
+            "types": ["movie"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    core.library()
+        .set_addons("p", std::slice::from_ref(&first), &core.hlc())
+        .unwrap();
+    core.library()
+        .set_addons("p", &[first.clone(), catalogs], &core.hlc())
+        .unwrap();
+    use futures_util::StreamExt;
+    let seen = tokio::time::timeout(Duration::from_millis(800), updates.next()).await;
+    if let Ok(Some(batch)) = seen {
+        for s in batch {
+            assert!(s.done && s.recommended.is_some(), "the rows emptied: {s:?}");
+        }
+    }
+    assert!(view.snapshot().recommended.is_some());
+}

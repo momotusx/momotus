@@ -240,8 +240,8 @@ fn eligible(core: &Core, path: &ResourcePath) -> Vec<InstalledAddon> {
 }
 
 /// Asks the installed stream addons, and asks again from the start whenever
-/// the installed addons change: a source installed while a title is open
-/// shows up without reopening it.
+/// they change: a source installed while a title is open shows up without
+/// reopening it.
 async fn supervise(
     core: Core,
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
@@ -252,21 +252,46 @@ async fn supervise(
     snapshot: SharedObservable<VersionsSnapshot>,
 ) {
     loop {
+        let current = urls(&addons);
         // Dropping an unfinished run stops its writes at once.
-        tokio::select! {
-            () = collect(core.clone(), addons, path.clone(), params.clone(), state.clone(), snapshot.clone()) => {
-                if !addons_changed(&mut changes).await {
-                    return;
-                }
-            }
-            changed = addons_changed(&mut changes) => if !changed {
-                return;
-            },
-        }
-        addons = eligible(&core, &path);
+        let outcome = tokio::select! {
+            () = collect(core.clone(), addons, path.clone(), params.clone(), state.clone(), snapshot.clone()) => None,
+            next = changed_set(&mut changes, &core, &path, &current) => Some(next),
+        };
+        let next = match outcome {
+            Some(next) => next,
+            None => changed_set(&mut changes, &core, &path, &current).await,
+        };
+        let Some(next) = next else { return };
+        addons = next;
         let mut s = lock(&state);
         restart(&mut s, &addons);
         snapshot.set(render(&s));
+    }
+}
+
+fn urls(addons: &[InstalledAddon]) -> Vec<Url> {
+    addons.iter().map(|a| a.transport_url.clone()).collect()
+}
+
+/// Waits until the stream addons themselves change (which ones, or their
+/// order). A write that leaves them as they were, such as a sync or another
+/// addon's switch, keeps the rows the user is moving through. `None` once
+/// the library closes.
+async fn changed_set(
+    changes: &mut tokio::sync::broadcast::Receiver<Vec<Table>>,
+    core: &Core,
+    path: &ResourcePath,
+    current: &[Url],
+) -> Option<Vec<InstalledAddon>> {
+    loop {
+        if !addons_changed(changes).await {
+            return None;
+        }
+        let next = eligible(core, path);
+        if urls(&next) != current {
+            return Some(next);
+        }
     }
 }
 
