@@ -2194,6 +2194,19 @@ async fn a_blocking_reload_may_wait_three_target_durations() {
 }
 
 #[tokio::test]
+async fn a_huge_target_duration_cannot_break_a_reload() {
+    // Three of these overflow any deadline; a reload must still be served.
+    let playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:4000000000000000000\n#EXTINF:4,\ns.ts\n";
+    let (base, _) = hls_origin(move |_| Reply::playlist(playlist)).await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/live.m3u8")).await;
+    let reload = format!("{}?_HLS_msn=1", lease.url);
+    let answer = http.get(&reload, &local()).await.unwrap();
+    assert!(text(&answer).contains("/s.ts"));
+}
+
+#[tokio::test]
 async fn a_live_playlist_is_fetched_fresh() {
     let reloads = Arc::new(AtomicU64::new(0));
     let count = reloads.clone();

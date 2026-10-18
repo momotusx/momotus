@@ -918,6 +918,18 @@ async fn fetch_playlist(
     Ok((response.body, response.final_url))
 }
 
+/// The largest target duration a blocking reload's wait counts: three of
+/// them, 90 s, is longer than an origin should hold a reload.
+const TARGET_MAX: u64 = 30;
+
+/// How long a playlist request may take: `MANIFEST_DEADLINE`, or for a
+/// blocking reload three of its target durations, each at most
+/// `TARGET_MAX`; an origin's huge value would overflow the deadline.
+fn reload_deadline(target: Option<u64>) -> Duration {
+    let wait = target.map_or(0, |target| target.min(TARGET_MAX) * 3);
+    MANIFEST_DEADLINE.max(Duration::from_secs(wait))
+}
+
 /// A playlist (`id`: a child's, `None`: the main one) fetched fresh and
 /// rewritten: never cached, as a live one changes with every reload. A
 /// blocking reload (`_HLS_msn`) may wait three of its target durations.
@@ -929,12 +941,9 @@ async fn serve_playlist(
     query: Option<&str>,
 ) -> Response {
     let directives = hls_directives(query);
-    let mut deadline = MANIFEST_DEADLINE;
-    if directives.iter().any(|(name, _)| name == "_HLS_msn")
-        && let Some(&target) = lock(&hls.targets).get(&id)
-    {
-        deadline = deadline.max(Duration::from_secs(target.saturating_mul(3)));
-    }
+    let blocking = directives.iter().any(|(name, _)| name == "_HLS_msn");
+    let target = blocking.then(|| lock(&hls.targets).get(&id).copied());
+    let deadline = reload_deadline(target.flatten());
     let end = Instant::now() + deadline;
     let fetch = fetch_playlist(hls, &url, &directives, deadline);
     let (body, base) = match playback.released.run_until_cancelled(fetch).await {
@@ -1426,6 +1435,15 @@ async fn proxy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_blocking_reload_waits_at_most_90_s() {
+        let s = Duration::from_secs;
+        assert_eq!(reload_deadline(None), s(10));
+        assert_eq!(reload_deadline(Some(2)), s(10));
+        assert_eq!(reload_deadline(Some(6)), s(18));
+        assert_eq!(reload_deadline(Some(u64::MAX)), s(90));
+    }
 
     #[test]
     fn a_players_failure_is_said_as_the_server_says_it() {
