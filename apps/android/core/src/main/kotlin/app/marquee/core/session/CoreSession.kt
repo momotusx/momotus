@@ -24,6 +24,7 @@ import app.marquee.core.views.ImportView
 import app.marquee.core.views.LibraryView
 import app.marquee.core.views.PairingView
 import app.marquee.core.views.PlaybackView
+import app.marquee.core.views.ProfilesView
 import app.marquee.core.views.SearchView
 import app.marquee.core.views.SettingsView
 import app.marquee.core.views.TitleView
@@ -210,6 +211,8 @@ class CoreSession(
     fun settings() = SettingsView(client, scope).also { it.open() }
 
     fun import() = ImportView(client, scope).also { it.open() }
+
+    fun profiles() = ProfilesView(client, scope).also { it.open() }
 
     fun pairing(
         server: String,

@@ -7,6 +7,7 @@ import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.InstalledAddon
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.Prefs
+import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RecoveryKitResult
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
@@ -14,6 +15,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
@@ -39,6 +41,7 @@ class CoreOps(
     private val client: CoreClient,
 ) {
     private val catalogs = ListSerializer(HomeCatalog.serializer())
+    private val profilesSnap = ProfilesSnapshot.serializer()
 
     private suspend fun <T> call(
         op: String,
@@ -79,6 +82,64 @@ class CoreOps(
     ) {
         client.request("setAddonEnabled", mapOf("url" to text(url), "enabled" to JsonPrimitive(enabled)))
     }
+
+    // Profiles (plans/m11-profiles.md section 6). Each answers the picker's snapshot, or a CoreError
+    // whose `code` names the refusal (wrongPin, locked with retryAfterMs, viewsOpen with views...).
+
+    suspend fun createProfile(
+        name: String,
+        avatar: String,
+    ): ProfilesSnapshot = call("createProfile", mapOf("name" to text(name), "avatar" to text(avatar)), profilesSnap)
+
+    /** Only the fields given change: an avatar this app did not pick is never rewritten. */
+    suspend fun updateProfile(
+        profile: String,
+        name: String? = null,
+        avatar: String? = null,
+    ): ProfilesSnapshot =
+        call(
+            "updateProfile",
+            buildMap {
+                put("profile", text(profile))
+                name?.let { put("name", text(it)) }
+                avatar?.let { put("avatar", text(it)) }
+            },
+            profilesSnap,
+        )
+
+    suspend fun deleteProfile(profile: String): ProfilesSnapshot =
+        call("deleteProfile", mapOf("profile" to text(profile)), profilesSnap)
+
+    /** Sets [pin], or clears it with null; [currentPin] when the profile has one. */
+    suspend fun setPin(
+        profile: String,
+        pin: String?,
+        currentPin: String? = null,
+    ): ProfilesSnapshot =
+        call(
+            "setPin",
+            mapOf(
+                "profile" to text(profile),
+                "pin" to (pin?.let(::text) ?: JsonNull),
+                "currentPin" to (currentPin?.let(::text) ?: JsonNull),
+            ),
+            profilesSnap,
+        )
+
+    /** Only the picker may be open: the app closes every other view first. */
+    suspend fun switchProfile(
+        profile: String,
+        pin: String?,
+    ): ProfilesSnapshot =
+        call("switchProfile", mapOf("profile" to text(profile), "pin" to (pin?.let(::text) ?: JsonNull)), profilesSnap)
+
+    suspend fun unlockProfile(pin: String?): ProfilesSnapshot =
+        call("unlockProfile", mapOf("pin" to (pin?.let(::text) ?: JsonNull)), profilesSnap)
+
+    suspend fun lockSession(): ProfilesSnapshot = call("lockSession", emptyMap(), profilesSnap)
+
+    /** Clears the owner's PIN without it: only after the device's own lock screen said yes. */
+    suspend fun resetOwnerPin(): ProfilesSnapshot = call("resetOwnerPin", emptyMap(), profilesSnap)
 
     /** The catalogs Home can show after Continue Watching, in order; hidden ones sit where they would show. */
     suspend fun homeCatalogs(): List<HomeCatalog> = call("homeCatalogs", emptyMap(), catalogs)

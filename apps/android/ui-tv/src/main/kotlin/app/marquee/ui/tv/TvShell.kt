@@ -71,6 +71,8 @@ fun TvShell(
     onNavFocus: () -> Unit,
     onKey: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The active profile's avatar at the pill's end; it opens the picker. */
+    profileButton: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val throttle = remember { DpadThrottle() }
@@ -96,6 +98,7 @@ fun TvShell(
                 onSelect,
                 onNavFocus,
                 Modifier.align(Alignment.CenterHorizontally).padding(top = Marquee.safe.top),
+                profileButton,
             )
         }
         Box(
@@ -139,6 +142,7 @@ private fun TvTopNav(
     onSelect: (Route) -> Unit,
     onNavFocus: () -> Unit,
     modifier: Modifier,
+    profileButton: (@Composable () -> Unit)?,
 ) {
     val colors = Marquee.colors
     val current = remember { FocusRequester() }
@@ -175,6 +179,7 @@ private fun TvTopNav(
                 .background(colors.lineStrong),
         )
         for (route in tail) NavItem(route, route == selected, current, onSelect, onNavFocus)
+        profileButton?.invoke()
     }
 }
 

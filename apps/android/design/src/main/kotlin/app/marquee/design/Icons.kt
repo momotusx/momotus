@@ -61,6 +61,16 @@ object Icons {
         )
     }
 
+    val Cat: ImageVector by lazy {
+        strokeIcon(
+            "cat",
+        "M12 5c.67 0 1.35.09 2 .26 1.78-2 5.03-2.84 6.42-2.26 1.4.58-.42 7-.42 7 .57 1.07 1 2.24 1 3.44C21 17.9 16.97 21 12 21s-9-3-9-7.56c0-1.25.5-2.4 1-3.44 0 0-1.89-6.42-.5-7 1.39-.58 4.72.23 6.5 2.23A9.04 9.04 0 0 1 12 5Z",
+        "M8 14v.5",
+        "M16 14v.5",
+        "M11.25 16.25h1.5L12 17l-.75-.75Z",
+        )
+    }
+
     val Check: ImageVector by lazy {
         strokeIcon(
             "check",
@@ -96,19 +106,19 @@ object Icons {
         )
     }
 
+    val Circle: ImageVector by lazy {
+        strokeIcon(
+            "circle",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        )
+    }
+
     val CircleAlert: ImageVector by lazy {
         strokeIcon(
             "circle-alert",
         "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
         "M12 8L12 12",
         "M12 16L12.01 16",
-        )
-    }
-
-    val Circle: ImageVector by lazy {
-        strokeIcon(
-            "circle",
-        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
         )
     }
 
@@ -147,20 +157,40 @@ object Icons {
         )
     }
 
+    val Compass: ImageVector by lazy {
+        strokeIcon(
+            "compass",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z",
+        )
+    }
+
+    val Delete: ImageVector by lazy {
+        strokeIcon(
+            "delete",
+        "M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z",
+        "m12 9 6 6",
+        "m18 9-6 6",
+        )
+    }
+
+    val Dog: ImageVector by lazy {
+        strokeIcon(
+            "dog",
+        "M11.25 16.25h1.5L12 17z",
+        "M16 14v.5",
+        "M4.42 11.247A13.152 13.152 0 0 0 4 14.556C4 18.728 7.582 21 12 21s8-2.272 8-6.444a11.702 11.702 0 0 0-.493-3.309",
+        "M8 14v.5",
+        "M8.5 8.5c-.384 1.05-1.083 2.028-2.344 2.5-1.931.722-3.576-.297-3.656-1-.113-.994 1.177-6.53 4-7 1.923-.321 3.651.845 3.651 2.235A7.497 7.497 0 0 1 14 5.277c0-1.39 1.844-2.598 3.767-2.277 2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.855-1.45-2.239-2.5",
+        )
+    }
+
     val Download: ImageVector by lazy {
         strokeIcon(
             "download",
         "M12 15V3",
         "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4",
         "m7 10 5 5 5-5",
-        )
-    }
-
-    val Compass: ImageVector by lazy {
-        strokeIcon(
-            "compass",
-        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
-        "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z",
         )
     }
 
@@ -196,11 +226,38 @@ object Icons {
         )
     }
 
+    val Flame: ImageVector by lazy {
+        strokeIcon(
+            "flame",
+        "M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4",
+        )
+    }
+
+    val Gamepad2: ImageVector by lazy {
+        strokeIcon(
+            "gamepad-2",
+        "M6 11L10 11",
+        "M8 9L8 13",
+        "M15 12L15.01 12",
+        "M18 10L18.01 10",
+        "M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z",
+        )
+    }
+
     val Gauge: ImageVector by lazy {
         strokeIcon(
             "gauge",
         "m12 14 4-4",
         "M3.34 19a10 10 0 1 1 17.32 0",
+        )
+    }
+
+    val Ghost: ImageVector by lazy {
+        strokeIcon(
+            "ghost",
+        "M15 10v1",
+        "M7.528 20.472a1.6 1.6 0 012.277 0l1.057 1.056a1.6 1.6 0 002.276 0l1.057-1.056a1.6 1.6 0 012.277 0l1.114 1.114a1.4 1.4 0 002.414-1V10a8 8 0 00-16 0v10.586a1.4 1.4 0 002.414 1z",
+        "M9 10v1",
         )
     }
 
@@ -213,6 +270,13 @@ object Icons {
         "M14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
         "M14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
         "M14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
+        )
+    }
+
+    val Headphones: ImageVector by lazy {
+        strokeIcon(
+            "headphones",
+        "M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3",
         )
     }
 
@@ -262,6 +326,14 @@ object Icons {
         )
     }
 
+    val Leaf: ImageVector by lazy {
+        strokeIcon(
+            "leaf",
+        "M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20",
+        "M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13",
+        )
+    }
+
     val LibraryBig: ImageVector by lazy {
         strokeIcon(
             "library-big",
@@ -289,12 +361,27 @@ object Icons {
         )
     }
 
+    val Lock: ImageVector by lazy {
+        strokeIcon(
+            "lock",
+        "M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-7a2 2 0 0 1 2 -2z",
+        "M7 11V7a5 5 0 0 1 10 0v4",
+        )
+    }
+
     val Monitor: ImageVector by lazy {
         strokeIcon(
             "monitor",
         "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z",
         "M8 21L16 21",
         "M12 17L12 21",
+        )
+    }
+
+    val Moon: ImageVector by lazy {
+        strokeIcon(
+            "moon",
+        "M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401",
         )
     }
 
@@ -326,6 +413,16 @@ object Icons {
             "plus",
         "M5 12h14",
         "M12 5v14",
+        )
+    }
+
+    val Popcorn: ImageVector by lazy {
+        strokeIcon(
+            "popcorn",
+        "M18 8a2 2 0 0 0 0-4 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0 0 4",
+        "M10 22 9 8",
+        "m14 22 1-14",
+        "M20 8c.5 0 .9.4.8 1l-2.6 12c-.1.5-.7 1-1.2 1H7c-.6 0-1.1-.4-1.2-1L3.2 9c-.1-.6.3-1 .8-1Z",
         )
     }
 
@@ -361,6 +458,16 @@ object Icons {
         "M21 3v5h-5",
         "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16",
         "M8 16H3v5",
+        )
+    }
+
+    val Rocket: ImageVector by lazy {
+        strokeIcon(
+            "rocket",
+        "M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5",
+        "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09",
+        "M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z",
+        "M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05",
         )
     }
 
@@ -472,6 +579,25 @@ object Icons {
             "tv",
         "m17 2-5 5-5-5",
         "M4 7h16a2 2 0 0 1 2 2v11a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2z",
+        )
+    }
+
+    val UserPen: ImageVector by lazy {
+        strokeIcon(
+            "user-pen",
+        "M11.5 15H7a4 4 0 0 0-4 4v2",
+        "M21.378 16.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z",
+        "M6 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0z",
+        )
+    }
+
+    val Users: ImageVector by lazy {
+        strokeIcon(
+            "users",
+        "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
+        "M16 3.128a4 4 0 0 1 0 7.744",
+        "M22 21v-2a4 4 0 0 0-3-3.87",
+        "M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0z",
         )
     }
 

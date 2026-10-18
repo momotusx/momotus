@@ -42,6 +42,10 @@ class CoreError(
     message: String,
     val timedOut: Boolean = false,
     val code: String? = null,
+    /** With code `locked`: how long until the next PIN try is allowed. */
+    val retryAfterMs: Long? = null,
+    /** With code `viewsOpen`: the views still open. */
+    val views: List<String> = emptyList(),
 ) : Exception(message)
 
 /** The protocol's JSON settings: tolerant of keys a newer core adds. Tests decode strictly. */
@@ -398,7 +402,13 @@ class CoreClient(
     ) {
         val id = message["id"]?.jsonPrimitive?.longOrNull
         if (id == null) {
-            CoreLog.w("reply without an id: ${message["error"]?.jsonPrimitive?.contentOrNull}")
+            // A session event, not a reply: `{"profile": "gone", id}`. The profiles view's next
+            // snapshot carries what changed; this device keeps no per-profile secrets yet.
+            if (message["profile"] != null) {
+                CoreLog.d("session event: profile ${message["profile"]?.jsonPrimitive?.contentOrNull}")
+            } else {
+                CoreLog.w("reply without an id: ${message["error"]?.jsonPrimitive?.contentOrNull}")
+            }
             return
         }
         val ok = message["ok"]?.jsonPrimitive?.booleanOrNull == true
@@ -423,7 +433,17 @@ class CoreClient(
                     if (ok) {
                         waiting.deferred.complete(message["result"] ?: JsonObject(emptyMap()))
                     } else {
-                        waiting.deferred.completeExceptionally(CoreError(error, code = code))
+                        waiting.deferred.completeExceptionally(
+                            CoreError(
+                                error,
+                                code = code,
+                                retryAfterMs = message["retryAfterMs"]?.jsonPrimitive?.longOrNull,
+                                views =
+                                    (message["views"] as? JsonArray)
+                                        ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                                        .orEmpty(),
+                            ),
+                        )
                     }
                 }
             }

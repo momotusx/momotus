@@ -7,14 +7,19 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -49,13 +54,35 @@ fun MarqueeRoot(
     /** A debug launch can start with a deeper stack (a title on Home); null starts on Home. */
     debugStack: List<Route>? = null,
 ) {
-    val caps = (LocalContext.current.applicationContext as MarqueeApp).deviceCaps
-    val app = viewModel<AppState>(factory = viewModelFactory { initializer { AppState(session, caps) } })
+    val marquee = LocalContext.current.applicationContext as MarqueeApp
+    val app = viewModel<AppState>(factory = viewModelFactory { initializer { AppState(session, marquee.deviceCaps) } })
+    val gate = marquee.profiles
+    // Shut after being open (a switch or a lock): everything of the old profile goes.
+    var wasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(gate.open) {
+        if (wasOpen && !gate.open) app.resetProfile()
+        wasOpen = gate.open
+    }
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
-        when (app.start) {
-            Start.Loading -> Unit
-            Start.Onboarding -> AppNav(session, form, app, listOf(Route.Onboarding))
-            Start.Home -> AppNav(session, form, app, debugStack ?: listOf(Route.Home))
+        val locked = gate.snapshot?.locked == true
+        when {
+            app.start == Start.Loading || gate.snapshot == null -> {
+                Unit
+            }
+
+            !gate.open -> {
+                PickerScreen(gate, session, if (locked) PickerMode.Locked else PickerMode.Start)
+            }
+
+            else -> {
+                CompositionLocalProvider(LocalViewModelStoreOwner provides app.screens) {
+                    when (app.start) {
+                        Start.Loading -> Unit
+                        Start.Onboarding -> AppNav(session, form, app, listOf(Route.Onboarding))
+                        Start.Home -> AppNav(session, form, app, debugStack ?: listOf(Route.Home))
+                    }
+                }
+            }
         }
         CoreStoppedOverlay(session)
     }
@@ -90,6 +117,7 @@ private fun AppNav(
 ) {
     val backStack = rememberNavBackStack(*initial.toTypedArray())
     val sync = (LocalContext.current.applicationContext as MarqueeApp).sync
+    val gate = (LocalContext.current.applicationContext as MarqueeApp).profiles
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
@@ -143,6 +171,10 @@ private fun AppNav(
     fun arrive() {
         backStack.clear()
         backStack.add(Route.Home)
+    }
+
+    fun pop() {
+        if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
     }
 
     // A join from the first screen settles how to begin: back on it, the app goes Home.
@@ -208,9 +240,31 @@ private fun AppNav(
                             onDiscover = { choose(Route.Discover) },
                         )
                     }
+                    entry<Route.Profiles> {
+                        PickerScreen(
+                            gate,
+                            session,
+                            PickerMode.Switch,
+                            onBack = ::pop,
+                            onAdd = { backStack.add(Route.EditProfile(null)) },
+                            onManage = { backStack.add(Route.ManageProfiles) },
+                        )
+                    }
+                    entry<Route.ManageProfiles> {
+                        ManageProfilesScreen(
+                            gate,
+                            onEdit = { backStack.add(Route.EditProfile(it)) },
+                            onAdd = { backStack.add(Route.EditProfile(null)) },
+                        )
+                    }
+                    entry<Route.EditProfile> { route -> EditProfileScreen(gate, session, route.id, onDone = ::pop) }
                     entry<Route.Settings> {
                         SettingsScreen(
                             session,
+                            gate,
+                            onProfiles = { backStack.add(Route.Profiles) },
+                            onEditProfile = { backStack.add(Route.EditProfile(it)) },
+                            onManageProfiles = { backStack.add(Route.ManageProfiles) },
                             sync,
                             onImport = { backStack.add(Route.Import) },
                             onSync = { backStack.add(if (sync.joined) Route.Sync else Route.Pairing) },
@@ -303,6 +357,7 @@ private fun AppNav(
             contentEntry = { if (top == Route.Home) app.tvHome.focus.lastEntry() else null },
             onNavFocus = { app.tvHome.focus.leftContent() },
             onKey = { app.tvHome.focus.interacted() },
+            profileButton = { PillProfile(gate) { backStack.add(Route.Profiles) } },
             content = content,
         )
     } else {

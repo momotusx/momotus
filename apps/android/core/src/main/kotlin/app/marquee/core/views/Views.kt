@@ -21,6 +21,7 @@ import app.marquee.core.model.LibrarySort
 import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Prefs
+import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.SearchSnapshot
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
@@ -218,6 +219,12 @@ class SettingsView(
     client: CoreClient,
     scope: CoroutineScope,
 ) : RecordView<Prefs>(client, scope, "settings", NO_PARAMS, Prefs.serializer())
+
+/** The picker's view: the session's profile, whether it is locked, and every profile. */
+class ProfilesView(
+    client: CoreClient,
+    scope: CoroutineScope,
+) : RecordView<ProfilesSnapshot>(client, scope, "profiles", NO_PARAMS, ProfilesSnapshot.serializer())
 
 class ImportView(
     client: CoreClient,

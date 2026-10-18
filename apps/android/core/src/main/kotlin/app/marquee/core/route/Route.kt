@@ -51,6 +51,20 @@ sealed interface Route : NavKey {
     @Serializable
     data object HomeRows : Route
 
+    /** The picker opened over the app (the pill or Settings): Back returns where it was. */
+    @Serializable
+    data object Profiles : Route
+
+    /** Manage profiles (the owner). */
+    @Serializable
+    data object ManageProfiles : Route
+
+    /** A profile's edit page; [id] null adds one. */
+    @Serializable
+    data class EditProfile(
+        val id: String? = null,
+    ) : Route
+
     @Serializable
     data class Title(
         val kind: String,

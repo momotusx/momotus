@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreHealth
@@ -39,7 +41,28 @@ class AppState(
 
     /** Opened on first use (main thread only), so a launch that never reaches Home never subscribes. */
     val home: HomeView get() = homeView ?: session.home().also { homeView = it }
-    val tvHome = TvHomeState()
+    var tvHome by mutableStateOf(TvHomeState())
+        private set
+
+    /**
+     * Where the screens' view models live: one profile's worth. A switch or a lock clears it, so
+     * every screen's views close (the core switches only with the picker open).
+     */
+    val screens =
+        object : ViewModelStoreOwner {
+            override val viewModelStore = ViewModelStore()
+        }
+
+    /** A switch or a lock: the screens, Home, Versions and the TV focus memory belong to the old profile. */
+    fun resetProfile() {
+        screens.viewModelStore.clear()
+        versions.closeAll()
+        homeView?.close()
+        homeView = null
+        tvHome = TvHomeState()
+        // The next profile opens on Home, as a cold start of a known user would.
+        start = Start.Home
+    }
 
     /** Where [decide] waits, for the log when it takes too long. */
     private var step = "waiting for the core"
@@ -78,6 +101,7 @@ class AppState(
     }
 
     override fun onCleared() {
+        screens.viewModelStore.clear()
         versions.closeAll()
         homeView?.close()
     }

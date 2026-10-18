@@ -123,6 +123,10 @@ private fun SaidLine(
 @Composable
 fun SettingsScreen(
     session: CoreSession,
+    gate: ProfileGate,
+    onProfiles: () -> Unit,
+    onEditProfile: (String) -> Unit,
+    onManageProfiles: () -> Unit,
     sync: SyncController,
     onImport: () -> Unit,
     onSync: () -> Unit,
@@ -183,6 +187,30 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         item(key = "head") { BrowseHeader("Settings", "Your Marquee") }
+        gate.snapshot?.let { s ->
+            val me = s.profiles.firstOrNull { it.id == s.active }
+            if (me != null) {
+                item(key = "profiles-head") { Kicker("Profiles") }
+                item(key = "profiles") {
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        ProfileLinkRow(
+                            me,
+                            if (s.profiles.size > 1) "Switch profile" else "Add a profile for someone else, or switch",
+                            onProfiles,
+                        )
+                        LinkRow(Icons.UserPen, "Edit profile", "Name, picture and PIN.") { onEditProfile(me.id) }
+                        if (me.isOwner) {
+                            LinkRow(
+                                Icons.Users,
+                                "Manage profiles",
+                                "Add, edit and remove profiles on this account.",
+                                onManageProfiles,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         item(key = "addons-head") { Kicker("Addons") }
         when {
             holder.addons.status is ViewStatus.Failed -> {
@@ -297,6 +325,38 @@ internal fun Section(content: @Composable () -> Unit) {
             .border(1.dp, colors.edge, shape)
             .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
     ) { content() }
+}
+
+/** The active profile's row: its avatar in place of an icon. */
+@Composable
+private fun ProfileLinkRow(
+    p: app.marquee.core.model.ProfileInfo,
+    text: String,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(Marquee.radius.l)
+    val colors = Marquee.colors
+    Row(
+        Modifier
+            .padding(horizontal = Marquee.safe.side)
+            .fillMaxWidth()
+            .marqueeFocus(Marquee.radius.l, scale = 1.01f)
+            .clip(shape)
+            .background(colors.surface)
+            .border(1.dp, colors.edge, shape)
+            .semantics(mergeDescendants = true) {}
+            .focusClickable(onClick, Role.Button)
+            .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ProfileAvatar(p, if (Marquee.form == Form.Tv) 40.dp else 28.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            MqText(p.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+            MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = 2)
+        }
+        MqIcon(Icons.ChevronRight, tint = colors.muted)
+    }
 }
 
 /** A row that opens another page: its icon, name and what it does, and a chevron (the web's LinkRow). */
