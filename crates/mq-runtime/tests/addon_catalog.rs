@@ -8,11 +8,12 @@ use mq_runtime::views::addon_catalog::{
     check_listed_manifest, entries, install_listed_with, listable,
 };
 use mq_runtime::{
-    AddonCatalogSnapshot, AddonCatalogView, AddonsView, Configuration, Core, Installed, ListState,
-    ListedAddon, ListedEntry, ListedError, ListedFailure,
+    AddonCatalogSnapshot, AddonCatalogView, AddonList, AddonsView, Configuration, Core, CoreConfig,
+    CoreError, Installed, ListState, ListedAddon, ListedEntry, ListedError, ListedFailure,
 };
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -201,22 +202,17 @@ async fn the_real_lists_show_only_what_is_safe() {
     let words = dog.description.as_deref().unwrap();
     assert!(!words.contains('<') && !words.contains("href"), "{words}");
     assert!(words.contains("Open source at"), "{words}");
-    // Configuration from the manifest, the configure page beside it.
+    // Configuration from the manifest; every entry has its configure page.
     let required = one(&snapshot, "community.aiostatus");
     assert_eq!(required.configuration, Configuration::Required);
-    assert!(
-        required
-            .configure_url
-            .as_deref()
-            .unwrap()
-            .ends_with("/configure")
-    );
     let optional = one(&snapshot, "org.community.cast-search");
     assert_eq!(optional.configuration, Configuration::Optional);
-    assert!(optional.configure_url.is_some());
     let plain = one(&snapshot, "community.anime.kitsu");
     assert_eq!(plain.configuration, Configuration::None);
-    assert_eq!(plain.configure_url, None);
+    for entry in [required, optional, plain] {
+        let page = entry.key.strip_suffix("manifest.json").unwrap().to_owned() + "configure";
+        assert_eq!(entry.configure_url, page);
+    }
     assert_eq!(plain.provides, ["catalog", "meta", "subtitles"]);
     assert!(snapshot.lists.iter().flat_map(|l| &l.entries).all(|e| {
         e.key.starts_with("https://") && e.installed == Installed::Absent && e.copy_key.is_none()
@@ -241,6 +237,18 @@ fn links_the_lists_may_show() {
         "https://user@a.example/manifest.json",
         &format!("https://a.example/{}/manifest.json", "t".repeat(65)),
         &format!("https://a.example/manifest.json?token={}", "t".repeat(65)),
+        // A bare token as a query key, and tokens split over short parts.
+        &format!("https://a.example/manifest.json?{}", "t".repeat(65)),
+        &format!(
+            "https://a.example/manifest.json?a={0}&b={0}&c={0}",
+            "t".repeat(41)
+        ),
+        &format!(
+            "https://a.example/{0}/{0}/{0}/manifest.json",
+            "t".repeat(40)
+        ),
+        // A link over 512 bytes.
+        &format!("https://{}.example/manifest.json", "h.".repeat(260)),
         "https://a.example/other.json",
         "https://a.example/manifest.json/other",
         "https://opensubtitles.strem.io/stremio/v1",
@@ -262,6 +270,26 @@ fn links_the_lists_may_show() {
     assert!(ok(&segment).is_some());
     let value = format!("https://a.example/manifest.json?lang={}", "t".repeat(64));
     assert!(ok(&value).is_some());
+    let key = format!("https://a.example/manifest.json?{}=1", "t".repeat(64));
+    assert!(ok(&key).is_some());
+    // A path or a query of exactly 128 characters is still a link.
+    let path = format!("https://a.example/{}/manifest.json", "t".repeat(113));
+    assert_eq!(Url::parse(&path).unwrap().path().len(), 128);
+    assert!(ok(&path).is_none(), "its segment is over 64");
+    let path = format!(
+        "https://a.example/{}/{}/manifest.json",
+        "t".repeat(56),
+        "t".repeat(56)
+    );
+    assert_eq!(Url::parse(&path).unwrap().path().len(), 128);
+    assert!(ok(&path).is_some());
+    let query = format!(
+        "https://a.example/manifest.json?a={}&b={}",
+        "t".repeat(62),
+        "t".repeat(61)
+    );
+    assert_eq!(Url::parse(&query).unwrap().query().unwrap().len(), 128);
+    assert!(ok(&query).is_some());
 }
 
 fn raw(url: &str, id: &str, hints: Value) -> Value {
@@ -317,6 +345,113 @@ fn lists_and_texts_are_capped() {
     assert_eq!(shown[0].description.as_ref().unwrap().chars().count(), 300);
 }
 
+#[test]
+fn descriptions_and_names_read_as_plain_text() {
+    let with = |field: &str, text: &str| {
+        let mut entry = raw("https://a.example/manifest.json", "a", json!({}));
+        entry["manifest"][field] = json!(text);
+        entries(&[entry]).pop()
+    };
+    let text = |description: &str| with("description", description)?.description;
+    // A `<` that opens no tag is text, and the rest stays.
+    assert_eq!(
+        text("a < b and <3 more").as_deref(),
+        Some("a < b and <3 more")
+    );
+    assert_eq!(
+        text("open <unclosed rest").as_deref(),
+        Some("open <unclosed rest")
+    );
+    assert_eq!(text("1 < 2 and 3 > 2").as_deref(), Some("1 < 2 and 3 > 2"));
+    // Entities decoded once; markup they spell is text.
+    assert_eq!(
+        text("Tom &amp; Jerry &amp;lt; &#39;x&#x27; &lt;b&gt; &nbsp;end &bogus; a&b").as_deref(),
+        Some("Tom & Jerry &lt; 'x' <b> end &bogus; a&b")
+    );
+    // Tags and control characters are spaces.
+    assert_eq!(
+        text("<p>one</p><p>two\u{0}three</p>").as_deref(),
+        Some("one two three")
+    );
+    assert_eq!(text("<br/>  "), None);
+    // Names: whitespace collapsed; an empty one drops the entry.
+    let name = |name: &str| with("name", name).map(|e| e.name);
+    assert_eq!(
+        name("  Open\n\tSubtitles \u{7} v3 ").as_deref(),
+        Some("Open Subtitles v3")
+    );
+    assert_eq!(name(" \n\t "), None);
+}
+
+#[test]
+fn a_crafted_entry_never_outgrows_a_push() {
+    let good = raw("https://g.example/manifest.json", "g", json!({}));
+    let with = |field: &str, value: Value| {
+        let mut entry = raw("https://c.example/manifest.json", "c", json!({}));
+        entry["manifest"][field] = value;
+        entry
+    };
+    let words = |n: usize, len: usize| json!(vec!["w".repeat(len); n]);
+    // Over a field cap: dropped, the rest stay.
+    let crafted = [
+        with("id", json!("i".repeat(129))),
+        with("types", words(17, 5)),
+        with("types", words(1, 33)),
+        with("resources", words(17, 5)),
+        with("resources", words(1, 33)),
+    ];
+    for entry in crafted {
+        let shown = entries(&[entry.clone(), good.clone()]);
+        let ids: Vec<&str> = shown.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["g"], "{entry}");
+    }
+    assert_eq!(entries(&[with("id", json!("i".repeat(128)))]).len(), 1);
+    // Within every field cap, with text that grows as JSON (four-byte
+    // characters, escaped control characters).
+    let big = |i: usize, word: &str| {
+        let url = format!("https://h{i}.example/manifest.json");
+        let mut entry = raw(&url, &format!("{i:0>128}"), json!({}));
+        entry["manifest"]["name"] = json!("\u{10348}".repeat(80));
+        entry["manifest"]["description"] = json!("\u{10348}".repeat(300));
+        entry["manifest"]["types"] = json!(vec![word; 16]);
+        entry["manifest"]["resources"] = json!(vec![word; 16]);
+        entry
+    };
+    // Over 4 KiB as JSON: dropped.
+    assert!(entries(&[big(0, &"\u{1}".repeat(32))]).is_empty());
+    // Two full lists of the largest shown fit one push of the bridge (4 MiB).
+    let list: Vec<Value> = (0..300).map(|i| big(i, &"w".repeat(32))).collect();
+    let shown = entries(&list);
+    assert_eq!(shown.len(), 300);
+    let list = |id: &str| AddonList {
+        id: id.into(),
+        name: id.into(),
+        state: ListState::Ready,
+        entries: shown.clone(),
+    };
+    let snapshot = AddonCatalogSnapshot {
+        lists: vec![list("official"), list("community")],
+    };
+    let push = json!({"sub": 1, "updates": [snapshot]}).to_string();
+    assert!(push.len() < 4 * 1024 * 1024, "{}", push.len());
+}
+
+#[tokio::test]
+async fn a_list_over_a_megabyte_is_not_read() {
+    let entry = raw("https://n.example/manifest.json", "n", json!({}));
+    let padded = json!({"addons": [entry], "pad": "x".repeat(1024 * 1024)}).to_string();
+    let source = Source::start(&padded, COMMUNITY).await;
+    let core = Core::temporary("p").unwrap();
+    let snapshot = settled(&AddonCatalogView::open_from(&core, &source.url(), false)).await;
+    assert_eq!(
+        snapshot.lists[0].state,
+        ListState::Failed {
+            words: "Cinemeta sent a list Marquee cannot read".into()
+        }
+    );
+    assert_eq!(snapshot.lists[1].state, ListState::Ready);
+}
+
 #[tokio::test]
 async fn installed_states_follow_the_profiles_addons() {
     let source = Source::start(OFFICIAL, COMMUNITY).await;
@@ -328,8 +463,11 @@ async fn installed_states_follow_the_profiles_addons() {
     let (pick_a, pick_b) = (pick[0].key.clone(), pick[1].key.clone());
     let trakt = one(&snapshot, "community.trakt-tv");
     let trakt_host = trakt.host.clone();
+    let cinemeta = one(&snapshot, "com.linvo.cinemeta").key.clone();
+    let hits = source.hits.load(Ordering::SeqCst);
     // This link, on; the first duplicate id's link, off; a configured Trakt
-    // (same id and host, another link), off, behind one that is on.
+    // (same id and host, another link), off, behind one that is on; Cinemeta
+    // with a stored manifest that no longer reads.
     let configured = format!("https://{trakt_host}/eyJ1c2VyIjoiYSJ9/manifest.json");
     let other = format!("https://{trakt_host}/eyJ1c2VyIjoiYiJ9/manifest.json");
     core.library()
@@ -340,6 +478,10 @@ async fn installed_states_follow_the_profiles_addons() {
                 row(&pick_a, "community.opensubtitles", false),
                 row(&configured, "community.trakt-tv", false),
                 row(&other, "community.trakt-tv", false),
+                AddonRow {
+                    manifest_json: "not a manifest".into(),
+                    ..row(&cinemeta, "com.linvo.cinemeta", true)
+                },
             ],
             &core.hlc(),
         )
@@ -360,6 +502,8 @@ async fn installed_states_follow_the_profiles_addons() {
         (entry.installed, entry.copy_key.clone())
     };
     assert_eq!(state(&subs), (Installed::On, None));
+    // An unreadable manifest still matches its exact link.
+    assert_eq!(state(&cinemeta), (Installed::On, None));
     assert_eq!(state(&pick_a), (Installed::Off, None));
     // The other OpenSubtitles of that id is on another host: no copy.
     assert_eq!(state(&pick_b), (Installed::Absent, None));
@@ -382,6 +526,40 @@ async fn installed_states_follow_the_profiles_addons() {
         (trakt.installed, trakt.copy_key.clone()),
         (Installed::CopyOn, None)
     );
+    // Addon changes recompute states only: the lists were not asked again.
+    assert_eq!(source.hits.load(Ordering::SeqCst), hits);
+}
+
+#[tokio::test]
+async fn unreadable_addons_fail_the_lists_instead_of_reading_absent() {
+    let dir = std::env::temp_dir().join(format!("mq-m12-unreadable-{}", std::process::id()));
+    let core = Core::open(CoreConfig {
+        data_dir: dir.clone(),
+        profile_id: String::new(),
+        device_id: 0,
+    })
+    .unwrap();
+    let source = Source::start(OFFICIAL, COMMUNITY).await;
+    let row = row("https://a.example/manifest.json", "a", true);
+    core.library()
+        .set_addons(core.profile(), &[row], &core.hlc())
+        .unwrap();
+    // A row the library can no longer read.
+    let db = rusqlite::Connection::open(dir.join("library.sqlite")).unwrap();
+    db.execute("UPDATE addons SET enabled = 'unreadable'", [])
+        .unwrap();
+    let snapshot = settled(&AddonCatalogView::open_from(&core, &source.url(), false)).await;
+    for list in &snapshot.lists {
+        assert_eq!(
+            list.state,
+            ListState::Failed {
+                words: "Marquee could not read your addons".into()
+            }
+        );
+        assert!(list.entries.is_empty());
+    }
+    drop((db, core));
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[tokio::test]
@@ -530,22 +708,24 @@ async fn a_listed_install_writes_only_a_checked_manifest() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].transport_url, key);
     assert!(!rows[0].allow_private && rows[0].enabled);
+    // The manifest written is the one fetched and checked.
+    let written: Value = serde_json::from_str(&rows[0].manifest_json).unwrap();
+    assert_eq!(
+        written,
+        serde_json::to_value(manifest(id, json!({}))).unwrap()
+    );
     let snapshot = until(&view, |s| one(s, id).installed == Installed::On).await;
     assert_eq!(one(&snapshot, id).installed, Installed::On);
 }
 
 /// A local addon answering its manifest, and the name that stands for it as
 /// a public host on the listed path (`set_public`).
-async fn manifest_origin(name: &str, id: &str) -> (String, Arc<AtomicUsize>) {
+async fn manifest_origin(name: &str, manifest: Value) -> (String, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
     let count = hits.clone();
-    let body = json!({
-        "id": id, "version": "1.0.0", "name": "Listed", "resources": ["subtitles"],
-        "types": ["movie"], "catalogs": []
-    })
-    .to_string();
+    let body = manifest.to_string();
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             count.fetch_add(1, Ordering::SeqCst);
@@ -569,7 +749,7 @@ async fn manifest_origin(name: &str, id: &str) -> (String, Arc<AtomicUsize>) {
 #[tokio::test]
 async fn the_listed_path_fetches_public_addresses_only() {
     let core = Core::temporary("p").unwrap();
-    let (origin, hits) = manifest_origin("listed.m12.test", "listed").await;
+    let (origin, hits) = manifest_origin("listed.m12.test", listed_manifest("listed")).await;
     // The addon at its private address: never fetched, nothing written.
     let port = origin.rsplit(':').next().unwrap();
     let private = ListedEntry {
@@ -591,6 +771,254 @@ async fn the_listed_path_fetches_public_addresses_only() {
     let rows = core.library().addons("p").unwrap();
     assert_eq!(rows.len(), 1);
     assert!(!rows[0].allow_private);
+}
+
+fn listed_manifest(id: &str) -> Value {
+    json!({
+        "id": id, "version": "1.0.0", "name": "Listed", "resources": ["subtitles"],
+        "types": ["movie"], "catalogs": []
+    })
+}
+
+#[tokio::test]
+async fn a_listed_manifest_over_256_kib_is_not_installed() {
+    let core = Core::temporary("p").unwrap();
+    let mut big = listed_manifest("big");
+    big["description"] = json!("d".repeat(256 * 1024));
+    let (origin, hits) = manifest_origin("big.m12.test", big).await;
+    let entry = ListedEntry {
+        key: Url::parse(&format!("http://{origin}/manifest.json")).unwrap(),
+        id: "big".into(),
+    };
+    assert_eq!(
+        refused(core.install_listed(&entry).await),
+        ListedFailure::Unreachable
+    );
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+    assert!(core.library().addons("p").unwrap().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn concurrent_addon_edits_all_land() {
+    let core = Core::temporary("p").unwrap();
+    let tasks: Vec<_> = (0..8)
+        .map(|t| {
+            let core = core.clone();
+            tokio::spawn(async move {
+                for i in 0..20 {
+                    let id = format!("a{t}-{i}");
+                    let entry = ListedEntry {
+                        key: Url::parse(&format!("https://{id}.example/manifest.json")).unwrap(),
+                        id: id.clone(),
+                    };
+                    install_listed_with(
+                        &core,
+                        &entry,
+                        |_| async move { Ok(manifest(&id, json!({}))) },
+                    )
+                    .await
+                    .unwrap();
+                }
+            })
+        })
+        .collect();
+    for task in tasks {
+        task.await.unwrap();
+    }
+    assert_eq!(core.library().addons("p").unwrap().len(), 160);
+}
+
+#[tokio::test]
+async fn an_edit_a_newer_list_overrules_never_reads_as_done() {
+    let core = Core::temporary("p").unwrap();
+    // A list stamped at the highest clock (a device far ahead): no local
+    // write wins over it.
+    let kept = row("https://kept.example/manifest.json", "kept", true);
+    let newest = "f".repeat(32);
+    core.library()
+        .set_addons("p", std::slice::from_ref(&kept), &newest)
+        .unwrap();
+    let entry = ListedEntry {
+        key: Url::parse("https://a.example/manifest.json").unwrap(),
+        id: "a".into(),
+    };
+    let result =
+        install_listed_with(&core, &entry, |_| async { Ok(manifest("a", json!({}))) }).await;
+    assert_eq!(refused(result), ListedFailure::Changed);
+    let toggled = core.set_addon_enabled(&kept.transport_url, false);
+    assert!(
+        matches!(toggled, Err(CoreError::AddonsChanged)),
+        "{toggled:?}"
+    );
+    assert_eq!(core.library().addons("p").unwrap(), [kept]);
+}
+
+#[tokio::test]
+async fn commands_find_an_imported_row_by_its_canonical_link() {
+    let core = Core::temporary("p").unwrap();
+    let key = "https://h.example/manifest.json";
+    let imported = format!("{key}#imported");
+    let other = "https://other.example/manifest.json";
+    let states = |core: &Core| -> Vec<(String, bool)> {
+        let rows = core.library().addons("p").unwrap();
+        rows.into_iter()
+            .map(|r| (r.transport_url, r.enabled))
+            .collect()
+    };
+    // The Stremio importer keeps fragments; the lists show the link
+    // without one, and the card's commands use that.
+    core.library()
+        .set_addons(
+            "p",
+            &[row(&imported, "a", false), row(other, "b", true)],
+            &core.hlc(),
+        )
+        .unwrap();
+    core.set_addon_enabled(key, true).unwrap();
+    core.move_addon(key, 1).unwrap();
+    assert_eq!(
+        states(&core),
+        [(other.to_owned(), true), (imported.clone(), true)]
+    );
+    // Installing the listed link finds it installed.
+    let entry = ListedEntry {
+        key: Url::parse(key).unwrap(),
+        id: "a".into(),
+    };
+    install_listed_with(&core, &entry, |_| async { Ok(manifest("a", json!({}))) })
+        .await
+        .unwrap();
+    assert_eq!(states(&core).len(), 2);
+    core.remove_addon(key).unwrap();
+    assert_eq!(states(&core), [(other.to_owned(), true)]);
+    // The exact link comes first: with both stored, each answers to its own.
+    core.library()
+        .set_addons(
+            "p",
+            &[row(&imported, "a", false), row(key, "a", false)],
+            &core.hlc(),
+        )
+        .unwrap();
+    core.set_addon_enabled(key, true).unwrap();
+    assert_eq!(
+        states(&core),
+        [(imported.clone(), false), (key.to_owned(), true)]
+    );
+}
+
+/// Takes every slot the core's client gives `host` (6, `ClientConfig`'s
+/// default) with answers whose bodies never end, then stops the clock: a
+/// request waiting for a slot now waits on virtual time, which jumps to the
+/// next timer whenever nothing else can run.
+async fn hold_slots(core: &Core, host: &str) -> Vec<mq_http::StreamingResponse> {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 1024];
+            let _ = socket.read(&mut buf).await;
+            let _ = socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n")
+                .await;
+            held.push(socket);
+        }
+    });
+    let localhost = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    mq_http::test_dns::set(host, &[localhost]);
+    let http = core.http().scoped(&[localhost]);
+    let mut held = Vec::new();
+    for _ in 0..6 {
+        let url = format!("http://{host}:{port}/");
+        held.push(http.stream(&url, None, &Default::default()).await.unwrap());
+    }
+    tokio::time::pause();
+    held
+}
+
+#[tokio::test]
+async fn a_list_waiting_for_a_slot_fails_at_its_deadline() {
+    let source = Source::start(OFFICIAL, COMMUNITY).await;
+    let core = Core::temporary("p").unwrap();
+    let _held = hold_slots(&core, "127.0.0.1").await;
+    let started = tokio::time::Instant::now();
+    let view = AddonCatalogView::open_from(&core, &source.url(), false);
+    let snapshot = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let snapshot = view.snapshot();
+            if snapshot.lists.iter().all(|l| l.state != ListState::Loading) {
+                return snapshot;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the lists end by their deadline");
+    for list in &snapshot.lists {
+        assert_eq!(
+            list.state,
+            ListState::Failed {
+                words: "Cinemeta did not answer in time".into()
+            }
+        );
+    }
+    assert!(started.elapsed() >= Duration::from_secs(10));
+    assert_eq!(source.hits.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_listed_install_waiting_for_a_slot_fails_at_its_deadline() {
+    let core = Core::temporary("p").unwrap();
+    let _held = hold_slots(&core, "slots.m12.test").await;
+    let entry = ListedEntry {
+        key: Url::parse("https://slots.m12.test/manifest.json").unwrap(),
+        id: "slots".into(),
+    };
+    let started = tokio::time::Instant::now();
+    let result = tokio::time::timeout(Duration::from_secs(60), core.install_listed(&entry))
+        .await
+        .expect("the install ends by its deadline");
+    assert_eq!(refused(result), ListedFailure::Timeout);
+    assert!(started.elapsed() >= Duration::from_secs(10));
+}
+
+#[tokio::test]
+async fn closing_the_view_ends_its_requests() {
+    // A Cinemeta that never answers, telling when each connection opens
+    // and when the client closes it.
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (opened_tx, mut opened) = tokio::sync::mpsc::unbounded_channel();
+    let (closed_tx, mut closed) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let _ = opened_tx.send(());
+            let closed = closed_tx.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = socket.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                }
+                let _ = closed.send(());
+            });
+        }
+    });
+    let core = Core::temporary("p").unwrap();
+    let view = AddonCatalogView::open_from(&core, &format!("http://{addr}/manifest.json"), false);
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(5), opened.recv())
+            .await
+            .expect("both lists are asked");
+    }
+    drop(view);
+    // Both requests end with the view, long before their 10 s deadline.
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(2), closed.recv())
+            .await
+            .expect("the request ended with the view");
+    }
 }
 
 #[tokio::test]

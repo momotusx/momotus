@@ -47,3 +47,6 @@ tracing.workspace = true
 mq-http = { path = "../mq-http", features = ["test-dns"] }
 mq-relparse = { path = "../mq-relparse" }
 mq-streams = { path = "../mq-streams" }
+# Tests make a stored row unreadable behind the library's back.
+rusqlite = "0.40"
+tokio = { workspace = true, features = ["test-util"] }

@@ -3,7 +3,7 @@
 //! 3.3). The lists come from Cinemeta's fixed address, whatever the user has
 //! installed: "Official" is that address, never a field a publisher controls.
 
-use crate::live::{FRAME, coalesce};
+use crate::core::{canonical, position};
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
@@ -23,15 +23,33 @@ use tokio::task::JoinHandle;
 /// Cinemeta, the source of both lists (the address the onboardings use).
 pub const CINEMETA: &str = "https://v3-cinemeta.strem.io/manifest.json";
 
-/// Each list's fetch, and a listed install's manifest fetch.
+/// Each list's fetch, and a listed install's manifest fetch, from the start
+/// of the wait for a host slot to the end of the body.
 const TIMEOUT: Duration = Duration::from_secs(10);
 /// Entries shown per list.
 const MAX_ENTRIES: usize = 300;
-/// A path segment or query value longer than this carries credentials (in
-/// the live Community list, someone's OAuth tokens).
+/// A path segment, query key or query value longer than this carries
+/// credentials (in the live Community list, someone's OAuth tokens).
 const MAX_PART: usize = 64;
+/// The path or the query as a whole: a token split over short parts.
+const MAX_WHOLE: usize = 128;
+/// The canonical link, in bytes.
+const KEY_MAX: usize = 512;
+/// The manifest id, in bytes.
+const ID_MAX: usize = 128;
+/// Types and resources: at most this many, each at most `WORD_MAX` bytes.
+const WORDS_MAX: usize = 16;
+const WORD_MAX: usize = 32;
+/// One entry as JSON: two full lists (600 entries) stay far below the
+/// bridge's 4 MiB message cap, whatever the lists hold.
+const ENTRY_MAX: usize = 4 * 1024;
+/// A list's body (Community was 122 KiB on 2026-10-18).
+const LIST_MAX_BYTES: usize = 1024 * 1024;
+/// A listed addon's manifest.
+const MANIFEST_MAX_BYTES: usize = 256 * 1024;
 const NAME_MAX: usize = 80;
 const DESCRIPTION_MAX: usize = 300;
+const UNREADABLE: &str = "Cinemeta sent a list Marquee cannot read";
 
 /// The lists, in order: Official, then Community.
 const LISTS: [(&str, &str); 2] = [("official", "Official"), ("community", "Community")];
@@ -96,8 +114,9 @@ pub struct ListedAddon {
     /// "catalog", "meta", "stream", "subtitles", ...
     pub provides: Vec<String>,
     pub configuration: Configuration,
-    /// The addon's configure page, when it has one.
-    pub configure_url: Option<String>,
+    /// The addon's configure page, always set: the apps offer it by
+    /// `configuration`, and a `needsSetup` install failure opens it.
+    pub configure_url: String,
     pub installed: Installed,
     /// With `copyOff`: the first such copy in addon order, for
     /// `setAddonEnabled`. May hold keys: never show or log it.
@@ -152,6 +171,8 @@ pub enum ListedFailure {
     Mismatch,
     Adult,
     NotListed,
+    /// The write did not land: a newer list from another device won.
+    Changed,
 }
 
 impl ListedFailure {
@@ -163,6 +184,7 @@ impl ListedFailure {
             Self::Mismatch => "mismatch",
             Self::Adult => "adult",
             Self::NotListed => "notListed",
+            Self::Changed => "changed",
         }
     }
 
@@ -174,6 +196,7 @@ impl ListedFailure {
             Self::Mismatch => "This addon is not the one the list named",
             Self::Adult => "This addon is for adults and is not shown",
             Self::NotListed => "This addon is no longer in the list",
+            Self::Changed => "Another device changed your addons first",
         }
     }
 }
@@ -234,6 +257,8 @@ impl AddonCatalogView {
         self.snapshot.get()
     }
 
+    /// Each update is one whole snapshot, the newest: never a batch, so a
+    /// push stays one snapshot's size.
     pub fn subscribe(
         &self,
     ) -> (
@@ -241,10 +266,7 @@ impl AddonCatalogView {
         Pin<Box<dyn Stream<Item = Vec<AddonCatalogSnapshot>> + Send>>,
     ) {
         let updates = self.snapshot.subscribe().map(|s| vec![s]);
-        (
-            self.snapshot.get(),
-            Box::pin(coalesce(Box::pin(updates), FRAME)),
-        )
+        (self.snapshot.get(), Box::pin(updates))
     }
 
     /// The entry this view shows for `key`: an install takes only those.
@@ -283,6 +305,7 @@ impl Core {
                 no_proxy: true,
                 allow_private: false,
                 timeout: TIMEOUT,
+                max_bytes: MANIFEST_MAX_BYTES,
                 ..Default::default()
             };
             self.http()
@@ -294,8 +317,8 @@ impl Core {
     }
 }
 
-/// `install_listed` with the manifest fetch given: fetch, validate, and only
-/// then persist.
+/// `install_listed` with the manifest fetch given: fetch (within `TIMEOUT`,
+/// whatever the fetch waits on), validate, and only then persist.
 pub async fn install_listed_with<F, Fut>(
     core: &Core,
     entry: &ListedEntry,
@@ -305,13 +328,16 @@ where
     F: FnOnce(Url) -> Fut,
     Fut: Future<Output = Result<Manifest, AddonError>>,
 {
-    let manifest = fetch(entry.key.clone()).await.map_err(fetch_failure)?;
+    let manifest = tokio::time::timeout(TIMEOUT, fetch(entry.key.clone()))
+        .await
+        .map_err(|_| ListedFailure::Timeout)?
+        .map_err(fetch_failure)?;
     check_listed_manifest(entry, &manifest)?;
     let manifest_json =
         serde_json::to_string(&manifest).map_err(|e| CoreError::BadManifest(e.to_string()))?;
     let url = entry.key.to_string();
     let written = core.edit_addons(|rows| {
-        if rows.iter().any(|row| canonical(&row.transport_url) == url) {
+        if position(rows, &url).is_ok() {
             return Err(CoreError::AlreadyInstalled(mq_http::redact_url(&entry.key)));
         }
         rows.push(AddonRow {
@@ -325,6 +351,7 @@ where
     });
     match written {
         Ok(()) | Err(CoreError::AlreadyInstalled(_)) => Ok((manifest.id, manifest.name)),
+        Err(CoreError::AddonsChanged) => Err(ListedFailure::Changed.into()),
         Err(e) => Err(e.into()),
     }
 }
@@ -355,16 +382,27 @@ fn fetch_failure(error: AddonError) -> ListedFailure {
 }
 
 /// An entry's link as the list may show it: the canonical form of a link
-/// that is https, carries no credentials (no userinfo, no path segment or
-/// query value over `MAX_PART` characters), ends in `/manifest.json` and
-/// names a public host. `stremio://` is normalized first.
+/// that is https, carries no credentials (no userinfo; no path segment,
+/// query key or query value over `MAX_PART` characters; no path or query
+/// over `MAX_WHOLE`), ends in `/manifest.json` and names a public host.
+/// `stremio://` is normalized first.
 pub fn listable(raw: &str) -> Option<Url> {
     let url = normalize_transport_url(raw).ok()?;
-    if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.as_str().len() > KEY_MAX
+    {
         return None;
     }
     let long = |part: &str| part.chars().count() > MAX_PART;
-    if url.path_segments()?.any(long) || url.query_pairs().any(|(_, value)| long(&value)) {
+    let whole = url.path().len().max(url.query().unwrap_or_default().len());
+    if whole > MAX_WHOLE
+        || url.path_segments()?.any(long)
+        || url
+            .query_pairs()
+            .any(|(key, value)| long(&key) || long(&value))
+    {
         return None;
     }
     let host = url.host_str()?;
@@ -381,13 +419,6 @@ pub(crate) fn configure_page(url: &Url, manifest: &Manifest) -> Option<String> {
         return None;
     }
     configure_url(url).ok()
-}
-
-/// The canonical form of a stored link, or the link as stored.
-fn canonical(transport_url: &str) -> String {
-    normalize_transport_url(transport_url)
-        .map(|u| u.to_string())
-        .unwrap_or_else(|_| transport_url.to_owned())
 }
 
 async fn run(
@@ -462,23 +493,30 @@ async fn fetch_list(
         id: id.into(),
         extra: vec![],
     };
-    let fetched = if fresh {
-        core.addons().fetch_fresh(&source, &path, TIMEOUT).await
-    } else {
-        core.addons().fetch(&source, &path, TIMEOUT).await
+    let fetched = async {
+        if fresh {
+            core.addons().fetch_fresh(&source, &path, TIMEOUT).await
+        } else {
+            core.addons().fetch(&source, &path, TIMEOUT).await
+        }
     };
-    let body = fetched.map_err(|e| list_failure(&e))?.body;
-    let answer: Value = serde_json::from_slice(&body)
-        .map_err(|_| "Cinemeta sent a list Marquee cannot read".to_owned())?;
-    let raw = answer["addons"]
-        .as_array()
-        .ok_or("Cinemeta sent a list Marquee cannot read")?;
+    // The deadline covers the wait for a host slot too.
+    let body = tokio::time::timeout(TIMEOUT, fetched)
+        .await
+        .map_err(|_| list_failure(&AddonError::TimedOut))?
+        .map_err(|e| list_failure(&e))?
+        .body;
+    if body.len() > LIST_MAX_BYTES {
+        return Err(UNREADABLE.into());
+    }
+    let answer: Value = serde_json::from_slice(&body).map_err(|_| UNREADABLE.to_owned())?;
+    let raw = answer["addons"].as_array().ok_or(UNREADABLE)?;
     Ok(entries(raw))
 }
 
 /// The entries the list may show, in the served order: each checked
-/// (`listable`, not adult), the malformed ones skipped, duplicates of a
-/// canonical link dropped, at most `MAX_ENTRIES`.
+/// (`listable`, not adult, within the caps), the malformed ones skipped,
+/// duplicates of a canonical link dropped, at most `MAX_ENTRIES`.
 pub fn entries(raw: &[Value]) -> Vec<ListedAddon> {
     let mut seen = HashSet::new();
     raw.iter()
@@ -492,7 +530,23 @@ fn entry(raw: &Value) -> Option<ListedAddon> {
     let url = listable(raw["transportUrl"].as_str()?)?;
     let manifest: Manifest = serde_json::from_value(raw["manifest"].clone()).ok()?;
     let hints = &manifest.behavior_hints;
-    if hints.adult {
+    let provides: Vec<String> = manifest
+        .resources
+        .iter()
+        .map(|r| match r {
+            ManifestResource::Short(name) => name.clone(),
+            ManifestResource::Full { name, .. } => name.clone(),
+        })
+        .collect();
+    let short =
+        |words: &[String]| words.len() <= WORDS_MAX && words.iter().all(|w| w.len() <= WORD_MAX);
+    let name = cut(&collapse(&manifest.name), NAME_MAX);
+    if hints.adult
+        || name.is_empty()
+        || manifest.id.len() > ID_MAX
+        || !short(&manifest.types)
+        || !short(&provides)
+    {
         return None;
     }
     let configuration = if hints.configuration_required {
@@ -502,48 +556,101 @@ fn entry(raw: &Value) -> Option<ListedAddon> {
     } else {
         Configuration::None
     };
-    Some(ListedAddon {
+    let entry = ListedAddon {
         key: url.to_string(),
         id: manifest.id.clone(),
         host: url.host_str()?.to_owned(),
-        name: cut(manifest.name.trim(), NAME_MAX),
+        name,
         description: manifest
             .description
             .as_deref()
             .map(|d| cut(&plain(d), DESCRIPTION_MAX))
             .filter(|d| !d.is_empty()),
         types: manifest.types.clone(),
-        provides: manifest
-            .resources
-            .iter()
-            .map(|r| match r {
-                ManifestResource::Short(name) => name.clone(),
-                ManifestResource::Full { name, .. } => name.clone(),
-            })
-            .collect(),
+        provides,
         configuration,
-        configure_url: configure_page(&url, &manifest),
+        configure_url: configure_url(&url).ok()?,
         installed: Installed::Absent,
         copy_key: None,
-    })
+    };
+    (serde_json::to_vec(&entry).ok()?.len() <= ENTRY_MAX).then_some(entry)
 }
 
-/// Text without markup: tags dropped, whitespace collapsed to one space.
+/// Text without markup: tags dropped (a `<` that opens none stays), the
+/// common entities decoded once, whitespace collapsed (`collapse`).
 fn plain(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut in_tag = false;
-    for c in text.chars() {
-        match c {
-            '<' => in_tag = true,
-            '>' if in_tag => {
-                in_tag = false;
+    let mut rest = text;
+    while let Some(at) = rest.find('<') {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        let opens = after.starts_with(|c: char| c.is_ascii_alphabetic() || c == '/' || c == '!');
+        match after.find('>').filter(|_| opens) {
+            Some(end) => {
                 out.push(' ');
+                rest = &after[end + 1..];
             }
-            _ if !in_tag => out.push(c),
-            _ => {}
+            None => {
+                out.push('<');
+                rest = after;
+            }
         }
     }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    out.push_str(rest);
+    collapse(&entities(&out))
+}
+
+/// `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&nbsp;` and numeric
+/// references, decoded once (`&amp;lt;` reads `&lt;`); any other `&` stays.
+fn entities(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        let named = after.find(';').filter(|&end| end <= 8);
+        match named.and_then(|end| Some((entity(&after[..end])?, end))) {
+            Some((c, end)) => {
+                out.push(c);
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push('&');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn entity(name: &str) -> Option<char> {
+    let c = match name {
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        "nbsp" => ' ',
+        _ => {
+            let number = name.strip_prefix('#')?;
+            let code = match number.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                None => number.parse().ok()?,
+            };
+            char::from_u32(code)?
+        }
+    };
+    Some(c)
+}
+
+/// One space between words; control characters count as spaces.
+fn collapse(text: &str) -> String {
+    let spaced: String = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    spaced.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// At most `max` characters.
@@ -552,35 +659,53 @@ fn cut(text: &str, max: usize) -> String {
 }
 
 /// Sets each entry's `installed` (and `copyKey`) from the profile's addons.
+/// Addons that cannot be read fail every loaded list: a state Marquee does
+/// not know never shows as absent.
 fn mark_installed(core: &Core, snapshot: &mut AddonCatalogSnapshot) {
-    let rows = core.library().addons(core.profile()).unwrap_or_default();
-    let installed: Vec<Row> = rows.iter().filter_map(Row::new).collect();
+    let rows = match core.library().addons(core.profile()) {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!("Find addons could not read the profile's addons: {e}");
+            for list in &mut snapshot.lists {
+                if list.state == ListState::Ready {
+                    list.state = ListState::Failed {
+                        words: "Marquee could not read your addons".into(),
+                    };
+                    list.entries.clear();
+                }
+            }
+            return;
+        }
+    };
+    let installed: Vec<Row> = rows.iter().map(Row::new).collect();
     for entry in snapshot.lists.iter_mut().flat_map(|l| l.entries.iter_mut()) {
         (entry.installed, entry.copy_key) = installed_state(entry, &installed);
     }
 }
 
-/// An installed addon as the lists compare it.
+/// An installed addon as the lists compare it. A row whose manifest or link
+/// cannot be read still matches its exact link; it is nobody's copy.
 struct Row {
     url: String,
     stored: String,
-    id: String,
-    host: String,
+    id: Option<String>,
+    host: Option<String>,
     enabled: bool,
 }
 
 impl Row {
-    fn new(row: &AddonRow) -> Option<Row> {
-        let manifest: Value = serde_json::from_str(&row.manifest_json).ok()?;
+    fn new(row: &AddonRow) -> Row {
         let url = canonical(&row.transport_url);
-        let host = Url::parse(&url).ok()?.host_str()?.to_owned();
-        Some(Row {
+        let manifest: Option<Value> = serde_json::from_str(&row.manifest_json).ok();
+        Row {
+            id: manifest.and_then(|m| Some(m["id"].as_str()?.to_owned())),
+            host: Url::parse(&url)
+                .ok()
+                .and_then(|u| Some(u.host_str()?.to_owned())),
             url,
             stored: row.transport_url.clone(),
-            id: manifest["id"].as_str()?.to_owned(),
-            host,
             enabled: row.enabled,
-        })
+        }
     }
 }
 
@@ -595,7 +720,10 @@ fn installed_state(entry: &ListedAddon, rows: &[Row]) -> (Installed, Option<Stri
     }
     let copies: Vec<&Row> = rows
         .iter()
-        .filter(|row| row.id == entry.id && row.host == entry.host)
+        .filter(|row| {
+            row.id.as_deref() == Some(entry.id.as_str())
+                && row.host.as_deref() == Some(entry.host.as_str())
+        })
         .collect();
     if copies.iter().any(|row| row.enabled) {
         (Installed::CopyOn, None)
@@ -615,9 +743,7 @@ fn list_failure(error: &AddonError) -> String {
         AddonError::Http(HttpError::Status { status, .. }) => {
             format!("Cinemeta answered with an error ({status})")
         }
-        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => {
-            "Cinemeta sent a list Marquee cannot read".into()
-        }
+        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => UNREADABLE.into(),
         _ => "Cinemeta did not answer".into(),
     }
 }

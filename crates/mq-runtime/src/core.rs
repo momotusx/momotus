@@ -27,6 +27,9 @@ pub enum CoreError {
     AlreadyInstalled(String),
     #[error("addon is not installed: {0}")]
     NotInstalled(String),
+    /// The write did not land: a newer list from another device won.
+    #[error("your addons changed on another device: try again")]
+    AddonsChanged,
     #[error("invalid setting: {0}")]
     BadPrefs(String),
     #[error("stored manifest is invalid: {0}")]
@@ -90,6 +93,10 @@ struct Device {
     sync_gate: Arc<Mutex<()>>,
     /// PIN attempts, one throttle for every session and profile.
     pins: std::sync::Mutex<crate::profiles::Throttle>,
+    /// Addon list edits, one at a time: each reads and writes a whole list.
+    // ponytail: one lock for every profile's list; per-profile locks if
+    // edits ever contend.
+    addon_edits: std::sync::Mutex<()>,
 }
 
 /// Devices open in this process, by canonical data directory.
@@ -114,6 +121,7 @@ impl Device {
             clock,
             sync_gate: Arc::default(),
             pins: std::sync::Mutex::new(crate::profiles::Throttle::new(std::time::Instant::now())),
+            addon_edits: std::sync::Mutex::default(),
         }))
     }
 
@@ -383,7 +391,7 @@ impl Core {
             .map_err(|e| CoreError::BadManifest(e.to_string()))?;
         let url = addon.transport_url.to_string();
         self.edit_addons(|rows| {
-            if rows.iter().any(|r| r.transport_url == url) {
+            if position(rows, &url).is_ok() {
                 return Err(CoreError::AlreadyInstalled(redact(&url)));
             }
             rows.push(AddonRow {
@@ -425,10 +433,19 @@ impl Core {
     }
 
     /// One write of the whole ordered list; positions follow the new order.
+    /// Edits run one at a time, so none is lost to another's read; one that
+    /// did not land (a newer list from another device won) is
+    /// `AddonsChanged`, never a success.
     pub(crate) fn edit_addons(
         &self,
         f: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), CoreError>,
     ) -> Result<(), CoreError> {
+        let _one_at_a_time = self
+            .inner
+            .device
+            .addon_edits
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let mut rows = self.library().addons(self.profile())?;
         f(&mut rows)?;
         for (i, row) in rows.iter_mut().enumerate() {
@@ -436,14 +453,31 @@ impl Core {
         }
         self.library()
             .set_addons(self.profile(), &rows, &self.hlc())?;
+        if self.library().addons(self.profile())? != rows {
+            return Err(CoreError::AddonsChanged);
+        }
         Ok(())
     }
 }
 
-fn position(rows: &[AddonRow], transport_url: &str) -> Result<usize, CoreError> {
+/// The installed addon a command names: its exact link, else the same link
+/// in canonical form (the Stremio importer keeps fragments the lists drop).
+pub(crate) fn position(rows: &[AddonRow], transport_url: &str) -> Result<usize, CoreError> {
     rows.iter()
         .position(|r| r.transport_url == transport_url)
+        .or_else(|| {
+            let wanted = canonical(transport_url);
+            rows.iter()
+                .position(|r| canonical(&r.transport_url) == wanted)
+        })
         .ok_or_else(|| CoreError::NotInstalled(redact(transport_url)))
+}
+
+/// The canonical form of a link, or the link as given.
+pub(crate) fn canonical(transport_url: &str) -> String {
+    mq_addons::normalize_transport_url(transport_url)
+        .map(|u| u.to_string())
+        .unwrap_or_else(|_| transport_url.to_owned())
 }
 
 /// A random device id kept in the library on first open.
