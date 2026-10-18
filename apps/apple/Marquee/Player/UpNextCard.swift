@@ -5,6 +5,8 @@ import SwiftUI
 struct UpNextCard: View {
     let model: PlayerModel
     @Environment(\.metrics) private var metrics
+    /// Play now takes focus when the card appears, so a remote can press it at once.
+    @FocusState private var playFocused: Bool
 
     var body: some View {
         if let next = model.next {
@@ -38,6 +40,7 @@ struct UpNextCard: View {
                 HStack(spacing: 10) {
                     Button { Task { await model.playNext() } } label: { Label("Play now", glyph: "skip-forward") }
                         .buttonStyle(PillButtonStyle(prominent: true))
+                        .focused($playFocused)
                     Button("Cancel", action: model.cancelNext)
                         .buttonStyle(PillButtonStyle())
                 }
@@ -49,6 +52,7 @@ struct UpNextCard: View {
             .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true, shadow: true)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Up next")
+            .onAppear { playFocused = true }
         }
     }
 }

@@ -9,8 +9,14 @@ struct PlayerControls: View {
     let back: () -> Void
     /// True while a menu is open: the controls must stay up.
     var hold: (Bool) -> Void = { _ in }
+    /// The viewer did something (focus moved, a seek on the bar): the controls stay up a while longer.
+    var activity: () -> Void = {}
     @Environment(\.metrics) private var metrics
     @State private var scrub: Double?
+    /// Which control has focus: TV enters on Play/Pause, and every move keeps the controls up.
+    @FocusState private var focus: Control?
+
+    enum Control: Hashable { case back, rewind, play, forward, scrub, audio, subtitles, versions, speed }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,6 +24,11 @@ struct PlayerControls: View {
             Spacer()
             bottom
         }
+        .onChange(of: focus) { activity() }
+        #if os(tvOS)
+        .defaultFocus($focus, .play)
+        .onAppear { focus = .play }
+        #endif
         .padding(.horizontal, metrics.gutter)
         .padding(.vertical, metrics.wide ? Theme.Space.m : Theme.Space.s)
         .background {
@@ -48,7 +59,8 @@ struct PlayerControls: View {
                     .frame(width: 40, height: 40)
                     .glass(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.round)
+            .focused($focus, equals: .back)
             .accessibilityLabel("Back")
             VStack(alignment: .leading, spacing: 2) {
                 Text(target.title)
@@ -74,11 +86,41 @@ struct PlayerControls: View {
 
     private var bottom: some View {
         VStack(spacing: 14) {
+            #if os(tvOS)
+            // The whole row takes focus, so nothing lies left or right of it:
+            // Left and Right seek 10 s a press instead of moving focus.
+            HStack(spacing: 12) {
+                Text(timecode(model.position)).monospacedDigit()
+                ProgressLine(value: model.duration > 0 ? model.position / model.duration : 0)
+                Text("-" + timecode(max(0, model.duration - model.position))).monospacedDigit()
+            }
+            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .contentShape(Capsule())
+            .focusable()
+            .focused($focus, equals: .scrub)
+            .modifier(FocusRing(shape: Capsule(), active: focus == .scrub))
+            .onMoveCommand { direction in
+                switch direction {
+                case .left: model.skip(-10); activity()
+                case .right: model.skip(10); activity()
+                default: break
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Position")
+            .accessibilityValue("\(timecode(model.position)) of \(timecode(model.duration))")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: model.skip(10)
+                case .decrement: model.skip(-10)
+                @unknown default: break
+                }
+            }
+            #else
             HStack(spacing: 12) {
                 Text(timecode(scrub ?? model.position)).monospacedDigit()
-                #if os(tvOS)
-                ProgressLine(value: model.duration > 0 ? model.position / model.duration : 0)
-                #else
                 Slider(
                     value: Binding(get: { scrub ?? model.position }, set: { scrub = $0 }),
                     in: 0...max(model.duration, 1)
@@ -90,10 +132,10 @@ struct PlayerControls: View {
                 }
                 .tint(.white)
                 .accessibilityLabel("Position")
-                #endif
                 Text("-" + timecode(max(0, model.duration - (scrub ?? model.position)))).monospacedDigit()
             }
             .font(.text(Theme.type.callout, relativeTo: .callout))
+            #endif
             if metrics.wide {
                 HStack(alignment: .center) {
                     Spacer().frame(maxWidth: .infinity)
@@ -112,21 +154,24 @@ struct PlayerControls: View {
     }
 
     private var transport: some View {
+        // Play/Pause is the white circle; only focus draws a ring.
         HStack(spacing: metrics.wide ? 28 : 20) {
             Button { model.skip(-10) } label: { SkipGlyph(name: "rotate-ccw", wide: metrics.wide) }
-            .accessibilityLabel("Back 10 seconds")
+                .focused($focus, equals: .rewind)
+                .accessibilityLabel("Back 10 seconds")
             Button(action: model.togglePlay) {
                 Glyph(model.playing ? "pause-fill" : "play-fill", size: 26)
                     .foregroundStyle(Theme.Palette.onPrimary)
                     .frame(width: 68, height: 68)
                     .background(Circle().fill(Theme.Palette.primary))
-                    .overlay(Circle().strokeBorder(Theme.Palette.accent, lineWidth: 3).padding(-5))
             }
+            .focused($focus, equals: .play)
             .accessibilityLabel(model.playing ? "Pause" : "Play")
             Button { model.skip(10) } label: { SkipGlyph(name: "rotate-cw", wide: metrics.wide) }
-            .accessibilityLabel("Forward 10 seconds")
+                .focused($focus, equals: .forward)
+                .accessibilityLabel("Forward 10 seconds")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.round)
     }
 
     /// Audio, Subtitles, Versions, Speed: each a word with its current value.
@@ -142,6 +187,7 @@ struct PlayerControls: View {
                     }
                 }
             }
+            .focused($focus, equals: .audio)
             menu("Subtitles", "captions", subtitleValue) {
                 Button { model.selectSubtitle(nil) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil)
@@ -152,6 +198,7 @@ struct PlayerControls: View {
                     }
                 }
             }
+            .focused($focus, equals: .subtitles)
             if let versions, let snapshot = versions.snapshot {
                 menu("Versions", "layers", currentQuality(snapshot)) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
@@ -160,6 +207,7 @@ struct PlayerControls: View {
                         }
                     }
                 }
+                .focused($focus, equals: .versions)
             }
             menu("Speed", "gauge", speedText(model.rate)) {
                 ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
@@ -168,9 +216,10 @@ struct PlayerControls: View {
                     }
                 }
             }
+            .focused($focus, equals: .speed)
         }
         .menuStyle(.button)
-        .buttonStyle(.plain)
+        .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
         .fixedSize()
     }
 

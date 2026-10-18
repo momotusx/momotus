@@ -13,6 +13,8 @@ struct PlayerScreen: View {
     @State private var showVersions = false
     /// An OSD menu is open: the controls stay up.
     @State private var menuOpen = false
+    /// TV: the invisible target that holds focus while the controls are hidden.
+    @FocusState private var catcherFocused: Bool
     let core: CoreClient
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
@@ -29,11 +31,28 @@ struct PlayerScreen: View {
             // Taps on the picture toggle the controls. A gesture on the whole
             // screen instead would sit over the menus (Audio, Subtitles, ...)
             // and keep them from opening.
+            #if os(tvOS)
+            // A remote has no picture to tap: with the controls hidden this
+            // invisible target holds focus, and a click or any move brings
+            // them back (Play/Pause is on the whole screen, below).
+            if !controls, model.playback?.phase != "failed", !model.showEndCard {
+                Button { touched(toggle: false) } label: {
+                    Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
+                }
+                .buttonStyle(BareStyle())
+                .focused($catcherFocused)
+                .onMoveCommand { _ in touched(toggle: false) }
+                .onAppear { if model.segment == nil && !model.showNext { catcherFocused = true } }
+                .ignoresSafeArea()
+                .accessibilityLabel("Show controls")
+            }
+            #else
             Color.clear
                 .contentShape(Rectangle())
                 .ignoresSafeArea()
                 .onTapGesture { touched(toggle: true) }
                 .accessibilityHidden(true)
+            #endif
             if let text = model.subtitleText {
                 GeometryReader { geo in
                     // The bottom of the picture as fitted on screen, kept clear of the controls.
@@ -49,10 +68,10 @@ struct PlayerScreen: View {
             }
             StatusOverlay(model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true })
             if controlsShown {
-                PlayerControls(model: model, versions: model.versions, back: close) { open in
+                PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
                     menuOpen = open
                     lastTouch = .now
-                }
+                }, activity: { lastTouch = .now })
                     .transition(.opacity)
             }
             if let segment = model.segment, model.playback?.phase != "failed", !model.showEndCard {
@@ -122,6 +141,11 @@ struct PlayerScreen: View {
         .onExitCommand {
             if controlsShown { withAnimation(Theme.Motion.panel) { controls = false } } else { close() }
         }
+        // The remote's Play/Pause, wherever focus is: it toggles and shows the controls.
+        .onPlayPauseCommand {
+            model.togglePlay()
+            touched(toggle: false)
+        }
         #endif
     }
 
@@ -186,6 +210,13 @@ private struct SkipButton: View {
     }
 }
 
+#if os(tvOS)
+/// The label alone: no focus mark, for the invisible target behind hidden controls.
+private struct BareStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label }
+}
+#endif
+
 /// Subtitle text on a dark box so it reads on any picture.
 private struct SubtitleLine: View {
     let text: String
@@ -209,13 +240,17 @@ private struct StatusOverlay: View {
     /// Opens this title's Versions: failover only tries the same release from
     /// other sources, so another version is the way on.
     let chooseVersion: (() -> Void)?
+    /// The way on takes focus when the failure shows, so a remote is on it.
+    @FocusState private var primary: Bool
 
     @ViewBuilder private var actions: some View {
         if let chooseVersion {
             Button("Choose another version", action: chooseVersion).buttonStyle(PillButtonStyle(prominent: true)).fixedSize()
+                .focused($primary)
             Button("Back", action: back).buttonStyle(PillButtonStyle()).fixedSize()
         } else {
             Button("Back", action: back).buttonStyle(PillButtonStyle(prominent: true))
+                .focused($primary)
         }
     }
 
@@ -241,6 +276,7 @@ private struct StatusOverlay: View {
             .frame(maxWidth: 640, alignment: .leading)
             .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
             .padding(.horizontal, Theme.Space.m)
+            .onAppear { primary = true }
         } else if model.firstFrameMs == nil || model.waiting {
             VStack(spacing: 14) {
                 ProgressView().controlSize(.large).tint(.white)

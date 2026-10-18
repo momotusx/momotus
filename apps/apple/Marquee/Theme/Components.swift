@@ -327,6 +327,37 @@ private struct RoundLabel<Icon: View, Title: View>: View {
     #endif
 }
 
+/// A control drawn by its own label (a settings row, a door, a key, a
+/// transport glyph, an OSD menu): the shared focus ring, halo and lift on TV
+/// and with a Mac keyboard, the press veil on a touch screen. Anything a
+/// remote can focus uses this or another style here, never `.plain`, which
+/// draws no focus mark on tvOS.
+struct FocusPlainStyle<S: InsettableShape>: ButtonStyle {
+    let shape: S
+    var scale = Theme.Focus.scaleTile
+
+    func makeBody(configuration: Configuration) -> some View {
+        Interactive(
+            configuration: configuration, shape: shape, focusScale: scale,
+            content: AnyView(configuration.label.contentShape(shape)))
+    }
+}
+
+extension ButtonStyle where Self == FocusPlainStyle<RoundedRectangle> {
+    /// A row or a door: the ring follows the card's corners.
+    static var row: Self { FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)) }
+}
+
+extension ButtonStyle where Self == FocusPlainStyle<Circle> {
+    /// A round control (keypad key, transport, the player's Back).
+    static var round: Self { FocusPlainStyle(shape: Circle(), scale: Theme.Focus.scaleCard) }
+}
+
+extension ButtonStyle where Self == FocusPlainStyle<Capsule> {
+    /// Words as a link ("More", "Browse first", "Get a key").
+    static var textLink: Self { FocusPlainStyle(shape: Capsule()) }
+}
+
 /// A destructive action as words in the error token: no fill, never the
 /// accent, so it cannot pass for the primary. Same height as a pill.
 struct DestructiveTextStyle: ButtonStyle {
