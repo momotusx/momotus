@@ -6,3 +6,6 @@
 {"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"cargo test -p mq-server --features test-hooks","passed":49,"failed":0,"ignored":1}
 {"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"workspace clippy -D warnings and fmt --check","result":"clean"}
 {"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"apps","web":"tsc 0, bun test 65 pass","android":"spotless, 178 unit tests 0 failures, assembleDebug","apple":"macOS 96 swift-testing and 9 XCTest pass"}
+{"date":"2026-10-18","phase":"4 after review r3","commit":"03391d1","check":"cargo test -p mq-http -p mq-server -p mq-runtime -p mq-bridge -p mq-addons -p mq-streams -p mq-engine","passed":267,"failed":0,"ignored":15}
+{"date":"2026-10-18","phase":"4 after review r3","commit":"03391d1","check":"cargo test -p mq-server --features test-hooks","passed":50,"failed":0,"ignored":1}
+{"date":"2026-10-18","phase":"4 after review r3","commit":"03391d1","check":"apps","web":"tsc 0, bun test 69 pass","android":"178 unit tests 0 failures, assembleDebug","apple":"macOS 99 swift-testing and 9 XCTest pass, 4 mutations killed"}
