@@ -1097,12 +1097,9 @@ mod tests {
     #[test]
     fn a_rewrite_looks_at_its_time_throughout() {
         let base = Url::parse("https://cdn.example/v/live.m3u8").unwrap();
-        let body = format!(
-            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n{}",
-            "#EXTINF:4,\ns.ts\n".repeat(CHECK_EVERY * 2)
-        );
-        // `alive` says stop at its `stop_at`-th question.
-        let run = |stop_at: usize| {
+        // `alive` says stop at its `stop_at`-th question; each stop shows by
+        // what the rewrite did not get to.
+        let run = |body: &[u8], stop_at: usize| {
             let asked = std::cell::Cell::new(0);
             let alive = || {
                 asked.set(asked.get() + 1);
@@ -1115,13 +1112,25 @@ mod tests {
                 table: &mut table,
                 alive: &alive,
             };
-            let result = rewrite_hls(body.as_bytes(), &base, true, &mut children);
+            let result = rewrite_hls(body, &base, true, &mut children);
             (result.map(|r| r.text), asked.get(), table.len())
         };
-        // At once: nothing read, nothing named.
-        assert_eq!(run(1), (Err("out of time"), 1, 0));
-        // While collecting lines: still nothing named.
-        assert_eq!(run(2), (Err("out of time"), 2, 0));
+        let segments = |n: usize| "#EXTINF:4,\ns.ts\n".repeat(n);
+        // At once: not even read (this body is not UTF-8).
+        assert_eq!(run(b"\xff\xfe", 1), (Err("out of time"), 1, 0));
+        // While collecting lines: the control character after them is never
+        // reached.
+        let control = format!("#EXTM3U\n{}#EXT-X-VERSION:3\u{0}\n", segments(CHECK_EVERY));
+        assert_eq!(run(control.as_bytes(), 2), (Err("out of time"), 2, 0));
+        // While telling a master from a media playlist: nothing named.
+        // 1,202 lines: one look while collecting, one while telling, then the
+        // main loop.
+        let media = format!("#EXTM3U\n#EXT-X-TARGETDURATION:4\n{}", segments(600));
+        assert_eq!(run(media.as_bytes(), 3), (Err("out of time"), 3, 0));
+        // In the main loop: some named, not all.
+        let (stopped, asked, named) = run(media.as_bytes(), 4);
+        assert_eq!((stopped, asked), (Err("out of time"), 4));
+        assert!(named > 0, "stopped before the main loop");
         // Eviction: the table is full of what earlier rewrites named, and a
         // new name finds the time up while making room.
         let mut table = Table::default();
