@@ -803,25 +803,36 @@ async fn pooled_connections_never_cross_a_policy_change() {
 async fn url_credentials_stay_with_their_origin() {
     let b = Origin::ok(0).await;
     let to_b = format!("Location: {}\r\n", b.url("/b"));
+    // A's own address, known once it listens: an absolute same-origin redirect.
+    let a_base = Arc::new(Mutex::new(String::new()));
+    let own = a_base.clone();
     let a = Origin::start(0, move |path| {
         let to_b = to_b.clone();
+        let to_self = format!("Location: {}/there\r\n", own.lock().unwrap());
         async move {
             match path.as_str() {
                 "/away" => reply("302 Found", &to_b, ""),
                 "/near" => reply("302 Found", "Location: /here\r\n", ""),
+                "/self" => reply("302 Found", &to_self, ""),
                 _ => reply("200 OK", "", "ok"),
             }
         }
     })
     .await;
+    *a_base.lock().unwrap() = format!("http://{}", a.addr);
     let http = scoped(&[LOOPBACK]);
     let with_user = |path: &str| format!("http://u:p@{}{path}", a.addr);
-    within("away", http.get(&with_user("/away"), &playback()))
-        .await
-        .unwrap();
-    within("near", http.get(&with_user("/near"), &playback()))
-        .await
-        .unwrap();
+    for path in ["/away", "/near", "/self"] {
+        within(path, http.get(&with_user(path), &playback()))
+            .await
+            .unwrap();
+    }
+    assert!(
+        a.head_of("/there")
+            .unwrap()
+            .contains("authorization: basic dtpw"),
+        "an absolute redirect to the same origin keeps them"
+    );
     // `u:p` as Basic credentials.
     let basic = "authorization: basic dtpw";
     assert!(a.head_of("/away").unwrap().contains(basic));
@@ -966,7 +977,7 @@ async fn a_long_chain_of_quick_hops_succeeds() {
 #[tokio::test]
 async fn a_slow_buffered_answer_within_its_timeout_succeeds() {
     // An addon or sync request as callers make it today: its headers come
-    // after the streams' 10 s default, within its own 15 s.
+    // after 10 s, within its own 15 s.
     let origin = slow_origin().await;
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let opts = RequestOptions {
@@ -997,6 +1008,89 @@ async fn a_buffered_chain_of_slow_hops_fails_at_its_total_limit() {
         .expect_err("the chain outlasts the total limit");
     assert_eq!(err.kind(), "timeout", "{err}");
     assert!(origin.head_of("/hop/300/5/5").is_none());
+    // The deadline runs inside a hop too, not only between hops: a redirect
+    // after 600 ms and a target answering after another 600 ms.
+    let url = origin.url("/hop/600/0/1");
+    let err = within(&url, http.get(&url, &opts))
+        .await
+        .expect_err("the second hop outlasts what is left of the total");
+    assert_eq!(err.kind(), "timeout", "{err}");
+}
+
+#[tokio::test]
+async fn a_buffered_chain_stops_at_its_total_while_queued_for_a_slot() {
+    let target = slow_origin().await;
+    // A name, so the target has its own host slot apart from the first hop's.
+    test_dns::set("busy.c23.test", &[LOOPBACK]);
+    let busy = format!("http://busy.c23.test:{}", target.addr.port());
+    let to_busy = format!("Location: {busy}/ok\r\n");
+    let start = Origin::start(0, move |_| {
+        let to_busy = to_busy.clone();
+        async move { reply("302 Found", &to_busy, "") }
+    })
+    .await;
+    let http = one_slot();
+    // A body holds the redirect target's one slot until the end of the test.
+    let holder = within(
+        "holder",
+        http.stream(&format!("{busy}/body"), None, &playback()),
+    )
+    .await
+    .unwrap();
+    let opts = RequestOptions {
+        timeout: Duration::from_millis(500),
+        ..playback()
+    };
+    let started = Instant::now();
+    let err = tokio::time::timeout(Duration::from_secs(2), http.get(&start.url("/go"), &opts))
+        .await
+        .expect("the request ends within 2 s, while the slot is still held")
+        .expect_err("the slot never frees in time");
+    assert_eq!(err.kind(), "timeout", "{err}");
+    assert!(started.elapsed() < Duration::from_secs(1));
+    assert!(target.head_of("/ok").is_none());
+    drop(holder);
+}
+
+#[tokio::test]
+async fn a_request_queued_across_a_refresh_takes_the_new_generation() {
+    let (addr, served) = keep_alive_origin().await;
+    // Also on 127.0.0.1: one host, so one slot for both origins.
+    let slow = slow_origin().await;
+    let http = HttpClient::new(ClientConfig {
+        per_host_limit: 1,
+        ..ClientConfig::default()
+    })
+    .unwrap();
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:2::abcd/64", false)]));
+    let handle = http.scoped(&[LOOPBACK]);
+    let url = format!("http://{addr}/");
+    within("first", handle.get(&url, &playback()))
+        .await
+        .unwrap();
+    let holder = within(
+        "holder",
+        handle.stream(&slow.url("/body"), None, &playback()),
+    )
+    .await
+    .unwrap();
+    let queued = tokio::spawn({
+        let (handle, url) = (handle.clone(), url.clone());
+        async move { handle.get(&url, &playback()).await }
+    });
+    // On this current-thread runtime one yield runs the request up to its
+    // wait for the slot.
+    tokio::task::yield_now().await;
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:9:9::abcd/64", false)]));
+    let _refreshed = http.scoped(&[LOOPBACK]);
+    drop(holder);
+    within("queued", queued).await.unwrap().unwrap();
+    let served = served.lock().unwrap().clone();
+    assert_eq!(served.len(), 2, "{served:?}");
+    assert_ne!(
+        served[1], 0,
+        "the queued request used the old pool: {served:?}"
+    );
 }
 
 #[tokio::test]

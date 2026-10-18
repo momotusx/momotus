@@ -39,7 +39,8 @@ fn interface_reads_log_counts_and_one_failure() {
         interface("198.18.0.1", "255.255.0.0", true),
     ];
     test_dns::set_interfaces(&http, Ok(list));
-    let _ = http.scoped(&[]);
+    // The second read finds the same list: no new info line.
+    let _ = (http.scoped(&[]), http.scoped(&[]));
     test_dns::set_interfaces(&http, Err(()));
     let _ = (http.scoped(&[]), http.scoped(&[]), http.scoped(&[]));
     let logs = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
@@ -49,6 +50,7 @@ fn interface_reads_log_counts_and_one_failure() {
         logs.contains("own=2 prefixes=1 tunnels=1") && logs.contains("interface snapshot"),
         "{logs}"
     );
+    assert_eq!(logs.matches("interface snapshot own=").count(), 1, "{logs}");
     assert_eq!(
         logs.matches("keeping the last snapshot").count(),
         1,

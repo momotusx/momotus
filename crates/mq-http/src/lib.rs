@@ -19,7 +19,8 @@ use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Once, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 /// Redirects a request follows at most.
 const MAX_REDIRECTS: usize = 5;
@@ -275,18 +276,23 @@ impl Scopes {
 
     /// Re-reads the interfaces. A failed read keeps the last snapshot (none
     /// before the first success), and only the first failure is logged.
+    /// The read happens under the lock, so two calls racing across a network
+    /// change cannot install the older list last.
     fn refresh(&self) {
-        let read = self.interfaces();
         let mut clients = lock(&self.clients);
-        match read {
+        match self.interfaces() {
             Ok(list) => {
                 let device = Device::from_interfaces(list);
                 let (own, prefixes, tunnels) = device.sizes();
-                tracing::info!(own, prefixes, tunnels, "interface snapshot");
                 let mut current = self.device.write().unwrap_or_else(|e| e.into_inner());
                 if *current != device {
+                    // Counts only, once per change: the device checks of
+                    // the app walks read this line.
+                    tracing::info!(own, prefixes, tunnels, "interface snapshot");
                     *current = device;
                     clients.clear();
+                } else {
+                    tracing::debug!(own, prefixes, tunnels, "interface snapshot unchanged");
                 }
             }
             Err(e) => {
@@ -661,8 +667,7 @@ impl HttpClient {
         opts: &RequestOptions,
     ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
         if let Some(local) = &self.scope {
-            let scope = self.scopes.client(local);
-            return self.follow(&scope, req, opts).await;
+            return self.follow(local, req, opts).await;
         }
         let host = req.url.host_str().unwrap_or_default().to_owned();
         if !opts.allow_private && is_private_host(&host) {
@@ -679,31 +684,41 @@ impl HttpClient {
         Ok((response, permit))
     }
 
-    /// A scoped request, hop by hop: each hop's literal is checked before
-    /// connecting (names go through `Allowed`), its headers follow
+    /// A scoped request, hop by hop: each hop takes its host slot, then the
+    /// current generation's client (a refresh while it waited for the slot
+    /// cannot leave it on an older pool) and checks its literal before
+    /// connecting (names go through `Allowed`); its headers follow
     /// `headers_for`, and `next_hop` decides where it leads, at most
     /// `MAX_REDIRECTS` times, with `Range` kept and methods as RFC 9110 15.4
     /// says. Each hop's wait for headers is bounded (`header_limit`); a
-    /// buffered request's total limit spans the whole chain. Release before
-    /// acquire: a hop's answer and host slot are dropped before the next hop
-    /// asks for a slot, since holding both deadlocks same-host redirects at
-    /// the per-host limit.
+    /// buffered request's total limit spans the whole chain, slot waits
+    /// included. Release before acquire: a hop's answer and host slot are
+    /// dropped before the next hop asks for a slot, since holding both
+    /// deadlocks same-host redirects at the per-host limit.
     async fn follow(
         &self,
-        scope: &Scope,
+        local: &[IpAddr],
         mut req: Request,
         opts: &RequestOptions,
     ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
-        let client = scope.client.clone()?;
+        let first = req.url.clone();
         let owner = opts.owner.clone().unwrap_or_else(|| req.url.clone());
         let deadline = req.timeout.map(|total| Instant::now() + total);
         let mut hops = 0;
         loop {
+            let host = req.url.host_str().unwrap_or_default();
+            let acquire = self.budget.acquire(host, opts.priority);
+            let permit = match deadline {
+                Some(deadline) => tokio::time::timeout_at(deadline, acquire)
+                    .await
+                    .map_err(|_| HttpError::Timeout(opts.timeout))?,
+                None => acquire.await,
+            };
+            let scope = self.scopes.client(local);
+            let client = scope.client?;
             if literal(&req.url).is_some_and(|ip| !scope.allowed.permits(ip)) {
                 return Err(HttpError::BlockedPrivate(OUT_OF_SCOPE.into()));
             }
-            let host = req.url.host_str().unwrap_or_default();
-            let permit = self.budget.acquire(host, opts.priority).await;
             if let Some(deadline) = deadline {
                 let left = deadline.saturating_duration_since(Instant::now());
                 if left.is_zero() {
@@ -733,9 +748,22 @@ impl HttpClient {
                 req.method = Method::GET;
                 req.body = None;
             }
-            req.url = next;
+            req.url = same_origin_credentials(&first, next);
         }
     }
+}
+
+/// `next` with the first URL's userinfo when it is the same origin (or its
+/// https upgrade) and names none itself: reqwest sends URL userinfo as Basic
+/// credentials, and an absolute `Location` on the same server carries none.
+/// Another origin never gets them.
+fn same_origin_credentials(first: &Url, mut next: Url) -> Url {
+    let same = first.origin() == next.origin() || upgrades(first, &next);
+    if same && next.username().is_empty() && next.password().is_none() {
+        let _ = next.set_username(first.username());
+        let _ = next.set_password(first.password());
+    }
+    next
 }
 
 /// One request as `send` and `stream` hand it to `fetch`.
@@ -748,9 +776,11 @@ struct Request {
     timeout: Option<Duration>,
 }
 
-/// A stream's default wait for one hop's response headers. Streams had no
-/// header bound before; buffered requests keep their own total.
-const STREAM_HEADERS: Duration = Duration::from_secs(10);
+/// A stream's default wait for one hop's response headers: the stream
+/// server's `OPEN` deadline (`mq-server/src/ahead.rs`), which bounded every
+/// stream before, so its re-opens and passthrough reads keep today's limit.
+/// Buffered requests keep their own total.
+const STREAM_HEADERS: Duration = Duration::from_secs(20);
 
 /// How long one hop may wait for its response headers.
 fn header_limit(req: &Request, opts: &RequestOptions) -> Duration {
