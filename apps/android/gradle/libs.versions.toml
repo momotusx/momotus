@@ -13,6 +13,7 @@ serialization = "1.11.0"
 jna = "5.19.1"
 rustlsVerifier = "0.2.0"
 junit = "4.13.2"
+robolectric = "4.17"
 coil = "3.6.3"
 zxing = "3.5.3"
 
@@ -45,6 +46,7 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" 
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 rustls-platform-verifier = { module = "org.rustls:rustls-platform-verifier", version.ref = "rustlsVerifier" }
 

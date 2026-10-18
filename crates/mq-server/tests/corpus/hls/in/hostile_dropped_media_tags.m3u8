@@ -1,0 +1,9 @@
+#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-DATERANGE:ID="ad",START-DATE="2026-10-01T00:00:00Z",X-ASSET-URI="https://evil.example/ad.m3u8"
+#EXT-X-CUE-OUT:30
+#EXTINF:4,a title naming http://evil.example/t.ts
+seg.ts
+#EXT-X-SCTE35:CUE="/DAIAAAAAAAAAAAQAAZ/I0VniQAQAgBDVUVJQAAAAH+cAAAAAA=="
+#EXTINF:4,
+seg2.ts

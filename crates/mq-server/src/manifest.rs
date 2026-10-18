@@ -792,4 +792,46 @@ mod tests {
         assert_eq!(table.register(&url, Role::Media), Ok(last + 1));
         assert!(table.get(1).is_none());
     }
+
+    /// The golden outputs Media3 parses in the Android `ManifestCorpusTest`:
+    /// every input in `tests/corpus/hls/in` rewritten for the core at
+    /// `CORE` with a fixed token. `MQ_CORPUS_WRITE=1` writes them to
+    /// `tests/corpus/hls/out`; otherwise any difference fails.
+    #[test]
+    fn corpus_matches_the_rewriter() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/hls");
+        let write = std::env::var_os("MQ_CORPUS_WRITE").is_some();
+        let names = |sub: &str| -> Vec<String> {
+            let mut names: Vec<String> = std::fs::read_dir(dir.join(sub))
+                .unwrap()
+                .map(|e| e.unwrap().file_name().into_string().unwrap())
+                .collect();
+            names.sort();
+            names
+        };
+        let inputs = names("in");
+        assert!(!inputs.is_empty());
+        let prefix = format!("{CORE}c/{}/", "0f".repeat(32));
+        for name in &inputs {
+            let body = std::fs::read(dir.join("in").join(name)).unwrap();
+            let base = Url::parse(&format!("https://cdn.example/hls/{name}")).unwrap();
+            let mut table = Table::default();
+            let mut children = Children {
+                core: CORE,
+                prefix: &prefix,
+                table: &mut table,
+            };
+            let out = rewrite_hls(&body, &base, false, &mut children)
+                .unwrap_or_else(|e| panic!("{name}: {e}"))
+                .text;
+            let golden = dir.join("out").join(name);
+            if write {
+                std::fs::write(&golden, &out).unwrap();
+            } else {
+                let kept = std::fs::read_to_string(&golden).unwrap_or_default();
+                assert_eq!(kept, out, "{name} differs from its golden output");
+            }
+        }
+        assert_eq!(names("out"), inputs, "a golden output with no input");
+    }
 }

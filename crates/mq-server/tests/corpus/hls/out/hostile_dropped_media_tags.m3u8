@@ -1,0 +1,6 @@
+#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+http://127.0.0.1:7777/c/0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f/0/seg.ts
+#EXTINF:4,
+http://127.0.0.1:7777/c/0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f/1/seg2.ts

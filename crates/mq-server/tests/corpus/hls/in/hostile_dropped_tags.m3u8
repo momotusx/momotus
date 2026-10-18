@@ -1,0 +1,8 @@
+#EXTM3U
+# a comment naming http://evil.example/c.m3u8
+#EXT-X-SESSION-DATA:DATA-ID="com.example.title",URI="https://evil.example/data.json"
+#EXT-X-CONTENT-STEERING:SERVER-URI="https://evil.example/steer",PATHWAY-ID="CDN"
+#EXT-X-FOO:X="//evil.example/x"
+#EXT-X-STREAM-INF:BANDWIDTH=1000000
+v/index.m3u8?u=https://a.example/
+#EXT-Y-UNKNOWN:URI="https://evil.example/unknown"

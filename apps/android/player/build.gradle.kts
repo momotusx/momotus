@@ -18,6 +18,12 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            // Robolectric's Android 16 sets up shared memory through JDK internals.
+            it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
+            // ManifestCorpusTest reads the core's golden playlists: a change reruns it.
+            it.inputs.dir("../../../crates/mq-server/tests/corpus")
+        }
     }
 }
 
@@ -34,4 +40,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
+    // Media3's playlist parsers take android.net.Uri (ManifestCorpusTest).
+    testImplementation(libs.robolectric)
 }
