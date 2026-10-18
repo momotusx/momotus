@@ -9,12 +9,15 @@ import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import { AvatarArt } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
+// The debrid accounts follow the core from the start, whatever screen is open.
+import "./core/debrid";
 import { gateOpen, launchProfile, profiles, profilesFailed, rememberShown } from "./core/profiles";
 import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
 import { historyBase, historyDepth, resetHistoryBase } from "./history";
 import Addons from "./screens/addons";
 import CalendarScreen from "./screens/calendar";
+import Debrid from "./screens/debrid";
 import Discover from "./screens/discover";
 import Home from "./screens/home";
 import HomeRows from "./screens/home-rows";
@@ -40,7 +43,7 @@ const destinations: Destination[] = [
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/import", "/pair", "/home-rows"];
+const settingsPages = ["/settings", "/addons", "/import", "/pair", "/home-rows", "/debrid"];
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
@@ -224,6 +227,7 @@ export function App() {
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />
       <Route path="/home-rows" component={HomeRows} />
+      <Route path="/debrid" component={Debrid} />
       <Route path="/profiles" component={ProfilesScreen} />
       <Route path="/profiles/manage" component={ManageProfiles} />
       <Route path="/profiles/new" component={EditProfile} />

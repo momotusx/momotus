@@ -2,6 +2,7 @@ import { A } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Download from "lucide-solid/icons/download";
+import KeyRound from "lucide-solid/icons/key-round";
 import Puzzle from "lucide-solid/icons/puzzle";
 import QrCode from "lucide-solid/icons/qr-code";
 import Rows3 from "lucide-solid/icons/rows-3";
@@ -19,6 +20,8 @@ import UserPen from "lucide-solid/icons/user-pen";
 import Users from "lucide-solid/icons/users";
 import { AvatarArt } from "../components/avatar";
 import { profiles } from "../core/profiles";
+import { debridAccounts } from "../core/debrid";
+import { inUse } from "../lib/debrid";
 
 // ISO 639-1 for audio (stream prefs) and 639-2 for subtitles, as the core expects.
 const LANGS: [iso1: string, iso2: string][] = [
@@ -135,6 +138,13 @@ export default function SettingsScreen() {
             icon={<Puzzle aria-hidden />}
             title="Addons"
             text={count() ? `${count()} installed. ${sources().length ? `Streams from ${sources().join(", ")}.` : "None of them finds streams yet."}` : "None installed yet."}
+          />
+          <LinkRow
+            href="/debrid"
+            fkey="settings:debrid"
+            icon={<KeyRound aria-hidden />}
+            title="Debrid services"
+            text={debridAccounts()?.accounts.length ? inUse(debridAccounts()!.accounts.length) : "Play torrents as fast direct links with a debrid account."}
           />
           <LinkRow href="/import" fkey="settings:import" icon={<Download aria-hidden />} title="Import from Stremio" text="Addons, library and progress, with a code. No password typed here." />
           <LinkRow href="/welcome?step=3" fkey="settings:setup" icon={<Wrench aria-hidden />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />

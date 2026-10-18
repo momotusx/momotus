@@ -124,3 +124,19 @@
 [data-form="phone"] .hrow-acts { margin-left: 36px; gap: 8px; }
 [data-form="phone"] .hrow-acts .btn { height: 36px; padding: 0 12px; font-size: 13px; gap: 6px; }
 [data-form="phone"] .hrow-acts .btn svg { width: 16px; height: 16px; }
+
+/* Debrid services: one card per service, its state, a sign-in by code, a key. */
+.debrid-page .lede { max-width: 1100px; }
+.debrid-page > .note { margin: -8px 0 28px; max-width: 1100px; }
+.dcards { display: grid; gap: 16px; max-width: 1400px; }
+.dcard { display: grid; gap: 20px; padding: 26px 30px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
+.dcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.dcard-head h2 { font: 700 var(--type-headline) / 1.2 var(--font-text); }
+.dcard-acts { display: flex; flex-wrap: wrap; gap: 12px; }
+.dkey { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 20px; }
+.dlink { font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); align-self: center; }
+.dlogin { display: grid; gap: 20px; }
+[data-form="phone"] .dcard { padding: 16px; border-radius: 14px; gap: 14px; }
+[data-form="phone"] .dcard-head h2 { font-size: 17px; }
+[data-form="phone"] .dkey { gap: 10px; }
+[data-form="phone"] .dlink { font-size: 13px; }
