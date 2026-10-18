@@ -34,6 +34,16 @@ import Testing
     #expect(DebridWords.inUse(2) == "2 debrid services in use.")
 }
 
+@Test func aDebridCardOffersItsSignInOnlyWhileItNeedsOne() {
+    #expect(DebridWords.offersSignIn("torbox", nil))
+    #expect(DebridWords.offersSignIn("torbox", DebridAccount(service: "torbox", generation: "g", state: "reconnect")))
+    // Connected, or failing for now: no sign-in, so no primary on the card.
+    #expect(!DebridWords.offersSignIn("torbox", DebridAccount(service: "torbox", generation: "g", state: "ok")))
+    #expect(!DebridWords.offersSignIn("torbox", DebridAccount(service: "torbox", generation: "g", state: "failing")))
+    // Premiumize takes a key only.
+    #expect(!DebridWords.offersSignIn("premiumize", nil))
+}
+
 @Test func aSignInByCodeEndsOnlyWithItsOwnStoredRecord() {
     // Done on the service's side, but the account still has the generation from before.
     #expect(!DebridWords.signedIn(done: true, before: "old", now: "old", pending: false))

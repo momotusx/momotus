@@ -72,22 +72,28 @@ struct DebridScreen: View {
                            stored: !debrid.health.unstored.contains(service.id),
                            again: { begin(service.id) }, close: { closeLogin(service.id) }, focus: $focus)
             } else {
+                // One primary per state, as on Android: the sign-in while the service needs
+                // one, Save once a key is being typed, none on a connected account.
+                let byCode = DebridWords.codeServices.contains(service.id)
+                let keyOpen = keyFields.contains(service.id)
                 FlowRow(spacing: 12) {
-                    if DebridWords.codeServices.contains(service.id) {
-                        Button { begin(service.id) } label: { Label("Sign in with a code", glyph: "qr-code") }
-                            .buttonStyle(PillButtonStyle(prominent: account == nil))
+                    if DebridWords.offersSignIn(service.id, account) {
+                        Button { begin(service.id) } label: { Label(account == nil ? "Sign in with a code" : "Sign in again", glyph: "qr-code") }
+                            .buttonStyle(PillButtonStyle(prominent: !keyOpen))
                             .focused($focus, equals: .signIn(service.id))
-                            .accessibilityLabel("Sign in to \(service.name) with a code")
-                        // A connected account takes a new key without a disconnect, and one
-                        // that asks for a new sign-in can take a key instead.
-                        if !keyFields.contains(service.id) {
+                            .accessibilityLabel(account == nil ? "Sign in to \(service.name) with a code" : "Sign in to \(service.name) again")
+                        // One that asks for a new sign-in can take a key instead.
+                        if !keyOpen {
                             Button("Use a key instead") { keyFields.insert(service.id) }
                                 .buttonStyle(PillButtonStyle())
                         }
-                    } else if account != nil && account?.state != "reconnect" && !keyFields.contains(service.id) {
-                        Button("Replace the key") { keyFields.insert(service.id) }
+                    }
+                    // A connected account takes a new key without a disconnect.
+                    if let account, account.state != "reconnect", !keyOpen {
+                        Button(byCode ? "Use a key instead" : "Replace the key") { keyFields.insert(service.id) }
                             .buttonStyle(PillButtonStyle())
-                            .accessibilityLabel("Replace the \(service.name) key")
+                            .focused($focus, equals: .signIn(service.id))
+                            .accessibilityLabel(byCode ? "Use a new key for \(service.name)" : "Replace the \(service.name) key")
                     }
                     if let account {
                         Button("Disconnect") { disconnect(account, service) }

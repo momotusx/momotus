@@ -168,6 +168,12 @@ enum DebridWords {
     /// Services that sign in with a code; Premiumize takes a key only.
     static let codeServices: Set<String> = ["realdebrid", "alldebrid", "torbox"]
 
+    /// A card offers its sign-in by code, its one primary, while the service has
+    /// none or asked for a new one; a connected card has no primary (Android's DebridScreen).
+    static func offersSignIn(_ service: String, _ account: DebridAccount?) -> Bool {
+        codeServices.contains(service) && (account == nil || account?.state == "reconnect")
+    }
+
     static func inUse(_ count: Int) -> String {
         switch count {
         case 0: "No debrid service in use."
