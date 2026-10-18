@@ -48,8 +48,9 @@ final class PlayerModel {
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
     @ObservationIgnored private var sub: UInt64?
     @ObservationIgnored private var loadedURL: String?
-    /// The source that plays, named in failOver so the core ignores a late error.
-    @ObservationIgnored private var loadedKey: String?
+    /// The core's attempt number of the source that plays, named in failOver so
+    /// the core ignores a late error, even from another source of the same key.
+    @ObservationIgnored private var loadedAttempt: Int64?
     /// Bumped per URL so a late error from a dead source is ignored.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var rendered = false
@@ -273,7 +274,7 @@ final class PlayerModel {
             #if DEBUG
             if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
             #endif
-            load(url, key: snapshot.key ?? route.key, at: start)
+            load(url, key: snapshot.key ?? route.key, attempt: snapshot.attempt, at: start)
         case "failed":
             player.pause()
             notice = nil
@@ -282,13 +283,14 @@ final class PlayerModel {
         }
     }
 
-    /// `key`: the version this URL plays, for its `duration`.
-    private func load(_ url: String, key: String, at start: Double) {
+    /// `key`: the version this URL plays, for its `duration`; `attempt`: the
+    /// core's number for this source, for `failOver`.
+    private func load(_ url: String, key: String, attempt: Int64?, at start: Double) {
         guard let address = URL(string: url) else { return }
         generation += 1
         let generation = generation
         loadedURL = url
-        loadedKey = key
+        loadedAttempt = attempt
         notice = nil
         itemBag = []
         let item = AVPlayerItem(url: address)
@@ -335,7 +337,7 @@ final class PlayerModel {
         loadedURL = nil
         guard let sub else { return }
         var command: [String: any Sendable] = ["type": "failOver", "error": reason]
-        if let loadedKey { command["key"] = loadedKey }
+        if let loadedAttempt { command["attempt"] = loadedAttempt }
         Task { [command] in try? await core.command(sub, command) }
     }
 

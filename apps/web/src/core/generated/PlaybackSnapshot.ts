@@ -13,7 +13,14 @@ url: string | null,
 /**
  * The version that is playing: the picked key or one of its failovers.
  */
-key: string | null, filename: string | null, sizeBytes: number | null, 
+key: string | null, 
+/**
+ * The source the view adopted last: one more each time it moves to a
+ * new source, never reused in the view's life (0 before the first).
+ * Two sources of one `key` (two installs listing the same link) differ
+ * here; `failOver` names it.
+ */
+attempt: number, filename: string | null, sizeBytes: number | null, 
 /**
  * Where to start, from saved progress.
  */

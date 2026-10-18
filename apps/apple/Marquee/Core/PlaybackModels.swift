@@ -82,6 +82,9 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let url: String?
     /// The version that is playing: the picked key or one of its failovers.
     let key: String?
+    /// The source adopted last, one more per new source; named in `failOver`
+    /// (optional for older cores).
+    let attempt: Int64?
     let filename: String?
     let sizeBytes: Int64?
     /// Where to start, from saved progress.

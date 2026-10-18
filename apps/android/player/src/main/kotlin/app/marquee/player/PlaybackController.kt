@@ -136,6 +136,9 @@ class PlaybackController(
     var playingKey: String? by mutableStateOf(null)
         private set
 
+    /** The core's attempt number of the source loaded, named when it fails. */
+    private var playingAttempt: Long? = null
+
     /** The quality of the version that plays ("1080p"), the Versions button's value; the screen sets it, as it knows the ranking. */
     var versionLabel: String? by mutableStateOf(null)
 
@@ -285,6 +288,7 @@ class PlaybackController(
         loadedUrl = url
         loadedSubs = s.subtitles
         playingKey = s.key
+        playingAttempt = s.attempt
         durationMs = 0L
         skippedAtMs = null
         handlingFailure = false
@@ -405,7 +409,7 @@ class PlaybackController(
         player.clearMediaItems()
         stage = Stage.Buffering
         status = "${failure.message}, trying the next source"
-        playback.failOver(failure.message, playingKey)
+        playback.failOver(failure.message, playingAttempt)
     }
 
     private suspend fun tickLoop() {

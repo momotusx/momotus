@@ -306,14 +306,17 @@ class PlaybackView(
         )
     }
 
-    /** [key] is the source that failed (the snapshot's), so the core ignores a late error. */
+    /**
+     * [attempt] is the source that failed (the snapshot's `attempt` when it was loaded), so the core
+     * ignores a late error, even from another source of the same key.
+     */
     fun failOver(
         error: String,
-        key: String?,
+        attempt: Long?,
     ) = post(
         command("failOver") {
             put("error", error)
-            if (key != null) put("key", key)
+            if (attempt != null) put("attempt", attempt)
         },
     )
 

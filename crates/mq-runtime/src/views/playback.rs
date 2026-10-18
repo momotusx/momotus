@@ -54,6 +54,12 @@ pub struct PlaybackSnapshot {
     pub url: Option<String>,
     /// The version that is playing: the picked key or one of its failovers.
     pub key: Option<String>,
+    /// The source the view adopted last: one more each time it moves to a
+    /// new source, never reused in the view's life (0 before the first).
+    /// Two sources of one `key` (two installs listing the same link) differ
+    /// here; `failOver` names it.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub attempt: u64,
     pub filename: Option<String>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub size_bytes: Option<u64>,
@@ -193,6 +199,7 @@ impl State {
                 phase: PlaybackPhase::Resolving,
                 url: None,
                 key: None,
+                attempt: 0,
                 filename: None,
                 size_bytes: None,
                 resume_ms,
@@ -259,14 +266,15 @@ impl PlaybackView {
         )
     }
 
-    /// The player could not open or keep playing the source `key` (the
-    /// snapshot's `key`; `None` means the current one): drop it and move to
-    /// the next candidate. A late report about a source already given up on
-    /// is ignored, so it never drops the one playing now.
-    pub fn fail_over(&self, key: Option<&str>, error: &str) {
+    /// The player could not open or keep playing the source `failed` (the
+    /// snapshot's `attempt`; `None` means the current one): drop it and move
+    /// to the next candidate. A late report about a source already given up
+    /// on is ignored, so it never drops the one playing now, even when both
+    /// have one `key`.
+    pub fn fail_over(&self, failed: Option<u64>, error: &str) {
         {
             let mut s = lock(&self.state);
-            let other = key.is_some_and(|key| s.snapshot.key.as_deref() != Some(key));
+            let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);
             if s.snapshot.phase != PlaybackPhase::Ready || other {
                 return;
             }
@@ -502,6 +510,7 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
         return false;
     }
     s.snapshot.url = Some(lease.url.clone());
+    s.snapshot.attempt += 1;
     s.lease = Some(lease);
     true
 }

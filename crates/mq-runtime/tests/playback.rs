@@ -468,28 +468,28 @@ async fn origins_that_ignore_range_still_count_as_alive() {
 async fn a_late_fail_over_never_drops_the_next_source() {
     let base = origin().await;
     let core = Core::temporary("p").unwrap();
-    let streams = format!(
-        r#"{{"streams":[
-          {{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}},
-          {{"name":"Full","url":"{base}/full.mkv"}}
-        ]}}"#
+    // One link listed twice, as two installs do: both sources have one key.
+    let live = format!(
+        r#"{{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}"#
     );
+    let streams = format!(r#"{{"streams":[{live},{live}]}}"#);
     let view = PlaybackView::open(&core, setup(&core, &streams), target());
     let first = settled(&view).await;
     assert_eq!(first.phase, PlaybackPhase::Ready, "{first:?}");
-    view.fail_over(first.key.as_deref(), "decoder error");
+    view.fail_over(Some(first.attempt), "decoder error");
     let second = settled(&view).await;
     assert_eq!(second.phase, PlaybackPhase::Ready, "{second:?}");
-    assert_ne!(second.key, first.key);
+    assert_eq!(second.key, first.key);
+    assert!(second.attempt > first.attempt, "{second:?}");
     // The first source's player reports a second error after the move.
-    view.fail_over(first.key.as_deref(), "decoder error");
+    view.fail_over(Some(first.attempt), "decoder error");
     let now = view.snapshot();
     assert_eq!(
-        (now.phase, now.key),
-        (PlaybackPhase::Ready, second.key.clone())
+        (now.phase, now.attempt),
+        (PlaybackPhase::Ready, second.attempt)
     );
     // The source playing now can still fail over.
-    view.fail_over(second.key.as_deref(), "decoder error");
+    view.fail_over(Some(second.attempt), "decoder error");
     assert_eq!(settled(&view).await.phase, PlaybackPhase::Failed);
 }
 

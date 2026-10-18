@@ -80,7 +80,7 @@ class ShapeDecodeTest {
         val snapshot =
             strict.decodeFromString(
                 PlaybackSnapshot.serializer(),
-                """{"phase":"ready","url":"http://127.0.0.1:1/s/t/x.mkv","key":"k","filename":"x.mkv","sizeBytes":5000000000,
+                """{"phase":"ready","url":"http://127.0.0.1:1/s/t/x.mkv","key":"k","attempt":2,"filename":"x.mkv","sizeBytes":5000000000,
                     "resumeMs":4000,"attempts":[{"key":"k0","via":"Local","error":"The link no longer exists (404)"}],
                     "subtitles":[{"url":"https://s/x.srt","lang":"eng","label":null,"source":"OpenSubtitles","forced":false,"hearingImpaired":true}],
                     "subtitlesPending":true,
@@ -91,6 +91,7 @@ class ShapeDecodeTest {
                     "nextAtMs":2400000}""",
             )
         assertEquals(PlaybackPhase.Ready, snapshot.phase)
+        assertEquals(2L, snapshot.attempt)
         assertEquals(5_000_000_000L, snapshot.sizeBytes)
         assertEquals("OpenSubtitles", snapshot.subtitles.single().source)
         assertEquals(2, snapshot.next?.episode)

@@ -192,9 +192,10 @@ async fn versions_then_playback_then_progress() {
         .await;
     assert_eq!(next(&mut rx).await["ok"], true);
     // A failOver about a source already given up on leaves this one playing.
+    let gone = ready["attempt"].as_u64().unwrap() - 1;
     session
         .handle_text(&request(json!({"id": 43, "op": "command", "sub": playback,
-            "command": {"type": "failOver", "key": "another-version", "error": "late"}})))
+            "command": {"type": "failOver", "attempt": gone, "error": "late"}})))
         .await;
     assert_eq!(next(&mut rx).await["ok"], true);
     let moved = tokio::time::timeout(

@@ -34,6 +34,7 @@ const LONG = new Set([
   "startMs",
   "endMs",
   "nextAtMs",
+  "attempt",
 ]);
 const FLOAT = new Set(["progress"]);
 const INT = new Set([
