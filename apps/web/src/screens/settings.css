@@ -140,3 +140,8 @@
 [data-form="phone"] .dcard-head h2 { font-size: 17px; }
 [data-form="phone"] .dkey { gap: 10px; }
 [data-form="phone"] .dlink { font-size: 13px; }
+
+/* A way to the addon lists under a link field (Addons, Add a source). */
+.btn.find-link { margin: -12px 0 44px; }
+[data-form="phone"] .btn.find-link { margin: -4px 0 20px; height: 44px; padding: 0 18px; font-size: 15px; }
+[data-form="phone"] .btn.find-link svg { width: 18px; height: 18px; }

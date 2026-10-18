@@ -148,3 +148,42 @@ export function plainAddress(url: string): boolean {
     return false;
   }
 }
+
+/** Find addons copy, word for word the same as Android's `FindAddonsCopy`
+ * and Apple's `FindAddonsWords` (each is tested against
+ * `apps/shared/find-addons-words.json`). `{kind}` and `{host}` are filled in. */
+export const findAddons = {
+  eyebrow: "Addons",
+  title: "Find addons",
+  lede: "Most of these add subtitles and catalogs. Sources usually come as a link from the addon's own website.",
+  community: "Community addons are made by other people. They see what you open in them, and their catalogs show on Home on all your devices.",
+  configureHelp: "Set it up on its website, copy the link it gives you, then paste it here.",
+  configureTv: "Set it up on its website, then add the link in Marquee on your phone or computer. With sync on, it follows you here.",
+  pasteLink: "Paste a link",
+  listLabel: "List",
+  official: "Official",
+  communityList: "Community",
+  showLabel: "Show",
+  all: "All",
+  sources: "Sources",
+  subtitles: "Subtitles",
+  catalogs: "Catalogs",
+  loading: "Asking Cinemeta",
+  failed: "Cinemeta did not answer.",
+  tryAgain: "Try again",
+  refresh: "Refresh",
+  empty: "Nothing to show from Cinemeta here.",
+  filterEmpty: "No {kind} addons in this list.",
+  kindSources: "source",
+  kindSubtitles: "subtitle",
+  kindCatalogs: "catalog",
+  installing: "Installing",
+  installed: "Installed",
+  off: "Off",
+  setUp: "Set up",
+  setUpOff: "Set up, off",
+  install: "Install",
+  configure: "Configure",
+  turnOn: "Turn on",
+  fromHost: "from {host}",
+} as const;

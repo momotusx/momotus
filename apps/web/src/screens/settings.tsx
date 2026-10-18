@@ -3,6 +3,7 @@ import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Download from "lucide-solid/icons/download";
 import KeyRound from "lucide-solid/icons/key-round";
+import PackageSearch from "lucide-solid/icons/package-search";
 import Puzzle from "lucide-solid/icons/puzzle";
 import QrCode from "lucide-solid/icons/qr-code";
 import Rows3 from "lucide-solid/icons/rows-3";
@@ -13,7 +14,7 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { Prefs } from "../core/generated/Prefs";
 import type { QualityPref } from "../core/generated/QualityPref";
 import { chooseForm, type Form, form } from "../form";
-import { languageName } from "../lib/words";
+import { findAddons, languageName } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 import UserPen from "lucide-solid/icons/user-pen";
@@ -132,6 +133,7 @@ export default function SettingsScreen() {
       <section class="set">
         <h2>Sources</h2>
         <div class="links">
+          <LinkRow href="/find-addons" fkey="settings:find-addons" icon={<PackageSearch aria-hidden />} title={findAddons.title} text={findAddons.lede} />
           <LinkRow
             href="/addons"
             fkey="settings:addons"

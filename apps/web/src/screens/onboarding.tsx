@@ -6,6 +6,7 @@ import { A, useSearchParams } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
+import PackageSearch from "lucide-solid/icons/package-search";
 import Plus from "lucide-solid/icons/plus";
 import QrCode from "lucide-solid/icons/qr-code";
 import Sparkle from "lucide-solid/icons/sparkle";
@@ -13,7 +14,7 @@ import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } f
 import { displayCaps, link, liveView, op, ping, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import { autoFocus } from "../focus/dom";
-import type { Tone } from "../lib/words";
+import { findAddons, type Tone } from "../lib/words";
 import { InstallField } from "./addons";
 import "./browse.css";
 import "./settings.css";
@@ -112,6 +113,10 @@ export default function Onboarding() {
             <h1>Add a source</h1>
             <p class="lead">Paste the link an addon's website gives you. Sources find streams; Marquee does not include any.</p>
             <InstallField fkey="welcome" />
+            <A class="btn find-link" href="/find-addons" data-f="welcome:find">
+              <PackageSearch aria-hidden />
+              {findAddons.title}
+            </A>
             <h2 class="kicker">Also useful</h2>
             <div class="suggest" data-fgroup="suggest">
               <For each={SUGGESTED}>

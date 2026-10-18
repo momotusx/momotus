@@ -1,15 +1,17 @@
 import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
 import Link2 from "lucide-solid/icons/link-2";
+import PackageSearch from "lucide-solid/icons/package-search";
 import Plus from "lucide-solid/icons/plus";
 import Power from "lucide-solid/icons/power";
 import Trash2 from "lucide-solid/icons/trash";
+import { A } from "@solidjs/router";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { liveView, op, reasonOf } from "../core/client";
 import type { AddonInfo } from "../core/generated/AddonInfo";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import { form } from "../form";
-import { kindLabel, providesText } from "../lib/words";
+import { findAddons, kindLabel, providesText } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 
@@ -166,6 +168,10 @@ export default function Addons() {
       >
         <InstallField autofocus={tv()} />
       </Show>
+      <A class="btn find-link" href="/find-addons" data-f="addons:find">
+        <PackageSearch aria-hidden />
+        {findAddons.title}
+      </A>
       <Switch>
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">

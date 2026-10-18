@@ -16,6 +16,7 @@ import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
 import { entryOwner, historyBase, historyDepth, resetHistoryBase, stampEntriesWith } from "./history";
 import Addons from "./screens/addons";
+import FindAddons from "./screens/find-addons";
 import CalendarScreen from "./screens/calendar";
 import Debrid from "./screens/debrid";
 import Discover from "./screens/discover";
@@ -43,7 +44,7 @@ const destinations: Destination[] = [
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/import", "/pair", "/home-rows", "/debrid"];
+const settingsPages = ["/settings", "/addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid"];
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
@@ -228,6 +229,7 @@ export function App() {
       <Route path="/library" component={Library} />
       <Route path="/calendar" component={CalendarScreen} />
       <Route path="/addons" component={Addons} />
+      <Route path="/find-addons" component={FindAddons} />
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />
       <Route path="/home-rows" component={HomeRows} />
