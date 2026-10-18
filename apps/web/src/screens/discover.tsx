@@ -1,5 +1,6 @@
 import { A } from "@solidjs/router";
 import Puzzle from "lucide-solid/icons/puzzle";
+import Wrench from "lucide-solid/icons/wrench";
 import { Match, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { liveView } from "../core/client";
@@ -26,11 +27,17 @@ export default function Discover() {
         <Match when={d() && d()?.kinds.length === 0}>
           <section class="problem">
             <h2>Nothing to browse yet</h2>
-            <p>Discover lists the catalogs of the addons you have on. None of them has one.</p>
-            <A class="btn primary" href="/addons" data-f="discover:addons" data-autofocus>
-              <Puzzle aria-hidden />
-              Add an addon
-            </A>
+            <p>Discover lists the catalogs of the addons you have on, and none of them has one. Set up Marquee adds the standard catalog in one step.</p>
+            <div class="acts">
+              <A class="btn primary" href="/welcome" data-f="discover:setup" data-autofocus>
+                <Wrench aria-hidden />
+                Set up Marquee
+              </A>
+              <A class="btn" href="/addons" data-f="discover:addons">
+                <Puzzle aria-hidden />
+                Add an addon
+              </A>
+            </div>
           </section>
         </Match>
         <Match when={d()}>

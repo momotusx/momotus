@@ -48,15 +48,21 @@ export default function Onboarding() {
     setBusy(url);
     setNote(null);
     try {
-      await op("installAddon", { url });
-      setNote({ tone: "ok", text: `Installed ${name}` });
+      // Installed and turned off (an empty Home sends people here): turned back on.
+      if (list().some((a) => a.url === url)) {
+        await op("setAddonEnabled", { url, enabled: true });
+        setNote({ tone: "ok", text: `Turned ${name} on` });
+      } else {
+        await op("installAddon", { url });
+        setNote({ tone: "ok", text: `Installed ${name}` });
+      }
     } catch (e) {
       setNote({ tone: "bad", text: `Could not install ${name}: ${reasonOf(e)}` });
     } finally {
       setBusy(null);
     }
   };
-  const installed = (url: string) => list().some((a) => a.url === url);
+  const installed = (url: string) => list().some((a) => a.url === url && a.enabled);
 
   return (
     <main class="welcome page" data-vscroll>

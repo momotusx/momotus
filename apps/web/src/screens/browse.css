@@ -30,6 +30,7 @@
 .note { font: 400 var(--type-body) / 1.4 var(--font-text); color: var(--muted); max-width: 1100px; }
 .note.bad { display: flex; align-items: center; gap: 14px; color: var(--text); }
 .browse .problem { margin-top: 10px; }
+.browse .problem .acts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 
 /* Search */
 .search .field { display: flex; align-items: center; gap: 20px; height: 96px; max-width: 1240px; padding: 0 34px; margin: 14px 0 40px;

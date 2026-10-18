@@ -3,6 +3,7 @@ import CircleAlert from "lucide-solid/icons/circle-alert";
 import Info from "lucide-solid/icons/info";
 import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
+import Wrench from "lucide-solid/icons/wrench";
 import Star from "lucide-solid/icons/star";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createSignal, For, Show } from "solid-js";
@@ -129,9 +130,13 @@ export default function Home() {
         <Show when={empty()}>
           <section class="problem home-problem">
             <h2>Home fills up from your addons</h2>
-            <p>None of the addons you have on shows a catalog here. Add one, or turn rows back on in Settings.</p>
+            <p>None of the addons you have on shows a catalog here. Set up Marquee adds the standard catalog in one step, or add an addon yourself.</p>
             <div class="acts">
-              <A class="btn primary" href="/addons" data-f="home:addons" data-autofocus>
+              <A class="btn primary" href="/welcome" data-f="home:setup" data-autofocus>
+                <Wrench aria-hidden />
+                Set up Marquee
+              </A>
+              <A class="btn" href="/addons" data-f="home:addons">
                 <Puzzle aria-hidden />
                 Add an addon
               </A>
