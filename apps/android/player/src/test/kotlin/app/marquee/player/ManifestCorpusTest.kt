@@ -114,7 +114,8 @@ class ManifestCorpusTest {
     /**
      * Every URL Media3 may fetch from [manifest]: `Location`s, the `UTCTiming` URLs it reads the
      * time from, the information URL, license URLs, and for every Representation each base URL with
-     * the initialization, index and first segment resolved on it.
+     * the initialization, index and segments resolved on it (every listed segment, the first
+     * [SEGMENTS] of a template).
      */
     private fun exposedDash(manifest: DashManifest): List<String> {
         val urls = mutableListOf<String>()
@@ -124,7 +125,8 @@ class ManifestCorpusTest {
             urls += timing.value.trim().split(Regex("\\s+"))
         }
         manifest.programInformation?.moreInformationURL?.let { urls += it }
-        for (period in (0 until manifest.periodCount).map(manifest::getPeriod)) {
+        for (p in 0 until manifest.periodCount) {
+            val period = manifest.getPeriod(p)
             for (representation in period.adaptationSets.flatMap { it.representations }) {
                 representation.format.drmInitData?.let { drm ->
                     (0 until drm.schemeDataCount).mapNotNullTo(urls) { drm.get(it).licenseServerUrl }
@@ -137,7 +139,11 @@ class ManifestCorpusTest {
                     representation.initializationUri?.let { urls += it.resolveUriString(base) }
                     representation.indexUri?.let { urls += it.resolveUriString(base) }
                     representation.index?.let { index ->
-                        urls += index.getSegmentUrl(index.firstSegmentNum).resolveUriString(base)
+                        val count = index.getSegmentCount(manifest.getPeriodDurationUs(p))
+                        val walked = if (count < 0) SEGMENTS else minOf(count, SEGMENTS)
+                        for (n in index.firstSegmentNum until index.firstSegmentNum + walked) {
+                            urls += index.getSegmentUrl(n).resolveUriString(base)
+                        }
                     }
                 }
             }
@@ -251,5 +257,8 @@ class ManifestCorpusTest {
     private companion object {
         const val CORE = "http://127.0.0.1:7777/"
         const val CANARY = "http://canary.invalid/"
+
+        /** Segments of each Representation the DASH walk resolves. */
+        const val SEGMENTS = 50L
     }
 }
