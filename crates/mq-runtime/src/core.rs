@@ -6,6 +6,7 @@ use mq_http::{ClientConfig, HttpClient};
 use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -23,8 +24,6 @@ pub enum CoreError {
     Addon(#[from] mq_addons::AddonError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("addon already installed: {0}")]
-    AlreadyInstalled(String),
     #[error("addon is not installed: {0}")]
     NotInstalled(String),
     #[error("invalid setting: {0}")]
@@ -384,26 +383,88 @@ impl Core {
         Err(last_error)
     }
 
-    /// Fetches the manifest and appends the addon to the profile's list.
+    /// Fetches the manifest and appends the addon to the profile's list, on.
+    /// A link already installed gets the new manifest in place instead, its
+    /// position and whether it is on kept (Stremio's `UpgradeAddon`).
     pub async fn install_addon(&self, transport_url: &str) -> Result<InstalledAddon, CoreError> {
         let addon = self.addons().fetch_manifest(transport_url).await?;
         let manifest_json = serde_json::to_string(&addon.manifest)
             .map_err(|e| CoreError::BadManifest(e.to_string()))?;
         let url = addon.transport_url.to_string();
         self.edit_addons(|rows| {
-            if position(rows, &url).is_ok() {
-                return Err(CoreError::AlreadyInstalled(redact(&url)));
-            }
-            rows.push(AddonRow {
-                transport_url: url.clone(),
-                manifest_json,
-                position: 0,
-                enabled: true,
-                allow_private: addon.allow_private,
-            });
+            put_addon(rows, &url, manifest_json, addon.allow_private);
             Ok(())
         })?;
         Ok(addon)
+    }
+
+    /// Fetches the manifest of every installed addon of every profile again,
+    /// at most once a day, and puts each one that changed in place, as
+    /// `install_addon` does. A link that fails keeps its manifest; a round
+    /// in which none answered counts as not done. `now_ms` is the time the
+    /// day is counted from. Returns how many rows changed.
+    pub async fn refresh_addons(&self, now_ms: u64) -> Result<usize, CoreError> {
+        let library = self.library();
+        let last = library.device_value(ADDONS_REFRESHED)?;
+        if last
+            .and_then(|v| v.parse::<u64>().ok())
+            .is_some_and(|last| now_ms < last.saturating_add(REFRESH_EVERY_MS))
+        {
+            return Ok(0);
+        }
+        let profiles: Vec<String> = library.profiles()?.into_iter().map(|p| p.id).collect();
+        let mut links: Vec<String> = Vec::new();
+        for profile in &profiles {
+            for row in library.addons(profile)? {
+                if !links.contains(&row.transport_url) {
+                    links.push(row.transport_url);
+                }
+            }
+        }
+        let fetched = futures_util::future::join_all(links.iter().map(|link| async move {
+            let addon = self.addons().fetch_manifest(link).await.ok()?;
+            let json = serde_json::to_string(&addon.manifest).ok()?;
+            Some((link.as_str(), (json, addon.allow_private)))
+        }))
+        .await;
+        let manifests: HashMap<&str, (String, bool)> = fetched.into_iter().flatten().collect();
+        if manifests.is_empty() && !links.is_empty() {
+            return Ok(0);
+        }
+        library.set_device_value(ADDONS_REFRESHED, &now_ms.to_string())?;
+        let mut changed = 0;
+        for profile in &profiles {
+            let newer = |row: &AddonRow| {
+                let fetched = manifests.get(row.transport_url.as_str());
+                fetched.filter(|(json, _)| *json != row.manifest_json)
+            };
+            // No write, and nothing to sync, when nothing changed.
+            if !library
+                .addons(profile)?
+                .iter()
+                .any(|row| newer(row).is_some())
+            {
+                continue;
+            }
+            let written = self.for_profile(profile).edit_addons(|rows| {
+                for row in rows.iter_mut() {
+                    if let Some((json, allow_private)) = newer(row) {
+                        row.manifest_json = json.clone();
+                        row.allow_private = *allow_private;
+                        changed += 1;
+                    }
+                }
+                Ok(())
+            });
+            if let Err(e) = written {
+                // A profile removed meanwhile, or a failed write: the next day tries again.
+                tracing::debug!(
+                    "addon refresh for a profile not written: {}",
+                    error_kind(&e)
+                );
+            }
+        }
+        Ok(changed)
     }
 
     pub fn remove_addon(&self, transport_url: &str) -> Result<(), CoreError> {
@@ -440,6 +501,43 @@ impl Core {
         f: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), CoreError>,
     ) -> Result<(), CoreError> {
         self.library().edit_addons(self.profile(), self.clock(), f)
+    }
+}
+
+/// Device state key of the time installed manifests were last refreshed.
+const ADDONS_REFRESHED: &str = "addons_refreshed_ms";
+/// Installed manifests are fetched again at most this often.
+const REFRESH_EVERY_MS: u64 = 24 * 60 * 60 * 1000;
+
+/// A library error's kind for logs: never a link, which can carry keys.
+fn error_kind(e: &CoreError) -> &'static str {
+    match e {
+        CoreError::Library(_) => "library",
+        _ => "other",
+    }
+}
+
+/// Puts a fetched manifest in the list: in place over the row the link
+/// names (position, whether it is on and the stored link kept), else at the
+/// end, on.
+pub(crate) fn put_addon(
+    rows: &mut Vec<AddonRow>,
+    url: &str,
+    manifest_json: String,
+    allow_private: bool,
+) {
+    match position(rows, url) {
+        Ok(at) => {
+            rows[at].manifest_json = manifest_json;
+            rows[at].allow_private = allow_private;
+        }
+        Err(_) => rows.push(AddonRow {
+            transport_url: url.to_owned(),
+            manifest_json,
+            position: 0,
+            enabled: true,
+            allow_private,
+        }),
     }
 }
 

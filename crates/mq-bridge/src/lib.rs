@@ -405,6 +405,22 @@ fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
     shared.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// Fetches installed manifests again in the background, at most once a day
+/// (`Core::refresh_addons`): when a session starts and when the app comes to
+/// the foreground. Views see a changed manifest through the addon list.
+fn refresh_addons(core: &Core) {
+    let core = core.clone();
+    tokio::spawn(async move {
+        if core
+            .refresh_addons(mq_library::hlc::now_ms())
+            .await
+            .is_err()
+        {
+            tracing::debug!("installed addon manifests not refreshed");
+        }
+    });
+}
+
 /// One client connection. Dropping it cancels every view it opened.
 pub struct Session {
     shared: Arc<Mutex<Shared>>,
@@ -451,6 +467,7 @@ impl Session {
             subs: HashMap::new(),
             state,
         }));
+        refresh_addons(&core);
         let watcher = tokio::spawn(watch_gone(
             Arc::downgrade(&shared),
             core,
@@ -660,9 +677,13 @@ impl Session {
                         core.on_network_changed();
                         Ok(json!({}))
                     }
+                    "foreground" => {
+                        refresh_addons(&core);
+                        Ok(json!({}))
+                    }
                     // ponytail: accepted and ignored until the core has work
-                    // for them (iOS listener reopen).
-                    "foreground" | "background" => Ok(json!({})),
+                    // for it (iOS listener reopen).
+                    "background" => Ok(json!({})),
                     other => Err(format!("unknown lifecycle event: {other}")),
                 };
                 self.reply(json!(id), result);

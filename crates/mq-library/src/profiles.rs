@@ -194,6 +194,29 @@ impl Library {
         })
     }
 
+    /// A value this device keeps for itself (never synced, never a profile's).
+    pub fn device_value(&self, key: &str) -> Result<Option<String>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT value FROM device_state WHERE key = ?1",
+                params![key],
+                |r| r.get(0),
+            )
+            .optional()
+        })
+    }
+
+    pub fn set_device_value(&self, key: &str, value: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO device_state (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, value],
+            )
+            .map(drop)
+        })
+    }
+
     /// The profile this device last switched to, as stored (it may be gone
     /// since).
     pub fn active_profile(&self) -> Result<Option<String>, LibraryError> {

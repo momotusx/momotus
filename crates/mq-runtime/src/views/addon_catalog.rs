@@ -3,7 +3,7 @@
 //! 3.3). The lists come from Cinemeta's fixed address, whatever the user has
 //! installed: "Official" is that address, never a field a publisher controls.
 
-use crate::core::{canonical, find_row, position};
+use crate::core::{canonical, find_row, put_addon};
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
@@ -344,23 +344,13 @@ where
     let manifest_json =
         serde_json::to_string(&manifest).map_err(|e| CoreError::BadManifest(e.to_string()))?;
     let url = entry.key.to_string();
-    let written = core.edit_addons(|rows| {
-        if position(rows, &url).is_ok() {
-            return Err(CoreError::AlreadyInstalled(mq_http::redact_url(&entry.key)));
-        }
-        rows.push(AddonRow {
-            transport_url: url.clone(),
-            manifest_json,
-            position: 0,
-            enabled: true,
-            allow_private: false,
-        });
+    // Installed already (a race, or another way in): the manifest goes in
+    // place, as `install_addon` does.
+    core.edit_addons(|rows| {
+        put_addon(rows, &url, manifest_json, false);
         Ok(())
-    });
-    match written {
-        Ok(()) | Err(CoreError::AlreadyInstalled(_)) => Ok((manifest.id, manifest.name)),
-        Err(e) => Err(e.into()),
-    }
+    })?;
+    Ok((manifest.id, manifest.name))
 }
 
 /// The fetched manifest is the addon the list named, needs no setup and is
