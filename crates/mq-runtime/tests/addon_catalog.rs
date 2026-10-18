@@ -344,8 +344,10 @@ async fn installed_states_follow_the_profiles_addons() {
             &core.hlc(),
         )
         .unwrap();
+    // Once the change reached the view (any state but absent), every state
+    // is checked exactly.
     let snapshot = until(&view, |s| {
-        one(s, "org.stremio.opensubtitlesv3").installed == Installed::On
+        one(s, "org.stremio.opensubtitlesv3").installed != Installed::Absent
     })
     .await;
     let state = |key: &str| {
@@ -367,19 +369,19 @@ async fn installed_states_follow_the_profiles_addons() {
         state(&trakt_key),
         (Installed::CopyOff, Some(configured.clone()))
     );
-    // One copy turned on: the card says Set up.
+    // One copy turned on, then OpenSubtitles removed: once the later change
+    // shows, the Trakt card says Set up.
     core.set_addon_enabled(&other, true).unwrap();
-    let snapshot = until(&view, |s| {
-        one(s, "community.trakt-tv").installed == Installed::CopyOn
-    })
-    .await;
-    assert_eq!(one(&snapshot, "community.trakt-tv").copy_key, None);
-    // Removed: absent again.
     core.remove_addon(&subs).unwrap();
-    until(&view, |s| {
+    let snapshot = until(&view, |s| {
         one(s, "org.stremio.opensubtitlesv3").installed == Installed::Absent
     })
     .await;
+    let trakt = one(&snapshot, "community.trakt-tv");
+    assert_eq!(
+        (trakt.installed, trakt.copy_key.clone()),
+        (Installed::CopyOn, None)
+    );
 }
 
 #[tokio::test]
@@ -567,8 +569,18 @@ async fn manifest_origin(name: &str, id: &str) -> (String, Arc<AtomicUsize>) {
 #[tokio::test]
 async fn the_listed_path_fetches_public_addresses_only() {
     let core = Core::temporary("p").unwrap();
-    // A name standing for a public host: fetched, checked, written.
     let (origin, hits) = manifest_origin("listed.m12.test", "listed").await;
+    // The addon at its private address: never fetched, nothing written.
+    let port = origin.rsplit(':').next().unwrap();
+    let private = ListedEntry {
+        key: Url::parse(&format!("http://127.0.0.1:{port}/manifest.json")).unwrap(),
+        id: "listed".into(),
+    };
+    let result = core.install_listed(&private).await;
+    assert_eq!(refused(result), ListedFailure::Unreachable);
+    assert_eq!(hits.load(Ordering::SeqCst), 0);
+    assert!(core.library().addons("p").unwrap().is_empty());
+    // At a name standing for a public host: fetched, checked, written.
     let entry = ListedEntry {
         key: Url::parse(&format!("http://{origin}/manifest.json")).unwrap(),
         id: "listed".into(),
@@ -579,16 +591,6 @@ async fn the_listed_path_fetches_public_addresses_only() {
     let rows = core.library().addons("p").unwrap();
     assert_eq!(rows.len(), 1);
     assert!(!rows[0].allow_private);
-    // The same addon at its private address: never fetched.
-    let port = origin.rsplit(':').next().unwrap();
-    let private = ListedEntry {
-        key: Url::parse(&format!("http://127.0.0.1:{port}/manifest.json")).unwrap(),
-        id: "listed".into(),
-    };
-    let result = core.install_listed(&private).await;
-    assert_eq!(refused(result), ListedFailure::Unreachable);
-    assert_eq!(hits.load(Ordering::SeqCst), 1);
-    assert_eq!(core.library().addons("p").unwrap().len(), 1);
 }
 
 #[tokio::test]
