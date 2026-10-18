@@ -132,13 +132,11 @@ fun PhoneTitle(
         }
 
         header == null || details == null -> {
-            Column(
-                modifier.fillMaxSize().padding(horizontal = side),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-            ) {
+            // The artwork's block runs edge to edge as the loaded artwork does, so nothing jumps.
+            Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 Skeleton(Modifier.fillMaxWidth().height(heroHeight()))
-                Skeleton(Modifier.size(200.dp, 24.dp))
-                Skeleton(Modifier.size(300.dp, 80.dp))
+                Skeleton(Modifier.padding(horizontal = side).size(200.dp, 24.dp))
+                Skeleton(Modifier.padding(horizontal = side).size(300.dp, 80.dp))
             }
         }
 

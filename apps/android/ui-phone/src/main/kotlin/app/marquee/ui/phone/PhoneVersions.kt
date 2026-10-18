@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,12 +28,16 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.VersionsCopy
@@ -47,6 +52,7 @@ import app.marquee.design.FactsGrid
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
+import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.PlayFilled
@@ -275,6 +281,23 @@ private fun Pick(
     }
 }
 
+/** The width of the widest quality word ("Unknown") at the current text size. */
+@Composable
+private fun qualityWidth(): Dp {
+    val measurer = rememberTextMeasurer()
+    val size = Marquee.type.body
+    val density = LocalDensity.current
+    return remember(measurer, size, density.fontScale) {
+        val style = TextStyle(fontSize = size, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.SemiBold)
+        with(density) {
+            measurer
+                .measure("Unknown", style, maxLines = 1)
+                .size.width
+                .toDp()
+        } + 2.dp
+    }
+}
+
 /** One source: the quality, then its status and size, where from and its features, on a hairline. */
 @Composable
 private fun SourceRow(
@@ -299,25 +322,20 @@ private fun SourceRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // One width for every quality ("Unknown" the widest), so the statuses line up.
+        // One width for every quality, "Unknown" measured at the current text size, so the statuses
+        // line up whatever the font scale.
         MqText(
             VersionsCopy.cell(row.quality),
-            Modifier.widthIn(min = 76.dp),
+            Modifier.width(qualityWidth()),
             weight = FontWeight.SemiBold,
             maxLines = 1,
         )
-        // The status with the size at its end, then the source and features: both wrap on a small
-        // phone or a large font instead of cutting what helps the choice.
+        // The status on its own line, then the size, the source and the features: both wrap on a
+        // small phone or a large font instead of cutting what helps the choice.
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StatusWord(VersionsCopy.status(row.status), statusTone(row), Modifier.weight(1f))
-                row.sizeBytes?.let { MqText(Format.bytes(it), role = TextRole.Callout, maxLines = 1) }
-            }
+            StatusWord(VersionsCopy.status(row.status), statusTone(row))
             MqText(
-                (listOf("via ${row.via}") + row.features).joinToString(" · "),
+                (listOfNotNull(row.sizeBytes?.let(Format::bytes), "via ${row.via}") + row.features).joinToString(" · "),
                 role = TextRole.Caption,
                 color = colors.muted,
                 maxLines = 2,
