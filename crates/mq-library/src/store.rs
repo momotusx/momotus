@@ -324,10 +324,16 @@ impl Library {
     /// order. Nothing (a pull, another edit) lands between the read and the
     /// write, so the edit never rewrites a list it did not see. An error
     /// from `edit` writes nothing and is returned.
+    ///
+    /// `stamp` gives the edit's hlc and is called inside the transaction, so
+    /// edits are stamped in the order they commit. Stamped before, two edits
+    /// could commit out of order: the older one is then stamped again just
+    /// above the newer (see `local`), which can equal the hlc a third edit
+    /// already holds, and that edit is then lost as no newer than the list.
     pub fn edit_addons<E: From<LibraryError>>(
         &self,
         profile: &str,
-        hlc: &str,
+        stamp: impl FnOnce() -> String,
         edit: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), E>,
     ) -> Result<(), E> {
         let mut refused = None;
@@ -338,7 +344,8 @@ impl Library {
                 refused = Some(e);
                 return Ok(());
             }
-            local(c, coll::ADDONS, &[profile], hlc, |h| {
+            let hlc = stamp();
+            local(c, coll::ADDONS, &[profile], &hlc, |h| {
                 sql::set_addons(c, profile, &rows, h)
             })
         })?;

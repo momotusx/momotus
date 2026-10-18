@@ -217,21 +217,25 @@ fn a_pull_during_an_addon_edit_lands_after_it_and_keeps_the_other_devices_addon(
     a.set_addons("p", &[row(x), row(y)], &hlc(9, 1)).unwrap();
     let pulled = all(&a);
     std::thread::scope(|s| {
-        b.edit_addons("p", &hlc(5, 2), |rows| {
-            assert_eq!(*rows, [row(x)]);
-            let (done, applied) = std::sync::mpsc::channel();
-            let (b, pulled) = (&b, &pulled);
-            s.spawn(move || {
-                b.apply(pulled).unwrap();
-                let _ = done.send(());
-            });
-            // Time enough for the pull to land if anything let it: the
-            // edit's transaction holds it until the write commits.
-            let landed = applied.recv_timeout(std::time::Duration::from_millis(250));
-            assert!(landed.is_err(), "the pull landed inside the edit");
-            rows.push(row(z));
-            Ok::<_, mq_library::LibraryError>(())
-        })
+        b.edit_addons(
+            "p",
+            || hlc(5, 2),
+            |rows| {
+                assert_eq!(*rows, [row(x)]);
+                let (done, applied) = std::sync::mpsc::channel();
+                let (b, pulled) = (&b, &pulled);
+                s.spawn(move || {
+                    b.apply(pulled).unwrap();
+                    let _ = done.send(());
+                });
+                // Time enough for the pull to land if anything let it: the
+                // edit's transaction holds it until the write commits.
+                let landed = applied.recv_timeout(std::time::Duration::from_millis(250));
+                assert!(landed.is_err(), "the pull landed inside the edit");
+                rows.push(row(z));
+                Ok::<_, mq_library::LibraryError>(())
+            },
+        )
         .unwrap();
     });
     // The pull applied after the edit, and A's newer list won as a whole:
@@ -298,4 +302,40 @@ fn moving_a_sync_state_replaces_it_in_one_step() {
         .unwrap();
     assert_eq!(lib.sync_state("approval:01").unwrap(), None);
     assert_eq!(lib.sync_state("cancel:01").unwrap().as_deref(), Some("1"));
+}
+
+#[test]
+fn concurrent_addon_edits_stamped_in_commit_order_all_land() {
+    // Many edits wait for the writer at once. Stamped when they hold it, each
+    // commits above the last. Stamped before, an edit that waited was stamped
+    // again just above the newer list, onto the hlc a third edit already held,
+    // and that third edit was lost as no newer than the list.
+    let lib = Library::temporary().unwrap();
+    let clock = mq_library::HlcClock::new(7);
+    std::thread::scope(|s| {
+        for t in 0..16 {
+            let (lib, clock) = (&lib, &clock);
+            s.spawn(move || {
+                for i in 0..40 {
+                    lib.edit_addons(
+                        "p",
+                        // One millisecond for all: only the counter orders them.
+                        || clock.tick(1_000).encode(),
+                        |rows: &mut Vec<AddonRow>| {
+                            rows.push(AddonRow {
+                                transport_url: format!("https://a{t}-{i}.example/manifest.json"),
+                                manifest_json: "{}".into(),
+                                position: 0,
+                                enabled: true,
+                                allow_private: false,
+                            });
+                            Ok::<_, mq_library::LibraryError>(())
+                        },
+                    )
+                    .unwrap();
+                }
+            });
+        }
+    });
+    assert_eq!(lib.addons("p").unwrap().len(), 640);
 }

@@ -431,7 +431,7 @@ impl Core {
         &self,
         f: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), CoreError>,
     ) -> Result<(), CoreError> {
-        self.library().edit_addons(self.profile(), &self.hlc(), f)
+        self.library().edit_addons(self.profile(), || self.hlc(), f)
     }
 }
 

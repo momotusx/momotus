@@ -188,16 +188,21 @@ fn map_addons(
     }
     report.addons_imported = rows.len();
     // Merged with the list as stored, in the same transaction as the write.
-    lib.edit_addons(profile_id, hlc, |local: &mut Vec<AddonRow>| {
-        for row in &mut rows {
-            if let Some(existing) = local.iter().find(|e| e.transport_url == row.transport_url) {
-                row.enabled = existing.enabled;
+    lib.edit_addons(
+        profile_id,
+        || hlc.to_owned(),
+        |local: &mut Vec<AddonRow>| {
+            for row in &mut rows {
+                if let Some(existing) = local.iter().find(|e| e.transport_url == row.transport_url)
+                {
+                    row.enabled = existing.enabled;
+                }
             }
-        }
-        rows.extend(local.drain(..).filter(|e| !seen.contains(&e.transport_url)));
-        *local = rows;
-        Ok::<_, LibraryError>(())
-    })
+            rows.extend(local.drain(..).filter(|e| !seen.contains(&e.transport_url)));
+            *local = rows;
+            Ok::<_, LibraryError>(())
+        },
+    )
 }
 
 fn map_items(
