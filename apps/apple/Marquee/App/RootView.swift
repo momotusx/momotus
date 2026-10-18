@@ -182,7 +182,8 @@ struct MainShell: View {
             .toolbar { NavToolbar(selection: tab, select: select) }
         #else
         screen(tab).safeAreaInset(edge: .top, spacing: 0) {
-            if !immersion.active {
+            // Top-level places only, as on Android: a pushed page has no pill to wander into.
+            if !immersion.active && !covered.contains(tab) {
                 TopNav(selection: tab, select: select, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
             }
         }
@@ -366,6 +367,8 @@ private struct TopNav: View {
     let select: (AppTab) -> Void
     /// TV: the active profile's avatar at the end, opening the picker.
     var profiles: (() -> Void)?
+    /// Which link has focus: Up from a page enters on the current place, not the nearest link.
+    @FocusState private var focused: AppTab?
 
     var body: some View {
         HStack(spacing: 2) {
@@ -382,6 +385,7 @@ private struct TopNav: View {
         .glass(Capsule(), shadow: true)
         #if os(tvOS)
         .focusSection()
+        .defaultFocus($focused, selection, priority: .userInitiated)
         #endif
     }
 
@@ -390,6 +394,7 @@ private struct TopNav: View {
             if item.isTool { Label(item.title, glyph: item.symbol) } else { Text(item.title) }
         }
         .buttonStyle(NavLinkStyle(on: item == selection))
+        .focused($focused, equals: item)
         .accessibilityAddTraits(item == selection ? .isSelected : [])
     }
 

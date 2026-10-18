@@ -35,7 +35,7 @@ struct HomeScreen: View {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 // Without catalogs, or with none answering, there is no art to show.
                 if !model.needsSetup && !model.allFailed {
-                    HeroView(hero: model.header.hero, height: heroHeight, startScope: startScopeID, play: playHero, starting: starting)
+                    HeroView(hero: model.header.hero, height: heroHeight, startScope: start == .hero ? startScopeID : nil, play: playHero, starting: starting)
                         // Phone: the profile button sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
                             if !metrics.wide { ProfileButton { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
@@ -101,7 +101,7 @@ struct HomeScreen: View {
             couldNotLoad.padding(.horizontal, metrics.gutter)
         case .ready:
             ForEach(model.rows, id: \.rowId) { row in
-                RowView(row: row, retry: model.reload)
+                RowView(row: row, retry: model.reload, startScope: start == .row(row.rowId) ? startScopeID : nil)
             }
             if model.needsSetup { setup.padding(.horizontal, metrics.gutter) }
         }
@@ -162,6 +162,11 @@ struct HomeScreen: View {
                 core: core, setUp: { onboarding = true })
         }
         .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xxl - 20)
+    }
+
+    /// Where TV focus enters and Menu returns: Continue Watching when it leads, else the hero, else the first row with tiles.
+    private var start: HomeStart? {
+        HomeStart.target(rows: model.rows, hero: model.header.hero != nil)
     }
 
     private var startScopeID: Namespace.ID? {

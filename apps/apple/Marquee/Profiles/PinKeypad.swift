@@ -136,7 +136,10 @@ struct PinKeypad: View {
             return .handled
         }
         .onKeyPress(.delete, phases: .down) { _ in delete(); return .handled }
-        #if !os(tvOS)
+        #if os(tvOS)
+        // Menu leaves the keypad for the profile tiles, one step, never the whole picker.
+        .onExitCommand { leave() }
+        #else
         .focusable()
         .focusEffectDisabled()
         .focused($focus, equals: "keys")

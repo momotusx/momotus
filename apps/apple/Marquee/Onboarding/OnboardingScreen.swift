@@ -20,6 +20,8 @@ struct OnboardingScreen: View {
     @State private var note: (ok: Bool, text: String)?
     @State private var showImport = false
     @State private var showPairing = false
+    /// TV: the doors step enters on the first door, not on Browse first.
+    @FocusState private var firstDoor: Bool
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
 
@@ -86,6 +88,7 @@ struct OnboardingScreen: View {
                 Button { showImport = true } label: {
                     Door(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
                 }
+                .focused($firstDoor)
                 Button { Task { await startFresh() } } label: {
                     Door(
                         symbol: "sparkle", title: busy == Self.cinemeta.url ? "Adding the catalog" : "Start fresh",
@@ -112,6 +115,7 @@ struct OnboardingScreen: View {
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
         }
+        .defaultFocus($firstDoor, true)
     }
 
     private var sourceStep: some View {

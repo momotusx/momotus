@@ -6,6 +6,8 @@ struct RowView: View {
     let retry: () -> Void
     /// Called when a tile is opened (Search remembers the query then).
     var onOpen: (() -> Void)?
+    /// TV: this row is Home's start; its first tile is the scope's default focus.
+    var startScope: Namespace.ID?
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -38,7 +40,8 @@ struct RowView: View {
     private var strip: some View {
         ScrollView(.horizontal) {
             LazyHStack(alignment: .top, spacing: metrics.wide ? 20 : 12) {
-                ForEach(Array(row.tiles.enumerated()), id: \.offset) { _, tile in
+                let tiles = row.tiles.keyed
+                ForEach(tiles, id: \.key) { key, tile in
                     NavigationLink(value: TitleRoute(tile)) {
                         if row.rowId == "continue-watching" {
                             ContinueCard(tile: tile)
@@ -48,6 +51,8 @@ struct RowView: View {
                     }
                     .buttonStyle(CardButtonStyle())
                     .simultaneousGesture(TapGesture().onEnded { onOpen?() })
+                    // TV: Home's start row enters on its first tile.
+                    .modifier(StartFocus(scope: key == tiles.first?.key ? startScope : nil))
                 }
             }
             .padding(.horizontal, metrics.gutter)

@@ -115,7 +115,8 @@ struct PosterGrid: View {
             columns: [GridItem(.adaptive(minimum: metrics.poster.width * 0.85), spacing: metrics.wide ? 20 : 12, alignment: .top)],
             alignment: .leading, spacing: metrics.wide ? 28 : 18
         ) {
-            ForEach(Array(tiles.enumerated()), id: \.offset) { index, tile in
+            let keyed = tiles.keyed
+            ForEach(keyed, id: \.key) { key, tile in
                 NavigationLink(value: TitleRoute(tile)) {
                     VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
                         ArtImage(url: tile.poster, fallback: tile.name)
@@ -132,7 +133,7 @@ struct PosterGrid: View {
                 }
                 .buttonStyle(CardButtonStyle())
                 .accessibilityLabel([tile.name, caption(tile)].compactMap { $0 }.joined(separator: ", "))
-                .onAppear { if index == tiles.count - 1 { onEnd?() } }
+                .onAppear { if key == keyed.last?.key { onEnd?() } }
             }
         }
     }

@@ -12,6 +12,8 @@ struct TitleScreen: View {
     @State private var height: CGFloat = 0
     /// Content has scrolled under the status bar and the back button.
     @State private var underBar = false
+    /// TV: the page enters on its primary (Play, Resume or Add a source).
+    @FocusState private var primaryFocused: Bool
     /// Versions for the play target: the line under Play, Play itself, and the Versions page.
     @State private var versions: VersionsModel?
     /// Versions for an episode picked from the list, when it is not the play target.
@@ -57,6 +59,7 @@ struct TitleScreen: View {
         #endif
         .fullBleedTop()
         .topScrim(underBar)
+        .defaultFocus($primaryFocused, true)
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: [versions, episodeVersions].compactMap { $0 }.first { $0.sub == route.versionsSub }, core: core)
         }
@@ -216,7 +219,7 @@ struct TitleScreen: View {
                             Task { playing = await versions?.settledPick() }
                         }
                     },
-                    addSource: { showAddons = true })
+                    addSource: { showAddons = true }, focus: $primaryFocused)
                 actions(details)
             } else if case .failed(let reason) = model.header?.state {
                 StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
@@ -438,6 +441,8 @@ private struct PlayBlock: View {
     let wide: Bool
     let play: () -> Void
     let addSource: () -> Void
+    /// TV: the page enters on this block's primary.
+    var focus: FocusState<Bool>.Binding
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -447,6 +452,7 @@ private struct PlayBlock: View {
                         .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
+                .focused(focus)
             } else {
                 Button(action: play) {
                     HStack(spacing: 10) {
@@ -459,6 +465,7 @@ private struct PlayBlock: View {
                     .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
+                .focused(focus)
                 // The reason shows right under it.
                 .disabled(failure != nil)
             }

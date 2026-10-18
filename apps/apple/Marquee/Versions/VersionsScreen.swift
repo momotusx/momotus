@@ -10,6 +10,8 @@ struct VersionsScreen: View {
     @State private var addSource = false
     @Environment(\.metrics) private var metrics
     @State private var expanded: Set<String> = []
+    /// TV: the page enters on the pick's Play.
+    @FocusState private var pickFocused: Bool
     /// The page's width, for the layouts below.
     @State private var width: CGFloat = 0
 
@@ -34,6 +36,7 @@ struct VersionsScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .onAppear(perform: model.freeze)
+        .defaultFocus($pickFocused, true)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: model, core: core)
@@ -91,9 +94,7 @@ struct VersionsScreen: View {
 
     @ViewBuilder private var pick: some View {
         if let best = snapshot?.recommended {
-            PickCard(row: best) {
-                playing = model.play(best.key)
-            }
+            PickCard(row: best, play: { playing = model.play(best.key) }, focus: $pickFocused)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 if let snapshot, snapshot.done {
@@ -202,6 +203,8 @@ struct VersionsScreen: View {
 private struct PickCard: View {
     let row: VersionRow
     let play: () -> Void
+    /// TV: the page enters on Play.
+    var focus: FocusState<Bool>.Binding
 
     static var kicker: some View {
         Text("RECOMMENDED FOR THIS SCREEN")
@@ -241,6 +244,7 @@ private struct PickCard: View {
                 Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
+            .focused(focus)
             .padding(.top, 6)
             Label(VersionWords.failover(row), glyph: "refresh-cw")
                 .font(.text(Theme.type.callout, relativeTo: .callout))

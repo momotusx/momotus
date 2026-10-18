@@ -130,8 +130,8 @@ struct HeroView: View {
     }
 }
 
-/// TV: the hero's Play is its scope's default focus; elsewhere nothing.
-private struct StartFocus: ViewModifier {
+/// TV: a scope's default focus (the hero's Play, or a row's first tile); elsewhere nothing.
+struct StartFocus: ViewModifier {
     let scope: Namespace.ID?
 
     func body(content: Content) -> some View {

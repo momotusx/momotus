@@ -24,6 +24,28 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     #expect(tile("series", videoId: nil).playVideoId == nil)
 }
 
+@Test func tilesKeepTheirIdentityWhenTheyMove() {
+    let a = row(.ready, "a").tiles[0], b = row(.ready, "b").tiles[0]
+    #expect([a, b].keyed.map(\.key) == ["movie:a", "movie:b"])
+    // After a play Continue Watching reorders: the keys move with their tiles.
+    #expect([b, a].keyed.map(\.key) == ["movie:b", "movie:a"])
+    // A tile twice in one strip still has two keys.
+    #expect([a, a].keyed.map(\.key) == ["movie:a", "movie:a#1"])
+}
+
+@Test func tvHomeEntersOnContinueWatchingThenTheHeroThenTheFirstRowWithTiles() {
+    let watching = HomeRow(rowId: "continue-watching", title: "Continue Watching", source: "", state: .ready, tiles: row(.ready, "a").tiles)
+    let popular = HomeRow(rowId: "popular", title: "Popular", source: "Cinemeta", state: .ready, tiles: row(.ready, "b").tiles)
+    let failed = HomeRow(rowId: "broken", title: "Broken", source: "X", state: .failed(reason: "500"), tiles: [])
+    #expect(HomeStart.target(rows: [watching, popular], hero: true) == .row("continue-watching"))
+    #expect(HomeStart.target(rows: [popular], hero: true) == .hero)
+    // No hero: the first row with tiles, past an empty or failed lane.
+    #expect(HomeStart.target(rows: [failed, popular], hero: false) == .row("popular"))
+    // Continue Watching that is not the first row does not lead.
+    #expect(HomeStart.target(rows: [popular, watching], hero: true) == .hero)
+    #expect(HomeStart.target(rows: [failed], hero: false) == nil)
+}
+
 @Test func homeOffersOneTryAgainOnlyWhenEveryLaneEndedWithNothingAndOneFailed() {
     let failed = row(.failed(reason: "offline"))
     #expect([failed, failed].allFailed)

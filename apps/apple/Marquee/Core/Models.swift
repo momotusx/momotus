@@ -81,6 +81,38 @@ extension [HomeRow] {
     }
 }
 
+extension [Tile] {
+    /// Stable identities for a strip or a grid: kind and id, a repeat
+    /// numbered. Keyed by position, a reorder (Continue Watching after a play)
+    /// changed the title under the focused place instead of moving it.
+    var keyed: [(key: String, tile: Tile)] {
+        var seen: [String: Int] = [:]
+        return map { tile in
+            let base = "\(tile.kind):\(tile.id)"
+            let repeats = seen[base, default: 0]
+            seen[base] = repeats + 1
+            return (repeats == 0 ? base : "\(base)#\(repeats)", tile)
+        }
+    }
+}
+
+/// Where TV focus enters Home, and where Menu brings it back, as the web and
+/// Android have it: Continue Watching's first tile when that row leads, else
+/// the hero's Play, else the first tile of the first row that has any (an
+/// empty or failed first lane is skipped).
+enum HomeStart: Equatable {
+    case row(String)
+    case hero
+
+    static func target(rows: [HomeRow], hero: Bool) -> HomeStart? {
+        if let first = rows.first, first.rowId == "continue-watching", !first.tiles.isEmpty {
+            return .row(first.rowId)
+        }
+        if hero { return .hero }
+        return rows.first { !$0.tiles.isEmpty }.map { .row($0.rowId) }
+    }
+}
+
 struct HomeSnapshot: Decodable, Sendable {
     let header: HomeHeader
     let rows: [HomeRow]
