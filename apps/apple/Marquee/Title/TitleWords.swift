@@ -44,6 +44,28 @@ func dayHeading(_ day: String, today: String, viewer: TimeZone = .current, local
     }
 }
 
+/// A long text in blocks of whole sentences of about `size` characters,
+/// for a TV reader whose blocks take focus one after another (a remote
+/// scrolls a page only by moving focus). A sentence longer than `size`
+/// is a block of its own; nothing is cut or dropped.
+func readingBlocks(_ text: String, size: Int = 240) -> [String] {
+    var sentences: [String] = []
+    text.enumerateSubstrings(in: text.startIndex..., options: .bySentences) { sentence, _, _, _ in
+        if let sentence = sentence?.trimmingCharacters(in: .whitespacesAndNewlines), !sentence.isEmpty {
+            sentences.append(sentence)
+        }
+    }
+    var blocks: [String] = []
+    for sentence in sentences {
+        if let last = blocks.last, last.count + 1 + sentence.count <= size {
+            blocks[blocks.count - 1] = last + " " + sentence
+        } else {
+            blocks.append(sentence)
+        }
+    }
+    return blocks
+}
+
 /// What Resume says after its label: "36 min left" from what the file has
 /// left (Continue Watching's figure), else from the runtime when it is known,
 /// else the position ("from 21:00").

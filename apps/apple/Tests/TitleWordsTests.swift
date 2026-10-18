@@ -22,6 +22,17 @@ import Testing
     #expect(resumeText(resumeMs: 21 * 60_000, leftMs: 0, runtime: "57 min") == "36 min left")
 }
 
+@Test func aLongSynopsisSplitsIntoWholeSentencesWithNothingLost() {
+    let text = "One sentence here. Another one follows! A third asks why? " + String(repeating: "word ", count: 80) + "end."
+    let blocks = readingBlocks(text, size: 50)
+    // Every word arrives, in order.
+    #expect(blocks.joined(separator: " ").split(separator: " ") == text.split(separator: " "))
+    // Short sentences share a block up to the size; a long one stands alone.
+    #expect(blocks.first == "One sentence here. Another one follows!")
+    #expect(blocks.count == 3)
+    #expect(readingBlocks("").isEmpty)
+}
+
 @Test func aCalendarDayKeepsItsDateWestOfUTC() throws {
     let english = Locale(identifier: "en_US")
     let losAngeles = try #require(TimeZone(identifier: "America/Los_Angeles"))

@@ -330,15 +330,61 @@ private struct Synopsis: View {
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { full = $0 }
                 }
             if !open, full > shown + 1 {
-                Button("More") { withAnimation(Theme.Motion.panel) { open = true } }
-                    .buttonStyle(.textLink)
-                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
-                    .foregroundStyle(Theme.Palette.text)
-                    .accessibilityHint("Shows the whole synopsis")
+                Button("More") {
+                    #if os(tvOS)
+                    // A remote scrolls only by moving focus: the whole text opens as a reader.
+                    reading = true
+                    #else
+                    withAnimation(Theme.Motion.panel) { open = true }
+                    #endif
+                }
+                .buttonStyle(.textLink)
+                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.text)
+                .accessibilityHint("Shows the whole synopsis")
             }
         }
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $reading) { SynopsisReader(text: text) }
+        #endif
+    }
+
+    #if os(tvOS)
+    @State private var reading = false
+    #endif
+}
+
+#if os(tvOS)
+/// The whole synopsis on TV, read to its end: blocks of whole sentences that
+/// take focus in turn, so Down scrolls the page a block at a time; Menu
+/// returns to the title.
+private struct SynopsisReader: View {
+    let text: String
+    @FocusState private var focused: Int?
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                ForEach(Array(readingBlocks(text).enumerated()), id: \.offset) { index, block in
+                    Text(block)
+                        .font(.text(Theme.type.body))
+                        .foregroundStyle(focused == index ? Theme.Palette.text : Theme.Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(Theme.Space.s)
+                        .focusable()
+                        .focused($focused, equals: index)
+                        .modifier(FocusRing(shape: RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous), active: focused == index))
+                }
+            }
+            .frame(maxWidth: 1100, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(Theme.Space.xl)
+        }
+        .background(Theme.Palette.bg)
+        .defaultFocus($focused, 0)
     }
 }
+#endif
 
 /// Backdrop art faded into the page; with no backdrop, the poster blurred at
 /// 35% over the page colour, so the right side is never a blank band.
