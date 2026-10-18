@@ -68,7 +68,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
@@ -90,11 +93,13 @@ import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 // Profiles (plans/m11-profiles.md, P1 apps and v2): the picker in its modes, the PIN keypad,
 // Manage profiles and the edit page, equal to the web's screens/profiles.tsx.
@@ -890,6 +895,13 @@ fun EditProfileScreen(
     // The stored PIN came from a newer version: it can only be removed (the core lets its owner do
     // that without it).
     var unreadable by remember(id) { mutableStateOf(false) }
+    val saves = viewModel<PinSaves>(key = "pin-saves:$id")
+    LaunchedEffect(saves.outcome) {
+        saves.outcome?.let {
+            said = it
+            saves.outcome = null
+        }
+    }
     val removeUnreadable = remember { FocusRequester() }
     LaunchedEffect(unreadable) {
         if (unreadable) {
@@ -942,7 +954,7 @@ fun EditProfileScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                PinSteps(session, p!!, f, scope, onLate = { said = it to Status.Ok }, onUnreadable = {
+                PinSteps(session, p!!, f, saves, onUnreadable = {
                     flow = null
                     unreadable = true
                 }) { text ->
@@ -1205,17 +1217,75 @@ private fun Choice(
     ) { content() }
 }
 
+/**
+ * The edit page's PIN saves. They run in this view model, so a save outlives its PIN flow and a
+ * rotation; one that ends after its flow left is told here, and the page shows it.
+ */
+class PinSaves : ViewModel() {
+    var outcome: Pair<String, Status>? by mutableStateOf(null)
+
+    fun start(block: suspend () -> Unit): Deferred<Unit> = viewModelScope.async { block() }
+
+    fun tell(
+        cause: Throwable?,
+        done: String,
+    ) {
+        outcome =
+            when (cause) {
+                null -> {
+                    done to Status.Ok
+                }
+
+                is CancellationException -> {
+                    null
+                }
+
+                else -> {
+                    ((tried(cause as? Exception ?: return) as? Tried.Problem)?.text ?: "The PIN was not changed.") to
+                        Status.Bad
+                }
+            }
+    }
+}
+
+private class OpenFlow {
+    @Volatile var alive = true
+
+    @Volatile var save: Pair<Deferred<Unit>, AtomicBoolean>? = null
+}
+
 /** The keypad steps for your own PIN, by the core's rules: change and remove ask the current one first. */
 @Composable
 private fun PinSteps(
     session: CoreSession,
     p: ProfileInfo,
     flow: PinFlow,
-    pageScope: CoroutineScope,
-    onLate: (String) -> Unit,
+    saves: PinSaves,
     onUnreadable: () -> Unit,
     onDone: (String?) -> Unit,
 ) {
+    // Whether this flow is still on screen, and its save still in flight: a save that ends after
+    // the flow left is told to the page; one that ended just before is told when the flow leaves.
+    val open = remember { OpenFlow() }
+    DisposableEffect(Unit) {
+        onDispose {
+            open.alive = false
+            open.save?.let { (save, told) ->
+                if (save.isCompleted && told.compareAndSet(false, true)) {
+                    saves.tell(
+                        save.getCompletionExceptionOrNull(),
+                        if (flow ==
+                            PinFlow.Remove
+                        ) {
+                            "PIN removed"
+                        } else {
+                            "PIN saved"
+                        },
+                    )
+                }
+            }
+        }
+    }
     val steps =
         when (flow) {
             PinFlow.Set -> listOf("new", "again")
@@ -1267,24 +1337,34 @@ private fun PinSteps(
                 else -> {
                     val done = if (flow == PinFlow.Remove) "PIN removed" else "PIN saved"
                     val (newPin, currentPin) = fresh to current
-                    // The save belongs to the page: it goes on when this flow leaves (the app went to
-                    // the back), and the page says how it ended without closing a newer flow.
+                    // The save belongs to the page's saves, not to this flow: when the flow leaves
+                    // first (the app went to the back, a rotation), the page says how it ended,
+                    // success or not, and a newer flow is never closed by it.
                     val save =
-                        pageScope.async(SupervisorJob(pageScope.coroutineContext[Job])) {
+                        saves.start {
                             if (flow == PinFlow.Remove) {
                                 session.ops.setPin(p.id, null, pin)
                             } else {
                                 session.ops.setPin(p.id, newPin, currentPin)
                             }
                         }
+                    val told = AtomicBoolean(false)
+                    open.save = save to told
+                    save.invokeOnCompletion { cause ->
+                        if (!open.alive &&
+                            told.compareAndSet(false, true)
+                        ) {
+                            saves.tell(cause, done)
+                        }
+                    }
                     try {
                         save.await()
-                        onDone(done)
+                        if (told.compareAndSet(false, true)) onDone(done)
                         Tried.Ok
                     } catch (e: CancellationException) {
-                        if (save.isActive) pageScope.launch { runCatching { save.await() }.onSuccess { onLate(done) } }
                         throw e
                     } catch (e: Exception) {
+                        if (!told.compareAndSet(false, true)) return@Keypad Tried.Ok
                         if ((e as? CoreError)?.code == "pinUnreadable") {
                             onUnreadable()
                             return@Keypad Tried.Ok

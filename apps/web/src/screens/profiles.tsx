@@ -502,7 +502,7 @@ export function EditProfile() {
               setFlow(null);
               if (text) setSaid({ text, bad: false });
             }}
-            onLate={(text) => setSaid({ text, bad: false })}
+            onLate={(text, bad) => setSaid({ text, bad })}
           />
         }
       >
@@ -683,7 +683,7 @@ function DeleteConfirm(props: { name: string; busy: boolean; onDelete: () => voi
 }
 
 /** The keypad steps for your own PIN, by the core's rules: change and remove ask the current one first. */
-function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: () => void; onDone: (said?: string) => void; onLate: (said: string) => void }) {
+function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: () => void; onDone: (said?: string) => void; onLate: (said: string, bad: boolean) => void }) {
   const steps = props.flow === "set" ? ["new", "again"] : props.flow === "change" ? ["current", "new", "again"] : ["current"];
   const [step, setStep] = createSignal(0);
   let current: string | undefined;
@@ -723,7 +723,12 @@ function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: ()
       if (props.flow === "remove") await op("setPin", { profile: props.profile.id, pin: null, currentPin: pin });
       else await op("setPin", { profile: props.profile.id, pin: fresh, currentPin: current });
     } catch (e) {
-      if (!alive) return { kind: "ok" };
+      if (!alive) {
+        // The flow left first: the page says the save did not go through.
+        const t = tried(e);
+        props.onLate(t.kind === "problem" ? t.text : t.kind === "wrong" ? "Wrong PIN: the PIN was not changed." : "The PIN was not changed.", true);
+        return { kind: "ok" };
+      }
       if (e instanceof BridgeError && e.code === "pinUnreadable") {
         props.onUnreadable();
         return { kind: "ok" };
@@ -736,7 +741,7 @@ function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: ()
     }
     const text = props.flow === "remove" ? "PIN removed" : "PIN saved";
     if (alive) props.onDone(text);
-    else props.onLate(text);
+    else props.onLate(text, false);
     return { kind: "ok" };
   };
   return <Keypad title={title()} onSubmit={submit} onCancel={() => props.onDone()} cancelLabel="Cancel" />;
