@@ -1930,6 +1930,10 @@ mod tests {
             ))
             .is_err()
         );
+        // Media3 casts the count to int: 2^32 + 5 builds 5.
+        accepted(&timeline(
+            "<S t=\"0\" d=\"1\" r=\"-1\"/><S t=\"4294967301\" d=\"1\"/>",
+        ));
         // In the last S it runs to a period end Media3 derives: refused.
         assert!(rewrite(&timeline("<S t=\"0\" d=\"1\" r=\"-1\"/>")).is_err());
         // Followed by an S with no t, Media3 counts to C.TIME_UNSET, wrapping:
