@@ -1,5 +1,6 @@
 use mq_addons::{
-    AddonClient, CacheControl, CacheStore, InstalledAddon, ResponseCache, StoredResponse,
+    AddonClient, AddonError, CacheControl, CacheStore, InstalledAddon, ResponseCache,
+    StoredResponse,
 };
 use mq_http::{ClientConfig, HttpClient};
 use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME};
@@ -309,8 +310,11 @@ impl Core {
         let (body, name) = self.fetch_meta_body(kind, id).await?;
         match serde_json::from_slice::<ResourceResponse>(&body) {
             Ok(ResourceResponse::Meta { meta }) => Ok((meta, name)),
-            Ok(_) => Err(format!("{name} returned no details")),
-            Err(e) => Err(format!("{name} returned unreadable details: {e}")),
+            Ok(_) => Err(format!("{name} has no details for this title")),
+            Err(e) => {
+                tracing::debug!("{name} sent unreadable details: {e}");
+                Err(format!("{name} sent details Marquee cannot read"))
+            }
         }
     }
 
@@ -346,16 +350,19 @@ impl Core {
             extra: vec![],
         };
         let addons = self.installed_addons().map_err(|e| e.to_string())?;
-        let mut last_error = "no installed addon provides details for this title".to_owned();
+        let mut last_error = "None of your addons has details for this title".to_owned();
         for addon in addons.iter().filter(|a| a.supports(&path)) {
             let name = &addon.manifest.name;
             match self.addons().fetch(addon, &path, META_TIMEOUT).await {
                 Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
                     Ok(ResourceResponse::Meta { .. }) => return Ok((fetched.body, name.clone())),
-                    Ok(_) => last_error = format!("{name} returned no details"),
-                    Err(e) => last_error = format!("{name} returned unreadable details: {e}"),
+                    Ok(_) => last_error = format!("{name} has no details for this title"),
+                    Err(e) => {
+                        tracing::debug!("{name} sent unreadable details: {e}");
+                        last_error = format!("{name} sent details Marquee cannot read");
+                    }
                 },
-                Err(e) => last_error = format!("{name}: {e}"),
+                Err(e) => last_error = meta_failure(name, &e),
             }
         }
         Err(last_error)
@@ -491,5 +498,61 @@ impl CacheStore for LibraryCache {
     /// anywhere retires every memory cache's older answers.
     fn generation(&self) -> u64 {
         self.0.removals()
+    }
+}
+
+/// Why an addon gave no details, in a sentence the title page shows as is,
+/// like the playback attempt list's; the status stays for support.
+fn meta_failure(name: &str, error: &AddonError) -> String {
+    use mq_http::HttpError;
+    match error {
+        AddonError::TimedOut | AddonError::Http(HttpError::Timeout(_)) => {
+            format!("{name} did not answer in time")
+        }
+        AddonError::Http(HttpError::Status { status, .. }) => match status {
+            404 | 410 => format!("{name} has no details for this title"),
+            429 => format!("{name} is busy, try again soon"),
+            500..=599 => format!("{name} had an error ({status})"),
+            _ => format!("{name} answered with an error ({status})"),
+        },
+        AddonError::Http(HttpError::BlockedPrivate(_)) => {
+            format!("{name} points to a private network address")
+        }
+        AddonError::Http(HttpError::TooLarge { .. } | HttpError::Decode(_)) => {
+            format!("{name} sent details Marquee cannot read")
+        }
+        _ => format!("{name} could not be reached"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mq_http::HttpError;
+
+    #[test]
+    fn meta_failures_read_as_sentences() {
+        let status = |status| {
+            AddonError::Http(HttpError::Status {
+                status,
+                body: Default::default(),
+                retry_after: None,
+            })
+        };
+        let say = |e: AddonError| meta_failure("Cinemeta", &e);
+        assert_eq!(say(AddonError::TimedOut), "Cinemeta did not answer in time");
+        assert_eq!(
+            say(AddonError::Http(HttpError::Timeout(Duration::from_secs(
+                10
+            )))),
+            "Cinemeta did not answer in time"
+        );
+        assert_eq!(say(status(404)), "Cinemeta has no details for this title");
+        assert_eq!(say(status(503)), "Cinemeta had an error (503)");
+        assert_eq!(say(status(429)), "Cinemeta is busy, try again soon");
+        assert_eq!(
+            say(AddonError::Http(HttpError::Network("dns".into()))),
+            "Cinemeta could not be reached"
+        );
     }
 }
