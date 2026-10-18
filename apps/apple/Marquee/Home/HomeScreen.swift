@@ -12,6 +12,7 @@ struct HomeScreen: View {
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @State private var width: CGFloat = 0
+    @State private var height: CGFloat = 0
     @State private var onboarding = false
     @State private var showProfiles = false
     /// Rows have scrolled under the status bar.
@@ -62,7 +63,7 @@ struct HomeScreen: View {
         .fullBleedTop()
         #endif
         .topScrim(underBar || model.needsSetup || model.allFailed)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
         #if DEBUG
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
         #endif
@@ -187,8 +188,10 @@ struct HomeScreen: View {
         #if os(tvOS)
         return 600
         #else
-        guard width > 0 else { return metrics.wide ? 460 : 520 }
-        return metrics.wide ? min(max(width * 0.36, 400), 560) : 520
+        guard width > 0, height > 0 else { return metrics.wide ? 460 : 520 }
+        // Held to 60% of the window, so Continue Watching shows on an SE and Play in landscape.
+        let window = height * 0.6
+        return metrics.wide ? min(max(width * 0.36, 400), 560, max(window, 300)) : min(520, max(window, 280))
         #endif
     }
 }

@@ -9,6 +9,7 @@ struct TitleScreen: View {
     @Environment(\.openURL) private var openURL
     @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
+    @State private var height: CGFloat = 0
     /// Content has scrolled under the status bar and the back button.
     @State private var underBar = false
     /// Versions for the play target: the line under Play, Play itself, and the Versions page.
@@ -42,7 +43,7 @@ struct TitleScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
         .task(id: core.generation) {
             model.start()
             versions?.start()
@@ -149,7 +150,10 @@ struct TitleScreen: View {
         return 640
         #else
         guard width > 0 else { return metrics.wide ? 520 : 300 }
-        return metrics.wide ? min(max(width * 0.46, 420), 600) : width * 0.78
+        // Held to under half the window: a landscape phone shows the title and Play
+        // above the tab bar, not only art. Portrait phones keep their width rule.
+        let window = height > 0 ? max(height * 0.4, 160) : .infinity
+        return metrics.wide ? min(max(width * 0.46, 420), 600) : min(width * 0.78, window)
         #endif
     }
 

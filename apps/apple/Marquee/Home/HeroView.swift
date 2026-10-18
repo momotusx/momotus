@@ -16,19 +16,26 @@ struct HeroView: View {
 
     var body: some View {
         let card = RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous)
-        ZStack(alignment: .bottomLeading) {
-            ArtImage(url: hero?.tile.background ?? hero?.tile.poster, maxPixels: ArtSize.backdrop)
-                .accessibilityHidden(true)
-            scrims
+        // The art is a minimum, the words decide: at a large text size or in a
+        // short window the card grows to its words instead of cutting them.
+        Group {
             if let hero {
                 details(hero)
                     .padding(.leading, metrics.wide ? Theme.Space.xl - 12 : 18)
                     .padding(.trailing, metrics.wide ? Theme.Space.l : 18)
                     .padding(.bottom, metrics.wide ? Theme.Space.l : 20)
+                    // Clear of the phone's wordmark at the card's top.
+                    .padding(.top, metrics.wide ? Theme.Space.l : 56)
+            } else {
+                Color.clear
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: height)
+        .frame(maxWidth: .infinity, minHeight: height, alignment: .bottomLeading)
+        .background {
+            ArtImage(url: hero?.tile.background ?? hero?.tile.poster, maxPixels: ArtSize.backdrop)
+                .accessibilityHidden(true)
+            scrims
+        }
         .clipShape(card)
         .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
         .overlay(alignment: .topLeading) {
