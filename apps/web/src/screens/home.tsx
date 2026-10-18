@@ -10,6 +10,7 @@ import { createSignal, For, Show } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { CONTINUE_ROW, Row } from "../components/row";
 import { homeView } from "../core/client";
+import { allFailed } from "../lib/rows";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
 import { playPath, titlePath } from "../lib/format";
@@ -144,7 +145,20 @@ export default function Home() {
           </section>
         </Show>
 
-        <For each={home.rows}>{(row, i) => <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} />}</For>
+        <Show
+          when={!home.hero && allFailed(home.rows)}
+          fallback={<For each={home.rows}>{(row, i) => <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} />}</For>}
+        >
+          <section class="problem home-problem">
+            <CircleAlert aria-hidden class="problem-icon" />
+            <h2>Home could not load</h2>
+            <p>None of your addons answered. Check the network, then try again.</p>
+            <button class="btn primary" data-f="home:retry-lanes" data-autofocus onClick={() => location.reload()}>
+              <RefreshCw aria-hidden />
+              Try again
+            </button>
+          </section>
+        </Show>
       </main>
     </div>
   );
