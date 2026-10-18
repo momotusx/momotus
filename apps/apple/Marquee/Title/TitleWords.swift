@@ -22,6 +22,28 @@ func releaseDate(_ value: String?) -> Date? {
     return try? Date(value, strategy: .iso8601.year().month().day())
 }
 
+/// A calendar day's heading: "Today", "Tomorrow", "Yesterday", else
+/// "Wednesday, October 21". Both are core days at UTC midnight, so they are
+/// counted and named in UTC, never in the viewer's zone (`viewer`, there so tests can
+/// be a viewer anywhere): read there, a day west of UTC was the day before,
+/// and the night the clocks change counted as no day at all.
+func dayHeading(_ day: String, today: String, viewer: TimeZone = .current, locale: Locale = .current) -> String {
+    guard let date = releaseDate(day), let now = releaseDate(today) else { return day }
+    let utc = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0) ?? viewer
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = utc
+    switch calendar.dateComponents([.day], from: now, to: date).day {
+    case 0: return "Today"
+    case 1: return "Tomorrow"
+    case -1: return "Yesterday"
+    default:
+        var style = Date.FormatStyle.dateTime.weekday(.wide).day().month(.wide)
+        style.timeZone = utc
+        style.locale = locale
+        return date.formatted(style)
+    }
+}
+
 /// What Resume says after its label: "36 min left" from what the file has
 /// left (Continue Watching's figure), else from the runtime when it is known,
 /// else the position ("from 21:00").

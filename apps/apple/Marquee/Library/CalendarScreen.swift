@@ -103,15 +103,7 @@ private struct DaySection: View {
         }
     }
 
-    private var label: String {
-        guard let date = releaseDate(day.date), let now = releaseDate(today) else { return day.date }
-        switch Calendar.current.dateComponents([.day], from: now, to: date).day {
-        case 0: return "Today"
-        case 1: return "Tomorrow"
-        case -1: return "Yesterday"
-        default: return date.formatted(.dateTime.weekday(.wide).day().month(.wide))
-        }
-    }
+    private var label: String { dayHeading(day.date, today: today) }
 }
 
 /// The episode's still (or the series poster), series, "S1:E2 Title", watched.
