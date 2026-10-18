@@ -7,6 +7,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 async fn meta_addon(body: &'static str) -> AddonRow {
+    addon_answering("200 OK", body).await
+}
+
+/// A meta addon whose every answer has this status line and body.
+async fn addon_answering(status: &'static str, body: &'static str) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -18,7 +23,7 @@ async fn meta_addon(body: &'static str) -> AddonRow {
                 let mut buf = [0u8; 2048];
                 let _ = socket.read(&mut buf).await;
                 let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
                     body.len(),
                     body
                 );
@@ -239,4 +244,34 @@ async fn a_watched_movie_plays_again_until_a_rewatch_resumes() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     panic!("the rewatch never offered Resume");
+}
+
+/// What the title page says when no addon gives details, one case per kind.
+#[tokio::test]
+async fn a_title_that_cannot_load_says_why() {
+    async fn reason(addons: &[AddonRow]) -> String {
+        let core = Core::temporary("p").unwrap();
+        core.library().set_addons("p", addons, &core.hlc()).unwrap();
+        let view = TitleView::open(&core, "series", "tt0944947");
+        match settle(&view).await.header.state {
+            TitleState::Failed { reason } => reason,
+            other => panic!("not failed: {other:?}"),
+        }
+    }
+    assert_eq!(
+        reason(&[]).await,
+        "None of your addons has details for this title"
+    );
+    assert_eq!(
+        reason(&[addon_answering("404 Not Found", "{}").await]).await,
+        "Meta Test has no details for this title (404)"
+    );
+    assert_eq!(
+        reason(&[meta_addon(r#"{"metas":[]}"#).await]).await,
+        "Meta Test has no details for this title"
+    );
+    assert_eq!(
+        reason(&[meta_addon("not json").await]).await,
+        "Meta Test sent details Marquee cannot read"
+    );
 }

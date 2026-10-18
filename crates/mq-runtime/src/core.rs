@@ -307,15 +307,8 @@ impl Core {
     /// Stremio; later addons are asked only when earlier ones fail. Returns the
     /// meta and the name of the addon that gave it.
     pub async fn fetch_meta(&self, kind: &str, id: &str) -> Result<(MetaItem, String), String> {
-        let (body, name) = self.fetch_meta_body(kind, id).await?;
-        match serde_json::from_slice::<ResourceResponse>(&body) {
-            Ok(ResourceResponse::Meta { meta }) => Ok((meta, name)),
-            Ok(_) => Err(format!("{name} has no details for this title")),
-            Err(e) => {
-                tracing::debug!("{name} sent unreadable details: {e}");
-                Err(format!("{name} sent details Marquee cannot read"))
-            }
-        }
+        let (_, meta, name) = self.fetch_meta_body(kind, id).await?;
+        Ok((meta, name))
     }
 
     /// Each episode's TVDB id by video id, from the same meta answer (served
@@ -326,9 +319,11 @@ impl Core {
         &self,
         id: &str,
     ) -> Result<std::collections::HashMap<String, u64>, String> {
-        let (body, _) = self.fetch_meta_body("series", id).await?;
-        let raw: serde_json::Value =
-            serde_json::from_slice(&body).map_err(|e| format!("unreadable details: {e}"))?;
+        let (body, _, name) = self.fetch_meta_body("series", id).await?;
+        // The body already decoded as a meta, so this read cannot fail on a
+        // well-formed answer.
+        let raw: serde_json::Value = serde_json::from_slice(&body)
+            .map_err(|_| format!("{name} sent details Marquee cannot read"))?;
         Ok(raw["meta"]["videos"]
             .as_array()
             .into_iter()
@@ -337,12 +332,14 @@ impl Core {
             .collect())
     }
 
-    /// The first meta answer in addon order that decodes, as raw bytes.
+    /// The first meta answer in addon order that decodes, as raw bytes and
+    /// decoded, with the addon's name. Otherwise the last addon's failure as
+    /// the title page shows it.
     async fn fetch_meta_body(
         &self,
         kind: &str,
         id: &str,
-    ) -> Result<(bytes::Bytes, String), String> {
+    ) -> Result<(bytes::Bytes, MetaItem, String), String> {
         let path = ResourcePath {
             resource: "meta".into(),
             r#type: kind.to_owned(),
@@ -355,14 +352,25 @@ impl Core {
             let name = &addon.manifest.name;
             match self.addons().fetch(addon, &path, META_TIMEOUT).await {
                 Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
-                    Ok(ResourceResponse::Meta { .. }) => return Ok((fetched.body, name.clone())),
+                    Ok(ResourceResponse::Meta { meta }) => {
+                        return Ok((fetched.body, meta, name.clone()));
+                    }
                     Ok(_) => last_error = format!("{name} has no details for this title"),
                     Err(e) => {
                         tracing::debug!("{name} sent unreadable details: {e}");
                         last_error = format!("{name} sent details Marquee cannot read");
                     }
                 },
-                Err(e) => last_error = meta_failure(name, &e),
+                Err(e) => {
+                    // An HTTP error's text can carry the addon's URL, so only its kind.
+                    match &e {
+                        AddonError::Http(h) => {
+                            tracing::debug!("{name} gave no details: {}", h.kind())
+                        }
+                        other => tracing::debug!("{name} gave no details: {other}"),
+                    }
+                    last_error = meta_failure(name, &e);
+                }
             }
         }
         Err(last_error)
@@ -502,7 +510,8 @@ impl CacheStore for LibraryCache {
 }
 
 /// Why an addon gave no details, in a sentence the title page shows as is,
-/// like the playback attempt list's; the status stays for support.
+/// worded as the playback attempt list words a source's answer
+/// (`mq_server::refused`), with the status kept for support.
 fn meta_failure(name: &str, error: &AddonError) -> String {
     use mq_http::HttpError;
     match error {
@@ -510,8 +519,9 @@ fn meta_failure(name: &str, error: &AddonError) -> String {
             format!("{name} did not answer in time")
         }
         AddonError::Http(HttpError::Status { status, .. }) => match status {
-            404 | 410 => format!("{name} has no details for this title"),
-            429 => format!("{name} is busy, try again soon"),
+            404 | 410 => format!("{name} has no details for this title ({status})"),
+            401 | 403 => format!("{name} refused access ({status})"),
+            429 => format!("{name} is busy, try again soon ({status})"),
             500..=599 => format!("{name} had an error ({status})"),
             _ => format!("{name} answered with an error ({status})"),
         },
@@ -539,20 +549,51 @@ mod tests {
                 retry_after: None,
             })
         };
-        let say = |e: AddonError| meta_failure("Cinemeta", &e);
-        assert_eq!(say(AddonError::TimedOut), "Cinemeta did not answer in time");
-        assert_eq!(
-            say(AddonError::Http(HttpError::Timeout(Duration::from_secs(
-                10
-            )))),
-            "Cinemeta did not answer in time"
-        );
-        assert_eq!(say(status(404)), "Cinemeta has no details for this title");
-        assert_eq!(say(status(503)), "Cinemeta had an error (503)");
-        assert_eq!(say(status(429)), "Cinemeta is busy, try again soon");
-        assert_eq!(
-            say(AddonError::Http(HttpError::Network("dns".into()))),
-            "Cinemeta could not be reached"
-        );
+        let cases = [
+            (AddonError::TimedOut, "did not answer in time"),
+            (
+                AddonError::Http(HttpError::Timeout(Duration::from_secs(10))),
+                "did not answer in time",
+            ),
+            (status(404), "has no details for this title (404)"),
+            (status(410), "has no details for this title (410)"),
+            (status(401), "refused access (401)"),
+            (status(403), "refused access (403)"),
+            (status(429), "is busy, try again soon (429)"),
+            (status(500), "had an error (500)"),
+            (status(599), "had an error (599)"),
+            (status(400), "answered with an error (400)"),
+            (
+                AddonError::Http(HttpError::BlockedPrivate("10.0.0.1".into())),
+                "points to a private network address",
+            ),
+            (
+                AddonError::Http(HttpError::TooLarge { limit: 1 }),
+                "sent details Marquee cannot read",
+            ),
+            (
+                AddonError::Http(HttpError::Decode("x".into())),
+                "sent details Marquee cannot read",
+            ),
+            (
+                AddonError::Http(HttpError::Network("dns".into())),
+                "could not be reached",
+            ),
+            (
+                AddonError::Http(HttpError::InvalidUrl("x".into())),
+                "could not be reached",
+            ),
+            (AddonError::LegacyTransport, "could not be reached"),
+            (
+                AddonError::InvalidTransportUrl("no scheme"),
+                "could not be reached",
+            ),
+        ];
+        for (error, words) in cases {
+            assert_eq!(
+                meta_failure("Cinemeta", &error),
+                format!("Cinemeta {words}")
+            );
+        }
     }
 }
