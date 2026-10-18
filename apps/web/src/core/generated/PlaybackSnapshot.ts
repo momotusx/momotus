@@ -20,7 +20,12 @@ key: string | null,
  * Two sources of one `key` (two installs listing the same link) differ
  * here; `failOver` names it.
  */
-attempt: number, filename: string | null, sizeBytes: number | null, 
+attempt: number, 
+/**
+ * `url` is an HLS playlist the core rewrote (its name ends in `.m3u8`),
+ * not a file.
+ */
+manifest: boolean, filename: string | null, sizeBytes: number | null, 
 /**
  * Where to start, from saved progress.
  */

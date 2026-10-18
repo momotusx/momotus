@@ -60,6 +60,9 @@ pub struct PlaybackSnapshot {
     /// here; `failOver` names it.
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub attempt: u64,
+    /// `url` is an HLS playlist the core rewrote (its name ends in `.m3u8`),
+    /// not a file.
+    pub manifest: bool,
     pub filename: Option<String>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub size_bytes: Option<u64>,
@@ -200,6 +203,7 @@ impl State {
                 url: None,
                 key: None,
                 attempt: 0,
+                manifest: false,
                 filename: None,
                 size_bytes: None,
                 resume_ms,
@@ -505,6 +509,7 @@ async fn find_segments(
 /// never the reverse.
 fn release_all(s: &mut State) {
     s.snapshot.url = None;
+    s.snapshot.manifest = false;
     s.snapshot.subtitles.clear();
     s.lease = None;
 }
@@ -521,6 +526,7 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
         return false;
     }
     s.snapshot.url = Some(lease.url.clone());
+    s.snapshot.manifest = lease.format.is_some();
     s.snapshot.attempt += 1;
     s.lease = Some(lease);
     true

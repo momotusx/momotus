@@ -516,6 +516,8 @@ data class PlaybackSnapshot(
     val key: String? = null,
     /** The source the view adopted last: one more each time it moves to a new source, never reused in the view's life (0 before the first). Two sources of one `key` (two installs listing the same link) differ here; `failOver` names it. */
     val attempt: Long,
+    /** `url` is an HLS playlist the core rewrote (its name ends in `.m3u8`), not a file. */
+    val manifest: Boolean,
     val filename: String? = null,
     val sizeBytes: Long? = null,
     /** Where to start, from saved progress. */

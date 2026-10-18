@@ -674,9 +674,65 @@ async fn every_ready_url_is_a_loopback_url() {
         "{url}"
     );
     assert!(!url.contains(&base), "{url}");
+    assert!(!s.manifest);
     for track in &s.subtitles {
         assert!(track.url.starts_with("http://127.0.0.1:"), "{}", track.url);
     }
+    // An HLS stream: its playlist and every child are the core's too.
+    let hls = hls_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(r#"{{"streams":[{{"name":"HLS","url":"{hls}/hls/index.m3u8"}}]}}"#);
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    assert!(s.manifest);
+    let url = s.url.unwrap();
+    assert!(
+        url.starts_with("http://127.0.0.1:") && url.contains("/s/") && url.ends_with(".m3u8"),
+        "{url}"
+    );
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let playlist = http.get(&url, &local).await.unwrap();
+    let playlist = String::from_utf8(playlist.body.to_vec()).unwrap();
+    let children: Vec<_> = playlist.lines().filter(|l| !l.starts_with('#')).collect();
+    assert_eq!(children.len(), 1, "{playlist}");
+    assert!(children[0].starts_with("http://127.0.0.1:") && !children[0].contains(&hls));
+    assert_eq!(
+        http.get(children[0], &local).await.unwrap().body[..],
+        b"segment"[..]
+    );
+}
+
+/// An HLS origin: a media playlist naming one segment.
+async fn hls_origin() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let (kind, body) = if head.starts_with("GET /hls/index.m3u8") {
+                    let playlist =
+                        "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n#EXT-X-ENDLIST\n";
+                    ("application/vnd.apple.mpegurl", playlist)
+                } else {
+                    ("video/mp2t", "segment")
+                };
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
 }
 
 #[tokio::test]
