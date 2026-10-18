@@ -30,6 +30,13 @@ final class ProfileSession {
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let sync: SyncModel
     @ObservationIgnored private var decided = false
+    /// What `chosen` was when the switch under way started: Cancel puts it back,
+    /// so a start picker that was never answered asks again.
+    @ObservationIgnored private var chosenBefore = false
+    /// The profile's screens were on onboarding: a restarted core opens it
+    /// again; a switch or a lock starts on Home.
+    @ObservationIgnored var resumeOnboarding = false
+    @ObservationIgnored private var retrying: Task<Void, Never>?
     /// The core generation the last snapshot came from: after a restart
     /// nothing of the profile shows until the new core says which one runs.
     private var seen = -1
@@ -41,18 +48,33 @@ final class ProfileSession {
         view.onSnapshot = { [weak self] snapshot in self?.saw(snapshot) }
         core.onProfileGone = { [weak self] id in self?.removed(id) }
         view.start()
+        // A profiles view that failed to open (at launch or after a restart)
+        // is opened again every 2 seconds; the root says so meanwhile.
+        retrying = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self else { return }
+                if self.view.failure != nil { self.view.retry() }
+            }
+        }
     }
+
+    /// Why the profiles view did not open, while nothing of a profile can show.
+    var loadProblem: String? { snapshot == nil ? view.failure : nil }
 
     var snapshot: ProfilesSnapshot? { seen == core.generation ? view.snapshot : nil }
 
-    /// Whether the app may show profile content, or only the picker. Locked always wins.
+    /// Whether the app may show profile content, or only the picker. Locked
+    /// always wins; a stopped core shuts it too, until the new one says.
     var open: Bool {
-        guard let snapshot else { return false }
+        guard core.failure == nil, let snapshot else { return false }
         return !snapshot.locked && chosen && switching == nil
     }
 
     private func saw(_ snapshot: ProfilesSnapshot) {
         seen = core.generation
+        // A lock starts the profile on Home again, as a switch does.
+        if snapshot.locked { resumeOnboarding = false }
         guard !decided else { return }
         decided = true
         if !ProfileRules.startsOnPicker(snapshot) { chosen = true }
@@ -96,6 +118,8 @@ final class ProfileSession {
         guard !inFlight else { return false }
         // Out from now until the last answer: a second ask, or Cancel, waits.
         inFlight = true
+        if switching == nil { chosenBefore = chosen }
+        resumeOnboarding = false
         switching = id
         switchProblem = nil
         epoch += 1
@@ -132,13 +156,14 @@ final class ProfileSession {
         return false
     }
 
-    /// A failed switch given up: the current profile opens again, on Home.
+    /// A failed switch given up: the app is as it was before it, the current
+    /// profile open if it was, else the start picker asking again.
     func cancelSwitch() {
         // A request still with the core is never undone here: its answer decides.
         guard !inFlight else { return }
         switching = nil
         switchProblem = nil
-        chosen = true
+        chosen = chosenBefore
     }
 
     /// Profile ops that answer the new snapshot (create, update, delete, setPin).

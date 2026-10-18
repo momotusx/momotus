@@ -180,7 +180,10 @@ struct ProfilePicker: View {
         if profile.id == snapshot.active && !snapshot.locked {
             switch mode {
             case .push: dismiss()
-            case .gate: profiles.switching != nil ? profiles.cancelSwitch() : profiles.markChosen()
+            case .gate:
+                // A failed switch is given up, and this profile is the answer.
+                if profiles.switching != nil { profiles.cancelSwitch() }
+                profiles.markChosen()
             }
         } else if profile.hasPin {
             keypad = profile

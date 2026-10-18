@@ -20,6 +20,8 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
     @ObservationIgnored private let params: [String: any Sendable]
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = -1
+    /// Counts opens: a run that was replaced (a retry, a new core) touches nothing.
+    @ObservationIgnored private var runs = 0
     /// Sees every snapshot as it lands, whether or not a view shows it (pairing stores its join here).
     @ObservationIgnored var onSnapshot: ((Snapshot) -> Void)?
 
@@ -36,20 +38,33 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
     /// The owning view calls `start()` again when this changes (a reopened core).
     var taskId: Int { core.generation }
 
+    /// Opens the view again after it failed to open.
+    func retry() {
+        task?.cancel()
+        task = nil
+        start()
+    }
+
     /// Opens the view once per core generation; calling it again is free.
     func start() {
         guard task == nil || generation != core.generation else { return }
         task?.cancel()
         generation = core.generation
-        let (core, view, params) = (core, view, params)
+        runs += 1
+        let (core, view, params, mine, run) = (core, view, params, core.generation, runs)
         // Holds the model only while applying a batch, so releasing it ends the loop.
         task = Task { [weak self] in
             do {
                 let opened = try await core.open(view, params: params, as: (Snapshot.self, Snapshot.self))
-                self?.sub = opened.sub
-                self?.failure = nil
+                do {
+                    // Held only here and per batch: releasing the model ends the loop.
+                    guard let self, run == runs, mine == core.generation else { return }
+                    sub = opened.sub
+                    failure = nil
+                }
                 for await event in opened.events {
-                    guard let self else { return }
+                    // An event a stopped core left behind is never applied as the new one's.
+                    guard let self, run == runs, mine == core.generation else { return }
                     switch event {
                     case .snapshot(let value): snapshot = value
                     case .updates(let values): if let last = values.last { snapshot = last }
@@ -58,9 +73,9 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
                 }
             } catch is CancellationError {
             } catch {
-                self?.failure = error.localizedDescription
+                if run == self?.runs, mine == core.generation { self?.failure = error.localizedDescription }
             }
-            self?.sub = nil
+            if run == self?.runs { self?.sub = nil }
         }
     }
 

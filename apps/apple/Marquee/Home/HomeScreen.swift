@@ -6,6 +6,7 @@ struct HomeScreen: View {
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
+    @Environment(ProfileSession.self) private var profiles
     @State private var width: CGFloat = 0
     @State private var onboarding = false
     @State private var showProfiles = false
@@ -41,6 +42,9 @@ struct HomeScreen: View {
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
         #endif
         .navigationDestination(isPresented: $showProfiles) { ProfilePicker(mode: .push, core: core) }
+        // A restarted core builds Home again: onboarding opens again if it was showing.
+        .onAppear { if profiles.resumeOnboarding { onboarding = true } }
+        .onChange(of: onboarding) { _, open in profiles.resumeOnboarding = open }
         .modifier(FullScreen(isPresented: $onboarding) {
             NavigationStack {
                 OnboardingScreen(core: core) { onboarding = false }

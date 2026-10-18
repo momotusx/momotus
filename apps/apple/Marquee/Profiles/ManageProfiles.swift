@@ -87,12 +87,17 @@ struct EditProfile: View {
     @State private var busy = false
     @State private var flow: PinFlow?
     @State private var confirmDelete = false
+    /// The delete confirmation opens on Keep, so a held Select or Return never
+    /// deletes; Keep gives the focus back to Delete profile.
+    @FocusState private var deleteFocus: DeleteFocus?
+    private enum DeleteFocus { case open, keep }
     /// The profile whose PIN a newer version stored: it can only be removed.
     @State private var unreadable: String?
     @FocusState private var removeFocused: Bool
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 if let snapshot = profiles.snapshot, let active = snapshot.current {
@@ -111,14 +116,13 @@ struct EditProfile: View {
                         form(snapshot)
                         if let target { pin(target, active) }
                         if let target, active.isOwner, !target.isOwner, target.id != active.id {
-                            Button("Delete profile") { confirmDelete = true }
-                                .buttonStyle(DestructiveTextStyle())
-                                .confirmationDialog("Delete \(target.name)?", isPresented: $confirmDelete, titleVisibility: .visible) {
-                                    Button("Delete \(target.name)", role: .destructive) { delete(target) }
-                                    Button("Keep", role: .cancel) {}
-                                } message: {
-                                    Text("Delete \(target.name)? Their library, progress and settings are removed from this device now and from your other devices when they next sync.")
-                                }
+                            if confirmDelete {
+                                deleteConfirm(target).id("delete")
+                            } else {
+                                Button("Delete profile") { confirmDelete = true }
+                                    .buttonStyle(DestructiveTextStyle())
+                                    .focused($deleteFocus, equals: .open)
+                            }
                         }
                     }
                 }
@@ -135,6 +139,41 @@ struct EditProfile: View {
         // A half-done PIN change is given up when the app leaves the front:
         // the steps forget the current and new PINs.
         .onChange(of: phase) { _, phase in if phase != .active { flow = nil } }
+        // The confirmation comes into view when it opens.
+        .onChange(of: confirmDelete) { _, open in
+            if open { withAnimation(Theme.Motion.panel) { proxy.scrollTo("delete", anchor: .center) } }
+        }
+        }
+    }
+
+    private func deleteConfirm(_ target: ProfileInfo) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text("Delete \(target.name)? Their library, progress and settings are removed from this device now and from your other devices when they next sync.")
+                .font(.text(Theme.type.body))
+                .foregroundStyle(Theme.Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button("Keep") {
+                    confirmDelete = false
+                    // Once Delete profile is back on screen.
+                    Task { deleteFocus = .open }
+                }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                #if !os(tvOS)
+                .keyboardShortcut(.defaultAction)
+                #endif
+                .focused($deleteFocus, equals: .keep)
+                Button("Delete \(target.name)", role: .destructive) { delete(target) }
+                    .buttonStyle(DestructiveTextStyle())
+            }
+        }
+        .padding(Theme.Space.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        #if os(tvOS)
+        .focusSection()
+        #endif
+        .onAppear { deleteFocus = .keep }
     }
 
     private func title(_ target: ProfileInfo?, _ active: ProfileInfo) -> String {

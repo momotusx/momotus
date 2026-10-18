@@ -49,8 +49,21 @@ struct RootView: View {
         Group {
             if profiles.open {
                 MainShell(core: core).id(profiles.epoch)
+            } else if core.failure != nil {
+                // The core stopped: only its message and the way back (the overlay).
+                Theme.Palette.bg.ignoresSafeArea()
             } else if profiles.snapshot != nil {
                 ProfilePicker(mode: .gate, core: core)
+            } else if let problem = profiles.loadProblem {
+                // The profiles view is opened again every 2 seconds meanwhile.
+                VStack(spacing: Theme.Space.s) {
+                    Text("Profiles did not load").display(Theme.type.title1).foregroundStyle(Theme.Palette.text)
+                    Text(problem).font(.text(Theme.type.body)).foregroundStyle(Theme.Palette.muted).multilineTextAlignment(.center)
+                    Label("Trying again", glyph: "refresh-cw").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+                }
+                .padding(Theme.Space.l)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.Palette.bg)
             } else {
                 Theme.Palette.bg.ignoresSafeArea()
             }
