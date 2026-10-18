@@ -64,6 +64,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -717,16 +718,23 @@ private fun ForgotPin(
         }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         MqText("Forgot the PIN?", role = TextRole.Callout, color = Marquee.colors.muted)
+        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        // A TV seldom has a screen lock and has no way to add one here: it says where to reset instead
+        // of offering a button that cannot work. A phone can add one, so it keeps the button.
+        if (tv && !keyguard.isDeviceSecure) {
+            MqText(
+                "This device has no screen lock, so the PIN cannot be reset here. Reset it from Marquee on a phone " +
+                    "with a screen lock: Settings, Profiles. This device gets the change at its next sync.",
+                modifier = Modifier.widthIn(max = 720.dp),
+                role = TextRole.Callout,
+                color = Marquee.colors.muted,
+                textAlign = TextAlign.Center,
+            )
+            return@Column
+        }
         SecondaryButton("Reset with this device's lock", {
-            val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             if (!keyguard.isDeviceSecure) {
-                said =
-                    if (tv) {
-                        "This device has no screen lock, so the PIN cannot be reset here. Reset it from Marquee " +
-                            "on a phone with a screen lock: Settings, Profiles. This device gets the change at its next sync."
-                    } else {
-                        "Set a screen lock on this device first, then try again."
-                    }
+                said = "Set a screen lock on this device first, then try again."
             } else {
                 @Suppress("DEPRECATION")
                 val intent =
