@@ -22,8 +22,8 @@ key: string | null,
  */
 attempt: number, 
 /**
- * `url` is an HLS playlist the core rewrote (its name ends in `.m3u8`),
- * not a file.
+ * `url` is a manifest the core rewrote, not a file: HLS (its name ends
+ * in `.m3u8`) or DASH (`.mpd`).
  */
 manifest: boolean, filename: string | null, sizeBytes: number | null, 
 /**

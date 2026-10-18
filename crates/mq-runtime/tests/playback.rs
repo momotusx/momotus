@@ -722,6 +722,64 @@ async fn a_player_without_hls_never_gets_a_playlist() {
     assert_eq!(words, ["This player cannot play HLS streams"]);
 }
 
+#[tokio::test]
+async fn apple_refuses_dash() {
+    // Apple's caps list m3u8 and no mpd: the DASH candidate fails with the
+    // words and the file after it plays.
+    let dash = dash_origin().await;
+    let (file, _) = file_and_subtitles().await;
+    let streams = format!(
+        r#"{{"streams":[{{"name":"DASH","url":"{dash}/dash/main.mpd"}},{{"name":"File","url":"{file}/video.mkv"}}]}}"#
+    );
+    let core = Core::temporary("p").unwrap();
+    let hls = [mq_server::Format::Hls];
+    let view = PlaybackView::open_for(&core, setup(&core, &streams), target(), &hls);
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    let words: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
+    assert_eq!(words, ["This player cannot play DASH streams"]);
+    assert!(!s.manifest);
+    assert!(!s.url.unwrap().ends_with(".mpd"));
+    // A player whose caps list mpd plays the DASH candidate.
+    let core = Core::temporary("p").unwrap();
+    let dash_too = [mq_server::Format::Hls, mq_server::Format::Dash];
+    let view = PlaybackView::open_for(&core, setup(&core, &streams), target(), &dash_too);
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    assert!(s.attempts.is_empty(), "{s:?}");
+    assert!(s.manifest);
+    let url = s.url.unwrap();
+    assert!(
+        url.starts_with("http://127.0.0.1:") && url.ends_with(".mpd"),
+        "{url}"
+    );
+}
+
+/// A DASH origin: an MPD whose segments sit beside it.
+async fn dash_origin() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let mpd = "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" \
+                           type=\"static\" mediaPresentationDuration=\"PT4S\"><Period>\
+                           <AdaptationSet mimeType=\"video/mp4\"><SegmentTemplate media=\"s-$Number$.m4s\" \
+                           duration=\"4\"/><Representation id=\"v\" bandwidth=\"1\"/></AdaptationSet>\
+                           </Period></MPD>";
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/dash+xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{mpd}",
+                    mpd.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    format!("http://{addr}")
+}
+
 /// An HLS origin: a media playlist naming one segment.
 async fn hls_origin() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

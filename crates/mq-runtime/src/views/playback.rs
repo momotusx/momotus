@@ -60,8 +60,8 @@ pub struct PlaybackSnapshot {
     /// here; `failOver` names it.
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub attempt: u64,
-    /// `url` is an HLS playlist the core rewrote (its name ends in `.m3u8`),
-    /// not a file.
+    /// `url` is a manifest the core rewrote, not a file: HLS (its name ends
+    /// in `.m3u8`) or DASH (`.mpd`).
     pub manifest: bool,
     pub filename: Option<String>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]

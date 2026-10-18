@@ -440,14 +440,18 @@ fn maybe_prefetch(core: &Core, s: &mut State, (season, episode): (Option<u32>, O
     }
 }
 
-/// The playlist formats caps list as containers: `m3u8` for HLS.
+/// The manifest formats caps list as containers: `m3u8` for HLS, `mpd`
+/// for DASH.
 fn plays(caps: &DeviceCaps) -> Vec<mq_server::Format> {
     let lists = |name: &str| caps.containers.iter().any(|c| c.eq_ignore_ascii_case(name));
-    if lists("m3u8") {
-        vec![mq_server::Format::Hls]
-    } else {
-        Vec::new()
-    }
+    [
+        ("m3u8", mq_server::Format::Hls),
+        ("mpd", mq_server::Format::Dash),
+    ]
+    .into_iter()
+    .filter(|(name, _)| lists(name))
+    .map(|(_, format)| format)
+    .collect()
 }
 
 fn rerank(s: &mut State, params: &VersionsParams) {
@@ -637,5 +641,15 @@ mod tests {
         assert!(plays(&caps).is_empty());
         caps.containers.push("M3U8".into());
         assert_eq!(plays(&caps), [mq_server::Format::Hls]);
+    }
+
+    #[test]
+    fn a_device_plays_dash_when_its_caps_list_mpd() {
+        let mut caps = DeviceCaps::basic_1080p();
+        caps.containers.push("MPD".into());
+        assert_eq!(plays(&caps), [mq_server::Format::Dash]);
+        caps.containers.push("m3u8".into());
+        let both = [mq_server::Format::Hls, mq_server::Format::Dash];
+        assert_eq!(plays(&caps), both);
     }
 }
