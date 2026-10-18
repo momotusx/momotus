@@ -181,6 +181,7 @@ private fun AppNav(
     fun arrive() {
         backStack.clear()
         backStack.add(Route.Home)
+        app.onboarded()
     }
 
     fun pop() {

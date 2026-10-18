@@ -6,15 +6,15 @@ import House from "lucide-solid/icons/house";
 import LibraryBig from "lucide-solid/icons/library-big";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
-import { type Component, createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
+import { type Component, createEffect, createMemo, For, on, Show, untrack } from "solid-js";
 import { AvatarArt } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
-import { gateOpen, launchProfile, profiles, profilesFailed, rememberShown } from "./core/profiles";
+import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
-import { historyBase, historyDepth, resetHistoryBase } from "./history";
+import { entryOwner, historyBase, historyDepth, resetHistoryBase, stampEntriesWith } from "./history";
 import Addons from "./screens/addons";
 import CalendarScreen from "./screens/calendar";
 import Debrid from "./screens/debrid";
@@ -137,41 +137,45 @@ function Shell(props: RouteSectionProps) {
     focusInstalled = true;
     installFocus(back);
   }
-  // A route belongs to the profile it was opened under. Once another profile
-  // shows (a switch, a reload after another tab switched, the remembered one
-  // removed), Home opens as a new entry: the old profile's entries end below
-  // the history base, and the push drops any forward ones. Its page never
-  // renders in between.
-  const [routeProfile, setRouteProfile] = createSignal(launchProfile);
-  const shown = () => (gateOpen() ? profiles()?.active : undefined);
+  // A route belongs to the profile its history entry was opened under
+  // (`entryOwner`, written with the entry itself). An entry of another profile
+  // never renders: after a switch or a reload when another tab switched, Home
+  // opens as a new entry above the old ones; reached through the browser's own
+  // Back or Forward, Home replaces it. Either way the app's Back stops there.
+  // The session's profile, locked or not: an entry opened behind the locked
+  // picker belongs to the profile that was locked, so unlocking it opens the
+  // asked page and choosing another opens Home. Entries of another profile
+  // reached with the browser's Back or Forward become Home in history.ts.
+  const session = () => profiles()?.active;
+  stampEntriesWith(session, gateOpen);
   const foreign = createMemo(() => {
-    const active = shown();
-    const owner = routeProfile();
-    return !!active && !!owner && owner !== active;
+    const active = session();
+    const owner = entryOwner();
+    return gateOpen() && !!active && !!owner && owner !== active;
   });
+  // The session changed (a switch, another profile after the locked picker,
+  // a reload after another tab switched): Home opens as a new entry above the
+  // old profile's ones. No navigation is under way here, so history is settled.
   createEffect(
-    on(shown, (active) => {
+    on([session, gateOpen], ([active, isOpen]) => {
       if (!active) return;
-      rememberShown(active);
-      if (foreign()) {
+      const owner = untrack(entryOwner);
+      // A fresh tab's first entry, or one written before the core said who runs.
+      if (!owner) return void history.replaceState(history.state, "");
+      if (!isOpen || owner === active) return;
+      if (window.location.pathname === "/") {
+        resetHistoryBase();
+        history.replaceState(history.state, "");
+      } else {
         resetHistoryBase(historyDepth() + 1);
         navigate("/");
       }
-      setRouteProfile(active);
     }),
   );
   createEffect(
     on(
       () => location.pathname,
       () => {
-        // The browser's own Back reached an entry of an earlier profile: Home
-        // replaces it, and the base comes down to it, so the app's own pages
-        // from here on count as this profile's.
-        if (historyDepth() < historyBase() && location.pathname !== "/") {
-          resetHistoryBase();
-          navigate("/", { replace: true });
-          return;
-        }
         const wasBack = wentBack;
         wentBack = false;
         // Touch has no cursor to place; remotes and keyboards do.

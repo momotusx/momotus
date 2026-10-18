@@ -1,8 +1,12 @@
-/** In-app history depth (plans/m11-profiles.md, P1 apps v2 6). The router
- * stamps every entry with `_depth` (history.length - 1 at first load), which
- * counts pages from before the app. Only entries above the base are ours to go
- * back through; a profile switch moves the base so Back never returns to the
- * old profile's pages. */
+/** In-app history (plans/m11-profiles.md, P1 apps v2 6). The router stamps
+ * every entry with `_depth` (history.length - 1 at first load), which counts
+ * pages from before the app; the app's own Back goes only through entries
+ * above the base. Every entry also carries the profile it was opened under
+ * (`_profile`), written by the history calls themselves, so the stamp always
+ * lands on the entry the router actually wrote (the router changes the route
+ * before it writes history). */
+
+import { createSignal } from "solid-js";
 
 export const historyDepth = () => (history.state as { _depth?: number } | null)?._depth ?? 0;
 
@@ -23,6 +27,53 @@ const sameVisit = (() => {
 })();
 let base = stored === null || !sameVisit ? historyDepth() : Number(stored);
 export const historyBase = () => base;
+// A fresh visit's base is kept too, so its own reload finds it.
+try {
+  sessionStorage.setItem(BASE, String(base));
+} catch {
+  // Kept for this page only.
+}
+
+const stampOf = () => (history.state as { _profile?: string } | null)?._profile;
+const [entryOwner, setEntryOwner] = createSignal(stampOf());
+/** The profile the current history entry was opened under; undefined before the app knew one. */
+export { entryOwner };
+
+let shown: () => string | undefined = () => undefined;
+let open: () => boolean = () => false;
+/** Tells the history calls which profile the session runs (every entry written from now carries
+ * it) and whether its content shows. */
+export function stampEntriesWith(session: () => string | undefined, gateOpen: () => boolean) {
+  shown = session;
+  open = gateOpen;
+}
+
+for (const name of ["pushState", "replaceState"] as const) {
+  const native = history[name].bind(history);
+  history[name] = (state: unknown, unused: string, url?: string | URL | null) => {
+    const fields = (state ?? {}) as Record<string, unknown>;
+    const owner = shown() ?? (fields._profile as string | undefined);
+    native({ ...fields, _profile: owner }, unused, url);
+    setEntryOwner(owner);
+  };
+}
+// Registered before the router's own listener, so it runs first: an entry of
+// another profile reached with the browser's Back or Forward becomes Home
+// before the router reads the address, and the app's Back stops there.
+window.addEventListener("popstate", () => {
+  const owner = stampOf();
+  const active = shown();
+  if (open() && owner && active && owner !== active) {
+    history.replaceState(history.state, "", `/${window.location.search}`);
+    base = historyDepth();
+    try {
+      sessionStorage.setItem(BASE, String(base));
+    } catch {
+      // Kept for this page only.
+    }
+  }
+  setEntryOwner(stampOf());
+});
 
 /** After a profile switch: the entries below [depth] (this one by default) belong to the old profile. */
 export function resetHistoryBase(depth = historyDepth()) {

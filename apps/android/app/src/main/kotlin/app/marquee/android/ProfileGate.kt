@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
@@ -138,7 +140,10 @@ class ProfileGate(
             problem = (v.status as? ViewStatus.Failed)?.reason
             CoreLog.w("profiles view failed, trying again: $problem")
             delay(2_000)
-            v.retry()
+            // A core that came back revives the view itself: a snapshot meanwhile ends the wait,
+            // and only a view still failed, on a core that runs, opens again.
+            if (v.opens > mark) break
+            if (v.status is ViewStatus.Failed && session.health == CoreHealth.Running) v.retry()
         }
         problem = null
     }
@@ -192,7 +197,13 @@ class ProfileGate(
         count: Int,
     ): Boolean {
         try {
-            // The app answers within a frame or two; without a screen (the activity gone) go on.
+            // A frame clock paused in the background never runs the reset: the switch waits for the
+            // app to be in front again. Then the app answers within a frame or two; without a
+            // screen (the activity gone) go on.
+            ProcessLifecycleOwner
+                .get()
+                .lifecycle.currentStateFlow
+                .first { it.isAtLeast(Lifecycle.State.STARTED) }
             withTimeoutOrNull(2_000) { snapshotFlow { resetCount }.first { it >= count } }
             for (attempt in 1..10) {
                 try {

@@ -89,6 +89,10 @@ import app.marquee.design.avatarColor
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -894,6 +898,7 @@ fun EditProfileScreen(
         }
     }
     var confirmDelete by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
     // The confirmation opens on Keep, never on Delete: a held OK cannot delete a profile, and
     // closing it gives focus back to "Delete profile".
     val keep = remember { FocusRequester() }
@@ -937,7 +942,7 @@ fun EditProfileScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                PinSteps(session, p!!, f, onUnreadable = {
+                PinSteps(session, p!!, f, scope, onLate = { said = it to Status.Ok }, onUnreadable = {
                     flow = null
                     unreadable = true
                 }) { text ->
@@ -1147,21 +1152,28 @@ fun EditProfileScreen(
                             role = TextRole.Body,
                         )
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                            // One delete at a time: while it is with the core, neither Delete nor Keep acts.
                             PrimaryButton("Delete ${p.name}", {
-                                scope.launch {
-                                    try {
-                                        session.ops.deleteProfile(p.id)
-                                        leave()
-                                    } catch (e: CancellationException) {
-                                        throw e
-                                    } catch (e: Exception) {
-                                        said =
-                                            ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to Status.Bad
-                                        swapDelete(false)
+                                if (!deleting) {
+                                    deleting = true
+                                    scope.launch {
+                                        try {
+                                            session.ops.deleteProfile(p.id)
+                                            leave()
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            said =
+                                                ((tried(e) as? Tried.Problem)?.text ?: "That did not work.") to
+                                                Status.Bad
+                                            swapDelete(false)
+                                        } finally {
+                                            deleting = false
+                                        }
                                     }
                                 }
-                            }, icon = Icons.Trash)
-                            SecondaryButton("Keep", { swapDelete(false) }, focusRequester = keep)
+                            }, icon = Icons.Trash, enabled = !deleting)
+                            SecondaryButton("Keep", { swapDelete(false) }, focusRequester = keep, enabled = !deleting)
                         }
                     }
                 }
@@ -1199,6 +1211,8 @@ private fun PinSteps(
     session: CoreSession,
     p: ProfileInfo,
     flow: PinFlow,
+    pageScope: CoroutineScope,
+    onLate: (String) -> Unit,
     onUnreadable: () -> Unit,
     onDone: (String?) -> Unit,
 ) {
@@ -1251,15 +1265,24 @@ private fun PinSteps(
                 }
 
                 else -> {
-                    try {
-                        if (flow == PinFlow.Remove) {
-                            session.ops.setPin(p.id, null, pin)
-                        } else {
-                            session.ops.setPin(p.id, fresh, current)
+                    val done = if (flow == PinFlow.Remove) "PIN removed" else "PIN saved"
+                    val (newPin, currentPin) = fresh to current
+                    // The save belongs to the page: it goes on when this flow leaves (the app went to
+                    // the back), and the page says how it ended without closing a newer flow.
+                    val save =
+                        pageScope.async(SupervisorJob(pageScope.coroutineContext[Job])) {
+                            if (flow == PinFlow.Remove) {
+                                session.ops.setPin(p.id, null, pin)
+                            } else {
+                                session.ops.setPin(p.id, newPin, currentPin)
+                            }
                         }
-                        onDone(if (flow == PinFlow.Remove) "PIN removed" else "PIN saved")
+                    try {
+                        save.await()
+                        onDone(done)
                         Tried.Ok
                     } catch (e: CancellationException) {
+                        if (save.isActive) pageScope.launch { runCatching { save.await() }.onSuccess { onLate(done) } }
                         throw e
                     } catch (e: Exception) {
                         if ((e as? CoreError)?.code == "pinUnreadable") {

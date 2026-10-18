@@ -83,6 +83,11 @@ class AppState(
         }
     }
 
+    /** Onboarding is done: a restart from here on opens Home, not onboarding again. */
+    fun onboarded() {
+        if (start == Start.Onboarding) start = Start.Home
+    }
+
     /** Where [decide] waits, for the log when it takes too long. */
     private var step = "waiting for the core"
 

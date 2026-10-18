@@ -58,7 +58,7 @@ function siblingsUpTo(el: HTMLElement): HTMLElement[] {
   return out;
 }
 
-/** How long a PIN try may wait for the core before the keypad lets go. */
+/** How long a PIN try waits for the core before the keypad offers a reload. */
 const PIN_WAIT_MS = 20_000;
 
 /** What a PIN try came to. */
@@ -77,6 +77,7 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
   const [busy, setBusy] = createSignal(false);
   const [shake, setShake] = createSignal(false);
   const [said, setSaid] = createSignal("");
+  const [stuck, setStuck] = createSignal(false);
   const [until, setUntil] = createSignal(0);
   const [now, setNow] = createSignal(Date.now());
   let root!: HTMLDivElement;
@@ -107,11 +108,13 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
   const submit = async (pin: string) => {
     setBusy(true);
     const mine = ++attempt;
-    // A core that never answers must not hold the keypad (and its Cancel) for good.
-    const silent = new Promise<Tried>((done) =>
-      setTimeout(() => done({ kind: "problem", text: "The core did not answer. Try again." }), PIN_WAIT_MS),
-    );
-    const result = await Promise.race([props.onSubmit(pin), silent]);
+    // A core that does not answer: the try may still go through, so nothing is
+    // called off. The keypad says so and offers a reload, which starts a fresh
+    // session with the core.
+    const slow = setTimeout(() => mine === attempt && setStuck(true), PIN_WAIT_MS);
+    const result = await props.onSubmit(pin);
+    clearTimeout(slow);
+    setStuck(false);
     if (!alive || mine !== attempt) return;
     setBusy(false);
     setDigits("");
@@ -191,6 +194,14 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
       </div>
       <Show when={props.note}>
         <p class="note small">{props.note}</p>
+      </Show>
+      <Show when={stuck()}>
+        <p class="pin-said" role="status">
+          The core is not answering.
+        </p>
+        <button class="btn" data-f="pin:reload" onClick={() => location.reload()}>
+          Reload
+        </button>
       </Show>
       {/* A try with the core cannot be called off half way: leaving waits for its answer. */}
       <button class="btn" data-f="pin:cancel" aria-disabled={busy()} onClick={() => !busy() && props.onCancel()}>
@@ -456,7 +467,11 @@ export function EditProfile() {
       setSaid({ text: t.kind === "problem" ? t.text : "That did not work.", bad: true });
     }
   };
+  // One delete at a time: while it is with the core, neither Delete nor Keep acts.
+  const [deleting, setDeleting] = createSignal(false);
   const remove = async () => {
+    if (deleting()) return;
+    setDeleting(true);
     try {
       await op("deleteProfile", { profile: p()!.id });
       navigate("/profiles/manage", { replace: true });
@@ -464,6 +479,8 @@ export function EditProfile() {
       const t = tried(err);
       setSaid({ text: t.kind === "problem" ? t.text : "That did not work.", bad: true });
       setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -485,6 +502,7 @@ export function EditProfile() {
               setFlow(null);
               if (text) setSaid({ text, bad: false });
             }}
+            onLate={(text) => setSaid({ text, bad: false })}
           />
         }
       >
@@ -618,7 +636,7 @@ export function EditProfile() {
                 </button>
               }
             >
-              <DeleteConfirm name={p()!.name} onDelete={() => void remove()} onKeep={() => setConfirmDelete(false)} />
+              <DeleteConfirm name={p()!.name} busy={deleting()} onDelete={() => void remove()} onKeep={() => setConfirmDelete(false)} />
             </Show>
           </section>
         </Show>
@@ -629,7 +647,7 @@ export function EditProfile() {
 }
 
 /** Deleting a profile, asked as a modal: the rest of the app waits, Escape or Back keeps it. */
-function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () => void }) {
+function DeleteConfirm(props: { name: string; busy: boolean; onDelete: () => void; onKeep: () => void }) {
   let root!: HTMLDivElement;
   holdModal(() => root);
   // A held OK repeats: only the first press counts while it is open. Backspace,
@@ -643,7 +661,7 @@ function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () =
     if (!isBack(e) && e.key !== "Backspace") return;
     e.preventDefault();
     e.stopPropagation();
-    props.onKeep();
+    if (!props.busy) props.onKeep();
   };
   window.addEventListener("keydown", onKey, { capture: true });
   onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));
@@ -653,10 +671,10 @@ function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () =
                   Delete {props.name}? Their library, progress and settings are removed from this device now and from your other devices when they next sync.
                 </p>
                 <div class="acts">
-                  <button class="btn danger" data-f="pedit:delete:yes" onClick={() => props.onDelete()}>
+                  <button class="btn danger" data-f="pedit:delete:yes" aria-disabled={props.busy} onClick={() => !props.busy && props.onDelete()}>
                     Delete {props.name}
                   </button>
-                  <button class="btn" data-f="pedit:delete:no" data-autofocus onClick={() => props.onKeep()}>
+                  <button class="btn" data-f="pedit:delete:no" data-autofocus aria-disabled={props.busy} onClick={() => !props.busy && props.onKeep()}>
                     Keep
                   </button>
                 </div>
@@ -665,7 +683,7 @@ function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () =
 }
 
 /** The keypad steps for your own PIN, by the core's rules: change and remove ask the current one first. */
-function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: () => void; onDone: (said?: string) => void }) {
+function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: () => void; onDone: (said?: string) => void; onLate: (said: string) => void }) {
   const steps = props.flow === "set" ? ["new", "again"] : props.flow === "change" ? ["current", "new", "again"] : ["current"];
   const [step, setStep] = createSignal(0);
   let current: string | undefined;
@@ -674,6 +692,10 @@ function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: ()
     current = undefined;
     fresh = "";
   });
+  // A flow that left (the app was hidden) never closes a newer one: a save it
+  // sent still says how it ended, through the page.
+  let alive = true;
+  onCleanup(() => (alive = false));
   // Hiding the app half way through gives the PIN change up: no PIN stays in memory behind it.
   const hide = () => document.hidden && props.onDone();
   document.addEventListener("visibilitychange", hide);
@@ -701,6 +723,7 @@ function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: ()
       if (props.flow === "remove") await op("setPin", { profile: props.profile.id, pin: null, currentPin: pin });
       else await op("setPin", { profile: props.profile.id, pin: fresh, currentPin: current });
     } catch (e) {
+      if (!alive) return { kind: "ok" };
       if (e instanceof BridgeError && e.code === "pinUnreadable") {
         props.onUnreadable();
         return { kind: "ok" };
@@ -711,7 +734,9 @@ function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onUnreadable: ()
       if (e instanceof BridgeError && e.code === "weakPin") setStep(steps.indexOf("new"));
       return t;
     }
-    props.onDone(props.flow === "remove" ? "PIN removed" : "PIN saved");
+    const text = props.flow === "remove" ? "PIN removed" : "PIN saved";
+    if (alive) props.onDone(text);
+    else props.onLate(text);
     return { kind: "ok" };
   };
   return <Keypad title={title()} onSubmit={submit} onCancel={() => props.onDone()} cancelLabel="Cancel" />;

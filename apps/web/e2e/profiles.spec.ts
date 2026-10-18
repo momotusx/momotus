@@ -144,3 +144,35 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   expect(end.profiles.map((p) => p.id)).toEqual(["default"]);
   expect(end.profiles[0]?.hasPin).toBe(false);
 });
+
+test("profiles: the browser's Forward never reopens another profile's pages", async ({ page }) => {
+  const c = new Client();
+  let kid = "";
+  try {
+    const s = await c.req<Snapshot>("createProfile", { name: "Kid", avatar: "letter:sky" });
+    kid = s.profiles.find((p) => p.name === "Kid")?.id as string;
+    // Main browses: Home, Library, Calendar, then Back twice to Home, with Main's pages ahead.
+    await page.goto("/?form=tv");
+    await page.locator('[data-f="profile:default"]').click();
+    await page.locator('[data-f="nav:/library"]').click();
+    await expect(page).toHaveURL(/\/library/);
+    await page.locator('[data-f="nav:/calendar"]').click();
+    await expect(page).toHaveURL(/\/calendar/);
+    await page.goBack();
+    await page.goBack();
+    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Main, switch profile");
+    // Another device or tab makes Kid the device's profile; this tab reloads and picks Kid.
+    await c.req("switchProfile", { profile: kid });
+    await page.reload();
+    await page.locator(`[data-f="profile:${kid}"]`).click();
+    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
+    // Forward reaches Main's Library: it opens as Kid's Home instead.
+    await page.goForward();
+    await expect(page).not.toHaveURL(/\/library/);
+    await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
+  } finally {
+    await c.req("switchProfile", { profile: "default" }).catch(() => undefined);
+    if (kid) await c.req("deleteProfile", { profile: kid }).catch(() => undefined);
+    c.close();
+  }
+});
