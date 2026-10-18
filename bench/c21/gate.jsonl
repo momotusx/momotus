@@ -12,3 +12,6 @@
 {"date":"2026-10-18","phase":"5 (C22 HLS)","commit":"443c4a1","check":"cargo test -p mq-http -p mq-server -p mq-runtime -p mq-bridge -p mq-addons -p mq-streams -p mq-engine","passed":291,"failed":0,"ignored":15}
 {"date":"2026-10-18","phase":"5 (C22 HLS)","commit":"443c4a1","check":"cargo test -p mq-server --features test-hooks","passed":74,"failed":0,"ignored":1}
 {"date":"2026-10-18","phase":"5 (C22 HLS)","commit":"443c4a1","check":"apps","web":"tsc 0, bun test 70 pass","android":"180 unit tests incl. ManifestCorpusTest (Robolectric SDK 36), 0 failures"}
+{"date":"2026-10-18","phase":"5 review r1 fixes","commit":"65a3ac8","check":"cargo test -p mq-http -p mq-server -p mq-runtime -p mq-bridge -p mq-addons -p mq-streams -p mq-engine","passed":304,"failed":0,"ignored":15}
+{"date":"2026-10-18","phase":"5 review r1 fixes","commit":"65a3ac8","check":"cargo test -p mq-server --features test-hooks","passed":84,"failed":0,"ignored":1}
+{"date":"2026-10-18","phase":"5 review r1 fixes","commit":"65a3ac8","check":"android","result":"181 unit tests incl. ManifestCorpusTest, 0 failures"}
