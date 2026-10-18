@@ -319,6 +319,21 @@ private fun AppNav(
                             onHomeRows = { backStack.add(Route.HomeRows) },
                         )
                     }
+                    entry<Route.Sources> {
+                        SettingsScreen(
+                            session,
+                            gate,
+                            onProfiles = {},
+                            onEditProfile = {},
+                            onManageProfiles = {},
+                            sync,
+                            onImport = {},
+                            onSync = {},
+                            onDebrid = {},
+                            onHomeRows = {},
+                            sourcesOnly = true,
+                        )
+                    }
                     entry<Route.Debrid> { DebridScreen(session) }
                     entry<Route.HomeRows> { HomeRowsScreen(session) }
                     entry<Route.Pairing> {
@@ -348,7 +363,7 @@ private fun AppNav(
                             onPlayEpisode = { videoId, name ->
                                 backStack.add(Route.Player(route.kind, route.id, videoId, name))
                             },
-                            onAddSource = { choose(Route.Settings) },
+                            onAddSource = { backStack.add(Route.Sources) },
                         )
                     }
                     entry<Route.Versions> { route ->
@@ -359,7 +374,7 @@ private fun AppNav(
                             onPlay = { row ->
                                 backStack.add(Route.Player(route.kind, route.id, route.videoId, route.title, row.key))
                             },
-                            onAddSource = { choose(Route.Settings) },
+                            onAddSource = { backStack.add(Route.Sources) },
                         )
                     }
                     entry<Route.Player> { route ->

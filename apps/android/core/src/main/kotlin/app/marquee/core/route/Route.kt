@@ -51,6 +51,13 @@ sealed interface Route : NavKey {
     @Serializable
     data object HomeRows : Route
 
+    /**
+     * "Add a source" from a title: the link field first, then the source addons. Pushed over the
+     * title, so Back returns to it, and its versions follow the install.
+     */
+    @Serializable
+    data object Sources : Route
+
     /** The picker opened over the app (the pill or Settings): Back returns where it was. */
     @Serializable
     data object Profiles : Route

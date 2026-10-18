@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -134,6 +135,8 @@ fun SettingsScreen(
     onSync: () -> Unit,
     onDebrid: () -> Unit,
     onHomeRows: () -> Unit,
+    /** Opened from "Add a source": the link field first and only the source addons, as on Apple. */
+    sourcesOnly: Boolean = false,
 ) {
     val holder =
         viewModel<SettingsHolder>(
@@ -182,38 +185,72 @@ fun SettingsScreen(
         holder.addons.snapshot
             ?.addons
             .orEmpty()
+            .filter { !sourcesOnly || "stream" in it.provides }
+    // A remote types; only a phone can paste.
+    val linkVerb = if (Marquee.form == Form.Tv) "Type" else "Paste"
+    if (sourcesOnly) {
+        LaunchedEffect(Unit) {
+            // The field is laid out in the first frame; focus it after that.
+            withFrameNanos {}
+            runCatching { installFocus.requestFocus() }
+        }
+    }
     LazyColumn(
         // Down from the TV pill comes back to what had focus (plans 2.1).
         Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader("Settings", "Your Marquee") }
-        gate.snapshot?.let { s ->
-            val me = s.profiles.firstOrNull { it.id == s.active }
-            if (me != null) {
-                item(key = "profiles-head") { Kicker("Profiles") }
-                item(key = "profiles") {
-                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        ProfileLinkRow(
-                            me,
-                            if (s.profiles.size > 1) "Switch profile" else "Add a profile for someone else, or switch",
-                            onProfiles,
-                        )
-                        LinkRow(Icons.UserPen, "Edit profile", "Name, picture and PIN.") { onEditProfile(me.id) }
-                        if (me.isOwner) {
-                            LinkRow(
-                                Icons.Users,
-                                "Manage profiles",
-                                "Add, edit and remove profiles on this account.",
-                                onManageProfiles,
+        if (sourcesOnly) {
+            item(key = "head") { BrowseHeader("Addons", "Add a source") }
+            item(key = "sources-why") {
+                Note(
+                    "A source is an addon that finds a playable stream for a title. Marquee does not " +
+                        "include any: ${linkVerb.lowercase()} a source addon's link to add one.",
+                )
+            }
+            item(key = "install") {
+                InstallField(busy != null, installFocus, said?.takeIf { it.place == Place.Install }) { url, clear ->
+                    run("Adding the addon", Place.Install, then = clear) {
+                        val added = session.ops.installAddon(url)
+                        said = Said(Place.Install, "Added ${added.name}", failed = false)
+                    }
+                }
+            }
+        } else {
+            item(key = "head") { BrowseHeader("Settings", "Your Marquee") }
+        }
+        if (!sourcesOnly) {
+            gate.snapshot?.let { s ->
+                val me = s.profiles.firstOrNull { it.id == s.active }
+                if (me != null) {
+                    item(key = "profiles-head") { Kicker("Profiles") }
+                    item(key = "profiles") {
+                        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                            ProfileLinkRow(
+                                me,
+                                if (s.profiles.size > 1) {
+                                    "Switch profile"
+                                } else {
+                                    "Add a profile for someone else, or switch"
+                                },
+                                onProfiles,
                             )
+                            LinkRow(Icons.UserPen, "Edit profile", "Name, picture and PIN.") { onEditProfile(me.id) }
+                            if (me.isOwner) {
+                                LinkRow(
+                                    Icons.Users,
+                                    "Manage profiles",
+                                    "Add, edit and remove profiles on this account.",
+                                    onManageProfiles,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-        item(key = "addons-head") { Kicker("Addons") }
+        item(key = "addons-head") { Kicker(if (sourcesOnly) "Your sources" else "Addons") }
         when {
             holder.addons.status is ViewStatus.Failed -> {
                 item(key = "addons-failed") { Note("Addons could not load", failed = true) }
@@ -221,9 +258,13 @@ fun SettingsScreen(
 
             addons.isEmpty() && holder.addons.snapshot != null -> {
                 item(key = "addons-none") {
-                    // A remote types; only a phone can paste.
-                    val verb = if (Marquee.form == Form.Tv) "Type" else "Paste"
-                    Note("No addon yet. $verb an addon link below to add one.")
+                    Note(
+                        if (sourcesOnly) {
+                            "No source yet. $linkVerb a source addon's link above."
+                        } else {
+                            "No addon yet. $linkVerb an addon link below to add one."
+                        },
+                    )
                 }
             }
         }
@@ -258,6 +299,7 @@ fun SettingsScreen(
             )
         }
         said?.takeIf { it.place == Place.Addons }?.let { item(key = "addons-said") { SaidLine(it) } }
+        if (sourcesOnly) return@LazyColumn
         item(key = "install") {
             InstallField(busy != null, installFocus, said?.takeIf { it.place == Place.Install }) { url, clear ->
                 run("Adding the addon", Place.Install, then = clear) {
