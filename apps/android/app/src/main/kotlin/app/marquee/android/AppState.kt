@@ -53,8 +53,13 @@ class AppState(
             override val viewModelStore = ViewModelStore()
         }
 
+    /** The gate's shut this state last answered. */
+    var resetAt = 0
+        private set
+
     /** A switch or a lock: the screens, Home, Versions and the TV focus memory belong to the old profile. */
-    fun resetProfile() {
+    fun resetProfile(shut: Int) {
+        resetAt = shut
         screens.viewModelStore.clear()
         versions.closeAll()
         homeView?.close()
@@ -70,9 +75,12 @@ class AppState(
     init {
         viewModelScope.launch {
             // Never a blank screen for good: past the limit Home opens, and says why if the core is silent.
-            start = withTimeoutOrNull(START_WAIT_MS) { decide() } ?: Start.Home.also {
-                CoreLog.w("start: no decision in $START_WAIT_MS ms at \"$step\", opening Home")
-            }
+            val decided =
+                withTimeoutOrNull(START_WAIT_MS) { decide() } ?: Start.Home.also {
+                    CoreLog.w("start: no decision in $START_WAIT_MS ms at \"$step\", opening Home")
+                }
+            // A reset meanwhile (a lock at start) already chose Home for the next profile.
+            if (resetAt == 0) start = decided
         }
     }
 

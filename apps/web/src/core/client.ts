@@ -46,18 +46,17 @@ export const reasonOf = (e: unknown) =>
     ? `Cannot reach the core at ${bridgeUrl}. Start it with: cargo run -p mq-bridge`
     : String(e instanceof Error ? e.message : e);
 
+/** Work from before a profile switch or a lock (`switched`): its screen is gone, so nothing shows it. */
+export const isSwitched = (e: unknown) => e instanceof BridgeError && e.code === "switched";
+window.addEventListener("unhandledrejection", (e) => {
+  if (isSwitched(e.reason)) e.preventDefault();
+});
+
 /** Runs a one-shot op such as `installAddon` or `setPrefs`. */
 export async function op<T = unknown>(name: string, fields: Record<string, unknown> = {}): Promise<T> {
-  try {
-    const result = await bridge.request<T>(name, fields);
-    setLink("open");
-    return result;
-  } catch (e) {
-    // Work from before a profile switch or a lock: its screen is gone, so it
-    // settles never rather than showing an error on the next profile's screen.
-    if (e instanceof BridgeError && e.code === "switched") return new Promise<T>(() => undefined);
-    throw e;
-  }
+  const result = await bridge.request<T>(name, fields);
+  setLink("open");
+  return result;
 }
 
 export interface Live<S> {
@@ -69,8 +68,14 @@ export interface LiveView<S> {
   state: Live<S>;
   sub: () => number | null;
   command(c: object): Promise<void>;
-  close(): void;
+  /** Settles once the core closed the view, even one still opening. */
+  close(): Promise<void>;
 }
+
+type Subscription = Awaited<ReturnType<typeof bridge.subscribe>>;
+/** Closes a subscription once its opening settled; a failed or lost one has nothing to close. */
+const closeWhenOpen = (opening: Promise<Subscription | null>) =>
+  opening.then((s) => s?.close()).catch(() => undefined);
 
 /** Opens a record view (pushes are whole snapshots; the last one wins). It
  * closes with the calling component unless `keep` is set. */
@@ -78,10 +83,9 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
   const [state, setState] = createStore<Live<S>>({ status: { state: "opening" }, data: null });
   const [sub, setSub] = createSignal<number | null>(null);
   let command: (c: object) => Promise<void> = async () => undefined;
-  let closeSub: (() => Promise<void>) | undefined;
-  let closed = false;
+  let closing: Promise<void> | undefined;
   const apply = (s: S) => setState("data", reconcile(s as never, { merge: true }));
-  bridge
+  const opening = bridge
     .subscribe<S, S>(view, params, {
       snapshot: (s) =>
         batch(() => {
@@ -95,17 +99,18 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
     })
     .then((s) => {
       setLink("open");
-      if (closed) return void s.close();
-      setSub(s.sub);
-      closeSub = s.close;
-      command = s.command;
+      if (!closing) {
+        setSub(s.sub);
+        command = s.command;
+      }
+      return s;
     })
-    .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
-  const close = () => {
-    closed = true;
-    void closeSub?.();
-  };
-  if (!keep) onCleanup(close);
+    .catch((e) => {
+      setState("status", { state: "failed", reason: reasonOf(e) });
+      return null;
+    });
+  const close = () => (closing ??= closeWhenOpen(opening));
+  if (!keep) onCleanup(() => void close());
   return { state, sub, command: (c) => command(c), close };
 }
 
@@ -116,7 +121,7 @@ export interface HomeState {
 }
 
 let home: HomeState | undefined;
-let homeClose: (() => Promise<void>) | undefined;
+let homeOpening: Promise<Subscription | null> | undefined;
 
 /** Home stays subscribed for the app's lifetime so Back lands on the same
  * rows, scroll offsets and focus without a reload. */
@@ -124,7 +129,7 @@ export function homeView(): HomeState {
   if (home) return home;
   const [state, setState] = createStore<HomeState>({ status: { state: "opening" }, hero: null, rows: [] });
   home = state;
-  bridge
+  homeOpening = bridge
     .subscribe<HomeSnapshot, HomeUpdate>("home", {}, {
       snapshot: (snapshot) => setState({ status: { state: "open" }, hero: snapshot.header.hero, rows: snapshot.rows }),
       updates: (updates) =>
@@ -137,11 +142,12 @@ export function homeView(): HomeState {
     })
     .then((s) => {
       setLink("open");
-      // Closed before the reply came: close what just opened.
-      if (home === state) homeClose = s.close;
-      else void s.close();
+      return s;
     })
-    .catch((e) => setState("status", { state: "failed", reason: reasonOf(e) }));
+    .catch((e) => {
+      setState("status", { state: "failed", reason: reasonOf(e) });
+      return null;
+    });
   return state;
 }
 
@@ -303,16 +309,15 @@ export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
 let prefs: LiveView<Prefs> | undefined;
 
 /** Before a profile switch or after a lock: the views this module keeps for
- * the app's life belong to the old profile, so they close and reopen fresh. */
+ * the app's life belong to the old profile, so they close and reopen fresh.
+ * Settles once the core closed each of them, including one still opening. */
 export async function closeProfileViews() {
-  const closing = homeClose;
+  const closing = [homeOpening && closeWhenOpen(homeOpening), versions?.view.close(), prefs?.close()];
   home = undefined;
-  homeClose = undefined;
-  versions?.view.close();
+  homeOpening = undefined;
   versions = null;
-  prefs?.close();
   prefs = undefined;
-  await closing?.();
+  await Promise.all(closing);
 }
 
 /** The profile's preferences, kept open for the app's lifetime. */

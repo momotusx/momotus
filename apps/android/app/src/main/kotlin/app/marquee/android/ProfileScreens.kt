@@ -8,8 +8,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,6 +65,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
@@ -149,7 +154,10 @@ internal fun Keypad(
     var attempt by remember { mutableStateOf(0) }
     val five = remember { FocusRequester() }
     val cancel = remember { FocusRequester() }
+    val surface = remember { FocusRequester() }
     val waiting = until > now
+    // Going to the back forgets what was typed.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { digits = "" }
 
     fun show(result: Tried) {
         when (result) {
@@ -194,11 +202,11 @@ internal fun Keypad(
             if (tv) runCatching { five.requestFocus() }
         }
     }
+    // The keypad owns the keys from the start: on TV its 5, on a phone the keypad itself, so a
+    // hardware keyboard types into it wherever the touch focus was.
     LaunchedEffect(Unit) {
-        if (tv) {
-            withFrameNanos { }
-            runCatching { five.requestFocus() }
-        }
+        withFrameNanos { }
+        runCatching { if (tv) five.requestFocus() else surface.requestFocus() }
     }
 
     fun press(d: Char) {
@@ -233,10 +241,17 @@ internal fun Keypad(
     Column(
         Modifier
             .fillMaxWidth()
+            .focusRequester(surface)
+            .focusable()
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val d = digitOf(e.key)
                 when {
+                    // A held key types once: a repeat never spends a try.
+                    d != null && e.nativeKeyEvent.repeatCount > 0 -> {
+                        true
+                    }
+
                     d != null -> {
                         press(d)
                         true
@@ -312,7 +327,8 @@ internal fun Keypad(
             )
         }
         extra?.invoke()
-        SecondaryButton(cancelLabel, onCancel, focusRequester = cancel)
+        // A try with the core cannot be called off half way: leaving waits for its answer.
+        SecondaryButton(cancelLabel, onCancel, enabled = !busy, focusRequester = cancel)
     }
 }
 
@@ -417,15 +433,24 @@ fun PickerScreen(
     val locked = s.locked
     val me = s.profiles.firstOrNull { it.id == s.active }
     val owner = me?.isOwner == true
-    // A switch refused at the root: its keypad opens again with the reason.
-    var target by remember { mutableStateOf<String?>(gate.switching.takeIf { gate.switchProblem != null }) }
+    // The profile whose keypad is open: picked here, or a switch the gate holds as refused (its
+    // keypad opens again with the reason, whichever picker asked).
+    var picked by remember { mutableStateOf<String?>(null) }
+    val target = picked ?: gate.switching.takeIf { gate.switchProblem != null }
     var said by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
     val chosen = s.profiles.firstOrNull { it.id == target }
+    // Focus starts on the current profile, else on the first tile (the current one was removed).
+    val focusId = s.profiles.firstOrNull { it.id == s.active }?.id ?: s.profiles.firstOrNull()?.id
     LaunchedEffect(target, s.profiles) {
         if (target != null && chosen == null) {
-            target = null
+            picked = null
+            if (gate.switching != null) gate.cancelSwitch()
             said = "That profile was removed on another device."
+            if (tv) {
+                withFrameNanos { }
+                runCatching { first.requestFocus() }
+            }
         }
     }
     if (mode == PickerMode.Switch) BackHandler(target == null) { onBack() }
@@ -470,7 +495,7 @@ fun PickerScreen(
             return
         }
         if (p.hasPin) {
-            target = p.id
+            picked = p.id
             return
         }
         scope.launch {
@@ -493,11 +518,24 @@ fun PickerScreen(
                 title = "Enter the PIN for ${chosen.name}",
                 onSubmit = { pin -> enter(chosen, pin) },
                 onCancel = {
-                    target = null
+                    picked = null
                     if (gate.switching != null) gate.cancelSwitch()
                 },
-                note = if (chosen.isOwner) "Forgot the PIN? Choose Reset with this device's lock below." else null,
-                extra = if (chosen.isOwner && locked && chosen.id == s.active) ({ ForgotPin(gate, session) }) else null,
+                extra =
+                    if (chosen.isOwner) {
+                        (
+                            {
+                                ForgotPin(
+                                    gate,
+                                    session,
+                                    chosen,
+                                    locked && chosen.id == s.active,
+                                )
+                            }
+                        )
+                    } else {
+                        null
+                    },
                 initialProblem = problem?.let(::tried),
             )
             return@Box
@@ -532,7 +570,7 @@ fun PickerScreen(
                     ProfileTile(
                         p = p,
                         active = p.id == s.active,
-                        modifier = if (p.id == s.active) Modifier.focusRequester(first) else Modifier,
+                        modifier = if (p.id == focusId) Modifier.focusRequester(first) else Modifier,
                         onClick = { pick(p) },
                     )
                 }
@@ -652,18 +690,23 @@ private fun AddTile(onClick: () -> Unit) {
 private fun ForgotPin(
     gate: ProfileGate,
     session: CoreSession,
+    owner: ProfileInfo,
+    unlocksSession: Boolean,
 ) {
     val context = LocalContext.current
+    val tv = Marquee.form == Form.Tv
     val scope = rememberCoroutineScope()
     var said by remember { mutableStateOf("") }
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+            // The device's lock stands in for the PIN: the main profile then opens without one, as
+            // the locked session's own profile or by a switch to it.
             scope.launch {
                 said =
                     try {
                         session.ops.resetOwnerPin()
-                        gate.unlock(null)
+                        if (unlocksSession) gate.unlock(null) else gate.switchTo(owner.id, null)
                         ""
                     } catch (e: CancellationException) {
                         throw e
@@ -673,10 +716,17 @@ private fun ForgotPin(
             }
         }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        MqText("Forgot the PIN?", role = TextRole.Callout, color = Marquee.colors.muted)
         SecondaryButton("Reset with this device's lock", {
             val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
             if (!keyguard.isDeviceSecure) {
-                said = "Set a screen lock on this device first, then try again."
+                said =
+                    if (tv) {
+                        "This device has no screen lock, so the PIN cannot be reset here. Reset it from Marquee " +
+                            "on a phone with a screen lock: Settings, Profiles. This device gets the change at its next sync."
+                    } else {
+                        "Set a screen lock on this device first, then try again."
+                    }
             } else {
                 @Suppress("DEPRECATION")
                 val intent =
@@ -816,8 +866,16 @@ fun EditProfileScreen(
     var flow by remember { mutableStateOf<PinFlow?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
 
+    // The page leaves once: a delete from here also removes the profile from the snapshot.
+    var left by remember { mutableStateOf(false) }
+    val leave = {
+        if (!left) {
+            left = true
+            onDone()
+        }
+    }
     // Removed on another device while open.
-    LaunchedEffect(p == null) { if (!isNew && p == null) onDone() }
+    LaunchedEffect(p == null) { if (!isNew && p == null) leave() }
     if (!isNew && p == null) return
     if (if (isNew) !owner else !(mine || owner)) {
         Box(Modifier.fillMaxSize().padding(pagePadding(framed = false))) {
@@ -826,13 +884,17 @@ fun EditProfileScreen(
         return
     }
     flow?.let { f ->
-        Box(
-            Modifier.fillMaxSize().background(colors.bg).padding(Marquee.safe.side),
-            contentAlignment = Alignment.Center,
-        ) {
-            PinSteps(session, p!!, f) { text ->
-                flow = null
-                if (text != null) said = text to Status.Ok
+        // Scrolls on a short landscape phone, where the keypad is taller than the screen.
+        BoxWithConstraints(Modifier.fillMaxSize().background(colors.bg).padding(Marquee.safe.side)) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                PinSteps(session, p!!, f) { text ->
+                    flow = null
+                    if (text != null) said = text to Status.Ok
+                }
             }
         }
         return
@@ -849,7 +911,7 @@ fun EditProfileScreen(
                 try {
                     if (isNew) {
                         session.ops.createProfile(n, ProfileCopy.formatAvatar(glyph, color))
-                        onDone()
+                        leave()
                         null
                     } else {
                         session.ops.updateProfile(
@@ -1016,7 +1078,7 @@ fun EditProfileScreen(
                                 scope.launch {
                                     try {
                                         session.ops.deleteProfile(p.id)
-                                        onDone()
+                                        leave()
                                     } catch (e: CancellationException) {
                                         throw e
                                     } catch (e: Exception) {
@@ -1081,6 +1143,8 @@ private fun PinSteps(
             fresh = ""
         }
     }
+    // Leaving the app half way through gives the PIN change up: no PIN stays in memory behind it.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { onDone(null) }
     val title =
         when (steps[step]) {
             "current" -> "Enter your current PIN"

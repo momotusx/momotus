@@ -22,9 +22,11 @@ export function parseAvatar(stored: string): Avatar {
 
 export const formatAvatar = (a: { glyph: Glyph; color: AvatarColor }) => `${a.glyph}:${a.color}`;
 
-/** The first letter of a name, as the letter avatar draws it. */
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** The name's first grapheme (a letter with its accents, a joined emoji), as the letter avatar draws it. */
 export function initial(name: string): string {
-  const first = [...name.trim()][0];
+  const first = graphemes.segment(name.trim())[Symbol.iterator]().next().value?.segment;
   return first ? first.toLocaleUpperCase() : "?";
 }
 

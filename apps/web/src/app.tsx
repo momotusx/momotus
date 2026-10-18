@@ -9,10 +9,10 @@ import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, For, on, Show } from "solid-js";
 import { AvatarArt } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
-import { gateOpen, profiles, profilesFailed } from "./core/profiles";
+import { gateOpen, launchProfile, profiles, profilesFailed } from "./core/profiles";
 import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
-import { historyBase, historyDepth } from "./history";
+import { historyBase, historyDepth, resetHistoryBase } from "./history";
 import Addons from "./screens/addons";
 import CalendarScreen from "./screens/calendar";
 import Discover from "./screens/discover";
@@ -115,6 +115,8 @@ function Tabs() {
 }
 
 let focusInstalled = false;
+// The profile the current route and history were opened under (none known: a fresh tab).
+let routeProfile = launchProfile;
 
 function Shell(props: RouteSectionProps) {
   const location = useLocation();
@@ -134,10 +136,31 @@ function Shell(props: RouteSectionProps) {
     focusInstalled = true;
     installFocus(back);
   }
+  // A route belongs to the profile it was opened under: once another profile
+  // shows (a switch, a reload after another tab switched, the remembered one
+  // removed), the app opens on Home and Back stops at it.
+  createEffect(
+    on(
+      () => (gateOpen() ? profiles()?.active : undefined),
+      (active) => {
+        if (!active) return;
+        if (routeProfile && routeProfile !== active) {
+          resetHistoryBase();
+          navigate("/", { replace: true });
+        }
+        routeProfile = active;
+      },
+    ),
+  );
   createEffect(
     on(
       () => location.pathname,
       () => {
+        // The browser's own Back reached an entry of an earlier profile.
+        if (historyDepth() < historyBase() && location.pathname !== "/") {
+          navigate("/", { replace: true });
+          return;
+        }
         const wasBack = wentBack;
         wentBack = false;
         // Touch has no cursor to place; remotes and keyboards do.
@@ -150,14 +173,17 @@ function Shell(props: RouteSectionProps) {
   // whether it is locked (plans/m11-profiles.md, P1 apps v2 5).
   return (
     <div class="app">
-      <Show when={profiles()} fallback={<Show when={profilesFailed()}>{(r) => <p class="banner bad">{r()}</p>}</Show>}>
-        <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
-          <Show when={nav() && form() !== "phone"}>
-            <TopNav />
-          </Show>
-          <div class="screen">{props.children}</div>
-          <Show when={nav() && form() === "phone"}>
-            <Tabs />
+      {/* A lost core takes the profile with it: nothing shows until a reload starts the next one. */}
+      <Show when={link() !== "closed"}>
+        <Show when={profiles()} fallback={<Show when={profilesFailed()}>{(r) => <p class="banner bad">{r()}</p>}</Show>}>
+          <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
+            <Show when={nav() && form() !== "phone"}>
+              <TopNav />
+            </Show>
+            <div class="screen">{props.children}</div>
+            <Show when={nav() && form() === "phone"}>
+              <Tabs />
+            </Show>
           </Show>
         </Show>
       </Show>

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import app.marquee.core.client.CoreLog
 import app.marquee.design.Form
 import app.marquee.design.Tokens
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -54,10 +55,20 @@ object DebugEntry {
     /**
      * `install_addon=<manifest url>` installs an addon at launch: the local test addon
      * (scripts/sintel-addon.ts over `adb reverse`) before there is a screen to do it from.
+     * `kill_core_after=<seconds>` hands the app the message a panicking core sends, that long
+     * after launch, to walk what the app does across a core death and its restart.
      */
     fun launched(activity: ComponentActivity) {
-        val url = activity.intent.getStringExtra("install_addon") ?: return
         val session = (activity.application as MarqueeApp).session
+        val killAfter = activity.intent.getIntExtra("kill_core_after", 0)
+        if (killAfter > 0) {
+            session.scope.launch {
+                delay(killAfter * 1_000L)
+                CoreLog.d("debug: the core dies")
+                session.client.onMessage("""{"core":"died","reason":"debug: a simulated panic"}""")
+            }
+        }
+        val url = activity.intent.getStringExtra("install_addon") ?: return
         session.scope.launch {
             runCatching { session.ops.installAddon(url) }
                 .onSuccess { CoreLog.d("debug: installed addon ${it.name}") }

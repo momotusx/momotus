@@ -1,6 +1,7 @@
 package app.marquee.android
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -18,12 +19,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The session's profile for the app's life (plans/m11-profiles.md, P1 apps A, B and v2 3 to 6): one
  * `profiles` view the core keeps open across switches and locks, whether profile content may show,
- * and the switch. While the gate is shut the app shows only the picker; every screen of the old
- * profile has left composition, so their views are closed when the core is asked to switch.
+ * and the switch.
+ *
+ * The gate shuts for a switch, a lock, and a core that stopped; each shut counts in [shutCount]. The
+ * app answers a shut by dropping everything of the old profile once its screens have left
+ * composition, then calls [resetDone] with that count; a switch waits for that before it asks the
+ * core, which switches only with the picker open.
  */
 class ProfileGate(
     private val session: CoreSession,
@@ -37,26 +43,35 @@ class ProfileGate(
     var chosen by mutableStateOf(false)
         private set
 
-    /** A switch under way: the profile asked for. The gate is shut until it ends. */
+    /** The core runs and its profiles snapshot came after it started: nothing shows from a core before. */
+    private var current by mutableStateOf(false)
+
+    /** A switch under way or refused: the profile asked for. The gate is shut while set. */
     var switching: String? by mutableStateOf(null)
         private set
 
-    /** Why the last switch failed, shown by the picker that takes over (a wrong PIN, a wait). */
+    /** A switch request is with the core: it cannot be called off any more. */
+    var inFlight by mutableStateOf(false)
+        private set
+
+    /** Why the last switch failed, shown by the root picker on that profile's keypad. */
     var switchProblem: CoreError? by mutableStateOf(null)
         private set
 
-    /** Bumped by every switch and lock: work from before it must not touch the screens after. */
-    var epoch by mutableStateOf(0)
+    /** Shuts so far: a switch, a lock, or a core that stopped. */
+    var shutCount by mutableIntStateOf(0)
         private set
+
+    private var resetCount by mutableIntStateOf(0)
 
     /** Whether the app may show profile content, or only the picker. */
     val open: Boolean
         get() {
             val s = snapshot ?: return false
-            return !s.locked && chosen && switching == null
+            return current && !s.locked && chosen && switching == null
         }
 
-    /** Opens the view once the core runs; the first snapshot decides whether the start picker asks. */
+    /** Opens the view once the core runs, decides the start picker on the first snapshot, and follows restarts and locks. */
     fun start() {
         session.scope.launch(Dispatchers.Main) {
             snapshotFlow { session.health }.first { it == CoreHealth.Running }
@@ -64,7 +79,40 @@ class ProfileGate(
             view = v
             val first = snapshotFlow { v.snapshot }.filterNotNull().first()
             if (!ProfileCopy.startsOnPicker(first)) chosen = true
+            current = true
+            // A core that stops shuts the gate; the next core's own snapshot opens it (a protected
+            // profile starts that core locked).
+            launch {
+                snapshotFlow { session.health == CoreHealth.Running }.collect { running ->
+                    if (!running && current) {
+                        current = false
+                        shut()
+                    } else if (running && !current) {
+                        val mark = v.opens
+                        snapshotFlow { v.opens }.first { it > mark }
+                        current = true
+                    }
+                }
+            }
+            // A lock while open (another device removed this profile, or a lock asked for).
+            launch {
+                var was = first.locked
+                snapshotFlow { v.snapshot?.locked }.filterNotNull().collect { locked ->
+                    if (locked && !was) shut()
+                    was = locked
+                }
+            }
         }
+    }
+
+    private fun shut(): Int {
+        shutCount++
+        return shutCount
+    }
+
+    /** The app dropped what the old profile left, after shut number [count]. */
+    fun resetDone(count: Int) {
+        if (count > resetCount) resetCount = count
     }
 
     /** The current profile, unlocked: the start picker's answer. */
@@ -76,31 +124,36 @@ class ProfileGate(
     suspend fun unlock(pin: String?) {
         session.ops.unlockProfile(pin)
         chosen = true
+        switching = null
         switchProblem = null
     }
 
     /**
-     * Shuts the gate (every screen of the old profile leaves, closing its views), then switches,
-     * waiting while views finish closing (`viewsOpen`). A refusal leaves the gate shut, with the
-     * picker showing [switchProblem] for [profile]; [cancelSwitch] goes back to the current profile.
+     * Shuts the gate, waits for the app to drop the old profile, then switches, waiting while views
+     * finish closing (`viewsOpen`). A refusal leaves the gate shut, with the root picker showing
+     * [switchProblem] on [profile]'s keypad; [cancelSwitch] goes back to the current profile. One
+     * switch at a time; it runs in the gate's own scope, so the picker that asked can leave.
      */
     suspend fun switchTo(
         profile: String,
         pin: String?,
     ): Boolean {
+        if (inFlight) return false
+        inFlight = true
         switching = profile
         switchProblem = null
-        epoch++
-        // The gate's own work, not the caller's: the picker that asked leaves with the app the moment
-        // the gate shuts, and its cancellation must not stop the switch half way.
-        return session.scope.async(Dispatchers.Main) { runSwitch(profile, pin) }.await()
+        val count = shut()
+        return session.scope.async(Dispatchers.Main) { runSwitch(profile, pin, count) }.await()
     }
 
     private suspend fun runSwitch(
         profile: String,
         pin: String?,
+        count: Int,
     ): Boolean {
         try {
+            // The app answers within a frame or two; without a screen (the activity gone) go on.
+            withTimeoutOrNull(2_000) { snapshotFlow { resetCount }.first { it >= count } }
             for (attempt in 1..10) {
                 try {
                     session.ops.switchProfile(profile, pin)
@@ -123,11 +176,14 @@ class ProfileGate(
         } catch (e: Exception) {
             switchProblem = CoreError(e.message ?: "The switch did not finish.")
             return false
+        } finally {
+            inFlight = false
         }
     }
 
-    /** A failed switch given up: the current profile opens again, on Home. */
+    /** A refused switch given up: the current profile opens again, on Home. Not while a request is out. */
     fun cancelSwitch() {
+        if (inFlight) return
         switching = null
         switchProblem = null
         chosen = true

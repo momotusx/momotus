@@ -16,13 +16,42 @@ import { markChosen, profiles, switchProfile, unlockProfile } from "../core/prof
 import { autoFocus, goBack } from "../focus/dom";
 import { type AvatarColor, COLORS, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
 import { profileProblem, waitText } from "../lib/profiles";
-import { resetHistoryBase } from "../history";
 import "./browse.css";
 import "./settings.css";
 import "./profiles.css";
 
 const BACK_CODES = new Set([10009, 461]);
 const isBack = (e: KeyboardEvent) => e.key === "Escape" || e.key === "GoBack" || e.key === "BrowserBack" || BACK_CODES.has(e.keyCode);
+
+/** While a modal is open, everything outside it is inert (no focus, no clicks, hidden from
+ * screen readers); focus goes back where it was when it closes. Without `inside`, the modal is
+ * the page's main and only the navigation goes inert. */
+function holdModal(inside?: () => HTMLElement) {
+  const before = document.activeElement as HTMLElement | null;
+  const held: HTMLElement[] = [];
+  onMount(() => {
+    const keep = inside?.();
+    const outside = keep ? siblingsUpTo(keep) : [...document.querySelectorAll<HTMLElement>(".app > nav")];
+    for (const el of outside) {
+      if (el.inert) continue;
+      el.inert = true;
+      held.push(el);
+    }
+  });
+  onCleanup(() => {
+    for (const el of held) el.inert = false;
+    if (before?.isConnected) queueMicrotask(() => before.focus());
+  });
+}
+
+/** Every element beside `el` and beside each of its ancestors, up to the body. */
+function siblingsUpTo(el: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (let node: HTMLElement | null = el; node && node !== document.body; node = node.parentElement) {
+    for (const sib of node.parentElement?.children ?? []) if (sib !== node && sib instanceof HTMLElement) out.push(sib);
+  }
+  return out;
+}
 
 /** What a PIN try came to. */
 type Tried = { kind: "ok" } | { kind: "wrong" } | { kind: "wait"; ms: number } | { kind: "problem"; text: string };
@@ -56,6 +85,7 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
     setDigits("");
   });
   onMount(() => queueMicrotask(() => autoFocus(root.querySelector<HTMLElement>('[data-f="pin:5"]'))));
+  holdModal();
   // When a wait ends, the remote goes back to the digits.
   createEffect(
     on(waiting, (w, was) => {
@@ -150,7 +180,8 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
       <Show when={props.note}>
         <p class="note small">{props.note}</p>
       </Show>
-      <button class="btn" data-f="pin:cancel" onClick={() => props.onCancel()}>
+      {/* A try with the core cannot be called off half way: leaving waits for its answer. */}
+      <button class="btn" data-f="pin:cancel" aria-disabled={busy()} onClick={() => !busy() && props.onCancel()}>
         {props.cancelLabel ?? "Choose another profile"}
       </button>
     </div>
@@ -203,11 +234,6 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
     }
   });
 
-  const arrived = () => {
-    // After a switch, Home opens as a cold start would; Back never returns to the old profile's pages.
-    resetHistoryBase();
-    navigate("/", { replace: true });
-  };
   const enter = async (p: ProfileInfo, pin?: string): Promise<Tried> => {
     const same = p.id === s()?.active;
     try {
@@ -219,10 +245,8 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
     }
     setTarget(null);
     // The same profile, unlocked: the app opens where it was asked to (a
-    // deep link, a reload). Another profile: Home, as a cold start would.
-    if (same) {
-      if (props.mode === "switch") goBack();
-    } else arrived();
+    // deep link, a reload). Another profile: the shell opens Home, as a cold start would.
+    if (same && props.mode === "switch") goBack();
     return { kind: "ok" };
   };
   const pick = async (p: ProfileInfo) => {
@@ -240,7 +264,9 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
     const r = await enter(p);
     if (r.kind !== "ok") setSaid(r.kind === "problem" ? r.text : "That did not work. Try again.");
   };
-  const canAdd = () => owner() && !locked() && (s()?.profiles.length ?? 0) < (s()?.max ?? 0);
+  // Managing profiles is for the open app: the start and locked pickers only choose.
+  const manages = () => props.mode === "switch" && owner() && !locked();
+  const canAdd = () => manages() && (s()?.profiles.length ?? 0) < (s()?.max ?? 0);
   const forgot = () =>
     target()?.isOwner ? "Forgot the PIN? Reset it from Marquee on your phone or TV, in Settings, Profiles. This device gets the change at its next sync." : undefined;
 
@@ -268,7 +294,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
             <p class="st bad" role="status" aria-live="polite">
               {said()}
             </p>
-            <Show when={owner() && !locked()}>
+            <Show when={manages()}>
               <A class="btn" href="/profiles/manage" data-f="profiles:manage">
                 Manage profiles
               </A>
@@ -555,25 +581,42 @@ export function EditProfile() {
                 </button>
               }
             >
-              <div class="confirm" role="alertdialog" aria-label={`Delete ${p()!.name}?`}>
-                <p>
-                  Delete {p()!.name}? Their library, progress and settings are removed from this device now and from your other devices when they next sync.
-                </p>
-                <div class="acts">
-                  <button class="btn danger" data-f="pedit:delete:yes" data-autofocus onClick={() => void remove()}>
-                    Delete {p()!.name}
-                  </button>
-                  <button class="btn" data-f="pedit:delete:no" onClick={() => setConfirmDelete(false)}>
-                    Keep
-                  </button>
-                </div>
-              </div>
+              <DeleteConfirm name={p()!.name} onDelete={() => void remove()} onKeep={() => setConfirmDelete(false)} />
             </Show>
           </section>
         </Show>
       </Show>
       </Show>
     </main>
+  );
+}
+
+/** Deleting a profile, asked as a modal: the rest of the app waits, Escape or Back keeps it. */
+function DeleteConfirm(props: { name: string; onDelete: () => void; onKeep: () => void }) {
+  let root!: HTMLDivElement;
+  holdModal(() => root);
+  const onKey = (e: KeyboardEvent) => {
+    if (!isBack(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    props.onKeep();
+  };
+  window.addEventListener("keydown", onKey, { capture: true });
+  onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));
+  return (
+              <div class="confirm" ref={root} role="alertdialog" aria-modal="true" aria-label={`Delete ${props.name}?`}>
+                <p>
+                  Delete {props.name}? Their library, progress and settings are removed from this device now and from your other devices when they next sync.
+                </p>
+                <div class="acts">
+                  <button class="btn danger" data-f="pedit:delete:yes" data-autofocus onClick={() => props.onDelete()}>
+                    Delete {props.name}
+                  </button>
+                  <button class="btn" data-f="pedit:delete:no" onClick={() => props.onKeep()}>
+                    Keep
+                  </button>
+                </div>
+              </div>
   );
 }
 
@@ -587,6 +630,10 @@ function PinSteps(props: { flow: PinFlow; profile: ProfileInfo; onDone: (said?: 
     current = undefined;
     fresh = "";
   });
+  // Hiding the app half way through gives the PIN change up: no PIN stays in memory behind it.
+  const hide = () => document.hidden && props.onDone();
+  document.addEventListener("visibilitychange", hide);
+  onCleanup(() => document.removeEventListener("visibilitychange", hide));
   const title = () =>
     ({ current: "Enter your current PIN", new: props.flow === "set" ? "Choose a PIN" : "Enter the new PIN", again: "Enter it again" })[steps[step()] as "current" | "new" | "again"];
   const submit = async (pin: string): Promise<Tried> => {

@@ -57,11 +57,12 @@ fun MarqueeRoot(
     val marquee = LocalContext.current.applicationContext as MarqueeApp
     val app = viewModel<AppState>(factory = viewModelFactory { initializer { AppState(session, marquee.deviceCaps) } })
     val gate = marquee.profiles
-    // Shut after being open (a switch or a lock): everything of the old profile goes.
-    var wasOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(gate.open) {
-        if (wasOpen && !gate.open) app.resetProfile()
-        wasOpen = gate.open
+    // Each shut of the gate (a switch, a lock, a core that stopped): once the screens have left
+    // composition, everything of the old profile goes, and the gate hears so. The count lives in
+    // AppState, so a configuration change between the shut and this effect still resets once.
+    LaunchedEffect(gate.shutCount) {
+        if (gate.shutCount > app.resetAt) app.resetProfile(gate.shutCount)
+        gate.resetDone(app.resetAt)
     }
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         val locked = gate.snapshot?.locked == true

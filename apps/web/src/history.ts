@@ -6,10 +6,24 @@
 
 export const historyDepth = () => (history.state as { _depth?: number } | null)?._depth ?? 0;
 
-let base = historyDepth();
+// Kept for the tab, so a reload does not reopen the old profile's entries.
+const BASE = "mq.historyBase";
+const stored = (() => {
+  try {
+    return sessionStorage.getItem(BASE);
+  } catch {
+    return null;
+  }
+})();
+let base = stored === null ? historyDepth() : Number(stored);
 export const historyBase = () => base;
 
 /** After a profile switch: the entries below this one belong to the old profile. */
 export function resetHistoryBase() {
   base = historyDepth();
+  try {
+    sessionStorage.setItem(BASE, String(base));
+  } catch {
+    // Kept for this page only.
+  }
 }

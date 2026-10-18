@@ -15,10 +15,6 @@ const view = createRoot(() => liveView<ProfilesSnapshot>("profiles", {}, true));
 export const profiles = () => view.state.data;
 export const profilesFailed = () => (view.state.status.state === "failed" ? view.state.status.reason : null);
 
-/** Bumped on every switch and lock: work from before it must not touch the screen after. */
-const [epoch, setEpoch] = createSignal(0);
-export { epoch };
-
 /** The start picker was answered this launch (a cold start with more than one profile asks once).
  * A reload in the same tab is not a cold start: the tab remembers which profile it chose. */
 const [chosen, setChosen] = createSignal(false);
@@ -38,6 +34,8 @@ const rememberedChoice = () => {
     return null;
   }
 };
+/** The profile this tab showed before a reload: its route and history belong to that profile. */
+export const launchProfile = rememberedChoice();
 export const markChosen = () => choose(profiles()?.active);
 
 /** Whether the app may show profile content, or only the picker. */
@@ -55,7 +53,6 @@ export function onProfileReset(fn: () => void) {
 
 /** Everything the old profile left outside the core: views kept for the app's life, focus memory, caches. */
 export async function resetProfileState() {
-  setEpoch((e) => e + 1);
   forgetFocus();
   for (const fn of resets) fn();
   await closeProfileViews();
@@ -63,8 +60,21 @@ export async function resetProfileState() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Tears down, then switches; a view still closing (`viewsOpen`) is waited for, up to five times. */
+let switching = false;
+
+/** Tears down, then switches; a view still closing (`viewsOpen`) is waited for, up to five times.
+ * One switch at a time: a second one while the first is out is refused. */
 export async function switchProfile(id: string, pin?: string): Promise<ProfilesSnapshot> {
+  if (switching) throw new Error("A switch is already under way.");
+  switching = true;
+  try {
+    return await runSwitch(id, pin);
+  } finally {
+    switching = false;
+  }
+}
+
+async function runSwitch(id: string, pin?: string): Promise<ProfilesSnapshot> {
   await resetProfileState();
   for (let attempt = 1; ; attempt++) {
     try {

@@ -60,6 +60,8 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await page.goto("/?form=tv");
   await expect(page.locator(".picker h1")).toHaveText("Who's watching?");
   await expect.poll(() => focused(page)).toBe("profile:default");
+  // The start picker only chooses: managing waits for the open app.
+  await expect(page.locator('[data-f="profile:add"], [data-f="profiles:manage"]')).toHaveCount(0);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("region", { name: "Featured" }).first()).toBeVisible();
 
@@ -85,6 +87,11 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await expect(page).toHaveURL(/\/(\?form=tv)?$/);
   await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
   expect((await picker()).active).toBe(kid);
+
+  // The browser's own Back never reopens Main's pages under Kid, across a reload too.
+  await page.goBack();
+  await expect(page.locator('[data-f="nav:/profiles"]')).toHaveAttribute("aria-label", "Profile: Kid, switch profile");
+  await expect(page).not.toHaveURL(/\/profiles\/edit\/default/);
 
   // Back to Main needs its PIN: a wrong one says so, the right one switches.
   await page.goto("/profiles?form=tv");
@@ -115,6 +122,12 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await page.keyboard.type(PIN);
   await expect(page.locator(".pedit .st")).toContainText("PIN removed");
   await page.goto(`/profiles/edit/${kid}?form=tv`);
+  // Deleting asks first; Escape keeps the profile, and the page behind waits meanwhile.
+  await page.locator('[data-f="pedit:delete"]').click();
+  await expect(page.locator(".topnav")).toHaveJSProperty("inert", true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-f="pedit:delete:yes"]')).toHaveCount(0);
+  await expect(page.locator(".topnav")).toHaveJSProperty("inert", false);
   await page.locator('[data-f="pedit:delete"]').click();
   await page.locator('[data-f="pedit:delete:yes"]').click();
   await expect(page).toHaveURL(/\/profiles\/manage/);

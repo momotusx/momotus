@@ -12,6 +12,8 @@ test("a stored avatar parses, and anything unknown falls back to the letter", ()
 test("the letter is the name's first character, and a new profile takes an unused color", () => {
   expect(initial("  élise")).toBe("É");
   expect(initial("")).toBe("?");
+  expect(initial("e\u0301lise")).toBe("E\u0301");
+  expect(initial("\u{1F469}\u200D\u{1F4BB} Dev")).toBe("\u{1F469}\u200D\u{1F4BB}");
   expect(nextAvatar([])).toBe("letter:ember");
   expect(nextAvatar(["cat:ember", "letter:amber"])).toBe("letter:moss");
   expect(nextAvatar([""])).toBe("letter:amber");
