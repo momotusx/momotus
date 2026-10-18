@@ -15,6 +15,11 @@ enum class AccountState {
 }
 
 @Serializable
+data class AddonCatalogSnapshot(
+    val lists: List<AddonList> = emptyList(),
+)
+
+@Serializable
 data class AddonInfo(
     /** The key for commands. May hold API keys: never show or log it. */
     val url: String,
@@ -29,6 +34,17 @@ data class AddonInfo(
     val provides: List<String> = emptyList(),
     val types: List<String> = emptyList(),
     val configurable: Boolean,
+    /** The addon's configure page, when its manifest says it has one (`configurable` or `configurationRequired`). */
+    val configureUrl: String? = null,
+)
+
+@Serializable
+data class AddonList(
+    /** "official" or "community". */
+    val id: String,
+    val name: String,
+    val state: ListState,
+    val entries: List<ListedAddon> = emptyList(),
 )
 
 @Serializable
@@ -99,6 +115,13 @@ data class CatalogChoice(
     val name: String,
     val source: String,
 )
+
+@Serializable
+enum class Configuration {
+    @SerialName("none") None,
+    @SerialName("optional") Optional,
+    @SerialName("required") Required,
+}
 
 @Serializable
 data class DebridAccount(
@@ -406,6 +429,16 @@ data class ImportSummary(
     val seriesUnmatched: Int,
 )
 
+/** This link installed (`on`, `off`), or a configured copy of the addon under another link (same manifest id and host: `copyOn` when any such copy is on, else `copyOff`), or neither. */
+@Serializable
+enum class Installed {
+    @SerialName("absent") Absent,
+    @SerialName("on") On,
+    @SerialName("off") Off,
+    @SerialName("copyOn") CopyOn,
+    @SerialName("copyOff") CopyOff,
+}
+
 @Serializable
 data class KindCount(
     val kind: String,
@@ -429,6 +462,45 @@ enum class LibrarySort {
     @SerialName("recent") Recent,
     @SerialName("added") Added,
     @SerialName("name") Name,
+}
+
+@Serializable
+data class ListedAddon(
+    /** The canonical transport URL, for `installListed` only. May hold keys: never show or log it. */
+    val key: String,
+    /** The manifest id. */
+    val id: String,
+    /** What to show instead of the URL. */
+    val host: String,
+    val name: String,
+    val description: String? = null,
+    val types: List<String> = emptyList(),
+    /** "catalog", "meta", "stream", "subtitles", ... */
+    val provides: List<String> = emptyList(),
+    val configuration: Configuration,
+    /** The addon's configure page, when it has one. */
+    val configureUrl: String? = null,
+    val installed: Installed,
+    /** With `copyOff`: the first such copy in addon order, for `setAddonEnabled`. May hold keys: never show or log it. */
+    val copyKey: String? = null,
+)
+
+@Serializable
+@JsonClassDiscriminator("state")
+sealed interface ListState {
+    @Serializable
+    @SerialName("loading")
+    data object Loading : ListState
+
+    @Serializable
+    @SerialName("ready")
+    data object Ready : ListState
+
+    @Serializable
+    @SerialName("failed")
+    data class Failed(
+        val words: String,
+    ) : ListState
 }
 
 /** What reporting `lost` drops by default: the devices it vouched for (transitively) for the user to untick, and the kits that always go. */

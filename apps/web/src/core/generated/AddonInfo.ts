@@ -12,4 +12,9 @@ host: string, name: string, description: string | null, logo: string | null, ver
 /**
  * "catalog", "meta", "stream", "subtitles", ...
  */
-provides: Array<string>, types: Array<string>, configurable: boolean, };
+provides: Array<string>, types: Array<string>, configurable: boolean, 
+/**
+ * The addon's configure page, when its manifest says it has one
+ * (`configurable` or `configurationRequired`).
+ */
+configureUrl: string | null, };
