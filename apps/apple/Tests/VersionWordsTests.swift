@@ -78,3 +78,18 @@ private func snapshot(
     #expect(VersionWords.languageName("fr") == "French")
     #expect(VersionWords.languageName("qqq") == "QQQ")
 }
+
+@Test func wideLayoutsNeedTheRoomTheyWereMadeFor() {
+    // iPad Air in portrait (820 pt, 40 pt gutters): the pick above the table, one column per row.
+    let ipadPortrait: CGFloat = 820 - 80
+    #expect(!WideLayout.pickBesideTable(page: ipadPortrait))
+    #expect(WideLayout.tableColumns(table: ipadPortrait))
+    #expect(!WideLayout.creditsBesideEpisodes(page: ipadPortrait))
+    // iPad mini in portrait (744 pt): rows read in two lines.
+    #expect(!WideLayout.tableColumns(table: 744 - 80))
+    // iPad Air in landscape (1180 pt): side by side, columns, credits beside the episodes.
+    let ipadLandscape: CGFloat = 1180 - 80
+    #expect(WideLayout.pickBesideTable(page: ipadLandscape))
+    #expect(WideLayout.tableColumns(table: ipadLandscape - 360 - 40))
+    #expect(WideLayout.creditsBesideEpisodes(page: ipadLandscape))
+}

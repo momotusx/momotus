@@ -10,12 +10,14 @@ struct VersionsScreen: View {
     @State private var addSource = false
     @Environment(\.metrics) private var metrics
     @State private var expanded: Set<String> = []
+    /// The page's width, for the layouts below.
+    @State private var width: CGFloat = 0
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 header
-                if metrics.wide {
+                if sideBySide {
                     HStack(alignment: .top, spacing: Theme.Space.l) {
                         pick.frame(width: 360)
                         table
@@ -32,6 +34,7 @@ struct VersionsScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .onAppear(perform: model.freeze)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: model, core: core)
         }
@@ -42,6 +45,17 @@ struct VersionsScreen: View {
     }
 
     private var snapshot: VersionsSnapshot? { model.snapshot }
+
+    /// The page inside its gutters, before the first width arrives the size class's guess.
+    private var page: CGFloat { width > 0 ? width - 2 * metrics.gutter : (metrics.wide ? 1180 : 360) }
+
+    /// The pick beside the table only with room for both (not an iPad in portrait).
+    private var sideBySide: Bool { metrics.wide && WideLayout.pickBesideTable(page: page) }
+
+    /// The table's columns only with room for them; else each row reads in two lines.
+    private var columns: Bool {
+        metrics.wide && WideLayout.tableColumns(table: sideBySide ? page - 360 - Theme.Space.l : page)
+    }
 
     private var title: some View {
         Text("Versions")
@@ -131,7 +145,7 @@ struct VersionsScreen: View {
                     .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                     let shown = expanded.contains(group) ? rows : Array(rows.prefix(3))
                     ForEach(shown) { row in
-                        VersionRowView(row: row, wide: metrics.wide) {
+                        VersionRowView(row: row, wide: columns) {
                             playing = model.play(row.key)
                         }
                         Rectangle().fill(Theme.Palette.line.opacity(0.6)).frame(height: 1)

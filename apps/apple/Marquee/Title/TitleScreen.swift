@@ -270,7 +270,7 @@ struct TitleScreen: View {
     @ViewBuilder private var lower: some View {
         if let details {
             let series = !(model.header?.seasons.isEmpty ?? true)
-            if metrics.wide && series {
+            if metrics.wide && series && (width == 0 || WideLayout.creditsBesideEpisodes(page: width - 2 * metrics.gutter)) {
                 HStack(alignment: .top, spacing: Theme.Space.xl) {
                     Credits(details: details, series: true).frame(width: 360, alignment: .leading)
                     episodes

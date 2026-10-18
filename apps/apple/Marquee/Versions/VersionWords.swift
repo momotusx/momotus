@@ -1,5 +1,18 @@
 import Foundation
 
+/// The wide layouts by the room they get, not the size class: an iPad in
+/// portrait and a large phone in landscape are "regular" with nowhere near
+/// the width those layouts were made for. Widths are the page's, inside its gutters.
+enum WideLayout {
+    /// The pick card (360 pt) beside the Versions table.
+    static func pickBesideTable(page: CGFloat) -> Bool { page >= 900 }
+    /// The table's columns (quality, features, size, status, via) need about
+    /// 680 pt; with less a row reads as the phone's two lines.
+    static func tableColumns(table: CGFloat) -> Bool { table >= 680 }
+    /// A series' credits (360 pt) beside its episodes.
+    static func creditsBesideEpisodes(page: CGFloat) -> Bool { page >= 1000 }
+}
+
 /// Plain words for what the core says about a version, equal to the web's
 /// `lib/words.ts` and Android's `VersionsCopy`. Never emoji, never codes.
 enum VersionWords {
