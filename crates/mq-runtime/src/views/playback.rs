@@ -259,12 +259,15 @@ impl PlaybackView {
         )
     }
 
-    /// The player could not open or keep playing the current source: drop it
-    /// and move to the next candidate.
-    pub fn fail_over(&self, error: &str) {
+    /// The player could not open or keep playing the source `key` (the
+    /// snapshot's `key`; `None` means the current one): drop it and move to
+    /// the next candidate. A late report about a source already given up on
+    /// is ignored, so it never drops the one playing now.
+    pub fn fail_over(&self, key: Option<&str>, error: &str) {
         {
             let mut s = lock(&self.state);
-            if s.snapshot.phase != PlaybackPhase::Ready {
+            let other = key.is_some_and(|key| s.snapshot.key.as_deref() != Some(key));
+            if s.snapshot.phase != PlaybackPhase::Ready || other {
                 return;
             }
             // The running task's work for this source ends here.

@@ -1095,8 +1095,8 @@ impl Session {
                 playback.report_duration(&param(command, "key")?, duration_ms);
             }
             (View::Playback(playback), "failOver") => {
-                playback
-                    .fail_over(&param(command, "error").unwrap_or_else(|_| "player error".into()));
+                let error = param(command, "error").unwrap_or_else(|_| "player error".into());
+                playback.fail_over(param(command, "key").ok().as_deref(), &error);
             }
             (_, other) => return Err(format!("unknown command: {other}")),
         }

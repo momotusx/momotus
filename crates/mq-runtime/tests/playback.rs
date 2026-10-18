@@ -407,7 +407,7 @@ async fn falls_over_to_the_first_source_that_answers() {
     assert_eq!(&resp.body[..], b"M");
 
     // A player error moves on; with nothing left the view says so.
-    view.fail_over("decoder error");
+    view.fail_over(None, "decoder error");
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Failed);
     assert_eq!(s.attempts.last().unwrap().error, "decoder error");
@@ -462,6 +462,35 @@ async fn origins_that_ignore_range_still_count_as_alive() {
     let view = PlaybackView::open(&core, setup(&core, &streams), target());
     let s = settled(&view).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+}
+
+#[tokio::test]
+async fn a_late_fail_over_never_drops_the_next_source() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(
+        r#"{{"streams":[
+          {{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}},
+          {{"name":"Full","url":"{base}/full.mkv"}}
+        ]}}"#
+    );
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let first = settled(&view).await;
+    assert_eq!(first.phase, PlaybackPhase::Ready, "{first:?}");
+    view.fail_over(first.key.as_deref(), "decoder error");
+    let second = settled(&view).await;
+    assert_eq!(second.phase, PlaybackPhase::Ready, "{second:?}");
+    assert_ne!(second.key, first.key);
+    // The first source's player reports a second error after the move.
+    view.fail_over(first.key.as_deref(), "decoder error");
+    let now = view.snapshot();
+    assert_eq!(
+        (now.phase, now.key),
+        (PlaybackPhase::Ready, second.key.clone())
+    );
+    // The source playing now can still fail over.
+    view.fail_over(second.key.as_deref(), "decoder error");
+    assert_eq!(settled(&view).await.phase, PlaybackPhase::Failed);
 }
 
 /// A 200 KiB file with Range support plus a subtitles addon that records the

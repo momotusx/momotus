@@ -191,6 +191,18 @@ async fn versions_then_playback_then_progress() {
             "command": {"type": "duration", "key": "another-version", "durationMs": 888000}})))
         .await;
     assert_eq!(next(&mut rx).await["ok"], true);
+    // A failOver about a source already given up on leaves this one playing.
+    session
+        .handle_text(&request(json!({"id": 43, "op": "command", "sub": playback,
+            "command": {"type": "failOver", "key": "another-version", "error": "late"}})))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    let moved = tokio::time::timeout(
+        Duration::from_millis(300),
+        push_until(&mut rx, playback, |s| s["phase"] != "ready"),
+    )
+    .await;
+    assert!(moved.is_err(), "{moved:?}");
     session
         .handle_text(&request(
             json!({"id": 5, "op": "unsubscribe", "sub": playback}),
