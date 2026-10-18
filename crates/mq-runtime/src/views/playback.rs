@@ -182,7 +182,8 @@ pub struct PlaybackView {
     target: Arc<PlayTarget>,
     snapshot: SharedObservable<PlaybackSnapshot>,
     state: Arc<Mutex<State>>,
-    task: Mutex<Option<JoinHandle<()>>>,
+    /// The resolve task and its run.
+    task: Mutex<Option<(u64, JoinHandle<()>)>>,
 }
 
 impl State {
@@ -369,15 +370,25 @@ impl PlaybackView {
             self.snapshot.clone(),
             run,
         ));
-        if let Some(old) = lock(&self.task).replace(task) {
-            old.abort();
-        }
+        install(&self.task, run, task);
+    }
+}
+
+/// Keeps `task` as the view's resolve task unless a newer run's task is
+/// already there: two callers racing between spawning and installing never
+/// leave the older task running in place of the newer.
+fn install(slot: &Mutex<Option<(u64, JoinHandle<()>)>>, run: u64, task: JoinHandle<()>) {
+    let mut slot = lock(slot);
+    if slot.as_ref().is_some_and(|(newer, _)| *newer > run) {
+        task.abort();
+    } else if let Some((_, old)) = slot.replace((run, task)) {
+        old.abort();
     }
 }
 
 impl Drop for PlaybackView {
     fn drop(&mut self) {
-        if let Some(task) = lock(&self.task).take() {
+        if let Some((_, task)) = lock(&self.task).take() {
             task.abort();
         }
         if let Some(task) = lock(&self.state).segments_task.take() {
@@ -1143,6 +1154,30 @@ mod tests {
         );
         let no_hash = stream(r#"{"clientResolve":{"type":"debrid","service":"torbox"}}"#);
         assert!(debrid_request(&no_hash, None, None).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_stale_resolve_never_replaces_a_newer_one() {
+        let slot = Mutex::new(None);
+        let task = || tokio::spawn(std::future::pending::<()>());
+        let (older, newer, newest) = (task(), task(), task());
+        let ends = [&older, &newer, &newest].map(|t| t.abort_handle());
+        // Caller B installs run 2 before caller A, paused after spawning,
+        // installs run 1.
+        install(&slot, 2, newer);
+        install(&slot, 1, older);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(
+            ends.each_ref().map(|t| t.is_finished()),
+            [true, false, false]
+        );
+        // A newer run still replaces it.
+        install(&slot, 3, newest);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(
+            ends.each_ref().map(|t| t.is_finished()),
+            [true, true, false]
+        );
     }
 
     #[tokio::test]
