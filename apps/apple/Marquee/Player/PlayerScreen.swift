@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// Full-screen playback with an OSD that hides itself while playing.
@@ -15,6 +16,9 @@ struct PlayerScreen: View {
     @State private var menuOpen = false
     /// TV: the invisible target that holds focus while the controls are hidden.
     @FocusState private var catcherFocused: Bool
+    #if os(iOS)
+    @State private var pip = PictureInPicture()
+    #endif
     let core: CoreClient
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
@@ -25,7 +29,7 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VideoSurface(player: model.player, onFirstFrame: model.firstFrame)
+            VideoSurface(player: model.player, onFirstFrame: model.firstFrame, onLayer: attachLayer)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
             // Taps on the picture toggle the controls. A gesture on the whole
@@ -76,7 +80,7 @@ struct PlayerScreen: View {
                 PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
                     menuOpen = open
                     lastTouch = .now
-                }, activity: { lastTouch = .now })
+                }, activity: { lastTouch = .now }, pip: pipControl)
                     .transition(.opacity)
             }
             if let segment = model.segment, model.playback?.phase != "failed", !model.showEndCard {
@@ -156,6 +160,23 @@ struct PlayerScreen: View {
             model.togglePlay()
             touched(toggle: false)
         }
+        #endif
+    }
+
+    /// iOS: Picture in Picture on the video layer; elsewhere nothing.
+    private var attachLayer: (@MainActor (AVPlayerLayer) -> Void)? {
+        #if os(iOS)
+        { [pip] layer in pip.attach(layer) }
+        #else
+        nil
+        #endif
+    }
+
+    private var pipControl: PipControl? {
+        #if os(iOS)
+        PipControl(possible: pip.possible, start: pip.start)
+        #else
+        nil
         #endif
     }
 

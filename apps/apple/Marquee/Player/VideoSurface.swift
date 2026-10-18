@@ -6,6 +6,8 @@ import SwiftUI
 struct VideoSurface {
     let player: AVPlayer
     let onFirstFrame: @MainActor () -> Void
+    /// iOS: the layer, for Picture in Picture.
+    var onLayer: (@MainActor (AVPlayerLayer) -> Void)?
 
     @MainActor fileprivate func attach(_ layer: AVPlayerLayer) -> NSKeyValueObservation {
         layer.player = player
@@ -53,6 +55,7 @@ extension VideoSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> PlayerLayerView {
         let view = PlayerLayerView()
         view.observation = attach(view.playerLayer)
+        onLayer?(view.playerLayer)
         return view
     }
 

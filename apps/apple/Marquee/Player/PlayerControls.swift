@@ -1,4 +1,13 @@
 import SwiftUI
+#if os(iOS)
+import AVKit
+#endif
+
+/// Picture in Picture for the OSD: whether the system allows it now, and how to start it.
+struct PipControl {
+    let possible: Bool
+    let start: () -> Void
+}
 
 /// The OSD: title top left, end time top right, the scrubber, transport in
 /// the middle and the track and version actions on the right, each a word
@@ -11,6 +20,8 @@ struct PlayerControls: View {
     var hold: (Bool) -> Void = { _ in }
     /// The viewer did something (focus moved, a seek on the bar): the controls stay up a while longer.
     var activity: () -> Void = {}
+    /// iOS: Picture in Picture, when the system says it is possible.
+    var pip: PipControl?
     @Environment(\.metrics) private var metrics
     @State private var scrub: Double?
     /// Which control has focus: TV enters on Play/Pause, and every move keeps the controls up.
@@ -77,6 +88,24 @@ struct PlayerControls: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(.white.opacity(0.8))
             }
+            #if os(iOS)
+            // The system's own glyphs: AirPlay's picker and Picture in Picture's.
+            AirPlayButton()
+                .frame(width: 40, height: 40)
+                .glass(Circle())
+                .accessibilityLabel("AirPlay")
+            if let pip, pip.possible {
+                Button(action: pip.start) {
+                    Image(uiImage: AVPictureInPictureController.pictureInPictureButtonStartImage)
+                        .renderingMode(.template)
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .glass(Circle())
+                }
+                .buttonStyle(.round)
+                .accessibilityLabel("Picture in Picture")
+            }
+            #endif
         }
     }
 
