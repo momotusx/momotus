@@ -79,6 +79,12 @@ private func snapshot(
     #expect(VersionWords.languageName("qqq") == "QQQ")
 }
 
+@Test func oneSeedIsSingular() {
+    #expect(VersionWords.status(.torrent(seeds: 1)) == "Torrent, 1 seed")
+    #expect(VersionWords.status(.torrent(seeds: 153)) == "Torrent, 153 seeds")
+    #expect(VersionWords.status(.torrent(seeds: nil)) == "Torrent")
+}
+
 @Test func wideLayoutsNeedTheRoomTheyWereMadeFor() {
     // iPad Air in portrait (820 pt, 40 pt gutters): the pick above the table, one column per row.
     let ipadPortrait: CGFloat = 820 - 80

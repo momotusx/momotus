@@ -139,12 +139,13 @@ private struct SeasonButtonStyle: ButtonStyle {
 private struct SeasonFocus: ViewModifier {
     let pressed: Bool
     @Environment(\.isFocused) private var focused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
             .pressVeil(Capsule(), pressed: pressed)
             .modifier(FocusRing(shape: Capsule(), active: focused))
-            .scaleEffect(pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
+            .scaleEffect(reduceMotion ? 1 : pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
             .animation(Theme.Motion.focus, value: pressed)
             .animation(Theme.Motion.focus, value: focused)
     }

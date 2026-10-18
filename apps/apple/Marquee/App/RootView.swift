@@ -414,6 +414,7 @@ struct NavLinkStyle: ButtonStyle {
         let on: Bool
         @Environment(\.isFocused) private var focused
         @State private var hovered = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         var body: some View {
             configuration.label
@@ -430,7 +431,7 @@ struct NavLinkStyle: ButtonStyle {
                 .contentShape(Capsule())
                 .pressVeil(Capsule(), pressed: configuration.isPressed)
                 .modifier(FocusRing(shape: Capsule(), active: focused))
-                .scaleEffect(focused ? Theme.Focus.scaleCard : configuration.isPressed ? 0.97 : 1)
+                .scaleEffect(reduceMotion ? 1 : focused ? Theme.Focus.scaleCard : configuration.isPressed ? 0.97 : 1)
                 .animation(Theme.Motion.focus, value: focused)
                 #if !os(tvOS)
                 .onHover { hovered = $0 }

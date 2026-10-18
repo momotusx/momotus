@@ -26,7 +26,7 @@ enum VersionWords {
     static func status(_ status: VersionStatus) -> String {
         switch status {
         case .ready(let service): service.map { "Ready on \($0)" } ?? "Ready"
-        case .torrent(let seeds): seeds.map { "Torrent, \($0) seeds" } ?? "Torrent"
+        case .torrent(let seeds): seeds.map { "Torrent, \($0) \($0 == 1 ? "seed" : "seeds")" } ?? "Torrent"
         case .needsDownload(let service): service.map { "Needs download on \($0)" } ?? "Needs download"
         case .direct: "Direct link"
         }
