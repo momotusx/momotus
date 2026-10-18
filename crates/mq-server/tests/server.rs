@@ -2023,6 +2023,32 @@ async fn media_children_are_never_sniffed() {
 }
 
 #[tokio::test]
+async fn keys_are_read_up_to_64_kib() {
+    let (base, _) = hls_origin(pages(vec![
+        (
+            "/m.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-KEY:METHOD=AES-128,URI=\"fits\"\n#EXTINF:4,\none.ts\n#EXT-X-KEY:METHOD=AES-128,URI=\"big\"\n#EXTINF:4,\ntwo.ts\n".to_vec(),
+        ),
+        ("/fits", "application/octet-stream", vec![7; 64 << 10]),
+        ("/big", "application/octet-stream", vec![7; (64 << 10) + 1]),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/m.m3u8")).await;
+    let named = named_urls(&text(&http.get(&lease.url, &local()).await.unwrap()));
+    let key = |name: &str| named.iter().find(|u| u.ends_with(name)).unwrap().clone();
+    let fits = http.get(&key("/fits"), &local()).await.unwrap();
+    assert_eq!(fits.body.len(), 64 << 10);
+    let big = http.get(&key("/big"), &local()).await.unwrap_err();
+    assert!(
+        matches!(big, mq_http::HttpError::Status { status: 502, .. }),
+        "{big:?}"
+    );
+}
+
+#[tokio::test]
 async fn a_child_redirect_to_the_canary_is_refused() {
     let canary = Canary::start(0).await;
     let hosts = canary_hosts(&canary, "redirect-canary.c22.test");
