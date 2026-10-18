@@ -264,6 +264,12 @@ struct Frame {
     attrs: Vec<(String, String)>,
     /// The text of a `BaseURL`, `Location` or `Label`.
     text: String,
+    /// A `SegmentTemplate` or `SegmentList`: its timescale, as Media3
+    /// reads it (its own, else the one it inherits, else 1).
+    timescale: i64,
+    /// A level: the timescale of the last `SegmentTemplate` or
+    /// `SegmentList` in it so far, which the next one inherits.
+    child_timescale: Option<i64>,
 }
 
 impl Frame {
@@ -278,12 +284,13 @@ impl Frame {
 }
 
 /// Media3 1.11.1's `parseSegmentTimeline`, followed only to count the
-/// elements it builds: the start time it carries from `S` to `S` and the
-/// last `S` read, whose count needs the next one's `t`.
-#[derive(Default)]
+/// elements it builds: the start time it carries from `S` to `S`, the last
+/// `S` read, whose count needs the next one's `t`, and the timescale its
+/// period end is scaled by.
 struct Timeline {
     start: i64,
     previous: Option<(i64, i32)>,
+    timescale: i64,
 }
 
 /// Rewrites an MPD (`base`: its final URL after redirects) for the core, or
@@ -670,7 +677,7 @@ impl Rewrite<'_> {
             return Ok(());
         };
         if let Some((d, r)) = timeline.previous {
-            timeline.start = self.repeat(timeline.start, d, r, Some(t))?;
+            timeline.start = self.repeat(timeline.start, d, r, t)?;
         }
         if t != TIME_UNSET {
             timeline.start = t;
@@ -682,20 +689,13 @@ impl Rewrite<'_> {
 
     /// Media3's `addSegmentTimelineElementsToList` (Java arithmetic, which
     /// wraps): how many elements one `S` builds, counted against
-    /// `MAX_TIMELINE`; returns the next start. `end` is the next `S`'s `t`,
-    /// `None` for the last `S`, whose end is the period's duration as
-    /// Media3 computes it: a negative repeat there refuses the MPD.
-    fn repeat(
-        &mut self,
-        start: i64,
-        d: i64,
-        r: i32,
-        end: Option<i64>,
-    ) -> Result<i64, &'static str> {
+    /// `MAX_TIMELINE`; returns the next start. `end` is the next `S`'s `t`
+    /// (`C.TIME_UNSET` when it has none), or for the last `S` the period's
+    /// end as Media3 computes it (`period_end`).
+    fn repeat(&mut self, start: i64, d: i64, r: i32, end: i64) -> Result<i64, &'static str> {
         let count = if r >= 0 {
             1i32.wrapping_add(r)
         } else {
-            let end = end.ok_or("a negative repeat in the last S")?;
             if d == 0 {
                 return Err("a negative repeat with no duration");
             }
@@ -710,6 +710,20 @@ impl Rewrite<'_> {
             return Err("a segment timeline longer than 100,000");
         }
         Ok(start.wrapping_add(i64::from(count).wrapping_mul(d)))
+    }
+
+    /// The end Media3 1.11.1 gives a timeline's last `S`:
+    /// `scaleLargeTimestamp(periodDurationMs, timescale, 1000)`, where
+    /// `periodDurationMs` is the enclosing `Period@duration` alone, or
+    /// `C.TIME_UNSET` (not the next Period's start, not the MPD's duration).
+    fn period_end(&self, timescale: i64) -> Result<i64, &'static str> {
+        let period = self.stack.iter().rev().find(|f| f.kept.name == "Period");
+        let duration = period.and_then(|f| f.attrs.iter().find(|(n, _)| n == "duration"));
+        let ms = match duration {
+            Some((_, value)) => xs_duration_ms(value)?,
+            None => TIME_UNSET,
+        };
+        scale_ms(ms, timescale).ok_or("a period end Media3 computes in doubles")
     }
 
     fn open(
@@ -751,8 +765,33 @@ impl Rewrite<'_> {
                 self.ids.push(id);
             }
         }
+        let mut timescale = 1;
         match kept.name {
-            "SegmentTimeline" => self.timeline = Some(Timeline::default()),
+            "SegmentTemplate" | "SegmentList" => {
+                // Media3 inherits it from the last template or list of this
+                // level, else of the levels above, in document order.
+                let own = attrs.iter().find(|(n, _)| n == "timescale");
+                timescale = match own {
+                    Some((_, v)) => v.parse::<i64>().map_err(|_| "a bad timescale")?,
+                    None => self
+                        .stack
+                        .iter()
+                        .rev()
+                        .find_map(|f| f.child_timescale)
+                        .unwrap_or(1),
+                };
+                if let Some(level) = self.stack.last_mut() {
+                    level.child_timescale = Some(timescale);
+                }
+            }
+            "SegmentTimeline" => {
+                let timescale = self.stack.last().map_or(1, |f| f.timescale);
+                self.timeline = Some(Timeline {
+                    start: 0,
+                    previous: None,
+                    timescale,
+                });
+            }
             "S" => self.segment(&attrs)?,
             _ => {}
         }
@@ -763,6 +802,8 @@ impl Rewrite<'_> {
             consumed: false,
             attrs,
             text: String::new(),
+            timescale,
+            child_timescale: None,
         };
         if kept.text != Text::None {
             // Written whole at the end, once the text is known.
@@ -812,7 +853,13 @@ impl Rewrite<'_> {
                     && let Some(timeline) = self.timeline.take()
                     && let Some((d, r)) = timeline.previous
                 {
-                    self.repeat(timeline.start, d, r, None)?;
+                    // Only a negative repeat runs to the period's end.
+                    let end = if r < 0 {
+                        self.period_end(timeline.timescale)?
+                    } else {
+                        TIME_UNSET
+                    };
+                    self.repeat(timeline.start, d, r, end)?;
                 }
                 self.write(Event::End(BytesEnd::new(name)))?;
             }
@@ -937,6 +984,107 @@ fn dot_segments(reference: &str) -> Result<(), &'static str> {
         }
     }
     Ok(())
+}
+
+/// Media3's `Util.parseXsDuration`, in milliseconds, for a value its
+/// pattern `-?P(nY)?(nM)?(nD)?(T(nH)?(nM)?(n.nS)?)?` matches: the parts
+/// summed in seconds as doubles in that order (a year 31,556,908 s, a month
+/// 2,629,739 s), times 1,000, cast. Another value Media3 reads as hours with
+/// `Double.parseDouble`, which the core does not repeat: refused.
+fn xs_duration_ms(value: &str) -> Result<i64, &'static str> {
+    const BAD: &str = "a duration the core does not read as Media3 does";
+    let (negated, rest) = match value.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, value),
+    };
+    let mut rest = rest.strip_prefix('P').ok_or(BAD)?;
+    let mut parts = [None; 6];
+    for (i, letter) in ['Y', 'M', 'D'].into_iter().enumerate() {
+        parts[i] = duration_part(&mut rest, letter, false);
+    }
+    if let Some(time) = rest.strip_prefix('T') {
+        rest = time;
+        for (i, letter) in ['H', 'M', 'S'].into_iter().enumerate() {
+            parts[3 + i] = duration_part(&mut rest, letter, letter == 'S');
+        }
+    }
+    if !rest.is_empty() {
+        return Err(BAD);
+    }
+    let mut seconds = 0.0f64;
+    for (part, unit) in parts
+        .iter()
+        .zip([31_556_908.0, 2_629_739.0, 86_400.0, 3_600.0, 60.0, 1.0])
+    {
+        if let Some(number) = part {
+            seconds += number.parse::<f64>().map_err(|_| BAD)? * unit;
+        }
+    }
+    let ms = (seconds * 1000.0) as i64;
+    Ok(if negated { ms.wrapping_neg() } else { ms })
+}
+
+/// One `nX` part of a duration: digits (and dots for seconds) followed by
+/// `letter`, taken off `rest`; an empty number is kept, as the pattern does.
+fn duration_part<'a>(rest: &mut &'a str, letter: char, dots: bool) -> Option<&'a str> {
+    let end = rest
+        .find(|c: char| !(c.is_ascii_digit() || (dots && c == '.')))
+        .unwrap_or(rest.len());
+    if rest[end..].starts_with(letter) {
+        let number = &rest[..end];
+        *rest = &rest[end + 1..];
+        Some(number)
+    } else {
+        None
+    }
+}
+
+/// Media3's `Util.scaleLargeTimestamp(value, multiplier, 1000)` (Guava's
+/// saturating math, rounding toward zero), branch by branch; `None` where it
+/// falls back to doubles, whose rounding the core does not repeat.
+fn scale_ms(value: i64, multiplier: i64) -> Option<i64> {
+    const DIVISOR: i64 = 1000;
+    let saturated = |a: i64, b: i64| {
+        let product = i128::from(a) * i128::from(b);
+        product.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
+    };
+    let at_bound = |p: i64| p == i64::MAX || p == i64::MIN;
+    if value == 0 || multiplier == 0 {
+        return Some(0);
+    }
+    if DIVISOR >= multiplier && DIVISOR % multiplier == 0 {
+        return Some(value.wrapping_div(DIVISOR / multiplier));
+    }
+    if DIVISOR < multiplier && multiplier % DIVISOR == 0 {
+        return Some(saturated(value, multiplier / DIVISOR));
+    }
+    if DIVISOR >= value && DIVISOR % value == 0 {
+        return Some(multiplier.wrapping_div(DIVISOR / value));
+    }
+    if DIVISOR < value && value % DIVISOR == 0 {
+        return Some(saturated(multiplier, value / DIVISOR));
+    }
+    let product = saturated(value, multiplier);
+    if !at_bound(product) {
+        return Some(product / DIVISOR);
+    }
+    // Math.abs of Long.MIN_VALUE stays negative and Guava's gcd throws.
+    if value == i64::MIN || multiplier == i64::MIN {
+        return None;
+    }
+    let g = gcd(multiplier.abs(), DIVISOR);
+    let (multiplier, divisor) = (multiplier / g, DIVISOR / g);
+    let g = gcd(value.abs(), divisor);
+    let (value, divisor) = (value / g, divisor / g);
+    let product = saturated(value, multiplier);
+    (!at_bound(product)).then(|| product / divisor)
+}
+
+fn gcd(mut a: i64, mut b: i64) -> i64 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
 }
 
 /// A template's identifiers, as Media3's `UrlTemplate` expands them:
@@ -1934,8 +2082,35 @@ mod tests {
         accepted(&timeline(
             "<S t=\"0\" d=\"1\" r=\"-1\"/><S t=\"4294967301\" d=\"1\"/>",
         ));
-        // In the last S it runs to a period end Media3 derives: refused.
-        assert!(rewrite(&timeline("<S t=\"0\" d=\"1\" r=\"-1\"/>")).is_err());
+        // In the last S it runs to the period's end as Media3 computes it:
+        // Period@duration scaled by the timescale (100,000 s at 1 builds
+        // 100,000, written either way, and one more second is too many).
+        let period = |duration: &str, timescale: &str, s: &str| {
+            let duration = if duration.is_empty() {
+                String::new()
+            } else {
+                format!(" duration=\"{duration}\"")
+            };
+            mpd(&format!(
+                "<Period{duration}><SegmentTemplate timescale=\"{timescale}\"/><AdaptationSet>\
+                 <SegmentTemplate media=\"s-$Time$.m4s\"><SegmentTimeline>{s}</SegmentTimeline>\
+                 </SegmentTemplate></AdaptationSet></Period>"
+            ))
+        };
+        let last = "<S t=\"0\" d=\"1\" r=\"-1\"/>";
+        accepted(&period("PT100000S", "1", last));
+        accepted(&period("P1DT3H46M40S", "1", last));
+        assert!(rewrite(&period("PT100001S", "1", last)).is_err());
+        // With no Period@duration Media3 scales C.TIME_UNSET with saturating
+        // math and counts with Java's wrapping arithmetic: at the inherited
+        // timescale 90,000 from 0 that is nothing; at 1 it is 1,511,828,488
+        // elements, and from t=1000 with d=2000 at 1,000 it is 755,914,245.
+        accepted(&period("", "90000", last));
+        assert!(rewrite(&period("", "1", last)).is_err());
+        let live = "<S t=\"1000\" d=\"2000\" r=\"-1\"/>";
+        assert!(rewrite(&period("", "1000", live)).is_err());
+        // A duration Media3 reads as hours with parseDouble: refused.
+        assert!(rewrite(&period("100", "1", last)).is_err());
         // Followed by an S with no t, Media3 counts to C.TIME_UNSET, wrapping:
         // this start makes it 2^31 - 1.
         let start = TIME_UNSET.wrapping_sub(0x7fff_ffff);
@@ -1952,6 +2127,34 @@ mod tests {
             .is_err()
         );
         assert!(rewrite(&timeline("<S d=\"1\"><S d=\"1\"/></S>")).is_err());
+    }
+
+    /// Media3's duration and scaling arithmetic, where the timeline bound
+    /// depends on it.
+    #[test]
+    fn media3_durations_and_scaling() {
+        assert_eq!(xs_duration_ms("PT1M30.5S"), Ok(90_500));
+        assert_eq!(xs_duration_ms("P1Y"), Ok(31_556_908_000));
+        assert_eq!(xs_duration_ms("P1M"), Ok(2_629_739_000));
+        assert_eq!(xs_duration_ms("P1DT"), Ok(86_400_000));
+        assert_eq!(xs_duration_ms("-PT1S"), Ok(-1000));
+        assert_eq!(xs_duration_ms("PT1.S"), Ok(1000));
+        assert_eq!(xs_duration_ms("P"), Ok(0));
+        for bad in ["PTS", "1H", "PT1H2", "P1H", "PT1.2.3S"] {
+            assert!(xs_duration_ms(bad).is_err(), "{bad}");
+        }
+        assert_eq!(scale_ms(100_000, 1), Some(100));
+        assert_eq!(scale_ms(100_000, 48_000), Some(4_800_000));
+        assert_eq!(scale_ms(7, 3), Some(0));
+        assert_eq!(scale_ms(TIME_UNSET, 90_000), Some(i64::MIN));
+        assert_eq!(scale_ms(TIME_UNSET, 1000), Some(TIME_UNSET));
+        // The product overflows; reduced by common factors it fits.
+        assert_eq!(
+            scale_ms(500_000_000_000_000_125, 24),
+            Some(12_000_000_000_000_003)
+        );
+        // Where Media3 falls back to doubles: not repeated.
+        assert_eq!(scale_ms(i64::MAX - 1, 7), None);
     }
 
     /// Template identifiers Media3 expands, with widths `String.format`
