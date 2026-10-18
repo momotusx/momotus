@@ -710,12 +710,13 @@ async fn the_listed_path_never_connects_to_a_private_address() {
     within("mixed", http.get(&url, &listed()))
         .await
         .expect_err("the public answer serves nothing");
-    // A name the system resolver itself answers with loopback, and which the
-    // name check before connecting does not catch (the trailing dot).
+    // A name the system resolver itself answers with loopback, its trailing
+    // dot and all.
     let url = format!("http://localhost.:{port}/");
-    within("localhost.", http.get(&url, &listed()))
+    let err = within("localhost.", http.get(&url, &listed()))
         .await
         .expect_err("the system's own loopback name");
+    assert_eq!(err.kind(), "blocked address");
     // A private literal.
     let err = within("literal", http.get(&origin.url("/"), &listed()))
         .await

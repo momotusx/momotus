@@ -6,6 +6,9 @@ use url::Url;
 /// rebinding protection check the connected address too.
 pub fn is_private_host(host: &str) -> bool {
     let host = host.trim_start_matches('[').trim_end_matches(']');
+    // A fully qualified name (`localhost.`) is the same name: the system
+    // resolver answers it as it answers the name without the dot.
+    let host = host.strip_suffix('.').unwrap_or(host);
     if is_localhost(host) {
         return true;
     }
@@ -337,6 +340,10 @@ mod tests {
             "169.254.1.1",
             "100.64.0.1",
             "localhost",
+            "localhost.",
+            "LOCALHOST",
+            "app.localhost",
+            "app.localhost.",
             "[::1]",
             "fd00::1",
             "fe80::1",
@@ -347,6 +354,8 @@ mod tests {
         for host in [
             "8.8.8.8",
             "torrentio.strem.fun",
+            "torrentio.strem.fun.",
+            "localhost.example",
             "2606:4700::1111",
             "100.128.0.1",
         ] {
