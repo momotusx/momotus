@@ -29,19 +29,20 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
     return (refused?.code, refused?.words ?? "unknown")
 }
 
-/// A request that waits until the test answers it.
+/// Requests that wait until the test answers them (all at once, so a
+/// second request that should not have started never hangs the test).
 @MainActor private final class Held {
-    private var continuation: CheckedContinuation<Void, any Error>?
+    private var waiting: [CheckedContinuation<Void, any Error>] = []
     private(set) var started = 0
 
     func request() async throws {
         started += 1
-        try await withCheckedThrowingContinuation { continuation = $0 }
+        try await withCheckedThrowingContinuation { waiting.append($0) }
     }
 
     func answer(_ result: Result<Void, any Error>) {
-        continuation?.resume(with: result)
-        continuation = nil
+        for continuation in waiting { continuation.resume(with: result) }
+        waiting = []
     }
 
     func waitForStart(_ count: Int = 1) async {
@@ -190,15 +191,18 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
         let run = Task { await cards.run("a", held.request, failure: refusal) }
         await held.waitForStart()
         #expect(cards["a"].busy)
-        await cards.run("a", held.request, failure: refusal)
+        let second = Task { await cards.run("a", held.request, failure: refusal) }
+        for _ in 0..<20 { await Task.yield() }
         #expect(held.started == 1)
         held.answer(.failure(Refused(code: "needsSetup", words: "This addon now needs setup first")))
         await run.value
+        await second.value
         #expect(cards["a"] == InstallCards.Card(busy: false, code: "needsSetup", words: "This addon now needs setup first"))
         #expect(cards["b"] == InstallCards.Card())
         // A success clears the card.
+        let before = held.started
         let again = Task { await cards.run("a", held.request, failure: refusal) }
-        await held.waitForStart(2)
+        await held.waitForStart(before + 1)
         held.answer(.success(()))
         await again.value
         #expect(cards["a"] == InstallCards.Card())
@@ -228,10 +232,10 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
         cards.forgetAll(running: false)
         #expect(cards["done"] == InstallCards.Card())
         #expect(cards["a"].busy)
-        held.answer(.failure(Refused(code: "changed", words: "Another device changed your addons first")))
+        held.answer(.failure(Refused(code: "timeout", words: "This addon's server did not answer in time")))
         await run.value
-        #expect(cards["a"].words == "Another device changed your addons first")
-        #expect(cards["a"].code == "changed")
+        #expect(cards["a"].words == "This addon's server did not answer in time")
+        #expect(cards["a"].code == "timeout")
     }
 
     @MainActor @Test func aNewInstalledStateForgetsOnlyAFinishedResult() async {
