@@ -1,3 +1,8 @@
 {"date":"2026-10-18","phase":"3 and 4","commit":"c1b1eb4","check":"cargo test -p mq-http -p mq-server -p mq-runtime -p mq-bridge -p mq-addons -p mq-streams","target_dir":"marquee-main","passed":250,"failed":0,"ignored":12}
 {"date":"2026-10-18","phase":"3 and 4","commit":"c1b1eb4","check":"cargo test -p mq-server --features torrent","target_dir":"marquee-main","binaries":[8,1,33,2],"failed":0}
 {"date":"2026-10-18","phase":"3 and 4","commit":"c1b1eb4","check":"Android emulator-5584 phone form, Sintel 1080p over the rebuilt core","snapshot":"own=10 prefixes=7 tunnels=0","subtitles_found":94,"picked":"English (SRT, OpenSubtitles)","seen":"cue 'Yeah! Come on!' rendered near 4:40","app_log_addresses":0,"result":"pass"}
+{"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"cargo test -p mq-http -p mq-server -p mq-runtime -p mq-bridge -p mq-addons -p mq-streams -p mq-engine","target_dir":"marquee-main","passed":266,"failed":0,"ignored":15}
+{"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"cargo test -p mq-server --features torrent","passed":48,"failed":0,"ignored":1}
+{"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"cargo test -p mq-server --features test-hooks","passed":49,"failed":0,"ignored":1}
+{"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"workspace clippy -D warnings and fmt --check","result":"clean"}
+{"date":"2026-10-18","phase":"4 after review r2","commit":"2b013b3","check":"apps","web":"tsc 0, bun test 65 pass","android":"spotless, 178 unit tests 0 failures, assembleDebug","apple":"macOS 96 swift-testing and 9 XCTest pass"}
