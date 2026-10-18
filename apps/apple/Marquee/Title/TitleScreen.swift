@@ -262,12 +262,19 @@ struct TitleScreen: View {
             }
             .buttonStyle(RoundButtonStyle(on: inLibrary))
             .frame(maxWidth: column)
+            // A state, spoken as one: "In Library, toggle, on".
+            .accessibilityLabel("In Library")
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityValue(inLibrary ? "On" : "Off")
             if details.kind == "movie" {
                 Button { model.setWatched(details.id, !watched); sync.schedule() } label: {
                     Label(watched ? "Watched" : "Mark as watched", glyph: "circle-check")
                 }
                 .buttonStyle(RoundButtonStyle(on: watched))
                 .frame(maxWidth: column)
+                .accessibilityLabel("Watched")
+                .accessibilityAddTraits(.isToggle)
+                .accessibilityValue(watched ? "On" : "Off")
             }
         }
         .padding(.top, 4)

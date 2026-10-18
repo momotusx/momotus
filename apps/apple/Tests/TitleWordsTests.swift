@@ -22,6 +22,13 @@ import Testing
     #expect(resumeText(resumeMs: 21 * 60_000, leftMs: 0, runtime: "57 min") == "36 min left")
 }
 
+@Test func upNextCountsMinutesPastNinetySecondsAndEpisodeCodesAreSpoken() {
+    #expect(startsIn(seconds: 12) == "Starts in 12 s")
+    #expect(startsIn(seconds: 90) == "Starts in 90 s")
+    #expect(startsIn(seconds: 214) == "Starts in 4 min")
+    #expect(spokenEpisode(season: 2, episode: 3) == "Season 2, Episode 3")
+}
+
 @Test func aLongSynopsisSplitsIntoWholeSentencesWithNothingLost() {
     let text = "One sentence here. Another one follows! A third asks why? " + String(repeating: "word ", count: 80) + "end."
     let blocks = readingBlocks(text, size: 50)

@@ -81,6 +81,7 @@ struct ChipStyle: ButtonStyle {
         let selected: Bool
         @Environment(\.isFocused) private var focused
         @State private var hovered = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         var body: some View {
             configuration.label
@@ -92,7 +93,7 @@ struct ChipStyle: ButtonStyle {
                 .contentShape(Capsule())
                 .pressVeil(Capsule(), pressed: configuration.isPressed)
                 .modifier(FocusRing(shape: Capsule(), active: focused))
-                .scaleEffect(configuration.isPressed ? 0.96 : 1)
+                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
                 .animation(Theme.Motion.focus, value: configuration.isPressed)
                 #if !os(tvOS)
                 .onHover { hovered = $0 }

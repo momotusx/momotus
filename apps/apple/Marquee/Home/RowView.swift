@@ -78,7 +78,7 @@ struct RowHeader: View {
             Text(title)
                 .display(size)
                 .foregroundStyle(Theme.Palette.text)
-                .lineLimit(1)
+                .lineLimit(2)
                 .layoutPriority(1)
                 .accessibilityAddTraits(.isHeader)
             if let subtitle {

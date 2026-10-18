@@ -115,7 +115,7 @@ struct ProfilePicker: View {
                     VStack(spacing: 10) {
                         ProfileAvatar(profile.avatar, name: profile.name, size: tile)
                         HStack(spacing: 6) {
-                            Text(profile.name).lineLimit(1)
+                            Text(profile.name).lineLimit(2).multilineTextAlignment(.center)
                             if profile.hasPin && !profile.syncing { Glyph("lock", size: 16) }
                         }
                         .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
@@ -265,6 +265,11 @@ struct ProfileButton: View {
             Button(action: action) {
                 ProfileAvatar(me.avatar, name: me.name, size: size)
                     .overlay(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous).strokeBorder(.white.opacity(0.3), lineWidth: 1))
+                    #if os(iOS)
+                    // A 44 pt target around the 32 pt avatar.
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                    #endif
             }
             #if os(tvOS)
             .buttonStyle(NavLinkStyle(on: false))

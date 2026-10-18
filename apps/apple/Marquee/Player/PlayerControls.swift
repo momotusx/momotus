@@ -78,6 +78,8 @@ struct PlayerControls: View {
                 Glyph("chevron-left", size: 22)
                     .frame(width: 40, height: 40)
                     .glass(Circle())
+                    // A 44 pt target around the 40 pt circle.
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.round)
             .focused($focus, equals: .back)
@@ -89,6 +91,7 @@ struct PlayerControls: View {
                     Text("S\(season):E\(episode)")
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(.white.opacity(0.75))
+                        .accessibilityLabel(spokenEpisode(season: season, episode: episode))
                 }
             }
             Spacer()

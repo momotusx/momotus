@@ -126,6 +126,9 @@ private struct SeasonButtonStyle: ButtonStyle {
             .background { Capsule().fill(.white.opacity(selected ? 0.16 : 0)) }
             .overlay { Capsule().strokeBorder(selected ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: edgeWidth) }
             .contentShape(Capsule())
+            // A 44 pt target around the 36 pt pill.
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
             .modifier(SeasonFocus(pressed: configuration.isPressed))
     }
 

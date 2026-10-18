@@ -39,7 +39,8 @@ struct SearchScreen: View {
         .topScrim()
         .task(id: search.taskId) { search.start() }
         .onChange(of: query) { _, value in setQuery(value) }
-        .onAppear { fieldFocused = true }
+        // The keyboard opens on the first visit, not over the results on the way back from a title.
+        .onAppear { if query.isEmpty { fieldFocused = true } }
     }
 
     private func setQuery(_ value: String) {
@@ -62,6 +63,7 @@ struct SearchScreen: View {
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Glyph("circle-x").foregroundStyle(Theme.Palette.muted)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.round)
                 .accessibilityLabel("Clear search")

@@ -77,6 +77,17 @@ private func join(_ parts: [String], size: Int) -> [String] {
     return runs
 }
 
+/// Up Next's countdown: seconds up to 90, then whole minutes rounded up
+/// ("Starts in 4 min", never "Starts in 214 s").
+func startsIn(seconds: Int) -> String {
+    seconds > 90 ? "Starts in \((seconds + 59) / 60) min" : "Starts in \(seconds) s"
+}
+
+/// What VoiceOver says for "S2:E3", which it would read as letters and a colon.
+func spokenEpisode(season: Int, episode: Int) -> String {
+    "Season \(season), Episode \(episode)"
+}
+
 /// What Resume says after its label: "36 min left" from what the file has
 /// left (Continue Watching's figure), else from the runtime when it is known,
 /// else the position ("from 21:00").

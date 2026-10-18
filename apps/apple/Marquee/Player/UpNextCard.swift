@@ -29,12 +29,13 @@ struct UpNextCard: View {
                             .display(Theme.type.headline + 2)
                             .foregroundStyle(.white)
                             .lineLimit(2)
+                            .accessibilityLabel("\(spokenEpisode(season: next.season, episode: next.episode)), \(next.title)")
                         if model.startingNext {
                             Label("Finding a version", glyph: "clock")
                                 .font(.text(Theme.type.callout, relativeTo: .callout))
                                 .foregroundStyle(.white.opacity(0.8))
                         } else if model.autoplayNext {
-                            Text("Starts in \(model.countdown) s")
+                            Text(startsIn(seconds: model.countdown))
                                 .font(.text(Theme.type.callout, relativeTo: .callout))
                                 .monospacedDigit()
                                 .foregroundStyle(.white.opacity(0.8))
