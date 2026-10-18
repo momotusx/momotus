@@ -11,6 +11,10 @@
 
 mod ahead;
 mod subtitles;
+#[cfg(all(test, feature = "torrent"))]
+#[allow(dead_code)]
+#[path = "../../mq-engine/tests/support/mod.rs"]
+mod torrent_support;
 
 pub use subtitles::to_vtt;
 
@@ -667,7 +671,24 @@ mod torrent {
 
     /// Serves one file of the engine with Range support. Headers go out at
     /// once; the body follows as pieces are verified. HEAD opens no demand.
+    /// A release before the answer goes out stops the setup too, so a
+    /// released torrent is never selected, woken or given demand again.
     pub(crate) async fn serve(
+        engine: &mq_engine::Engine,
+        torrent: mq_engine::TorrentHandle,
+        file: usize,
+        range: Option<&str>,
+        head_only: bool,
+        released: CancellationToken,
+    ) -> Response {
+        let answer = open(engine, torrent, file, range, head_only, released.clone());
+        released
+            .run_until_cancelled(answer)
+            .await
+            .unwrap_or_else(|| StatusCode::NOT_FOUND.into_response())
+    }
+
+    async fn open(
         engine: &mq_engine::Engine,
         torrent: mq_engine::TorrentHandle,
         file: usize,
@@ -724,11 +745,32 @@ mod torrent {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::torrent_support as support;
 
         #[test]
         fn names_content_types() {
             assert_eq!(content_type("A/B.MKV"), "video/x-matroska");
             assert_eq!(content_type("x.iso"), "application/octet-stream");
+        }
+
+        /// A request that found its playback just before the lease went:
+        /// its setup never runs, so the torrent is neither started nor
+        /// given demand.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+        async fn a_released_setup_never_starts_the_torrent() {
+            let s = support::swarm(true).await;
+            let t = s
+                .leecher
+                .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+                .await
+                .unwrap();
+            let file = s.leecher.files(t).unwrap().len() - 1;
+            let released = CancellationToken::new();
+            released.cancel();
+            let response = serve(&s.leecher, t, file, Some("bytes=0-"), false, released).await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            let stats = s.leecher.stats(t).await.unwrap();
+            assert_eq!((stats.readers, stats.pieces_total), (0, 0));
         }
     }
 }
