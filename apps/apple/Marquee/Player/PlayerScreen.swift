@@ -122,7 +122,9 @@ struct PlayerScreen: View {
         .task(id: model.taskId) { await model.run() }
         .task { await autoHide() }
         // VoiceOver: a two-finger double tap plays or pauses; the scrub gesture leaves.
+        #if !os(macOS)
         .accessibilityAction(.magicTap) { model.togglePlay() }
+        #endif
         .accessibilityAction(.escape) { close() }
         .onAppear { immersion.active = true }
         .onDisappear {
