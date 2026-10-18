@@ -189,7 +189,7 @@ private fun CatalogRow(
                     textAlign = TextAlign.Center,
                 )
                 Column(Modifier.alpha(if (row.hidden) 0.55f else 1f)) {
-                    MqText(row.title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+                    MqText(row.title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
                     MqText(
                         row.source +
                             if (!row.hidden) {
