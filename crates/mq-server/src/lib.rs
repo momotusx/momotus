@@ -1057,7 +1057,8 @@ async fn rewrite(
     let table = table.await.map_err(|_| "out of time")?;
     let slot = Arc::new(Mutex::new(Some(table)));
     let _handoff = Handoff(slot.clone());
-    // Cancelled when this future ends, however it ends.
+    // Cancelled when this future ends, however it ends: at the deadline
+    // (`timeout_at` below returns), at release, or with the request dropped.
     let gone = CancellationToken::new();
     let _gone = gone.clone().drop_guard();
     let hls = hls.clone();
@@ -1070,7 +1071,7 @@ async fn rewrite(
         if let Some(hook) = &hls.hook {
             hook();
         }
-        let alive = || Instant::now() < end && !released.is_cancelled() && !gone.is_cancelled();
+        let alive = || !released.is_cancelled() && !gone.is_cancelled();
         let mut children = Children {
             core: &hls.core,
             prefix: &hls.prefix,
