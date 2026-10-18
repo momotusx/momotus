@@ -364,20 +364,24 @@ pub(crate) fn rewrite_hls(
 ) -> Result<Rewritten, &'static str> {
     let text = std::str::from_utf8(body).map_err(|_| "not UTF-8")?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let lines: Vec<&str> = text
-        .split('\n')
-        .map(|l| l.strip_suffix('\r').unwrap_or(l))
-        .collect();
-    // Media3 ends a line at a bare CR: one inside a kept tag would give it a
-    // URI line this rewrite never saw.
-    if lines.iter().any(|l| l.chars().any(control)) {
-        return Err("a control character");
+    let mut lines = Vec::new();
+    for line in text.split('\n') {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        // Media3 ends a line at a bare CR: one inside a kept tag would give
+        // it a URI line this rewrite never saw.
+        if line.chars().any(control) {
+            return Err("a control character");
+        }
+        if !line.trim().is_empty() {
+            lines.push(line);
+        }
     }
-    let mut lines = lines.into_iter().filter(|l| !l.trim().is_empty());
-    if lines.next().map(str::trim_end) != Some("#EXTM3U") {
+    let Some((first, lines)) = lines.split_first() else {
+        return Err("no #EXTM3U");
+    };
+    if first.trim_end() != "#EXTM3U" {
         return Err("no #EXTM3U");
     }
-    let lines: Vec<&str> = lines.collect();
     let named = |tag: &str| lines.iter().any(|l| tag_of(l) == Some(tag));
     let master = named("EXT-X-STREAM-INF") || named("EXT-X-MEDIA");
     let media = named("EXT-X-TARGETDURATION");
@@ -387,10 +391,10 @@ pub(crate) fn rewrite_hls(
     if master && media_only {
         return Err("a master playlist named as a media playlist");
     }
-    let mut out = vec!["#EXTM3U".to_owned()];
+    let mut out = String::from("#EXTM3U\n");
     let mut variant = false;
     let mut target_duration = None;
-    for line in lines {
+    for &line in lines {
         if !line.starts_with('#') {
             let role = if master {
                 if !variant {
@@ -402,7 +406,7 @@ pub(crate) fn rewrite_hls(
                 Role::Media
             };
             let url = resolve(base, line.trim())?;
-            out.push(children.link(&url, role)?);
+            emit(&mut out, &children.link(&url, role)?)?;
             continue;
         }
         let Some(tag) = tag_of(line) else {
@@ -422,11 +426,11 @@ pub(crate) fn rewrite_hls(
                     .split(',')
                     .next()
                     .unwrap_or_default();
-                out.push(format!("#EXTINF:{duration},"));
+                emit(&mut out, &format!("#EXTINF:{duration},"))?;
             }
             "EXT-X-TARGETDURATION" => {
                 target_duration = value.and_then(|v| v.trim().parse().ok());
-                out.push(line.to_owned());
+                emit(&mut out, line)?;
             }
             _ if LISTS.contains(&tag) => {
                 if tag == "EXT-X-STREAM-INF" {
@@ -435,31 +439,34 @@ pub(crate) fn rewrite_hls(
                     }
                     variant = true;
                 }
-                out.push(rewrite_list(
-                    tag,
-                    value.unwrap_or_default(),
-                    base,
-                    children,
-                )?);
+                let list = rewrite_list(tag, value.unwrap_or_default(), base, children)?;
+                emit(&mut out, &list)?;
             }
-            _ => out.push(line.to_owned()),
+            _ => emit(&mut out, line)?,
         }
     }
     if variant {
         return Err("a variant with no URI line");
     }
-    let mut text = out.join("\n");
-    text.push('\n');
-    if text.len() > OUTPUT_MAX {
-        return Err("output too large");
-    }
-    if !hls_output_ok(&text, children.core) {
+    if !hls_output_ok(&out, children.core) {
         return Err("the output check");
     }
     Ok(Rewritten {
-        text,
+        text: out,
         target_duration,
     })
+}
+
+/// Appends a line, refusing before the output would pass `OUTPUT_MAX`: one
+/// short line repeated can make an accepted playlist's output 50 times its
+/// size.
+fn emit(out: &mut String, line: &str) -> Result<(), &'static str> {
+    if out.len() + line.len() + 1 > OUTPUT_MAX {
+        return Err("output too large");
+    }
+    out.push_str(line);
+    out.push('\n');
+    Ok(())
 }
 
 /// C0 but tab (a bare CR included), DEL, C1, and the Unicode line and
@@ -726,6 +733,16 @@ mod tests {
         for text in bad {
             assert!(!hls_output_ok(&text, CORE), "{text:?}");
         }
+    }
+
+    #[test]
+    fn the_output_budget_holds_while_writing() {
+        // One short line repeated is one resource, so only the output budget
+        // stops it, and it must stop before the refusal at the end.
+        let mut body = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+        body.push_str(&"a\n".repeat(600_000));
+        body.push_str("ftp://a.example/x\n");
+        assert_eq!(rewrite(&body, true).unwrap_err(), "output too large");
     }
 
     #[test]

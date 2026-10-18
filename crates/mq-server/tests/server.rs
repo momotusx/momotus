@@ -2323,8 +2323,15 @@ async fn manifest_limits_and_deadlines() {
         wide.push_str(&format!("#EXTINF:1,\n{i}\n"));
     }
     assert!(wide.len() < 8 << 20);
+    // Accepted at 8 MiB, but every line becomes a 100 byte core URL.
+    let mut repeated = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n".to_vec();
+    repeated.resize(8 << 20, b'\n');
+    for pair in repeated[32..].chunks_exact_mut(2) {
+        pair[0] = b'a';
+    }
     let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
         "/huge.m3u8" => Reply::playlist(huge.clone()),
+        "/repeated.m3u8" => Reply::playlist(repeated.clone()),
         "/wide.m3u8" => Reply::playlist(wide.clone()),
         _ => Reply {
             status: 200,
@@ -2346,6 +2353,11 @@ async fn manifest_limits_and_deadlines() {
     for (path, deadline, words) in [
         (
             "/huge.m3u8",
+            s(5),
+            "The stream's playlist could not be read",
+        ),
+        (
+            "/repeated.m3u8",
             s(5),
             "The stream's playlist could not be read",
         ),
