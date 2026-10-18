@@ -30,10 +30,15 @@ pub(crate) enum Sniffed {
     File,
 }
 
+/// DASH's namespace (ISO/IEC 23009-1).
+const DASH_NS: &[u8] = b"urn:mpeg:dash:schema:mpd:2011";
+
 /// Tells a playlist from a file by its first bytes: `#EXTM3U` after an
-/// optional BOM and whitespace is HLS; an XML root element named `MPD` under
-/// any prefix (after the declaration, comments, processing instructions and
-/// whitespace) is DASH.
+/// optional BOM and whitespace is HLS. An XML root element (after the
+/// declaration, comments, processing instructions and whitespace) named
+/// `MPD` in DASH's namespace, under any prefix the root binds to it, is
+/// DASH; one named `MPD` in no or another namespace, and a `Patch`, are
+/// refused: never served raw, never rewritten as DASH.
 pub(crate) fn sniff(prefix: &[u8]) -> Sniffed {
     let mut rest = prefix.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(prefix);
     rest = rest.trim_ascii_start();
@@ -70,14 +75,43 @@ pub(crate) fn sniff(prefix: &[u8]) -> Sniffed {
                 .position(|b| b.is_ascii_whitespace() || matches!(b, b'>' | b'/'))
                 .unwrap_or(tag.len());
             let name = &tag[..end];
-            let local = name.rsplit(|&b| b == b':').next().unwrap_or(name);
+            let (prefix, local) = match name.iter().position(|&b| b == b':') {
+                Some(at) => (&name[..at], &name[at + 1..]),
+                None => (&name[..0], name),
+            };
             return match local {
-                b"MPD" => Sniffed::Dash,
-                b"Patch" => Sniffed::Refused,
+                b"MPD" if namespace(&tag[end..], prefix) == Some(DASH_NS) => Sniffed::Dash,
+                b"MPD" | b"Patch" => Sniffed::Refused,
                 _ => Sniffed::File,
             };
         } else {
             return Sniffed::File;
+        }
+    }
+}
+
+/// The namespace a start tag's own attributes (`attrs`, after its name) bind
+/// to `prefix` (empty: the default namespace), if any.
+fn namespace<'a>(attrs: &'a [u8], prefix: &[u8]) -> Option<&'a [u8]> {
+    let mut rest = attrs;
+    loop {
+        rest = rest.trim_ascii_start();
+        let name_end = rest
+            .iter()
+            .position(|&b| b == b'=' || b == b'>' || b == b'/')?;
+        let name = rest[..name_end].trim_ascii();
+        rest = rest[name_end..].strip_prefix(b"=")?.trim_ascii_start();
+        let quote = *rest.first().filter(|q| matches!(q, b'"' | b'\''))?;
+        let value_end = rest[1..].iter().position(|&b| b == quote)?;
+        let value = &rest[1..1 + value_end];
+        rest = &rest[2 + value_end..];
+        let bound = match name.strip_prefix(b"xmlns") {
+            Some(b"") => prefix.is_empty(),
+            Some(rest) => rest.strip_prefix(b":") == Some(prefix) && !prefix.is_empty(),
+            None => false,
+        };
+        if bound {
+            return Some(value);
         }
     }
 }
@@ -721,6 +755,27 @@ mod tests {
         assert_eq!(sniff(mpd), Sniffed::Dash);
         assert_eq!(sniff(b"<!DOCTYPE x><MPD>"), Sniffed::Refused);
         assert_eq!(sniff(b"<?xml?><Patch>"), Sniffed::Refused);
+        // Namespace-aware: DASH only in DASH's namespace, under the prefix
+        // the root binds to it; any other MPD is refused, never a file.
+        let dash = |root: &str| sniff(format!("<?xml version=\"1.0\"?>{root}").as_bytes());
+        assert_eq!(
+            dash("<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type='static'>"),
+            Sniffed::Dash
+        );
+        assert_eq!(
+            dash("<MPD type=\"static\" xmlns='urn:mpeg:dash:schema:mpd:2011'/>"),
+            Sniffed::Dash
+        );
+        for root in [
+            "<MPD>",
+            "<d:MPD xmlns:d=\"urn:example:other\">",
+            "<x:MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" xmlns:x=\"urn:other\">",
+            "<MPD xmlns:d=\"urn:mpeg:dash:schema:mpd:2011\">",
+            "<d:MPD xmlns:dd=\"urn:mpeg:dash:schema:mpd:2011\">",
+            "<Patch xmlns=\"urn:mpeg:dash:schema:mpd-patch:2020\">",
+        ] {
+            assert_eq!(dash(root), Sniffed::Refused, "{root}");
+        }
         assert_eq!(sniff(b"\x1aE\xdf\xa3"), Sniffed::File);
         assert_eq!(sniff(b"<html>"), Sniffed::File);
     }
