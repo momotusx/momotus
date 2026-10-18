@@ -44,10 +44,24 @@ final class DebridStore {
     /// Tombstones whose record delete failed; retried with the next push.
     private var unfinished: [DebridTombstone] = []
     private var disconnecting: [String: Task<Void, any Error>] = [:]
+    /// Whether a service's pending record reached the keystore, as its card shows it.
+    private let report: @Sendable (_ service: String, _ stored: Bool) async -> Void
+    /// The record each service's last push asked for: what a retry stores.
+    private var asked: [String: DebridRecord] = [:]
+    /// Services whose last save failed (a refused write, or a read or listing before it).
+    private var unstored: Set<String> = []
+    private var retrying: Task<Void, Never>?
+    private let retryAfter: Duration
 
-    init(keystore: any DebridKeystore, core: any DebridCore) {
+    init(
+        keystore: any DebridKeystore, core: any DebridCore,
+        report: @escaping @Sendable (_ service: String, _ stored: Bool) async -> Void = { _, _ in },
+        retryAfter: Duration = .seconds(10)
+    ) {
         self.keystore = keystore
         self.core = core
+        self.report = report
+        self.retryAfter = retryAfter
     }
 
     /// True while any service has queued or running work.
@@ -78,7 +92,9 @@ final class DebridStore {
                 do { try await job.value() } catch { remember(tombstone) }
             }
         }
-        // A failed write is not acknowledged; the next push carries it again.
+        // A failed write is not acknowledged; the next push carries it again,
+        // and so does the retry while the keystore keeps failing.
+        asked = Dictionary(records.map { ($0.service, $0) }, uniquingKeysWith: { _, last in last })
         for record in records {
             enqueue(record.service, record.generation, write: true) { [self] in try await save(record) }
         }
@@ -158,10 +174,35 @@ final class DebridStore {
     }
 
     private func save(_ record: DebridRecord) async throws {
-        let stored = try await keystore.records().first { $0.service == record.service }
-        let newer = stored.map { $0.generation == record.generation && $0.revision > record.revision } ?? false
-        if !newer { try await keystore.writeRecord(record) }
+        do {
+            let stored = try await keystore.records().first { $0.service == record.service }
+            let newer = stored.map { $0.generation == record.generation && $0.revision > record.revision } ?? false
+            if !newer { try await keystore.writeRecord(record) }
+        } catch {
+            // Not stored, so not acknowledged. A read or a listing that failed
+            // before the write says so as a refused write does, and what the core
+            // asks for then is tried again until the keystore takes it.
+            unstored.insert(record.service)
+            await report(record.service, false)
+            retryLater()
+            throw error
+        }
+        unstored.remove(record.service)
+        await report(record.service, true)
         try await core.ack(service: record.service, generation: record.generation, revision: record.revision)
+    }
+
+    // ponytail: a fixed interval while any save keeps failing (a locked or busy
+    // Keychain); a protected-data notification could wake it sooner if that matters.
+    private func retryLater() {
+        guard retrying == nil else { return }
+        retrying = Task { [self] in
+            try? await Task.sleep(for: retryAfter)
+            retrying = nil
+            for (service, record) in asked where unstored.contains(service) {
+                enqueue(service, record.generation, write: true) { [self] in try await save(record) }
+            }
+        }
     }
 
     /// Deletes the record, reads back that it is gone, then the tombstone.

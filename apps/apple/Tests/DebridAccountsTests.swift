@@ -71,7 +71,13 @@ private final class FakeCore: DebridCore, @unchecked Sendable {
 
     private func note(_ records: [DebridRecord]) { restores.append(records) }
 
-    nonisolated func ack(service: String, generation: String, revision: UInt64) async throws {}
+    /// "service generation revision", in the order acknowledged.
+    var acks: [String] = []
+    nonisolated func ack(service: String, generation: String, revision: UInt64) async throws {
+        await noteAck("\(service) \(generation) \(revision)")
+    }
+
+    private func noteAck(_ ack: String) { acks.append(ack) }
     nonisolated func disconnect(service: String, generation: String) async throws {}
 
     func connect(_ service: String, _ key: String) async throws {
@@ -228,6 +234,47 @@ private func accounts(_ items: MemoryItems, _ core: FakeCore) -> (DebridAccounts
     // G is gone for good: deleted once it could be read, then its tombstone.
     #expect(try await keystore.records().isEmpty)
     #expect(try await keystore.tombstones().isEmpty)
+}
+
+/// What the cards were told, in order: "service stored" or "service not stored".
+@MainActor private final class Marks {
+    var list: [String] = []
+}
+
+@MainActor @Test func aKeychainThatCannotReadWhileStoringSaysSoThenStoresOnceItAnswers() async throws {
+    let items = MemoryItems()
+    let core = FakeCore()
+    let marks = Marks()
+    let keystore = ItemDebridKeystore(items: items)
+    let accounts = DebridAccounts(
+        keystore: keystore, core: core,
+        report: { service, stored in await MainActor.run { marks.list.append("\(service) \(stored ? "stored" : "not stored")") } },
+        retryAfter: .milliseconds(50), connect: { _, _ in })
+    await accounts.opened { nil }
+    // A typed key's record arrives while the Keychain cannot list its records.
+    items.failListings = 1
+    accounts.pushed([record("torbox", "G")])
+    await accounts.store.idle()
+    // The card says it is not stored; the core is not told it is.
+    #expect(marks.list == ["torbox not stored"])
+    #expect(core.acks.isEmpty)
+    #expect(try await keystore.records().isEmpty)
+    // The Keychain answers again: the retry stores the record and acknowledges it.
+    try await Task.sleep(for: .milliseconds(300))
+    await accounts.store.idle()
+    #expect(marks.list == ["torbox not stored", "torbox stored"])
+    #expect(core.acks == ["torbox G 1"])
+    #expect(try await keystore.records().map(\.generation) == ["G"])
+    // A refreshed token whose stored record cannot be read: the same, through a read.
+    items.failReads = ["debrid.record.torbox": 1]
+    accounts.pushed([DebridRecord(service: "torbox", generation: "G", revision: 2, credential: .key("k-torbox"))])
+    await accounts.store.idle()
+    #expect(marks.list.last == "torbox not stored")
+    #expect(core.acks == ["torbox G 1"])
+    try await Task.sleep(for: .milliseconds(300))
+    await accounts.store.idle()
+    #expect(marks.list.last == "torbox stored")
+    #expect(core.acks == ["torbox G 1", "torbox G 2"])
 }
 
 @MainActor @Test func aKeychainThatCannotListMovesNoLegacyKey() async throws {

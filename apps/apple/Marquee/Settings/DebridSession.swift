@@ -12,18 +12,17 @@ final class DebridSession {
     /// The core generation whose restore finished: until it matches, nothing of the app shows.
     private(set) var restored = -1
     @ObservationIgnored private let core: CoreClient
-    /// Services whose last record write the Keychain refused.
+    /// Services whose pending record the Keychain did not take (a refused write, or a read before it).
     let health: DebridStoreHealth
 
     init(core: CoreClient) {
         self.core = core
         let health = DebridStoreHealth()
         self.health = health
-        var keystore = ItemDebridKeystore(items: KeychainItems())
-        keystore.report = { [health] service, stored in await health.mark(service, stored: stored) }
         accounts = DebridAccounts(
-            keystore: keystore,
+            keystore: ItemDebridKeystore(items: KeychainItems()),
             core: CoreDebridCalls(core: core),
+            report: { [health] service, stored in await health.mark(service, stored: stored) },
             connect: { service, key in try await core.perform("setDebridKey", ["service": service, "key": key]) })
         view = LiveRecord("debrid", core: core)
         accounts.log = { coreLog.notice("\($0, privacy: .public)") }
@@ -59,7 +58,7 @@ final class DebridSession {
     }
 }
 
-/// Whether each service's last record write reached the Keychain, as the cards show it.
+/// Whether each service's pending record reached the Keychain, as the cards show it.
 @MainActor @Observable
 final class DebridStoreHealth {
     private(set) var unstored: Set<String> = []

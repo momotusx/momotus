@@ -32,9 +32,6 @@ enum DebridKeystoreError: Error {
 /// itself was not stored.
 struct ItemDebridKeystore: DebridKeystore {
     let items: any SecretItems
-    /// Whether a service's last record write reached the store: a card that
-    /// cannot be stored says so as soon as the write fails.
-    var report: @Sendable (_ service: String, _ stored: Bool) async -> Void = { _, _ in }
 
     private static func record(_ service: String) -> String { "debrid.record.\(service)" }
     private static func tombstone(_ t: DebridTombstone) -> String { "debrid.tombstone.\(t.service).\(t.generation)" }
@@ -76,11 +73,7 @@ struct ItemDebridKeystore: DebridKeystore {
     }
 
     func writeRecord(_ record: DebridRecord) async throws {
-        guard items.write(Self.record(record.service), try JSONEncoder().encode(record)) else {
-            await report(record.service, false)
-            throw DebridKeystoreError.refused
-        }
-        await report(record.service, true)
+        guard items.write(Self.record(record.service), try JSONEncoder().encode(record)) else { throw DebridKeystoreError.refused }
         // The record is stored: from now on its legacy key is ignored, and
         // deleted here or at the next start.
         _ = items.delete(Self.legacy(record.service))
@@ -129,10 +122,17 @@ final class DebridAccounts {
     var log: (String) -> Void = { _ in }
     private var ready = false
 
-    init(keystore: ItemDebridKeystore, core: any DebridCore, connect: @escaping (String, String) async throws -> Void) {
+    /// `report`: whether each service's pending record reached the Keychain, as
+    /// soon as a save fails or succeeds (the cards say "Kept for this session").
+    init(
+        keystore: ItemDebridKeystore, core: any DebridCore,
+        report: @escaping @Sendable (_ service: String, _ stored: Bool) async -> Void = { _, _ in },
+        retryAfter: Duration = .seconds(10),
+        connect: @escaping (String, String) async throws -> Void
+    ) {
         self.keystore = keystore
         self.connect = connect
-        store = DebridStore(keystore: keystore, core: core)
+        store = DebridStore(keystore: keystore, core: core, report: report, retryAfter: retryAfter)
     }
 
     /// The core is going away: its views' pushes wait for the next core's restore.
