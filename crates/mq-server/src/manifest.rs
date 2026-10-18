@@ -166,6 +166,10 @@ pub(crate) struct Table {
     /// one), for how long a blocking reload may wait; a child's goes when
     /// its entry goes.
     targets: HashMap<Option<u32>, u64>,
+    /// The playlists the latest master advertised (variants, renditions,
+    /// I-frame playlists): a player may switch to any of them at any time,
+    /// so segment churn never evicts them while that master is current.
+    topology: HashSet<u32>,
 }
 
 impl Table {
@@ -186,9 +190,27 @@ impl Table {
         }
     }
 
+    /// Ends a master's rewrite: the playlists it named are now the ones a
+    /// player may switch to.
+    pub(crate) fn advertise(&mut self) {
+        let floor = self.floor;
+        self.topology = self
+            .entries
+            .iter()
+            .filter(|(_, e)| e.used >= floor && e.role == Role::Playlist)
+            .map(|(&id, _)| id)
+            .collect();
+    }
+
     /// The id that serves `url` in `role`. A URL named before in another
-    /// role refuses the playlist naming it now, whichever came first.
-    pub(crate) fn register(&mut self, url: &Url, role: Role) -> Result<u32, &'static str> {
+    /// role refuses the playlist naming it now, whichever came first. Past
+    /// either limit, entries are evicted until both hold (`fit`).
+    pub(crate) fn register(
+        &mut self,
+        url: &Url,
+        role: Role,
+        alive: &dyn Fn() -> bool,
+    ) -> Result<u32, &'static str> {
         let (dir, last, query) = split(url);
         self.tick += 1;
         let probe = (
@@ -202,6 +224,7 @@ impl Table {
                 return Err("a resource named in two roles");
             }
             entry.used = self.tick;
+            self.fit(alive)?;
             return Ok(id);
         }
         if self.next == u32::MAX {
@@ -221,10 +244,16 @@ impl Table {
         };
         self.entries.insert(id, entry);
         self.ids.insert((dir, last.into(), query), id);
-        if self.entries.len() > MAX_ENTRIES || self.text > MAX_TEXT {
-            self.evict()?;
-        }
+        self.fit(alive)?;
         Ok(id)
+    }
+
+    /// Evicts until both limits hold, or refuses when nothing more may go.
+    fn fit(&mut self, alive: &dyn Fn() -> bool) -> Result<(), &'static str> {
+        while self.entries.len() > MAX_ENTRIES || self.text > MAX_TEXT {
+            self.evict(alive)?;
+        }
+        Ok(())
     }
 
     /// The URL and role of `id`; asking counts as use.
@@ -256,23 +285,29 @@ impl Table {
     }
 
     /// Drops the least recently used tenth, but none the running rewrite
-    /// named: when only those are left, the rewrite does not fit.
+    /// named and none the current master advertised: when only those are
+    /// left, the rewrite does not fit. Looks at `alive` as it goes.
     /// ponytail: a scan per eviction; a linked list if evictions ever show
     /// in profiles.
-    fn evict(&mut self) -> Result<(), &'static str> {
+    fn evict(&mut self, alive: &dyn Fn() -> bool) -> Result<(), &'static str> {
         let floor = self.floor;
-        let mut by_use: Vec<(u64, u32)> = self
-            .entries
-            .iter()
-            .filter(|(_, e)| e.used < floor)
-            .map(|(&id, e)| (e.used, id))
-            .collect();
+        let mut by_use: Vec<(u64, u32)> = Vec::new();
+        for (n, (&id, e)) in self.entries.iter().enumerate() {
+            checkpoint(n, alive)?;
+            if e.used < floor && !self.topology.contains(&id) {
+                by_use.push((e.used, id));
+            }
+        }
         if by_use.is_empty() {
             return Err("too many resources");
         }
+        if !alive() {
+            return Err("out of time");
+        }
         by_use.sort_unstable();
         let count = (self.entries.len() / 10).clamp(1, by_use.len());
-        for &(_, id) in &by_use[..count] {
+        for (n, &(_, id)) in by_use[..count].iter().enumerate() {
+            checkpoint(n, alive)?;
             self.targets.remove(&Some(id));
             if let Some(entry) = self.entries.remove(&id) {
                 self.text -= entry.last.len();
@@ -365,12 +400,22 @@ pub(crate) struct Children<'a> {
     pub(crate) alive: &'a dyn Fn() -> bool,
 }
 
-/// How many lines a rewrite handles between two looks at `alive`.
+/// How many lines (or entries) a rewrite handles between two looks at
+/// `alive`.
 const CHECK_EVERY: usize = 1024;
+
+/// Every `CHECK_EVERY` steps of a rewrite, the first included: stop once its
+/// time is up or its playback is gone.
+fn checkpoint(n: usize, alive: &dyn Fn() -> bool) -> Result<(), &'static str> {
+    if n.is_multiple_of(CHECK_EVERY) && !alive() {
+        return Err("out of time");
+    }
+    Ok(())
+}
 
 impl Children<'_> {
     fn link(&mut self, url: &Url, role: Role) -> Result<String, &'static str> {
-        let id = self.table.register(url, role)?;
+        let id = self.table.register(url, role, self.alive)?;
         let (_, last, _) = split(url);
         Ok(format!("{}{id}/{}", self.prefix, crate::sanitize(last)))
     }
@@ -386,10 +431,13 @@ pub(crate) fn rewrite_hls(
     media_only: bool,
     children: &mut Children<'_>,
 ) -> Result<Rewritten, &'static str> {
+    let alive = children.alive;
+    checkpoint(0, alive)?;
     let text = std::str::from_utf8(body).map_err(|_| "not UTF-8")?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut lines = Vec::new();
-    for line in text.split('\n') {
+    for (n, line) in text.split('\n').enumerate() {
+        checkpoint(n + 1, alive)?;
         let line = line.strip_suffix('\r').unwrap_or(line);
         // Media3 ends a line at a bare CR: one inside a kept tag would give
         // it a URI line this rewrite never saw.
@@ -409,9 +457,15 @@ pub(crate) fn rewrite_hls(
     if *first != "#EXTM3U" {
         return Err("no #EXTM3U");
     }
-    let named = |tag: &str| lines.iter().any(|l| tag_of(l) == Some(tag));
-    let master = named("EXT-X-STREAM-INF") || named("EXT-X-MEDIA");
-    let media = named("EXT-X-TARGETDURATION");
+    let (mut master, mut media) = (false, false);
+    for (n, line) in lines.iter().enumerate() {
+        checkpoint(n + 1, alive)?;
+        match tag_of(line) {
+            Some("EXT-X-STREAM-INF" | "EXT-X-MEDIA") => master = true,
+            Some("EXT-X-TARGETDURATION") => media = true,
+            _ => {}
+        }
+    }
     if master == media {
         return Err("neither or both a master and a media playlist");
     }
@@ -423,9 +477,7 @@ pub(crate) fn rewrite_hls(
     let mut variant = false;
     let mut target_duration = None;
     for (n, &line) in lines.iter().enumerate() {
-        if n % CHECK_EVERY == 0 && !(children.alive)() {
-            return Err("out of time");
-        }
+        checkpoint(n + 1, alive)?;
         if !line.starts_with('#') {
             let role = if master {
                 if !variant {
@@ -482,8 +534,9 @@ pub(crate) fn rewrite_hls(
     if variant {
         return Err("a variant with no URI line");
     }
-    if !hls_output_ok(&out, children.core) {
-        return Err("the output check");
+    output_check(&out, children.core, alive)?;
+    if master {
+        children.table.advertise();
     }
     Ok(Rewritten {
         text: out,
@@ -611,17 +664,34 @@ fn attributes(list: &str) -> Option<Vec<(&str, &str)>> {
 /// CR or CRLF; a line not starting with `#` is a URL; `URI="` anywhere is a
 /// URL), and accepts it only if every such URL is the core's own (`core` is
 /// `http://127.0.0.1:{port}/`), or `data:` in a key.
-pub(crate) fn hls_output_ok(text: &str, core: &str) -> bool {
-    text.split(['\n', '\r']).all(|line| {
+/// Looks at `alive` as it goes, like the rewrite.
+pub(crate) fn output_check(
+    text: &str,
+    core: &str,
+    alive: &dyn Fn() -> bool,
+) -> Result<(), &'static str> {
+    checkpoint(0, alive)?;
+    for (n, line) in text.split(['\n', '\r']).enumerate() {
+        checkpoint(n + 1, alive)?;
         if !line.is_empty() && !line.starts_with('#') && !line.starts_with(core) {
-            return false;
+            return Err("the output check");
         }
         let key = line.starts_with("#EXT-X-KEY:") || line.starts_with("#EXT-X-SESSION-KEY:");
-        line.match_indices("URI=\"").all(|(at, found)| {
+        let core_only = line.match_indices("URI=\"").all(|(at, found)| {
             let rest = &line[at + found.len()..];
             rest.starts_with(core) || (key && rest.starts_with("data:"))
-        })
-    })
+        });
+        if !core_only {
+            return Err("the output check");
+        }
+    }
+    Ok(())
+}
+
+/// `output_check` with all the time in the world, for tests.
+#[cfg(test)]
+pub(crate) fn hls_output_ok(text: &str, core: &str) -> bool {
+    output_check(text, core, &|| true).is_ok()
 }
 
 #[cfg(test)]
@@ -877,13 +947,13 @@ mod tests {
         let url = |s: &str| Url::parse(s).unwrap();
         let mut table = Table::default();
         let a = url("https://cdn.example/v/a.ts?sig=1");
-        let id = table.register(&a, Role::Media).unwrap();
-        assert_eq!(table.register(&a, Role::Media), Ok(id));
-        assert!(table.register(&a, Role::Small).is_err());
-        assert!(table.register(&a, Role::Playlist).is_err());
+        let id = table.register(&a, Role::Media, &|| true).unwrap();
+        assert_eq!(table.register(&a, Role::Media, &|| true), Ok(id));
+        assert!(table.register(&a, Role::Small, &|| true).is_err());
+        assert!(table.register(&a, Role::Playlist, &|| true).is_err());
         let k = url("https://cdn.example/k");
-        table.register(&k, Role::Small).unwrap();
-        assert!(table.register(&k, Role::Playlist).is_err());
+        table.register(&k, Role::Small, &|| true).unwrap();
+        assert!(table.register(&k, Role::Playlist, &|| true).is_err());
         assert_eq!(table.get(id), Some((a, Role::Media)));
         // Through a playlist: a URL first named as a key, then as a variant.
         let master = "#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"v.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n";
@@ -922,7 +992,7 @@ mod tests {
         for i in 0..32_000 {
             let url =
                 Url::parse(&format!("https://cdn.example/v/seg-{i:05}.m4s?sig={sig}")).unwrap();
-            table.register(&url, Role::Media).unwrap();
+            table.register(&url, Role::Media, &|| true).unwrap();
         }
         assert_eq!(table.len(), 32_000);
         assert_eq!(table.get(0).map(|(_, role)| role), Some(Role::Media));
@@ -933,14 +1003,14 @@ mod tests {
         let mut last = 0;
         for i in 32_000..=MAX_ENTRIES {
             let url = Url::parse(&format!("https://cdn.example/v/seg-{i:06}.m4s")).unwrap();
-            last = table.register(&url, Role::Media).unwrap();
+            last = table.register(&url, Role::Media, &|| true).unwrap();
         }
         assert!(table.len() <= MAX_ENTRIES);
         assert!(table.get(0).is_some(), "a recently used entry went");
         assert!(table.get(1).is_none(), "an untouched older entry stayed");
         // Ids are never reused: the next one is new, an evicted one stays gone.
         let url = Url::parse("https://cdn.example/v/new.m4s").unwrap();
-        assert_eq!(table.register(&url, Role::Media), Ok(last + 1));
+        assert_eq!(table.register(&url, Role::Media, &|| true), Ok(last + 1));
         assert!(table.get(1).is_none());
     }
 
@@ -955,16 +1025,146 @@ mod tests {
         let mut table = Table::default();
         table.begin();
         for i in 0..32_000 {
-            table.register(&signed(i), Role::Media).unwrap();
+            table.register(&signed(i), Role::Media, &|| true).unwrap();
         }
         assert_eq!(table.len(), 32_000);
         table.begin();
         for i in 32_000..40_000 {
-            table.register(&signed(i), Role::Media).unwrap();
+            table.register(&signed(i), Role::Media, &|| true).unwrap();
         }
         assert!(table.len() < 40_000, "the text limit evicted nothing");
         assert!(table.text <= MAX_TEXT);
         assert!(table.get(0).is_none());
+    }
+
+    /// A rewrite that is told to stop does no more work: at its start, while
+    /// it collects lines, while it evicts and while it checks its output.
+    #[test]
+    fn a_rewrite_looks_at_its_time_throughout() {
+        let base = Url::parse("https://cdn.example/v/live.m3u8").unwrap();
+        let body = format!(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n{}",
+            "#EXTINF:4,\ns.ts\n".repeat(CHECK_EVERY * 2)
+        );
+        // `alive` says stop at its `stop_at`-th question.
+        let run = |stop_at: usize| {
+            let asked = std::cell::Cell::new(0);
+            let alive = || {
+                asked.set(asked.get() + 1);
+                asked.get() < stop_at
+            };
+            let mut table = Table::default();
+            let mut children = Children {
+                core: CORE,
+                prefix: PREFIX,
+                table: &mut table,
+                alive: &alive,
+            };
+            let result = rewrite_hls(body.as_bytes(), &base, true, &mut children);
+            (result.map(|r| r.text), asked.get(), table.len())
+        };
+        // At once: nothing read, nothing named.
+        assert_eq!(run(1), (Err("out of time"), 1, 0));
+        // While collecting lines: still nothing named.
+        assert_eq!(run(2), (Err("out of time"), 2, 0));
+        // Eviction: the table is full of what earlier rewrites named, and a
+        // new name finds the time up while making room.
+        let mut table = Table::default();
+        table.begin();
+        let url = |i: usize| Url::parse(&format!("https://cdn.example/v/{i}.ts")).unwrap();
+        for i in 0..MAX_ENTRIES {
+            table.register(&url(i), Role::Media, &|| true).unwrap();
+        }
+        table.begin();
+        let stopped = table.register(&url(MAX_ENTRIES), Role::Media, &|| false);
+        assert_eq!(stopped, Err("out of time"));
+        assert_eq!(
+            table.len(),
+            MAX_ENTRIES + 1,
+            "evicted after it was told to stop"
+        );
+        // The output check.
+        let clean = format!("#EXTM3U\n{CORE}c/t/0/s.ts\n");
+        assert_eq!(output_check(&clean, CORE, &|| true), Ok(()));
+        assert_eq!(output_check(&clean, CORE, &|| false), Err("out of time"));
+    }
+
+    /// A player may switch to any variant or rendition the master named at
+    /// any time: segment churn never evicts them while that master is
+    /// current.
+    #[test]
+    fn advertised_playlists_survive_segment_churn() {
+        let base = Url::parse("https://cdn.example/v/master.m3u8").unwrap();
+        let mut table = Table::default();
+        let mut children = Children {
+            core: CORE,
+            prefix: PREFIX,
+            table: &mut table,
+            alive: &|| true,
+        };
+        let master = "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"en\",URI=\"audio/en.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=1,AUDIO=\"a\"\nlow/index.m3u8\n";
+        let text = rewrite_hls(master.as_bytes(), &base, false, &mut children)
+            .unwrap()
+            .text;
+        let audio: u32 = text
+            .split("/c/token/")
+            .nth(1)
+            .unwrap()
+            .split('/')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        // The player plays the video rendition: its reloads name fresh
+        // signed segments, enough to evict several times over.
+        let media = Url::parse("https://cdn.example/v/low/index.m3u8").unwrap();
+        for reload in 0..7 {
+            let mut body = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+            for i in 0..20_000 {
+                body.push_str(&format!("#EXTINF:4,\ns{reload}-{i}.ts\n"));
+            }
+            rewrite_hls(body.as_bytes(), &media, true, &mut children).unwrap();
+        }
+        assert!(children.table.len() <= MAX_ENTRIES);
+        // The audio rendition the master advertised still answers.
+        let (url, role) = children.table.get(audio).expect("the audio rendition went");
+        assert_eq!(url.as_str(), "https://cdn.example/v/audio/en.m3u8");
+        assert_eq!(role, Role::Playlist);
+    }
+
+    /// Past either limit, eviction goes on until both hold; a name already
+    /// in the table checks them too.
+    #[test]
+    fn both_limits_hold_after_every_name() {
+        // Each query its own: shared ones are interned once.
+        let big = |i: usize, mib: usize| {
+            let query = format!("{i}-{}", "q".repeat(mib << 20));
+            Url::parse(&format!("https://cdn.example/v/{i}.ts?sig={query}")).unwrap()
+        };
+        // About 31 MiB of older names, then one with a 7 MiB query: one
+        // tenth evicted is not enough.
+        let mut table = Table::default();
+        table.begin();
+        for i in 0..31 {
+            table.register(&big(i, 1), Role::Media, &|| true).unwrap();
+        }
+        table.begin();
+        table.register(&big(99, 7), Role::Media, &|| true).unwrap();
+        assert!(table.text <= MAX_TEXT, "{} bytes of text", table.text);
+        // One rewrite naming more than the text limit is refused, leaving
+        // the table over it; the next name, though already there, brings it
+        // back under.
+        let mut table = Table::default();
+        table.begin();
+        for i in 0..4 {
+            table.register(&big(i, 7), Role::Media, &|| true).unwrap();
+        }
+        let refused = table.register(&big(4, 7), Role::Media, &|| true);
+        assert_eq!(refused, Err("too many resources"));
+        assert!(table.text > MAX_TEXT);
+        table.begin();
+        table.register(&big(0, 7), Role::Media, &|| true).unwrap();
+        assert!(table.text <= MAX_TEXT, "{} bytes of text", table.text);
     }
 
     #[test]
@@ -972,7 +1172,7 @@ mod tests {
         let url = |i: usize| Url::parse(&format!("https://cdn.example/v/{i}.m3u8")).unwrap();
         let mut table = Table::default();
         table.begin();
-        let first = table.register(&url(0), Role::Playlist).unwrap();
+        let first = table.register(&url(0), Role::Playlist, &|| true).unwrap();
         table.set_target(Some(first), 4);
         table.set_target(None, 6);
         assert_eq!(table.target(Some(first)), Some(4));
@@ -980,7 +1180,7 @@ mod tests {
         // target duration with it.
         table.begin();
         for i in 1..=MAX_ENTRIES {
-            table.register(&url(i), Role::Media).unwrap();
+            table.register(&url(i), Role::Media, &|| true).unwrap();
         }
         assert!(table.get(first).is_none());
         assert_eq!(
