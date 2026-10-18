@@ -7,9 +7,11 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
+use crate::views::addons_changed;
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
-use mq_addons::{AddonEvent, Deadlines};
+use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
+use mq_library::Table;
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_streams::{
     DeviceCaps, Group, HideReason, ParsedStream, RankInput, Ranked, RankedRow, Reason, StreamPrefs,
@@ -134,14 +136,15 @@ impl VersionsView {
                 .flatten();
         }
         let episode = (params.target.season, params.target.episode);
-        let addons = core.installed_addons().unwrap_or_default();
+        // Subscribe before the first read so no addon change slips in between.
+        let changes = core.library().subscribe();
         let path = ResourcePath {
             resource: "stream".into(),
             r#type: params.kind.clone(),
             id: params.video_id.clone(),
             extra: vec![],
         };
-        let eligible: Vec<_> = addons.into_iter().filter(|a| a.supports(&path)).collect();
+        let eligible = eligible(core, &path);
         let state = Arc::new(Mutex::new(State {
             streams: Vec::new(),
             ranked: Ranked::default(),
@@ -158,11 +161,12 @@ impl VersionsView {
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
-        tasks.spawn(collect(
+        tasks.spawn(supervise(
             core.clone(),
+            changes,
             eligible,
             path,
-            params,
+            Arc::new(params),
             state.clone(),
             snapshot.clone(),
         ));
@@ -230,11 +234,70 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+fn eligible(core: &Core, path: &ResourcePath) -> Vec<InstalledAddon> {
+    let addons = core.installed_addons().unwrap_or_default();
+    addons.into_iter().filter(|a| a.supports(path)).collect()
+}
+
+/// Asks the installed stream addons, and asks again from the start whenever
+/// the installed addons change: a source installed while a title is open
+/// shows up without reopening it.
+async fn supervise(
+    core: Core,
+    mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
+    mut addons: Vec<InstalledAddon>,
+    path: ResourcePath,
+    params: Arc<VersionsParams>,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<VersionsSnapshot>,
+) {
+    loop {
+        // Dropping an unfinished run stops its writes at once.
+        tokio::select! {
+            () = collect(core.clone(), addons, path.clone(), params.clone(), state.clone(), snapshot.clone()) => {
+                if !addons_changed(&mut changes).await {
+                    return;
+                }
+            }
+            changed = addons_changed(&mut changes) => if !changed {
+                return;
+            },
+        }
+        addons = eligible(&core, &path);
+        let mut s = lock(&state);
+        restart(&mut s, &addons);
+        snapshot.set(render(&s));
+    }
+}
+
+/// A fresh run over `addons`. A frozen pick stays while its addon is still
+/// installed; otherwise the next answers pick again.
+fn restart(s: &mut State, addons: &[InstalledAddon]) {
+    let from_installed = s
+        .recommended
+        .as_ref()
+        .and_then(|r| r.stream.addon_url.as_ref())
+        .is_some_and(|url| addons.iter().any(|a| a.transport_url == *url));
+    if !(s.frozen && from_installed) {
+        s.frozen = false;
+        s.recommended = None;
+    }
+    s.streams.clear();
+    s.ranked = Ranked::default();
+    s.pending = addons
+        .iter()
+        .map(|a| (a.transport_url.clone(), a.manifest.name.clone()))
+        .collect();
+    s.slow.clear();
+    s.failed.clear();
+    s.done = addons.is_empty();
+}
+
 async fn collect(
     core: Core,
-    addons: Vec<mq_addons::InstalledAddon>,
+    addons: Vec<InstalledAddon>,
     path: ResourcePath,
-    params: VersionsParams,
+    params: Arc<VersionsParams>,
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<VersionsSnapshot>,
 ) {
@@ -251,7 +314,6 @@ async fn collect(
         (url.clone(), name)
     };
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
-    let params = Arc::new(params);
     let mut next_index = 0u32;
     while let Some(event) = fanout.next().await {
         // Parsing is CPU work: keep it off the async threads that feed UIs.

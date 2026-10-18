@@ -330,3 +330,85 @@ async fn remembers_the_release_line_played_last_for_the_title() {
     assert!(best.release_name.contains("NTb"), "{best:?}");
     assert!(best.reasons.contains(&Reason::SameReleaseAsLast));
 }
+
+/// Waits until `check` holds for the view's snapshot, or fails after 10 s.
+async fn until(
+    view: &VersionsView,
+    what: &str,
+    check: impl Fn(&mq_runtime::views::versions::VersionsSnapshot) -> bool,
+) {
+    for _ in 0..200 {
+        if check(&view.snapshot()) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("never: {what}; last {:?}", view.snapshot());
+}
+
+/// A source installed while the title is open shows up without reopening it,
+/// and a source removed takes its versions with it.
+#[tokio::test]
+async fn versions_follow_installed_addons() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let view = VersionsView::open(&core, params());
+    until(&view, "done with no addon", |s| {
+        s.done && s.recommended.is_none()
+    })
+    .await;
+
+    let first = stream_addon("first", Duration::ZERO, FIRST).await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&first), &core.hlc())
+        .unwrap();
+    until(&view, "a pick from the new install", |s| {
+        s.done && s.recommended.as_ref().is_some_and(|r| r.via == "first")
+    })
+    .await;
+
+    core.library().set_addons("p", &[], &core.hlc()).unwrap();
+    until(&view, "nothing once it is removed", |s| {
+        s.done && s.recommended.is_none() && s.rows.is_empty()
+    })
+    .await;
+}
+
+/// A pick under focus stays through another install, and lets go when its own
+/// addon is removed.
+#[tokio::test]
+async fn a_frozen_pick_stays_until_its_addon_goes() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let first = stream_addon("first", Duration::ZERO, FIRST).await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&first), &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    until(&view, "the first pick", |s| s.recommended.is_some()).await;
+    view.freeze();
+
+    let second = stream_addon("second", Duration::from_millis(100), SECOND).await;
+    core.library()
+        .set_addons("p", &[second.clone(), first.clone()], &core.hlc())
+        .unwrap();
+    until(&view, "both answered", |s| {
+        s.done && s.pending_addons.is_empty() && !s.rows.is_empty()
+    })
+    .await;
+    let snap = view.snapshot();
+    assert!(snap.frozen);
+    assert_eq!(
+        snap.recommended.unwrap().via,
+        "first",
+        "the pick under focus did not move"
+    );
+
+    core.library()
+        .set_addons("p", std::slice::from_ref(&second), &core.hlc())
+        .unwrap();
+    until(&view, "a new pick from what is left", |s| {
+        s.done && !s.frozen && s.recommended.as_ref().is_some_and(|r| r.via == "second")
+    })
+    .await;
+}
