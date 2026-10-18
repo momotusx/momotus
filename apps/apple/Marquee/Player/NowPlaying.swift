@@ -74,6 +74,10 @@ final class NowPlaying {
     /// What the Lock Screen shows: the title, the episode, the poster, the
     /// length, where the playhead is and how fast it moves.
     func update(title: String, episode: String?, duration: Double, position: Double, rate: Float) {
+        // Only the playback that runs speaks: SwiftUI builds and drops spare
+        // player models, and one of those published "paused at 0:00" over a
+        // film playing at 2x.
+        guard !targets.isEmpty else { return }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,

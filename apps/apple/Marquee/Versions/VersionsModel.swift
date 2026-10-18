@@ -15,12 +15,17 @@ struct PlayTargetInfo: Hashable, Sendable {
     let episode: Int?
     let resumeMs: Int64?
 
-    init(kind: String, itemId: String, videoId: String, title: String, poster: String?, resumeMs: Int64?) {
+    /// `season` and `episode` when the caller knows them (the core's next
+    /// episode); else read from an id shaped "<series>:<season>:<episode>".
+    init(
+        kind: String, itemId: String, videoId: String, title: String, poster: String?, resumeMs: Int64?,
+        season: Int? = nil, episode: Int? = nil
+    ) {
         (self.kind, self.itemId, self.videoId, self.title, self.poster, self.resumeMs) =
             (kind, itemId, videoId, title, poster, resumeMs)
-        // Episode ids are "<series>:<season>:<episode>".
         let parts = videoId.split(separator: ":")
-        (season, episode) = parts.count == 3 ? (Int(parts[1]), Int(parts[2])) : (nil, nil)
+        let parsed = parts.count == 3 ? (Int(parts[1]), Int(parts[2])) : (nil, nil)
+        (self.season, self.episode) = (season ?? parsed.0, episode ?? parsed.1)
     }
 }
 

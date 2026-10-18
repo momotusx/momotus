@@ -23,7 +23,8 @@ final class PlayerModel {
     private(set) var subtitle: SubtitleTrack?
     private(set) var cues: [WebVTT.Cue] = []
     var rate: Float = 1 {
-        didSet { player.defaultRate = rate; if playing { player.rate = rate } }
+        // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
+        didSet { player.defaultRate = rate; if playing { player.rate = rate }; publishNowPlaying() }
     }
 
     /// The Versions view this playback came from; held so the core keeps it.
@@ -157,7 +158,7 @@ final class PlayerModel {
         let current = route.target
         let target = PlayTargetInfo(
             kind: current.kind, itemId: current.itemId, videoId: next.videoId, title: current.title,
-            poster: current.poster, resumeMs: nil)
+            poster: current.poster, resumeMs: nil, season: next.season, episode: next.episode)
         let model = VersionsModel(target: target, core: core, bingeGroup: playback?.bingeGroup)
         guard let pick = await model.settledPick() else {
             player.pause()
