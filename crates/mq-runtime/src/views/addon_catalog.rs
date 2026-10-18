@@ -40,9 +40,14 @@ const ID_MAX: usize = 128;
 /// Types and resources: at most this many, each at most `WORD_MAX` bytes.
 const WORDS_MAX: usize = 16;
 const WORD_MAX: usize = 32;
-/// One entry as JSON: two full lists (600 entries) stay far below the
-/// bridge's 4 MiB message cap, whatever the lists hold.
+/// One entry as JSON, its `copyKey` included: two full lists (600 entries)
+/// stay far below the bridge's 4 MiB message cap, whatever the lists and
+/// the profile's addons hold. An entry without its copy key is checked
+/// against `ENTRY_MAX - COPY_KEY_MAX`.
 const ENTRY_MAX: usize = 4 * 1024;
+/// A copy's link in `copyKey`, as JSON; a longer one is left out (the card
+/// reads Set up, off, with no action).
+const COPY_KEY_MAX: usize = 1024;
 /// A list's body (Community was 122 KiB on 2026-10-18).
 const LIST_MAX_BYTES: usize = 1024 * 1024;
 /// A listed addon's manifest.
@@ -119,7 +124,8 @@ pub struct ListedAddon {
     pub configure_url: String,
     pub installed: Installed,
     /// With `copyOff`: the first such copy in addon order, for
-    /// `setAddonEnabled`. May hold keys: never show or log it.
+    /// `setAddonEnabled`; none when its link is over 1 KiB as JSON (the
+    /// card then has no action). May hold keys: never show or log it.
     pub copy_key: Option<String>,
 }
 
@@ -568,7 +574,8 @@ fn entry(raw: &Value) -> Option<ListedAddon> {
         installed: Installed::Absent,
         copy_key: None,
     };
-    (serde_json::to_vec(&entry).ok()?.len() <= ENTRY_MAX).then_some(entry)
+    // Room left for the copy key `mark_installed` may add.
+    (serde_json::to_vec(&entry).ok()?.len() + COPY_KEY_MAX <= ENTRY_MAX).then_some(entry)
 }
 
 /// Text without markup: tags dropped (a `<` that opens none stays), the
@@ -727,10 +734,16 @@ fn installed_state(entry: &ListedAddon, rows: &[Row]) -> (Installed, Option<Stri
     if copies.iter().any(|row| row.enabled) {
         (Installed::CopyOn, None)
     } else if let Some(first) = copies.first() {
-        (Installed::CopyOff, Some(first.stored.clone()))
+        (Installed::CopyOff, copy_key(&first.stored))
     } else {
         (Installed::Absent, None)
     }
+}
+
+/// A copy's link for `copyKey`, unless it is over `COPY_KEY_MAX` as JSON.
+fn copy_key(stored: &str) -> Option<String> {
+    let json = serde_json::to_string(stored).ok()?;
+    (json.len() <= COPY_KEY_MAX).then(|| stored.to_owned())
 }
 
 /// The words of a list that could not be read.

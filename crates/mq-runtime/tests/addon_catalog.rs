@@ -419,6 +419,11 @@ fn a_crafted_entry_never_outgrows_a_push() {
     };
     // Over 4 KiB as JSON: dropped.
     assert!(entries(&[big(0, &"\u{1}".repeat(32))]).is_empty());
+    // Under 4 KiB, but with no room left for a copy key (1 KiB): dropped.
+    let roomless = big(0, &"\"".repeat(32));
+    let len = serde_json::to_vec(&roomless["manifest"]).unwrap().len();
+    assert!(len < 4 * 1024, "{len}");
+    assert!(entries(&[roomless]).is_empty());
     // Two full lists of the largest shown fit one push of the bridge (4 MiB).
     let list: Vec<Value> = (0..300).map(|i| big(i, &"w".repeat(32))).collect();
     let shown = entries(&list);
@@ -434,6 +439,95 @@ fn a_crafted_entry_never_outgrows_a_push() {
     };
     let push = json!({"sub": 1, "updates": [snapshot]}).to_string();
     assert!(push.len() < 4 * 1024 * 1024, "{}", push.len());
+}
+
+/// The view's newest snapshot once every entry reads `state`.
+async fn all_read(view: &AddonCatalogView, state: Installed) -> AddonCatalogSnapshot {
+    until(view, |s| {
+        s.lists.iter().all(|l| l.state == ListState::Ready)
+            && s.lists
+                .iter()
+                .flat_map(|l| &l.entries)
+                .all(|e| e.installed == state)
+    })
+    .await
+}
+
+/// Every entry within 4 KiB as JSON, and the push of the snapshot within
+/// the bridge's 4 MiB message cap. Returns the push's size.
+fn fits_a_push(snapshot: &AddonCatalogSnapshot) -> usize {
+    for entry in snapshot.lists.iter().flat_map(|l| &l.entries) {
+        let len = serde_json::to_vec(entry).unwrap().len();
+        assert!(len <= 4 * 1024, "{len} bytes: {}", entry.key);
+    }
+    let push = json!({"sub": 1, "updates": [snapshot]}).to_string();
+    assert!(push.len() < 4 * 1024 * 1024, "{}", push.len());
+    push.len()
+}
+
+#[tokio::test]
+async fn a_copys_link_never_outgrows_a_push() {
+    // Two lists of 300 short links on one host, all the same addon, and a
+    // configured copy of it off, its link with an 8 KiB path: each card
+    // would repeat that link as its copyKey (5 MB in one push).
+    let short: Vec<Value> = (0..300)
+        .map(|i| {
+            raw(
+                &format!("https://h.example/e{i}/manifest.json"),
+                "same",
+                json!({}),
+            )
+        })
+        .collect();
+    let list = json!({"addons": short}).to_string();
+    let source = Source::start(&list, &list).await;
+    let core = Core::temporary("p").unwrap();
+    let view = AddonCatalogView::open_from(&core, &source.url(), false);
+    let long = format!("https://h.example/{}/manifest.json", "k".repeat(8 * 1024));
+    core.library()
+        .set_addons("p", &[row(&long, "same", false)], &core.hlc())
+        .unwrap();
+    let snapshot = all_read(&view, Installed::CopyOff).await;
+    assert_eq!(snapshot.lists[0].entries.len(), 300);
+    // Set up, off, with no action: the link is left out.
+    let keys = snapshot.lists.iter().flat_map(|l| &l.entries);
+    assert!(keys.clone().all(|e| e.copy_key.is_none()));
+    fits_a_push(&snapshot);
+    // The largest entries the lists show, with a copy whose link is as long
+    // as a copyKey may be (1 KiB as JSON): the key is there, and still fits.
+    let id = "i".repeat(128);
+    let big: Vec<Value> = (0..300)
+        .map(|i| {
+            let mut entry = raw(
+                &format!("https://h.example/e{i}/manifest.json"),
+                &id,
+                json!({}),
+            );
+            entry["manifest"]["name"] = json!("\u{10348}".repeat(80));
+            entry["manifest"]["description"] = json!("\u{10348}".repeat(300));
+            entry["manifest"]["types"] = json!(vec!["w".repeat(32); 16]);
+            entry["manifest"]["resources"] = json!(vec!["w".repeat(32); 16]);
+            entry
+        })
+        .collect();
+    let list = json!({"addons": big}).to_string();
+    source.set("official", 200, &list);
+    source.set("community", 200, &list);
+    let at_most = format!("https://h.example/{}/manifest.json", "k".repeat(990));
+    assert_eq!(serde_json::to_string(&at_most).unwrap().len(), 1024);
+    core.library()
+        .set_addons("p", &[row(&at_most, &id, false)], &core.hlc())
+        .unwrap();
+    let view = AddonCatalogView::open_from(&core, &source.url(), true);
+    let snapshot = all_read(&view, Installed::CopyOff).await;
+    assert_eq!(snapshot.lists[1].entries.len(), 300);
+    let keys = snapshot.lists.iter().flat_map(|l| &l.entries);
+    assert!(
+        keys.clone()
+            .all(|e| e.copy_key.as_deref() == Some(&*at_most))
+    );
+    let size = fits_a_push(&snapshot);
+    assert!(size > 2 * 1024 * 1024, "the largest entries, {size} bytes");
 }
 
 #[tokio::test]
