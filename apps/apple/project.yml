@@ -96,6 +96,7 @@ targets:
       - path: Marquee/Core/ProfileModels.swift
       - path: Marquee/Core/DebridModels.swift
       - path: Marquee/Core/DebridStore.swift
+      - path: Marquee/Core/DebridAccounts.swift
       - path: Marquee/Player/WebVTT.swift
       - path: Marquee/Sync/SyncWords.swift
       - path: Marquee/Theme/ArtLoader.swift

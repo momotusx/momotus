@@ -10,6 +10,7 @@ struct SettingsScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
+    @Environment(DebridSession.self) private var debrid
     #if DEBUG
     @State private var previewPairing = false
     #endif
@@ -64,7 +65,7 @@ struct SettingsScreen: View {
                 NavigationLink {
                     DebridScreen(core: core)
                 } label: {
-                    SettingsRow(symbol: "zap", title: "Debrid services", detail: "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.")
+                    SettingsRow(symbol: "zap", title: "Debrid services", detail: debrid.inUse ?? "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.")
                 }
                 .buttonStyle(.plain)
                 NavigationLink {

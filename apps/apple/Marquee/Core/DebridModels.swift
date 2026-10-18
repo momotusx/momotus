@@ -1,3 +1,5 @@
+import Foundation
+
 // Debrid account DTOs, mirroring apps/web/src/core/generated/DebridRecord.ts,
 // DebridCredential.ts, DebridTombstone.ts and RestoreAnswer.ts. A credential
 // and a record never print a key, token, client id or secret: description,
@@ -104,8 +106,68 @@ extension DebridRecord: CustomStringConvertible, CustomDebugStringConvertible, C
     }
 }
 
-/// What a debrid key change says, storing and handing over apart (Android's `DebridCopy`).
+/// The `debrid` view (apps/web/src/core/generated/DebridSnapshot.ts).
+struct DebridSnapshot: Decodable, Hashable, Sendable {
+    /// Connected services, the default store first.
+    let accounts: [DebridAccount]
+    /// Per service, the newest record the app has not acknowledged: store it, then `ackDebrid`.
+    let pending: [DebridRecord]
+}
+
+struct DebridAccount: Decodable, Hashable, Sendable {
+    let service: String
+    /// What `disconnectDebrid` names.
+    let generation: String
+    /// "ok", "failing" or "reconnect".
+    let state: String
+}
+
+/// A sign-in by code (`debridLogin`), tagged by "phase".
+enum DebridLoginSnapshot: Decodable, Hashable, Sendable {
+    case starting
+    /// Show `userCode` and `url`, and `qr` as a QR code, until `expiresMs` (wall clock).
+    case code(userCode: String, url: String, qr: String, expiresMs: Int64)
+    case done, expired, denied, used
+    case failed(reason: String)
+
+    private enum Key: String, CodingKey { case phase, userCode, url, qr, expiresMs, reason }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        switch try c.decode(String.self, forKey: .phase) {
+        case "starting": self = .starting
+        case "code":
+            self = .code(userCode: try c.decode(String.self, forKey: .userCode), url: try c.decode(String.self, forKey: .url),
+                         qr: try c.decode(String.self, forKey: .qr), expiresMs: try c.decode(Int64.self, forKey: .expiresMs))
+        case "done": self = .done
+        case "expired": self = .expired
+        case "denied": self = .denied
+        case "used": self = .used
+        case "failed": self = .failed(reason: try c.decode(String.self, forKey: .reason))
+        case let phase: throw DecodingError.dataCorruptedError(forKey: .phase, in: c, debugDescription: "unknown sign-in phase \(phase)")
+        }
+    }
+}
+
+/// The debrid services and the words around them (Android's `DebridCopy`).
 enum DebridWords {
+    struct Service: Identifiable, Sendable {
+        let id: String
+        let name: String
+        let keyPage: String
+    }
+
+    /// In this order: `restoreDebrid` makes the first stored one the default.
+    static let services = [
+        Service(id: "realdebrid", name: "Real-Debrid", keyPage: "https://real-debrid.com/apitoken"),
+        Service(id: "torbox", name: "TorBox", keyPage: "https://torbox.app/settings"),
+        Service(id: "alldebrid", name: "AllDebrid", keyPage: "https://alldebrid.com/apikeys"),
+        Service(id: "premiumize", name: "Premiumize", keyPage: "https://www.premiumize.me/account"),
+    ]
+
+    /// Services that sign in with a code; Premiumize takes a key only.
+    static let codeServices: Set<String> = ["realdebrid", "alldebrid", "torbox"]
+
     static func inUse(_ count: Int) -> String {
         switch count {
         case 0: "No debrid service in use."
@@ -114,16 +176,46 @@ enum DebridWords {
         }
     }
 
-    /// After the Keychain took the change: what the core did with it, with
-    /// its count, or its refusal when `inUse` is nil.
-    static func outcome(removed: Bool, inUse count: Int?, refused: String? = nil) -> String {
-        let kept = removed ? "Removed from this device." : "Saved on this device."
-        guard let count else { return "\(kept) The core did not take it: \(refused ?? "no answer")." }
-        return "\(kept) \(inUse(count))"
+    /// A card's state in words, nil when the service is not connected.
+    /// "Connected" only once its record is stored and nothing is pending.
+    static func state(_ account: DebridAccount?, pending: Bool, stored: Bool = true) -> String? {
+        guard let account else { return nil }
+        // The core holds it, but the Keychain did not take it: gone after a restart.
+        if pending && !stored { return "Kept for this session" }
+        switch account.state {
+        case "reconnect": return "Sign in again: the service asked for it"
+        case "failing": return "Not answering, trying again"
+        default: return pending ? "Saving" : "Connected"
+        }
     }
 
-    /// The Keychain refused: nothing changed, here or in the core.
-    static func refused(removing: Bool) -> String {
-        removing ? "This device could not remove the key, so nothing changed." : "This device could not store the key, so nothing changed."
+    /// What a sign-in by code says, for every phase but the code itself.
+    static func login(_ phase: DebridLoginSnapshot) -> String {
+        switch phase {
+        case .starting: "Getting a code"
+        case .code: "Enter the code"
+        case .done: "Connected"
+        case .expired: "The code ran out before it was entered."
+        case .denied: "The sign-in was turned down on the service's page."
+        case .used: "Another sign-in or key took its place."
+        case .failed(let reason): reason
+        }
     }
+
+    /// "Good for 4:59": the time a code has left, rounded up.
+    static func goodFor(_ ms: Int64) -> String {
+        let total = max(0, (ms + 999) / 1000)
+        return "Good for \(total / 60):\(String(format: "%02d", total % 60))"
+    }
+
+    /// "real-debrid.com/device": the sign-in page as a person types it.
+    static func address(_ url: String) -> String {
+        var text = url
+        for prefix in ["https://", "http://", "www."] where text.hasPrefix(prefix) { text.removeFirst(prefix.count) }
+        while text.hasSuffix("/") { text.removeLast() }
+        return text
+    }
+
+    /// A disconnect whose tombstone could not be saved: nothing changed.
+    static let notSaved = "This device could not save that, so it stays connected."
 }

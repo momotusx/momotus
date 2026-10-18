@@ -21,13 +21,17 @@ import Testing
     #expect(!PairingWords.plainAddress("sync.example.org"))
 }
 
-@Test func debridSaysStoringAndHandingOverApart() {
-    #expect(DebridWords.outcome(removed: false, inUse: 1) == "Saved on this device. 1 debrid service in use.")
-    #expect(DebridWords.outcome(removed: true, inUse: 0) == "Removed from this device. No debrid service in use.")
-    #expect(DebridWords.outcome(removed: false, inUse: nil, refused: "the core stopped") == "Saved on this device. The core did not take it: the core stopped.")
-    // A Keychain refusal never says saved.
-    #expect(!DebridWords.refused(removing: false).contains("Saved"))
-    #expect(DebridWords.refused(removing: true) == "This device could not remove the key, so nothing changed.")
+@Test func aDebridCardSaysConnectedOnlyOnceStored() {
+    let ok = DebridAccount(service: "torbox", generation: "g", state: "ok")
+    #expect(DebridWords.state(nil, pending: false) == nil)
+    #expect(DebridWords.state(ok, pending: true) == "Saving")
+    #expect(DebridWords.state(ok, pending: false) == "Connected")
+    #expect(DebridWords.state(DebridAccount(service: "torbox", generation: "g", state: "reconnect"), pending: false) == "Sign in again: the service asked for it")
+    #expect(DebridWords.state(DebridAccount(service: "torbox", generation: "g", state: "failing"), pending: true) == "Not answering, trying again")
+    #expect(DebridWords.login(.used) == "Another sign-in or key took its place.")
+    #expect(DebridWords.goodFor(299_001) == "Good for 5:00")
+    #expect(DebridWords.address("https://www.real-debrid.com/device/") == "real-debrid.com/device")
+    #expect(DebridWords.inUse(2) == "2 debrid services in use.")
 }
 
 @Test func aHomeRowToggleReadsTheLastReply() {

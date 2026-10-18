@@ -1,0 +1,164 @@
+import Foundation
+
+// The device's debrid accounts as records (plans/c10-handoff.md, phase 3a,
+// revised), as Android's DebridAccounts and SecretDebridKeystore have them.
+
+/// Small named secrets: the Keychain in the app, a dictionary in tests.
+protocol SecretItems: Sendable {
+    func read(_ account: String) -> Data?
+    /// False when the store refused it.
+    func write(_ account: String, _ data: Data) -> Bool
+    /// False when the store refused it; an absent item is removed already.
+    func delete(_ account: String) -> Bool
+    /// The names of the stored items that start with `prefix`.
+    func accounts(prefix: String) -> [String]
+}
+
+enum DebridKeystoreError: Error {
+    case refused
+}
+
+/// The debrid keystore over secret items: one item per record (a service
+/// holds one) and one per tombstone. A record or a tombstone for a service
+/// drops that service's legacy key before the write returns, so a
+/// half-finished move from legacy keys never overwrites a later sign-in or
+/// brings back a disconnect.
+struct ItemDebridKeystore: DebridKeystore {
+    let items: any SecretItems
+    /// Whether a service's last record write reached the store: a card that
+    /// cannot be stored says so as soon as the write fails.
+    var report: @Sendable (_ service: String, _ stored: Bool) async -> Void = { _, _ in }
+
+    private static func record(_ service: String) -> String { "debrid.record.\(service)" }
+    private static func tombstone(_ t: DebridTombstone) -> String { "debrid.tombstone.\(t.service).\(t.generation)" }
+    /// The key a service had before records (the old Debrid screen stored it here).
+    static func legacy(_ service: String) -> String { "debrid.\(service)" }
+
+    // In the services' order, the order the legacy keys kept: `restoreDebrid`
+    // makes the first the default, so a refresh never changes which one it is.
+    func records() async throws -> [DebridRecord] {
+        let found = items.accounts(prefix: "debrid.record.").compactMap { items.read($0) }
+            .compactMap { try? JSONDecoder().decode(DebridRecord.self, from: $0) }
+        return Self.inServiceOrder(found)
+    }
+
+    func tombstones() async throws -> [DebridTombstone] {
+        items.accounts(prefix: "debrid.tombstone.").compactMap { items.read($0) }
+            .compactMap { try? JSONDecoder().decode(DebridTombstone.self, from: $0) }
+    }
+
+    /// `(service, key)` pairs from before records, still to move, in the services' order.
+    func legacy() -> [(service: String, key: String)] {
+        DebridWords.services.compactMap { service in
+            items.read(Self.legacy(service.id)).map { (service.id, String(decoding: $0, as: UTF8.self)) }
+        }
+    }
+
+    func writeRecord(_ record: DebridRecord) async throws {
+        guard items.write(Self.record(record.service), try JSONEncoder().encode(record)) else {
+            await report(record.service, false)
+            throw DebridKeystoreError.refused
+        }
+        await report(record.service, true)
+        try dropLegacy(record.service)
+    }
+
+    func deleteRecord(service: String, generation: String) async throws {
+        let name = Self.record(service)
+        guard let data = items.read(name), (try? JSONDecoder().decode(DebridRecord.self, from: data))?.generation == generation else { return }
+        guard items.delete(name) else { throw DebridKeystoreError.refused }
+    }
+
+    func writeTombstone(_ tombstone: DebridTombstone) async throws {
+        guard items.write(Self.tombstone(tombstone), try JSONEncoder().encode(tombstone)) else { throw DebridKeystoreError.refused }
+        try dropLegacy(tombstone.service)
+    }
+
+    func deleteTombstone(_ tombstone: DebridTombstone) async throws {
+        guard items.delete(Self.tombstone(tombstone)) else { throw DebridKeystoreError.refused }
+    }
+
+    private func dropLegacy(_ service: String) throws {
+        guard items.delete(Self.legacy(service)) else { throw DebridKeystoreError.refused }
+    }
+
+    /// Known services first, in the services' order; any other after them, as stored.
+    static func inServiceOrder(_ records: [DebridRecord]) -> [DebridRecord] {
+        let rank = Dictionary(uniqueKeysWithValues: DebridWords.services.enumerated().map { ($1.id, $0) })
+        return records.enumerated()
+            .sorted { (rank[$0.element.service] ?? Int.max, $0.offset) < (rank[$1.element.service] ?? Int.max, $1.offset) }
+            .map(\.element)
+    }
+}
+
+/// The device's debrid accounts for the app's life: one `DebridStore` across
+/// every core the app opens. Each core open runs `opened` before the app may
+/// show anything: the helper's `start()` (interrupted disconnects finished,
+/// `restoreDebrid`), then what the `debrid` view holds, then the legacy keys
+/// one at a time. Pushes reach the helper only once that core's `start()`
+/// returned.
+@MainActor
+final class DebridAccounts {
+    let store: DebridStore
+    private let keystore: ItemDebridKeystore
+    /// `setDebridKey`: one connection by key; its record arrives through the view.
+    private let connect: (String, String) async throws -> Void
+    /// Error kinds only: never a key, a token or a code.
+    var log: (String) -> Void = { _ in }
+    private var ready = false
+
+    init(keystore: ItemDebridKeystore, core: any DebridCore, connect: @escaping (String, String) async throws -> Void) {
+        self.keystore = keystore
+        self.connect = connect
+        store = DebridStore(keystore: keystore, core: core)
+    }
+
+    /// The core is going away: its views' pushes wait for the next core's restore.
+    func pause() {
+        ready = false
+    }
+
+    /// A core opened. `current` reads the pending records the `debrid` view
+    /// holds now. A restore that fails twice is logged and the app goes on:
+    /// records stay in the keystore for the next start.
+    func opened(current: () -> [DebridRecord]?) async {
+        ready = false
+        // What the last core left queued is stored first: the restore then
+        // reads the newest record of each service, never one a queued write
+        // was about to replace.
+        await store.idle()
+        for attempt in 1...2 {
+            do {
+                try await store.start()
+                break
+            } catch {
+                log("debrid restore failed (attempt \(attempt)): \(type(of: error))")
+            }
+        }
+        ready = true
+        if let pending = current() { store.pending(pending) }
+        let records = (try? await keystore.records().count) ?? 0
+        let tombstones = (try? await keystore.tombstones().count) ?? 0
+        log("debrid: \(records) records restored, \(tombstones) tombstones left, \(keystore.legacy().count) legacy keys to move")
+        await moveLegacy()
+    }
+
+    /// Every push of the `debrid` view.
+    func pushed(_ pending: [DebridRecord]) {
+        if ready { store.pending(pending) }
+    }
+
+    /// Keys from before records, one at a time: each becomes a connection
+    /// whose record, once stored, drops the key. A failure stops here; the
+    /// rest moves at the next start.
+    private func moveLegacy() async {
+        for (service, key) in keystore.legacy() {
+            do {
+                try await connect(service, key)
+            } catch {
+                log("a legacy \(service) key did not move yet: \(type(of: error))")
+                return
+            }
+        }
+    }
+}

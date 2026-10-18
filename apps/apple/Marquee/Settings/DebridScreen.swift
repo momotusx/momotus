@@ -1,69 +1,33 @@
 import Foundation
 import SwiftUI
 
-/// Debrid accounts by service. Keys live in the Keychain (this device only)
-/// and are handed to the core with `setDebridKeys`; the core never stores them.
-enum DebridKeys {
-    struct Service: Identifiable, Sendable {
-        let id: String
-        let name: String
-        let keyPage: String
-    }
-
-    static let services = [
-        Service(id: "realdebrid", name: "Real-Debrid", keyPage: "https://real-debrid.com/apitoken"),
-        Service(id: "torbox", name: "TorBox", keyPage: "https://torbox.app/settings"),
-        Service(id: "alldebrid", name: "AllDebrid", keyPage: "https://alldebrid.com/apikeys"),
-        Service(id: "premiumize", name: "Premiumize", keyPage: "https://www.premiumize.me/account"),
-    ]
-
-    static func key(_ service: String) -> String? {
-        Keychain.read("debrid.\(service)").map { String(decoding: $0, as: UTF8.self) }
-    }
-
-    /// Stores or removes a key; false when the Keychain refused it.
-    @discardableResult
-    static func set(_ service: String, _ key: String?) -> Bool {
-        guard let key, !key.isEmpty else {
-            return Keychain.delete("debrid.\(service)")
-        }
-        return Keychain.write("debrid.\(service)", Data(key.utf8))
-    }
-
-    /// Hands every stored key to the core, in the services' order; the first is the default.
-    /// Returns how many services the core now uses.
-    @MainActor @discardableResult
-    static func handOver(to core: CoreClient) async throws -> Int {
-        let keys = services.compactMap { service in key(service.id).map { [service.id, $0] } }
-        struct Stores: Decodable { let stores: Int }
-        return try await core.request("setDebridKeys", ["keys": keys]) {
-            struct Envelope: Decodable { let result: Stores }
-            return try JSONDecoder().decode(Envelope.self, from: $0).result.stores
-        }
-    }
-}
-
-/// One key field per service; saving hands the set to the core at once.
+/// Debrid accounts by service, as records (plans/c10-handoff.md, phase 3a):
+/// sign in with a code (Real-Debrid, TorBox, AllDebrid), or with a key; the
+/// records live in the Keychain behind the debrid helper, which stores what
+/// the core hands over and disconnects with a tombstone first.
 struct DebridScreen: View {
     let core: CoreClient
-    @State private var drafts: [String: String] = [:]
-    @State private var saved: [String: Bool] = [:]
-    /// What the last change did, under its service's row; `ok` when it went through, here and in the core.
-    @State private var said: (service: String, text: String, ok: Bool)?
-    /// The key field being typed in.
-    @FocusState private var typing: String?
+    @Environment(DebridSession.self) private var debrid
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
+    /// The sign-in by code under way, and its service.
+    @State private var login: (service: String, view: LiveRecord<DebridLoginSnapshot>)?
+    /// Cards with the key field open (Premiumize always has it).
+    @State private var keyFields: Set<String> = []
+    @State private var drafts: [String: String] = [:]
+    @State private var said: (service: String, text: String)?
+    @State private var busy: String?
+    @FocusState private var focus: DebridScreenFocus?
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Debrid services")
-                Text("A debrid account plays torrents as fast direct links. Keys stay in this device's Keychain and are never shown again or synced.")
+                Text("A debrid account plays torrents as fast direct links. Accounts stay in this device's Keychain and are never shown again or synced.")
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
-                ForEach(DebridKeys.services) { service in
-                    row(service)
+                ForEach(DebridWords.services) { service in
+                    card(service)
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -74,54 +38,65 @@ struct DebridScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
-        .onAppear {
-            for service in DebridKeys.services { saved[service.id] = DebridKeys.key(service.id) != nil }
+        .task(id: login?.view.taskId) { login?.view.start() }
+        // A sign-in that went through closes; the card says Connected once stored.
+        .onChange(of: login?.view.snapshot) { _, phase in
+            if case .done? = phase, let service = login?.service { closeLogin(service) }
         }
     }
 
-    private func row(_ service: DebridKeys.Service) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+    private var snapshot: DebridSnapshot? { debrid.view.snapshot }
+
+    private func card(_ service: DebridWords.Service) -> some View {
+        let account = snapshot?.accounts.first { $0.service == service.id }
+        let pending = snapshot?.pending.contains { $0.service == service.id } ?? false
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(service.name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                if saved[service.id] == true {
-                    Label("Key saved", glyph: "lock").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.ok)
-                }
                 Spacer()
-                if let url = URL(string: service.keyPage) {
-                    Button("Get a key") { openURL(url) }
-                        .buttonStyle(.plain)
-                        .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
-                        .foregroundStyle(Theme.Palette.muted)
-                        // Spoken with the service, so a list of controls says whose key it is.
-                        .accessibilityLabel("Get \("AEIOU".contains(service.name.prefix(1)) ? "an" : "a") \(service.name) key")
-                }
+                let state = DebridWords.state(account, pending: pending, stored: !debrid.health.unstored.contains(service.id))
+                Text(state ?? "Not connected")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(state == "Connected" ? Theme.Palette.ok : Theme.Palette.muted)
             }
-            HStack(spacing: 10) {
-                SecureField(saved[service.id] == true ? "Replace the saved key" : "API key", text: Binding(
-                    get: { drafts[service.id] ?? "" }, set: { drafts[service.id] = $0 }))
-                    .focused($typing, equals: service.id)
-                    .textFieldStyle(.plain)
-                    .font(.mono(Theme.type.body))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
-                // Save is the primary only once its field holds a key.
-                let draft = (drafts[service.id] ?? "").trimmingCharacters(in: .whitespaces)
-                Button("Save") { apply(service.id, drafts[service.id]) }
-                    .buttonStyle(PillButtonStyle(prominent: !draft.isEmpty))
-                    .disabled(draft.isEmpty)
-                    .accessibilityLabel("Save \(service.name) key")
-                if saved[service.id] == true {
-                    Button("Remove") { apply(service.id, nil) }
-                        .buttonStyle(PillButtonStyle())
-                        .accessibilityLabel("Remove \(service.name) key")
+            if let login, login.service == service.id {
+                LoginPanel(phase: login.view.snapshot, failure: login.view.failure,
+                           again: { begin(service.id) }, close: { closeLogin(service.id) }, focus: $focus)
+            } else {
+                FlowRow(spacing: 12) {
+                    if DebridWords.codeServices.contains(service.id) {
+                        Button { begin(service.id) } label: { Label("Sign in with a code", glyph: "qr-code") }
+                            .buttonStyle(PillButtonStyle(prominent: account == nil))
+                            .focused($focus, equals: .signIn(service.id))
+                            .accessibilityLabel("Sign in to \(service.name) with a code")
+                        // A connected account takes a new key without a disconnect, except
+                        // when it asks for a new sign-in, which is offered above.
+                        if !keyFields.contains(service.id) && account?.state != "reconnect" {
+                            Button("Use a key instead") { keyFields.insert(service.id) }
+                                .buttonStyle(PillButtonStyle())
+                        }
+                    } else if account != nil && account?.state != "reconnect" && !keyFields.contains(service.id) {
+                        Button("Replace the key") { keyFields.insert(service.id) }
+                            .buttonStyle(PillButtonStyle())
+                            .accessibilityLabel("Replace the \(service.name) key")
+                    }
+                    if let account {
+                        Button("Disconnect") { disconnect(account, service) }
+                            .buttonStyle(PillButtonStyle())
+                            .disabled(busy == service.id)
+                            .accessibilityLabel("Disconnect \(service.name)")
+                    }
+                }
+                // Premiumize signs in with a key only: its field shows while it is not connected.
+                if keyFields.contains(service.id)
+                    || (!DebridWords.codeServices.contains(service.id) && (account == nil || account?.state == "reconnect")) {
+                    keyField(service)
                 }
             }
             if let said, said.service == service.id {
-                Label(said.text, glyph: said.ok ? "circle-check" : "triangle-alert")
+                Label(said.text, glyph: "triangle-alert")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
-                    .foregroundStyle(said.ok ? Theme.Palette.muted : Theme.Palette.text)
+                    .foregroundStyle(Theme.Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -130,24 +105,164 @@ struct DebridScreen: View {
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
-    private func apply(_ service: String, _ key: String?) {
-        let trimmed = key?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let removing = trimmed?.isEmpty ?? true
-        // The keyboard goes, so the result under the row is in view.
-        typing = nil
-        // A refusal changes nothing: the core keeps the keys it has, so nothing is handed over.
-        guard DebridKeys.set(service, trimmed) else {
-            said = (service, DebridWords.refused(removing: removing), false)
-            return
+    private func keyField(_ service: DebridWords.Service) -> some View {
+        let draft = (drafts[service.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                SecureField("API key", text: Binding(get: { drafts[service.id] ?? "" }, set: { drafts[service.id] = $0 }))
+                    .textFieldStyle(.plain)
+                    .font(.mono(Theme.type.body))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
+                // Save is the primary only once its field holds a key.
+                Button("Save") { save(service, draft) }
+                    .buttonStyle(PillButtonStyle(prominent: !draft.isEmpty))
+                    .disabled(draft.isEmpty || busy == service.id)
+                    .accessibilityLabel("Save \(service.name) key")
+            }
+            #if !os(tvOS)
+            if let url = URL(string: service.keyPage) {
+                Button("Get a key") { openURL(url) }
+                    .buttonStyle(.plain)
+                    .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .accessibilityLabel("Get \("AEIOU".contains(service.name.prefix(1)) ? "an" : "a") \(service.name) key")
+            }
+            #else
+            Text("Get a key at \(DebridWords.address(service.keyPage))")
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+            #endif
         }
-        drafts[service] = nil
-        saved[service] = !removing
+    }
+
+    /// Opens a sign-in by code; a second one for the service starts over.
+    private func begin(_ service: String) {
+        said = nil
+        let view = LiveRecord<DebridLoginSnapshot>("debridLogin", params: ["service": service], core: core)
+        view.start()
+        login = (service, view)
+        // Into the sign-in once it is on screen.
+        Task { focus = .panel }
+    }
+
+    /// Closing the panel closes the view; a record already collected still arrives and is stored.
+    private func closeLogin(_ service: String) {
+        login = nil
+        Task { focus = .signIn(service) }
+    }
+
+    private func save(_ service: DebridWords.Service, _ key: String) {
+        busy = service.id
+        said = nil
         Task {
+            defer { busy = nil }
             do {
-                let count = try await DebridKeys.handOver(to: core)
-                said = (service, DebridWords.outcome(removed: removing, inUse: count), true)
+                // The record arrives through the debrid view; the card says Saving, then Connected.
+                try await debrid.setKey(service.id, key)
+                drafts[service.id] = nil
+                keyFields.remove(service.id)
+            } catch is CancellationError {
             } catch {
-                said = (service, DebridWords.outcome(removed: removing, inUse: nil, refused: error.localizedDescription), false)
+                said = (service.id, error.localizedDescription)
+            }
+        }
+    }
+
+    private func disconnect(_ account: DebridAccount, _ service: DebridWords.Service) {
+        busy = service.id
+        said = nil
+        Task {
+            defer { busy = nil }
+            do {
+                try await debrid.disconnect(account)
+            } catch {
+                said = (service.id, DebridWords.notSaved)
+            }
+        }
+    }
+}
+
+/// Where focus goes on the Debrid page: a card's sign-in button, or the open sign-in.
+enum DebridScreenFocus: Hashable { case signIn(String), panel }
+
+/// A sign-in by code: the code large, the address, its QR, the time left;
+/// then why not, with a new code.
+private struct LoginPanel: View {
+    let phase: DebridLoginSnapshot?
+    let failure: String?
+    let again: () -> Void
+    let close: () -> Void
+    var focus: FocusState<DebridScreenFocus?>.Binding
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            switch phase {
+            case nil, .starting?:
+                if let failure {
+                    Text(failure).font(.text(Theme.type.body))
+                    buttons(again: true)
+                } else {
+                    Label(DebridWords.login(.starting), glyph: "clock").font(.text(Theme.type.body))
+                    buttons(again: false)
+                }
+            case let .code(userCode, url, qr, expiresMs)?:
+                HStack(alignment: .top, spacing: Theme.Space.s) {
+                    QRCode(text: qr).frame(width: 160, height: 160).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("On a phone or computer, go to").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+                        Text(DebridWords.address(url)).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        Text("and enter").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+                        Text(userCode)
+                            .font(.mono(Theme.type.title1))
+                            .tracking(2)
+                            .accessibilityLabel("Code \(userCode.map(String.init).joined(separator: " "))")
+                        // The time left, from the code's own deadline: a new code starts its own clock.
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(DebridWords.goodFor(expiresMs - Int64(context.date.timeIntervalSince1970 * 1000)))
+                                .font(.text(Theme.type.callout, relativeTo: .callout).monospacedDigit())
+                                .foregroundStyle(Theme.Palette.muted)
+                        }
+                    }
+                }
+                #if os(iOS)
+                if let page = URL(string: url) {
+                    Button { openURL(page) } label: { Label("Open the page", glyph: "external-link") }
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                }
+                #endif
+                buttons(again: false)
+            case .done?:
+                Label(DebridWords.login(.done), glyph: "circle-check").font(.text(Theme.type.body))
+            case let other?:
+                Text(DebridWords.login(other)).font(.text(Theme.type.body)).fixedSize(horizontal: false, vertical: true)
+                buttons(again: true)
+            }
+        }
+        .padding(Theme.Space.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
+        #if os(tvOS)
+        .focusSection()
+        #endif
+    }
+
+    @ViewBuilder private func buttons(again showAgain: Bool) -> some View {
+        HStack(spacing: 12) {
+            if showAgain {
+                Button("Get a new code", action: again)
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .focused(focus, equals: .panel)
+            }
+            if showAgain {
+                Button("Close", action: close).buttonStyle(PillButtonStyle())
+            } else {
+                Button("Close", action: close)
+                    .buttonStyle(PillButtonStyle())
+                    .focused(focus, equals: .panel)
             }
         }
     }

@@ -41,16 +41,18 @@ extension EnvironmentValues {
 struct RootView: View {
     @Environment(CoreClient.self) private var core
     @Environment(ProfileSession.self) private var profiles
+    @Environment(DebridSession.self) private var debrid
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
 
     var body: some View {
         Group {
-            if profiles.open {
+            if profiles.open && debrid.ready {
                 MainShell(core: core).id(profiles.epoch)
-            } else if core.failure != nil {
-                // The core stopped: only its message and the way back (the overlay).
+            } else if core.failure != nil || !debrid.ready {
+                // The core stopped (only its message and the way back show,
+                // in the overlay), or its debrid accounts are not back yet.
                 Theme.Palette.bg.ignoresSafeArea()
             } else if profiles.snapshot != nil {
                 ProfilePicker(mode: .gate, core: core)
