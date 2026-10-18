@@ -130,7 +130,7 @@ export default function Home() {
         <Show when={empty()}>
           <section class="problem home-problem">
             <h2>Home fills up from your addons</h2>
-            <p>No addon with catalogs is installed yet. Add one to see what is popular, new and featured.</p>
+            <p>None of the addons you have on shows a catalog here. Add one, or turn rows back on in Settings.</p>
             <div class="acts">
               <A class="btn primary" href="/welcome" data-f="home:setup" data-autofocus>
                 <Wrench aria-hidden />
