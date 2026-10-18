@@ -1,11 +1,13 @@
+use mq_http::test_dns::Interface;
 use mq_http::{
-    Body, ClientConfig, HttpClient, HttpError, Method, Priority, RequestOptions, Url, test_dns,
+    Body, ClientConfig, HttpClient, HttpError, Method, Priority, RequestOptions, Url, local_addrs,
+    test_dns,
 };
 use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
@@ -261,8 +263,13 @@ impl Origin {
                 tokio::spawn(async move {
                     let head = read_head(&mut socket).await;
                     let path = head.split(' ').nth(1).unwrap_or_default().to_owned();
+                    let is_head = head.starts_with("HEAD ");
                     kept.lock().unwrap().push(head);
-                    let _ = socket.write_all(route(path).await.as_bytes()).await;
+                    let mut answer = route(path).await;
+                    if is_head && let Some(end) = answer.find("\r\n\r\n") {
+                        answer.truncate(end + 4);
+                    }
+                    let _ = socket.write_all(answer.as_bytes()).await;
                 });
             }
         });
@@ -290,16 +297,32 @@ impl Origin {
     }
 }
 
+/// A request's head and, by its `Content-Length`, its body.
 async fn read_head(socket: &mut tokio::net::TcpStream) -> String {
-    let mut head = Vec::new();
+    let mut data = Vec::new();
     let mut buf = [0u8; 1024];
-    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+    let wanted = loop {
+        if let Some(end) = data.windows(4).position(|w| w == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&data[..end]).to_ascii_lowercase();
+            let body = head
+                .lines()
+                .find_map(|l| l.strip_prefix("content-length:"))
+                .and_then(|v| v.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            break end + 4 + body;
+        }
+        match socket.read(&mut buf).await {
+            Ok(0) | Err(_) => return String::from_utf8_lossy(&data).into_owned(),
+            Ok(n) => data.extend_from_slice(&buf[..n]),
+        }
+    };
+    while data.len() < wanted {
         match socket.read(&mut buf).await {
             Ok(0) | Err(_) => break,
-            Ok(n) => head.extend_from_slice(&buf[..n]),
+            Ok(n) => data.extend_from_slice(&buf[..n]),
         }
     }
-    String::from_utf8_lossy(&head).into_owned()
+    String::from_utf8_lossy(&data).into_owned()
 }
 
 fn reply(status: &str, headers: &str, body: &str) -> String {
@@ -633,4 +656,371 @@ async fn blocked_hops_are_typed() {
         assert_eq!(err.kind(), "blocked address", "{url}: {err}");
     }
     assert_eq!(canary.accepted(), 0);
+}
+
+// The interface snapshot, through `scoped()` (plans/c21-c23-loopback.md 3.1).
+
+fn ip(s: &str) -> IpAddr {
+    s.parse().unwrap()
+}
+
+/// An interface with a prefix length.
+fn interface(cidr: &str, point_to_point: bool) -> Interface {
+    let (addr, len) = cidr.split_once('/').unwrap();
+    let (addr, len): (IpAddr, u32) = (ip(addr), len.parse().unwrap());
+    let bits = u128::MAX.checked_shl(128 - len).unwrap_or(0);
+    let mask = match addr {
+        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::from((bits >> 96) as u32)),
+        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::from(bits)),
+    };
+    Interface {
+        addr,
+        mask: Some(mask),
+        loopback: false,
+        point_to_point,
+    }
+}
+
+/// A client whose connections to addresses nobody serves fail fast.
+fn quick_client() -> HttpClient {
+    HttpClient::new(ClientConfig {
+        connect_timeout: Duration::from_millis(200),
+        ..ClientConfig::default()
+    })
+    .unwrap()
+}
+
+/// A request that is not refused by the scope, so it fails some other way
+/// (nothing serves the address).
+async fn not_refused(http: &HttpClient, url: &str) {
+    let err = within(url, http.get(url, &playback()))
+        .await
+        .expect_err(url);
+    assert_ne!(err.kind(), "blocked address", "{url}: {err}");
+}
+
+#[tokio::test]
+async fn the_interface_snapshot_is_read() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    assert!(test_dns::own_addresses(&http).is_empty());
+    let _handle = http.scoped(&[]);
+    let own = test_dns::own_addresses(&http);
+    assert!(own.contains(&LOOPBACK), "{own:?}");
+}
+
+#[tokio::test]
+async fn own_and_on_link_addresses_are_private_for_playback() {
+    let http = quick_client();
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:2::abcd/64", false)]));
+    let handle = http.scoped(&[]);
+    test_dns::set("lan.c23.test", &[ip("2001:db8:1:2::1")]);
+    for url in [
+        "http://[2001:db8:1:2::1]:9/",
+        "http://[2001:db8:1:2::abcd]:9/",
+        "http://lan.c23.test:9/",
+    ] {
+        refused(&handle, url).await;
+    }
+    not_refused(&handle, "http://[2001:db8:1:3::1]:9/").await;
+    // An addon installed by a literal on that link keeps its own host only.
+    let addon = http.scoped(&local_addrs("2001:db8:1:2::5"));
+    not_refused(&addon, "http://[2001:db8:1:2::5]:9/").await;
+    refused(&addon, "http://[2001:db8:1:2::1]:9/").await;
+    // Unscoped clients do not use the snapshot.
+    not_refused(&http, "http://[2001:db8:1:2::1]:9/").await;
+}
+
+#[tokio::test]
+async fn a_failed_interface_read_keeps_the_snapshot() {
+    // The log lines it writes are checked in tests/logs.rs.
+    let http = quick_client();
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:2::abcd/64", false)]));
+    let before = http.scoped(&[]);
+    test_dns::set_interfaces(&http, Err(()));
+    let after = http.scoped(&[]);
+    let _ = (http.scoped(&[]), http.scoped(&[]));
+    test_dns::set("kept.c23.test", &[ip("2001:db8:1:2::1")]);
+    for handle in [&before, &after] {
+        refused(handle, "http://[2001:db8:1:2::1]:9/").await;
+        refused(handle, "http://kept.c23.test:9/").await;
+    }
+}
+
+/// A loopback origin that keeps connections alive and records, per request,
+/// which accepted connection served it.
+async fn keep_alive_origin() -> (SocketAddr, Arc<Mutex<Vec<usize>>>) {
+    let listener = TcpListener::bind((LOOPBACK, 0)).await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let served = Arc::new(Mutex::new(Vec::new()));
+    let log = served.clone();
+    tokio::spawn(async move {
+        let mut connection = 0;
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let (log, at) = (log.clone(), connection);
+            connection += 1;
+            tokio::spawn(async move {
+                while !read_head(&mut socket).await.is_empty() {
+                    log.lock().unwrap().push(at);
+                    let reply = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+                    if socket.write_all(reply).await.is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    (addr, served)
+}
+
+#[tokio::test]
+async fn pooled_connections_never_cross_a_policy_change() {
+    let (addr, served) = keep_alive_origin().await;
+    let url = format!("http://{addr}/");
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:2::abcd/64", false)]));
+    let old = http.scoped(&[LOOPBACK]);
+    for _ in 0..2 {
+        within("before", old.get(&url, &playback())).await.unwrap();
+    }
+    assert_eq!(*served.lock().unwrap(), [0, 0], "one pooled connection");
+    // Another open reads a changed snapshot.
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:9:9::abcd/64", false)]));
+    let new = http.scoped(&[LOOPBACK]);
+    within("old handle", old.get(&url, &playback()))
+        .await
+        .unwrap();
+    within("new handle", new.get(&url, &playback()))
+        .await
+        .unwrap();
+    let served = served.lock().unwrap().clone();
+    assert!(
+        served[2..].iter().all(|&connection| connection != 0),
+        "a request after the change reused the old pool: {served:?}"
+    );
+}
+
+#[tokio::test]
+async fn url_credentials_stay_with_their_origin() {
+    let b = Origin::ok(0).await;
+    let to_b = format!("Location: {}\r\n", b.url("/b"));
+    let a = Origin::start(0, move |path| {
+        let to_b = to_b.clone();
+        async move {
+            match path.as_str() {
+                "/away" => reply("302 Found", &to_b, ""),
+                "/near" => reply("302 Found", "Location: /here\r\n", ""),
+                _ => reply("200 OK", "", "ok"),
+            }
+        }
+    })
+    .await;
+    let http = scoped(&[LOOPBACK]);
+    let with_user = |path: &str| format!("http://u:p@{}{path}", a.addr);
+    within("away", http.get(&with_user("/away"), &playback()))
+        .await
+        .unwrap();
+    within("near", http.get(&with_user("/near"), &playback()))
+        .await
+        .unwrap();
+    // `u:p` as Basic credentials.
+    let basic = "authorization: basic dtpw";
+    assert!(a.head_of("/away").unwrap().contains(basic));
+    assert!(!b.head_of("/b").unwrap().contains("authorization"));
+    assert!(
+        a.head_of("/here").unwrap().contains(basic),
+        "same origin keeps them"
+    );
+}
+
+#[tokio::test]
+async fn redirect_methods_follow_rfc_9110() {
+    let origin = Origin::start(0, |path| async move {
+        match path.strip_prefix("/s/") {
+            Some(status) => reply(&format!("{status} Moved"), "Location: /target\r\n", ""),
+            None => reply("200 OK", "", "ok"),
+        }
+    })
+    .await;
+    let http = scoped(&[LOOPBACK]);
+    let form = || Some(Body::Form(vec![("k".into(), "v".into())]));
+    for status in [301, 302, 303, 307, 308] {
+        let url = origin.url(&format!("/s/{status}"));
+        for method in [Method::POST, Method::PUT, Method::HEAD] {
+            let body = if method == Method::HEAD { None } else { form() };
+            within(&url, http.request(method.clone(), &url, body, &playback()))
+                .await
+                .unwrap_or_else(|e| panic!("{status} {method}: {e}"));
+            let target = origin.heads().last().unwrap().clone();
+            let to_get = match status {
+                301 | 302 => method == Method::POST,
+                303 => method != Method::HEAD,
+                _ => false,
+            };
+            let (want, body) = if to_get {
+                ("GET", false)
+            } else {
+                (method.as_str(), method != Method::HEAD)
+            };
+            assert!(
+                target.starts_with(&format!("{want} /target ")),
+                "{status} {method}: {target}"
+            );
+            assert_eq!(target.ends_with("k=v"), body, "{status} {method}: {target}");
+        }
+        let opts = playback();
+        let ranged = http.stream(&url, Some("bytes=5-".into()), &opts);
+        within(&url, ranged)
+            .await
+            .unwrap_or_else(|e| panic!("{status} range: {e}"));
+        let target = origin.heads().last().unwrap().to_ascii_lowercase();
+        assert!(target.contains("range: bytes=5-"), "{status}: {target}");
+    }
+}
+
+/// `/stall` never answers; `/to-stall` redirects there; `/body` sends its
+/// headers and 10 of 100 bytes; `/hop/{ms}/{at}/{end}` waits
+/// `ms`, then redirects to the next hop until `end`; anything else is `ok`.
+async fn slow_origin() -> Origin {
+    Origin::start(0, |path| async move {
+        let parts: Vec<&str> = path.split('/').collect();
+        match parts.as_slice() {
+            ["", "stall"] => std::future::pending().await,
+            ["", "to-stall"] => reply("302 Found", "Location: /stall\r\n", ""),
+            // 10 of the 100 bytes it announces.
+            ["", "body"] => "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n0123456789".into(),
+            ["", "hop", ms, at, end] => {
+                let (ms, at, end): (u64, u32, u32) = (
+                    ms.parse().unwrap(),
+                    at.parse().unwrap(),
+                    end.parse().unwrap(),
+                );
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+                if at < end {
+                    let next = format!("Location: /hop/{ms}/{}/{end}\r\n", at + 1);
+                    reply("302 Found", &next, "")
+                } else {
+                    reply("200 OK", "", "end")
+                }
+            }
+            _ => reply("200 OK", "", "ok"),
+        }
+    })
+    .await
+}
+
+fn one_slot() -> HttpClient {
+    HttpClient::new(ClientConfig {
+        per_host_limit: 1,
+        ..ClientConfig::default()
+    })
+    .unwrap()
+    .scoped(&[LOOPBACK])
+}
+
+#[tokio::test]
+async fn a_stalled_hop_times_out_and_frees_its_slot() {
+    let origin = slow_origin().await;
+    let http = one_slot();
+    let opts = RequestOptions {
+        hop_headers: Duration::from_millis(300),
+        ..playback()
+    };
+    let started = Instant::now();
+    let first = tokio::time::timeout(
+        Duration::from_secs(1),
+        http.stream(&origin.url("/stall"), None, &opts),
+    )
+    .await
+    .expect("a stalled first hop ends within 1 s");
+    assert_eq!(first.err().map(|e| e.kind()), Some("timeout"));
+    let target = tokio::time::timeout(
+        Duration::from_secs(1),
+        http.get(&origin.url("/to-stall"), &opts),
+    )
+    .await
+    .expect("a stalled redirect target ends within 1 s");
+    assert_eq!(target.err().map(|e| e.kind()), Some("timeout"));
+    assert!(started.elapsed() < Duration::from_secs(2));
+    tokio::time::timeout(Duration::from_secs(1), http.get(&origin.url("/ok"), &opts))
+        .await
+        .expect("the host's one slot came back")
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_long_chain_of_quick_hops_succeeds() {
+    let origin = slow_origin().await;
+    let http = scoped(&[LOOPBACK]);
+    let opts = RequestOptions {
+        hop_headers: Duration::from_millis(300),
+        ..playback()
+    };
+    // Five redirects of 200 ms each: longer than one header deadline in all.
+    let url = origin.url("/hop/200/0/5");
+    let end = within(&url, http.get(&url, &opts))
+        .await
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(&end.body[..], b"end");
+}
+
+#[tokio::test]
+async fn a_buffered_chain_of_slow_hops_fails_at_its_total_limit() {
+    let origin = slow_origin().await;
+    let http = scoped(&[LOOPBACK]);
+    let opts = RequestOptions {
+        timeout: Duration::from_secs(1),
+        ..playback()
+    };
+    // Each hop is well within its header deadline; five of them are not
+    // within the total.
+    let url = origin.url("/hop/300/0/5");
+    let err = within(&url, http.get(&url, &opts))
+        .await
+        .expect_err("the chain outlasts the total limit");
+    assert_eq!(err.kind(), "timeout", "{err}");
+    assert!(origin.head_of("/hop/300/5/5").is_none());
+}
+
+#[tokio::test]
+async fn cancelled_requests_free_their_slots() {
+    let origin = slow_origin().await;
+    let http = one_slot();
+    let opts = playback();
+    let (ok_url, stall_url) = (origin.url("/ok"), origin.url("/stall"));
+    let ok = || http.get(&ok_url, &opts);
+    let in_time = Duration::from_secs(1);
+    // Dropped while waiting for headers.
+    let waiting = tokio::time::timeout(Duration::from_millis(100), http.get(&stall_url, &opts));
+    assert!(waiting.await.is_err());
+    tokio::time::timeout(in_time, ok())
+        .await
+        .expect("free after a drop while waiting for headers")
+        .unwrap();
+    // Dropped while queued behind a body that holds the slot.
+    let holder = http
+        .stream(&origin.url("/body"), None, &opts)
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), ok())
+            .await
+            .is_err()
+    );
+    drop(holder);
+    tokio::time::timeout(in_time, ok())
+        .await
+        .expect("free after a drop while queued")
+        .unwrap();
+    // A streaming response dropped mid-body.
+    let mut body = http
+        .stream(&origin.url("/body"), None, &opts)
+        .await
+        .unwrap();
+    let first = body.next_chunk().await.expect("a chunk").unwrap();
+    assert!(!first.is_empty());
+    drop(body);
+    tokio::time::timeout(in_time, ok())
+        .await
+        .expect("free after a drop mid-body")
+        .unwrap();
 }

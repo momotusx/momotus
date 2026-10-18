@@ -92,42 +92,65 @@ pub(crate) fn permitted(ip: IpAddr, local: &[IpAddr], device: &Device) -> bool {
 /// What playback treats as private beyond the classifier: the device's own
 /// addresses and the on-link prefixes of its interfaces, which can be global
 /// (a home IPv6 /64, a LAN on public IPv4).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct Device {
     own: Vec<IpAddr>,
     nets: Vec<(IpAddr, u32)>,
+    /// Point-to-point interfaces seen, for the snapshot's log line.
+    tunnels: usize,
 }
 
 /// One address of an interface, as `getifaddrs` lists it.
-struct Entry {
-    addr: IpAddr,
-    mask: Option<IpAddr>,
-    loopback: bool,
-    point_to_point: bool,
+#[derive(Debug, Clone)]
+pub struct Interface {
+    pub addr: IpAddr,
+    pub mask: Option<IpAddr>,
+    pub loopback: bool,
+    pub point_to_point: bool,
 }
 
-impl Device {
-    /// The interfaces as they are now; none when they cannot be read.
-    pub(crate) fn current() -> Self {
-        Self::from_entries(interfaces())
-    }
+/// Shorter prefixes add only the interface's own address, so one odd netmask
+/// (a tunnel's `/0`, a driver's `/8`) cannot make unrelated public sources
+/// unreachable.
+const FLOOR_V4: u32 = 16;
+const FLOOR_V6: u32 = 48;
 
-    fn from_entries(entries: Vec<Entry>) -> Self {
+impl Device {
+    pub(crate) fn from_interfaces(list: Vec<Interface>) -> Self {
         let mut device = Device::default();
-        for entry in entries {
-            let addr = entry.addr.to_canonical();
+        for interface in list {
+            let addr = interface.addr.to_canonical();
             device.own.push(addr);
-            // A tunnel's mask is a route, not a LAN: a fake-IP proxy's TUN
-            // takes 198.18.0.1/15 or /16, the range it answers every public
-            // name from. Loopback is private anyway, and a /0 is no LAN.
-            if entry.loopback || entry.point_to_point {
+            device.tunnels += usize::from(interface.point_to_point);
+            // A fake-IP proxy's TUN takes 198.18.0.1/15 or /16, the range it
+            // answers every public name from. Loopback is private anyway.
+            let fake_ip = match addr {
+                IpAddr::V4(v4) => matches!(v4.octets(), [198, 18 | 19, _, _]),
+                IpAddr::V6(_) => false,
+            };
+            if interface.loopback || fake_ip {
                 continue;
             }
-            if let Some(len) = entry.mask.and_then(prefix_len).filter(|&len| len > 0) {
+            let floor = if addr.is_ipv4() { FLOOR_V4 } else { FLOOR_V6 };
+            if let Some(len) = interface
+                .mask
+                .and_then(prefix_len)
+                .filter(|&len| len >= floor)
+            {
                 device.nets.push((addr, len));
             }
         }
         device
+    }
+
+    /// Counts only, for the log: never an address.
+    pub(crate) fn sizes(&self) -> (usize, usize, usize) {
+        (self.own.len(), self.nets.len(), self.tunnels)
+    }
+
+    #[cfg(any(test, feature = "test-dns"))]
+    pub(crate) fn own(&self) -> &[IpAddr] {
+        &self.own
     }
 
     fn holds(&self, ip: IpAddr) -> bool {
@@ -165,14 +188,17 @@ fn wide(ip: IpAddr) -> u128 {
     }
 }
 
+/// Every interface address with its netmask and flags. Claimed for Linux,
+/// Android, macOS and iOS: other BSDs report compact netmasks this does not
+/// decode.
 #[cfg(unix)]
-fn interfaces() -> Vec<Entry> {
+pub(crate) fn interfaces() -> std::io::Result<Vec<Interface>> {
     let mut head: *mut libc::ifaddrs = std::ptr::null_mut();
     // SAFETY: getifaddrs only writes the list head we pass.
     if unsafe { libc::getifaddrs(&mut head) } != 0 {
-        return Vec::new();
+        return Err(std::io::Error::last_os_error());
     }
-    let mut entries = Vec::new();
+    let mut list = Vec::new();
     let mut at = head;
     // SAFETY (every block in this loop): each node and the addresses it points
     // to live until freeifaddrs below.
@@ -180,7 +206,7 @@ fn interfaces() -> Vec<Entry> {
         at = ifa.ifa_next;
         let flag = |f: libc::c_int| ifa.ifa_flags & f as libc::c_uint != 0;
         if let Some(addr) = unsafe { sockaddr_ip(ifa.ifa_addr, None) } {
-            entries.push(Entry {
+            list.push(Interface {
                 addr,
                 mask: unsafe { sockaddr_ip(ifa.ifa_netmask, Some(addr)) },
                 loopback: flag(libc::IFF_LOOPBACK),
@@ -190,13 +216,13 @@ fn interfaces() -> Vec<Entry> {
     }
     // SAFETY: `head` came from getifaddrs and nothing points into it now.
     unsafe { libc::freeifaddrs(head) };
-    entries
+    Ok(list)
 }
 
 // ponytail: no Windows build ships; read GetAdaptersAddresses if one does.
 #[cfg(not(unix))]
-fn interfaces() -> Vec<Entry> {
-    Vec::new()
+pub(crate) fn interfaces() -> std::io::Result<Vec<Interface>> {
+    Err(std::io::ErrorKind::Unsupported.into())
 }
 
 /// The IPv4 or IPv6 address in `sa`. A netmask is read as the family of its
@@ -399,51 +425,85 @@ mod tests {
         }
     }
 
-    fn entry(addr: &str, mask: &str, point_to_point: bool) -> Entry {
-        Entry {
-            addr: ip(addr),
-            mask: Some(ip(mask)),
-            loopback: addr == "127.0.0.1",
+    /// An interface with a prefix length.
+    fn interface(cidr: &str, point_to_point: bool) -> Interface {
+        let (addr, len) = cidr.split_once('/').unwrap();
+        let (addr, len): (IpAddr, u32) = (ip(addr), len.parse().unwrap());
+        let bits = u128::MAX.checked_shl(128 - len).unwrap_or(0);
+        let mask = match addr {
+            IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::from((bits >> 96) as u32)),
+            IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::from(bits)),
+        };
+        Interface {
+            addr,
+            mask: Some(mask),
+            loopback: addr.is_loopback(),
             point_to_point,
         }
     }
 
     #[test]
-    fn the_devices_own_network_is_private_for_playback() {
-        let device = Device::from_entries(vec![
-            // A home IPv6 /64 and a LAN on public IPv4.
-            entry("2001:db8:1::5", "ffff:ffff:ffff:ffff::", false),
-            entry("203.0.113.5", "255.255.255.0", false),
-            // A fake-IP proxy's TUN.
-            entry("198.18.0.1", "255.254.0.0", true),
-            entry("127.0.0.1", "255.0.0.0", false),
-            // A broken mask is no prefix.
-            entry("192.0.2.9", "0.0.0.0", false),
+    fn prefix_floors_and_links() {
+        let device = Device::from_interfaces(vec![
+            // At each floor the prefix counts; just below it, only the address.
+            interface("203.0.113.5/16", false),
+            interface("100.128.0.5/15", false),
+            interface("2001:db8:a::5/48", false),
+            interface("2001:db8:c::5/47", false),
+            // Point-to-point links count their prefixes.
+            interface("2001:db8:e::2/127", true),
+            interface("2001:db8:f::5/64", true),
+            // A /0 tunnel and fake-IP TUNs add only their addresses.
+            interface("192.0.2.9/0", true),
+            interface("198.18.0.1/15", true),
+            interface("198.19.0.1/16", true),
+            interface("127.0.0.1/8", false),
         ]);
         for denied in [
-            "2001:db8:1::5",
-            "2001:db8:1::9",
-            "203.0.113.77",
-            "64:ff9b::cb00:714d",
+            "203.0.200.1",
+            "2001:db8:a:ffff::1",
+            "2001:db8:e::3",
+            "2001:db8:f::9",
+            "64:ff9b::cb00:c801",
+            // Own addresses, whatever their prefix.
+            "100.128.0.5",
+            "2001:db8:c::5",
+            "192.0.2.9",
             "198.18.0.1",
+            "198.19.0.1",
         ] {
-            assert!(!permitted(ip(denied), &[], &device), "{denied}");
+            assert!(!permitted(ip(denied), &[], &device), "{denied} is refused");
         }
-        for allowed in ["2001:db8:2::1", "203.0.114.1", "198.18.0.9", "8.8.8.8"] {
-            assert!(permitted(ip(allowed), &[], &device), "{allowed}");
+        for allowed in [
+            "100.129.0.1",
+            "2001:db8:d::1",
+            "2001:db8:b::1",
+            "198.18.5.5",
+            "198.19.7.7",
+            "8.8.8.8",
+        ] {
+            assert!(permitted(ip(allowed), &[], &device), "{allowed} is allowed");
         }
-        // A local addon's own host on that network stays reachable.
-        assert!(permitted(ip("203.0.113.7"), &[ip("203.0.113.7")], &device));
+        // A local addon's own host on that network stays reachable; its
+        // neighbours do not.
+        let local = [ip("203.0.200.7")];
+        assert!(permitted(ip("203.0.200.7"), &local, &device));
+        assert!(!permitted(ip("203.0.200.8"), &local, &device));
+        assert_eq!(device.sizes(), (10, 4, 5));
     }
 
     #[test]
     fn the_device_is_read_from_its_interfaces() {
-        let device = Device::current();
-        assert!(device.own.contains(&ip("127.0.0.1")), "{device:?}");
+        let list = interfaces().expect("getifaddrs works here");
         assert!(
-            device.nets.iter().all(|(net, _)| !net.is_loopback()),
-            "{device:?}"
+            list.iter().any(|i| i.addr == ip("127.0.0.1") && i.loopback),
+            "{list:?}"
         );
+        // Netmasks decode as contiguous prefixes of a sane length.
+        for i in list.iter().filter(|i| i.addr.is_ipv4() && !i.loopback) {
+            let len = i.mask.and_then(prefix_len);
+            assert!(len.is_some_and(|l| (8..=32).contains(&l)), "{i:?}");
+        }
     }
 
     #[test]

@@ -20,8 +20,13 @@ impl Priority {
     }
 }
 
-// ponytail: per-host semaphores are never evicted; fine for the few hundred
-// hosts a client talks to, add LRU eviction if that ever grows unbounded.
+/// Hosts kept before idle ones are dropped. Redirect hops add their hosts
+/// (numbered CDN and debrid download hosts), so the map would otherwise grow
+/// for the process's lifetime.
+const MAX_HOSTS: usize = 1024;
+
+// ponytail: a scan of the map once it is full; an LRU if hosts ever churn
+// fast enough for the scan to show in profiles.
 pub(crate) struct Budget {
     per_host_limit: usize,
     global: Arc<Semaphore>,
@@ -44,6 +49,10 @@ impl Budget {
 
     fn host_semaphore(&self, host: &str) -> Arc<Semaphore> {
         let mut hosts = self.hosts.lock().unwrap_or_else(|p| p.into_inner());
+        if hosts.len() >= MAX_HOSTS {
+            // A semaphore someone holds or waits on has another reference.
+            hosts.retain(|_, semaphore| Arc::strong_count(semaphore) > 1);
+        }
         hosts
             .entry(host.to_owned())
             .or_insert_with(|| Arc::new(Semaphore::new(self.per_host_limit)))
@@ -95,6 +104,29 @@ mod tests {
         )
         .await;
         assert!(same_host.is_err());
+        drop(held);
+    }
+
+    #[tokio::test]
+    async fn idle_hosts_leave_the_map() {
+        let budget = Budget::new(1, 64);
+        let held = budget.acquire("held.example", Priority::Playback).await;
+        for i in 0..2 * MAX_HOSTS {
+            drop(
+                budget
+                    .acquire(&format!("h{i}.example"), Priority::Playback)
+                    .await,
+            );
+        }
+        let len = budget.hosts.lock().unwrap().len();
+        assert!(len <= MAX_HOSTS, "{len} hosts kept");
+        // A host in use keeps its semaphore, and with it its limit.
+        let again = tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            budget.acquire("held.example", Priority::Playback),
+        )
+        .await;
+        assert!(again.is_err(), "the held host's limit was lost");
         drop(held);
     }
 }

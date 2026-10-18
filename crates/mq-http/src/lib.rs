@@ -17,14 +17,19 @@ use net::Device;
 use reqwest::header::{CONTENT_TYPE, HeaderName, HeaderValue, LOCATION, RANGE, RETRY_AFTER};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc, Mutex, Once, RwLock};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, Once, RwLock};
+use std::time::{Duration, Instant};
 
 /// Redirects a request follows at most.
 const MAX_REDIRECTS: usize = 5;
 /// A scoped handle's refusal. It never names the address, which may be the
 /// user's own.
 const OUT_OF_SCOPE: &str = "outside the playback's scope";
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum HttpError {
@@ -102,7 +107,12 @@ fn redact_error(e: reqwest::Error) -> String {
 #[derive(Debug, Clone)]
 pub struct RequestOptions {
     pub priority: Priority,
+    /// A buffered request's total limit, over every redirect hop and the
+    /// body; a stream's idle limit between body chunks.
     pub timeout: Duration,
+    /// How long each hop may wait for its response headers, buffered or
+    /// streamed. Unscoped requests follow redirects inside one hop.
+    pub hop_headers: Duration,
     pub max_bytes: usize,
     pub allow_private: bool,
     pub headers: Vec<(String, String)>,
@@ -116,6 +126,7 @@ impl Default for RequestOptions {
         Self {
             priority: Priority::Addon,
             timeout: Duration::from_secs(10),
+            hop_headers: Duration::from_secs(10),
             max_bytes: 8 * 1024 * 1024,
             allow_private: false,
             headers: Vec::new(),
@@ -223,21 +234,90 @@ pub struct HttpClient {
     public: reqwest::Client,
     budget: Arc<Budget>,
     scopes: Arc<Scopes>,
-    /// Set on a handle from `scoped`: every request goes through it.
-    scope: Option<Scope>,
+    /// Set on a handle from `scoped`: its addresses, canonical and sorted.
+    /// Each request takes the current generation's client for them.
+    scope: Option<Arc<[IpAddr]>>,
 }
 
-/// The scoped clients, one per address set, and what building one takes.
+/// The scoped clients of the current interface snapshot, one per address set,
+/// and what building one takes.
 struct Scopes {
     config: ClientConfig,
-    /// Read by every scoped resolver, re-read by every `scoped` call.
+    /// Read by every scoped resolver and literal check, re-read by every
+    /// `scoped` call.
     device: Arc<RwLock<Device>>,
+    /// Emptied when the snapshot changes (a new generation), so no request
+    /// reuses a connection pooled under an older one.
     clients: Mutex<HashMap<Vec<IpAddr>, Scope>>,
+    /// The first failed interface read was logged.
+    unreadable: AtomicBool,
+    #[cfg(any(test, feature = "test-dns"))]
+    injected: Mutex<Option<Result<Vec<net::Interface>, ()>>>,
     #[cfg(test)]
     built: std::sync::atomic::AtomicUsize,
 }
 
 impl Scopes {
+    fn new(config: ClientConfig) -> Self {
+        Self {
+            config,
+            device: Default::default(),
+            clients: Default::default(),
+            unreadable: AtomicBool::new(false),
+            #[cfg(any(test, feature = "test-dns"))]
+            injected: Default::default(),
+            #[cfg(test)]
+            built: Default::default(),
+        }
+    }
+
+    /// Re-reads the interfaces. A failed read keeps the last snapshot (none
+    /// before the first success), and only the first failure is logged.
+    fn refresh(&self) {
+        let read = self.interfaces();
+        let mut clients = lock(&self.clients);
+        match read {
+            Ok(list) => {
+                let device = Device::from_interfaces(list);
+                let (own, prefixes, tunnels) = device.sizes();
+                tracing::info!(own, prefixes, tunnels, "interface snapshot");
+                let mut current = self.device.write().unwrap_or_else(|e| e.into_inner());
+                if *current != device {
+                    *current = device;
+                    clients.clear();
+                }
+            }
+            Err(e) => {
+                if !self.unreadable.swap(true, Ordering::Relaxed) {
+                    let kind = e.kind();
+                    tracing::warn!("interface list unreadable ({kind}); keeping the last snapshot");
+                }
+            }
+        }
+    }
+
+    fn interfaces(&self) -> std::io::Result<Vec<net::Interface>> {
+        #[cfg(any(test, feature = "test-dns"))]
+        if let Some(injected) = lock(&self.injected).clone() {
+            return injected.map_err(|()| std::io::ErrorKind::Other.into());
+        }
+        net::interfaces()
+    }
+
+    /// The current generation's client for `local`, built on first use. A
+    /// failed build is not kept, so the next request tries again.
+    fn client(&self, local: &[IpAddr]) -> Scope {
+        let mut clients = lock(&self.clients);
+        if let Some(scope) = clients.get(local) {
+            return scope.clone();
+        }
+        let scope = self.build(local.to_vec());
+        if scope.client.is_ok() {
+            clients.insert(local.to_vec(), scope.clone());
+        }
+        scope
+    }
+
     fn build(&self, local: Vec<IpAddr>) -> Scope {
         #[cfg(test)]
         self.built
@@ -319,10 +399,12 @@ async fn lookup(name: &str) -> std::io::Result<Vec<SocketAddr>> {
 }
 
 /// Names the scoped resolver answers before the system resolver, so a test
-/// can point a name at a fixture and change its answer. Only dev-dependencies
-/// enable it.
+/// can point a name at a fixture and change its answer, and interface lists
+/// a client reads instead of the device's. Only dev-dependencies enable it.
 #[cfg(any(test, feature = "test-dns"))]
 pub mod test_dns {
+    pub use crate::net::Interface;
+    use crate::{HttpClient, lock};
     use std::collections::HashMap;
     use std::net::IpAddr;
     use std::sync::{LazyLock, Mutex};
@@ -333,6 +415,19 @@ pub mod test_dns {
     pub fn set(name: &str, addrs: &[IpAddr]) {
         let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
         names.insert(name.to_ascii_lowercase(), addrs.to_vec());
+    }
+
+    /// Every later `scoped()` call on `http` (or a handle of it) reads this
+    /// list, or fails to read, instead of the device's interfaces. Per client,
+    /// so tests running side by side do not see each other's lists.
+    pub fn set_interfaces(http: &HttpClient, list: Result<Vec<Interface>, ()>) {
+        *lock(&http.scopes.injected) = Some(list);
+    }
+
+    /// The own addresses of `http`'s interface snapshot.
+    pub fn own_addresses(http: &HttpClient) -> Vec<IpAddr> {
+        let device = http.scopes.device.read().unwrap_or_else(|e| e.into_inner());
+        device.own().to_vec()
     }
 
     pub(crate) fn get(name: &str) -> Option<Vec<IpAddr>> {
@@ -414,13 +509,7 @@ impl HttpClient {
             inner,
             public,
             budget: Arc::new(Budget::new(config.per_host_limit, config.global_limit)),
-            scopes: Arc::new(Scopes {
-                config,
-                device: Default::default(),
-                clients: Default::default(),
-                #[cfg(test)]
-                built: Default::default(),
-            }),
+            scopes: Arc::new(Scopes::new(config)),
             scope: None,
         })
     }
@@ -433,37 +522,21 @@ impl HttpClient {
     /// (`headers_for`). `allow_private` is ignored. The device's own addresses
     /// and the on-link prefixes of its interfaces count as private, re-read on
     /// every call. Handles with the same addresses share one client and its
-    /// connections, and every handle shares this client's budget.
+    /// connections while the snapshot stays the same, and every handle shares
+    /// this client's budget.
     pub fn scoped(&self, local: &[IpAddr]) -> HttpClient {
         let mut key: Vec<IpAddr> = local.iter().map(|ip| ip.to_canonical()).collect();
         key.sort();
         key.dedup();
-        *self
-            .scopes
-            .device
-            .write()
-            .unwrap_or_else(|e| e.into_inner()) = Device::current();
-        let mut clients = self
-            .scopes
-            .clients
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let scope = match clients.get(&key) {
-            Some(scope) => scope.clone(),
-            None => {
-                let scope = self.scopes.build(key.clone());
-                if scope.client.is_ok() {
-                    clients.insert(key, scope.clone());
-                }
-                scope
-            }
-        };
+        self.scopes.refresh();
+        // Built here, so a playback's open pays for it rather than its first read.
+        let _ = self.scopes.client(&key);
         HttpClient {
             inner: self.inner.clone(),
             public: self.public.clone(),
             budget: self.budget.clone(),
             scopes: self.scopes.clone(),
-            scope: Some(scope),
+            scope: Some(key.into()),
         }
     }
 
@@ -585,8 +658,9 @@ impl HttpClient {
         req: Request,
         opts: &RequestOptions,
     ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
-        if let Some(scope) = &self.scope {
-            return self.follow(scope, req, opts).await;
+        if let Some(local) = &self.scope {
+            let scope = self.scopes.client(local);
+            return self.follow(&scope, req, opts).await;
         }
         let host = req.url.host_str().unwrap_or_default().to_owned();
         if !opts.allow_private && is_private_host(&host) {
@@ -599,17 +673,19 @@ impl HttpClient {
             &self.public
         };
         let headers = build_headers(&opts.headers, req.range.clone());
-        let response = open(client, &req, headers, opts.timeout).await?;
+        let response = open(client, &req, headers, opts).await?;
         Ok((response, permit))
     }
 
     /// A scoped request, hop by hop: each hop's literal is checked before
     /// connecting (names go through `Allowed`), its headers follow
     /// `headers_for`, and `next_hop` decides where it leads, at most
-    /// `MAX_REDIRECTS` times, with `Range` kept. A total limit applies to
-    /// each hop. Release before acquire: a hop's answer and host slot are
-    /// dropped before the next hop asks for a slot, since holding both
-    /// deadlocks same-host redirects at the per-host limit.
+    /// `MAX_REDIRECTS` times, with `Range` kept and methods as RFC 9110 15.4
+    /// says. Each hop waits at most `opts.hop_headers` for its headers; a
+    /// buffered request's total limit spans the whole chain. Release before
+    /// acquire: a hop's answer and host slot are dropped before the next hop
+    /// asks for a slot, since holding both deadlocks same-host redirects at
+    /// the per-host limit.
     async fn follow(
         &self,
         scope: &Scope,
@@ -618,6 +694,7 @@ impl HttpClient {
     ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
         let client = scope.client.clone()?;
         let owner = opts.owner.clone().unwrap_or_else(|| req.url.clone());
+        let deadline = req.timeout.map(|total| Instant::now() + total);
         let mut hops = 0;
         loop {
             if literal(&req.url).is_some_and(|ip| !scope.allowed.permits(ip)) {
@@ -625,9 +702,16 @@ impl HttpClient {
             }
             let host = req.url.host_str().unwrap_or_default();
             let permit = self.budget.acquire(host, opts.priority).await;
+            if let Some(deadline) = deadline {
+                let left = deadline.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    return Err(HttpError::Timeout(opts.timeout));
+                }
+                req.timeout = Some(left);
+            }
             let headers = headers_for(&owner, &req.url, &opts.headers);
             let headers = build_headers(&headers, req.range.clone());
-            let response = open(&client, &req, headers, opts.timeout).await?;
+            let response = open(&client, &req, headers, opts).await?;
             let status = response.status().as_u16();
             let Some(next) = next_hop(status, response.headers().get(LOCATION), &req.url)? else {
                 return Ok((response, permit));
@@ -638,9 +722,12 @@ impl HttpClient {
             if hops > MAX_REDIRECTS {
                 return Err(HttpError::Network("too many redirects".into()));
             }
-            // As browsers do: 301, 302 and 303 turn any method but HEAD into a
-            // GET without a body.
-            if !matches!(status, 307 | 308) && req.method != Method::HEAD {
+            let to_get = match status {
+                301 | 302 => req.method == Method::POST,
+                303 => req.method != Method::HEAD,
+                _ => false,
+            };
+            if to_get {
                 req.method = Method::GET;
                 req.body = None;
             }
@@ -659,11 +746,13 @@ struct Request {
     timeout: Option<Duration>,
 }
 
+/// Sends one hop. Its wait for response headers is bounded by
+/// `opts.hop_headers`; when that passes, the hop's future is dropped.
 async fn open(
     client: &reqwest::Client,
     req: &Request,
     mut headers: HeaderMap,
-    idle: Duration,
+    opts: &RequestOptions,
 ) -> Result<reqwest::Response, HttpError> {
     let mut request = client.request(req.method.clone(), req.url.clone());
     if let Some(timeout) = req.timeout {
@@ -676,11 +765,11 @@ async fn open(
         }
         request = request.body(bytes);
     }
-    let request = request.headers(headers);
-    request
-        .send()
-        .await
-        .map_err(|e| HttpError::from_reqwest(e, idle))
+    let sent = request.headers(headers).send();
+    match tokio::time::timeout(opts.hop_headers, sent).await {
+        Ok(answer) => answer.map_err(|e| HttpError::from_reqwest(e, opts.timeout)),
+        Err(_) => Err(HttpError::Timeout(opts.hop_headers)),
+    }
 }
 
 fn literal(url: &Url) -> Option<IpAddr> {
@@ -702,8 +791,9 @@ fn next_hop(
     if !matches!(status, 301 | 302 | 303 | 307 | 308) {
         return Ok(None);
     }
+    // UTF-8 as reqwest reads it; `join` percent-encodes what needs it.
     let next = location
-        .and_then(|l| l.to_str().ok())
+        .and_then(|l| std::str::from_utf8(l.as_bytes()).ok())
         .and_then(|l| from.join(l).ok());
     match next {
         Some(next) if downgrades(from, &next) => {
@@ -962,6 +1052,8 @@ mod tests {
     #[test]
     fn scoped_clients_are_shared_by_address_set() {
         let http = HttpClient::new(ClientConfig::default()).unwrap();
+        // A fixed interface list: a real one could change between the calls.
+        test_dns::set_interfaces(&http, Ok(Vec::new()));
         let (a, b) = (ip("127.0.0.1"), ip("192.168.1.5"));
         let _first = http.scoped(&[a, b]);
         let _reversed = http.scoped(&[b, a]);
@@ -1026,6 +1118,12 @@ mod tests {
         }
         assert!(next_hop(302, None, &from).unwrap().is_none());
         assert!(to(300, "/x").unwrap().is_none());
+        // A UTF-8 file name, as some servers send it, is followed encoded.
+        let utf8 = HeaderValue::from_bytes("../b/Amélie.mkv".as_bytes()).unwrap();
+        let next = next_hop(302, Some(&utf8), &from)
+            .unwrap()
+            .expect("followed");
+        assert_eq!(next.as_str(), "https://cdn.example/b/Am%C3%A9lie.mkv");
     }
 
     #[test]

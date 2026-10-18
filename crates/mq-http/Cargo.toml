@@ -28,3 +28,4 @@ libc = "0.2"
 [dev-dependencies]
 mq-http = { path = ".", features = ["test-dns"] }
 tokio = { workspace = true, features = ["net", "io-util"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }

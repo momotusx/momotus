@@ -67,6 +67,8 @@ fn opts(base: &str, timeout: Duration) -> RequestOptions {
         .unwrap_or(false);
     RequestOptions {
         timeout,
+        // A large library's answer may start only after a long wait.
+        hop_headers: timeout,
         max_bytes: MAX_RESPONSE_BYTES,
         allow_private,
         ..Default::default()
