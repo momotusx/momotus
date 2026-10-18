@@ -309,66 +309,49 @@ pub(crate) struct Rewritten {
     pub(crate) target_duration: Option<u64>,
 }
 
+/// A kept tag: whether its value is an attribute list, and the role of its
+/// own `URI` (`None`: it may name none).
+struct Kept {
+    name: &'static str,
+    list: bool,
+    uri: Option<Role>,
+}
+
+const fn kept(name: &'static str, list: bool, uri: Option<Role>) -> Kept {
+    Kept { name, list, uri }
+}
+
 /// Tags kept: everything else (unknown tags, comments, session data,
 /// steering, date ranges) is dropped, as clients ignore unknown tags.
-const KEPT: [&str; 27] = [
-    "EXTINF",
-    "EXT-X-VERSION",
-    "EXT-X-TARGETDURATION",
-    "EXT-X-MEDIA-SEQUENCE",
-    "EXT-X-DISCONTINUITY-SEQUENCE",
-    "EXT-X-DISCONTINUITY",
-    "EXT-X-ENDLIST",
-    "EXT-X-PLAYLIST-TYPE",
-    "EXT-X-I-FRAMES-ONLY",
-    "EXT-X-INDEPENDENT-SEGMENTS",
-    "EXT-X-START",
-    "EXT-X-PROGRAM-DATE-TIME",
-    "EXT-X-GAP",
-    "EXT-X-BITRATE",
-    "EXT-X-BYTERANGE",
-    "EXT-X-STREAM-INF",
-    "EXT-X-MEDIA",
-    "EXT-X-I-FRAME-STREAM-INF",
-    "EXT-X-KEY",
-    "EXT-X-SESSION-KEY",
-    "EXT-X-MAP",
-    "EXT-X-SERVER-CONTROL",
-    "EXT-X-PART-INF",
-    "EXT-X-PART",
-    "EXT-X-PRELOAD-HINT",
-    "EXT-X-RENDITION-REPORT",
-    "EXT-X-SKIP",
+const KEPT: [Kept; 27] = [
+    kept("EXTINF", false, None),
+    kept("EXT-X-VERSION", false, None),
+    kept("EXT-X-TARGETDURATION", false, None),
+    kept("EXT-X-MEDIA-SEQUENCE", false, None),
+    kept("EXT-X-DISCONTINUITY-SEQUENCE", false, None),
+    kept("EXT-X-DISCONTINUITY", false, None),
+    kept("EXT-X-ENDLIST", false, None),
+    kept("EXT-X-PLAYLIST-TYPE", false, None),
+    kept("EXT-X-I-FRAMES-ONLY", false, None),
+    kept("EXT-X-INDEPENDENT-SEGMENTS", false, None),
+    kept("EXT-X-START", true, None),
+    kept("EXT-X-PROGRAM-DATE-TIME", false, None),
+    kept("EXT-X-GAP", false, None),
+    kept("EXT-X-BITRATE", false, None),
+    kept("EXT-X-BYTERANGE", false, None),
+    kept("EXT-X-STREAM-INF", true, None),
+    kept("EXT-X-MEDIA", true, Some(Role::Playlist)),
+    kept("EXT-X-I-FRAME-STREAM-INF", true, Some(Role::Playlist)),
+    kept("EXT-X-KEY", true, Some(Role::Small)),
+    kept("EXT-X-SESSION-KEY", true, Some(Role::Small)),
+    kept("EXT-X-MAP", true, Some(Role::Media)),
+    kept("EXT-X-SERVER-CONTROL", true, None),
+    kept("EXT-X-PART-INF", true, None),
+    kept("EXT-X-PART", true, Some(Role::Media)),
+    kept("EXT-X-PRELOAD-HINT", true, Some(Role::Media)),
+    kept("EXT-X-RENDITION-REPORT", true, Some(Role::Playlist)),
+    kept("EXT-X-SKIP", true, None),
 ];
-
-/// Kept tags whose value is an attribute list.
-const LISTS: [&str; 13] = [
-    "EXT-X-START",
-    "EXT-X-STREAM-INF",
-    "EXT-X-MEDIA",
-    "EXT-X-I-FRAME-STREAM-INF",
-    "EXT-X-KEY",
-    "EXT-X-SESSION-KEY",
-    "EXT-X-MAP",
-    "EXT-X-SERVER-CONTROL",
-    "EXT-X-PART-INF",
-    "EXT-X-PART",
-    "EXT-X-PRELOAD-HINT",
-    "EXT-X-RENDITION-REPORT",
-    "EXT-X-SKIP",
-];
-
-/// The role of a tag's own `URI`; tags not here have none.
-fn uri_role(tag: &str) -> Option<Role> {
-    match tag {
-        "EXT-X-MEDIA" | "EXT-X-I-FRAME-STREAM-INF" | "EXT-X-RENDITION-REPORT" => {
-            Some(Role::Playlist)
-        }
-        "EXT-X-MAP" | "EXT-X-PART" | "EXT-X-PRELOAD-HINT" => Some(Role::Media),
-        "EXT-X-KEY" | "EXT-X-SESSION-KEY" => Some(Role::Small),
-        _ => None,
-    }
-}
 
 /// Where a rewrite sends a child: `{prefix}{id}/{name}`.
 pub(crate) struct Children<'a> {
@@ -463,9 +446,9 @@ pub(crate) fn rewrite_hls(
         if tag == "EXT-X-DEFINE" {
             return Err("EXT-X-DEFINE");
         }
-        if !KEPT.contains(&tag) {
+        let Some(kept) = KEPT.iter().find(|kept| kept.name == tag) else {
             continue;
-        }
+        };
         let value = line[1 + tag.len()..].strip_prefix(':');
         match tag {
             "EXTINF" => {
@@ -480,15 +463,18 @@ pub(crate) fn rewrite_hls(
                 target_duration = value.and_then(|v| v.trim().parse().ok());
                 emit(&mut out, line)?;
             }
-            _ if LISTS.contains(&tag) => {
+            _ if kept.list => {
                 if tag == "EXT-X-STREAM-INF" {
                     if variant {
                         return Err("a variant with no URI line");
                     }
                     variant = true;
                 }
-                let list = rewrite_list(tag, value.unwrap_or_default(), base, children)?;
-                emit(&mut out, &list)?;
+                let list = value.unwrap_or_default();
+                emit(
+                    &mut out,
+                    &rewrite_list(tag, kept.uri, list, base, children)?,
+                )?;
             }
             _ => emit(&mut out, line)?,
         }
@@ -544,6 +530,7 @@ fn resolve(base: &Url, reference: &str) -> Result<Url, &'static str> {
 /// attribute verbatim.
 fn rewrite_list(
     tag: &str,
+    role: Option<Role>,
     list: &str,
     base: &Url,
     children: &mut Children<'_>,
@@ -574,7 +561,7 @@ fn rewrite_list(
             parts.push(format!("{name}={value}"));
             continue;
         }
-        let role = uri_role(tag).ok_or("a URI on a tag that names none")?;
+        let role = role.ok_or("a URI on a tag that names none")?;
         let reference = value
             .strip_prefix('"')
             .and_then(|v| v.strip_suffix('"'))

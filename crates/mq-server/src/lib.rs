@@ -751,14 +751,7 @@ async fn serve_subtitle(
     let Some(vtt) = to_vtt(&body, &subtitle.lang) else {
         return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
     };
-    (
-        [
-            (header::CONTENT_TYPE, "text/vtt; charset=utf-8"),
-            (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-        ],
-        vtt,
-    )
-        .into_response()
+    cors(([(header::CONTENT_TYPE, "text/vtt; charset=utf-8")], vtt).into_response())
 }
 
 async fn serve(
@@ -772,11 +765,7 @@ async fn serve(
     let Some(playback) = playback(&shared, &token) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let range = request
-        .headers()
-        .get(header::RANGE)
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_owned);
+    let range = range_of(&request);
     let head_only = request.method() == Method::HEAD;
     match &playback.body {
         Content::Http(source) => serve_http(source.clone(), range, head_only).await,
@@ -842,11 +831,7 @@ async fn serve_child(
             serve_playlist(&playback, hls, Some(id), url, query).await
         }
         Role::Media => {
-            let range = request
-                .headers()
-                .get(header::RANGE)
-                .and_then(|v| v.to_str().ok())
-                .map(str::to_owned);
+            let range = range_of(&request);
             let head_only = request.method() == Method::HEAD;
             proxy(
                 &hls.http,
@@ -865,11 +850,22 @@ async fn serve_child(
 
 /// Lets any page read the answer (`<video crossorigin>` and Safari's HLS).
 fn cors(mut response: Response) -> Response {
-    response.headers_mut().insert(
+    allow_any_origin(response.headers_mut());
+    response
+}
+
+/// `Access-Control-Allow-Origin: *`: the token in the path is the capability.
+fn allow_any_origin(headers: &mut HeaderMap) {
+    headers.insert(
         header::ACCESS_CONTROL_ALLOW_ORIGIN,
         HeaderValue::from_static("*"),
     );
-    response
+}
+
+/// The request's `Range` header.
+fn range_of(request: &Request<Body>) -> Option<String> {
+    let range = request.headers().get(header::RANGE)?;
+    range.to_str().ok().map(str::to_owned)
 }
 
 /// The request's LL-HLS directives (`_HLS_msn`, `_HLS_part`, `_HLS_skip`),
@@ -1337,11 +1333,7 @@ async fn serve_http(
     };
     let mut out = meta.headers.clone();
     out.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
-    // A page may read it as `<video crossorigin>`; the token is the capability.
-    out.insert(
-        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        HeaderValue::from_static("*"),
-    );
+    allow_any_origin(&mut out);
     let (status, start, end) = match range_headers(range.as_deref(), meta.len, &mut out) {
         Some(span) => span,
         None => return (StatusCode::RANGE_NOT_SATISFIABLE, out).into_response(),
@@ -1418,11 +1410,7 @@ async fn proxy(
     }
     out.entry(header::ACCEPT_RANGES)
         .or_insert(HeaderValue::from_static("bytes"));
-    // A page may read it as `<video crossorigin>`; the token is the capability.
-    out.insert(
-        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        HeaderValue::from_static("*"),
-    );
+    allow_any_origin(&mut out);
     if head_only {
         return (status, out).into_response();
     }
