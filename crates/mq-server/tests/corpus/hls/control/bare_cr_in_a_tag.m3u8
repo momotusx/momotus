@@ -1,0 +1,5 @@
+#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00.000Zhttp://canary.invalid/seg.ts
+#EXTINF:4,
+s.ts

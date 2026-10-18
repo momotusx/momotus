@@ -936,23 +936,26 @@ mod tests {
         assert_eq!(refused.unwrap_err(), "too many resources");
     }
 
+    /// The `.m3u8` files of `tests/corpus/hls/{sub}`, by name.
+    fn corpus(sub: &str) -> (std::path::PathBuf, Vec<String>) {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/hls");
+        let mut names: Vec<String> = std::fs::read_dir(dir.join(sub))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name.ends_with(".m3u8"))
+            .collect();
+        names.sort();
+        (dir, names)
+    }
+
     /// The golden outputs Media3 parses in the Android `ManifestCorpusTest`:
     /// every input in `tests/corpus/hls/in` rewritten for the core at
     /// `CORE` with a fixed token. `MQ_CORPUS_WRITE=1` writes them to
     /// `tests/corpus/hls/out`; otherwise any difference fails.
     #[test]
     fn corpus_matches_the_rewriter() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/hls");
         let write = std::env::var_os("MQ_CORPUS_WRITE").is_some();
-        let names = |sub: &str| -> Vec<String> {
-            let mut names: Vec<String> = std::fs::read_dir(dir.join(sub))
-                .unwrap()
-                .map(|e| e.unwrap().file_name().into_string().unwrap())
-                .collect();
-            names.sort();
-            names
-        };
-        let inputs = names("in");
+        let (dir, inputs) = corpus("in");
         assert!(!inputs.is_empty());
         let prefix = format!("{CORE}c/{}/", "0f".repeat(32));
         for name in &inputs {
@@ -976,6 +979,27 @@ mod tests {
                 assert_eq!(kept, out, "{name} differs from its golden output");
             }
         }
-        assert_eq!(names("out"), inputs, "a golden output with no input");
+        assert_eq!(corpus("out").1, inputs, "a golden output with no input");
+    }
+
+    /// The controls in `tests/corpus/hls/control`: inputs Media3 reads an
+    /// origin URL from (`ManifestCorpusTest` shows it does), all refused.
+    #[test]
+    fn controls_are_refused() {
+        let (dir, controls) = corpus("control");
+        assert!(!controls.is_empty());
+        for name in &controls {
+            let body = std::fs::read(dir.join("control").join(name)).unwrap();
+            let base = Url::parse(&format!("https://cdn.example/hls/{name}")).unwrap();
+            let mut table = Table::default();
+            let mut children = Children {
+                core: CORE,
+                prefix: PREFIX,
+                table: &mut table,
+                alive: &|| true,
+            };
+            let rewritten = rewrite_hls(&body, &base, false, &mut children);
+            assert!(rewritten.is_err(), "{name} was accepted");
+        }
     }
 }

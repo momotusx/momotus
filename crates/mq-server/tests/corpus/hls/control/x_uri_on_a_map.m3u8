@@ -1,0 +1,5 @@
+#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MAP:X-URI="http://canary.invalid/i",URI="i.mp4"
+#EXTINF:4,
+s.mp4
