@@ -452,9 +452,14 @@ impl Shared {
     }
 
     /// Keeps where the original URL's redirect led for this playback's later
-    /// reads.
+    /// reads. The answer's URL has lost the stream URL's userinfo, which the
+    /// same origin keeps, so a read with no redirect is not remembered.
     fn remember(&self, target: &Url) {
-        if Url::parse(&self.url).is_ok_and(|first| *target != first) {
+        let Ok(first) = Url::parse(&self.url) else {
+            return;
+        };
+        let target = mq_http::same_origin_credentials(&first, target.clone());
+        if target != first {
             *lock(&self.redirect) = Some(target.as_str().into());
         }
     }

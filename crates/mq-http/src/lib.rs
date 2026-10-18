@@ -756,9 +756,9 @@ impl HttpClient {
 
 /// `next` with the first URL's userinfo when it is the same origin (or its
 /// https upgrade) and names none itself: reqwest sends URL userinfo as Basic
-/// credentials, and an absolute `Location` on the same server carries none.
-/// Another origin never gets them.
-fn same_origin_credentials(first: &Url, mut next: Url) -> Url {
+/// credentials, and an absolute `Location` on the same server carries none
+/// (nor does a response's `final_url`). Another origin never gets them.
+pub fn same_origin_credentials(first: &Url, mut next: Url) -> Url {
     let same = first.origin() == next.origin() || upgrades(first, &next);
     if same && next.username().is_empty() && next.password().is_none() {
         let _ = next.set_username(first.username());

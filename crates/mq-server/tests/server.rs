@@ -50,6 +50,11 @@ struct Behaviour {
     hang_after: Option<usize>,
     /// From the second request on, answer 403, as an expired link does.
     expires: bool,
+    /// Answer 401 to requests without Basic credentials, as a NAS does.
+    basic: bool,
+    /// Redirect every other path to `/video.mkv` on this host, by an
+    /// absolute `Location`.
+    moved: bool,
 }
 
 /// Bytes that differ with their offset, so a misplaced range shows.
@@ -85,6 +90,25 @@ async fn answer(mut socket: TcpStream, data: Arc<Vec<u8>>, how: Behaviour, seen:
     seen.heads.lock().unwrap().push(head.clone());
     if head.contains("\r\nauthorization:") {
         seen.credentials.fetch_add(1, Ordering::Relaxed);
+    }
+    if how.basic && !head.contains("\r\nauthorization: basic ") {
+        let _ = socket
+            .write_all(
+                b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .await;
+        return;
+    }
+    if how.moved && !head.starts_with("get /video.mkv ") {
+        let host = head
+            .lines()
+            .find_map(|l| l.strip_prefix("host: "))
+            .unwrap_or_default();
+        let reply = format!(
+            "HTTP/1.1 302 Found\r\nLocation: http://{host}/video.mkv\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        );
+        let _ = socket.write_all(reply.as_bytes()).await;
+        return;
     }
     if how.token && !head.contains("x-token: abc") {
         let _ = socket
@@ -1057,6 +1081,38 @@ async fn a_redirect_target_that_turns_private_is_refused() {
         "the fallback asked the original URL"
     );
     assert_eq!(canary.accepted(), 0);
+}
+
+/// Userinfo in a stream URL goes with every read, a seek's too, and to a
+/// redirect target on the same origin, so no read pays a 401 first.
+#[tokio::test]
+async fn url_credentials_go_with_every_read() {
+    let data = file(16 << 20);
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    // The file itself, then a download path that redirects to it.
+    for (moved, requests) in [(false, 2), (true, 3)] {
+        let how = Behaviour {
+            basic: true,
+            moved,
+            ..Default::default()
+        };
+        let (origin, seen) = range_origin(data.clone(), how).await;
+        let mut origin = origin.replace("http://", "http://u:p@");
+        if moved {
+            origin = origin.replace("/video.mkv", "/download");
+        }
+        let lease = server.register(local_upstream(origin), "video.mkv");
+        assert_eq!(range(&http, &lease.url, 0, 2).await, data[..2]);
+        let far = 12usize << 20;
+        assert_eq!(
+            range(&http, &lease.url, far as u64, 1000).await,
+            data[far..far + 1000]
+        );
+        let heads = seen.heads();
+        assert_eq!(heads.len(), requests, "{heads:?}");
+        assert!(heads.iter().all(|h| h.contains("authorization: basic ")));
+    }
 }
 
 #[tokio::test]
