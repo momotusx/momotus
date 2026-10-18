@@ -243,10 +243,6 @@ impl Engine {
             disable_upload: !cfg.upload,
             ..Default::default()
         };
-        // librqbit's HTTP clients (trackers, UPnP) take the process's rustls
-        // provider, ring, the one the rest of the core uses (core backlog C11):
-        // installed here too, since the engine can start before any other client.
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
         let engine = Self {
             inner: Arc::new(Inner {

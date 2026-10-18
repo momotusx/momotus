@@ -3,14 +3,16 @@ librqbit, vendored for Marquee
 Upstream: https://github.com/ikatson/rqbit, tag v9.0.1,
 commit a499d2f243d124e144aef137afe7cb304a6e3f36, directory crates/librqbit.
 Copyright 2021 Igor Katson. Licensed under the Apache License, Version 2.0
-(see LICENSE). Upstream ships no NOTICE file of its own.
+(LICENSE is upstream's header, LICENSE-APACHE-2.0 the full text). Upstream
+ships no NOTICE file of its own.
 
 What was taken: src/, resources/, examples/, build.rs and README.md as in the
 tag. Cargo.toml is the manifest published to crates.io for librqbit 9.0.1
 (workspace inheritance resolved to concrete versions). The web UI (webui/) is
 not vendored; it is only built with the `webui` feature, which Marquee never
 enables. Sibling crates (librqbit-core, -dht, -peer-protocol, -utp, -upnp and
-the rest) come unmodified from crates.io at 9.0.1.
+the rest) come unmodified from crates.io at 9.0.1, except librqbit-sha1-wrapper,
+vendored beside this crate (see its NOTICE).
 
 Marquee changes (each changed spot carries a "Marquee fork" comment):
 
@@ -31,4 +33,8 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
 - src/torrent_state/streaming.rs: a `FileStream` no longer holds a blocking
   spawner permit for its lifetime (as many open streams as permits starved
   disk writes, and every stream then waited forever).
-- Cargo.toml: an empty [workspace] table.
+- Cargo.toml: an empty [workspace] table; the `rust-tls` feature turns on
+  reqwest's `rustls-no-provider` (not its aws-lc `rustls`) and an optional
+  `rustls` with ring.
+- src/session.rs: the ring provider is installed before the first reqwest
+  client is built (core backlog C11).

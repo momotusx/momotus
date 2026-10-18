@@ -707,6 +707,13 @@ impl Session {
                 .client_name_and_version
                 .unwrap_or_else(|| crate::client_name_and_version().to_owned());
 
+            // Marquee fork: reqwest uses the process's rustls provider
+            // (`rustls-no-provider`), so one must be installed before the first
+            // client is built, whichever way the session was opened. Ring, as
+            // the rest of Marquee's core uses; a provider already installed stays.
+            #[cfg(feature = "rust-tls")]
+            let _ = rustls::crypto::ring::default_provider().install_default();
+
             let reqwest_client = {
                 let builder = if let Some(proxy_url) = proxy_url {
                     let proxy = reqwest::Proxy::all(proxy_url)

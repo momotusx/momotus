@@ -62,6 +62,7 @@ prometheus = ["metrics-exporter-prometheus"]
 # mq-http), not reqwest's bundled aws-lc one (core backlog C11).
 rust-tls = [
     "reqwest/rustls-no-provider",
+    "dep:rustls",
     "sha1w/sha1-ring",
     "librqbit-core/sha1-ring",
 ]
@@ -276,6 +277,12 @@ version = "0.7"
 
 [dependencies.serde_with]
 version = "3"
+
+[dependencies.rustls]
+version = "0.23"
+default-features = false
+features = ["ring", "std"]
+optional = true
 
 [dependencies.sha1w]
 version = "9.0.1"
