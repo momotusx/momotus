@@ -1054,7 +1054,11 @@ async fn rewrite(
 ) -> Result<manifest::Rewritten, &'static str> {
     let deadline = tokio::time::Instant::from_std(end);
     let table = tokio::time::timeout_at(deadline, hls.table.clone().lock_owned());
-    let table = table.await.map_err(|_| "out of time")?;
+    let table = match released.run_until_cancelled(table).await {
+        None => return Err("released"),
+        Some(Err(_)) => return Err("out of time"),
+        Some(Ok(table)) => table,
+    };
     let slot = Arc::new(Mutex::new(Some(table)));
     let _handoff = Handoff(slot.clone());
     // Cancelled when this future ends, however it ends: at the deadline
@@ -1062,7 +1066,7 @@ async fn rewrite(
     let gone = CancellationToken::new();
     let _gone = gone.clone().drop_guard();
     let hls = hls.clone();
-    let released = released.clone();
+    let release = released.clone();
     let work = tokio::task::spawn_blocking(move || {
         let Some(mut table) = lock(&slot).take() else {
             return Err("out of time");
@@ -1071,7 +1075,7 @@ async fn rewrite(
         if let Some(hook) = &hls.hook {
             hook();
         }
-        let alive = || !released.is_cancelled() && !gone.is_cancelled();
+        let alive = || !release.is_cancelled() && !gone.is_cancelled();
         let mut children = Children {
             core: &hls.core,
             prefix: &hls.prefix,
@@ -1084,10 +1088,14 @@ async fn rewrite(
         }
         Ok(rewritten)
     });
-    match tokio::time::timeout_at(deadline, work).await {
-        Ok(Ok(rewritten)) => rewritten,
-        Ok(Err(_)) => Err("the rewrite failed"),
-        Err(_) => Err("out of time"),
+    // Work still queued for a blocking thread cannot look at `released`:
+    // release ends the wait here, and `_handoff` takes the table back.
+    let work = tokio::time::timeout_at(deadline, work);
+    match released.run_until_cancelled(work).await {
+        None => Err("released"),
+        Some(Ok(Ok(rewritten))) => rewritten,
+        Some(Ok(Err(_))) => Err("the rewrite failed"),
+        Some(Err(_)) => Err("out of time"),
     }
 }
 
@@ -1770,6 +1778,63 @@ mod rewrites {
             assert!(hls.table.try_lock().is_ok(), "queued work kept the table");
             busy.send(()).unwrap();
             occupied.await.unwrap();
+        });
+    }
+
+    /// Release ends a rewrite's waits with the request still there: its wait
+    /// for a table another rewrite holds, and its work queued behind the
+    /// only blocking thread, both well before their 60 s deadline.
+    #[test]
+    fn release_ends_a_queued_rewrite() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let hls = hls(None);
+            // Waiting for the table.
+            let rewriting = hls.table.clone().lock_owned().await;
+            let token = CancellationToken::new();
+            let waiting = rewrite(&hls, media(10), base(), None, &token, far());
+            let release = async {
+                tokio::task::yield_now().await;
+                token.cancel();
+            };
+            let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+                tokio::join!(waiting, release)
+            })
+            .await
+            .expect("release ended the wait for the table");
+            assert_eq!(result.unwrap_err(), "released");
+            drop(rewriting);
+            // Queued behind a busy blocking thread, holding the table.
+            let (busy, wait) = mpsc::channel::<()>();
+            let occupied = tokio::task::spawn_blocking(move || {
+                let _ = wait.recv_timeout(Duration::from_secs(10));
+            });
+            let token = CancellationToken::new();
+            let queued = rewrite(&hls, media(10), base(), None, &token, far());
+            let release = async {
+                while hls.table.try_lock().is_ok() {
+                    tokio::task::yield_now().await;
+                }
+                token.cancel();
+            };
+            let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+                tokio::join!(queued, release)
+            })
+            .await
+            .expect("release ended the queued work's wait");
+            assert_eq!(result.unwrap_err(), "released");
+            assert!(hls.table.try_lock().is_ok(), "queued work kept the table");
+            busy.send(()).unwrap();
+            occupied.await.unwrap();
+            // Its work, run at last, finds the table taken back.
+            let table = tokio::time::timeout(Duration::from_secs(5), hls.table.lock())
+                .await
+                .expect("the table is free");
+            assert_eq!(table.len(), 0, "released work went on");
         });
     }
 
