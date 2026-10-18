@@ -39,6 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.NextEpisode
@@ -102,6 +105,9 @@ fun PhonePlayer(
     modifier: Modifier = Modifier,
 ) {
     val stage = controller.stage
+    val density = LocalDensity.current
+    // Measured from the controls; 200 dp until they have shown once.
+    var controlsHeight by remember { mutableStateOf(200.dp) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     var osd by remember { mutableStateOf(true) }
     var wake by remember { mutableIntStateOf(0) }
@@ -245,7 +251,8 @@ fun PhonePlayer(
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
-            Box {
+            // The scrim can be taller than the controls: they keep to the foot.
+            Box(contentAlignment = Alignment.BottomCenter) {
                 Scrim(
                     top = false,
                     height = 240.dp,
@@ -259,6 +266,11 @@ fun PhonePlayer(
                     onVersions = onVersions,
                     onEpisodes = onEpisodes,
                     onTouch = { wake++ },
+                    // The last height they had: the skip button and Up Next sit just above it.
+                    modifier =
+                        Modifier.onSizeChanged {
+                            if (it.height > 0) controlsHeight = with(density) { it.height.toDp() }
+                        },
                 )
             }
         }
@@ -310,7 +322,7 @@ fun PhonePlayer(
                             Modifier
                                 .align(Alignment.BottomEnd)
                                 .windowInsetsPadding(WindowInsets.displayCutout)
-                                .padding(end = 16.dp, bottom = if (showControls) 200.dp else 24.dp),
+                                .padding(end = 16.dp, bottom = if (showControls) controlsHeight + 8.dp else 24.dp),
                     )
                 }
             }
@@ -323,7 +335,7 @@ fun PhonePlayer(
                         Modifier
                             .align(Alignment.BottomEnd)
                             .windowInsetsPadding(WindowInsets.displayCutout)
-                            .padding(end = 16.dp, bottom = 200.dp),
+                            .padding(end = 16.dp, bottom = controlsHeight + 8.dp),
                 )
             }
             if (showEnd) {
@@ -370,51 +382,22 @@ private fun Controls(
     onVersions: () -> Unit,
     onEpisodes: (() -> Unit)?,
     onTouch: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var dragging by remember { mutableStateOf<Long?>(null) }
     val playing = controller.offersPause
+    val short = LocalConfiguration.current.screenHeightDp < SHORT_HEIGHT_DP
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.displayCutout)
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // The transport sits just above the bar and never crosses it.
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RoundButton(
-                Icons.RotateCcw,
-                "Back 10 seconds",
-                {
-                    onTouch()
-                    controller.seekBy(-SEEK_MS)
-                },
-                badge = "10",
-            )
-            RoundButton(
-                icon = if (playing) PauseFilled else PlayFilled,
-                label = if (playing) "Pause" else "Play",
-                onClick = {
-                    onTouch()
-                    controller.togglePlay()
-                },
-                main = true,
-            )
-            RoundButton(
-                Icons.RotateCw,
-                "Forward 10 seconds",
-                {
-                    onTouch()
-                    controller.seekBy(SEEK_MS)
-                },
-                badge = "10",
-            )
-        }
+        // A short screen puts the transport beside the actions, so the controls stay low and clear of
+        // the title and the status line; a tall one keeps it just above the bar.
+        if (!short) Transport(controller, playing, onTouch, Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             MqText(clockText(dragging ?: controller.positionMs), role = TextRole.Caption)
             Scrubber(
@@ -454,23 +437,97 @@ private fun Controls(
                 role = TextRole.Caption,
             )
         }
-        // Audio, Subtitles, Versions, Speed, then Episodes (the design audit's order for every platform).
-        // Spread across the width when they fit; past it (a small phone, a large font, long track names)
-        // the row scrolls, so no action is squeezed under its 48 dp target.
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            if (controller.audio.isNotEmpty()) {
-                ActionButton(Icons.Volume2, "Audio", controller.audioDetail(), onAudio)
+        if (short) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Transport(controller, playing, onTouch)
+                Actions(controller, onAudio, onSubtitles, onVersions, onEpisodes, onTouch, Modifier.weight(1f))
             }
-            ActionButton(Icons.Captions, "Subtitles", controller.subtitlesDetail(), onSubtitles)
-            ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
-            ActionButton(Icons.Gauge, "Speed", speedText(controller.speed), {
-                onTouch()
-                controller.changeSpeed(nextSpeed(controller.speed))
-            })
-            onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
+        } else {
+            Actions(controller, onAudio, onSubtitles, onVersions, onEpisodes, onTouch, Modifier.fillMaxWidth())
         }
     }
 }
+
+/** Back 10 seconds, play or pause, forward 10 seconds. */
+@Composable
+private fun Transport(
+    controller: PlaybackController,
+    playing: Boolean,
+    onTouch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RoundButton(
+            Icons.RotateCcw,
+            "Back 10 seconds",
+            {
+                onTouch()
+                controller.seekBy(-SEEK_MS)
+            },
+            badge = "10",
+        )
+        RoundButton(
+            icon = if (playing) PauseFilled else PlayFilled,
+            label = if (playing) "Pause" else "Play",
+            onClick = {
+                onTouch()
+                controller.togglePlay()
+            },
+            main = true,
+        )
+        RoundButton(
+            Icons.RotateCw,
+            "Forward 10 seconds",
+            {
+                onTouch()
+                controller.seekBy(SEEK_MS)
+            },
+            badge = "10",
+        )
+    }
+}
+
+/**
+ * Audio, Subtitles, Versions, Speed, then Episodes (the design audit's order for every platform).
+ * Spread across the width when they fit; past it (a small phone, a large font, long track names)
+ * the row scrolls, so no action is squeezed under its 48 dp target.
+ */
+@Composable
+private fun Actions(
+    controller: PlaybackController,
+    onAudio: () -> Unit,
+    onSubtitles: () -> Unit,
+    onVersions: () -> Unit,
+    onEpisodes: (() -> Unit)?,
+    onTouch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        if (controller.audio.isNotEmpty()) {
+            ActionButton(Icons.Volume2, "Audio", controller.audioDetail(), onAudio)
+        }
+        ActionButton(Icons.Captions, "Subtitles", controller.subtitlesDetail(), onSubtitles)
+        ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
+        ActionButton(Icons.Gauge, "Speed", speedText(controller.speed), {
+            onTouch()
+            controller.changeSpeed(nextSpeed(controller.speed))
+        })
+        onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
+    }
+}
+
+/**
+ * Below this height (every phone, as the player is landscape) the transport joins the actions' row,
+ * as on TV, so the controls stay low; a tablet keeps it above the scrubber.
+ */
+private const val SHORT_HEIGHT_DP = 420
