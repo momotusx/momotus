@@ -28,6 +28,9 @@ struct PlayerControls: View {
     var measured: (CGFloat) -> Void = { _ in }
     @State private var actionsWidth: CGFloat = 0
     @State private var moreAfter = false
+    /// TV seeking: how many quick presses in a row, and the last one's direction and time.
+    @State private var seekRun = 0
+    @State private var lastSeek: (direction: Int, at: ContinuousClock.Instant)?
     @Environment(\.metrics) private var metrics
     @State private var scrub: Double?
     /// Which control has focus: TV enters on Play/Pause, and every move keeps the controls up.
@@ -136,11 +139,15 @@ struct PlayerControls: View {
             .focusable()
             .focused($focus, equals: .scrub)
             .modifier(FocusRing(shape: Capsule(), active: focus == .scrub))
+            // Left and Right seek, faster while pressed again quickly; Up and
+            // Down leave the bar for Back and Play by name, not by geometry.
             .onMoveCommand { direction in
                 switch direction {
-                case .left: model.skip(-10); activity()
-                case .right: model.skip(10); activity()
-                default: break
+                case .left: seek(-1)
+                case .right: seek(1)
+                case .up: focus = .back
+                case .down: focus = .play
+                @unknown default: break
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -194,6 +201,16 @@ struct PlayerControls: View {
     }
 
     private var footPadding: CGFloat { metrics.wide ? Theme.Space.m : Theme.Space.s }
+
+    /// One press on the TV bar: 10 s, more while the same direction comes again within a second.
+    private func seek(_ direction: Int) {
+        let now = ContinuousClock.now
+        let continuing = lastSeek.map { $0.direction == direction && now - $0.at < SeekRamp.window } ?? false
+        seekRun = SeekRamp.run(after: seekRun, continuing: continuing)
+        lastSeek = (direction, now)
+        model.skip(Double(direction) * SeekRamp.step(seekRun))
+        activity()
+    }
 
     private var transport: some View {
         // Play/Pause is the white circle; only focus draws a ring.

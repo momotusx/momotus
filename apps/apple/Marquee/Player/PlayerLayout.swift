@@ -28,3 +28,18 @@ enum PlayerLayout {
         controlsShown ? controlsHeight + 8 : 24
     }
 }
+
+/// Seeking on the TV's position bar: 10 s a press, growing while the same
+/// direction is pressed again quickly, so twenty minutes is about fifteen
+/// presses rather than 120.
+enum SeekRamp {
+    /// Seconds a press moves, by how many quick presses came before it in that direction.
+    static let steps: [Double] = [10, 10, 20, 30, 60, 120]
+    /// Presses closer than this continue a run.
+    static let window: Duration = .seconds(1)
+
+    static func step(_ run: Int) -> Double { steps[min(max(run, 0), steps.count - 1)] }
+
+    /// The run a press starts or continues: the same direction within the window goes on, anything else starts over.
+    static func run(after previous: Int, continuing: Bool) -> Int { continuing ? previous + 1 : 0 }
+}

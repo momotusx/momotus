@@ -97,3 +97,18 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(PlayerLayout.overlayBottom(controlsShown: true, controlsHeight: 180) == 188)
     #expect(PlayerLayout.overlayBottom(controlsShown: false, controlsHeight: 180) == 24)
 }
+
+@Test func tvSeekingGrowsWhilePressedAgainQuickly() {
+    // Quick presses one way: 10, 10, 20, 30, 60, then 120 s each.
+    var run = 0
+    var moved = SeekRamp.step(run)
+    for _ in 1..<15 {
+        run = SeekRamp.run(after: run, continuing: true)
+        moved += SeekRamp.step(run)
+    }
+    #expect(SeekRamp.step(0) == 10 && SeekRamp.step(5) == 120 && SeekRamp.step(40) == 120)
+    // Twenty minutes in fifteen presses, not 120.
+    #expect(moved >= 1200)
+    // A pause or the other direction starts over at 10 s.
+    #expect(SeekRamp.run(after: 4, continuing: false) == 0)
+}
