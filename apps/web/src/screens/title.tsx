@@ -351,7 +351,8 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
     if (e.watched) return "Watched";
     if (e.leftMs) return minutesLeft(e.leftMs);
     if (e.progress !== null) return props.runtime ? `${Math.max(1, Math.round(props.runtime * (1 - e.progress)))} min left` : `${pct(e.progress)} watched`;
-    if (!released(e)) return `Airs ${new Date(e.released as string).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`;
+    // A release is a date, not an instant: read in UTC, it stays the day it names west of UTC too.
+    if (!released(e)) return `Airs ${new Date(e.released as string).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
     return props.runtime ? `${props.runtime} min` : "";
   };
   return (
