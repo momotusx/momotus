@@ -2030,7 +2030,7 @@ async fn keys_are_read_up_to_64_kib() {
             "application/vnd.apple.mpegurl",
             b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-KEY:METHOD=AES-128,URI=\"fits\"\n#EXTINF:4,\none.ts\n#EXT-X-KEY:METHOD=AES-128,URI=\"big\"\n#EXTINF:4,\ntwo.ts\n".to_vec(),
         ),
-        ("/fits", "application/octet-stream", vec![7; 64 << 10]),
+        ("/fits", "text/html", vec![7; 64 << 10]),
         ("/big", "application/octet-stream", vec![7; (64 << 10) + 1]),
     ]))
     .await;
@@ -2041,6 +2041,12 @@ async fn keys_are_read_up_to_64_kib() {
     let key = |name: &str| named.iter().find(|u| u.ends_with(name)).unwrap().clone();
     let fits = http.get(&key("/fits"), &local()).await.unwrap();
     assert_eq!(fits.body.len(), 64 << 10);
+    // Never the origin's type: any page may read a key's answer.
+    assert_eq!(
+        fits.header("content-type"),
+        Some("application/octet-stream")
+    );
+    assert_eq!(fits.header("x-content-type-options"), Some("nosniff"));
     let big = http.get(&key("/big"), &local()).await.unwrap_err();
     assert!(
         matches!(big, mq_http::HttpError::Status { status: 502, .. }),

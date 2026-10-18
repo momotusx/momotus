@@ -1018,13 +1018,16 @@ async fn serve_small(hls: &Hls, url: &Url, released: &CancellationToken) -> Resp
     let fetch = hls.http.get(url.as_str(), &opts);
     match released.run_until_cancelled(fetch).await {
         None => StatusCode::NOT_FOUND.into_response(),
-        Some(Ok(response)) => {
-            let mut out = HeaderMap::new();
-            if let Some(value) = response.headers.get(header::CONTENT_TYPE) {
-                out.insert(header::CONTENT_TYPE, value.clone());
-            }
-            (out, response.body).into_response()
-        }
+        // Key bytes for a player, never a page: any page may read the
+        // answer (`cors`), so it gets no type of the origin's choosing.
+        Some(Ok(response)) => (
+            [
+                (header::CONTENT_TYPE, "application/octet-stream"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            response.body,
+        )
+            .into_response(),
         Some(Err(e)) => {
             tracing::warn!("key upstream failed: {}", e.kind());
             StatusCode::BAD_GATEWAY.into_response()
