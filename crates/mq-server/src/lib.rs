@@ -20,13 +20,17 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use futures_util::stream;
+use futures_util::{Stream, StreamExt, stream};
 use mq_http::{HttpClient, Priority, RequestOptions, Url};
 use mq_media::CancellationToken;
 use std::collections::HashMap;
+use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
+use std::task::{Context, Poll};
 use std::time::Duration;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// Where the bytes of one playback come from.
 #[derive(Debug, Clone)]
@@ -124,6 +128,10 @@ impl StreamServer {
             .with_state(shared.clone());
         let shutdown = CancellationToken::new();
         let stop = shutdown.clone().cancelled_owned();
+        let listener = Loopback {
+            tcp: listener,
+            shutdown: shutdown.clone(),
+        };
         tokio::spawn(async move {
             let _ = axum::serve(listener, app)
                 .with_graceful_shutdown(stop)
@@ -240,6 +248,105 @@ impl Drop for StreamServer {
             playback.release();
         }
     }
+}
+
+/// The server's listener. Its connections fail every read and write once
+/// the server is dropped, so a player that stopped reading cannot keep a
+/// connection task, or graceful shutdown, waiting.
+struct Loopback {
+    tcp: tokio::net::TcpListener,
+    shutdown: CancellationToken,
+}
+
+impl axum::serve::Listener for Loopback {
+    type Io = Conn;
+    type Addr = SocketAddr;
+
+    async fn accept(&mut self) -> (Conn, SocketAddr) {
+        let (io, addr) = axum::serve::Listener::accept(&mut self.tcp).await;
+        let closed = Box::pin(self.shutdown.clone().cancelled_owned());
+        (Conn { io, closed }, addr)
+    }
+
+    fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.tcp.local_addr()
+    }
+}
+
+struct Conn {
+    io: tokio::net::TcpStream,
+    closed: Pin<Box<dyn Future<Output = ()> + Send>>,
+}
+
+impl Conn {
+    /// An error once the server is gone. Polling also wakes a task that
+    /// waits on the socket when that happens.
+    fn open(&mut self, cx: &mut Context<'_>) -> std::io::Result<()> {
+        match self.closed.as_mut().poll(cx) {
+            Poll::Ready(()) => Err(std::io::ErrorKind::ConnectionAborted.into()),
+            Poll::Pending => Ok(()),
+        }
+    }
+}
+
+impl AsyncRead for Conn {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        self.open(cx)?;
+        Pin::new(&mut self.io).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for Conn {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        self.open(cx)?;
+        Pin::new(&mut self.io).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        self.open(cx)?;
+        Pin::new(&mut self.io).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.io).poll_shutdown(cx)
+    }
+}
+
+/// A response body fed from a task of its own, which ends at release
+/// whether or not the player reads, and when the player goes. So a player
+/// that stopped reading keeps neither an upstream response and its request
+/// slot nor a torrent range's demand.
+fn pumped<S>(chunks: S, released: CancellationToken) -> Body
+where
+    S: Stream<Item = std::io::Result<bytes::Bytes>> + Send + 'static,
+{
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(async move {
+        let pump = async {
+            let mut chunks = std::pin::pin!(chunks);
+            while let Some(chunk) = chunks.next().await {
+                if tx.send(chunk).await.is_err() {
+                    return;
+                }
+            }
+        };
+        tokio::select! {
+            () = pump => {}
+            () = tx.closed() => {}
+            () = released.cancelled() => {}
+        }
+    });
+    Body::from_stream(stream::unfold(rx, |mut rx| async move {
+        rx.recv().await.map(|chunk| (chunk, rx))
+    }))
 }
 
 /// One playback's token: its URL and its subtitles' work while the lease
@@ -596,24 +703,22 @@ mod torrent {
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
         };
-        // Release ends the body: a read waiting for pieces stops at once.
-        let chunks = stream::unfold(Some(body), move |body| {
-            let released = released.clone();
-            async move {
-                use tokio::io::AsyncReadExt;
-                let mut body = body?;
-                let mut buf = vec![0u8; 64 * 1024];
-                match released.run_until_cancelled(body.read(&mut buf)).await? {
-                    Ok(0) => None,
-                    Ok(n) => {
-                        buf.truncate(n);
-                        Some((Ok(bytes::Bytes::from(buf)), Some(body)))
-                    }
-                    Err(e) => Some((Err(e), None)),
+        // Release ends the body: a read waiting for pieces stops at once,
+        // and the range's demand goes.
+        let chunks = stream::unfold(Some(body), |body| async move {
+            use tokio::io::AsyncReadExt;
+            let mut body = body?;
+            let mut buf = vec![0u8; 64 * 1024];
+            match body.read(&mut buf).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    buf.truncate(n);
+                    Some((Ok(bytes::Bytes::from(buf)), Some(body)))
                 }
+                Err(e) => Some((Err(e), None)),
             }
         });
-        (status, out, Body::from_stream(chunks)).into_response()
+        (status, out, pumped(chunks, released)).into_response()
     }
 
     #[cfg(test)]
@@ -739,18 +844,11 @@ async fn proxy_http(source: &ahead::Source, range: Option<String>, head_only: bo
     if head_only {
         return (status, out).into_response();
     }
-    // Release ends the body too.
-    let body = stream::unfold(upstream, move |mut upstream| {
-        let released = released.clone();
-        async move {
-            let chunk = released
-                .run_until_cancelled(upstream.next_chunk())
-                .await
-                .flatten()?;
-            Some((chunk.map_err(std::io::Error::other), upstream))
-        }
+    let chunks = stream::unfold(upstream, |mut upstream| async move {
+        let chunk = upstream.next_chunk().await?;
+        Some((chunk.map_err(std::io::Error::other), upstream))
     });
-    (status, out, Body::from_stream(body)).into_response()
+    (status, out, pumped(chunks, released)).into_response()
 }
 
 #[cfg(test)]

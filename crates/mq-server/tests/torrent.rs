@@ -108,10 +108,76 @@ async fn release_ends_work_in_flight() {
         .stream(&lease.url, Some("bytes=0-".into()), &local())
         .await
         .unwrap();
+    // A player that leaves ends its range's demand too.
+    let readers = || async { s.leecher.stats(t).await.unwrap().readers };
+    let left = http
+        .stream(&lease.url, Some("bytes=0-".into()), &local())
+        .await
+        .unwrap();
+    assert_eq!(readers().await, 2);
+    drop(left);
+    let one = tokio::time::timeout(Duration::from_secs(1), async {
+        while readers().await > 1 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(one.is_ok(), "a range outlived its player");
     drop(lease);
     let ended = tokio::time::timeout(Duration::from_secs(1), async {
         while let Some(Ok(_)) = body.next_chunk().await {}
     })
     .await;
     assert!(ended.is_ok(), "the body kept waiting for pieces");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stalled_player_holds_no_demand_after_release() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let s = support::swarm(true).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let file = s
+        .leecher
+        .select_file(t, &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    let lease = server.register(
+        Upstream::Torrent {
+            engine: s.leecher.clone(),
+            torrent: t,
+            file,
+        },
+        "movie.mkv",
+    );
+    // A player with a small receive buffer that reads the head and stops.
+    let path = lease.url.split_once("/s/").unwrap().1;
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.set_recv_buffer_size(16 * 1024).unwrap();
+    let mut player = socket.connect(server.addr()).await.unwrap();
+    let request = format!(
+        "GET /s/{path} HTTP/1.1\r\nHost: {}\r\nRange: bytes=0-\r\n\r\n",
+        server.addr()
+    );
+    player.write_all(request.as_bytes()).await.unwrap();
+    let mut head = [0u8; 1024];
+    let n = player.read(&mut head).await.unwrap();
+    assert!(head[..n].starts_with(b"HTTP/1.1 206"));
+    let readers = || async { s.leecher.stats(t).await.unwrap().readers };
+    // The range stays open, held back by the player.
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(readers().await, 1, "the body did not stall");
+    drop(lease);
+    let gone = tokio::time::timeout(Duration::from_secs(1), async {
+        while readers().await > 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(gone.is_ok(), "the range's demand outlived its lease");
 }

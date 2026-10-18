@@ -145,6 +145,8 @@ pub struct TorrentStats {
     pub dup_bytes: u64,
     pub snubs: u64,
     pub seeks: u64,
+    /// Ranges open on the torrent, each one scheduler demand.
+    pub readers: usize,
 }
 
 const KEEP_WARM: Duration = Duration::from_secs(60);
@@ -449,6 +451,7 @@ impl Engine {
         let live = t.live.lock().await;
         let mut s = TorrentStats {
             metadata_ms: t.metadata_ms,
+            readers: t.readers.load(Ordering::Relaxed),
             ..Default::default()
         };
         let Some(l) = live.as_ref() else {

@@ -17,6 +17,17 @@ struct Seen {
     heads: Arc<Mutex<Vec<String>>>,
     /// Connections the client closed while a slow start held the answer.
     closed: Arc<AtomicU64>,
+    /// Answers still being written.
+    open: Arc<AtomicU64>,
+}
+
+/// Counts an answer as open while it lives.
+struct Open(Arc<AtomicU64>);
+
+impl Drop for Open {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl Seen {
@@ -78,6 +89,8 @@ async fn range_origin(data: Arc<Vec<u8>>, how: Behaviour) -> (String, Seen) {
 }
 
 async fn answer(mut socket: TcpStream, data: Arc<Vec<u8>>, how: Behaviour, seen: Seen) {
+    seen.open.fetch_add(1, Ordering::SeqCst);
+    let _open = Open(seen.open.clone());
     let mut head = Vec::new();
     let mut buf = [0u8; 1024];
     while !head.windows(4).any(|w| w == b"\r\n\r\n") {
@@ -1413,4 +1426,70 @@ async fn the_in_process_reader_keeps_the_playbacks_scope() {
     .expect("the read ended");
     assert!(tail.is_err(), "the tail came from somewhere");
     assert_eq!(canary.accepted(), 0);
+}
+
+/// Waits, at most `limit`, until `done` holds.
+async fn until(limit: Duration, what: &str, done: impl Fn() -> bool) {
+    let wait = async {
+        while !done() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    if tokio::time::timeout(limit, wait).await.is_err() {
+        panic!("{what}");
+    }
+}
+
+/// A player with a small receive buffer that reads the response head of
+/// `url` and then nothing more.
+async fn stalled(server: &StreamServer, url: &str) -> TcpStream {
+    let base = format!("http://{}", server.addr());
+    let path = url.trim_start_matches(&base);
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.set_recv_buffer_size(16 * 1024).unwrap();
+    let mut player = socket.connect(server.addr()).await.unwrap();
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {}\r\nRange: bytes=0-\r\n\r\n",
+        server.addr()
+    );
+    player.write_all(request.as_bytes()).await.unwrap();
+    let mut head = [0u8; 1024];
+    let n = player.read(&mut head).await.unwrap();
+    let head = String::from_utf8_lossy(&head[..n]);
+    assert!(head.starts_with("HTTP/1.1 2"), "{head}");
+    player
+}
+
+#[tokio::test]
+async fn a_stalled_player_holds_nothing_after_release() {
+    let data = file(64 << 20);
+    let how = Behaviour {
+        ignore_ranges: true,
+        ..Default::default()
+    };
+    let (server, lease, seen, _http) = serve(&data, how).await;
+    let mut player = stalled(&server, &lease.url).await;
+    // Only the plainly proxied answer is left, held back by the player.
+    let open = || seen.open.load(Ordering::SeqCst);
+    until(Duration::from_secs(5), "the prefetch answer stayed", || {
+        open() == 1
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(open(), 1);
+    drop(lease);
+    until(
+        Duration::from_secs(1),
+        "the upstream outlived its lease",
+        || open() == 0,
+    )
+    .await;
+    // Dropping the server closes the stalled connection: the player's
+    // writes then meet a reset.
+    drop(server);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let _ = player.write_all(b"\r\n").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let late = player.write_all(b"\r\n").await;
+    assert!(late.is_err(), "the connection outlived the server");
 }
