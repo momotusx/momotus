@@ -1,0 +1,3 @@
+{"date":"2026-10-18","phase":"3 and 4","commit":"c1b1eb4","check":"cargo test -p mq-http -p mq-server -p mq-runtime -p mq-bridge -p mq-addons -p mq-streams","target_dir":"marquee-main","passed":250,"failed":0,"ignored":12}
+{"date":"2026-10-18","phase":"3 and 4","commit":"c1b1eb4","check":"cargo test -p mq-server --features torrent","target_dir":"marquee-main","binaries":[8,1,33,2],"failed":0}
+{"date":"2026-10-18","phase":"3 and 4","commit":"c1b1eb4","check":"Android emulator-5584 phone form, Sintel 1080p over the rebuilt core","snapshot":"own=10 prefixes=7 tunnels=0","subtitles_found":94,"picked":"English (SRT, OpenSubtitles)","seen":"cue 'Yeah! Come on!' rendered near 4:40","app_log_addresses":0,"result":"pass"}
