@@ -26,6 +26,11 @@ pub const CINEMETA: &str = "https://v3-cinemeta.strem.io/manifest.json";
 /// Each list's fetch, and a listed install's manifest fetch, from the start
 /// of the wait for a host slot to the end of the body.
 const TIMEOUT: Duration = Duration::from_secs(10);
+/// A list fetch's own timeout, which `mq-http` starts once a host slot is
+/// free: a second inside `TIMEOUT`, so when it fires the addon client still
+/// has time to serve a stale cached list (stale-if-error). A slot wait over
+/// that second ends at `TIMEOUT` instead, without the stale list.
+const FETCH_TIMEOUT: Duration = Duration::from_secs(9);
 /// Entries shown per list.
 const MAX_ENTRIES: usize = 300;
 /// A path segment, query key or query value longer than this carries
@@ -120,7 +125,8 @@ pub struct ListedAddon {
     pub provides: Vec<String>,
     pub configuration: Configuration,
     /// The addon's configure page, always set: the apps offer it by
-    /// `configuration`, and a `needsSetup` install failure opens it.
+    /// `configuration`, and a `needsSetup` install failure opens it. Built
+    /// from `key`, so it may hold keys: never show or log it.
     pub configure_url: String,
     pub installed: Installed,
     /// With `copyOff`: the first such copy in addon order, for
@@ -486,7 +492,7 @@ async fn fetch_list(
     let source = InstalledAddon {
         allow_private: url.host_str().is_some_and(mq_http::is_private_host),
         transport_url: url,
-        manifest: cinemeta_manifest(),
+        manifest: source_manifest(),
     };
     let path = ResourcePath {
         resource: "addon_catalog".into(),
@@ -494,11 +500,13 @@ async fn fetch_list(
         id: id.into(),
         extra: vec![],
     };
+    // A larger list is refused while it is read, never kept in the cache.
+    let client = core.addons().with_max_bytes(LIST_MAX_BYTES);
     let fetched = async {
         if fresh {
-            core.addons().fetch_fresh(&source, &path, TIMEOUT).await
+            client.fetch_fresh(&source, &path, FETCH_TIMEOUT).await
         } else {
-            core.addons().fetch(&source, &path, TIMEOUT).await
+            client.fetch(&source, &path, FETCH_TIMEOUT).await
         }
     };
     // The deadline covers the wait for a host slot too.
@@ -507,6 +515,7 @@ async fn fetch_list(
         .map_err(|_| list_failure(&AddonError::TimedOut))?
         .map_err(|e| list_failure(&e))?
         .body;
+    // A list cached before the limit.
     if body.len() > LIST_MAX_BYTES {
         return Err(UNREADABLE.into());
     }
@@ -760,11 +769,11 @@ fn list_failure(error: &AddonError) -> String {
     }
 }
 
-/// The source addon's manifest as the addon client needs it (its id keys the
-/// health book): the lists come from Cinemeta whatever is installed.
-fn cinemeta_manifest() -> Manifest {
+/// The source as the addon client needs it. Its id keys the health book, so
+/// list fetches are kept apart from Cinemeta's own (Home, title pages).
+fn source_manifest() -> Manifest {
     serde_json::from_value(serde_json::json!({
-        "id": "com.linvo.cinemeta",
+        "id": "marquee.addon-lists",
         "version": "0.0.0",
         "name": "Cinemeta",
         "resources": ["addon_catalog"],

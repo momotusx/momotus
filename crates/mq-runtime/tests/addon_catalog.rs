@@ -26,11 +26,13 @@ const COMMUNITY: &str = include_str!("fixtures/addon_catalog/community.json");
 const LISTS: &str = "/addon_catalog/all/";
 
 /// A local Cinemeta: each path answers its status and body, cacheable for an
-/// hour as Cinemeta's are.
+/// hour as Cinemeta's are. Status 0 holds the answer until `release` (for
+/// ever without it), then answers 200.
 struct Source {
     addr: std::net::SocketAddr,
     routes: Arc<Mutex<HashMap<String, (u16, String)>>>,
     hits: Arc<AtomicUsize>,
+    held: Arc<tokio::sync::Semaphore>,
 }
 
 impl Source {
@@ -39,28 +41,34 @@ impl Source {
         let addr = listener.local_addr().unwrap();
         let routes: Arc<Mutex<HashMap<String, (u16, String)>>> = Arc::default();
         let hits = Arc::new(AtomicUsize::new(0));
+        let held = Arc::new(tokio::sync::Semaphore::new(0));
         let source = Source {
             addr,
             routes: routes.clone(),
             hits: hits.clone(),
+            held: held.clone(),
         };
         source.set("official", 200, official);
         source.set("community", 200, community);
         tokio::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
-                let (routes, hits) = (routes.clone(), hits.clone());
+                let (routes, hits, held) = (routes.clone(), hits.clone(), held.clone());
                 tokio::spawn(async move {
                     let mut buf = vec![0u8; 4096];
                     let n = socket.read(&mut buf).await.unwrap_or(0);
                     let head = String::from_utf8_lossy(&buf[..n]).into_owned();
                     let path = head.split(' ').nth(1).unwrap_or_default().to_owned();
                     hits.fetch_add(1, Ordering::SeqCst);
-                    let (status, body) = routes
+                    let (mut status, body) = routes
                         .lock()
                         .unwrap()
                         .get(&path)
                         .cloned()
                         .unwrap_or((404, String::new()));
+                    if status == 0 {
+                        held.acquire().await.unwrap().forget();
+                        status = 200;
+                    }
                     let reply = format!(
                         "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nCache-Control: public, max-age=3600\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                         body.len()
@@ -82,6 +90,11 @@ impl Source {
 
     fn url(&self) -> String {
         format!("http://{}/manifest.json", self.addr)
+    }
+
+    /// Lets one held answer go.
+    fn release(&self) {
+        self.held.add_permits(1);
     }
 }
 
@@ -536,14 +549,18 @@ async fn a_list_over_a_megabyte_is_not_read() {
     let padded = json!({"addons": [entry], "pad": "x".repeat(1024 * 1024)}).to_string();
     let source = Source::start(&padded, COMMUNITY).await;
     let core = Core::temporary("p").unwrap();
+    let failed = ListState::Failed {
+        words: "Cinemeta sent a list Marquee cannot read".into(),
+    };
     let snapshot = settled(&AddonCatalogView::open_from(&core, &source.url(), false)).await;
-    assert_eq!(
-        snapshot.lists[0].state,
-        ListState::Failed {
-            words: "Cinemeta sent a list Marquee cannot read".into()
-        }
-    );
+    assert_eq!(snapshot.lists[0].state, failed);
     assert_eq!(snapshot.lists[1].state, ListState::Ready);
+    // Refused while it was read, so never cached (cacheable for an hour):
+    // the next open asks for it again, and Community comes from the cache.
+    let hits = source.hits.load(Ordering::SeqCst);
+    let again = settled(&AddonCatalogView::open_from(&core, &source.url(), false)).await;
+    assert_eq!(again.lists[0].state, failed);
+    assert_eq!(source.hits.load(Ordering::SeqCst), hits + 1);
 }
 
 #[tokio::test]
@@ -662,6 +679,8 @@ async fn fresh_waits_for_the_network_and_replaces_a_cached_list() {
     let core = Core::temporary("p").unwrap();
     let first = settled(&AddonCatalogView::open_from(&core, &source.url(), false)).await;
     assert_eq!(first.lists[0].entries.len(), 5);
+    // List fetches keep out of Cinemeta's health, which Home's use.
+    assert!(core.addons().health().get("com.linvo.cinemeta").is_none());
     // Cinemeta's list changes: the cache still answers the plain open.
     let one_entry = json!({"addons": [raw("https://n.example/manifest.json", "new", json!({}))]});
     source.set("official", 200, &one_entry.to_string());
@@ -1070,7 +1089,9 @@ async fn a_list_waiting_for_a_slot_fails_at_its_deadline() {
             }
         );
     }
-    assert!(started.elapsed() >= Duration::from_secs(10));
+    let elapsed = started.elapsed();
+    assert!(elapsed >= Duration::from_secs(10), "{elapsed:?}");
+    assert!(elapsed <= Duration::from_millis(10_100), "{elapsed:?}");
     assert_eq!(source.hits.load(Ordering::SeqCst), 0);
 }
 
@@ -1087,7 +1108,84 @@ async fn a_listed_install_waiting_for_a_slot_fails_at_its_deadline() {
         .await
         .expect("the install ends by its deadline");
     assert_eq!(refused(result), ListedFailure::Timeout);
-    assert!(started.elapsed() >= Duration::from_secs(10));
+    let elapsed = started.elapsed();
+    assert!(elapsed >= Duration::from_secs(10), "{elapsed:?}");
+    assert!(elapsed <= Duration::from_millis(10_100), "{elapsed:?}");
+}
+
+#[tokio::test]
+async fn a_list_fetch_that_times_out_still_serves_its_stale_copy() {
+    // Lists that may be served stale after an error for an hour, cached.
+    let entry = raw("https://s.example/manifest.json", "s", json!({}));
+    let list = json!({"addons": [entry], "cacheMaxAge": 0, "staleError": 3600}).to_string();
+    let source = Source::start(&list, &list).await;
+    let core = Core::temporary("p").unwrap();
+    settled(&AddonCatalogView::open_from(&core, &source.url(), false)).await;
+    // Cinemeta stops answering; its host's slots are taken for the first
+    // 200 ms of the open, then two come free.
+    source.set("official", 0, &list);
+    source.set("community", 0, &list);
+    let mut held = hold_slots(&core, "127.0.0.1").await;
+    let started = tokio::time::Instant::now();
+    let view = AddonCatalogView::open_from(&core, &source.url(), false);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    held.truncate(4);
+    let snapshot = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let snapshot = view.snapshot();
+            if snapshot.lists.iter().all(|l| l.state != ListState::Loading) {
+                return snapshot;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the lists end by their deadline");
+    // Each fetch timed out a second inside the view's 10 s deadline, so the
+    // addon client served the stale copy.
+    for list in &snapshot.lists {
+        assert_eq!(list.state, ListState::Ready, "{snapshot:?}");
+        assert_eq!(list.entries.len(), 1);
+    }
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+#[tokio::test]
+async fn an_addon_change_while_the_lists_load_still_marks_them() {
+    let source = Source::start(OFFICIAL, COMMUNITY).await;
+    source.set("official", 0, OFFICIAL);
+    let core = Core::temporary("p").unwrap();
+    let view = AddonCatalogView::open_from(&core, &source.url(), false);
+    // Community loaded; Official is held.
+    let snapshot = until(&view, |s| s.lists[1].state == ListState::Ready).await;
+    assert_eq!(snapshot.lists[0].state, ListState::Loading);
+    let kitsu = one(&snapshot, "community.anime.kitsu").key.clone();
+    // OpenSubtitles v3 (in Official) and Kitsu (in Community) installed
+    // while Official loads; Kitsu's card shows the view took the change.
+    let subs = "https://opensubtitles-v3.strem.io/manifest.json";
+    core.library()
+        .set_addons(
+            "p",
+            &[
+                row(subs, "org.stremio.opensubtitlesv3", true),
+                row(&kitsu, "community.anime.kitsu", true),
+            ],
+            &core.hlc(),
+        )
+        .unwrap();
+    let snapshot = until(&view, |s| {
+        one(s, "community.anime.kitsu").installed == Installed::On
+    })
+    .await;
+    assert_eq!(snapshot.lists[0].state, ListState::Loading);
+    // Official arrives after the change: its entries read the addons as
+    // they are now.
+    source.release();
+    let snapshot = until(&view, |s| s.lists[0].state == ListState::Ready).await;
+    assert_eq!(
+        one(&snapshot, "org.stremio.opensubtitlesv3").installed,
+        Installed::On
+    );
 }
 
 #[tokio::test]

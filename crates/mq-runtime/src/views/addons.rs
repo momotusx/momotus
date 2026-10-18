@@ -34,7 +34,8 @@ pub struct AddonInfo {
     pub types: Vec<String>,
     pub configurable: bool,
     /// The addon's configure page, when its manifest says it has one
-    /// (`configurable` or `configurationRequired`).
+    /// (`configurable` or `configurationRequired`). Built from the installed
+    /// link, so it may hold keys: never show or log it.
     pub configure_url: Option<String>,
 }
 

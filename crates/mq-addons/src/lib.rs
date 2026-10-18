@@ -43,6 +43,8 @@ pub struct AddonClient {
     http: HttpClient,
     cache: Arc<ResponseCache>,
     health: Arc<HealthBook>,
+    /// A larger response is refused while it is read, never kept.
+    max_bytes: usize,
 }
 
 impl AddonClient {
@@ -55,6 +57,16 @@ impl AddonClient {
             http,
             cache: Arc::new(cache),
             health: Arc::new(HealthBook::default()),
+            max_bytes: RequestOptions::default().max_bytes,
+        }
+    }
+
+    /// This client with responses over `max_bytes` refused (`TooLarge`)
+    /// before they are read whole or cached. It shares the cache and health.
+    pub fn with_max_bytes(&self, max_bytes: usize) -> Self {
+        Self {
+            max_bytes,
+            ..self.clone()
         }
     }
 
@@ -144,6 +156,7 @@ impl AddonClient {
         let opts = RequestOptions {
             priority: Priority::Addon,
             timeout,
+            max_bytes: self.max_bytes,
             allow_private: addon.allow_private,
             ..Default::default()
         };
