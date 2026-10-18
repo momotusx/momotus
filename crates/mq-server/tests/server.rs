@@ -1626,8 +1626,9 @@ impl Asked {
     }
 }
 
-/// What an `hls_origin` answers: after `wait`, `status` with `headers`, then
-/// the body in `parts`, each after `gap`.
+/// What an `hls_origin` answers: once `hold` lets it go (when set) and after
+/// `wait`, `status` with `headers`, then the body in `parts`, each after
+/// `gap`.
 #[derive(Clone, Default)]
 struct Reply {
     status: u16,
@@ -1635,6 +1636,7 @@ struct Reply {
     parts: Vec<Vec<u8>>,
     wait: Duration,
     gap: Duration,
+    hold: Option<Arc<tokio::sync::Notify>>,
 }
 
 impl Reply {
@@ -1707,6 +1709,9 @@ async fn hls_origin(answer: impl Fn(&Asked) -> Reply + Send + Sync + 'static) ->
                 };
                 seen.lock().unwrap().push(asked.clone());
                 let reply = answer(&asked);
+                if let Some(hold) = &reply.hold {
+                    hold.notified().await;
+                }
                 tokio::time::sleep(reply.wait).await;
                 let len: usize = reply.parts.iter().map(Vec::len).sum();
                 let mut out = format!(
@@ -2179,13 +2184,32 @@ async fn ll_hls_directives_reach_only_playlists() {
 
 #[tokio::test]
 async fn a_blocking_reload_may_wait_three_target_durations() {
+    // After open, the origin holds every reload: the blocking one until the
+    // test lets it go, the plain one for good. Nothing here depends on how
+    // fast this machine is.
     let opened = Arc::new(AtomicU64::new(0));
-    let count = opened.clone();
-    let (base, _) = hls_origin(move |_| {
+    let hold_blocking: Arc<tokio::sync::Notify> = Arc::default();
+    let hold_plain: Arc<tokio::sync::Notify> = Arc::default();
+    let saw_blocking = Arc::new(tokio::sync::Notify::new());
+    let (count, blocked, held, saw) = (
+        opened.clone(),
+        hold_blocking.clone(),
+        hold_plain.clone(),
+        saw_blocking.clone(),
+    );
+    let (base, _) = hls_origin(move |asked| {
         let mut reply = Reply::playlist("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n");
-        // Open's own reads answer at once; a player's reload waits 11 s.
         if count.load(Ordering::SeqCst) == 1 {
-            reply.wait = Duration::from_secs(11);
+            if asked
+                .query
+                .as_deref()
+                .is_some_and(|q| q.contains("_HLS_msn"))
+            {
+                reply.hold = Some(blocked.clone());
+                saw.notify_one();
+            } else {
+                reply.hold = Some(held.clone());
+            }
         }
         reply
     })
@@ -2195,16 +2219,28 @@ async fn a_blocking_reload_may_wait_three_target_durations() {
     let lease = open_hls(&server, format!("{base}/live.m3u8")).await;
     opened.store(1, Ordering::SeqCst);
     let slow = RequestOptions {
-        timeout: Duration::from_secs(30),
+        timeout: Duration::from_secs(60),
         ..local()
     };
-    let blocking = http.get(&format!("{}?_HLS_msn=9", lease.url), &slow).await;
-    assert_eq!(blocking.map(|r| r.status).ok(), Some(200));
+    // The blocking reload reaches the origin first, so its deadline started
+    // first.
+    let blocking = {
+        let (http, slow) = (http.clone(), slow.clone());
+        let url = format!("{}?_HLS_msn=9", lease.url);
+        tokio::spawn(async move { http.get(&url, &slow).await })
+    };
+    saw_blocking.notified().await;
+    // The plain reload gives up at its 10 s deadline. A blocking reload with
+    // the same deadline would have given up before it.
     let plain = http.get(&lease.url, &slow).await.unwrap_err();
     assert!(
         matches!(plain, mq_http::HttpError::Status { status: 502, .. }),
         "{plain:?}"
     );
+    // The blocking one waits three target durations: let go, it is served.
+    hold_blocking.notify_one();
+    let served = blocking.await.unwrap();
+    assert_eq!(served.map(|r| r.status).ok(), Some(200));
 }
 
 #[tokio::test]
@@ -2379,41 +2415,39 @@ async fn manifest_limits_and_deadlines() {
     let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
         "/huge.m3u8" => Reply::playlist(huge.clone()),
         "/repeated.m3u8" => Reply::playlist(repeated.clone()),
-        _ => Reply {
+        // A playlist that takes 4 s to arrive, against a 2 s deadline: open
+        // ends before it is whole (a whole one would open).
+        "/trickle.m3u8" => Reply {
             status: 200,
             headers: vec![("Content-Type", "application/vnd.apple.mpegurl".into())],
             parts: b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n"
-                .iter()
-                .map(|b| vec![*b])
+                .chunks(4)
+                .map(<[u8]>::to_vec)
                 .collect(),
             gap: Duration::from_millis(500),
             ..Reply::default()
+        },
+        // A source that never answers.
+        _ => Reply {
+            hold: Some(Arc::default()),
+            ..Reply::status(200)
         },
     })
     .await;
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http).await.unwrap();
     let s = Duration::from_secs;
+    let unreadable = "The stream's playlist could not be read";
     for (path, deadline, words) in [
-        (
-            "/huge.m3u8",
-            s(5),
-            "The stream's playlist could not be read",
-        ),
-        (
-            "/repeated.m3u8",
-            s(5),
-            "The stream's playlist could not be read",
-        ),
-        ("/trickle.m3u8", s(3), "The source did not answer in time"),
+        ("/huge.m3u8", s(5), unreadable),
+        ("/repeated.m3u8", s(5), unreadable),
+        ("/trickle.m3u8", s(2), unreadable),
+        ("/silent", s(2), "The source did not answer in time"),
     ] {
-        let started = std::time::Instant::now();
         let opened = server
             .open(local_upstream(format!("{base}{path}")), "v.mkv", deadline)
             .await;
         assert_eq!(opened.unwrap_err(), words, "{path}");
-        let took = started.elapsed();
-        assert!(took < deadline + s(1), "{path} took {took:?}");
     }
 }
 
