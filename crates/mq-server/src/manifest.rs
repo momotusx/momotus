@@ -204,12 +204,24 @@ pub(crate) struct Table {
     /// I-frame playlists): a player may switch to any of them at any time,
     /// so segment churn never evicts them while that master is current.
     topology: HashSet<u32>,
+    /// A master's rewrite is running: the playlists it names replace the
+    /// topology, so the old ones hold no place against the limits.
+    replacing: bool,
 }
 
 impl Table {
     /// Starts a rewrite: entries it names from now on stay until it ends.
     pub(crate) fn begin(&mut self) {
         self.floor = self.tick + 1;
+        self.replacing = false;
+    }
+
+    /// Starts a master's rewrite: as `begin`, and the playlists the last
+    /// master advertised may go unless this one names them again, so a new
+    /// master always fits where the old one did.
+    pub(crate) fn begin_master(&mut self) {
+        self.begin();
+        self.replacing = true;
     }
 
     /// The target duration a playlist's last rewrite saw.
@@ -319,8 +331,9 @@ impl Table {
     }
 
     /// Drops the least recently used tenth, but none the running rewrite
-    /// named and none the current master advertised: when only those are
-    /// left, the rewrite does not fit. Looks at `alive` as it goes.
+    /// named and, unless a new master is being rewritten, none the current
+    /// master advertised: when only those are left, the rewrite does not
+    /// fit. Looks at `alive` as it goes.
     /// ponytail: a scan per eviction; a linked list if evictions ever show
     /// in profiles.
     fn evict(&mut self, alive: &dyn Fn() -> bool) -> Result<(), &'static str> {
@@ -328,7 +341,7 @@ impl Table {
         let mut by_use: Vec<(u64, u32)> = Vec::new();
         for (n, (&id, e)) in self.entries.iter().enumerate() {
             checkpoint(n, alive)?;
-            if e.used < floor && !self.topology.contains(&id) {
+            if e.used < floor && (self.replacing || !self.topology.contains(&id)) {
                 by_use.push((e.used, id));
             }
         }
@@ -506,7 +519,11 @@ pub(crate) fn rewrite_hls(
     if master && media_only {
         return Err("a master playlist named as a media playlist");
     }
-    children.table.begin();
+    if master {
+        children.table.begin_master();
+    } else {
+        children.table.begin();
+    }
     let mut out = String::from("#EXTM3U\n");
     let mut variant = false;
     let mut target_duration = None;
@@ -1194,6 +1211,47 @@ mod tests {
         let (url, role) = children.table.get(audio).expect("the audio rendition went");
         assert_eq!(url.as_str(), "https://cdn.example/v/audio/en.m3u8");
         assert_eq!(role, Role::Playlist);
+    }
+
+    /// A new master replaces the old one's topology, also at the entry
+    /// limit: the old playlists it does not name again may go while it is
+    /// rewritten, so it is never refused for the old master's sake.
+    #[test]
+    fn a_new_master_replaces_the_old_topology() {
+        let base = Url::parse("https://cdn.example/v/master.m3u8").unwrap();
+        let mut table = Table::default();
+        let mut children = Children {
+            core: CORE,
+            prefix: PREFIX,
+            table: &mut table,
+            alive: &|| true,
+        };
+        let master = |names: &mut dyn Iterator<Item = String>| {
+            let mut body = String::from("#EXTM3U\n");
+            for name in names {
+                body.push_str(&format!("#EXT-X-STREAM-INF:BANDWIDTH=1\n{name}\n"));
+            }
+            body
+        };
+        // As many short variants as the table holds.
+        let full = master(&mut (0..MAX_ENTRIES).map(|i| format!("{i}.m3u8")));
+        rewrite_hls(full.as_bytes(), &base, false, &mut children).unwrap();
+        assert_eq!(children.table.len(), MAX_ENTRIES);
+        // The next master drops one variant and adds another.
+        let one_new = master(
+            &mut (1..MAX_ENTRIES)
+                .map(|i| format!("{i}.m3u8"))
+                .chain(["new.m3u8".to_owned()]),
+        );
+        let replaced = rewrite_hls(one_new.as_bytes(), &base, false, &mut children);
+        assert!(replaced.is_ok(), "{replaced:?}");
+        // Signed variant URLs that rotate on every master.
+        for round in 0..2 {
+            let signed = master(&mut (0..MAX_ENTRIES).map(|i| format!("{i}.m3u8?sig={round}")));
+            let replaced = rewrite_hls(signed.as_bytes(), &base, false, &mut children);
+            assert!(replaced.is_ok(), "round {round}: {replaced:?}");
+        }
+        assert_eq!(children.table.len(), MAX_ENTRIES);
     }
 
     /// Past either limit, eviction goes on until both hold; a name already
