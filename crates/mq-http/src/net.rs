@@ -6,7 +6,7 @@ use url::Url;
 /// rebinding protection check the connected address too.
 pub fn is_private_host(host: &str) -> bool {
     let host = host.trim_start_matches('[').trim_end_matches(']');
-    if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
+    if is_localhost(host) {
         return true;
     }
     match host.parse::<IpAddr>() {
@@ -14,6 +14,10 @@ pub fn is_private_host(host: &str) -> bool {
         Ok(IpAddr::V6(ip)) => is_private_v6(ip),
         Err(_) => false,
     }
+}
+
+fn is_localhost(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost")
 }
 
 /// Loopback, private, link-local and other non-public addresses.
@@ -24,24 +28,217 @@ pub fn is_private_ip(ip: IpAddr) -> bool {
     }
 }
 
+// 198.18.0.0/15 stays public: fake-IP DNS proxies (Clash, Mihomo, Surge,
+// sing-box) answer every public name from it.
 fn is_private_v4(ip: Ipv4Addr) -> bool {
+    let [a, b, c, _] = ip.octets();
     ip.is_loopback()
         || ip.is_private()
         || ip.is_link_local()
-        || ip.is_unspecified()
         || ip.is_broadcast()
-        || ip.octets()[0] == 100 && (ip.octets()[1] & 0xC0) == 64 // CGNAT 100.64/10
+        || a == 0 // 0.0.0.0/8: 0.0.0.0 reaches this host on Linux and macOS
+        || a == 100 && (b & 0xC0) == 64 // CGNAT 100.64/10
+        || a == 192 && b == 0 && c == 0 // 192.0.0.0/24: DS-Lite and service continuity, on the router
 }
 
 fn is_private_v6(ip: Ipv6Addr) -> bool {
-    if let Some(v4) = ip.to_ipv4_mapped() {
+    if let Some(v4) = embedded_v4(ip) {
         return is_private_v4(v4);
     }
     let first = ip.segments()[0];
-    ip.is_loopback()
-        || ip.is_unspecified()
-        || (first & 0xfe00) == 0xfc00 // unique local
+    (first & 0xfe00) == 0xfc00 // unique local
         || (first & 0xffc0) == 0xfe80 // link local
+        || (first & 0xffc0) == 0xfec0 // site local: deprecated, still on old internal networks
+}
+
+/// The IPv4 address an IPv6 form carries, which a local translator turns back
+/// into that address: mapped `::ffff:0:0/96`, compatible `::/96` (`::` and
+/// `::1` are 0.0.0.0 and 0.0.0.1 there), translated `::ffff:0:0:0/96`, NAT64
+/// `64:ff9b::/96` and 6to4 `2002::/16`. Local-use NAT64 `64:ff9b:1::/48` has
+/// no fixed embedding and stays public.
+fn embedded_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let v4 = |hi: u16, lo: u16| Some(Ipv4Addr::from(u32::from(hi) << 16 | u32::from(lo)));
+    match ip.segments() {
+        [0, 0, 0, 0, 0, 0 | 0xffff, hi, lo]
+        | [0, 0, 0, 0, 0xffff, 0, hi, lo]
+        | [0x64, 0xff9b, 0, 0, 0, 0, hi, lo] => v4(hi, lo),
+        [0x2002, hi, lo, ..] => v4(hi, lo),
+        _ => None,
+    }
+}
+
+/// What an installed addon's host adds to its playbacks' scope: an address
+/// literal itself, exactly `127.0.0.1` and `::1` for `localhost` and
+/// `*.localhost`, nothing for any other name. A public literal counts too: it
+/// may sit in the device's own network, which playback treats as private.
+pub fn local_addrs(host: &str) -> Vec<IpAddr> {
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = bare.parse::<IpAddr>() {
+        vec![ip.to_canonical()]
+    } else if is_localhost(bare) {
+        vec![Ipv4Addr::LOCALHOST.into(), Ipv6Addr::LOCALHOST.into()]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Whether a playback hop may connect to `ip`: it is in `local` (canonical),
+/// or it is public and not on the device's own network.
+pub(crate) fn permitted(ip: IpAddr, local: &[IpAddr], device: &Device) -> bool {
+    let ip = ip.to_canonical();
+    local.contains(&ip) || !is_private_ip(ip) && !device.holds(ip)
+}
+
+/// What playback treats as private beyond the classifier: the device's own
+/// addresses and the on-link prefixes of its interfaces, which can be global
+/// (a home IPv6 /64, a LAN on public IPv4).
+#[derive(Debug, Default)]
+pub(crate) struct Device {
+    own: Vec<IpAddr>,
+    nets: Vec<(IpAddr, u32)>,
+}
+
+/// One address of an interface, as `getifaddrs` lists it.
+struct Entry {
+    addr: IpAddr,
+    mask: Option<IpAddr>,
+    loopback: bool,
+    point_to_point: bool,
+}
+
+impl Device {
+    /// The interfaces as they are now; none when they cannot be read.
+    pub(crate) fn current() -> Self {
+        Self::from_entries(interfaces())
+    }
+
+    fn from_entries(entries: Vec<Entry>) -> Self {
+        let mut device = Device::default();
+        for entry in entries {
+            let addr = entry.addr.to_canonical();
+            device.own.push(addr);
+            // A tunnel's mask is a route, not a LAN: a fake-IP proxy's TUN
+            // takes 198.18.0.1/15 or /16, the range it answers every public
+            // name from. Loopback is private anyway, and a /0 is no LAN.
+            if entry.loopback || entry.point_to_point {
+                continue;
+            }
+            if let Some(len) = entry.mask.and_then(prefix_len).filter(|&len| len > 0) {
+                device.nets.push((addr, len));
+            }
+        }
+        device
+    }
+
+    fn holds(&self, ip: IpAddr) -> bool {
+        let embedded = match ip {
+            IpAddr::V6(v6) => embedded_v4(v6).map(IpAddr::V4),
+            IpAddr::V4(_) => None,
+        };
+        [Some(ip), embedded].into_iter().flatten().any(|ip| {
+            self.own.contains(&ip)
+                || self
+                    .nets
+                    .iter()
+                    .any(|&(net, len)| same_prefix(ip, net, len))
+        })
+    }
+}
+
+/// A contiguous netmask's length; `None` for anything else.
+fn prefix_len(mask: IpAddr) -> Option<u32> {
+    let bits = wide(mask);
+    (bits.leading_ones() == bits.count_ones()).then_some(bits.leading_ones())
+}
+
+fn same_prefix(a: IpAddr, b: IpAddr, len: u32) -> bool {
+    let mask = u128::MAX.checked_shl(128 - len).unwrap_or(0);
+    a.is_ipv4() == b.is_ipv4() && (wide(a) ^ wide(b)) & mask == 0
+}
+
+/// An address as 128 bits from the top, so one prefix length fits both
+/// families.
+fn wide(ip: IpAddr) -> u128 {
+    match ip {
+        IpAddr::V4(v4) => u128::from(u32::from(v4)) << 96,
+        IpAddr::V6(v6) => u128::from(v6),
+    }
+}
+
+#[cfg(unix)]
+fn interfaces() -> Vec<Entry> {
+    let mut head: *mut libc::ifaddrs = std::ptr::null_mut();
+    // SAFETY: getifaddrs only writes the list head we pass.
+    if unsafe { libc::getifaddrs(&mut head) } != 0 {
+        return Vec::new();
+    }
+    let mut entries = Vec::new();
+    let mut at = head;
+    // SAFETY (every block in this loop): each node and the addresses it points
+    // to live until freeifaddrs below.
+    while let Some(ifa) = unsafe { at.as_ref() } {
+        at = ifa.ifa_next;
+        let flag = |f: libc::c_int| ifa.ifa_flags & f as libc::c_uint != 0;
+        if let Some(addr) = unsafe { sockaddr_ip(ifa.ifa_addr, None) } {
+            entries.push(Entry {
+                addr,
+                mask: unsafe { sockaddr_ip(ifa.ifa_netmask, Some(addr)) },
+                loopback: flag(libc::IFF_LOOPBACK),
+                point_to_point: flag(libc::IFF_POINTOPOINT),
+            });
+        }
+    }
+    // SAFETY: `head` came from getifaddrs and nothing points into it now.
+    unsafe { libc::freeifaddrs(head) };
+    entries
+}
+
+// ponytail: no Windows build ships; read GetAdaptersAddresses if one does.
+#[cfg(not(unix))]
+fn interfaces() -> Vec<Entry> {
+    Vec::new()
+}
+
+/// The IPv4 or IPv6 address in `sa`. A netmask is read as the family of its
+/// interface address (`like`): BSDs may leave a mask's family unset and cut
+/// it short at its `sa_len`, so nothing past that length is read.
+///
+/// # Safety
+/// `sa` is null or points to a sockaddr from `getifaddrs`.
+#[cfg(unix)]
+unsafe fn sockaddr_ip(sa: *const libc::sockaddr, like: Option<IpAddr>) -> Option<IpAddr> {
+    if sa.is_null() {
+        return None;
+    }
+    let family = match like {
+        Some(IpAddr::V4(_)) => libc::AF_INET,
+        Some(IpAddr::V6(_)) => libc::AF_INET6,
+        // SAFETY: `sa` is a sockaddr (the caller's contract).
+        None => i32::from(unsafe { (*sa).sa_family }),
+    };
+    let size = match family {
+        libc::AF_INET => size_of::<libc::sockaddr_in>(),
+        libc::AF_INET6 => size_of::<libc::sockaddr_in6>(),
+        _ => return None,
+    };
+    // SAFETY: as above.
+    #[cfg(target_vendor = "apple")]
+    let size = size.min(usize::from(unsafe { (*sa).sa_len }));
+    // SAFETY: zero is a valid sockaddr_storage, which is larger than `size`;
+    // `sa` holds at least `size` bytes; the storage is aligned and sized for
+    // both families.
+    let mut storage: libc::sockaddr_storage = unsafe { std::mem::zeroed() };
+    unsafe {
+        std::ptr::copy_nonoverlapping(sa.cast::<u8>(), (&raw mut storage).cast::<u8>(), size)
+    };
+    let storage = &raw const storage;
+    Some(if family == libc::AF_INET {
+        let sin = unsafe { &*storage.cast::<libc::sockaddr_in>() };
+        IpAddr::V4(Ipv4Addr::from(u32::from_be(sin.sin_addr.s_addr)))
+    } else {
+        let sin6 = unsafe { &*storage.cast::<libc::sockaddr_in6>() };
+        IpAddr::V6(Ipv6Addr::from(sin6.sin6_addr.s6_addr))
+    })
 }
 
 /// Removes credentials, query values and every path segment that is not a
@@ -123,6 +320,130 @@ mod tests {
         ] {
             assert!(!is_private_host(host), "{host}");
         }
+    }
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn address_classes() {
+        for public in [
+            "8.8.8.8",
+            "198.18.0.1",
+            "192.0.2.1",
+            "2606:4700::1111",
+            "64:ff9b::808:808",
+            "64:ff9b:1::1",
+            "2001::1",
+            "2001:2::1",
+            "240.0.0.1",
+            "224.0.0.1",
+            "100::1",
+        ] {
+            assert!(!is_private_ip(ip(public)), "{public} is public");
+        }
+        for private in [
+            // Today's set.
+            "127.0.0.3",
+            "10.1.2.3",
+            "172.16.5.4",
+            "192.168.0.10",
+            "169.254.1.1",
+            "100.64.0.1",
+            "0.0.0.0",
+            "255.255.255.255",
+            "::",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:192.168.1.1",
+            // New rows.
+            "0.1.2.3",
+            "192.0.0.2",
+            "fec0::1",
+            "::127.0.0.3",
+            "::ffff:0:7f00:3",
+            "64:ff9b::7f00:3",
+            "2002:7f00:3::1",
+        ] {
+            assert!(is_private_ip(ip(private)), "{private} is not public");
+        }
+        // An embedded public address stays public.
+        assert!(!is_private_ip(ip("2002:808:808::1")));
+    }
+
+    #[test]
+    fn fake_ip_answers_stay_public() {
+        for answer in ["198.18.0.1", "198.19.255.254"] {
+            assert!(!is_private_ip(ip(answer)), "{answer}");
+            assert!(permitted(ip(answer), &[], &Device::default()), "{answer}");
+        }
+    }
+
+    #[test]
+    fn local_addrs_of_install_hosts() {
+        let loopback = vec![ip("127.0.0.1"), ip("::1")];
+        for host in ["localhost", "a.localhost", "LOCALHOST"] {
+            let found = local_addrs(host);
+            assert_eq!(found, loopback, "{host}");
+            assert!(!found.contains(&ip("127.0.0.3")), "{host}");
+        }
+        assert_eq!(local_addrs("192.168.1.5"), vec![ip("192.168.1.5")]);
+        assert_eq!(local_addrs("[::1]"), vec![ip("::1")]);
+        assert_eq!(local_addrs("[::ffff:192.168.1.5]"), vec![ip("192.168.1.5")]);
+        // A literal on the device's own global network is its own host too.
+        assert_eq!(local_addrs("[2001:db8::5]"), vec![ip("2001:db8::5")]);
+        for name in ["addon.example", "nas.local", "localhost.example"] {
+            assert!(local_addrs(name).is_empty(), "{name}");
+        }
+    }
+
+    fn entry(addr: &str, mask: &str, point_to_point: bool) -> Entry {
+        Entry {
+            addr: ip(addr),
+            mask: Some(ip(mask)),
+            loopback: addr == "127.0.0.1",
+            point_to_point,
+        }
+    }
+
+    #[test]
+    fn the_devices_own_network_is_private_for_playback() {
+        let device = Device::from_entries(vec![
+            // A home IPv6 /64 and a LAN on public IPv4.
+            entry("2001:db8:1::5", "ffff:ffff:ffff:ffff::", false),
+            entry("203.0.113.5", "255.255.255.0", false),
+            // A fake-IP proxy's TUN.
+            entry("198.18.0.1", "255.254.0.0", true),
+            entry("127.0.0.1", "255.0.0.0", false),
+            // A broken mask is no prefix.
+            entry("192.0.2.9", "0.0.0.0", false),
+        ]);
+        for denied in [
+            "2001:db8:1::5",
+            "2001:db8:1::9",
+            "203.0.113.77",
+            "64:ff9b::cb00:714d",
+            "198.18.0.1",
+        ] {
+            assert!(!permitted(ip(denied), &[], &device), "{denied}");
+        }
+        for allowed in ["2001:db8:2::1", "203.0.114.1", "198.18.0.9", "8.8.8.8"] {
+            assert!(permitted(ip(allowed), &[], &device), "{allowed}");
+        }
+        // A local addon's own host on that network stays reachable.
+        assert!(permitted(ip("203.0.113.7"), &[ip("203.0.113.7")], &device));
+    }
+
+    #[test]
+    fn the_device_is_read_from_its_interfaces() {
+        let device = Device::current();
+        assert!(device.own.contains(&ip("127.0.0.1")), "{device:?}");
+        assert!(
+            device.nets.iter().all(|(net, _)| !net.is_loopback()),
+            "{device:?}"
+        );
     }
 
     #[test]

@@ -60,6 +60,7 @@ impl HttpRangeReader {
             max_bytes: usize::try_from(len).unwrap_or(usize::MAX),
             allow_private: self.allow_private,
             headers: self.headers.clone(),
+            ..Default::default()
         };
         let (at, body) = match self.http.get_range(&self.url, start, len, &opts).await {
             Ok(r) if r.status == 206 => {

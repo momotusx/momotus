@@ -2613,6 +2613,8 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "futures-util",
+ "libc",
+ "mq-http",
  "reqwest",
  "rustls",
  "serde",

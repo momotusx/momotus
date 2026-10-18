@@ -441,6 +441,7 @@ pub(crate) fn options(server: &str, device_token: &str) -> RequestOptions {
             "" => Vec::new(),
             token => vec![("authorization".into(), format!("Bearer {token}"))],
         },
+        ..Default::default()
     }
 }
 

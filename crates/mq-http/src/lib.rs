@@ -5,7 +5,7 @@ mod budget;
 mod net;
 
 pub use budget::Priority;
-pub use net::{is_private_host, is_private_ip, redact_url};
+pub use net::{is_private_host, is_private_ip, local_addrs, redact_url};
 pub use reqwest::Method;
 pub use reqwest::header::HeaderMap;
 pub use url::Url;
@@ -13,9 +13,18 @@ pub use url::Url;
 use budget::Budget;
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt;
-use reqwest::header::{CONTENT_TYPE, HeaderName, HeaderValue, RANGE, RETRY_AFTER};
-use std::sync::{Arc, Once};
+use net::Device;
+use reqwest::header::{CONTENT_TYPE, HeaderName, HeaderValue, LOCATION, RANGE, RETRY_AFTER};
+use std::collections::HashMap;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::{Arc, Mutex, Once, RwLock};
 use std::time::Duration;
+
+/// Redirects a request follows at most.
+const MAX_REDIRECTS: usize = 5;
+/// A scoped handle's refusal. It never names the address, which may be the
+/// user's own.
+const OUT_OF_SCOPE: &str = "outside the playback's scope";
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum HttpError {
@@ -58,10 +67,17 @@ impl HttpError {
     fn from_reqwest(e: reqwest::Error, timeout: Duration) -> Self {
         if e.is_timeout() {
             HttpError::Timeout(timeout)
+        } else if is_blocked(&e) {
+            HttpError::BlockedPrivate(OUT_OF_SCOPE.into())
         } else {
             HttpError::Network(redact_error(e))
         }
     }
+}
+
+/// Whether a scoped resolver's refusal is among `e`'s causes.
+fn is_blocked(e: &(dyn std::error::Error + 'static)) -> bool {
+    std::iter::successors(Some(e), |e| e.source()).any(|e| e.is::<Blocked>())
 }
 
 fn redact_error(e: reqwest::Error) -> String {
@@ -90,6 +106,9 @@ pub struct RequestOptions {
     pub max_bytes: usize,
     pub allow_private: bool,
     pub headers: Vec<(String, String)>,
+    /// Scoped handles only: the URL whose origin gets every header in
+    /// `headers` (`headers_for`). Unset: the request's own first URL.
+    pub owner: Option<Url>,
 }
 
 impl Default for RequestOptions {
@@ -100,6 +119,7 @@ impl Default for RequestOptions {
             max_bytes: 8 * 1024 * 1024,
             allow_private: false,
             headers: Vec::new(),
+            owner: None,
         }
     }
 }
@@ -202,6 +222,123 @@ pub struct HttpClient {
     /// it.
     public: reqwest::Client,
     budget: Arc<Budget>,
+    scopes: Arc<Scopes>,
+    /// Set on a handle from `scoped`: every request goes through it.
+    scope: Option<Scope>,
+}
+
+/// The scoped clients, one per address set, and what building one takes.
+struct Scopes {
+    config: ClientConfig,
+    /// Read by every scoped resolver, re-read by every `scoped` call.
+    device: Arc<RwLock<Device>>,
+    clients: Mutex<HashMap<Vec<IpAddr>, Scope>>,
+    #[cfg(test)]
+    built: std::sync::atomic::AtomicUsize,
+}
+
+impl Scopes {
+    fn build(&self, local: Vec<IpAddr>) -> Scope {
+        #[cfg(test)]
+        self.built
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let allowed = Allowed {
+            local,
+            device: self.device.clone(),
+        };
+        let client = builder(&self.config)
+            .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
+            .dns_resolver(allowed.clone())
+            .build()
+            .map_err(|e| HttpError::Network(e.to_string()));
+        Scope { client, allowed }
+    }
+}
+
+#[derive(Clone)]
+struct Scope {
+    /// A client that could not be built fails every request: nothing falls
+    /// back to a wider one.
+    client: Result<reqwest::Client, HttpError>,
+    allowed: Allowed,
+}
+
+/// The addresses a scoped handle may connect to: `local`, and public ones off
+/// the device's own network. As a resolver it keeps only those.
+#[derive(Clone)]
+struct Allowed {
+    /// Canonical and sorted.
+    local: Vec<IpAddr>,
+    device: Arc<RwLock<Device>>,
+}
+
+impl Allowed {
+    fn permits(&self, ip: IpAddr) -> bool {
+        let device = self.device.read().unwrap_or_else(|e| e.into_inner());
+        net::permitted(ip, &self.local, &device)
+    }
+}
+
+impl reqwest::dns::Resolve for Allowed {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let allowed = self.clone();
+        Box::pin(async move {
+            let kept: Vec<SocketAddr> = lookup(name.as_str())
+                .await?
+                .into_iter()
+                .filter(|a| allowed.permits(a.ip()))
+                .collect();
+            if kept.is_empty() {
+                return Err(Box::new(Blocked) as Box<dyn std::error::Error + Send + Sync>);
+            }
+            Ok(Box::new(kept.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// A scoped resolver's refusal: no address it found is in scope.
+#[derive(Debug)]
+struct Blocked;
+
+impl std::fmt::Display for Blocked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(OUT_OF_SCOPE)
+    }
+}
+
+impl std::error::Error for Blocked {}
+
+/// The system resolver's answer, or the test table's.
+async fn lookup(name: &str) -> std::io::Result<Vec<SocketAddr>> {
+    #[cfg(any(test, feature = "test-dns"))]
+    if let Some(found) = test_dns::get(name) {
+        return Ok(found.into_iter().map(|ip| SocketAddr::new(ip, 0)).collect());
+    }
+    Ok(tokio::net::lookup_host((name, 0)).await?.collect())
+}
+
+/// Names the scoped resolver answers before the system resolver, so a test
+/// can point a name at a fixture and change its answer. Only dev-dependencies
+/// enable it.
+#[cfg(any(test, feature = "test-dns"))]
+pub mod test_dns {
+    use std::collections::HashMap;
+    use std::net::IpAddr;
+    use std::sync::{LazyLock, Mutex};
+
+    static NAMES: LazyLock<Mutex<HashMap<String, Vec<IpAddr>>>> = LazyLock::new(Default::default);
+
+    /// Answers `name` with `addrs` from now on, for every scoped handle.
+    pub fn set(name: &str, addrs: &[IpAddr]) {
+        let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+        names.insert(name.to_ascii_lowercase(), addrs.to_vec());
+    }
+
+    pub(crate) fn get(name: &str) -> Option<Vec<IpAddr>> {
+        let names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+        names.get(&name.to_ascii_lowercase()).cloned()
+    }
 }
 
 /// Resolves with the system resolver and keeps only public addresses.
@@ -257,23 +394,77 @@ fn redirect_allowed(first: &Url, next: &Url) -> bool {
     private(first) || !private(next)
 }
 
+/// What every client shares, scoped or not.
+fn builder(config: &ClientConfig) -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .user_agent(config.user_agent.clone())
+        .connect_timeout(config.connect_timeout)
+        .pool_idle_timeout(Duration::from_secs(90))
+}
+
 impl HttpClient {
     pub fn new(config: ClientConfig) -> Result<Self, HttpError> {
         install_crypto_provider();
-        let builder = || {
-            reqwest::Client::builder()
-                .user_agent(config.user_agent.clone())
-                .connect_timeout(config.connect_timeout)
-                .redirect(reqwest::redirect::Policy::custom(redirect))
-                .pool_idle_timeout(Duration::from_secs(90))
-        };
+        let follow = || builder(&config).redirect(reqwest::redirect::Policy::custom(redirect));
         let build =
             |b: reqwest::ClientBuilder| b.build().map_err(|e| HttpError::Network(e.to_string()));
+        let inner = build(follow())?;
+        let public = build(follow().dns_resolver(Arc::new(PublicOnly)))?;
         Ok(Self {
-            inner: build(builder())?,
-            public: build(builder().dns_resolver(Arc::new(PublicOnly)))?,
+            inner,
+            public,
             budget: Arc::new(Budget::new(config.per_host_limit, config.global_limit)),
+            scopes: Arc::new(Scopes {
+                config,
+                device: Default::default(),
+                clients: Default::default(),
+                #[cfg(test)]
+                built: Default::default(),
+            }),
+            scope: None,
         })
+    }
+
+    /// A handle for one playback's requests. They connect only to public
+    /// addresses and to `local` (`local_addrs` of the installing addon's
+    /// host): each hop's literal is checked before connecting and each DNS
+    /// answer when resolving, redirects are followed here hop by hop, no proxy
+    /// is used, and headers go in full only to their owner's origin
+    /// (`headers_for`). `allow_private` is ignored. The device's own addresses
+    /// and the on-link prefixes of its interfaces count as private, re-read on
+    /// every call. Handles with the same addresses share one client and its
+    /// connections, and every handle shares this client's budget.
+    pub fn scoped(&self, local: &[IpAddr]) -> HttpClient {
+        let mut key: Vec<IpAddr> = local.iter().map(|ip| ip.to_canonical()).collect();
+        key.sort();
+        key.dedup();
+        *self
+            .scopes
+            .device
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Device::current();
+        let mut clients = self
+            .scopes
+            .clients
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scope = match clients.get(&key) {
+            Some(scope) => scope.clone(),
+            None => {
+                let scope = self.scopes.build(key.clone());
+                if scope.client.is_ok() {
+                    clients.insert(key, scope.clone());
+                }
+                scope
+            }
+        };
+        HttpClient {
+            inner: self.inner.clone(),
+            public: self.public.clone(),
+            budget: self.budget.clone(),
+            scopes: self.scopes.clone(),
+            scope: Some(scope),
+        }
     }
 
     pub async fn get(&self, url: &str, opts: &RequestOptions) -> Result<Response, HttpError> {
@@ -339,14 +530,14 @@ impl HttpClient {
         range: Option<String>,
     ) -> Result<Response, HttpError> {
         let url = Url::parse(raw).map_err(|_| HttpError::InvalidUrl(redact_str(raw)))?;
-        let host = url.host_str().unwrap_or_default().to_owned();
-        if !opts.allow_private && is_private_host(&host) {
-            return Err(HttpError::BlockedPrivate(host));
-        }
-        let _permit = self.budget.acquire(&host, opts.priority).await;
-        let response = self
-            .open(method, url, body, opts, range, Some(opts.timeout))
-            .await?;
+        let request = Request {
+            method,
+            url,
+            body,
+            range,
+            timeout: Some(opts.timeout),
+        };
+        let (response, _permit) = self.fetch(request, opts).await?;
         read_capped(response, opts).await
     }
 
@@ -361,14 +552,14 @@ impl HttpClient {
         opts: &RequestOptions,
     ) -> Result<StreamingResponse, HttpError> {
         let parsed = Url::parse(url).map_err(|_| HttpError::InvalidUrl(redact_str(url)))?;
-        let host = parsed.host_str().unwrap_or_default().to_owned();
-        if !opts.allow_private && is_private_host(&host) {
-            return Err(HttpError::BlockedPrivate(host));
-        }
-        let permit = self.budget.acquire(&host, opts.priority).await;
-        let response = self
-            .open(Method::GET, parsed, None, opts, range, None)
-            .await?;
+        let request = Request {
+            method: Method::GET,
+            url: parsed,
+            body: None,
+            range,
+            timeout: None,
+        };
+        let (response, permit) = self.fetch(request, opts).await?;
         let status = response.status().as_u16();
         let headers = response.headers().clone();
         let idle = opts.timeout;
@@ -386,38 +577,192 @@ impl HttpClient {
         })
     }
 
-    async fn open(
+    /// Sends `req` and returns the answer with the host slot it holds.
+    /// Unscoped, the first URL is checked against `allow_private` and reqwest
+    /// follows redirects under `redirect`; scoped, `follow` does it all.
+    async fn fetch(
         &self,
-        method: Method,
-        url: Url,
-        body: Option<Body>,
+        req: Request,
         opts: &RequestOptions,
-        range: Option<String>,
-        total_timeout: Option<Duration>,
-    ) -> Result<reqwest::Response, HttpError> {
-        let mut headers = build_headers(&opts.headers, range);
+    ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
+        if let Some(scope) = &self.scope {
+            return self.follow(scope, req, opts).await;
+        }
+        let host = req.url.host_str().unwrap_or_default().to_owned();
+        if !opts.allow_private && is_private_host(&host) {
+            return Err(HttpError::BlockedPrivate(host));
+        }
+        let permit = self.budget.acquire(&host, opts.priority).await;
         let client = if opts.allow_private {
             &self.inner
         } else {
             &self.public
         };
-        let mut request = client.request(method, url);
-        if let Some(timeout) = total_timeout {
-            request = request.timeout(timeout);
-        }
-        if let Some(body) = body {
-            let (content_type, bytes) = body.encode();
-            if let Ok(value) = HeaderValue::try_from(content_type) {
-                headers.insert(CONTENT_TYPE, value);
-            }
-            request = request.body(bytes);
-        }
-        let request = request.headers(headers);
-        request
-            .send()
-            .await
-            .map_err(|e| HttpError::from_reqwest(e, opts.timeout))
+        let headers = build_headers(&opts.headers, req.range.clone());
+        let response = open(client, &req, headers, opts.timeout).await?;
+        Ok((response, permit))
     }
+
+    /// A scoped request, hop by hop: each hop's literal is checked before
+    /// connecting (names go through `Allowed`), its headers follow
+    /// `headers_for`, and `next_hop` decides where it leads, at most
+    /// `MAX_REDIRECTS` times, with `Range` kept. A total limit applies to
+    /// each hop. Release before acquire: a hop's answer and host slot are
+    /// dropped before the next hop asks for a slot, since holding both
+    /// deadlocks same-host redirects at the per-host limit.
+    async fn follow(
+        &self,
+        scope: &Scope,
+        mut req: Request,
+        opts: &RequestOptions,
+    ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
+        let client = scope.client.clone()?;
+        let owner = opts.owner.clone().unwrap_or_else(|| req.url.clone());
+        let mut hops = 0;
+        loop {
+            if literal(&req.url).is_some_and(|ip| !scope.allowed.permits(ip)) {
+                return Err(HttpError::BlockedPrivate(OUT_OF_SCOPE.into()));
+            }
+            let host = req.url.host_str().unwrap_or_default();
+            let permit = self.budget.acquire(host, opts.priority).await;
+            let headers = headers_for(&owner, &req.url, &opts.headers);
+            let headers = build_headers(&headers, req.range.clone());
+            let response = open(&client, &req, headers, opts.timeout).await?;
+            let status = response.status().as_u16();
+            let Some(next) = next_hop(status, response.headers().get(LOCATION), &req.url)? else {
+                return Ok((response, permit));
+            };
+            drop(response);
+            drop(permit);
+            hops += 1;
+            if hops > MAX_REDIRECTS {
+                return Err(HttpError::Network("too many redirects".into()));
+            }
+            // As browsers do: 301, 302 and 303 turn any method but HEAD into a
+            // GET without a body.
+            if !matches!(status, 307 | 308) && req.method != Method::HEAD {
+                req.method = Method::GET;
+                req.body = None;
+            }
+            req.url = next;
+        }
+    }
+}
+
+/// One request as `send` and `stream` hand it to `fetch`.
+struct Request {
+    method: Method,
+    url: Url,
+    body: Option<Body>,
+    range: Option<String>,
+    /// A total limit; streams have only `opts.timeout` between chunks.
+    timeout: Option<Duration>,
+}
+
+async fn open(
+    client: &reqwest::Client,
+    req: &Request,
+    mut headers: HeaderMap,
+    idle: Duration,
+) -> Result<reqwest::Response, HttpError> {
+    let mut request = client.request(req.method.clone(), req.url.clone());
+    if let Some(timeout) = req.timeout {
+        request = request.timeout(timeout);
+    }
+    if let Some(body) = &req.body {
+        let (content_type, bytes) = body.encode();
+        if let Ok(value) = HeaderValue::try_from(content_type) {
+            headers.insert(CONTENT_TYPE, value);
+        }
+        request = request.body(bytes);
+    }
+    let request = request.headers(headers);
+    request
+        .send()
+        .await
+        .map_err(|e| HttpError::from_reqwest(e, idle))
+}
+
+fn literal(url: &Url) -> Option<IpAddr> {
+    match url.host()? {
+        url::Host::Ipv4(ip) => Some(ip.into()),
+        url::Host::Ipv6(ip) => Some(ip.into()),
+        url::Host::Domain(_) => None,
+    }
+}
+
+/// Where a scoped hop's answer leads; `None` returns it as it is. Only 301,
+/// 302, 303, 307 and 308 with a `Location` naming an http or https URL lead
+/// on, and never from https to http.
+fn next_hop(
+    status: u16,
+    location: Option<&HeaderValue>,
+    from: &Url,
+) -> Result<Option<Url>, HttpError> {
+    if !matches!(status, 301 | 302 | 303 | 307 | 308) {
+        return Ok(None);
+    }
+    let next = location
+        .and_then(|l| l.to_str().ok())
+        .and_then(|l| from.join(l).ok());
+    match next {
+        Some(next) if downgrades(from, &next) => {
+            Err(HttpError::Network("redirect from https to http".into()))
+        }
+        Some(next) if matches!(next.scheme(), "http" | "https") => Ok(Some(next)),
+        _ => Ok(None),
+    }
+}
+
+/// Request headers no hop takes from a caller: the transport's own, plus
+/// `Range` and `Accept-Encoding`, which the client sets itself. Every
+/// `Proxy-*` header too.
+const TRANSPORT: [&str; 11] = [
+    "host",
+    "connection",
+    "keep-alive",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "content-length",
+    "range",
+    "expect",
+    "accept-encoding",
+];
+/// What every origin gets. Hotlink-protected CDNs check `Referer` and
+/// `Origin`, which name a site, not a secret.
+const SAFE: [&str; 5] = [
+    "user-agent",
+    "referer",
+    "origin",
+    "accept",
+    "accept-language",
+];
+
+/// The part of a stream's `headers` a scoped hop to `url` sends, when they
+/// belong to `owner`'s origin: all of them on that origin, or on its https
+/// upgrade (http on the default port to https on the default port, same
+/// host); only `SAFE` anywhere else; never `TRANSPORT`.
+pub fn headers_for(owner: &Url, url: &Url, headers: &[(String, String)]) -> Vec<(String, String)> {
+    let owned = owner.origin() == url.origin() || upgrades(owner, url);
+    headers
+        .iter()
+        .filter(|(name, _)| {
+            let name = name.to_ascii_lowercase();
+            let transport = TRANSPORT.contains(&name.as_str()) || name.starts_with("proxy-");
+            !transport && (owned || SAFE.contains(&name.as_str()))
+        })
+        .cloned()
+        .collect()
+}
+
+fn upgrades(owner: &Url, url: &Url) -> bool {
+    owner.scheme() == "http"
+        && url.scheme() == "https"
+        && owner.host() == url.host()
+        && owner.port().is_none()
+        && url.port().is_none()
 }
 
 /// A response whose body arrives as a stream of chunks.
@@ -576,6 +921,111 @@ mod tests {
         }
         let err = response.json::<Token>().unwrap_err();
         assert!(!format!("{err} {err:?}").contains("SECRET"), "{err:?}");
+    }
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().unwrap()
+    }
+
+    #[tokio::test]
+    async fn allowed_resolver_keeps_public_and_own() {
+        use reqwest::dns::Resolve;
+        let allowed = Allowed {
+            local: vec![ip("127.0.0.1")],
+            device: Default::default(),
+        };
+        let answer = [
+            "8.8.8.8",
+            "127.0.0.1",
+            "127.0.0.3",
+            "192.168.1.1",
+            "fd00::1",
+        ]
+        .map(ip);
+        test_dns::set("mixed.unit.test", &answer);
+        let kept: Vec<IpAddr> = allowed
+            .resolve("mixed.unit.test".parse().unwrap())
+            .await
+            .expect("two answers are allowed")
+            .map(|a| a.ip())
+            .collect();
+        assert_eq!(kept, [ip("8.8.8.8"), ip("127.0.0.1")]);
+        test_dns::set("denied.unit.test", &[ip("127.0.0.3"), ip("10.0.0.1")]);
+        let err = allowed
+            .resolve("denied.unit.test".parse().unwrap())
+            .await
+            .err()
+            .expect("nothing is allowed");
+        assert!(err.is::<Blocked>(), "{err}");
+    }
+
+    #[test]
+    fn scoped_clients_are_shared_by_address_set() {
+        let http = HttpClient::new(ClientConfig::default()).unwrap();
+        let (a, b) = (ip("127.0.0.1"), ip("192.168.1.5"));
+        let _first = http.scoped(&[a, b]);
+        let _reversed = http.scoped(&[b, a]);
+        let _mapped = http.scoped(&[ip("::ffff:127.0.0.1"), b, b]);
+        let built = &http.scopes.built;
+        assert_eq!(built.load(std::sync::atomic::Ordering::Relaxed), 1);
+        let _other = http.scoped(&[]);
+        assert_eq!(built.load(std::sync::atomic::Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn headers_follow_their_owner() {
+        let url = |s: &str| Url::parse(s).unwrap();
+        let headers: Vec<(String, String)> = [
+            ("X-Api-Key", "k"),
+            ("Cookie", "c"),
+            ("Referer", "https://site.example/"),
+            ("User-Agent", "ua"),
+            ("Host", "evil.example"),
+            ("Range", "bytes=0-"),
+            ("Proxy-Authorization", "p"),
+            ("Accept-Encoding", "gzip"),
+        ]
+        .map(|(n, v)| (n.to_owned(), v.to_owned()))
+        .into();
+        let names = |owner: &str, to: &str| -> Vec<String> {
+            headers_for(&url(owner), &url(to), &headers)
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect()
+        };
+        let all = ["X-Api-Key", "Cookie", "Referer", "User-Agent"];
+        let safe = ["Referer", "User-Agent"];
+        assert_eq!(names("http://a.example/v", "http://a.example/w"), all);
+        // An upgrade to https on the same host keeps the owner.
+        assert_eq!(names("http://a.example/v", "https://a.example/w"), all);
+        assert_eq!(
+            names("http://a.example/v", "https://a.example:8443/w"),
+            safe
+        );
+        assert_eq!(names("https://a.example/v", "http://a.example/w"), safe);
+        assert_eq!(names("http://a.example/v", "http://a.example:81/w"), safe);
+        assert_eq!(names("http://a.example/v", "http://b.example/v"), safe);
+    }
+
+    #[test]
+    fn a_redirect_never_downgrades_or_leaves_http() {
+        let from = Url::parse("https://cdn.example/a/v.mkv").unwrap();
+        let to = |status: u16, location: &str| {
+            next_hop(
+                status,
+                Some(&HeaderValue::from_str(location).unwrap()),
+                &from,
+            )
+        };
+        let next = to(302, "../b/v.mkv").unwrap().expect("followed");
+        assert_eq!(next.as_str(), "https://cdn.example/b/v.mkv");
+        let err = to(301, "http://cdn.example/v.mkv").expect_err("downgrade");
+        assert!(err.to_string().contains("https to http"), "{err}");
+        for location in ["file:///etc/passwd", "ftp://cdn.example/v.mkv", "data:,x"] {
+            assert!(to(302, location).unwrap().is_none(), "{location}");
+        }
+        assert!(next_hop(302, None, &from).unwrap().is_none());
+        assert!(to(300, "/x").unwrap().is_none());
     }
 
     #[test]
