@@ -1,0 +1,5 @@
+{"date":"2026-10-18","device":"emulator-5584","check":"first request to download.blender.org after a fresh start, time to response headers","runs_ms":[4017,4048,5360],"resumed_session_ms":[108,220],"note":"lookup 8 to 448 ms, IPv4 first"}
+{"date":"2026-10-18","device":"emulator-5584","check":"Java stack of the verifying thread","at_1_6_s":"PKIXBuilderParameters(AndroidCAStore) reading each certificate file","at_3_5_s":"RevocationChecker.checkCRLs downloading the CRL"}
+{"date":"2026-10-18","device":"emulator-5584","check":"CRL host ye1.c.lencr.org dropped with iptables","result":"invalid peer certificate: Revoked","first_request_ms":5509}
+{"date":"2026-10-18","device":"emulator-5584","check":"verifier warmed at startup (not shipped)","warm_ms":[2226,1538,1637,2146,2362,2555],"first_request_ms":[4192,2940,2892,4348,4029,3275]}
+{"date":"2026-10-18","device":"host","check":"curl of http://ye1.c.lencr.org/82.crl","bytes":58625,"ms":125}
