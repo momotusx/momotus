@@ -70,7 +70,7 @@ struct OnboardingScreen: View {
                 Spacer()
                 if let close {
                     Button("Browse first", action: close)
-                        .buttonStyle(.plain)
+                        .buttonStyle(.textLink)
                         .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.text)
                 }
@@ -97,7 +97,7 @@ struct OnboardingScreen: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.row)
             if metrics.wide {
                 // On one row the doors share one height.
                 HStack(alignment: .top, spacing: Theme.Space.s) { doors }

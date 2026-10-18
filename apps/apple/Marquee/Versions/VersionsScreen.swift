@@ -147,7 +147,7 @@ struct VersionsScreen: View {
                                 Glyph("chevron-down").rotationEffect(.degrees(open ? 180 : 0))
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.textLink)
                         .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
                         .padding(.vertical, 10)
@@ -303,7 +303,7 @@ private struct VersionRowView: View {
             .contentShape(Rectangle())
             .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(.white.opacity(hovered ? 0.06 : 0)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
         #if !os(tvOS)
         .onHover { hovered = $0 }
         #endif

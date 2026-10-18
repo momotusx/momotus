@@ -122,8 +122,7 @@ struct PairingScreen: View {
                 #endif
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
+                .fieldChrome(focused: typing == label)
         }
     }
 

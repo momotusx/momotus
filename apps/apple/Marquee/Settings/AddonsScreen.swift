@@ -135,8 +135,7 @@ struct InstallField: View {
                     .onChange(of: focusRequest, initial: true) { if focusRequest > 0 { fieldFocused = true } }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
+                    .fieldChrome(focused: fieldFocused)
                 Button(action: installLink) {
                     Label(installing ? "Installing" : "Install", glyph: "plus")
                 }

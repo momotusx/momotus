@@ -98,7 +98,7 @@ private struct DaySection: View {
                 NavigationLink(value: TitleRoute(kind: "series", id: item.itemId, name: item.name, season: item.season)) {
                     CalendarRow(item: item)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
             }
         }
     }

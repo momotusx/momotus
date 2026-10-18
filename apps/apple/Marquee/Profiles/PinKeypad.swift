@@ -213,7 +213,7 @@ struct PinKeypad: View {
                                 .overlay(Circle().strokeBorder(Theme.Palette.control, lineWidth: 1))
                                 .contentShape(Circle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.round)
                             .foregroundStyle(Theme.Palette.text)
                             .focused($focus, equals: name)
                             .opacity(busy || waiting ? 0.4 : 1)

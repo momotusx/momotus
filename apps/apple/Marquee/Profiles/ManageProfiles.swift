@@ -18,13 +18,13 @@ struct ManageProfiles: View {
                             NavigationLink { EditProfile(profileId: profile.id) } label: {
                                 ProfileRow(stored: profile.avatar, name: profile.name, detail: ProfileRules.detail(profile))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         }
                         if snapshot.profiles.count < snapshot.max {
                             NavigationLink { EditProfile(profileId: nil) } label: {
                                 SettingsRow(symbol: "plus", title: "Add profile", detail: "A new profile starts with your addons and no PIN.")
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.row)
                         } else {
                             StateLine(symbol: "users", text: "This account has as many profiles as it can hold (\(snapshot.max)).")
                         }
@@ -77,6 +77,7 @@ struct EditProfile: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.metrics) private var metrics
     @State private var name = ""
+    @FocusState private var nameFocused: Bool
     @State private var glyph = "letter"
     @State private var color = "ember"
     /// The user picked a picture or a color: only then is `avatar` sent, so a
@@ -213,8 +214,8 @@ struct EditProfile: View {
                         .font(.text(Theme.type.body))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
-                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
+                        .focused($nameFocused)
+                        .fieldChrome(focused: nameFocused)
                         .onChange(of: name) { _, typed in if typed.count > 30 { name = String(typed.prefix(30)) } }
                 }
             }
@@ -273,7 +274,7 @@ struct EditProfile: View {
                 .padding(3)
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(selected ? Theme.Palette.text : .clear, lineWidth: 2))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 14, style: .continuous)))
         .accessibilityLabel(label)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

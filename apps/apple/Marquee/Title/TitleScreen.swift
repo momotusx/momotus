@@ -327,7 +327,7 @@ private struct Synopsis: View {
                 }
             if !open, full > shown + 1 {
                 Button("More") { withAnimation(Theme.Motion.panel) { open = true } }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.textLink)
                     .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.text)
                     .accessibilityHint("Shows the whole synopsis")

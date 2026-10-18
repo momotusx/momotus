@@ -123,8 +123,8 @@ struct DebridScreen: View {
                     .font(.mono(Theme.type.body))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
+                    .focused($focus, equals: .key(service.id))
+                    .fieldChrome(focused: focus == .key(service.id))
                 // Save is the primary only once its field holds a key.
                 Button("Save") { save(service, draft) }
                     .buttonStyle(PillButtonStyle(prominent: !draft.isEmpty))
@@ -195,7 +195,7 @@ struct DebridScreen: View {
 }
 
 /// Where focus goes on the Debrid page: a card's sign-in button, or the open sign-in.
-enum DebridScreenFocus: Hashable { case signIn(String), panel }
+enum DebridScreenFocus: Hashable { case signIn(String), panel, key(String) }
 
 /// A sign-in by code: the code large, the address, its QR, the time left;
 /// then why not, with a new code.

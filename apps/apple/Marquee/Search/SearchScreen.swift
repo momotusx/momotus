@@ -63,7 +63,7 @@ struct SearchScreen: View {
                 Button { query = "" } label: {
                     Glyph("circle-x").foregroundStyle(Theme.Palette.muted)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.round)
                 .accessibilityLabel("Clear search")
             }
         }
@@ -72,6 +72,7 @@ struct SearchScreen: View {
         .frame(maxWidth: 780)
         .background(Capsule().fill(Theme.Palette.surface))
         .overlay(Capsule().strokeBorder(fieldFocused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: fieldFocused ? 2 : 1))
+        .modifier(FocusRing(shape: Capsule(), active: fieldFocused))
         .animation(Theme.Motion.focus, value: fieldFocused)
     }
 

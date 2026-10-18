@@ -33,20 +33,20 @@ struct SettingsScreen: View {
                         ProfileRow(stored: me.avatar, name: me.name,
                                    detail: snapshot.profiles.count > 1 ? "Switch profile" : "Add a profile for someone else, or switch")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     NavigationLink {
                         EditProfile(profileId: me.id)
                     } label: {
                         SettingsRow(symbol: "pencil", title: "Edit profile", detail: "Name, picture and PIN.")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                     if me.isOwner {
                         NavigationLink {
                             ManageProfiles(core: core)
                         } label: {
                             SettingsRow(symbol: "users", title: "Manage profiles", detail: "Add, edit and remove profiles on this account.")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.row)
                     }
                 }
                 section("Sources").padding(.top, Theme.Space.s)
@@ -55,31 +55,31 @@ struct SettingsScreen: View {
                 } label: {
                     SettingsRow(symbol: "puzzle", title: "Addons", detail: addonsSummary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 NavigationLink {
                     ImportScreen(core: core)
                 } label: {
                     SettingsRow(symbol: "download", title: "Import from Stremio", detail: "Addons, library and progress, with a code. No password typed here.")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 NavigationLink {
                     DebridScreen(core: core)
                 } label: {
                     SettingsRow(symbol: "zap", title: "Debrid services", detail: debrid.inUse ?? "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 NavigationLink {
                     HomeRowsScreen(core: core)
                 } label: {
                     SettingsRow(symbol: "list-video", title: "Home rows", detail: "Which catalogs Home shows, and in what order.")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 NavigationLink {
                     OnboardingScreen(core: core, start: .check)
                 } label: {
                     SettingsRow(symbol: "monitor-check", title: "Setup check", detail: "Network, display, catalogs, sources and subtitles at a glance.")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.row)
                 section("Devices and sync").padding(.top, Theme.Space.s)
                 if sync.joined {
                     NavigationLink {
@@ -87,14 +87,14 @@ struct SettingsScreen: View {
                     } label: {
                         SettingsRow(symbol: "refresh-cw", title: "Sync", detail: syncSummary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                 } else {
                     NavigationLink {
                         PairingScreen(core: core)
                     } label: {
                         SettingsRow(symbol: "qr-code", title: "Pair this device", detail: "Show a code here, then approve this device from one that already syncs.")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.row)
                 }
                 if let p = prefs.snapshot {
                     section("Playback").padding(.top, Theme.Space.s)

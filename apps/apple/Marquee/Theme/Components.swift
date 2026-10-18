@@ -327,6 +327,19 @@ private struct RoundLabel<Icon: View, Title: View>: View {
     #endif
 }
 
+extension View {
+    /// A text field's box: the surface fill and edge, the edge turning accent
+    /// while focused, and on TV, where a field is a focus stop like a button,
+    /// the shared focus ring.
+    func fieldChrome(focused: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)
+        return background(shape.fill(Theme.Palette.surface))
+            .overlay(shape.strokeBorder(focused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: focused ? 2 : 1))
+            .modifier(FocusRing(shape: shape, active: focused))
+            .animation(Theme.Motion.focus, value: focused)
+    }
+}
+
 /// A control drawn by its own label (a settings row, a door, a key, a
 /// transport glyph, an OSD menu): the shared focus ring, halo and lift on TV
 /// and with a Mac keyboard, the press veil on a touch screen. Anything a
