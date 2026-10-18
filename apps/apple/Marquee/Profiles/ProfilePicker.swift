@@ -214,7 +214,7 @@ struct ProfilePicker: View {
         #if os(tvOS)
         return "Forgot the PIN? Reset it from Marquee on your phone or Mac. This device gets the change at its next sync."
         #else
-        return target.id == snapshot.active && snapshot.locked ? "Forgot the PIN? Choose Reset with this device's lock below." : nil
+        return "Forgot the PIN?"
         #endif
     }
 
@@ -222,14 +222,14 @@ struct ProfilePicker: View {
         #if os(tvOS)
         return nil
         #else
-        guard target.isOwner, target.id == snapshot.active, snapshot.locked else { return nil }
-        return ("Reset with this device's lock", resetOwner)
+        guard target.isOwner else { return nil }
+        return ("Reset with this device's lock", { await resetOwner(target) })
         #endif
     }
 
     #if !os(tvOS)
     /// The device's own lock, then `resetOwnerPin`, then the session opens.
-    private func resetOwner() async -> KeypadResult {
+    private func resetOwner(_ owner: ProfileInfo) async -> KeypadResult {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
@@ -239,7 +239,7 @@ struct ProfilePicker: View {
             return .ok
         }
         do {
-            try await profiles.resetOwnerPin()
+            try await profiles.resetOwnerPin(owner: owner.id)
             return .ok
         } catch {
             return .problem(ProfileRules.problem((error as? CoreError)?.code, fallback: "The PIN could not be reset."))

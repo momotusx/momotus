@@ -87,6 +87,10 @@ struct EditProfile: View {
     @State private var busy = false
     @State private var flow: PinFlow?
     @State private var confirmDelete = false
+    /// The profile whose PIN a newer version stored: it can only be removed.
+    @State private var unreadable: String?
+    @FocusState private var removeFocused: Bool
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         ScrollView(.vertical) {
@@ -128,6 +132,9 @@ struct EditProfile: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .onAppear(perform: fill)
+        // A half-done PIN change is given up when the app leaves the front:
+        // the steps forget the current and new PINs.
+        .onChange(of: phase) { _, phase in if phase != .active { flow = nil } }
     }
 
     private func title(_ target: ProfileInfo?, _ active: ProfileInfo) -> String {
@@ -230,8 +237,15 @@ struct EditProfile: View {
     @ViewBuilder private func pin(_ target: ProfileInfo, _ active: ProfileInfo) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             Text("PIN").display(Theme.type.title2).foregroundStyle(Theme.Palette.text)
-            let actions = PinAction.allowed(for: target, by: active)
-            if target.syncing {
+            let actions = PinAction.allowed(for: target, by: active, unreadable: unreadable == target.id)
+            if actions == [.removeUnreadable] {
+                StateLine(symbol: "triangle-alert", text: ProfileRules.problem("pinUnreadable", fallback: ""))
+                Button("Remove PIN") { begin(.removeUnreadable, target) }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .disabled(busy)
+                    .focused($removeFocused)
+                    .onAppear { removeFocused = true }
+            } else if target.syncing {
                 StateLine(symbol: "clock", text: "Waiting for this profile's lock to arrive from your other devices.")
             } else if actions.isEmpty {
                 StateLine(symbol: "info", text: "\(target.name) has no PIN. They can set one from their own profile.")
@@ -253,12 +267,13 @@ struct EditProfile: View {
         case .change: "Change PIN"
         case .remove: "Remove PIN"
         case .removeOther: "Remove \(target.name)'s PIN"
+        case .removeUnreadable: "Remove PIN"
         }
     }
 
     private func begin(_ action: PinAction, _ target: ProfileInfo) {
         said = nil
-        guard action == .removeOther else {
+        guard action == .removeOther || action == .removeUnreadable else {
             flow = PinFlow(action)
             return
         }
@@ -266,8 +281,10 @@ struct EditProfile: View {
         Task {
             defer { busy = false }
             do {
+                // No current PIN: the core takes that from the owner, and for one it cannot read.
                 try await profiles.perform("setPin", ["profile": target.id, "pin": JSONValue.null])
-                said = ("\(target.name)'s PIN was removed.", true)
+                said = (action == .removeUnreadable ? "PIN removed" : "\(target.name)'s PIN was removed.", true)
+                if action == .removeUnreadable { unreadable = nil }
             } catch {
                 said = (problem(error), false)
             }
@@ -287,6 +304,11 @@ struct EditProfile: View {
             try await profiles.perform("setPin", fields)
             flow = nil
             said = (submit.pin == nil ? "PIN removed" : "PIN saved", true)
+            return .ok
+        } catch let error as CoreError where error.code == "pinUnreadable" {
+            // A PIN a newer version stored: the steps close and Remove is offered.
+            flow = nil
+            unreadable = target.id
             return .ok
         } catch {
             let result = KeypadResult.of(error)

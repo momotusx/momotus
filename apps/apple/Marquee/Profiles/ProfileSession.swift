@@ -20,6 +20,9 @@ final class ProfileSession {
     private(set) var switchProblem: CoreError?
     /// Bumped by every switch: the profile's screens are built again from nothing.
     private(set) var epoch = 0
+    /// A switch request is with the core: no second switch starts, and Cancel
+    /// waits for its answer (the core may still commit it).
+    private(set) var inFlight = false
     /// A profile removed on another device, and how many times one was: the
     /// picker closes its keypad and says so.
     private(set) var gone: (id: String, count: Int)?
@@ -72,10 +75,16 @@ final class ProfileSession {
     }
 
     /// The owner forgot the PIN: cleared behind the device's own lock (asked
-    /// by the caller), then the session opens.
-    func resetOwnerPin() async throws {
+    /// by the caller; the core takes it from any session), then the owner
+    /// opens: unlocked when it is the locked session's own profile, else by
+    /// a switch.
+    func resetOwnerPin(owner: String) async throws {
         try await core.perform("resetOwnerPin")
-        try await unlock(pin: nil)
+        if snapshot?.active == owner, snapshot?.locked == true {
+            try await unlock(pin: nil)
+        } else if await !switchTo(owner, pin: nil) {
+            throw switchProblem ?? CoreError("The switch did not finish.")
+        }
     }
 
     /// Shuts the gate, so every screen of the old profile leaves and closes
@@ -84,6 +93,9 @@ final class ProfileSession {
     /// shut with `switchProblem` for the picker; `cancelSwitch` goes back.
     @discardableResult
     func switchTo(_ id: String, pin: String?) async -> Bool {
+        guard !inFlight else { return false }
+        // Out from now until the last answer: a second ask, or Cancel, waits.
+        inFlight = true
         switching = id
         switchProblem = nil
         epoch += 1
@@ -97,6 +109,7 @@ final class ProfileSession {
     private func runSwitch(_ id: String, pin: String?) async -> Bool {
         var fields: [String: any Sendable] = ["profile": id]
         if let pin { fields["pin"] = pin }
+        defer { inFlight = false }
         for attempt in 1...10 {
             do {
                 try await core.perform("switchProfile", fields)
@@ -121,6 +134,8 @@ final class ProfileSession {
 
     /// A failed switch given up: the current profile opens again, on Home.
     func cancelSwitch() {
+        // A request still with the core is never undone here: its answer decides.
+        guard !inFlight else { return }
         switching = nil
         switchProblem = nil
         chosen = true

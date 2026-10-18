@@ -127,13 +127,17 @@ enum ProfileRules {
 /// The PIN changes the core allows (its `set_pin`): your own profile with no
 /// PIN can set one; with one, change or remove it, each asking the current
 /// PIN first; the owner can remove another profile's PIN; nobody sets
-/// another's.
+/// another's. A PIN a newer version stored (`pinUnreadable`) can only be
+/// removed, without asking it.
 enum PinAction: Equatable, Sendable {
-    case set, change, remove, removeOther
+    case set, change, remove, removeOther, removeUnreadable
 
-    static func allowed(for target: ProfileInfo, by active: ProfileInfo) -> [PinAction] {
+    static func allowed(for target: ProfileInfo, by active: ProfileInfo, unreadable: Bool = false) -> [PinAction] {
         if target.syncing { return [] }
-        if target.id == active.id { return target.hasPin ? [.change, .remove] : [.set] }
+        if target.id == active.id {
+            if unreadable { return [.removeUnreadable] }
+            return target.hasPin ? [.change, .remove] : [.set]
+        }
         return active.isOwner && target.hasPin ? [.removeOther] : []
     }
 }

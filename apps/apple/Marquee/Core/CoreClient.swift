@@ -45,6 +45,13 @@ final class CoreClient {
 
     var version: String { core?.version() ?? "unavailable" }
 
+    #if DEBUG
+    /// Hands the router the message a panicking core sends (`-MQKillCoreAfter`).
+    func debugDie() {
+        router.onMessage(json: #"{"core":"died","reason":"debug: a simulated panic"}"#)
+    }
+    #endif
+
     /// Opens the core again after it stopped; open views resubscribe.
     func restart() {
         openCore()
@@ -114,6 +121,10 @@ final class CoreClient {
     ) async throws -> CoreView<S, U> {
         let (events, sink) = AsyncStream.makeStream(of: ViewEvent<S, U>.self)
         let router = router
+        #if DEBUG
+        // Which views subscribe to which core: a restart must open only `profiles` before its snapshot.
+        coreLog.notice("debug: subscribe \(view, privacy: .public) on core \(self.generation, privacy: .public)")
+        #endif
         let sub = try await request("subscribe", ["view": view, "params": params]) { data in
             let opened = try JSONDecoder().decode(Reply<Opened<S>>.self, from: data).result
             sink.yield(.snapshot(opened.snapshot))

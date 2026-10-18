@@ -131,11 +131,11 @@ struct PinKeypad: View {
         }
         .frame(maxWidth: .infinity)
         // Hardware digits and Delete type wherever focus is within the keypad.
-        .onKeyPress(characters: .decimalDigits) { press in
+        .onKeyPress(characters: .decimalDigits, phases: .down) { press in
             press.characters.forEach { type($0) }
             return .handled
         }
-        .onKeyPress(.delete) { delete(); return .handled }
+        .onKeyPress(.delete, phases: .down) { _ in delete(); return .handled }
         #if !os(tvOS)
         .focusable()
         .focusEffectDisabled()
@@ -173,6 +173,8 @@ struct PinKeypad: View {
         Button(cancelTitle, action: leave)
             .buttonStyle(PillButtonStyle())
             .focused($focus, equals: "cancel")
+            // A try with the core is never undone from here: its answer decides.
+            .disabled(busy)
         if let reset {
             Button(reset.title) { run { await reset.run() } }
                 .buttonStyle(PillButtonStyle())

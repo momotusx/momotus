@@ -49,6 +49,10 @@ enum DebugHooks {
 
     @MainActor private static var pairedPreviewTaken = false
 
+    /// `-MQKillCoreAfter 12`: that many seconds after launch the app gets the
+    /// message a panicking core sends, to walk a core death and its restart.
+    static var killCoreAfter: Int { UserDefaults.standard.integer(forKey: "MQKillCoreAfter") }
+
     /// `-MQShowVersions YES` opens the Versions page once versions are in.
     static var showVersions: Bool { UserDefaults.standard.bool(forKey: "MQShowVersions") }
 

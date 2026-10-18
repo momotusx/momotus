@@ -28,6 +28,13 @@ struct MarqueeApp: App {
                 .environment(sync)
                 .environment(profiles)
                 .modifier(ScenePhaseForward(core: core, sync: sync))
+                #if DEBUG
+                .task {
+                    guard DebugHooks.killCoreAfter > 0 else { return }
+                    try? await Task.sleep(for: .seconds(DebugHooks.killCoreAfter))
+                    core.debugDie()
+                }
+                #endif
                 // Debrid keys from the Keychain, at start and after the core reopens.
                 .task(id: core.generation) {
                     guard DebridKeys.services.contains(where: { DebridKeys.key($0.id) != nil }) else { return }

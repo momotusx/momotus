@@ -81,3 +81,12 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     var remove = PinFlow(.remove)
     #expect(remove.enter("1357") == .init(pin: nil, currentPin: "1357"))
 }
+
+@Test func aPinANewerVersionStoredCanOnlyBeRemoved() {
+    let kid = profile("kid", pin: true)
+    #expect(PinAction.allowed(for: kid, by: kid, unreadable: true) == [.removeUnreadable])
+    // It wins over Set, which the snapshot alone would offer.
+    let main = profile("main", owner: true)
+    #expect(PinAction.allowed(for: main, by: main, unreadable: true) == [.removeUnreadable])
+    #expect(PinAction.allowed(for: main, by: main) == [.set])
+}
