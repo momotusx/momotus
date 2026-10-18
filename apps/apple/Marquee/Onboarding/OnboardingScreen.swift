@@ -122,6 +122,7 @@ struct OnboardingScreen: View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             stepHeading("Add a source", "A source is an addon that finds a playable stream for a title. Marquee does not include any. \(linkVerb) a source addon's link, or skip this and add one later.")
             InstallField(addons: addons, focusRequest: 1)
+            FindAddonsLink(core: core)
             let sources = (addons.snapshot?.addons ?? []).filter(\.isSource)
             ForEach(sources) { addon in
                 HStack(spacing: 10) {

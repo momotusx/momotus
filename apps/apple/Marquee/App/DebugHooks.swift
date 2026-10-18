@@ -54,6 +54,16 @@ enum DebugHooks {
 
     @MainActor private static var pairedPreviewTaken = false
 
+    /// `-MQTab settings -MQOpenScreen findAddons` opens that page from Settings
+    /// once at launch: SwiftUI menus do not open under idb's synthetic taps.
+    @MainActor static func takeOpenScreen(_ name: String) -> Bool {
+        guard !openScreenTaken, UserDefaults.standard.string(forKey: "MQOpenScreen") == name else { return false }
+        openScreenTaken = true
+        return true
+    }
+
+    @MainActor private static var openScreenTaken = false
+
     /// `-MQKillCoreAfter 12`: that many seconds after launch the app gets the
     /// message a panicking core sends, to walk a core death and its restart.
     static var killCoreAfter: Int { UserDefaults.standard.integer(forKey: "MQKillCoreAfter") }

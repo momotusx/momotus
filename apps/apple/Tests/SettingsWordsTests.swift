@@ -86,7 +86,7 @@ import Testing
     func cinemeta(enabled: Bool) -> AddonInfo {
         AddonInfo(
             url: url, host: "v3-cinemeta.strem.io", name: "Cinemeta", description: nil, logo: nil, version: "3.0.14",
-            enabled: enabled, provides: ["catalog", "meta"], types: ["movie", "series"], configurable: false)
+            enabled: enabled, provides: ["catalog", "meta"], types: ["movie", "series"], configurable: false, configureUrl: nil)
     }
     // Installed counts as installed and on: off is turned back on, never installed again or shown as done.
     #expect(AddonSetup.step(url, in: [cinemeta(enabled: false)]) == .turnOn)

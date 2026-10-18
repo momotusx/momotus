@@ -131,6 +131,8 @@ final class ProfileSession {
         switching = id
         switchProblem = nil
         epoch += 1
+        // A Find addons card's state belongs to the profile that pressed it.
+        InstallCards.shared.forgetAll()
         // Device-level views a profile does not own still count as open.
         sync.endPairing()
         // The session's own task: the caller's view leaves with the gate.

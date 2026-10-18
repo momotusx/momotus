@@ -112,6 +112,8 @@ targets:
       - path: Marquee/Player/PlayerLayout.swift
       - path: Marquee/Player/CaptionStyle.swift
       - path: Marquee/Sync/SyncWords.swift
+      - path: Marquee/Settings/FindAddonsWords.swift
+      - path: Marquee/Settings/FindAddonsRules.swift
       - path: Marquee/Theme/ArtLoader.swift
     settings:
       base:

@@ -35,6 +35,7 @@ struct AddonsScreen: View {
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
                 InstallField(addons: addons, focusRequest: focusLink ? 1 : 0)
+                FindAddonsLink(core: addons.core)
                 if let failure = addons.failure {
                     StateLine(symbol: "triangle-alert", text: failure)
                 }
@@ -174,7 +175,7 @@ private struct AddonCard: View {
         Menu {
             // A configure page is a web page: not on TV, which has no browser.
             #if !os(tvOS)
-            if addon.configurable, let url = configureURL {
+            if let url = addon.configureUrl.flatMap(URL.init(string:)) {
                 Button("Configure", glyph: "settings") { openURL(url) }
             }
             #endif
@@ -197,12 +198,6 @@ private struct AddonCard: View {
         .menuIndicator(.hidden)
         #endif
         .accessibilityHint("Opens its actions: move, turn off, remove")
-    }
-
-    /// Stremio's convention: the configure page sits beside the manifest.
-    private var configureURL: URL? {
-        guard addon.url.hasSuffix("manifest.json") else { return nil }
-        return URL(string: String(addon.url.dropLast("manifest.json".count)) + "configure")
     }
 
     private var card: some View {
@@ -276,16 +271,7 @@ private struct AddonCard: View {
 
     /// "Catalogs, Details for movie, series"
     private var provides: String {
-        let words = addon.provides.map { kind in
-            switch kind {
-            case "catalog": "Catalogs"
-            case "meta": "Details"
-            case "stream": "Streams"
-            case "subtitles": "Subtitles"
-            case "addon_catalog": "Addon lists"
-            default: kind.capitalized
-            }
-        }
+        let words = addon.provides.map(providesWord)
         let types = addon.types.isEmpty ? "" : " for \(addon.types.joined(separator: ", "))"
         return words.joined(separator: ", ") + types
     }

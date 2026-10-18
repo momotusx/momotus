@@ -13,6 +13,7 @@ struct SettingsScreen: View {
     @Environment(DebridSession.self) private var debrid
     #if DEBUG
     @State private var previewPairing = false
+    @State private var openFindAddons = false
     #endif
 
     init(core: CoreClient) {
@@ -50,6 +51,12 @@ struct SettingsScreen: View {
                     }
                 }
                 section("Sources").padding(.top, Theme.Space.s)
+                NavigationLink {
+                    FindAddonsScreen(core: core)
+                } label: {
+                    SettingsRow(symbol: "package-search", title: FindAddonsWords.title, detail: FindAddonsWords.lede)
+                }
+                .buttonStyle(.row)
                 NavigationLink {
                     AddonsScreen(addons: addons)
                 } label: {
@@ -126,7 +133,11 @@ struct SettingsScreen: View {
         .task(id: addons.taskId) { addons.start() }
         #if DEBUG
         .navigationDestination(isPresented: $previewPairing) { PairingScreen(core: core) }
-        .task { if DebugHooks.takePairedPreview() { previewPairing = true } }
+        .navigationDestination(isPresented: $openFindAddons) { FindAddonsScreen(core: core) }
+        .task {
+            if DebugHooks.takePairedPreview() { previewPairing = true }
+            if DebugHooks.takeOpenScreen("findAddons") { openFindAddons = true }
+        }
         #endif
     }
 

@@ -100,8 +100,74 @@ struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
     let provides: [String]
     let types: [String]
     let configurable: Bool
+    /// The addon's configure page, when its manifest says it has one.
+    let configureUrl: String?
 
     var id: String { url }
+}
+
+/// Find addons: Cinemeta's two lists, Official then Community (plans/core-protocol.md).
+struct AddonCatalogSnapshot: Decodable, Hashable, Sendable {
+    let lists: [AddonList]
+}
+
+struct AddonList: Decodable, Hashable, Sendable {
+    /// "official" or "community".
+    let id: String
+    let name: String
+    let state: ListState
+    let entries: [ListedAddon]
+}
+
+enum ListState: Decodable, Hashable, Sendable {
+    case loading
+    case ready
+    case failed(words: String)
+
+    private enum Key: String, CodingKey { case state, words }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        switch try c.decode(String.self, forKey: .state) {
+        case "loading": self = .loading
+        case "ready": self = .ready
+        case "failed": self = .failed(words: try c.decode(String.self, forKey: .words))
+        case let state:
+            throw DecodingError.dataCorruptedError(forKey: .state, in: c, debugDescription: "unknown list state \(state)")
+        }
+    }
+}
+
+struct ListedAddon: Decodable, Hashable, Sendable {
+    /// The canonical link, for `installListed` (and Turn on when `off`) only.
+    /// May hold keys: never show or log it.
+    let key: String
+    /// The manifest id.
+    let id: String
+    /// What to show instead of the link.
+    let host: String
+    let name: String
+    let description: String?
+    let types: [String]
+    /// "catalog", "meta", "stream", "subtitles", ...
+    let provides: [String]
+    let configuration: Configuration
+    /// The addon's configure page, always set; it opens in the system browser.
+    let configureUrl: String
+    let installed: Installed
+    /// With `copyOff`: the first configured copy in addon order, for Turn on.
+    /// As secret as `key`.
+    let copyKey: String?
+
+    enum Configuration: String, Decodable, Sendable {
+        case none, optional, required
+    }
+
+    /// This link installed on or off, a configured copy (same manifest id
+    /// and host, another link) on or off, or neither.
+    enum Installed: String, Decodable, Sendable {
+        case absent, on, off, copyOn, copyOff
+    }
 }
 
 /// What makes a standard addon (Cinemeta for Start fresh and the setup
