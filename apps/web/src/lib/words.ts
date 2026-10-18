@@ -178,6 +178,7 @@ export const findAddons = {
   kindSubtitles: "subtitle",
   kindCatalogs: "catalog",
   installing: "Installing",
+  turningOn: "Turning on",
   installed: "Installed",
   off: "Off",
   setUp: "Set up",

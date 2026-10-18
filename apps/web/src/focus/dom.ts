@@ -182,6 +182,10 @@ const DIRS: Record<string, Direction> = { ArrowUp: "up", ArrowDown: "down", Arro
 // Tizen and webOS remotes send these for Back.
 const BACK_CODES = new Set([10009, 461]);
 
+/** Back on a keyboard or a remote; Backspace only outside a text field. */
+export const isBackKey = (e: KeyboardEvent) =>
+  e.key === "Escape" || e.key === "GoBack" || e.key === "BrowserBack" || BACK_CODES.has(e.keyCode) || (e.key === "Backspace" && !typing(e.target));
+
 const typing = (t: EventTarget | null) =>
   t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t instanceof HTMLElement && t.isContentEditable);
 
@@ -225,7 +229,7 @@ export function installFocus(onBack: () => void) {
       move(dir);
       return;
     }
-    if (e.key === "Escape" || e.key === "GoBack" || e.key === "BrowserBack" || BACK_CODES.has(e.keyCode) || (e.key === "Backspace" && !inField)) {
+    if (isBackKey(e)) {
       e.preventDefault();
       cancelRestore();
       onBack();

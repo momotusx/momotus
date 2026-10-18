@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import shared from "../../../shared/find-addons-words.json";
 import type { ListedAddon } from "../core/generated/ListedAddon";
-import { action, filterEmpty, initial, shows, spoken } from "./find-addons";
+import { action, cardAction, filterEmpty, initial, providesLine, repeatedNames, shows, spoken } from "./find-addons";
 import { findAddons } from "./words";
 
 const entry = (over: Partial<ListedAddon>): ListedAddon => ({
@@ -24,21 +24,26 @@ test("the words are the shared ones, every key and no more", () => {
 });
 
 test("each installed state gives its one action", () => {
-  expect(action(entry({ installed: "on" }), false)).toEqual({ kind: "none", word: "Installed" });
-  expect(action(entry({ installed: "copyOn" }), false)).toEqual({ kind: "none", word: "Set up" });
-  expect(action(entry({ installed: "off" }), false)).toEqual({ kind: "turnOn", url: "https://addon.example/manifest.json", word: "Off" });
+  expect(action(entry({ installed: "on" }))).toEqual({ kind: "none", word: "Installed" });
+  expect(action(entry({ installed: "copyOn" }))).toEqual({ kind: "none", word: "Set up" });
+  expect(action(entry({ installed: "off" }))).toEqual({ kind: "turnOn", url: "https://addon.example/manifest.json", word: "Off" });
   const copy = entry({ installed: "copyOff", copyKey: "https://addon.example/abc/manifest.json" });
-  expect(action(copy, false)).toEqual({ kind: "turnOn", url: "https://addon.example/abc/manifest.json", word: "Set up, off" });
+  expect(action(copy)).toEqual({ kind: "turnOn", url: "https://addon.example/abc/manifest.json", word: "Set up, off" });
 });
 
 test("setup decides between Install, Install and Configure, and Configure", () => {
   const page = "https://addon.example/configure";
-  expect(action(entry({}), false)).toEqual({ kind: "install", configure: false });
-  expect(action(entry({ configuration: "optional", configureUrl: page }), false)).toEqual({ kind: "install", configure: true });
-  expect(action(entry({ configuration: "optional", configureUrl: page }), true)).toEqual({ kind: "install", configure: false });
-  expect(action(entry({ configuration: "required", configureUrl: page }), false)).toEqual({ kind: "configure" });
+  expect(action(entry({}))).toEqual({ kind: "install", configure: false });
+  expect(action(entry({ configuration: "optional", configureUrl: page }))).toEqual({ kind: "install", configure: true });
+  expect(action(entry({ configuration: "required", configureUrl: page }))).toEqual({ kind: "configure" });
   // An installed state wins over setup.
-  expect(action(entry({ configuration: "required", installed: "on" }), false).kind).toBe("none");
+  expect(action(entry({ configuration: "required", installed: "on" })).kind).toBe("none");
+});
+
+test("an install refused as needing setup asks for Configure until the addon is installed another way", () => {
+  expect(cardAction(entry({}), "needsSetup")).toEqual({ kind: "configure" });
+  expect(cardAction(entry({}), "timeout")).toEqual({ kind: "install", configure: false });
+  expect(cardAction(entry({ installed: "copyOn" }), "needsSetup")).toEqual({ kind: "none", word: "Set up" });
 });
 
 test("filters read what an addon provides", () => {
@@ -60,9 +65,21 @@ test("the mark is the first letter or digit", () => {
 
 test("a card's spoken label names the action, then the host only when names repeat", () => {
   const subs = entry({ name: "OpenSubtitles v3" });
-  expect(spoken(subs, action(subs, false), false, "Subtitles")).toBe("Install OpenSubtitles v3, subtitles");
+  expect(spoken(subs, action(subs), false, "Subtitles")).toBe("Install OpenSubtitles v3, subtitles");
   const trakt = entry({ name: "Trakt Tv", host: "trakt.example", provides: ["catalog"] });
-  expect(spoken(trakt, action(trakt, false), true, "Catalogs")).toBe("Install Trakt Tv, from trakt.example, catalogs");
+  expect(spoken(trakt, action(trakt), true, "Catalogs")).toBe("Install Trakt Tv, from trakt.example, catalogs");
   const on = entry({ installed: "on" });
-  expect(spoken(on, action(on, false), false, "Subtitles")).toBe("Example, subtitles, installed");
+  expect(spoken(on, action(on), false, "Subtitles")).toBe("Example, subtitles, installed");
+});
+
+test("what a card provides reads as a sentence", () => {
+  expect(providesLine(entry({ provides: ["subtitles"], types: ["movie", "series"] }))).toBe("Subtitles for movies and series");
+  expect(providesLine(entry({ provides: ["catalog", "meta"], types: ["channel"] }))).toBe("Catalogs, Details for channels");
+  expect(providesLine(entry({ provides: ["stream"], types: ["movie", "series", "other"] }))).toBe("Streams for movies, series and other");
+  expect(providesLine(entry({ provides: ["stream"], types: [] }))).toBe("Streams");
+});
+
+test("only names shown twice in a list are marked", () => {
+  const names = repeatedNames([entry({ name: "Trakt Tv" }), entry({ name: "Trakt Tv" }), entry({ name: "Kitsu" })]);
+  expect([...names]).toEqual(["Trakt Tv"]);
 });

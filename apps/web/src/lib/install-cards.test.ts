@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { BridgeError } from "../core/bridge";
-import { cards, runCard as run } from "./install-cards";
+import { cards, forgetAllCards, runCard as run } from "./install-cards";
 
 const words = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const runCard = (key: string, request: () => Promise<unknown>) => run(key, request, words);
@@ -24,4 +24,18 @@ test("a late result updates only its own card, and a second press waits", async 
   await first;
   expect(cards.a).toEqual({ busy: false });
   expect(cards.b?.code).toBe("needsSetup");
+});
+
+test("a new profile forgets every card, and a request from before lands nowhere", async () => {
+  let finish: (v: unknown) => void = () => undefined;
+  const running = runCard("p", () => new Promise((r) => (finish = r)));
+  await runCard("q", () => Promise.reject(new BridgeError("Not installed", "notListed")));
+  forgetAllCards(false);
+  expect(cards.p?.busy).toBe(true);
+  expect(cards.q).toBeUndefined();
+  forgetAllCards();
+  expect(cards.p).toBeUndefined();
+  finish({});
+  await running;
+  expect(cards.p).toBeUndefined();
 });

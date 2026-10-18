@@ -206,7 +206,7 @@ const SCREENS: Screen[] = [
   { name: "welcome-check", path: "/welcome?step=3", ready: visible(".check li") },
   { name: "import", path: "/import", ready: visible(".code, .problem") },
   { name: "pairing", path: "/pair", ready: visible(".install") },
-  { name: "find-addons", path: "/find-addons", ready: visible(".fa-card:not(.skel), .problem") },
+  { name: "find-addons", path: "/find-addons", ready: visible(".fa-card:not(.skel)") },
 ];
 
 

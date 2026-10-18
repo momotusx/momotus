@@ -6,153 +6,185 @@ import Link2 from "lucide-solid/icons/link-2";
 import Plus from "lucide-solid/icons/plus";
 import Power from "lucide-solid/icons/power";
 import RotateCw from "lucide-solid/icons/rotate-cw";
-import { createSignal, For, Match, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { Chips } from "../components/grid";
 import { liveView, op, reasonOf } from "../core/client";
 import type { AddonCatalogSnapshot } from "../core/generated/AddonCatalogSnapshot";
 import type { ListedAddon } from "../core/generated/ListedAddon";
+import { onProfileReset } from "../core/profiles";
+import { focusEl, isBackKey } from "../focus/dom";
 import { form } from "../form";
-import { cards, runCard } from "../lib/install-cards";
-import { type Action, action, type Filter, filterEmpty, filters, initial, shows, spoken } from "../lib/find-addons";
-import { findAddons as w, kindLabel, providesText } from "../lib/words";
+import { type Action, cardAction, type Filter, filterEmpty, filters, initial, providesLine, repeatedNames, shows, spoken } from "../lib/find-addons";
+import { cards, forgetAllCards, forgetCard, runCard } from "../lib/install-cards";
+import { findAddons as w, providesText } from "../lib/words";
 import { InstallField } from "./addons";
 import "./browse.css";
 import "./settings.css";
 import "./find-addons.css";
 
+// A card's state belongs to the profile that pressed it.
+onProfileReset(forgetAllCards);
+
 const install = (entry: ListedAddon) => runCard(entry.key, () => op("installListed", { key: entry.key }), reasonOf);
 const turnOn = (entry: ListedAddon, url: string) => runCard(entry.key, () => op("setAddonEnabled", { url, enabled: true }), reasonOf);
 
-const kindsWords: Record<string, string> = { movie: "movies", series: "series", channel: "channels", tv: "live TV", anime: "anime" };
+/** Cards render in pages as the page scrolls toward them (Community has about 100). */
+const PAGE = 24;
 
-/** "Subtitles for movies and series". */
-function providesLine(entry: ListedAddon): string {
-  const what = entry.provides.map(providesText).join(", ");
-  const kinds = entry.types.map((t) => kindsWords[t] ?? kindLabel(t).toLowerCase());
-  if (!kinds.length) return what;
-  const last = kinds.length > 1 ? ` and ${kinds.pop()}` : "";
-  return `${what} for ${kinds.join(", ")}${last}`;
+/** The list, filter and rendered count, kept in this history entry: Back to
+ * the page shows the same cards, so focus finds the card it left. A new visit
+ * opens on Official, All. */
+type Picks = { list: string; filter: Filter; shown: number };
+function savedPicks(): Picks {
+  const p = (history.state as { findAddons?: Partial<Picks> } | null)?.findAddons;
+  return { list: p?.list ?? "official", filter: p?.filter ?? "all", shown: p?.shown ?? PAGE };
 }
 
-function Card(props: { entry: ListedAddon; index: number; sameName: boolean }) {
+function Card(props: { entry: ListedAddon; fkey: string; sameName: boolean }) {
   const e = () => props.entry;
   const tv = () => form() === "tv";
   const state = () => cards[e().key];
-  // A failure can call for another action than the entry's: setup first.
-  const act = (): Action => (state()?.code === "needsSetup" ? { kind: "configure" } : action(e(), tv()));
-  const fkey = () => `fa:${e().id}:${e().host}:${props.index}`;
-  const label = () => spoken(e(), act(), props.sameName, e().provides.map(providesText).join(", "));
+  const busy = () => state()?.busy === true;
+  const act = createMemo((): Action => cardAction(e(), state()?.code));
+  // A result is about the state it was pressed in: a new installed state
+  // (from this card or another device) clears it.
+  createEffect(on(() => e().installed, () => forgetCard(e().key), { defer: true }));
+  const failure = () => (busy() || act().kind === "none" ? undefined : state()?.words);
+  const provides = () => e().provides.map(providesText).join(", ");
+  const label = (a: Action) => spoken(e(), a, props.sameName, provides());
+  const word = () => {
+    const a = act();
+    return a.kind === "none" || a.kind === "turnOn" ? a.word : null;
+  };
+  const verb = () => (act().kind === "turnOn" ? w.turnOn : w.install);
+  const busyWord = () => (act().kind === "turnOn" ? w.turningOn : w.installing);
   const perform = () => {
     const a = act();
-    if (state()?.busy) return;
+    if (busy()) return;
     if (a.kind === "install") void install(e());
     if (a.kind === "turnOn") void turnOn(e(), a.url);
   };
+  const pressable = () => act().kind === "install" || act().kind === "turnOn";
+  const configureUrl = () => {
+    const a = act();
+    return a.kind === "configure" || (a.kind === "install" && a.configure) ? e().configureUrl : null;
+  };
   return (
-    <li
-      class="fa-card"
-      classList={{ busy: state()?.busy, done: act().kind === "none" }}
-      data-fgroup={tv() ? undefined : fkey()}
-      // On a TV the card is one focus stop and select performs its action.
-      data-f={tv() ? fkey() : undefined}
-      tabindex={tv() ? 0 : undefined}
-      role={tv() && act().kind !== "none" && act().kind !== "configure" ? "button" : undefined}
-      aria-label={tv() ? label() : undefined}
-      aria-busy={state()?.busy || undefined}
-      onClick={() => tv() && perform()}
-    >
-      <div class="fa-mark" aria-hidden="true">
-        {initial(e().name)}
-      </div>
-      <div class="fa-text">
-        <h2 dir="auto">{e().name}</h2>
-        <p class="fa-host">{e().host}</p>
-        <p class="fa-provides">{providesLine(e())}</p>
-        <Show when={e().description}>
-          <p class="fa-desc" dir="auto">
-            {e().description}
-          </p>
-        </Show>
-        <Show when={act().kind === "configure"}>
-          <p class="fa-help">{tv() ? w.configureTv : w.configureHelp}</p>
-        </Show>
-        <Show when={!state()?.busy && state()?.words}>
-          <p class="st bad" role="status">
-            <i class="dot" />
-            {state()?.words}
-          </p>
-        </Show>
-      </div>
-      <div class="fa-acts">
-        <Switch>
-          <Match when={state()?.busy}>
-            <span class="fa-state live" role="status">
-              <i class="spin" aria-hidden="true" />
-              {w.installing}
-            </span>
-          </Match>
-          <Match when={act().kind === "none" && (act() as { word: string })}>
-            {(a) => (
-              <span class="fa-state on">
+    <li class="fa-cell">
+      <div
+        class="fa-card"
+        data-fgroup={tv() ? undefined : props.fkey}
+        // On a TV the card is one focus stop and select performs its action.
+        data-f={tv() ? props.fkey : undefined}
+        tabindex={tv() ? 0 : undefined}
+        role={tv() && pressable() ? "button" : undefined}
+        aria-label={tv() ? (pressable() ? label(act()) : `${spoken(e(), { kind: "none", word: word() ?? "" }, props.sameName, provides())}`) : undefined}
+        aria-disabled={tv() && busy() ? true : undefined}
+        aria-busy={busy() || undefined}
+        onClick={() => tv() && perform()}
+      >
+        <div class="fa-mark" aria-hidden="true">
+          {initial(e().name)}
+        </div>
+        <div class="fa-text">
+          <h2 dir="auto">{e().name}</h2>
+          <p class="fa-host">{e().host}</p>
+          <p class="fa-provides">{providesLine(e())}</p>
+          <Show when={e().description}>
+            <p class="fa-desc" dir="auto">
+              {e().description}
+            </p>
+          </Show>
+          <Show when={act().kind === "configure"}>
+            <p class="fa-help">{tv() ? w.configureTv : w.configureHelp}</p>
+          </Show>
+          <Show when={failure()}>
+            <p class="st bad" role="status">
+              <i class="dot" />
+              {failure()}
+            </p>
+          </Show>
+        </div>
+        <div class="fa-acts">
+          <Show when={word()}>
+            <span class="fa-state" classList={{ on: act().kind === "none" }}>
+              <Show when={act().kind === "none"}>
                 <Check aria-hidden />
-                {a().word}
-              </span>
-            )}
-          </Match>
-          <Match when={tv()}>
-            <Show when={act().kind === "install" || act().kind === "turnOn"}>
-              <span class="fa-state">
-                <Show when={act().kind === "turnOn"} fallback={<Plus aria-hidden />}>
-                  <Power aria-hidden />
+              </Show>
+              {word()}
+            </span>
+          </Show>
+          <Switch>
+            <Match when={tv()}>
+              <Show when={pressable()}>
+                <span class="fa-state pill" classList={{ live: busy() }}>
+                  <Show when={busy()} fallback={act().kind === "turnOn" ? <Power aria-hidden /> : <Plus aria-hidden />}>
+                    <i class="spin" aria-hidden="true" />
+                  </Show>
+                  {busy() ? busyWord() : verb()}
+                </span>
+              </Show>
+            </Match>
+            <Match when={pressable()}>
+              {/* The button stays while its request runs, so keyboard focus stays on it. */}
+              <button
+                class="btn"
+                data-f={`${props.fkey}:act`}
+                aria-label={label(act())}
+                aria-disabled={busy() || undefined}
+                aria-busy={busy() || undefined}
+                onClick={perform}
+              >
+                <Show when={busy()} fallback={act().kind === "turnOn" ? <Power aria-hidden /> : <Plus aria-hidden />}>
+                  <i class="spin" aria-hidden="true" />
                 </Show>
-                {act().kind === "turnOn" ? w.turnOn : w.install}
-              </span>
-            </Show>
-          </Match>
-          <Match when={act().kind === "turnOn" && (act() as { url: string; word: string })}>
-            {(a) => (
-              <>
-                <span class="fa-state">{a().word}</span>
-                <button class="btn" data-f={`${fkey()}:on`} aria-label={label()} onClick={perform}>
-                  <Power aria-hidden />
-                  {w.turnOn}
-                </button>
-              </>
-            )}
-          </Match>
-          <Match when={true}>
-            <Show when={act().kind === "install"}>
-              <button class="btn" data-f={`${fkey()}:install`} aria-label={label()} onClick={perform}>
-                <Plus aria-hidden />
-                {w.install}
+                {busy() ? busyWord() : verb()}
               </button>
-            </Show>
-            <Show when={(act().kind === "configure" || (act() as { configure?: boolean }).configure) && e().configureUrl}>
-              {(url) => (
-                <a class="btn" href={url()} target="_blank" rel="noopener noreferrer" data-f={`${fkey()}:configure`}>
-                  <ExternalLink aria-hidden />
-                  {w.configure}
-                </a>
-              )}
-            </Show>
-          </Match>
-        </Switch>
+            </Match>
+          </Switch>
+          <Show when={!tv() && configureUrl()}>
+            {(url) => (
+              <a class="btn" href={url()} target="_blank" rel="noopener noreferrer" data-f={`${props.fkey}:configure`} aria-label={label({ kind: "configure" })}>
+                <ExternalLink aria-hidden />
+                {w.configure}
+              </a>
+            )}
+          </Show>
+        </div>
       </div>
     </li>
   );
 }
 
-function Lists(props: { fresh: boolean; onRetry: () => void }) {
-  const view = liveView<AddonCatalogSnapshot>("addonCatalog", props.fresh ? { fresh: true } : {});
-  const [list, setList] = createSignal("official");
-  const [filter, setFilter] = createSignal<Filter>("all");
+function Lists(props: { fresh: boolean; picks: Picks; onPicks: (p: Partial<Picks>) => void; onRetry: () => void }) {
+  // Entries are matched by `key`: two entries of a list can share a manifest id.
+  const view = liveView<AddonCatalogSnapshot>("addonCatalog", props.fresh ? { fresh: true } : {}, false, "key");
+  const tv = () => form() === "tv";
   const lists = () => view.state.data?.lists ?? [];
-  const current = () => lists().find((l) => l.id === list());
-  const entries = () => (current()?.entries ?? []).filter((e) => shows(e, filter()));
-  const repeated = (entry: ListedAddon) => (current()?.entries ?? []).filter((e) => e.name === entry.name).length > 1;
+  const current = () => lists().find((l) => l.id === props.picks.list);
+  const ready = (id: string) => lists().find((l) => l.id === id)?.state.state === "ready";
+  const count = (id: string) => (ready(id) ? lists().find((l) => l.id === id)?.entries.length.toString() : undefined);
+  // Each entry keeps its place in the whole list, so its focus key holds across filters.
+  const visible = createMemo(() => (current()?.entries ?? []).map((entry, at) => ({ entry, at })).filter(({ entry }) => shows(entry, props.picks.filter)));
+  const repeated = createMemo(() => repeatedNames(current()?.entries ?? []));
   const failure = () => {
+    const status = view.state.status;
+    if (status.state === "failed") return status.reason;
     const s = current()?.state;
-    return s?.state === "failed" ? s.words : view.state.status.state === "failed" ? w.failed : null;
+    return s?.state === "failed" ? s.words || w.failed : null;
+  };
+  const more = (el: HTMLElement) => {
+    const io = new IntersectionObserver((seen) => seen.some((s) => s.isIntersecting) && props.onPicks({ shown: props.picks.shown + PAGE }), { rootMargin: "1200px 0px" });
+    io.observe(el);
+    onCleanup(() => io.disconnect());
+  };
+  // TV: Back from a card goes to the chips; Back from the chips leaves.
+  const back = (e: KeyboardEvent) => {
+    if (!tv() || !isBackKey(e)) return;
+    const chip = document.querySelector<HTMLElement>(`[data-f="fa-lists:${props.picks.list}"]`);
+    if (!chip) return;
+    e.preventDefault();
+    focusEl(chip);
   };
   return (
     <>
@@ -161,28 +193,44 @@ function Lists(props: { fresh: boolean; onRetry: () => void }) {
           label={w.listLabel}
           group="fa-lists"
           items={[
-            { value: "official", label: w.official, note: lists().find((l) => l.id === "official")?.entries.length.toString() },
-            { value: "community", label: w.communityList, note: lists().find((l) => l.id === "community")?.entries.length.toString() },
+            { value: "official", label: w.official, note: count("official") },
+            { value: "community", label: w.communityList, note: count("community") },
           ]}
-          selected={list()}
-          onSelect={setList}
+          selected={props.picks.list}
+          onSelect={(list) => props.onPicks({ list, shown: PAGE })}
           autofocus
         />
-        <Chips label={w.showLabel} group="fa-filter" items={filters} selected={filter()} onSelect={setFilter} />
+        <Chips label={w.showLabel} group="fa-filter" items={filters} selected={props.picks.filter} onSelect={(filter) => props.onPicks({ filter, shown: PAGE })} />
       </div>
-      <Show when={list() === "community"}>
+      <Show when={props.picks.list === "community"}>
         <p class="fa-note">
           <Info aria-hidden />
           {w.community}
         </p>
       </Show>
+      <div class="fa-tools">
+        <Switch>
+          <Match when={!failure() && (!current() || current()?.state.state === "loading")}>
+            <p class="st warn live" role="status">
+              <i class="dot" />
+              {w.loading}
+            </p>
+          </Match>
+          <Match when={ready(props.picks.list)}>
+            <button class="btn" data-f="fa:refresh" onClick={props.onRetry}>
+              <RotateCw aria-hidden />
+              {w.refresh}
+            </button>
+          </Match>
+        </Switch>
+      </div>
       <Switch>
         <Match when={failure()}>
           {(words) => (
             <section class="problem" role="alert">
               <p>{words()}</p>
               <div class="acts">
-                <button class="btn primary" data-f="fa:retry" data-autofocus onClick={props.onRetry}>
+                <button class="btn" data-f="fa:retry" data-autofocus onClick={props.onRetry}>
                   <RotateCw aria-hidden />
                   {w.tryAgain}
                 </button>
@@ -191,30 +239,31 @@ function Lists(props: { fresh: boolean; onRetry: () => void }) {
           )}
         </Match>
         <Match when={!current() || current()?.state.state === "loading"}>
-          <p class="st warn live fa-status" role="status">
-            <i class="dot" />
-            {w.loading}
-          </p>
           <ul class="fa-grid" aria-hidden="true">
-            <For each={Array.from({ length: 6 })}>{() => <li class="fa-card skel" />}</For>
+            <For each={Array.from({ length: 6 })}>
+              {() => (
+                <li class="fa-cell">
+                  <div class="fa-card skel" />
+                </li>
+              )}
+            </For>
           </ul>
         </Match>
         <Match when={current()?.entries.length === 0}>
           <p class="note">{w.empty}</p>
         </Match>
-        <Match when={entries().length === 0 && filter() !== "all"}>
-          <p class="note">{filterEmpty(filter() as Exclude<Filter, "all">)}</p>
+        <Match when={visible().length === 0 && props.picks.filter !== "all"}>
+          <p class="note">{filterEmpty(props.picks.filter as Exclude<Filter, "all">)}</p>
         </Match>
         <Match when={true}>
-          <ul class="fa-grid">
-            <For each={entries()}>{(entry, i) => <Card entry={entry} index={i()} sameName={repeated(entry)} />}</For>
+          <ul class="fa-grid" onKeyDown={back}>
+            <For each={visible().slice(0, props.picks.shown)}>
+              {(item) => <Card entry={item.entry} fkey={`fa:${props.picks.list}:${item.at}`} sameName={repeated().has(item.entry.name)} />}
+            </For>
           </ul>
-          <div class="fa-foot">
-            <button class="btn" data-f="fa:refresh" onClick={props.onRetry}>
-              <RotateCw aria-hidden />
-              {w.refresh}
-            </button>
-          </div>
+          <Show when={visible().length > props.picks.shown}>
+            <div class="sentinel" ref={more} />
+          </Show>
         </Match>
       </Switch>
     </>
@@ -222,9 +271,18 @@ function Lists(props: { fresh: boolean; onRetry: () => void }) {
 }
 
 export default function FindAddons() {
+  const saved = savedPicks();
+  const [picks, setPicks] = createSignal<Picks>(saved);
+  const update = (p: Partial<Picks>) => setPicks({ ...picks(), ...p });
+  createEffect(() => history.replaceState({ ...(history.state ?? {}), findAddons: picks() }, ""));
   // Try again and Refresh close the view and open it with `fresh`, which
-  // waits for the network instead of the addon cache.
+  // waits for the network instead of the addon cache; results from before
+  // are about the old list.
   const [opens, setOpens] = createSignal(0);
+  const retry = () => {
+    forgetAllCards(false);
+    setOpens(opens() + 1);
+  };
   const tv = () => form() === "tv";
   return (
     <main class="browse page settings-page find-addons" data-vscroll>
@@ -242,7 +300,7 @@ export default function FindAddons() {
         <InstallField fkey="fa-paste" />
       </Show>
       <Show when={opens() + 1} keyed>
-        {(n) => <Lists fresh={n > 1} onRetry={() => setOpens(opens() + 1)} />}
+        {(n) => <Lists fresh={n > 1} picks={picks()} onPicks={update} onRetry={retry} />}
       </Show>
     </main>
   );

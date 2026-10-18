@@ -9,11 +9,16 @@
   border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
   font: 400 var(--type-callout) / 1.45 var(--font-text); color: var(--muted); }
 .fa-note svg { flex: none; width: 28px; height: 28px; margin-top: 2px; color: var(--text); }
-.fa-status { margin-top: 28px; font: 500 var(--type-callout) var(--font-text); color: var(--muted); }
+/* The list's status or its Refresh, in one place above the cards. */
+.fa-tools { display: flex; align-items: center; min-height: 64px; margin-top: 24px; }
+.fa-tools .st { font: 500 var(--type-callout) var(--font-text); color: var(--muted); }
+.fa-tools .btn { height: 56px; padding: 0 22px; font-size: var(--type-callout); gap: 10px; }
+.fa-tools .btn svg { width: 24px; height: 24px; }
 
-.fa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 660px), 1fr)); gap: 22px; margin-top: 28px; }
+.fa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 660px), 1fr)); gap: 22px; margin-top: 20px; }
+.fa-cell { display: flex; min-width: 0; }
 /* A row of the grid is as tall as its tallest card; the action line keeps to the bottom. */
-.fa-card { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: space-between; gap: 22px 26px; padding: 28px; border-radius: var(--radius-l);
+.fa-card { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start; align-content: space-between; gap: 22px 26px; padding: 28px; border-radius: var(--radius-l);
   background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
   transition: transform var(--motion-focus) var(--ease), box-shadow var(--motion-focus) var(--ease); }
 .fa-card.skel { min-height: 210px; box-shadow: none; }
@@ -43,20 +48,20 @@
 .fa-state svg { width: 26px; height: 26px; }
 .fa-state.on { color: var(--text); }
 .fa-state.on svg { color: var(--ok); }
-.fa-state .spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .22); border-top-color: var(--text);
+.fa-acts .spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .22); border-top-color: var(--text);
   animation: fa-spin .9s linear infinite; }
 @keyframes fa-spin { to { transform: rotate(1turn); } }
-@media (prefers-reduced-motion: reduce) { .fa-state .spin { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .fa-acts .spin { animation: none; } }
 .fa-foot { margin-top: 36px; }
 
 /* TV: the card is the focus stop; it lifts with the ring and its action
  * reads as a pill. */
 [data-form="tv"] .fa-card:focus { transform: scale(var(--focus-scale-tile)); outline-offset: 2px; }
 [data-form="tv"] .fa-card:focus .fa-text h2 { color: var(--accent); }
-[data-form="tv"] .fa-card .fa-state:not(.on):not(.live) { padding: 0 26px; border-radius: var(--radius-pill); color: var(--text);
+[data-form="tv"] .fa-state.pill { padding: 0 26px; border-radius: var(--radius-pill); color: var(--text);
   background: linear-gradient(145deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .065));
   box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); }
-[data-form="tv"] .fa-card:focus .fa-state:not(.on):not(.live) { background: var(--primary); color: var(--on-primary); box-shadow: none; }
+[data-form="tv"] .fa-card:focus .fa-state.pill:not(.live) { background: var(--primary); color: var(--on-primary); box-shadow: none; }
 @media (hover: hover) { [data-form="desktop"] .fa-card:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), var(--glass-highlight); } }
 
 [data-form="phone"] .fa-grid { grid-template-columns: 1fr; gap: 12px; margin-top: 16px; }
@@ -68,9 +73,11 @@
 [data-form="phone"] .fa-provides { margin-top: 8px; }
 [data-form="phone"] .fa-desc, [data-form="phone"] .fa-help, [data-form="phone"] .fa-text .st { font-size: 13px; }
 [data-form="phone"] .fa-acts { width: 100%; justify-content: flex-start; gap: 8px; }
-[data-form="phone"] .fa-acts .btn { height: 40px; padding: 0 16px; font-size: 14px; gap: 8px; }
+[data-form="phone"] .fa-acts .btn, [data-form="phone"] .fa-tools .btn { height: 44px; padding: 0 16px; font-size: 14px; gap: 8px; }
 [data-form="phone"] .fa-acts .btn svg, [data-form="phone"] .fa-state svg { width: 18px; height: 18px; }
-[data-form="phone"] .fa-state { height: 40px; font-size: 14px; gap: 8px; }
+[data-form="phone"] .fa-state { height: 44px; font-size: 14px; gap: 8px; }
+[data-form="phone"] .fa-tools { min-height: 44px; margin-top: 14px; }
+[data-form="phone"] .fa-tools .btn svg { width: 18px; height: 18px; }
 [data-form="phone"] .fa-note { padding: 14px 16px; gap: 12px; font-size: 13px; margin-top: 12px; }
 [data-form="phone"] .fa-note svg { width: 20px; height: 20px; }
 [data-form="phone"] .find-addons .install, [data-form="phone"] .find-addons .btn.disclose { margin-bottom: 20px; }

@@ -78,13 +78,14 @@ const closeWhenOpen = (opening: Promise<Subscription | null>) =>
   opening.then((s) => s?.close()).catch(() => undefined);
 
 /** Opens a record view (pushes are whole snapshots; the last one wins). It
- * closes with the calling component unless `keep` is set. */
-export function liveView<S>(view: string, params: Record<string, unknown> = {}, keep = false): LiveView<S> {
+ * closes with the calling component unless `keep` is set. Array items are
+ * matched by `key` across pushes (`id` unless a view's items repeat it). */
+export function liveView<S>(view: string, params: Record<string, unknown> = {}, keep = false, key = "id"): LiveView<S> {
   const [state, setState] = createStore<Live<S>>({ status: { state: "opening" }, data: null });
   const [sub, setSub] = createSignal<number | null>(null);
   let command: (c: object) => Promise<void> = async () => undefined;
   let closing: Promise<void> | undefined;
-  const apply = (s: S) => setState("data", reconcile(s as never, { merge: true }));
+  const apply = (s: S) => setState("data", reconcile(s as never, { merge: true, key }));
   const opening = bridge
     .subscribe<S, S>(view, params, {
       snapshot: (s) =>
