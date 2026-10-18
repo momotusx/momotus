@@ -11,6 +11,10 @@ enum WideLayout {
     static func tableColumns(table: CGFloat) -> Bool { table >= 680 }
     /// A series' credits (360 pt) beside its episodes.
     static func creditsBesideEpisodes(page: CGFloat) -> Bool { page >= 1000 }
+    /// The title's words over its art: a wide window that is also tall enough.
+    /// A short one (a large phone in landscape, a short iPad split) stacks them
+    /// under the art, as a phone does, with the art held to the window.
+    static func titleOverArt(wide: Bool, window: CGFloat) -> Bool { wide && !(window > 0 && window < 500) }
 }
 
 /// Plain words for what the core says about a version, equal to the web's

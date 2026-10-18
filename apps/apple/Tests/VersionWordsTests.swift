@@ -106,3 +106,14 @@ private func snapshot(
     #expect(WideLayout.tableColumns(table: ipadLandscape - 360 - 40))
     #expect(WideLayout.creditsBesideEpisodes(page: ipadLandscape))
 }
+
+@Test func theWideTitleStacksOnAShortWindow() {
+    // iPad and Mac windows: the words over the art.
+    #expect(WideLayout.titleOverArt(wide: true, window: 820))
+    #expect(WideLayout.titleOverArt(wide: true, window: 500))
+    // A Pro Max in landscape (440 pt): stacked under the art, as a phone.
+    #expect(!WideLayout.titleOverArt(wide: true, window: 440))
+    // Not measured yet: the wide layout; a phone always stacks.
+    #expect(WideLayout.titleOverArt(wide: true, window: 0))
+    #expect(!WideLayout.titleOverArt(wide: false, window: 900))
+}

@@ -58,7 +58,8 @@ struct TitleScreen: View {
         }
         #endif
         .fullBleedTop()
-        .topScrim(underBar)
+        // At rest too: on a short or wide window the words can start under the bar before any scroll.
+        .topScrim(underBar, atRest: true)
         .defaultFocus($primaryFocused, true)
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: [versions, episodeVersions].compactMap { $0 }.first { $0.sub == route.versionsSub }, core: core)
@@ -152,16 +153,24 @@ struct TitleScreen: View {
         #if os(tvOS)
         return 640
         #else
-        guard width > 0 else { return metrics.wide ? 520 : 300 }
+        guard width > 0 else { return wideHero ? 520 : 300 }
         // Held to under half the window: a landscape phone shows the title and Play
         // above the tab bar, not only art. Portrait phones keep their width rule.
         let window = height > 0 ? max(height * 0.4, 160) : .infinity
-        return metrics.wide ? min(max(width * 0.46, 420), 600) : min(width * 0.78, window)
+        return wideHero ? min(max(width * 0.46, 420), 600) : min(width * 0.78, window)
+        #endif
+    }
+
+    private var wideHero: Bool {
+        #if os(tvOS)
+        return true
+        #else
+        return WideLayout.titleOverArt(wide: metrics.wide, window: height)
         #endif
     }
 
     @ViewBuilder private var hero: some View {
-        if metrics.wide {
+        if wideHero {
             ZStack(alignment: .bottomLeading) {
                 Backdrop(url: details?.background, poster: details?.poster, height: heroHeight, wide: true)
                 decision.frame(maxWidth: 580, alignment: .leading)
@@ -188,7 +197,7 @@ struct TitleScreen: View {
     private var logo: some View {
         TitleLogo(
             logo: details?.logo, name: details?.name ?? model.route.name,
-            maxWidth: metrics.wide ? 460 : 280, height: metrics.wide ? 120 : 96)
+            maxWidth: wideHero ? 460 : 280, height: wideHero ? 120 : 96)
             // The first words on the page: where they are decides the scrim.
             .onGeometryChange(for: Bool.self) { $0.frame(in: .scrollView).minY < Self.wordsClearance } action: { underBar = $1 }
     }

@@ -474,9 +474,10 @@ extension View {
     /// button (iOS): absent on an unscrolled page, it covers content that
     /// scrolls under them. Pages whose art runs under the bar pass `visible`
     /// once content scrolls there.
-    func topScrim(_ visible: Bool = true) -> some View {
+    /// `atRest`: shown before any scroll too, for a page whose words can start under the bar.
+    func topScrim(_ visible: Bool = true, atRest: Bool = false) -> some View {
         #if os(iOS)
-        return modifier(TopScrim(visible: visible))
+        return modifier(TopScrim(visible: visible, atRest: atRest))
         #else
         return self
         #endif
@@ -500,10 +501,12 @@ extension View {
 
 #if os(iOS)
 /// iOS 26 and later: the system's hard scroll-edge material, shown only once
-/// content has scrolled under the bar (it would frost a hero's art at rest).
+/// content has scrolled under the bar (it would frost a hero's art at rest),
+/// or at rest when the page says its words already sit under the bar.
 /// Earlier systems: a page-coloured fade.
 private struct TopScrim: ViewModifier {
     let visible: Bool
+    var atRest = false
     @State private var scrolled = false
 
     func body(content: Content) -> some View {
@@ -511,7 +514,7 @@ private struct TopScrim: ViewModifier {
             content
                 .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { scrolled = $1 }
                 .scrollEdgeEffectStyle(.hard, for: .top)
-                .scrollEdgeEffectHidden(!(visible && scrolled), for: .top)
+                .scrollEdgeEffectHidden(!(visible && (scrolled || atRest)), for: .top)
         } else {
             content.overlay(alignment: .top) {
                 // Solid down to the bar's bottom (the safe area: status bar, plus the
