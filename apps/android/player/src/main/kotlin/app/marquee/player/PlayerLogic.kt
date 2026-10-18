@@ -1,9 +1,11 @@
 package app.marquee.player
 
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.util.Util
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
+import app.marquee.core.model.SubtitleTrack
 
 /** A position the core can store: both numbers are known and the position is inside the video. */
 data class ProgressReport(
@@ -202,6 +204,45 @@ fun subtitleMime(url: String): String {
         else -> "application/x-subrip"
     }
 }
+
+/** The format id of an addon subtitle side-loaded with the media item: `ext:N` is the item's Nth file. */
+const val EXTERNAL = "ext:"
+
+private val externalId = Regex("""(?:\d+:)?ext:(\d+)""")
+
+/**
+ * The N of an addon subtitle's `ext:N` format id, or null for any other track. Once an item has
+ * side-loaded subtitles Media3 merges sources and puts the source's index in front (`1:ext:0`).
+ */
+fun externalIndex(formatId: String?): Int? =
+    formatId
+        ?.let(externalId::matchEntire)
+        ?.groupValues
+        ?.get(1)
+        ?.toIntOrNull()
+
+/**
+ * The addon subtitles to side-load with a new media item: only the one carrying the viewer's addon pick
+ * over (its file, else one in its language). Media3 downloads and parses every side-loaded file before
+ * the first frame (86 OpenSubtitles files held it for 17.6 s on the emulator); the others are listed
+ * and load when chosen.
+ */
+fun upfrontSubtitles(
+    subs: List<SubtitleTrack>,
+    pickLanguage: String?,
+    pickUrl: String?,
+): List<SubtitleTrack> {
+    val carried =
+        subs.firstOrNull { pickUrl != null && it.url == pickUrl }
+            ?: subs.firstOrNull { !pickLanguage.isNullOrEmpty() && sameLanguage(it.lang, pickLanguage) }
+    return listOfNotNull(carried)
+}
+
+/** "eng" and "en" are the same language. */
+fun sameLanguage(
+    a: String,
+    b: String,
+): Boolean = Util.normalizeLanguageCode(a) == Util.normalizeLanguageCode(b)
 
 /** Sources that failed the same way, from one addon, said once. */
 data class FailedSources(

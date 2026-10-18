@@ -17,7 +17,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
-import androidx.media3.common.util.Util
 import androidx.media3.datasource.HttpDataSource
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
@@ -286,7 +285,8 @@ class PlaybackController(
         val again = loadedUrl != null || handlingFailure
         val from = if (again) lastPositionMs else s.resumeMs ?: 0L
         loadedUrl = url
-        loadedSubs = s.subtitles
+        val carried = pick?.takeIf { it.external }
+        loadedSubs = upfrontSubtitles(s.subtitles, carried?.language, carried?.url)
         playingKey = s.key
         playingAttempt = s.attempt
         durationMs = 0L
@@ -590,8 +590,8 @@ class PlaybackController(
         trackIndex: Int,
         group: Tracks.Group,
     ): String {
-        val formatId = group.getTrackFormat(trackIndex).id
-        return if (formatId != null && formatId.startsWith(EXTERNAL)) formatId else "$groupIndex:$trackIndex"
+        val external = externalIndex(group.getTrackFormat(trackIndex).id)
+        return if (external != null) "$EXTERNAL$external" else "$groupIndex:$trackIndex"
     }
 
     private fun refreshTracks(tracks: Tracks = player.currentTracks) {
@@ -643,7 +643,7 @@ class PlaybackController(
         row: TrackChoice,
         formatId: String?,
     ): TrackChoice {
-        val index = formatId?.takeIf { it.startsWith(EXTERNAL) }?.removePrefix(EXTERNAL)?.toIntOrNull() ?: return row
+        val index = externalIndex(formatId) ?: return row
         val source = loadedSubs.getOrNull(index) ?: return row
         val detail =
             listOfNotNull(
@@ -658,12 +658,7 @@ class PlaybackController(
     }
 
     /** The address of the addon subtitle file behind a loaded track's `ext:N` id, or null. */
-    private fun externalUrl(formatId: String?): String? =
-        formatId
-            ?.takeIf { it.startsWith(EXTERNAL) }
-            ?.removePrefix(EXTERNAL)
-            ?.toIntOrNull()
-            ?.let { loadedSubs.getOrNull(it)?.url }
+    private fun externalUrl(formatId: String?): String? = externalIndex(formatId)?.let { loadedSubs.getOrNull(it)?.url }
 
     /** One text track of the current media item. */
     private class TextTrack(
@@ -692,7 +687,7 @@ class PlaybackController(
                     TextTrack(
                         group,
                         ti,
-                        external = format.id?.startsWith(EXTERNAL) == true,
+                        external = externalIndex(format.id) != null,
                         url = externalUrl(format.id),
                         language = format.language,
                         selected = group.isTrackSelected(ti),
@@ -700,9 +695,7 @@ class PlaybackController(
             }
         }
         val same = { t: TextTrack ->
-            wanted.language.isNotEmpty() &&
-                t.language?.let { Util.normalizeLanguageCode(it) == Util.normalizeLanguageCode(wanted.language) } ==
-                true
+            wanted.language.isNotEmpty() && t.language?.let { sameLanguage(it, wanted.language) } == true
         }
         val target =
             found.firstOrNull { wanted.url != null && it.url == wanted.url }
@@ -734,7 +727,6 @@ class PlaybackController(
         const val TICK_MS = 500L
         const val REPORT_MS = 5_000L
         const val NOTICE_MS = 4_000L
-        const val EXTERNAL = "ext:"
         const val LATE = "late:"
     }
 }

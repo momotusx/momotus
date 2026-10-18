@@ -4,6 +4,7 @@ import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
+import app.marquee.core.model.SubtitleTrack
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -197,5 +198,31 @@ class PlayerLogicTest {
         assertEquals("The source is busy, try again soon (429)", statusWords(429))
         assertEquals("The source had an error (502)", statusWords(502))
         assertEquals("The source answered with an error (400)", statusWords(400))
+    }
+
+    @Test
+    fun `an addon subtitle is known by its id with or without Media3's source index`() {
+        assertEquals(0, externalIndex("ext:0"))
+        assertEquals(7, externalIndex("1:ext:7"))
+        assertEquals(12, externalIndex("23:ext:12"))
+        assertNull(externalIndex(null))
+        assertNull(externalIndex("0:"))
+        assertNull(externalIndex("2"))
+        assertNull(externalIndex("ext:"))
+        assertNull(externalIndex("1:ext:7:x"))
+    }
+
+    @Test
+    fun `only the subtitle carrying the viewer's pick is side-loaded`() {
+        fun sub(
+            url: String,
+            lang: String,
+        ) = SubtitleTrack(url = url, lang = lang, source = "OpenSubtitles", forced = false, hearingImpaired = false)
+        val subs = listOf(sub("a", "pob"), sub("b", "eng"), sub("c", "eng"), sub("d", "fre"))
+        assertEquals(emptyList(), upfrontSubtitles(subs, pickLanguage = null, pickUrl = null))
+        assertEquals(emptyList(), upfrontSubtitles(subs, pickLanguage = "", pickUrl = null))
+        assertEquals(listOf(subs[2]), upfrontSubtitles(subs, pickLanguage = "en", pickUrl = "c"))
+        assertEquals(listOf(subs[1]), upfrontSubtitles(subs, pickLanguage = "en", pickUrl = "gone"))
+        assertEquals(emptyList(), upfrontSubtitles(subs, pickLanguage = "de", pickUrl = "gone"))
     }
 }
