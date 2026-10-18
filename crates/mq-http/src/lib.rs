@@ -118,6 +118,11 @@ pub struct RequestOptions {
     pub hop_headers: Option<Duration>,
     pub max_bytes: usize,
     pub allow_private: bool,
+    /// Unscoped requests without `allow_private` only: no proxy at all, not
+    /// even the system's. A proxy, an HTTPS one above all, resolves the
+    /// destination itself, past the public-only resolver; installs from the
+    /// addon lists take this path.
+    pub no_proxy: bool,
     pub headers: Vec<(String, String)>,
     /// Scoped handles only: the URL whose origin gets every header in
     /// `headers` (`headers_for`). Unset: the request's own first URL.
@@ -132,6 +137,7 @@ impl Default for RequestOptions {
             hop_headers: None,
             max_bytes: 8 * 1024 * 1024,
             allow_private: false,
+            no_proxy: false,
             headers: Vec::new(),
             owner: None,
         }
@@ -235,6 +241,8 @@ pub struct HttpClient {
     /// a redirect to one, or a DNS answer that changes later cannot reach
     /// it.
     public: reqwest::Client,
+    /// `public` without any proxy (`RequestOptions::no_proxy`).
+    direct: reqwest::Client,
     budget: Arc<Budget>,
     scopes: Arc<Scopes>,
     /// Set on a handle from `scoped`: its addresses, canonical and sorted.
@@ -442,15 +450,36 @@ pub mod test_dns {
         let names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
         names.get(&name.to_ascii_lowercase()).cloned()
     }
+
+    static PUBLIC: LazyLock<Mutex<HashMap<String, Vec<IpAddr>>>> = LazyLock::new(Default::default);
+
+    /// Answers `name` with `addrs` for the unscoped public-only clients, and
+    /// lets them through as if they were public: a loopback fixture then
+    /// stands for a public origin, so redirects from it can be tested.
+    pub fn set_public(name: &str, addrs: &[IpAddr]) {
+        let mut names = PUBLIC.lock().unwrap_or_else(|e| e.into_inner());
+        names.insert(name.to_ascii_lowercase(), addrs.to_vec());
+    }
+
+    pub(crate) fn public(name: &str) -> Option<Vec<IpAddr>> {
+        let names = PUBLIC.lock().unwrap_or_else(|e| e.into_inner());
+        names.get(&name.to_ascii_lowercase()).cloned()
+    }
 }
 
-/// Resolves with the system resolver and keeps only public addresses.
+/// Resolves with the system resolver (or the test table) and keeps only
+/// public addresses.
 struct PublicOnly;
 
 impl reqwest::dns::Resolve for PublicOnly {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         Box::pin(async move {
-            let found = tokio::net::lookup_host((name.as_str(), 0)).await?;
+            #[cfg(any(test, feature = "test-dns"))]
+            if let Some(found) = test_dns::public(name.as_str()) {
+                let found = found.into_iter().map(|ip| SocketAddr::new(ip, 0));
+                return Ok(Box::new(found) as reqwest::dns::Addrs);
+            }
+            let found = lookup(name.as_str()).await?.into_iter();
             let public: Vec<std::net::SocketAddr> =
                 found.filter(|a| !is_private_ip(a.ip())).collect();
             if public.is_empty() {
@@ -513,9 +542,11 @@ impl HttpClient {
             |b: reqwest::ClientBuilder| b.build().map_err(|e| HttpError::Network(e.to_string()));
         let inner = build(follow())?;
         let public = build(follow().dns_resolver(Arc::new(PublicOnly)))?;
+        let direct = build(follow().no_proxy().dns_resolver(Arc::new(PublicOnly)))?;
         Ok(Self {
             inner,
             public,
+            direct,
             budget: Arc::new(Budget::new(config.per_host_limit, config.global_limit)),
             scopes: Arc::new(Scopes::new(config)),
             scope: None,
@@ -543,6 +574,7 @@ impl HttpClient {
         HttpClient {
             inner: self.inner.clone(),
             public: self.public.clone(),
+            direct: self.direct.clone(),
             budget: self.budget.clone(),
             scopes: self.scopes.clone(),
             scope: Some(key.into()),
@@ -677,6 +709,8 @@ impl HttpClient {
         let permit = self.budget.acquire(&host, opts.priority).await;
         let client = if opts.allow_private {
             &self.inner
+        } else if opts.no_proxy {
+            &self.direct
         } else {
             &self.public
         };
@@ -1026,6 +1060,23 @@ mod tests {
         );
         // The cause after the top line ("error sending request").
         assert!(text.matches(": ").count() >= 2, "{text}");
+    }
+
+    #[test]
+    fn https_never_redirects_to_http() {
+        let url = |s: &str| Url::parse(s).unwrap();
+        assert!(downgrades(
+            &url("https://a.example/m"),
+            &url("http://a.example/m")
+        ));
+        assert!(!downgrades(
+            &url("http://a.example/m"),
+            &url("https://b.example/m")
+        ));
+        assert!(!downgrades(
+            &url("https://a.example/m"),
+            &url("https://b.example/m")
+        ));
     }
 
     #[test]

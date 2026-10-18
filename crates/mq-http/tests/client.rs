@@ -681,6 +681,75 @@ fn interface(cidr: &str, point_to_point: bool) -> Interface {
     }
 }
 
+// The listed path (`no_proxy`): installs from the addon lists
+// (plans/m12-addon-discovery.md 3.2). Its proxy rule is in tests/proxy.rs.
+
+fn listed() -> RequestOptions {
+    RequestOptions {
+        no_proxy: true,
+        timeout: Duration::from_secs(3),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn the_listed_path_never_connects_to_a_private_address() {
+    let origin = Origin::ok(0).await;
+    let port = origin.addr.port();
+    let http = quick_client();
+    // Only private answers: nothing is left to connect to.
+    test_dns::set("private.m12.test", &[LOOPBACK]);
+    let url = format!("http://private.m12.test:{port}/");
+    within("private", http.get(&url, &listed()))
+        .await
+        .expect_err("only private answers");
+    // Mixed answers, the private one first: only the public one is tried,
+    // and nothing serves it.
+    test_dns::set("mixed.m12.test", &[LOOPBACK, ip("192.0.2.1")]);
+    let url = format!("http://mixed.m12.test:{port}/");
+    within("mixed", http.get(&url, &listed()))
+        .await
+        .expect_err("the public answer serves nothing");
+    // A private literal.
+    let err = within("literal", http.get(&origin.url("/"), &listed()))
+        .await
+        .expect_err("a private literal");
+    assert_eq!(err.kind(), "blocked address");
+    assert!(origin.heads().is_empty(), "{:?}", origin.heads());
+}
+
+#[tokio::test]
+async fn the_listed_path_never_follows_a_redirect_to_a_private_address() {
+    let target = Origin::ok(0).await;
+    let to_private = format!("Location: {}\r\n", target.url("/private"));
+    let to_public = format!(
+        "Location: http://listed-b.m12.test:{}/public\r\n",
+        target.addr.port()
+    );
+    let origin = Origin::start(0, move |path| {
+        let location = match path.as_str() {
+            "/a" => to_private.clone(),
+            _ => to_public.clone(),
+        };
+        async move { reply("302 Found", &location, "") }
+    })
+    .await;
+    // Loopback fixtures standing for public origins.
+    test_dns::set_public("listed-a.m12.test", &[LOOPBACK]);
+    test_dns::set_public("listed-b.m12.test", &[LOOPBACK]);
+    let http = quick_client();
+    let base = format!("http://listed-a.m12.test:{}", origin.addr.port());
+    within("to private", http.get(&format!("{base}/a"), &listed()))
+        .await
+        .expect_err("a public-to-private redirect");
+    assert!(target.head_of("/private").is_none(), "{:?}", target.heads());
+    // A redirect to another public origin is followed.
+    let ok = within("to public", http.get(&format!("{base}/b"), &listed()))
+        .await
+        .expect("followed");
+    assert_eq!(&ok.body[..], b"ok");
+}
+
 /// A client whose connections to addresses nobody serves fail fast.
 fn quick_client() -> HttpClient {
     HttpClient::new(ClientConfig {

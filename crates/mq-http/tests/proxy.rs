@@ -59,4 +59,31 @@ async fn a_proxy_from_the_environment_is_never_used() {
         .expect("reaches the origin directly");
     assert_eq!(&ok.body[..], b"ok");
     assert_eq!(proxied.load(Ordering::SeqCst), 0);
+
+    // The listed path (`no_proxy`) goes direct too, while an unscoped public
+    // request without it takes the proxy from the environment. The name
+    // stands for a public origin (`set_public`).
+    test_dns::set_public("listed.m12.test", &[IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    let unscoped = HttpClient::new(ClientConfig::default()).unwrap();
+    let url = format!("http://listed.m12.test:{port}/");
+    let listed = RequestOptions {
+        no_proxy: true,
+        ..opts.clone()
+    };
+    let ok = tokio::time::timeout(Duration::from_secs(5), unscoped.get(&url, &listed))
+        .await
+        .expect("finishes within 5 s")
+        .expect("reaches the origin directly");
+    assert_eq!(&ok.body[..], b"ok");
+    assert_eq!(
+        proxied.load(Ordering::SeqCst),
+        0,
+        "the listed path used the proxy"
+    );
+    let _ = tokio::time::timeout(Duration::from_secs(5), unscoped.get(&url, &opts)).await;
+    assert_eq!(
+        proxied.load(Ordering::SeqCst),
+        1,
+        "the environment's proxy was not in effect, so the check above proves nothing"
+    );
 }
