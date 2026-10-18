@@ -675,6 +675,9 @@ mod tests {
                 "#EXT-X-KEY:METHOD=AES-128,X-URI=\"{canary}/x\",URI=\"k\""
             )),
             media(&format!("#EXT-X-MAP:X-URI=\"{canary}/x\",URI=\"i.mp4\"")),
+            // Unquoted, so only the name rule stops it: the output check
+            // looks for `URI="` as Media3 does, other players may not.
+            media(&format!("#EXT-X-MAP:X-URI={canary}/x,URI=\"i.mp4\"")),
             media("#EXT-X-KEY:METHOD=AES-128,URI=\"a\",URI=\"b\""),
             media(&format!(
                 "#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00Z\r{canary}/seg.ts"
