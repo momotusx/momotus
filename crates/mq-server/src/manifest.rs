@@ -396,14 +396,17 @@ pub(crate) fn rewrite_hls(
         if line.chars().any(control) {
             return Err("a control character");
         }
-        if !line.trim().is_empty() {
+        // Media3 trims every line as Java's `trim` does (code points up to a
+        // space) and skips empty ones: ` #EXT-X-ENDLIST ` is still a tag.
+        let line = line.trim_matches(|c: char| c <= ' ');
+        if !line.is_empty() {
             lines.push(line);
         }
     }
     let Some((first, lines)) = lines.split_first() else {
         return Err("no #EXTM3U");
     };
-    if first.trim_end() != "#EXTM3U" {
+    if *first != "#EXTM3U" {
         return Err("no #EXTM3U");
     }
     let named = |tag: &str| lines.iter().any(|l| tag_of(l) == Some(tag));
@@ -433,7 +436,7 @@ pub(crate) fn rewrite_hls(
             } else {
                 Role::Media
             };
-            let url = resolve(base, line.trim())?;
+            let url = resolve(base, line)?;
             emit(&mut out, &children.link(&url, role)?)?;
             continue;
         }
@@ -687,6 +690,15 @@ mod tests {
             "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-KEY:METHOD=AES-128,URI=\"http://127.0.0.1:7777/c/token/0/key.bin\"\n#EXT-X-MAP:URI=\"http://127.0.0.1:7777/c/token/1/init.mp4\",BYTERANGE=\"720@0\"\n#EXTINF:4.0,\n#EXT-X-BYTERANGE:1000@720\nhttp://127.0.0.1:7777/c/token/2/seg.mp4\n#EXT-X-ENDLIST\n"
         );
         assert!(hls_output_ok(&out.text, CORE));
+        // Lines are trimmed as Media3 trims them, so these keep their meaning.
+        let sloppy =
+            "#EXTM3U \n#EXT-X-TARGETDURATION:4\t\n  \n #EXTINF:4,\n\tseg.ts \n#EXT-X-ENDLIST \n";
+        assert_eq!(
+            rewrite(sloppy, true).unwrap().text,
+            format!(
+                "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\n{PREFIX}0/seg.ts\n#EXT-X-ENDLIST\n"
+            )
+        );
     }
 
     #[test]
