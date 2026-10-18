@@ -496,7 +496,8 @@ fun ActionButton(
             .focusClickable(onClick, Role.Button)
             // Wide enough to touch (48 dp on a phone), and short enough that five fit beside the transport on TV.
             .widthIn(min = if (tv) 128.dp else 48.dp, max = if (tv) 190.dp else 150.dp)
-            .padding(horizontal = if (tv) 8.dp else 2.dp, vertical = if (tv) 10.dp else 6.dp),
+            // Side padding keeps neighbours apart when a phone's row is full and scrolls.
+            .padding(horizontal = if (tv) 8.dp else 6.dp, vertical = if (tv) 10.dp else 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {

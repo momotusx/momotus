@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -64,6 +66,8 @@ fun PhoneShell(
     showTabs: Boolean,
     onSelect: (Route) -> Unit,
     modifier: Modifier = Modifier,
+    /** False for a page whose artwork runs under the status bar and handles the bar itself. */
+    statusStrip: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
@@ -73,6 +77,16 @@ fun PhoneShell(
     val space: Dp = if (showBar) BAR_HEIGHT + BAR_MARGIN * 2 + inset else 0.dp
     Box(modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalBarSpace provides space) { content() }
+        // Pages start below the status bar but scroll under it: a strip of page color keeps the
+        // text off the clock and icons. At rest it covers only the page's own background.
+        if (statusStrip) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsTopHeight(WindowInsets.statusBars)
+                    .background(Marquee.colors.bg),
+            )
+        }
         if (showBar) {
             PhoneBar(
                 selected,

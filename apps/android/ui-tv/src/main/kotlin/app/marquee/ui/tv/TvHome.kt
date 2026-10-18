@@ -98,6 +98,7 @@ fun TvHome(
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
+    onAddons: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safe = Marquee.safe
@@ -135,7 +136,7 @@ fun TvHome(
         ) {
             val hero = home.hero
             if (hero != null) item(key = "hero") { TvHero(hero, state, onOpen, onPlay) }
-            if (home.rows.isEmpty()) item(key = "state") { HomeState(home) }
+            if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onAddons) }
             itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row ->
                 TvRow(row, state, onOpen)
             }
@@ -144,7 +145,10 @@ fun TvHome(
 }
 
 @Composable
-private fun HomeState(home: HomeView) {
+private fun HomeState(
+    home: HomeView,
+    onAddons: () -> Unit,
+) {
     val inset = Marquee.safe.side
     when (val status = home.status) {
         is ViewStatus.Failed -> {
@@ -163,9 +167,14 @@ private fun HomeState(home: HomeView) {
         }
 
         ViewStatus.Open -> {
+            // Open with no rows: no addon that is on has a catalog, or every row is hidden.
             StateMessage(
-                title = "Nothing to show yet",
-                body = "Home fills up as your addons answer.",
+                title = "Home fills up from your addons",
+                body =
+                    "None of the addons you have on shows a catalog here. " +
+                        "Add one, or turn rows back on in Settings.",
+                actionLabel = "Add an addon",
+                onAction = onAddons,
                 modifier = Modifier.padding(start = inset, top = Marquee.safe.top),
             )
         }
@@ -455,19 +464,17 @@ fun firstTarget(
 }
 
 /**
- * The row where the first visit starts and where Back returns focus to: Continue Watching when it
- * leads, else the hero (focus starts on its Play), else the first lane. Focus on it means the
- * next Back leaves.
+ * The row where the first visit starts and where Back returns focus to: the row of [firstTarget],
+ * so a lane that came back empty or failed is never named while focus lands below it. Focus on it
+ * means the next Back leaves.
  */
 internal fun startRow(
     rows: List<HomeRow>,
     hero: Hero?,
-): String? =
-    when {
-        rows.firstOrNull()?.rowId == TileCopy.CONTINUE_ROW -> TileCopy.CONTINUE_ROW
-        hero != null -> HERO_ROW
-        else -> rows.firstOrNull()?.rowId
-    }
+): String? {
+    val key = firstTarget(rows, hero, patient = false) ?: return null
+    return if (key.startsWith("hero:")) HERO_ROW else rows.firstOrNull { key in it.tileKeys() }?.rowId
+}
 
 private const val PATIENCE_MS = 3_000L
 

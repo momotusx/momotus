@@ -2,9 +2,12 @@
 
 package app.marquee.ui.tv
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -37,6 +41,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -74,6 +79,8 @@ import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 private const val PLAY = "play"
 private const val ADD = "add"
@@ -223,9 +230,24 @@ private fun Pick(
 
             best != null -> {
                 // The details scroll when they run long (features, languages, three reasons, a long
-                // release name); Play and its fallback line keep their place at the card's foot.
+                // release name); Play and its fallback line keep their place at the card's foot. Only
+                // then do they take focus (Up from Play), and Up and Down scroll them until an edge,
+                // where the key moves focus on as usual.
+                val details = rememberScrollState()
+                val scope = rememberCoroutineScope()
                 Column(
-                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    Modifier
+                        .weight(1f, fill = false)
+                        .then(
+                            if (details.maxValue > 0) {
+                                Modifier
+                                    .onPreviewKeyEvent { scrollByKey(it, details, scope) }
+                                    .marqueeFocus(Marquee.radius.m, scale = 1f)
+                                    .focusable()
+                            } else {
+                                Modifier
+                            },
+                        ).verticalScroll(details),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
                 ) {
                     CapsLabel("Recommended for this screen")
@@ -284,6 +306,26 @@ private fun Pick(
         }
     }
 }
+
+/** Up and Down scroll [state] by a third of a screen while it can move that way; at an edge they pass on. */
+private fun scrollByKey(
+    event: KeyEvent,
+    state: ScrollState,
+    scope: CoroutineScope,
+): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    val down =
+        when (event.key) {
+            Key.DirectionDown -> true
+            Key.DirectionUp -> false
+            else -> return false
+        }
+    val can = if (down) state.value < state.maxValue else state.value > 0
+    if (can) scope.launch { state.animateScrollBy(if (down) SCROLL_STEP else -SCROLL_STEP) }
+    return can
+}
+
+private const val SCROLL_STEP = 240f
 
 /** A release name in monospace, broken at its dots so it wraps whole. */
 @Composable

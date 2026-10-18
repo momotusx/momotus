@@ -275,7 +275,7 @@ private fun Pick(
     }
 }
 
-/** One source: the quality, then its status and where from, with the size at the end, on a hairline. */
+/** One source: the quality, then its status and size, where from and its features, on a hairline. */
 @Composable
 private fun SourceRow(
     row: VersionRow,
@@ -306,15 +306,22 @@ private fun SourceRow(
             weight = FontWeight.SemiBold,
             maxLines = 1,
         )
+        // The status with the size at its end, then the source and features: both wrap on a small
+        // phone or a large font instead of cutting what helps the choice.
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            StatusWord(VersionsCopy.status(row.status), statusTone(row))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusWord(VersionsCopy.status(row.status), statusTone(row), Modifier.weight(1f))
+                row.sizeBytes?.let { MqText(Format.bytes(it), role = TextRole.Callout, maxLines = 1) }
+            }
             MqText(
-                (listOf(row.via) + row.features).joinToString(" · "),
+                (listOf("via ${row.via}") + row.features).joinToString(" · "),
                 role = TextRole.Caption,
                 color = colors.muted,
-                maxLines = 1,
+                maxLines = 2,
             )
         }
-        row.sizeBytes?.let { MqText(Format.bytes(it), role = TextRole.Callout, maxLines = 1) }
     }
 }

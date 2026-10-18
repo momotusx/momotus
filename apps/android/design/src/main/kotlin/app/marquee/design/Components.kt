@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -111,12 +112,13 @@ private fun ButtonShell(
                         Modifier
                     },
                 ).focusClickable(onClick, Role.Button, enabled)
-                .padding(horizontal = pad),
+                .padding(horizontal = pad, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) MqIcon(icon, tint = content)
-        MqText(label, color = content, weight = FontWeight.SemiBold, maxLines = 1)
+        // A label that does not fit (a small phone, a large font) takes a second line, never an ellipsis.
+        MqText(label, color = content, weight = FontWeight.SemiBold, maxLines = 2, textAlign = TextAlign.Center)
     }
 }
 
@@ -319,8 +321,9 @@ fun StateMessage(
             MqText(title, role = TextRole.Title3)
         }
         MqText(body, role = TextRole.Callout, color = Marquee.colors.muted)
+        // The fix is the state's one action: the white pill, as on the web.
         if (actionLabel != null && onAction != null) {
-            SecondaryButton(actionLabel, onAction, focusRequester = actionFocus)
+            PrimaryButton(actionLabel, onAction, focusRequester = actionFocus)
         }
     }
 }
@@ -408,7 +411,8 @@ fun StatusWord(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatusDot(tone)
-        MqText(text, role = TextRole.Callout, color = color, maxLines = 1)
+        // A second line on a small phone or a large font, never an ellipsis over what happened.
+        MqText(text, role = TextRole.Callout, color = color, maxLines = 2)
     }
 }
 
@@ -482,6 +486,8 @@ fun RoundButton(
     longClickLabel: String? = null,
     /** A short text in the middle of the icon: the seconds a skip button jumps ("10"). */
     badge: String? = null,
+    /** What a screen reader says, when the visible label needs its target ("Remove Torrentio"). */
+    spoken: String = label,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -516,7 +522,7 @@ fun RoundButton(
                 .background(if (lit) colors.primary else colors.raised)
                 .then(if (lit) Modifier else Modifier.border(2.dp, colors.control, CircleShape))
                 .semantics {
-                    contentDescription = label
+                    contentDescription = spoken
                     if (selected) stateDescription = "On"
                 }.focusClickable(onClick, Role.Button, enabled, onLongClick, longClickLabel),
             contentAlignment = Alignment.Center,
@@ -734,7 +740,7 @@ fun CapsLabel(
         role = TextRole.Caption,
         color = color,
         weight = FontWeight.Bold,
-        maxLines = 1,
+        maxLines = 2,
         letterSpacing = 0.12.em,
     )
 }

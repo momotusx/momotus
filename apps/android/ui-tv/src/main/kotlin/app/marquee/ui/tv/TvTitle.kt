@@ -4,6 +4,7 @@ package app.marquee.ui.tv
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,8 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
@@ -73,6 +78,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
+import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 
 private const val PLAY = "play"
@@ -203,6 +209,42 @@ fun TvTitle(
     }
 }
 
+/**
+ * Five lines of the synopsis. As on the web, a synopsis that is cut takes focus (Up from the
+ * actions) and shows whole on glass while it has it; one that fits is plain text.
+ */
+@Composable
+private fun Synopsis(text: String) {
+    var cut by remember(text) { mutableStateOf(false) }
+    var open by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(Marquee.radius.m)
+    val inset = 14.dp
+    MqText(
+        text,
+        // Half the screen: the scrim is dark enough for text only that far. The inset is pulled
+        // back, so the text lines up with the logo whether the glass shows or not.
+        modifier =
+            Modifier
+                .offset(x = -inset)
+                .widthIn(max = 640.dp + inset * 2)
+                .then(
+                    if (cut || open) {
+                        Modifier
+                            .onFocusChanged { open = it.isFocused }
+                            .marqueeFocus(Marquee.radius.m, scale = 1f)
+                            .clip(shape)
+                            .background(if (open) Marquee.colors.glassStrong else Color.Transparent)
+                            .focusable()
+                    } else {
+                        Modifier
+                    },
+                ).padding(horizontal = inset, vertical = 10.dp),
+        role = TextRole.Body,
+        maxLines = if (open) Int.MAX_VALUE else 5,
+        onTextLayout = { if (!open) cut = it.hasVisualOverflow },
+    )
+}
+
 @Composable
 private fun Info(
     title: TitleView,
@@ -227,15 +269,7 @@ private fun Info(
             TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)),
             Modifier.widthIn(max = 760.dp),
         )
-        details.description?.let {
-            MqText(
-                it,
-                // Half the screen: the scrim is dark enough for text only that far.
-                modifier = Modifier.widthIn(max = 640.dp),
-                role = TextRole.Body,
-                maxLines = 5,
-            )
-        }
+        details.description?.let { Synopsis(it) }
         Row(
             Modifier
                 .padding(top = Marquee.space.xs)

@@ -437,10 +437,30 @@ private fun AddonRow(
                 )
             }
             addon.description?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
-            Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
-                RoundButton(Icons.ChevronUp, "Move up", { onMove(-1) }, showLabel = true, enabled = !first && !busy)
-                RoundButton(Icons.ChevronDown, "Move down", { onMove(1) }, showLabel = true, enabled = !last && !busy)
-                RoundButton(Icons.Trash, "Remove", onRemove, showLabel = true, enabled = !busy)
+            // Wraps on a small phone or a large font instead of cutting a label.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            ) {
+                // Spoken with the addon's name: TalkBack moves between several of these rows.
+                val name = addon.name
+                RoundButton(
+                    Icons.ChevronUp,
+                    "Move up",
+                    { onMove(-1) },
+                    showLabel = true,
+                    enabled = !first && !busy,
+                    spoken = "Move $name up",
+                )
+                RoundButton(
+                    Icons.ChevronDown,
+                    "Move down",
+                    { onMove(1) },
+                    showLabel = true,
+                    enabled = !last && !busy,
+                    spoken = "Move $name down",
+                )
+                RoundButton(Icons.Trash, "Remove", onRemove, showLabel = true, enabled = !busy, spoken = "Remove $name")
             }
         }
     }

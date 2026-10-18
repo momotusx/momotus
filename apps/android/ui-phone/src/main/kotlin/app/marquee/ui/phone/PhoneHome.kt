@@ -74,6 +74,7 @@ fun PhoneHome(
     home: HomeView,
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
+    onAddons: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -93,13 +94,16 @@ fun PhoneHome(
     ) {
         val hero = home.hero
         if (hero != null) item(key = "hero") { PhoneHero(hero, onOpen, onPlay) }
-        if (home.rows.isEmpty()) item(key = "state") { HomeState(home) }
+        if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onAddons) }
         itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row -> PhoneRow(row, onOpen) }
     }
 }
 
 @Composable
-private fun HomeState(home: HomeView) {
+private fun HomeState(
+    home: HomeView,
+    onAddons: () -> Unit,
+) {
     val side = Marquee.safe.side
     when (val status = home.status) {
         is ViewStatus.Failed -> {
@@ -118,9 +122,14 @@ private fun HomeState(home: HomeView) {
         }
 
         ViewStatus.Open -> {
+            // Open with no rows: no addon that is on has a catalog, or every row is hidden.
             StateMessage(
-                title = "Nothing to show yet",
-                body = "Home fills up as your addons answer.",
+                title = "Home fills up from your addons",
+                body =
+                    "None of the addons you have on shows a catalog here. " +
+                        "Add one, or turn rows back on in Settings.",
+                actionLabel = "Add an addon",
+                onAction = onAddons,
                 modifier = Modifier.padding(horizontal = side),
             )
         }

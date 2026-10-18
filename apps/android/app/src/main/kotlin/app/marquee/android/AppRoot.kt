@@ -236,9 +236,20 @@ private fun AppNav(
                     entry<Route.Import> { ImportScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
                         if (tv) {
-                            TvHome(app.home, app.tvHome, onOpen = ::open, onPlay = ::playTile)
+                            TvHome(
+                                app.home,
+                                app.tvHome,
+                                onOpen = ::open,
+                                onPlay = ::playTile,
+                                onAddons = { choose(Route.Settings) },
+                            )
                         } else {
-                            PhoneHome(app.home, onOpen = ::open, onPlay = ::playTile)
+                            PhoneHome(
+                                app.home,
+                                onOpen = ::open,
+                                onPlay = ::playTile,
+                                onAddons = { choose(Route.Settings) },
+                            )
                         }
                     }
                     entry<Route.Search> { SearchScreen(session, ::open) }
@@ -372,6 +383,12 @@ private fun AppNav(
             content = content,
         )
     } else {
-        PhoneShell(selected = selected, showTabs = framed, onSelect = ::choose, content = content)
+        PhoneShell(
+            selected = selected,
+            showTabs = framed,
+            onSelect = ::choose,
+            statusStrip = top !is Route.Title && top !is Route.Player,
+            content = content,
+        )
     }
 }

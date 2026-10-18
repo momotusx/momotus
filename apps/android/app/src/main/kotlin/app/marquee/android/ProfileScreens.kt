@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -923,10 +925,14 @@ fun EditProfileScreen(
         confirmDelete = ask
         swapping = true
     }
+    // A touch screen has no focus to scroll the list: the opened question is brought into view.
+    val deleteView = remember { BringIntoViewRequester() }
     LaunchedEffect(confirmDelete, swapping) {
         if (!swapping) return@LaunchedEffect
         withFrameNanos { }
         runCatching { if (confirmDelete) keep.requestFocus() else askDelete.requestFocus() }
+        // Before the flag changes: clearing it restarts this effect and would cancel the scroll.
+        if (confirmDelete) deleteView.bringIntoView()
         swapping = false
     }
 
@@ -1147,7 +1153,10 @@ fun EditProfileScreen(
         if (!isNew && owner && p != null && !p.isOwner) {
             item(key = "delete") {
                 Column(
-                    Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),
+                    Modifier
+                        .bringIntoViewRequester(deleteView)
+                        .padding(horizontal = Marquee.safe.side)
+                        .widthIn(max = 900.dp),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
                 ) {
                     if (!confirmDelete || swapping) {

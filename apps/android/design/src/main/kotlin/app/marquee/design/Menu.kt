@@ -79,12 +79,12 @@ fun ActionMenu(
                                 false
                             }
                         }
-                    }.padding(horizontal = Marquee.space.m)
+                    }.padding(horizontal = if (tv) Marquee.space.m else Marquee.space.s)
                     .widthIn(max = if (tv) 560.dp else 420.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(Marquee.radius.l))
                     .background(Marquee.colors.surface)
-                    .padding(Marquee.space.m),
+                    .padding(if (tv) Marquee.space.m else Marquee.space.s),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
                 MqText(title, role = TextRole.Title3, maxLines = 2)

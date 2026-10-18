@@ -73,6 +73,14 @@ class FirstTargetTest {
     }
 
     @Test
+    fun `Back's row skips a first lane that came back empty or failed, as the focus does`() {
+        val rows =
+            listOf(row("a", RowState.Failed("timed out")), row("b", RowState.Empty), row("c", RowState.Ready, "z"))
+        assertEquals("c", startRow(rows, hero = null))
+        assertNull(startRow(listOf(row("a", RowState.Empty)), hero = null))
+    }
+
+    @Test
     fun `a series hero has no single video to play, so its Details takes the focus`() {
         assertEquals("hero:details", firstTarget(listOf(row("b", RowState.Ready, "z")), seriesHero, patient = true))
     }
