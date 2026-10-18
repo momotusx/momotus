@@ -304,7 +304,11 @@ fun PlayerStatus(
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
                 for (failed in groupFailures(attempts)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                    // One spoken line per row: the addon, then why.
+                    Row(
+                        Modifier.semantics(mergeDescendants = true) {},
+                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                    ) {
                         MqText(failed.via, role = TextRole.Callout, weight = FontWeight.SemiBold)
                         // The core words the reason in plain sentences ("The link no longer exists (404)").
                         MqText(failed.words, role = TextRole.Callout, color = colors.muted)

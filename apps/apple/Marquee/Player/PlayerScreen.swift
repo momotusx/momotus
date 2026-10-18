@@ -322,7 +322,7 @@ private struct StatusOverlay: View {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text("None of the sources could be played")
                     .display(Theme.type.title1)
-                ForEach(FailedSources.group(model.playback?.attempts ?? []), id: \.self) { failed in
+                ForEach(FailedSources.group(model.playback?.attempts ?? []), id: \.key) { failed in
                     Label("\(failed.via): \(failed.words)", glyph: "circle-x")
                         .font(.text(Theme.type.body))
                         .foregroundStyle(Theme.Palette.muted)

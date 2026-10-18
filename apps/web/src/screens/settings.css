@@ -104,7 +104,7 @@
 .hrow-main:focus-visible, [data-form="tv"] .hrow-main:focus { background: var(--raised); }
 .hrow-n { width: 48px; flex: none; font: 400 var(--type-title3) / 1 var(--font-display); color: var(--muted); }
 .hrow-text { display: grid; gap: 6px; min-width: 0; }
-.hrow-text b { font: 600 var(--type-body) / 1.2 var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hrow-text b { font: 600 var(--type-body) / 1.2 var(--font-text); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .hrow-text small { font: 400 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); }
 .hrow.off .hrow-text b, .hrow.off .hrow-n { color: var(--muted); }
 .hrow-hint { margin-left: auto; padding-left: 24px; font: 500 var(--type-caption) var(--font-text); white-space: nowrap; }

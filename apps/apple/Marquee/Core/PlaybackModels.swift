@@ -151,6 +151,9 @@ struct FailedSources: Hashable, Sendable {
     /// "The link no longer exists (404) · 8 sources".
     var words: String { count > 1 ? "\(error) · \(count) sources" : error }
 
+    /// One row per addon and reason, whatever its count.
+    var key: String { "\(via)\u{0}\(error)" }
+
     /// The failure history with each addon and reason once, in the order they first failed.
     static func group(_ attempts: [Attempt]) -> [FailedSources] {
         var order: [FailedSources] = []

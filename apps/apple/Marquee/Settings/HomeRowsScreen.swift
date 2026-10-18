@@ -151,6 +151,7 @@ private struct HomeRowLine: View {
             Text(row.title)
                 .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                 .foregroundStyle(Theme.Palette.text)
+                .lineLimit(2)
                 .opacity(row.hidden ? 0.55 : 1)
             Text(row.hidden ? "\(row.source), hidden from Home" : row.source)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
