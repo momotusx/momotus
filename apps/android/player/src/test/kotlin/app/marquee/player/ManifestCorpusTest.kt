@@ -36,7 +36,10 @@ class ManifestCorpusTest {
                 val inline = key && resolved.startsWith("data:")
                 assertTrue(resolved.startsWith(CORE) || inline, "${file.name}: $resolved")
             }
-            assertEverythingRead(file, playlist)
+            // Media3 reads as much from the rewrite as from the origin's playlist.
+            val input = File(file.parentFile?.parentFile, "in/${file.name}")
+            val origin = parse(input, "https://cdn.example/hls/${file.name}")
+            assertEquals(shape(origin), shape(playlist), "${file.name}: read from the input, then the output")
         }
     }
 
@@ -106,34 +109,39 @@ class ManifestCorpusTest {
             }
         }
 
-    /** Media3 read every variant, segment and part the file names: none was skipped. */
-    private fun assertEverythingRead(
-        file: File,
-        playlist: HlsPlaylist,
-    ) {
-        val lines = file.readLines().map { it.trim() }.filter { it.isNotEmpty() }
+    /**
+     * How many of each thing Media3 read: variants and renditions, or segments, parts, trailing
+     * parts, init sections, keys and rendition reports. A rewrite that makes Media3 skip one
+     * changes it.
+     */
+    private fun shape(playlist: HlsPlaylist): List<Int> =
         when (playlist) {
             is HlsMultivariantPlaylist -> {
-                // I-frame variants are variants to Media3.
-                val variants =
-                    lines.count {
-                        it.startsWith("#EXT-X-STREAM-INF:") || it.startsWith("#EXT-X-I-FRAME-STREAM-INF:")
-                    }
-                assertEquals(variants, playlist.variants.size, "${file.name}: variants")
+                listOf(
+                    playlist.variants.size,
+                    playlist.videos.size,
+                    playlist.audios.size,
+                    playlist.subtitles.size,
+                    playlist.closedCaptions.size,
+                )
             }
 
             is HlsMediaPlaylist -> {
-                val segments = lines.count { !it.startsWith("#") }
-                assertEquals(segments, playlist.segments.size, "${file.name}: segments")
-                val parts =
-                    lines.count {
-                        it.startsWith("#EXT-X-PART:") || it.startsWith("#EXT-X-PRELOAD-HINT:TYPE=PART")
-                    }
-                val read = playlist.segments.sumOf { it.parts.size } + playlist.trailingParts.size
-                assertEquals(parts, read, "${file.name}: parts")
+                val segments = playlist.segments
+                listOf(
+                    segments.size,
+                    segments.sumOf { it.parts.size },
+                    playlist.trailingParts.size,
+                    segments.count { it.initializationSegment != null },
+                    segments.count { it.fullSegmentEncryptionKeyUri != null },
+                    playlist.renditionReports.size,
+                )
+            }
+
+            else -> {
+                error("${playlist.javaClass}")
             }
         }
-    }
 
     private companion object {
         const val CORE = "http://127.0.0.1:7777/"
