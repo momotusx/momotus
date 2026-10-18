@@ -3,6 +3,10 @@ import SwiftUI
 /// Home: hero, then Continue Watching and catalog rows in core order.
 struct HomeScreen: View {
     let model: HomeModel
+    /// Bumped by the shell (TV Back) to bring Home back to its top row.
+    var topRequest = 0
+    /// Home is scrolled off its top row.
+    var scrolled: Binding<Bool> = .constant(false)
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
@@ -12,13 +16,19 @@ struct HomeScreen: View {
     @State private var showProfiles = false
     /// Rows have scrolled under the status bar.
     @State private var underBar = false
+    @State private var position = ScrollPosition(edge: .top)
+    #if os(tvOS)
+    /// The hero's Play is where focus goes back to.
+    @Namespace private var startScope
+    @Environment(\.resetFocus) private var resetFocus
+    #endif
 
     var body: some View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 // Without catalogs there is no art to show: setup takes the top.
                 if !model.needsSetup {
-                    HeroView(hero: model.header.hero, height: heroHeight)
+                    HeroView(hero: model.header.hero, height: heroHeight, startScope: startScopeID)
                         // Phone: the profile button sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
                             if !metrics.wide { ProfileButton { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
@@ -32,6 +42,15 @@ struct HomeScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > cardTop } action: { underBar = $1 }
+        #if os(tvOS)
+        .scrollPosition($position)
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { scrolled.wrappedValue = $1 }
+        .onChange(of: topRequest) {
+            withAnimation(Theme.Motion.panel) { position.scrollTo(edge: .top) }
+            resetFocus(in: startScope)
+        }
+        .focusScope(startScope)
+        #endif
         #if os(macOS)
         // The card runs up under the window toolbar, where the navigation pill floats over it.
         .fullBleedTop()
@@ -82,6 +101,14 @@ struct HomeScreen: View {
                 core: core, setUp: { onboarding = true })
         }
         .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xxl - 20)
+    }
+
+    private var startScopeID: Namespace.ID? {
+        #if os(tvOS)
+        startScope
+        #else
+        nil
+        #endif
     }
 
     /// The card's gap to the top: under the status bar on a phone, under

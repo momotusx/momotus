@@ -104,8 +104,14 @@ struct MainShell: View {
     @State private var homePath: [TitleRoute] = []
     @State private var immersion = Immersion()
     @Environment(ProfileSession.self) private var profiles
+    /// Home has scrolled off its top row (TV Back takes it there first).
+    @State private var homeScrolled = false
+    /// Bumped to send Home's focus back to its top row.
+    @State private var homeTop = 0
     #if os(tvOS)
     @State private var showProfiles = false
+    /// Places whose root page has another page over it: Back pops that first.
+    @State private var covered: Set<AppTab> = []
     #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -185,8 +191,23 @@ struct MainShell: View {
                 .environment(profiles)
                 .environment(\.metrics, metrics)
         })
+        // nil leaves Menu to the system: a pushed page pops, the top of Home exits.
+        .onExitCommand(perform: back)
         #endif
     }
+
+    #if os(tvOS)
+    /// Menu on a place's root page: another place goes Home, Home scrolled down
+    /// goes to its top row, else nothing here and the app exits.
+    private var back: (() -> Void)? {
+        guard !covered.contains(tab) else { return nil }
+        switch TVBack.step(atHome: tab == .home, scrolledDown: homeScrolled) {
+        case .goHome: return { select(.home) }
+        case .toTop: return { homeTop += 1 }
+        case .exit: return nil
+        }
+    }
+    #endif
 
     private func select(_ item: AppTab) {
         #if os(iOS)
@@ -199,23 +220,33 @@ struct MainShell: View {
         switch tab {
         case .home:
             NavigationStack(path: $homePath) {
-                HomeScreen(model: home)
+                HomeScreen(model: home, topRequest: homeTop, scrolled: $homeScrolled)
+                    .root(of: .home, covered: coveredBinding)
                     .withTitleRoutes(core: core)
                     #if os(iOS)
                     .toolbar(.hidden, for: .navigationBar)
                     #endif
             }
         case .search:
-            NavigationStack { SearchScreen(core: core).withTitleRoutes(core: core) }
+            NavigationStack { SearchScreen(core: core).root(of: .search, covered: coveredBinding).withTitleRoutes(core: core) }
         case .discover:
-            NavigationStack { DiscoverScreen(core: core).withTitleRoutes(core: core) }
+            NavigationStack { DiscoverScreen(core: core).root(of: .discover, covered: coveredBinding).withTitleRoutes(core: core) }
         case .library:
-            NavigationStack { LibraryScreen(core: core).withTitleRoutes(core: core) }
+            NavigationStack { LibraryScreen(core: core).root(of: .library, covered: coveredBinding).withTitleRoutes(core: core) }
         case .calendar:
-            NavigationStack { CalendarScreen(core: core).withTitleRoutes(core: core) }
+            NavigationStack { CalendarScreen(core: core).root(of: .calendar, covered: coveredBinding).withTitleRoutes(core: core) }
         case .settings:
-            NavigationStack { SettingsScreen(core: core) }
+            NavigationStack { SettingsScreen(core: core).root(of: .settings, covered: coveredBinding) }
         }
+    }
+
+    /// TV: which places have a page over their root (none elsewhere).
+    private var coveredBinding: Binding<Set<AppTab>> {
+        #if os(tvOS)
+        $covered
+        #else
+        .constant([])
+        #endif
     }
 
     private var metrics: Metrics {
@@ -225,6 +256,18 @@ struct MainShell: View {
         return .regular
         #else
         return sizeClass == .regular ? .regular : .compact
+        #endif
+    }
+}
+
+extension View {
+    /// TV: marks a place's root page, so Back knows when another page is over it.
+    @ViewBuilder func root(of tab: AppTab, covered: Binding<Set<AppTab>>) -> some View {
+        #if os(tvOS)
+        onAppear { covered.wrappedValue.remove(tab) }
+            .onDisappear { covered.wrappedValue.insert(tab) }
+        #else
+        self
         #endif
     }
 }

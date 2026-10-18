@@ -85,3 +85,12 @@ import Testing
     // The list not read yet: install, and a core answering "already installed" has it turned on.
     #expect(AddonSetup.step(url, in: nil) == .install)
 }
+
+@Test func tvBackGoesHomeThenToTheTopThenExits() {
+    // Another place, wherever it is scrolled: Home first.
+    #expect(TVBack.step(atHome: false, scrolledDown: true) == .goHome)
+    #expect(TVBack.step(atHome: false, scrolledDown: false) == .goHome)
+    // Home down the rows: its top row; only Home at the top lets the app exit.
+    #expect(TVBack.step(atHome: true, scrolledDown: true) == .toTop)
+    #expect(TVBack.step(atHome: true, scrolledDown: false) == .exit)
+}

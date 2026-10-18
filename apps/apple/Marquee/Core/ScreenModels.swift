@@ -121,6 +121,20 @@ enum AddonSetup: Equatable {
     }
 }
 
+/// Menu (Back) at the top of a TV place, as on Android: a place other than
+/// Home goes to Home, Home scrolled down goes back to its top row, and only
+/// then does the app exit. A pushed page pops first; that is the stack's.
+enum TVBack: Equatable {
+    case goHome
+    case toTop
+    case exit
+
+    static func step(atHome: Bool, scrolledDown: Bool) -> TVBack {
+        guard atHome else { return .goHome }
+        return scrolledDown ? .toTop : .exit
+    }
+}
+
 struct Prefs: Decodable, Hashable, Sendable {
     let streams: StreamPrefs
     /// Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first.

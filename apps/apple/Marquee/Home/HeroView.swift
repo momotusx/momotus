@@ -6,6 +6,8 @@ import SwiftUI
 struct HeroView: View {
     let hero: Hero?
     let height: CGFloat
+    /// TV: the scope whose default focus is Play (Back on Home returns there).
+    var startScope: Namespace.ID?
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -94,6 +96,7 @@ struct HeroView: View {
                     Label("Play", glyph: "play-fill")
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
+                .modifier(StartFocus(scope: startScope))
                 NavigationLink(value: TitleRoute(tile)) {
                     Label("Details", glyph: "info")
                 }
@@ -101,6 +104,19 @@ struct HeroView: View {
             }
         }
         .frame(maxWidth: wide ? 620 : .infinity, alignment: .leading)
+    }
+}
+
+/// TV: the hero's Play is its scope's default focus; elsewhere nothing.
+private struct StartFocus: ViewModifier {
+    let scope: Namespace.ID?
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        if let scope { content.prefersDefaultFocus(true, in: scope) } else { content }
+        #else
+        content
+        #endif
     }
 }
 
