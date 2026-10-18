@@ -2185,8 +2185,10 @@ async fn ll_hls_directives_reach_only_playlists() {
 #[tokio::test]
 async fn a_blocking_reload_may_wait_three_target_durations() {
     // After open, the origin holds every reload: the blocking one until the
-    // test lets it go, the plain one for good. Nothing here depends on how
-    // fast this machine is.
+    // test lets it go, the plain one for good. The target duration is the
+    // largest counted (30 s), so the blocking reload may wait 90 s and is
+    // let go 80 s before that, once the plain one gave up at 10 s; the
+    // arithmetic itself is `a_blocking_reload_waits_at_most_90_s`.
     let opened = Arc::new(AtomicU64::new(0));
     let hold_blocking: Arc<tokio::sync::Notify> = Arc::default();
     let hold_plain: Arc<tokio::sync::Notify> = Arc::default();
@@ -2198,7 +2200,7 @@ async fn a_blocking_reload_may_wait_three_target_durations() {
         saw_blocking.clone(),
     );
     let (base, _) = hls_origin(move |asked| {
-        let mut reply = Reply::playlist("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n");
+        let mut reply = Reply::playlist("#EXTM3U\n#EXT-X-TARGETDURATION:30\n#EXTINF:4,\ns.ts\n");
         if count.load(Ordering::SeqCst) == 1 {
             if asked
                 .query
@@ -2237,7 +2239,8 @@ async fn a_blocking_reload_may_wait_three_target_durations() {
         matches!(plain, mq_http::HttpError::Status { status: 502, .. }),
         "{plain:?}"
     );
-    // The blocking one waits three target durations: let go, it is served.
+    // The blocking one waits up to three target durations: let go, it is
+    // served.
     hold_blocking.notify_one();
     let served = blocking.await.unwrap();
     assert_eq!(served.map(|r| r.status).ok(), Some(200));
