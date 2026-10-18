@@ -29,7 +29,7 @@ export default function Discover() {
             <p>Discover lists the catalogs of the addons you have on. None of them has one.</p>
             <A class="btn primary" href="/addons" data-f="discover:addons" data-autofocus>
               <Puzzle aria-hidden />
-              Addons
+              Add an addon
             </A>
           </section>
         </Match>

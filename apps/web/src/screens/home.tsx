@@ -5,7 +5,6 @@ import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
 import Star from "lucide-solid/icons/star";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, Show } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { CONTINUE_ROW, Row } from "../components/row";
@@ -132,13 +131,9 @@ export default function Home() {
             <h2>Home fills up from your addons</h2>
             <p>None of the addons you have on shows a catalog here. Add one, or turn rows back on in Settings.</p>
             <div class="acts">
-              <A class="btn primary" href="/welcome" data-f="home:setup" data-autofocus>
-                <Wrench aria-hidden />
-                Set up Marquee
-              </A>
-              <A class="btn" href="/addons" data-f="home:addons">
+              <A class="btn primary" href="/addons" data-f="home:addons" data-autofocus>
                 <Puzzle aria-hidden />
-                Addons
+                Add an addon
               </A>
             </div>
           </section>
