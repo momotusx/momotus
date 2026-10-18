@@ -2741,11 +2741,13 @@ dependencies = [
  "mq-engine",
  "mq-http",
  "mq-media",
+ "quick-xml",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

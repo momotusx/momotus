@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- every origin URL here is decoded, found absolute and sent to the core, or dropped -->
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" xmlns:x="urn:mpeg:dash:schema:mpd:2011" xmlns:o="urn:example:other" profiles="urn:mpeg:dash:profile:isoff-live:2011" type="dynamic" availabilityStartTime="2026-10-18T00:00:00Z" minimumUpdatePeriod="PT4S" minBufferTime="PT2S" o:extra="http://canary.invalid/attribute">
+  <ProgramInformation moreInformationURL="http://canary.invalid/info">
+    <Title>t</Title>
+  </ProgramInformation>
+  <BaseURL><![CDATA[http://canary.invalid/cdata/]]><!-- a comment --><?pi data?></BaseURL>
+  <Location>htt<!-- split -->p://canary.invalid/next.mpd</Location>
+  <Period id="p0" start="PT0S">
+    <EventStream schemeIdUri="urn:example:events" timescale="1">
+      <Event presentationTime="1" duration="1" messageData="http://canary.invalid/event"/>
+    </EventStream>
+    <o:Unknown href="http://canary.invalid/unknown">http://canary.invalid/text</o:Unknown>
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true">
+      <x:BaseURL>&#104;ttp://canary.invalid/prefixed/</x:BaseURL>
+      <SegmentTemplate timescale="1000" duration="4000" startNumber="1" initialization="&#104;ttp://canary.invalid/t/init-$RepresentationID$.mp4" media="&#x68;ttp://canary.invalid/t/$RepresentationID$-$Number$.m4s"/>
+      <Representation id="v" codecs="avc1.64001f" width="1280" height="720" bandwidth="2500000" o:hint="http://canary.invalid/hint"/>
+    </AdaptationSet>
+    <AdaptationSet mimeType="video/mp4">
+      <Representation id="w" codecs="avc1.64001f" width="640" height="360" bandwidth="800000">
+        <SegmentList timescale="1000" duration="4000">
+          <Initialization sourceURL="http://canary.invalid/l/init.mp4"/>
+          <SegmentURL media="http://canary.invalid/l/1.m4s"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+  <Metrics metrics="DVBErrors">
+    <Reporting schemeIdUri="urn:dvb:dash:reporting:2014" value="1" dvb:reportingUrl="http://canary.invalid/report" xmlns:dvb="urn:dvb:dash:dash-extensions:2014-1"/>
+  </Metrics>
+  <UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-iso:2014" value="http://canary.invalid/time"/>
+</MPD>

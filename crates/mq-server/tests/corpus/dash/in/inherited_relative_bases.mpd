@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-live:2011" type="static" mediaPresentationDuration="PT8S" minBufferTime="PT2S">
+  <BaseURL>media/</BaseURL>
+  <Period>
+    <BaseURL>period-1/</BaseURL>
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true">
+      <SegmentTemplate timescale="1000" duration="4000" startNumber="1" initialization="init.mp4" media="seg-$Number$.m4s"/>
+      <Representation id="720" codecs="avc1.64001f" width="1280" height="720" bandwidth="2500000">
+        <BaseURL>720p/</BaseURL>
+      </Representation>
+      <Representation id="1080" codecs="avc1.640028" width="1920" height="1080" bandwidth="5000000">
+        <BaseURL>1080p/</BaseURL>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>

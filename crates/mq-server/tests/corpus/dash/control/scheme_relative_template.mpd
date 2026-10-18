@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- a scheme-relative template takes the page's scheme and the canary's host -->
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-live:2011" type="static" mediaPresentationDuration="PT8S" minBufferTime="PT2S">
+  <Period>
+    <AdaptationSet mimeType="video/mp4">
+      <SegmentTemplate timescale="1000" duration="4000" startNumber="1" initialization="//canary.invalid/init.mp4" media="//canary.invalid/seg-$Number$.m4s"/>
+      <Representation id="v" codecs="avc1.64001f" width="1280" height="720" bandwidth="2500000"/>
+    </AdaptationSet>
+  </Period>
+</MPD>

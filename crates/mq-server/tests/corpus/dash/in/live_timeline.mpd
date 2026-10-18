@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" xmlns:dvb="urn:dvb:dash:dash-extensions:2014-1" profiles="urn:mpeg:dash:profile:isoff-live:2011,urn:dvb:dash:profile:dvb-dash:2014" type="dynamic" availabilityStartTime="2026-10-18T00:00:00Z" publishTime="2026-10-18T12:00:00Z" minimumUpdatePeriod="PT6S" timeShiftBufferDepth="PT2M" suggestedPresentationDelay="PT10S" minBufferTime="PT4S">
+  <BaseURL serviceLocation="cdn-a" dvb:priority="1" dvb:weight="10">https://cdn-a.example/live/ch1/</BaseURL>
+  <BaseURL serviceLocation="cdn-b" dvb:priority="2" dvb:weight="5">https://cdn-b.example/live/ch1/</BaseURL>
+  <Location>https://origin.example/live/ch1/manifest.mpd?session=7f3a</Location>
+  <ServiceDescription id="0">
+    <Latency target="8000" min="4000" max="12000" referenceId="0"/>
+    <PlaybackRate min="0.96" max="1.04"/>
+  </ServiceDescription>
+  <Period id="p0" start="PT0S">
+    <AdaptationSet id="1" contentType="video" mimeType="video/mp4" segmentAlignment="true" startWithSAP="1">
+      <SegmentTemplate timescale="90000" initialization="$RepresentationID$/init.mp4" media="$RepresentationID$/$Time$.m4s" presentationTimeOffset="0">
+        <SegmentTimeline>
+          <S t="3888000000" d="540000" r="19"/>
+        </SegmentTimeline>
+      </SegmentTemplate>
+      <Representation id="video=1500000" codecs="avc1.4d401f" width="1280" height="720" bandwidth="1500000"/>
+      <Representation id="video=3000000" codecs="avc1.640028" width="1920" height="1080" bandwidth="3000000"/>
+    </AdaptationSet>
+    <AdaptationSet id="2" contentType="audio" mimeType="audio/mp4" lang="de" segmentAlignment="true">
+      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="main"/>
+      <SegmentTemplate timescale="48000" initialization="$RepresentationID$/init.mp4" media="$RepresentationID$/$Time$.m4s">
+        <SegmentTimeline>
+          <S t="2073600000" d="288000" r="19"/>
+        </SegmentTimeline>
+      </SegmentTemplate>
+      <Representation id="audio_deu=128000" codecs="mp4a.40.2" audioSamplingRate="48000" bandwidth="128000"/>
+    </AdaptationSet>
+  </Period>
+  <UTCTiming schemeIdUri="urn:mpeg:dash:utc:http-xsdate:2014" value="https://time.example/xsdate https://time2.example/xsdate"/>
+</MPD>

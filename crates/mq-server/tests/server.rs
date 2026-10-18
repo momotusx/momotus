@@ -1259,8 +1259,23 @@ async fn a_released_playback_answers_404_everywhere() {
         let reply = raw(&server, url, method, None).await;
         assert!(reply.starts_with("HTTP/1.1 200"), "{method} {reply}");
     }
+    // A DASH playback and a file under its MPD's directory.
+    let mpd =
+        "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\"/>";
+    let (base, _) = hls_origin(pages(vec![
+        ("/d/m.mpd", "application/dash+xml", mpd.into()),
+        ("/d/s.m4s", "video/mp4", b"segment".to_vec()),
+    ]))
+    .await;
+    let dash = open_dash(&server, format!("{base}/d/m.mpd")).await;
+    let mpd = text(&http.get(&dash.url, &local()).await.unwrap());
+    let template = format!("{}s.m4s", mpd_texts(&mpd, "BaseURL")[0]);
+    for method in ["GET", "HEAD"] {
+        let reply = raw(&server, &template, method, None).await;
+        assert!(reply.starts_with("HTTP/1.1 200"), "{method} {reply}");
+    }
 
-    drop((lease, hls));
+    drop((lease, hls, dash));
     for (url, method) in [
         (&url, "GET"),
         (&url, "HEAD"),
@@ -1268,6 +1283,8 @@ async fn a_released_playback_answers_404_everywhere() {
         (&main, "GET"),
         (&child, "GET"),
         (&child, "HEAD"),
+        (&template, "GET"),
+        (&template, "HEAD"),
     ] {
         let reply = raw(&server, url, method, None).await;
         assert!(reply.starts_with("HTTP/1.1 404"), "{method} {url}: {reply}");
@@ -1320,7 +1337,21 @@ async fn ids_reach_only_their_own_playback() {
         }
     }
     assert_eq!(a_log.lock().unwrap().len(), before, "A's origin was asked");
-    drop(a);
+    // A DASH playback's directories under another playback's token.
+    let mpd =
+        "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\"/>";
+    let (d_base, d_log) = hls_origin(move |_| Reply::ok("application/dash+xml", mpd)).await;
+    let d = open_dash(&server, format!("{d_base}/d.mpd")).await;
+    let before = d_log.lock().unwrap().len();
+    for other in [&a, &b, &file] {
+        let prefix = format!("http://{}/t/{}", server.addr(), token(&other.url));
+        for id in ["0", "1", "2"] {
+            let reply = raw(&server, &format!("{prefix}/{id}/s.m4s"), "GET", None).await;
+            assert!(reply.starts_with("HTTP/1.1 404"), "{id}: {reply}");
+        }
+    }
+    assert_eq!(d_log.lock().unwrap().len(), before, "D's origin was asked");
+    drop((a, d));
 }
 
 #[tokio::test]
@@ -2123,6 +2154,44 @@ async fn a_child_path_cannot_change_the_origin() {
         assert!(reply.starts_with("HTTP/1.1 404"), "{id}: {reply}");
     }
     assert_eq!(log.lock().unwrap().len(), before, "the origin was asked");
+    // A DASH template directory: its tail can leave neither the origin nor
+    // the directory.
+    let (base, log) = hls_origin(move |_| {
+        let mpd = "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" \
+                   type=\"static\"><Period><SegmentTemplate media=\"https://cdn.example/d/$Number$.m4s\"/>\
+                   </Period></MPD>";
+        Reply::ok("application/dash+xml", mpd)
+    })
+    .await;
+    let lease = open_dash(&server, format!("{base}/m.mpd")).await;
+    let mpd = text(&http.get(&lease.url, &local()).await.unwrap());
+    let media = mpd_attrs(&mpd, "media").remove(0);
+    let (directory, _) = media.rsplit_once('/').unwrap();
+    let id = directory.rsplit('/').next().unwrap();
+    let prefix = format!("http://{}/t/{}", server.addr(), token(&lease.url));
+    let before = log.lock().unwrap().len();
+    let tails = [
+        "a//b.m4s",
+        "/canary.example/x",
+        ".",
+        "..",
+        "../x.m4s",
+        "%2e%2e/x.m4s",
+        "%2E%2E/x.m4s",
+        "a%2Fb.m4s",
+        "a%2fb.m4s",
+        "a%5Cb.m4s",
+        "a%5cb.m4s",
+    ];
+    for tail in tails {
+        let reply = raw(&server, &format!("{prefix}/{id}/{tail}"), "GET", None).await;
+        assert!(reply.starts_with("HTTP/1.1 404"), "{tail}: {reply}");
+    }
+    for id in ["+0", "00", "-1", "4294967296", "0x0"] {
+        let reply = raw(&server, &format!("{prefix}/{id}/1.m4s"), "GET", None).await;
+        assert!(reply.starts_with("HTTP/1.1 404"), "{id}: {reply}");
+    }
+    assert_eq!(log.lock().unwrap().len(), before, "the origin was asked");
 }
 
 #[tokio::test]
@@ -2438,9 +2507,24 @@ async fn manifest_limits_and_deadlines() {
     // Accepted at 8 MiB, but every line becomes a 100 byte core URL.
     let mut repeated = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n".to_vec();
     repeated.extend("a\n".repeat(((8 << 20) - repeated.len()) / 2).bytes());
+    let mpd = |inner: String| {
+        format!("<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\">{inner}</MPD>")
+    };
+    // 33 deep: the MPD, a Period and 31 Roles.
+    let deep = mpd(format!(
+        "<Period>{}{}</Period>",
+        "<Role>".repeat(31),
+        "</Role>".repeat(31)
+    ));
+    // 1,025 directories: the MPD's own BaseURL and one per Period.
+    let directories = mpd((0..1025)
+        .map(|i| format!("<Period><BaseURL>https://cdn.example/{i}/</BaseURL></Period>"))
+        .collect());
     let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
         "/huge.m3u8" => Reply::playlist(huge.clone()),
         "/repeated.m3u8" => Reply::playlist(repeated.clone()),
+        "/deep.mpd" => Reply::ok("application/dash+xml", deep.clone()),
+        "/directories.mpd" => Reply::ok("application/dash+xml", directories.clone()),
         // A playlist that takes 4 s to arrive, against a 2 s deadline: open
         // ends before it is whole (a whole one would open).
         "/trickle.m3u8" => Reply {
@@ -2474,13 +2558,15 @@ async fn manifest_limits_and_deadlines() {
     for (path, deadline, words) in [
         ("/huge.m3u8", s(5), unreadable),
         ("/repeated.m3u8", s(5), unreadable),
+        ("/deep.mpd", s(5), unreadable),
+        ("/directories.mpd", s(5), unreadable),
         ("/trickle.m3u8", s(2), unreadable),
         ("/held.m3u8", s(15), unreadable),
         ("/silent", s(2), "The source did not answer in time"),
     ] {
-        let opened = server
-            .open(local_upstream(format!("{base}{path}")), "v.mkv", deadline)
-            .await;
+        let upstream = local_upstream(format!("{base}{path}"));
+        let plays = [mq_server::Format::Hls, mq_server::Format::Dash];
+        let opened = server.open_for(upstream, "v.mkv", deadline, &plays).await;
         assert_eq!(opened.unwrap_err(), words, "{path}");
     }
 }
@@ -2517,4 +2603,190 @@ async fn a_video_file_is_never_sniffed() {
         assert_eq!(lease.format, None);
     }
     assert_eq!(log.lock().unwrap().len(), 2, "only the prefetch requests");
+}
+
+// C22 phase 6: DASH through the loopback server (plans/c21-c23-loopback.md
+// 3.3).
+
+async fn open_dash(server: &StreamServer, url: String) -> Lease {
+    let plays = [mq_server::Format::Dash];
+    let lease = server
+        .open_for(local_upstream(url), "v.mkv", Duration::from_secs(5), &plays)
+        .await
+        .expect("a DASH playback opens");
+    assert_eq!(lease.format, Some(mq_server::Format::Dash));
+    assert!(lease.url.ends_with("/v.mpd"), "{}", lease.url);
+    lease
+}
+
+/// The text of every `element` in an MPD the core wrote.
+fn mpd_texts(mpd: &str, element: &str) -> Vec<String> {
+    let close = format!("</{element}>");
+    mpd.split(&format!("<{element}"))
+        .skip(1)
+        .filter_map(|part| {
+            let gt = part.find('>')?;
+            let rest = &part[gt + 1..];
+            Some(rest[..rest.find(&close)?].replace("&amp;", "&"))
+        })
+        .collect()
+}
+
+/// Every value of `attr` in an MPD the core wrote.
+fn mpd_attrs(mpd: &str, attr: &str) -> Vec<String> {
+    let key = format!(" {attr}=\"");
+    mpd.match_indices(&key)
+        .map(|(at, _)| {
+            let rest = &mpd[at + key.len()..];
+            rest[..rest.find('"').unwrap()].replace("&amp;", "&")
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_dash_playback_is_served_entirely_through_loopback() {
+    let file_data = file(4096);
+    let (far, far_log) = hls_origin(pages(vec![(
+        "/f/file.mp4",
+        "video/mp4",
+        file_data.to_vec(),
+    )]))
+    .await;
+    let main = format!(
+        "<?xml version=\"1.0\"?>\
+         <MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" type=\"static\" \
+         mediaPresentationDuration=\"PT8S\" minBufferTime=\"PT2S\">\
+         <Location>next.mpd</Location><Period>\
+         <AdaptationSet mimeType=\"video/mp4\">\
+         <SegmentTemplate media=\"seg-$Number$.m4s\" initialization=\"init.mp4\" duration=\"4\" startNumber=\"1\"/>\
+         <Representation id=\"a\" bandwidth=\"1\"><BaseURL>720p/</BaseURL></Representation>\
+         </AdaptationSet><AdaptationSet mimeType=\"video/mp4\">\
+         <Representation id=\"f\" bandwidth=\"1\"><BaseURL>{far}/f/file.mp4?sig=1&amp;x=2</BaseURL>\
+         <SegmentBase indexRange=\"0-9\"/></Representation></AdaptationSet></Period>\
+         <UTCTiming schemeIdUri=\"urn:mpeg:dash:utc:http-xsdate:2014\" value=\"/time\"/></MPD>"
+    );
+    let next = "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" \
+                type=\"static\"><Period><AdaptationSet><Representation id=\"n\" bandwidth=\"1\">\
+                <BaseURL>n/</BaseURL></Representation></AdaptationSet></Period></MPD>";
+    let (base, log) = hls_origin(pages(vec![
+        ("/v/main.mpd", "application/dash+xml", main.into_bytes()),
+        ("/v/next.mpd", "application/dash+xml", next.into()),
+        ("/v/720p/init.mp4", "video/mp4", b"init section".to_vec()),
+        ("/v/720p/seg-1.m4s", "video/mp4", b"segment one".to_vec()),
+        ("/time", "text/plain", b"2026-10-18T00:00:00Z".to_vec()),
+    ]))
+    .await;
+    let server = StreamServer::start(HttpClient::new(ClientConfig::default()).unwrap())
+        .await
+        .unwrap();
+    let player = ClientConfig {
+        user_agent: "test-player/1".into(),
+        ..ClientConfig::default()
+    };
+    let http = HttpClient::new(player).unwrap();
+    let lease = open_dash(&server, format!("{base}/v/main.mpd")).await;
+    let core = format!("http://{}/", server.addr());
+    let read = |url: String| {
+        let http = http.clone();
+        async move {
+            let response = http.get(&url, &local()).await.unwrap();
+            assert_eq!(response.status, 200, "{url}");
+            let cors = response.header("access-control-allow-origin");
+            assert_eq!(cors, Some("*"), "{url}");
+            response
+        }
+    };
+    // A request's query never reaches the MPD's origin.
+    let response = read(format!("{}?_HLS_msn=2&x=1", lease.url)).await;
+    let asked = log.lock().unwrap().last().cloned().unwrap();
+    assert_eq!((asked.path.as_str(), asked.query), ("/v/main.mpd", None));
+    assert_eq!(
+        response.header("content-type"),
+        Some("application/dash+xml")
+    );
+    let mpd = text(&response);
+    assert!(!mpd.contains(&base) && !mpd.contains(&far), "{mpd}");
+    // The inserted MPD base, a relative Representation base, and a file.
+    let bases = mpd_texts(&mpd, "BaseURL");
+    assert_eq!(bases.len(), 3, "{mpd}");
+    assert!(
+        bases[0].starts_with(&core) && bases[2].starts_with(&core),
+        "{mpd}"
+    );
+    assert_eq!(bases[1], "720p/");
+    let under = |reference: &str| {
+        let url = Url::parse(&bases[0]).unwrap().join("720p/").unwrap();
+        url.join(reference).unwrap().to_string()
+    };
+    let media = mpd_attrs(&mpd, "media")[0].replace("$Number$", "1");
+    let init = mpd_attrs(&mpd, "initialization")[0].clone();
+    assert_eq!(read(under(&media)).await.body[..], b"segment one"[..]);
+    assert_eq!(read(under(&init)).await.body[..], b"init section"[..]);
+    // The file base: ranges, with its signed query.
+    let ranged = http.get_range(&bases[2], 100, 50, &local()).await.unwrap();
+    assert_eq!(ranged.status, 206);
+    assert_eq!(ranged.header("access-control-allow-origin"), Some("*"));
+    assert_eq!(ranged.body[..], file_data[100..150]);
+    let head = raw(&server, &bases[2], "HEAD", None).await;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    assert!(
+        far_log
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|asked| asked.query.as_deref() == Some("sig=1&x=2")),
+        "the file's query was lost"
+    );
+    // `Location`: an MPD the core rewrote again.
+    let location = mpd_texts(&mpd, "Location").remove(0);
+    assert!(location.starts_with(&core), "{location}");
+    let next = read(location).await;
+    assert_eq!(next.header("content-type"), Some("application/dash+xml"));
+    let next = text(&next);
+    assert!(mpd_texts(&next, "BaseURL")[0].starts_with(&core), "{next}");
+    assert!(!next.contains(&base), "{next}");
+    // `UTCTiming`: the time, read whole.
+    let time = mpd_attrs(&mpd, "value").remove(0);
+    assert!(time.starts_with(&core), "{time}");
+    assert_eq!(read(time).await.body[..], b"2026-10-18T00:00:00Z"[..]);
+    // The origins saw only the core.
+    for asked in log
+        .lock()
+        .unwrap()
+        .iter()
+        .chain(far_log.lock().unwrap().iter())
+    {
+        assert!(
+            asked.head.contains("user-agent: marquee/"),
+            "{}",
+            asked.head
+        );
+    }
+}
+
+#[tokio::test]
+async fn dash_opens_only_for_a_player_that_plays_it() {
+    let mpd = "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" \
+               type=\"static\"><Period/></MPD>";
+    let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
+        // Declared by its path, and found by its first bytes only.
+        "/live.mpd" => Reply::ok("application/dash+xml", mpd),
+        _ => Reply::ok("application/octet-stream", mpd),
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    for path in ["/live.mpd", "/stream"] {
+        let open = |plays: &'static [mq_server::Format]| {
+            let upstream = local_upstream(format!("{base}{path}"));
+            server.open_for(upstream, "v.mkv", Duration::from_secs(5), plays)
+        };
+        for plays in [&[][..], &[mq_server::Format::Hls][..]] {
+            let refused = open(plays).await.unwrap_err();
+            assert_eq!(refused, "This player cannot play DASH streams", "{path}");
+        }
+        let lease = open(&[mq_server::Format::Dash]).await.unwrap();
+        assert_eq!(lease.format, Some(mq_server::Format::Dash), "{path}");
+        assert!(lease.url.ends_with("/v.mpd"), "{path}");
+    }
 }

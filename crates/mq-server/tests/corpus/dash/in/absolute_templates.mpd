@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-live:2011" type="static" mediaPresentationDuration="PT20S" minBufferTime="PT2S">
+  <Period id="1">
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true">
+      <SegmentTemplate timescale="1000" duration="4000" startNumber="1" initialization="https://pkg.example/a/$RepresentationID$/init.mp4?hdnts=exp=1893456000~hmac=0f0f" media="https://pkg.example/a/$RepresentationID$/seg-$Number%05d$.m4s?hdnts=exp=1893456000~hmac=0f0f"/>
+      <Representation id="v1_257" codecs="avc1.64001f" width="1280" height="720" bandwidth="2500000"/>
+      <Representation id="v2_258" codecs="avc1.640028" width="1920" height="1080" bandwidth="5000000"/>
+    </AdaptationSet>
+    <AdaptationSet mimeType="audio/mp4" lang="en">
+      <Representation id="a1" codecs="mp4a.40.2" audioSamplingRate="48000" bandwidth="96000">
+        <SegmentTemplate timescale="1000" duration="4000" startNumber="1" initialization="https://pkg.example/a/audio/init.mp4" media="https://pkg.example/a/audio/seg.m4s?n=$Number$&amp;b=$Bandwidth$"/>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>

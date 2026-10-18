@@ -7,6 +7,9 @@ use mq_http::Url;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+mod dash;
+pub(crate) use dash::{rewrite_dash, template_url};
+
 /// Bytes read at open to tell a playlist from a file.
 pub(crate) const SNIFF: usize = 64 * 1024;
 /// Largest playlist read.
@@ -19,6 +22,8 @@ pub(crate) const SMALL_MAX: usize = 64 * 1024;
 /// least recently used tenth goes.
 const MAX_ENTRIES: usize = 131_072;
 const MAX_TEXT: usize = 32 << 20;
+/// `/t/` entries a playback keeps before the least recently used tenth goes.
+const MAX_TEMPLATES: usize = 1024;
 
 /// What a body's first bytes are.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,6 +169,8 @@ pub(crate) fn candidate(content_type: Option<&str>, len: Option<u64>) -> bool {
 pub(crate) enum Role {
     /// An HLS media playlist: parsed and rewritten.
     Playlist,
+    /// A DASH manifest (`Location`): parsed and rewritten.
+    Dash,
     /// Segments, init sections and parts: bytes, `Range` passed through.
     Media,
     /// Keys: bytes up to `SMALL_MAX`.
@@ -179,6 +186,18 @@ struct Entry {
 }
 
 type Key = (Arc<str>, Box<str>, Option<Arc<str>>);
+
+/// A `/t/` entry: an origin, a path prefix ending in `/` and an optional
+/// query (3.3, DASH rule 4). Immutable, as resources are.
+struct Template {
+    /// `scheme://host[:port]`.
+    origin: Box<str>,
+    prefix: Box<str>,
+    query: Option<Box<str>>,
+    used: u64,
+}
+
+type TemplateKey = (Box<str>, Box<str>, Option<Box<str>>);
 
 /// One playback's children, by id. An id's URL and role never change, and
 /// ids are never reused, so after an eviction an old id answers 404 and
@@ -207,6 +226,9 @@ pub(crate) struct Table {
     /// A master's rewrite is running: the playlists it names replace the
     /// topology, so the old ones hold no place against the limits.
     replacing: bool,
+    /// `/t/` entries, by id (ids shared with `entries`, never reused).
+    templates: HashMap<u32, Template>,
+    template_ids: HashMap<TemplateKey, u32>,
 }
 
 impl Table {
@@ -292,6 +314,69 @@ impl Table {
         self.ids.insert((dir, last.into(), query), id);
         self.fit(alive)?;
         Ok(id)
+    }
+
+    /// The `/t/` id for `origin` (`scheme://host[:port]`), `prefix` (a path
+    /// ending in `/`) and `query`; the same three get the same id. Past
+    /// `MAX_TEMPLATES` the least recently used tenth of those earlier
+    /// rewrites named goes, or the rewrite does not fit.
+    pub(crate) fn register_template(
+        &mut self,
+        origin: &str,
+        prefix: &str,
+        query: Option<&str>,
+    ) -> Result<u32, &'static str> {
+        self.tick += 1;
+        let key: TemplateKey = (origin.into(), prefix.into(), query.map(Into::into));
+        if let Some(&id) = self.template_ids.get(&key) {
+            self.templates.get_mut(&id).expect("indexed").used = self.tick;
+            return Ok(id);
+        }
+        if self.next == u32::MAX {
+            return Err("too many resources");
+        }
+        let id = self.next;
+        self.next += 1;
+        let template = Template {
+            origin: key.0.clone(),
+            prefix: key.1.clone(),
+            query: key.2.clone(),
+            used: self.tick,
+        };
+        self.templates.insert(id, template);
+        self.template_ids.insert(key, id);
+        if self.templates.len() > MAX_TEMPLATES {
+            let floor = self.floor;
+            let mut by_use: Vec<(u64, u32)> = self
+                .templates
+                .iter()
+                .filter(|(_, t)| t.used < floor)
+                .map(|(&id, t)| (t.used, id))
+                .collect();
+            if by_use.is_empty() {
+                return Err("too many templates");
+            }
+            by_use.sort_unstable();
+            let count = (self.templates.len() / 10).clamp(1, by_use.len());
+            for &(_, id) in &by_use[..count] {
+                if let Some(t) = self.templates.remove(&id) {
+                    self.template_ids.remove(&(t.origin, t.prefix, t.query));
+                }
+            }
+        }
+        Ok(id)
+    }
+
+    /// A `/t/` entry's origin, prefix and query; asking counts as use.
+    pub(crate) fn template(&mut self, id: u32) -> Option<(String, String, Option<String>)> {
+        self.tick += 1;
+        let t = self.templates.get_mut(&id)?;
+        t.used = self.tick;
+        Some((
+            t.origin.to_string(),
+            t.prefix.to_string(),
+            t.query.as_deref().map(str::to_owned),
+        ))
     }
 
     /// Evicts until both limits hold, or refuses when nothing more may go.
@@ -441,6 +526,8 @@ pub(crate) struct Children<'a> {
     pub(crate) core: &'a str,
     /// `http://127.0.0.1:{port}/c/{token}/`.
     pub(crate) prefix: &'a str,
+    /// `http://127.0.0.1:{port}/t/{token}/` (DASH).
+    pub(crate) templates: &'a str,
     pub(crate) table: &'a mut Table,
     /// False once the rewrite's deadline has passed or its playback ended;
     /// asked every `CHECK_EVERY` lines.
@@ -751,6 +838,7 @@ mod tests {
 
     const CORE: &str = "http://127.0.0.1:7777/";
     const PREFIX: &str = "http://127.0.0.1:7777/c/token/";
+    const TEMPLATES: &str = "http://127.0.0.1:7777/t/token/";
 
     fn rewrite(body: &str, media_only: bool) -> Result<Rewritten, &'static str> {
         let base = Url::parse("https://cdn.example/v/master.m3u8?sig=1").unwrap();
@@ -758,6 +846,7 @@ mod tests {
         let mut children = Children {
             core: CORE,
             prefix: PREFIX,
+            templates: TEMPLATES,
             table: &mut table,
             alive: &|| true,
         };
@@ -1002,6 +1091,7 @@ mod tests {
         let mut children = Children {
             core: CORE,
             prefix: PREFIX,
+            templates: TEMPLATES,
             table: &mut table,
             alive: &alive,
         };
@@ -1041,6 +1131,7 @@ mod tests {
         let mut children = Children {
             core: CORE,
             prefix: PREFIX,
+            templates: TEMPLATES,
             table: &mut table,
             alive: &|| true,
         };
@@ -1126,6 +1217,7 @@ mod tests {
             let mut children = Children {
                 core: CORE,
                 prefix: PREFIX,
+                templates: TEMPLATES,
                 table: &mut table,
                 alive: &alive,
             };
@@ -1180,6 +1272,7 @@ mod tests {
         let mut children = Children {
             core: CORE,
             prefix: PREFIX,
+            templates: TEMPLATES,
             table: &mut table,
             alive: &|| true,
         };
@@ -1223,6 +1316,7 @@ mod tests {
         let mut children = Children {
             core: CORE,
             prefix: PREFIX,
+            templates: TEMPLATES,
             table: &mut table,
             alive: &|| true,
         };
@@ -1333,6 +1427,7 @@ mod tests {
         let mut children = Children {
             core: CORE,
             prefix: PREFIX,
+            templates: TEMPLATES,
             table: &mut table,
             alive: &|| true,
         };
@@ -1365,6 +1460,7 @@ mod tests {
         let mut children = Children {
             core: CORE,
             prefix: PREFIX,
+            templates: TEMPLATES,
             table: &mut table,
             alive: &|| true,
         };
@@ -1402,6 +1498,7 @@ mod tests {
             let mut children = Children {
                 core: CORE,
                 prefix: &prefix,
+                templates: &format!("{CORE}t/{}/", "0f".repeat(32)),
                 table: &mut table,
                 alive: &|| true,
             };
@@ -1432,6 +1529,7 @@ mod tests {
             let mut children = Children {
                 core: CORE,
                 prefix: PREFIX,
+                templates: TEMPLATES,
                 table: &mut table,
                 alive: &|| true,
             };

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:full:2011" type="static" mediaPresentationDuration="PT12S" minBufferTime="PT2S">
+  <Period>
+    <AdaptationSet mimeType="video/mp4">
+      <Representation id="list" codecs="avc1.4d401f" width="854" height="480" bandwidth="900000">
+        <BaseURL>segments/</BaseURL>
+        <SegmentList timescale="1000" duration="4000">
+          <Initialization sourceURL="https://init.example/v/init.mp4"/>
+          <SegmentURL media="seg-1.m4s"/>
+          <SegmentURL media="https://edge.example/v/seg-2.m4s?sig=9a"/>
+          <SegmentURL media="seg-3.m4s" index="seg-3.sidx"/>
+        </SegmentList>
+      </Representation>
+      <Representation id="ranges" codecs="avc1.4d401f" width="640" height="360" bandwidth="500000">
+        <BaseURL>https://files.example/v/360p.mp4</BaseURL>
+        <SegmentList timescale="1000" duration="4000">
+          <Initialization range="0-999"/>
+          <SegmentURL mediaRange="1000-49999"/>
+          <SegmentURL mediaRange="50000-99999"/>
+          <SegmentURL mediaRange="100000-149999"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>

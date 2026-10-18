@@ -9,10 +9,12 @@
 //! under the same token: the addon's file fetched on request and served as
 //! UTF-8 WebVTT. A token exists only while its `Lease` does.
 //!
-//! An HLS stream is found at open and served as a playlist rewritten on
-//! every request (`manifest`): each child it names is
+//! An HLS or DASH stream is found at open and served as a manifest
+//! rewritten on every request (`manifest`): each child it names is
 //! `http://127.0.0.1:<port>/c/<token>/<id>/<name>`, served by the role that
-//! named it, so a player never fetches from an origin.
+//! named it, and each DASH base or template directory
+//! `http://127.0.0.1:<port>/t/<token>/<id>/<tail>`, so a player never
+//! fetches from an origin.
 
 mod ahead;
 mod manifest;
@@ -86,7 +88,8 @@ fn scope(addon_url: Option<&Url>) -> Vec<IpAddr> {
 /// Where one playback's bytes come from.
 enum Content {
     Http(Arc<ahead::Source>),
-    /// An HLS playlist, fetched fresh and rewritten for every request.
+    /// An HLS playlist or a DASH manifest, fetched fresh and rewritten for
+    /// every request.
     Hls(Arc<Hls>),
     #[cfg(feature = "torrent")]
     Torrent {
@@ -115,16 +118,20 @@ impl Playback {
     }
 }
 
-/// An HLS playback: the stream URL's playlist and the children its
-/// rewrites named, all fetched through the playback's scoped handle.
+/// A manifest playback (HLS or DASH, `kind`): the stream URL's manifest
+/// and the children its rewrites named, all fetched through the playback's
+/// scoped handle.
 struct Hls {
     url: Url,
+    kind: Format,
     http: HttpClient,
     /// The stream's `proxyHeaders`: in full only to the stream URL's origin.
     headers: Vec<(String, String)>,
-    /// `http://127.0.0.1:{port}/`, and `{core}c/{token}/` where children go.
+    /// `http://127.0.0.1:{port}/`, `{core}c/{token}/` where children go and
+    /// `{core}t/{token}/` where DASH directories go.
     core: String,
     prefix: String,
+    templates: String,
     /// Held by a rewrite for its whole run on a blocking thread; a child's
     /// lookup waits for it without holding a runtime worker, and no longer
     /// than a playlist request may take.
@@ -151,11 +158,13 @@ impl Hls {
 pub enum Format {
     /// An HLS playlist: the main URL ends in `.m3u8`.
     Hls,
+    /// A DASH manifest: the main URL ends in `.mpd`.
+    Dash,
 }
 
 /// The attempt list's words for a manifest that cannot be played.
 const UNREADABLE_PLAYLIST: &str = "The stream's playlist could not be read";
-/// DASH is not served until its rewrite exists (phase 6 of the plan).
+/// DASH on a player whose caps do not list `mpd`.
 const NO_DASH: &str = "This player cannot play DASH streams";
 /// HLS on a player whose caps do not list `m3u8`.
 const NO_HLS: &str = "This player cannot play HLS streams";
@@ -187,6 +196,10 @@ impl StreamServer {
         let app = Router::new()
             .route("/s/{token}/{name}", get(serve).head(serve))
             .route("/c/{token}/{id}/{name}", get(serve_child).head(serve_child))
+            .route(
+                "/t/{token}/{id}/{*tail}",
+                get(serve_template).head(serve_template),
+            )
             .route("/sub/{token}/{id}/{name}", get(serve_subtitle))
             .with_state(shared.clone());
         let shutdown = CancellationToken::new();
@@ -222,7 +235,7 @@ impl StreamServer {
     /// once within the same deadline, and then served as one (`format`); a
     /// declared one that is not a playlist, and DASH, fail. The token exists
     /// only once all that is done: dropping this future first leaves none,
-    /// and stops the reads. A player that plays HLS: see `open_for`.
+    /// and stops the reads. A player that plays HLS only: see `open_for`.
     pub async fn open(
         &self,
         upstream: Upstream,
@@ -263,12 +276,14 @@ impl StreamServer {
             Ok(Ok(Some(hls))) => {
                 // The cursors stop: every request fetches the playlist fresh.
                 playback.release();
+                let kind = hls.kind;
                 let playback = Arc::new(Playback {
                     body: Content::Hls(hls),
                     released: CancellationToken::new(),
                     subtitles: Mutex::default(),
                 });
-                Ok(self.lease(token, playback, &hls_name(filename), Some(Format::Hls)))
+                let name = manifest_name(filename, kind);
+                Ok(self.lease(token, playback, &name, Some(kind)))
             }
             Ok(Err(error)) => {
                 playback.release();
@@ -285,7 +300,7 @@ impl StreamServer {
         }
     }
 
-    /// A file (`None`) or an HLS playlist, by the first answer's type, the
+    /// A file (`None`) or a manifest, by the first answer's type, the
     /// URLs' paths and the body's first bytes (plans/c21-c23-loopback.md
     /// 3.3). A ranged origin's first bytes come from the read-ahead cache, a
     /// passthrough origin's from one fresh request; a video or audio type of
@@ -354,24 +369,30 @@ impl StreamServer {
                 return Err(UNREACHABLE.into());
             }
         };
-        match (manifest::sniff(&prefix), declared) {
-            (Sniffed::Hls, None | Some(Declared::Hls)) => playlist.store(true, Ordering::Relaxed),
-            (Sniffed::Dash, None | Some(Declared::Dash)) => return Err(NO_DASH.into()),
+        let kind = match (manifest::sniff(&prefix), declared) {
+            (Sniffed::Hls, None | Some(Declared::Hls)) => Format::Hls,
+            (Sniffed::Dash, None | Some(Declared::Dash)) => Format::Dash,
             (Sniffed::File, None) => return Ok(None),
             // Declared but not that format, a DASH patch, a DOCTYPE: a
             // declared body is never served raw.
             _ => return Err(UNREADABLE_PLAYLIST.into()),
-        }
-        if !plays.contains(&Format::Hls) {
-            return Err(NO_HLS.into());
+        };
+        playlist.store(true, Ordering::Relaxed);
+        if !plays.contains(&kind) {
+            return Err(match kind {
+                Format::Hls => NO_HLS.into(),
+                Format::Dash => NO_DASH.into(),
+            });
         }
         let url = Url::parse(&listed).map_err(|_| UNREADABLE_PLAYLIST.to_owned())?;
         let core = format!("http://{}/", self.shared.addr);
         let hls = Arc::new(Hls {
             url,
+            kind,
             http: source.http().clone(),
             headers: source.headers().to_vec(),
             prefix: format!("{core}c/{token}/"),
+            templates: format!("{core}t/{token}/"),
             core,
             table: Arc::default(),
             #[cfg(test)]
@@ -424,7 +445,7 @@ impl StreamServer {
         })
     }
 
-    /// `name` is already the main URL's name (`file_name`, `hls_name`).
+    /// `name` is already the main URL's name (`file_name`, `manifest_name`).
     fn lease(
         &self,
         token: String,
@@ -719,13 +740,17 @@ fn file_name(filename: &str) -> String {
     }
 }
 
-/// An HLS playback's main URL name: Media3 picks the source by `.m3u8`.
-fn hls_name(filename: &str) -> String {
+/// A manifest playback's main URL name: Media3 picks the source by `.m3u8`
+/// or `.mpd`.
+fn manifest_name(filename: &str, kind: Format) -> String {
     let name = file_name(filename);
     let stem = name
         .rsplit_once('.')
         .map_or(name.as_str(), |(stem, _)| stem);
-    format!("{stem}.m3u8")
+    match kind {
+        Format::Hls => format!("{stem}.m3u8"),
+        Format::Dash => format!("{stem}.mpd"),
+    }
 }
 
 /// A response's `Content-Type`.
@@ -837,9 +862,10 @@ async fn serve(
     }
 }
 
-/// A child of an HLS playback, by the role that named it: a media playlist
-/// rewritten, media bytes with `Range`, or a small key read whole. Every
-/// answer may be read by any page; the token is the capability.
+/// A child of a manifest playback, by the role that named it: a media
+/// playlist or DASH manifest rewritten, media bytes with `Range`, or a small
+/// key or time read whole. Every answer may be read by any page; the token
+/// is the capability.
 async fn serve_child(
     State(shared): State<Arc<Shared>>,
     Path((token, id, _name)): Path<(String, String, String)>,
@@ -866,7 +892,7 @@ async fn serve_child(
     };
     let released = playback.released.clone();
     let out = match role {
-        Role::Playlist => {
+        Role::Playlist | Role::Dash => {
             let query = request.uri().query();
             serve_playlist(&playback, hls, Some(id), url, query).await
         }
@@ -886,6 +912,50 @@ async fn serve_child(
         Role::Small => serve_small(hls, &url, &released).await,
     };
     cors(out)
+}
+
+/// A file under a DASH base or template directory: `tail` (the raw path,
+/// never decoded) on the entry's origin and prefix, with `Range`.
+async fn serve_template(
+    State(shared): State<Arc<Shared>>,
+    Path((token, id, _tail)): Path<(String, String, String)>,
+    request: Request<Body>,
+) -> Response {
+    if !host_ok(&shared, request.headers()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(playback) = playback(&shared, &token) else {
+        return cors(StatusCode::NOT_FOUND.into_response());
+    };
+    let Content::Hls(hls) = &playback.body else {
+        return cors(StatusCode::NOT_FOUND.into_response());
+    };
+    let Some(id) = parse_id(&id).and_then(|id| u32::try_from(id).ok()) else {
+        return cors(StatusCode::NOT_FOUND.into_response());
+    };
+    // `/t/{token}/{id}/` and then the tail, as the player sent it.
+    let tail = request.uri().path().splitn(5, '/').nth(4).unwrap_or("");
+    let found = match table_within(hls, &playback.released, MANIFEST_DEADLINE).await {
+        Ok(mut table) => table.template(id),
+        Err(status) => return cors(status.into_response()),
+    };
+    let url = found.and_then(|(origin, prefix, query)| {
+        manifest::template_url(
+            &origin,
+            &prefix,
+            query.as_deref(),
+            tail,
+            request.uri().query(),
+        )
+    });
+    let Some(url) = url else {
+        return cors(StatusCode::NOT_FOUND.into_response());
+    };
+    let range = range_of(&request);
+    let head_only = request.method() == Method::HEAD;
+    let released = playback.released.clone();
+    let opts = hls.options();
+    cors(proxy(&hls.http, url.as_str(), opts, released, range, head_only).await)
 }
 
 /// Lets any page read the answer (`<video crossorigin>` and Safari's HLS).
@@ -972,7 +1042,10 @@ async fn serve_playlist(
     // The request's clock starts here: a wait for the table counts against
     // its deadline (a lookup never waits past `MANIFEST_DEADLINE`).
     let started = Instant::now();
-    let directives = hls_directives(query);
+    let directives = match hls.kind {
+        Format::Hls => hls_directives(query),
+        Format::Dash => Vec::new(),
+    };
     let blocking = directives.iter().any(|(name, _)| name == "_HLS_msn");
     let target = if blocking {
         match table_within(hls, &playback.released, MANIFEST_DEADLINE).await {
@@ -1002,9 +1075,13 @@ async fn serve_playlist(
             return StatusCode::BAD_GATEWAY.into_response();
         }
     };
+    let content_type = match hls.kind {
+        Format::Hls => "application/vnd.apple.mpegurl",
+        Format::Dash => "application/dash+xml",
+    };
     (
         [
-            (header::CONTENT_TYPE, "application/vnd.apple.mpegurl"),
+            (header::CONTENT_TYPE, content_type),
             (header::CACHE_CONTROL, "no-store"),
         ],
         rewritten.text,
@@ -1079,10 +1156,14 @@ async fn rewrite(
         let mut children = Children {
             core: &hls.core,
             prefix: &hls.prefix,
+            templates: &hls.templates,
             table: &mut table,
             alive: &alive,
         };
-        let rewritten = manifest::rewrite_hls(&body, &base, id.is_some(), &mut children)?;
+        let rewritten = match hls.kind {
+            Format::Hls => manifest::rewrite_hls(&body, &base, id.is_some(), &mut children)?,
+            Format::Dash => manifest::rewrite_dash(&body, &base, &mut children)?,
+        };
         if let Some(target) = rewritten.target_duration {
             table.set_target(id, target);
         }
@@ -1611,7 +1692,14 @@ mod tests {
         assert_eq!(file_name("x.m3u8"), "x.bin");
         assert_eq!(file_name("x.ism"), "x.bin");
         assert_eq!(file_name("Movie.2010.mkv"), "Movie.2010.mkv");
-        assert_eq!(hls_name("tt1727587.mkv"), "tt1727587.m3u8");
+        assert_eq!(
+            manifest_name("tt1727587.mkv", Format::Hls),
+            "tt1727587.m3u8"
+        );
+        assert_eq!(
+            manifest_name("tt1727587.mkv", Format::Dash),
+            "tt1727587.mpd"
+        );
         assert!(lease.url.ends_with("/v.mkv"));
     }
 }
@@ -1629,9 +1717,11 @@ mod rewrites {
         let core = "http://127.0.0.1:7777/".to_owned();
         Arc::new(Hls {
             url: base(),
+            kind: Format::Hls,
             http: HttpClient::new(mq_http::ClientConfig::default()).unwrap(),
             headers: Vec::new(),
             prefix: format!("{core}c/token/"),
+            templates: format!("{core}t/token/"),
             core,
             table: Arc::default(),
             hook,
