@@ -466,10 +466,17 @@ async fn origins_that_ignore_range_still_count_as_alive() {
 
 /// A 200 KiB file with Range support plus a subtitles addon that records the
 /// path it was asked for.
-async fn file_and_subtitles() -> (String, Arc<Mutex<Vec<String>>>) {
+/// Logs the subtitles paths asked for, and the video's `Range` values.
+#[derive(Clone, Default)]
+struct Asked {
+    subtitles: Arc<Mutex<Vec<String>>>,
+    ranges: Arc<Mutex<Vec<String>>>,
+}
+
+async fn file_and_subtitles() -> (String, Asked) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    let asked = Arc::new(Mutex::new(Vec::new()));
+    let asked = Asked::default();
     let log = asked.clone();
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
@@ -484,7 +491,7 @@ async fn file_and_subtitles() -> (String, Arc<Mutex<Vec<String>>>) {
                     .unwrap_or_default()
                     .to_owned();
                 let reply = if path.starts_with("/subtitles/") {
-                    log.lock().unwrap().push(path);
+                    log.subtitles.lock().unwrap().push(path);
                     let body = r#"{"subtitles":[{"id":"1","lang":"eng","url":"https://subs.example/1.srt"},{"id":"2","lang":"tur","url":"https://subs.example/2.srt"}]}"#;
                     format!(
                         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -498,6 +505,10 @@ async fn file_and_subtitles() -> (String, Arc<Mutex<Vec<String>>>) {
                             .strip_prefix("range: bytes=")
                             .map(str::to_owned)
                     });
+                    log.ranges
+                        .lock()
+                        .unwrap()
+                        .extend(range.as_ref().map(|r| r.trim().to_owned()));
                     let (start, end) = range
                         .and_then(|r| {
                             let (a, b) = r.trim().split_once('-')?;
@@ -542,9 +553,9 @@ fn expected_hash(file: &[u8]) -> String {
     format!("{sum:016x}")
 }
 
-#[tokio::test]
-async fn finds_subtitles_by_hash_size_and_filename() {
-    let (base, asked) = file_and_subtitles().await;
+/// Plays the video at `base` with its addon installed for streams and
+/// subtitles, until the subtitles settle.
+async fn played_with_subtitles(base: &str) -> (PlaybackView, PlaybackSnapshot) {
     let core = Core::temporary("p").unwrap();
     core.set_prefs(&serde_json::json!({"subtitleLanguages": ["tur"]}))
         .unwrap();
@@ -571,16 +582,20 @@ async fn finds_subtitles_by_hash_size_and_filename() {
     );
     let candidates = listed(&format!("{base}/manifest.json"), "subs", "Subs", &streams);
     let view = PlaybackView::open(&core, candidates, target());
-    let mut done = None;
     for _ in 0..500 {
         let s = view.snapshot();
         if s.phase == PlaybackPhase::Ready && !s.subtitles_pending {
-            done = Some(s);
-            break;
+            return (view, s);
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    let s = done.expect("subtitles settled");
+    panic!("subtitles never settled: {:?}", view.snapshot());
+}
+
+#[tokio::test]
+async fn finds_subtitles_by_hash_size_and_filename() {
+    let (base, asked) = file_and_subtitles().await;
+    let (_view, s) = played_with_subtitles(&base).await;
     // The preferred language comes first; the rest keep arrival order (the
     // stream's own track, then the addon's).
     let order: Vec<_> = s
@@ -601,7 +616,7 @@ async fn finds_subtitles_by_hash_size_and_filename() {
             && u.ends_with(".vtt")),
         "{urls:?}"
     );
-    let path = asked.lock().unwrap()[0].clone();
+    let path = asked.subtitles.lock().unwrap()[0].clone();
     let hash = expected_hash(&video());
     assert_eq!(
         path,
@@ -609,6 +624,35 @@ async fn finds_subtitles_by_hash_size_and_filename() {
             "/subtitles/movie/tt1727587/videoHash={hash}&videoSize=204800&filename=Sintel.2010.mkv.json"
         )
     );
+}
+
+#[tokio::test]
+async fn every_ready_url_is_a_loopback_url() {
+    let (base, _) = file_and_subtitles().await;
+    let (_view, s) = played_with_subtitles(&base).await;
+    let url = s.url.unwrap();
+    assert!(
+        url.starts_with("http://127.0.0.1:") && url.contains("/s/"),
+        "{url}"
+    );
+    assert!(!url.contains(&base), "{url}");
+    for track in &s.subtitles {
+        assert!(track.url.starts_with("http://127.0.0.1:"), "{}", track.url);
+    }
+}
+
+#[tokio::test]
+async fn the_hash_is_read_in_process() {
+    let (base, asked) = file_and_subtitles().await;
+    let (_view, _) = played_with_subtitles(&base).await;
+    let path = asked.subtitles.lock().unwrap()[0].clone();
+    let hash = expected_hash(&video());
+    assert!(path.contains(&format!("videoHash={hash}")), "{path}");
+    // The playback's cursors ask open ranges; a closed one is a second
+    // reader on the origin.
+    let ranges = asked.ranges.lock().unwrap().clone();
+    assert!(!ranges.is_empty());
+    assert!(ranges.iter().all(|r| r.ends_with('-')), "{ranges:?}");
 }
 
 /// Meta addon for a three-episode season plus a special; episode 3 is not

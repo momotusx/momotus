@@ -18,6 +18,7 @@ async fn main() {
         url,
         headers: Vec::new(),
     };
-    println!("{}", server.register(upstream, &name));
+    let lease = server.register(upstream, &name);
+    println!("{}", lease.url);
     std::future::pending::<()>().await;
 }

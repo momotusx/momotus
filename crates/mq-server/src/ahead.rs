@@ -9,8 +9,9 @@
 use crate::lock;
 use axum::http::{HeaderMap, StatusCode, header};
 use bytes::{Bytes, BytesMut};
+use futures_util::future::BoxFuture;
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions, StreamingResponse, Url};
-use mq_media::{BLOCK_SIZE, ByteCache, CancellationToken};
+use mq_media::{BLOCK_SIZE, ByteCache, CancellationToken, ProbeError};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
@@ -325,6 +326,43 @@ impl Source {
         *lock(&cursor.task) = Some(task.abort_handle());
         cursors.push(cursor.clone());
         Some(cursor)
+    }
+}
+
+/// A playback's bytes in process, for the subtitle hash: from its cache and
+/// its cursors (open-ended reads), with no HTTP to the core's own server.
+pub(crate) struct Reader(pub(crate) Arc<Source>);
+
+impl mq_media::RangeReader for Reader {
+    fn len(&self) -> BoxFuture<'_, Result<u64, ProbeError>> {
+        Box::pin(async move {
+            match self.0.meta(0).await {
+                Ok(meta) => Ok(meta.len),
+                Err(Refusal::Passthrough) => Err(ProbeError::RangeUnsupported),
+                Err(_) => Err(ProbeError::Http("source failed".into())),
+            }
+        })
+    }
+
+    fn read_at(&self, offset: u64, len: u64) -> BoxFuture<'_, Result<Bytes, ProbeError>> {
+        Box::pin(async move {
+            let end = offset.saturating_add(len).min(self.len().await?);
+            let mut out = BytesMut::new();
+            let mut pos = offset;
+            while pos < end {
+                let bytes = self
+                    .0
+                    .read(pos, end)
+                    .await
+                    .map_err(|e| ProbeError::Http(e.to_string()))?;
+                if bytes.is_empty() {
+                    break;
+                }
+                pos += bytes.len() as u64;
+                out.extend_from_slice(&bytes);
+            }
+            Ok(out.freeze())
+        })
     }
 }
 

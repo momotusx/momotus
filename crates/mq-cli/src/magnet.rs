@@ -169,7 +169,7 @@ async fn run(
         .next()
         .unwrap_or(&info.path)
         .to_owned();
-    let url = server.register(
+    let lease = server.register(
         Upstream::Torrent {
             engine: engine.clone(),
             torrent: t,
@@ -177,6 +177,7 @@ async fn run(
         },
         &name,
     );
+    let url = lease.url.clone();
     // A player's first request (time to first byte and to 4 MiB through the
     // loopback) runs beside the readiness wait. A player starts at Ready, as
     // in the app; the byte probe needs no container tail and starts its seeks

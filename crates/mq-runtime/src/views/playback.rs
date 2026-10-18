@@ -13,9 +13,8 @@ use futures_util::{Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{FINISHED_RATIO, LibraryItemRow, ProgressRow};
-use mq_media::{ByteCache, HttpRangeReader};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
-use mq_server::{StreamServer, Upstream};
+use mq_server::{Lease, SubtitleSlot, Upstream};
 use mq_streams::ParsedStream;
 use serde::Serialize;
 use std::pin::Pin;
@@ -156,7 +155,15 @@ struct State {
     snapshot: PlaybackSnapshot,
     candidates: Vec<ParsedStream>,
     next: usize,
-    server: Option<Arc<StreamServer>>,
+    /// The playing source's token: its URL and its subtitles' URLs live as
+    /// long as it is kept here.
+    lease: Option<Lease>,
+    /// Bumped under this lock by every new resolve and every failover; a
+    /// resolve task adopts a lease, and publishes tracks, only while its own
+    /// number is the newest.
+    run: u64,
+    /// The view is gone: no lease is ever adopted again.
+    closed: bool,
     last: Option<(u64, u64)>,
     saved_at: Option<Instant>,
     dirty: bool,
@@ -178,6 +185,39 @@ pub struct PlaybackView {
     task: Mutex<Option<JoinHandle<()>>>,
 }
 
+impl State {
+    fn new(candidates: Vec<ParsedStream>, resume_ms: Option<u64>) -> Self {
+        Self {
+            snapshot: PlaybackSnapshot {
+                phase: PlaybackPhase::Resolving,
+                url: None,
+                key: None,
+                filename: None,
+                size_bytes: None,
+                resume_ms,
+                attempts: Vec::new(),
+                subtitles: Vec::new(),
+                subtitles_pending: false,
+                next: None,
+                binge_group: None,
+                segments: Vec::new(),
+                next_at_ms: None,
+            },
+            candidates,
+            next: 0,
+            lease: None,
+            run: 0,
+            closed: false,
+            last: None,
+            saved_at: None,
+            dirty: false,
+            source: 0,
+            lookup: None,
+            segments_task: None,
+        }
+    }
+}
+
 impl PlaybackView {
     pub fn open(core: &Core, candidates: Vec<ParsedStream>, target: PlayTarget) -> Self {
         let resume_ms = core
@@ -189,37 +229,12 @@ impl PlaybackView {
                 pos > 0 && (dur == 0 || (pos as f64) < dur as f64 * FINISHED_RATIO)
             })
             .map(|(pos, _)| pos as u64);
-        let snapshot = PlaybackSnapshot {
-            phase: PlaybackPhase::Resolving,
-            url: None,
-            key: None,
-            filename: None,
-            size_bytes: None,
-            resume_ms,
-            attempts: Vec::new(),
-            subtitles: Vec::new(),
-            subtitles_pending: false,
-            next: None,
-            binge_group: None,
-            segments: Vec::new(),
-            next_at_ms: None,
-        };
+        let state = State::new(candidates, resume_ms);
         let view = Self {
             core: core.clone(),
             target: Arc::new(target),
-            snapshot: SharedObservable::new(snapshot.clone()),
-            state: Arc::new(Mutex::new(State {
-                snapshot,
-                candidates,
-                next: 0,
-                server: None,
-                last: None,
-                saved_at: None,
-                dirty: false,
-                source: 0,
-                lookup: None,
-                segments_task: None,
-            })),
+            snapshot: SharedObservable::new(state.snapshot.clone()),
+            state: Arc::new(Mutex::new(state)),
             task: Mutex::new(None),
         };
         view.spawn_resolve();
@@ -251,6 +266,8 @@ impl PlaybackView {
             if s.snapshot.phase != PlaybackPhase::Ready {
                 return;
             }
+            // The running task's work for this source ends here.
+            s.run += 1;
             release_all(&mut s);
             if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
                 let attempt = attempt(stream, error);
@@ -340,11 +357,17 @@ impl PlaybackView {
     }
 
     fn spawn_resolve(&self) {
+        let run = {
+            let mut s = lock(&self.state);
+            s.run += 1;
+            s.run
+        };
         let task = tokio::spawn(resolve_next(
             self.core.clone(),
             self.target.clone(),
             self.state.clone(),
             self.snapshot.clone(),
+            run,
         ));
         if let Some(old) = lock(&self.task).replace(task) {
             old.abort();
@@ -361,7 +384,10 @@ impl Drop for PlaybackView {
             task.abort();
         }
         self.save();
-        release_all(&mut lock(&self.state));
+        // A task still running after the abort can never adopt a lease now.
+        let mut s = lock(&self.state);
+        s.closed = true;
+        release_all(&mut s);
     }
 }
 
@@ -442,14 +468,28 @@ async fn find_segments(
 }
 
 /// Ends the stream's and the subtitles' loopback URLs; they stop working.
+/// Under the view's lock, which the lease's drop follows with the server's:
+/// never the reverse.
 fn release_all(s: &mut State) {
-    let url = s.snapshot.url.take();
-    let subtitles = std::mem::take(&mut s.snapshot.subtitles);
-    if let Some(server) = &s.server {
-        for url in url.iter().chain(subtitles.iter().map(|t| &t.url)) {
-            server.release(url);
-        }
+    s.snapshot.url = None;
+    s.snapshot.subtitles.clear();
+    s.lease = None;
+}
+
+/// Whether `run` still owns the view's source and tracks.
+fn current(s: &State, run: u64) -> bool {
+    !s.closed && s.run == run
+}
+
+/// Keeps `lease` as the playing source's, only while the view is open and
+/// `run` is still the newest; else it is dropped here, which ends its token.
+fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
+    if !current(s, run) {
+        return false;
     }
+    s.snapshot.url = Some(lease.url.clone());
+    s.lease = Some(lease);
+    true
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -521,6 +561,7 @@ async fn resolve_next(
     target: Arc<PlayTarget>,
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<PlaybackSnapshot>,
+    run: u64,
 ) {
     let server = match core.stream_server().await {
         Ok(server) => server,
@@ -539,7 +580,6 @@ async fn resolve_next(
     loop {
         let stream = {
             let mut s = lock(&state);
-            s.server = Some(server.clone());
             let Some(stream) = s.candidates.get(s.next).cloned() else {
                 s.snapshot.phase = PlaybackPhase::Failed;
                 snapshot.set(s.snapshot.clone());
@@ -556,27 +596,31 @@ async fn resolve_next(
                 server
                     .open(upstream.clone(), &name, PROBE_TIMEOUT)
                     .await
-                    .map(|url| (upstream, filename, size, url))
+                    .map(|lease| (upstream, filename, size, lease))
             }
             Err(e) => Err(e),
         };
         match opened {
-            Ok((upstream, filename, size, url)) => {
+            Ok((upstream, filename, size, lease)) => {
                 let wanted = core.prefs().subtitle_languages;
                 // The stream's own tracks come from its addon.
                 let addon_url = stream.addon_url.as_ref();
+                let slot = lease.subtitles();
+                let reader = lease.reader();
                 {
                     let mut s = lock(&state);
+                    if !adopt(&mut s, run, lease) {
+                        return;
+                    }
                     clear_segments(&mut s);
                     s.snapshot.phase = PlaybackPhase::Ready;
-                    s.snapshot.url = Some(url);
                     s.snapshot.key = Some(stream.key.clone());
                     s.snapshot.filename = filename.clone();
                     s.snapshot.size_bytes = size.or(stream.size_bytes);
                     s.snapshot.subtitles = stream
                         .subtitles
                         .iter()
-                        .map(|w| track(w, &stream.addon_name, &server, addon_url))
+                        .filter_map(|w| track(w, &stream.addon_name, &slot, addon_url))
                         .collect();
                     order_subtitles(&mut s.snapshot.subtitles, &wanted);
                     s.snapshot.subtitles_pending = true;
@@ -584,15 +628,10 @@ async fn resolve_next(
                     snapshot.set(s.snapshot.clone());
                 }
                 remember_stream(&core, &target, &stream);
-                let subtitles = find_subtitles(
-                    &core,
-                    &server,
-                    &target,
-                    &upstream,
-                    filename.as_deref(),
-                    &state,
-                    &snapshot,
-                );
+                let subtitles = async {
+                    let extra = video_extra(&upstream, reader, filename.as_deref()).await;
+                    find_subtitles(&core, &target, extra, &slot, run, &state, &snapshot).await
+                };
                 let next = async {
                     if let Some(next) = next_episode(&core, &target).await {
                         let mut s = lock(&state);
@@ -871,71 +910,52 @@ fn source_word(source: &Source) -> &'static str {
 }
 
 /// A track served through the loopback server as UTF-8 WebVTT, whatever
-/// format and charset the addon's file has.
+/// format and charset the addon's file has; `None` once its playback is
+/// released.
 fn track(
     w: &mq_protocol::WireSubtitle,
     source: &str,
-    server: &StreamServer,
+    slot: &SubtitleSlot,
     addon_url: Option<&Url>,
-) -> SubtitleTrack {
-    SubtitleTrack {
-        url: server.register_subtitle(w.url.as_str(), &w.lang, addon_url),
+) -> Option<SubtitleTrack> {
+    Some(SubtitleTrack {
+        url: slot.add(w.url.as_str(), &w.lang, addon_url)?,
         lang: w.lang.clone(),
         label: w.label.clone(),
         source: source.to_owned(),
         forced: w.forced,
         hearing_impaired: w.hearing_impaired,
-    }
+    })
 }
 
-/// Asks every subtitles addon for this video with the OpenSubtitles hash, size
-/// and filename when they can be had (hash: first and last 64 KiB), and adds
-/// tracks to the snapshot as each addon answers.
-async fn find_subtitles(
-    core: &Core,
-    server: &StreamServer,
-    target: &PlayTarget,
+/// The OpenSubtitles hash and size when they can be had (first and last
+/// 64 KiB, read in process for files), and the filename.
+async fn video_extra(
     upstream: &Upstream,
+    reader: Option<Box<dyn mq_media::RangeReader>>,
     filename: Option<&str>,
-    state: &Mutex<State>,
-    snapshot: &SharedObservable<PlaybackSnapshot>,
-) {
-    let reader: Box<dyn mq_media::RangeReader> = match upstream {
-        Upstream::Http {
-            url,
-            headers,
-            addon_url,
-        } => {
-            // The playback's own scope, as the stream server uses it.
-            let local = addon_url
-                .as_ref()
-                .and_then(Url::host_str)
-                .map(mq_http::local_addrs)
-                .unwrap_or_default();
-            Box::new(HttpRangeReader::new(
-                core.http().scoped(&local),
-                url,
-                headers.clone(),
-                Arc::new(ByteCache::new(512 * 1024)),
-            ))
-        }
+) -> Vec<ExtraValue> {
+    let reader = match upstream {
+        // Over the playback's own cache and cursors; none for passthrough.
+        Upstream::Http { .. } => reader,
         #[cfg(feature = "torrent")]
         Upstream::Torrent {
             engine,
             torrent,
             file,
         } => match engine.open_reader(*torrent, *file).await {
-            Ok(reader) => Box::new(TorrentBytes(reader)),
+            Ok(reader) => Some(Box::new(TorrentBytes(reader)) as Box<dyn mq_media::RangeReader>),
             Err(e) => {
                 tracing::warn!("torrent reader for the subtitle hash: {e}");
-                return;
+                None
             }
         },
     };
     let mut extra = Vec::new();
     // Origins that ignore Range give no hash; filename and id still match.
-    if let Ok(Ok((hash, size))) =
-        tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(&*reader)).await
+    if let Some(reader) = reader
+        && let Ok(Ok((hash, size))) =
+            tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(&*reader)).await
     {
         extra.push(extra_value("videoHash", hash));
         extra.push(extra_value("videoSize", size.to_string()));
@@ -943,6 +963,20 @@ async fn find_subtitles(
     if let Some(name) = filename {
         extra.push(extra_value("filename", name.to_owned()));
     }
+    extra
+}
+
+/// Asks every subtitles addon for this video with `extra`, and adds tracks
+/// to the snapshot as each addon answers, while `run` is still the view's.
+async fn find_subtitles(
+    core: &Core,
+    target: &PlayTarget,
+    extra: Vec<ExtraValue>,
+    slot: &SubtitleSlot,
+    run: u64,
+    state: &Mutex<State>,
+    snapshot: &SharedObservable<PlaybackSnapshot>,
+) {
     let path = ResourcePath {
         resource: "subtitles".into(),
         r#type: target.kind.clone(),
@@ -959,6 +993,9 @@ async fn find_subtitles(
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     while let Some(event) = fanout.next().await {
         let mut s = lock(state);
+        if !current(&s, run) {
+            return;
+        }
         match event {
             AddonEvent::Arrived {
                 addon_id,
@@ -974,7 +1011,9 @@ async fn find_subtitles(
                 for w in &found {
                     // One file, one loopback address: compare by it. The
                     // fetch has the scope of the install that answered.
-                    let t = track(w, &source, server, Some(&transport_url));
+                    let Some(t) = track(w, &source, slot, Some(&transport_url)) else {
+                        return;
+                    };
                     if !s.snapshot.subtitles.iter().any(|known| known.url == t.url) {
                         s.snapshot.subtitles.push(t);
                     }
@@ -987,7 +1026,7 @@ async fn find_subtitles(
         snapshot.set(s.snapshot.clone());
     }
     let mut s = lock(state);
-    if s.snapshot.subtitles_pending {
+    if current(&s, run) && s.snapshot.subtitles_pending {
         s.snapshot.subtitles_pending = false;
         snapshot.set(s.snapshot.clone());
     }
@@ -1104,5 +1143,32 @@ mod tests {
         );
         let no_hash = stream(r#"{"clientResolve":{"type":"debrid","service":"torbox"}}"#);
         assert!(debrid_request(&no_hash, None, None).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_late_lease_is_never_adopted() {
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let server = mq_server::StreamServer::start(http).await.unwrap();
+        let lease = || {
+            let upstream = Upstream::Http {
+                url: "http://127.0.0.1:9/v.mkv".into(),
+                headers: Vec::new(),
+                addon_url: None,
+            };
+            server.register(upstream, "v.mkv")
+        };
+        let mut s = State::new(Vec::new(), None);
+        // A failover moved the view on while run 1 was opening.
+        s.run = 2;
+        assert!(!adopt(&mut s, 1, lease()), "a run that moved on");
+        assert_eq!(server.playbacks(), 0);
+        assert!(adopt(&mut s, 2, lease()));
+        assert_eq!(server.playbacks(), 1);
+        // The view closed while run 2's task still ran.
+        s.closed = true;
+        release_all(&mut s);
+        assert!(!adopt(&mut s, 2, lease()), "a closed view");
+        assert_eq!(server.playbacks(), 0);
+        assert_eq!(s.snapshot.url, None);
     }
 }

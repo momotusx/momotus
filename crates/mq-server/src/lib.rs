@@ -5,8 +5,9 @@
 //! (feature `torrent`, full builds only) a file of the embedded torrent
 //! engine served from verified pieces.
 //!
-//! Subtitles get `http://127.0.0.1:<port>/sub/<token>/<lang>.vtt`: the
-//! addon's file fetched on request and served as UTF-8 WebVTT.
+//! Its subtitles get `http://127.0.0.1:<port>/sub/<token>/<id>/<lang>.vtt`
+//! under the same token: the addon's file fetched on request and served as
+//! UTF-8 WebVTT. A token exists only while its `Lease` does.
 
 mod ahead;
 mod subtitles;
@@ -21,9 +22,10 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use futures_util::stream;
 use mq_http::{HttpClient, Priority, RequestOptions, Url};
+use mq_media::CancellationToken;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 /// Where the bytes of one playback come from.
@@ -64,9 +66,8 @@ fn scope(addon_url: Option<&Url>) -> Vec<IpAddr> {
         .unwrap_or_default()
 }
 
-/// A registered playback.
-#[derive(Clone)]
-enum Session {
+/// Where one playback's bytes come from.
+enum Content {
     Http(Arc<ahead::Source>),
     #[cfg(feature = "torrent")]
     Torrent {
@@ -76,156 +77,267 @@ enum Session {
     },
 }
 
-#[derive(Clone)]
-struct AppState {
+/// One playback: its body and its subtitles, under one token.
+struct Playback {
+    body: Content,
+    /// Cancelled at release: bodies being served and fetches in flight end.
+    released: CancellationToken,
+    /// By the id in `/sub/{token}/{id}/...`; deduplicated within the playback.
+    subtitles: Mutex<Vec<Subtitle>>,
+}
+
+impl Playback {
+    #[allow(irrefutable_let_patterns)] // one variant without `torrent`
+    fn release(&self) {
+        self.released.cancel();
+        if let Content::Http(source) = &self.body {
+            source.shutdown();
+        }
+    }
+}
+
+/// What the routes and every lease share.
+struct Shared {
     http: HttpClient,
-    sessions: Arc<Mutex<HashMap<String, Session>>>,
-    subtitles: Arc<Mutex<HashMap<String, Subtitle>>>,
-    port: u16,
+    playbacks: Mutex<HashMap<String, Arc<Playback>>>,
+    addr: SocketAddr,
 }
 
 pub struct StreamServer {
-    state: AppState,
-    addr: SocketAddr,
-    _task: tokio::task::JoinHandle<()>,
+    shared: Arc<Shared>,
+    /// Stops accepting and closes every connection, keep-alive ones too.
+    shutdown: CancellationToken,
 }
 
 impl StreamServer {
     /// Binds an ephemeral port on 127.0.0.1 only.
     pub async fn start(http: HttpClient) -> std::io::Result<Self> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
-        let addr = listener.local_addr()?;
-        let state = AppState {
+        let shared = Arc::new(Shared {
             http,
-            sessions: Arc::default(),
-            subtitles: Arc::default(),
-            port: addr.port(),
-        };
+            playbacks: Mutex::default(),
+            addr: listener.local_addr()?,
+        });
         let app = Router::new()
             .route("/s/{token}/{name}", get(serve).head(serve))
-            .route("/sub/{token}/{name}", get(serve_subtitle))
-            .with_state(state.clone());
-        let task = tokio::spawn(async move {
-            let _ = axum::serve(listener, app).await;
+            .route("/sub/{token}/{id}/{name}", get(serve_subtitle))
+            .with_state(shared.clone());
+        let shutdown = CancellationToken::new();
+        let stop = shutdown.clone().cancelled_owned();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app)
+                .with_graceful_shutdown(stop)
+                .await;
         });
-        Ok(Self {
-            state,
-            addr,
-            _task: task,
-        })
+        Ok(Self { shared, shutdown })
     }
 
-    /// Registers a playback and returns its URL. `filename` only helps
-    /// players guess the container; it carries no secrets.
-    /// An HTTP upstream starts reading its first bytes at once.
-    pub fn register(&self, upstream: Upstream, filename: &str) -> String {
-        self.add(upstream, filename).0
+    /// A playback that serves at once, with no check of its origin: for the
+    /// CLI and examples. `filename` only helps players guess the container;
+    /// it carries no secrets. An HTTP upstream starts reading at once.
+    pub fn register(&self, upstream: Upstream, filename: &str) -> Lease {
+        self.lease(self.playback(upstream), filename)
     }
 
-    fn add(&self, upstream: Upstream, filename: &str) -> (String, Session) {
-        let session = match upstream {
+    /// A playback whose origin answered within `deadline`, so a dead link
+    /// fails here instead of in the player. For HTTP that answer is the read
+    /// that goes on to serve the player; no extra request is made. The token
+    /// exists only once the answer came: dropping this future first leaves
+    /// none, and stops the read.
+    #[allow(irrefutable_let_patterns)] // one variant without `torrent`
+    pub async fn open(
+        &self,
+        upstream: Upstream,
+        filename: &str,
+        deadline: Duration,
+    ) -> Result<Lease, String> {
+        let playback = self.playback(upstream);
+        // Torrent playbacks are checked before they get here.
+        if let Content::Http(source) = &playback.body {
+            let error = match tokio::time::timeout(deadline, source.meta(0)).await {
+                Ok(Ok(_) | Err(ahead::Refusal::Passthrough)) => None,
+                Ok(Err(ahead::Refusal::Status(status, _))) => Some(refused(status)),
+                Ok(Err(ahead::Refusal::Blocked)) => {
+                    Some("The source points to a private network address".into())
+                }
+                Ok(Err(ahead::Refusal::Failed(reason))) => {
+                    tracing::info!("stream source unreachable: {reason}");
+                    Some("The source could not be reached".into())
+                }
+                Err(_) => Some("The source did not answer in time".into()),
+            };
+            if let Some(error) = error {
+                playback.release();
+                return Err(error);
+            }
+        }
+        Ok(self.lease(playback, filename))
+    }
+
+    fn playback(&self, upstream: Upstream) -> Arc<Playback> {
+        let body = match upstream {
             Upstream::Http {
                 url,
                 headers,
                 addon_url,
             } => {
-                let http = self.state.http.scoped(&scope(addon_url.as_ref()));
+                let http = self.shared.http.scoped(&scope(addon_url.as_ref()));
                 let source = ahead::Source::new(http, url, headers);
                 source.prefetch();
-                Session::Http(source)
+                Content::Http(source)
             }
             #[cfg(feature = "torrent")]
             Upstream::Torrent {
                 engine,
                 torrent,
                 file,
-            } => Session::Torrent {
+            } => Content::Torrent {
                 engine,
                 torrent,
                 file,
             },
         };
+        Arc::new(Playback {
+            body,
+            released: CancellationToken::new(),
+            subtitles: Mutex::default(),
+        })
+    }
+
+    fn lease(&self, playback: Arc<Playback>, filename: &str) -> Lease {
         let token = new_token();
-        lock(&self.state.sessions).insert(token.clone(), session.clone());
-        let url = format!("http://{}/s/{token}/{}", self.addr, sanitize(filename));
-        (url, session)
+        lock(&self.shared.playbacks).insert(token.clone(), playback.clone());
+        let url = format!(
+            "http://{}/s/{token}/{}",
+            self.shared.addr,
+            sanitize(filename)
+        );
+        Lease {
+            url,
+            token,
+            playback,
+            shared: self.shared.clone(),
+        }
     }
 
-    /// Registers a playback and waits up to `deadline` for its origin's
-    /// first answer, so a dead link fails here instead of in the player. For
-    /// HTTP that answer is the read that goes on to serve the player; no
-    /// extra request is made. A dead link is released again.
-    pub async fn open(
-        &self,
-        upstream: Upstream,
-        filename: &str,
-        deadline: Duration,
-    ) -> Result<String, String> {
-        let (url, session) = self.add(upstream, filename);
-        // Torrent playbacks are checked before they get here.
-        #[allow(irrefutable_let_patterns)] // one variant without `torrent`
-        let Session::Http(source) = session else {
-            return Ok(url);
-        };
-        let error = match tokio::time::timeout(deadline, source.meta(0)).await {
-            Ok(Ok(_) | Err(ahead::Refusal::Passthrough)) => return Ok(url),
-            Ok(Err(ahead::Refusal::Status(status, _))) => refused(status),
-            Ok(Err(ahead::Refusal::Blocked)) => {
-                "The source points to a private network address".into()
-            }
-            Ok(Err(ahead::Refusal::Failed(reason))) => {
-                tracing::info!("stream source unreachable: {reason}");
-                "The source could not be reached".into()
-            }
-            Err(_) => "The source did not answer in time".into(),
-        };
-        self.release(&url);
-        Err(error)
+    /// Playbacks with a live token.
+    pub fn playbacks(&self) -> usize {
+        lock(&self.shared.playbacks).len()
     }
 
-    /// Registers an addon's subtitle file and returns a URL that serves it as
-    /// UTF-8 WebVTT. The same file gets the same URL, so tracks compare by it.
-    /// `addon_url` is the install whose answer named the file: the fetch
-    /// reaches only its own host among private addresses.
-    pub fn register_subtitle(&self, url: &str, lang: &str, addon_url: Option<&Url>) -> String {
+    pub fn addr(&self) -> SocketAddr {
+        self.shared.addr
+    }
+}
+
+impl Drop for StreamServer {
+    /// Every token goes, every body and fetch ends, and axum closes the
+    /// connections, keep-alive ones too.
+    fn drop(&mut self) {
+        self.shutdown.cancel();
+        let playbacks = std::mem::take(&mut *lock(&self.shared.playbacks));
+        for playback in playbacks.values() {
+            playback.release();
+        }
+    }
+}
+
+/// One playback's token: its URL and its subtitles' work while the lease
+/// lives. Dropping it removes the token, ends bodies being served and stops
+/// every upstream read.
+pub struct Lease {
+    pub url: String,
+    token: String,
+    playback: Arc<Playback>,
+    shared: Arc<Shared>,
+}
+
+impl Lease {
+    /// Where this playback's subtitle tracks are added, for as long as it
+    /// lives.
+    pub fn subtitles(&self) -> SubtitleSlot {
+        SubtitleSlot {
+            playback: Arc::downgrade(&self.playback),
+            base: format!("http://{}/sub/{}", self.shared.addr, self.token),
+        }
+    }
+
+    /// The playback's bytes in process (through its read-ahead cache), for
+    /// the subtitle hash; `None` for an origin that ignores ranges and for a
+    /// torrent, which has its own reader.
+    pub fn reader(&self) -> Option<Box<dyn mq_media::RangeReader>> {
+        match &self.playback.body {
+            Content::Http(source) if !source.passthrough() => {
+                Some(Box::new(ahead::Reader(source.clone())))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Debug for Lease {
+    /// Never the URL: its token is the playback's only secret.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Lease").finish_non_exhaustive()
+    }
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        let mut playbacks = lock(&self.shared.playbacks);
+        if playbacks
+            .get(&self.token)
+            .is_some_and(|p| Arc::ptr_eq(p, &self.playback))
+        {
+            playbacks.remove(&self.token);
+        }
+        drop(playbacks);
+        self.playback.release();
+    }
+}
+
+/// Adds subtitle tracks to one playback. It never keeps the playback alive:
+/// once the lease is gone, `add` gives `None`.
+#[derive(Clone)]
+pub struct SubtitleSlot {
+    playback: Weak<Playback>,
+    base: String,
+}
+
+impl SubtitleSlot {
+    /// The URL that serves the addon's file `url` as UTF-8 WebVTT. The same
+    /// file gets the same URL, so tracks compare by it. `addon_url` is the
+    /// install whose answer named the file: the fetch reaches only its own
+    /// host among private addresses. `None` once the playback was released.
+    pub fn add(&self, url: &str, lang: &str, addon_url: Option<&Url>) -> Option<String> {
+        let playback = self.playback.upgrade()?;
+        if playback.released.is_cancelled() {
+            return None;
+        }
         let subtitle = Subtitle {
             url: url.to_owned(),
             lang: lang.to_owned(),
             addon_url: addon_url.cloned(),
         };
-        let mut subtitles = lock(&self.state.subtitles);
-        let token = match subtitles.iter().find(|(_, s)| **s == subtitle) {
-            Some((token, _)) => token.clone(),
+        let mut subtitles = lock(&playback.subtitles);
+        let id = match subtitles.iter().position(|s| *s == subtitle) {
+            Some(id) => id,
             None => {
-                let token = new_token();
-                subtitles.insert(token.clone(), subtitle);
-                token
+                subtitles.push(subtitle);
+                subtitles.len() - 1
             }
         };
-        format!("http://{}/sub/{token}/{}.vtt", self.addr, sanitize(lang))
+        Some(format!("{}/{id}/{}.vtt", self.base, sanitize(lang)))
     }
+}
 
-    /// Ends a playback or a subtitle; its URL stops working immediately and
-    /// its upstream reads stop.
-    pub fn release(&self, url: &str) {
-        let token = |prefix| {
-            url.split(prefix)
-                .nth(1)
-                .and_then(|rest: &str| rest.split('/').next())
-                .map(str::to_owned)
-        };
-        let removed = token("/s/").and_then(|token| lock(&self.state.sessions).remove(&token));
-        if let Some(Session::Http(source)) = removed {
-            source.shutdown();
-        }
-        if let Some(token) = token("/sub/") {
-            lock(&self.state.subtitles).remove(&token);
-        }
-    }
-
-    pub fn addr(&self) -> SocketAddr {
-        self.addr
-    }
+/// A route id: decimal, no sign, no leading zero.
+fn parse_id(id: &str) -> Option<usize> {
+    let digits = !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit());
+    (digits && (id == "0" || !id.starts_with('0')))
+        .then(|| id.parse::<u32>().ok())
+        .flatten()
+        .map(|id| id as usize)
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -268,27 +380,35 @@ const PASSTHROUGH: [header::HeaderName; 6] = [
 ];
 
 /// DNS rebinding guard: only answer requests addressed to our loopback.
-fn host_ok(state: &AppState, headers: &HeaderMap) -> bool {
+fn host_ok(shared: &Shared, headers: &HeaderMap) -> bool {
+    let port = shared.addr.port();
     headers
         .get(header::HOST)
         .and_then(|h| h.to_str().ok())
-        .is_some_and(|h| {
-            h == format!("127.0.0.1:{}", state.port) || h == format!("localhost:{}", state.port)
-        })
+        .is_some_and(|h| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}"))
+}
+
+/// The playback a token names, while its lease lives.
+fn playback(shared: &Shared, token: &str) -> Option<Arc<Playback>> {
+    lock(&shared.playbacks).get(token).cloned()
 }
 
 /// Fetches the addon's subtitle file and answers with UTF-8 WebVTT. Any
 /// origin may read it (a browser's `<track crossorigin>`); the token is the
 /// capability.
 async fn serve_subtitle(
-    State(state): State<AppState>,
-    Path((token, _name)): Path<(String, String)>,
+    State(shared): State<Arc<Shared>>,
+    Path((token, id, _name)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    if !host_ok(&state, &headers) {
+    if !host_ok(&shared, &headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let Some(subtitle) = lock(&state.subtitles).get(&token).cloned() else {
+    let Some(playback) = playback(&shared, &token) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let subtitle = parse_id(&id).and_then(|id| lock(&playback.subtitles).get(id).cloned());
+    let Some(subtitle) = subtitle else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let opts = RequestOptions {
@@ -296,10 +416,13 @@ async fn serve_subtitle(
         timeout: Duration::from_secs(20),
         ..Default::default()
     };
-    let http = state.http.scoped(&scope(subtitle.addon_url.as_ref()));
-    let body = match http.get(&subtitle.url, &opts).await {
-        Ok(response) => response.body,
-        Err(e) => {
+    let http = shared.http.scoped(&scope(subtitle.addon_url.as_ref()));
+    let fetch = http.get(&subtitle.url, &opts);
+    // Release ends the fetch too.
+    let body = match playback.released.run_until_cancelled(fetch).await {
+        None => return StatusCode::NOT_FOUND.into_response(),
+        Some(Ok(response)) => response.body,
+        Some(Err(e)) => {
             tracing::warn!("subtitle upstream failed: {}", e.kind());
             return StatusCode::BAD_GATEWAY.into_response();
         }
@@ -318,14 +441,14 @@ async fn serve_subtitle(
 }
 
 async fn serve(
-    State(state): State<AppState>,
+    State(shared): State<Arc<Shared>>,
     Path((token, _name)): Path<(String, String)>,
     request: Request<Body>,
 ) -> Response {
-    if !host_ok(&state, request.headers()) {
+    if !host_ok(&shared, request.headers()) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let Some(session) = lock(&state.sessions).get(&token).cloned() else {
+    let Some(playback) = playback(&shared, &token) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let range = request
@@ -334,14 +457,25 @@ async fn serve(
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
     let head_only = request.method() == Method::HEAD;
-    match session {
-        Session::Http(source) => serve_http(source, range, head_only).await,
+    match &playback.body {
+        Content::Http(source) => serve_http(source.clone(), range, head_only).await,
         #[cfg(feature = "torrent")]
-        Session::Torrent {
+        Content::Torrent {
             engine,
             torrent,
             file,
-        } => torrent::serve(&engine, torrent, file, range.as_deref(), head_only).await,
+        } => {
+            let released = playback.released.clone();
+            torrent::serve(
+                engine,
+                *torrent,
+                *file,
+                range.as_deref(),
+                head_only,
+                released,
+            )
+            .await
+        }
     }
 }
 
@@ -432,6 +566,7 @@ mod torrent {
         file: usize,
         range: Option<&str>,
         head_only: bool,
+        released: CancellationToken,
     ) -> Response {
         let reader = match engine.open_reader(torrent, file).await {
             Ok(r) => r,
@@ -461,17 +596,21 @@ mod torrent {
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
         };
-        let chunks = stream::unfold(Some(body), |body| async move {
-            use tokio::io::AsyncReadExt;
-            let mut body = body?;
-            let mut buf = vec![0u8; 64 * 1024];
-            match body.read(&mut buf).await {
-                Ok(0) => None,
-                Ok(n) => {
-                    buf.truncate(n);
-                    Some((Ok(bytes::Bytes::from(buf)), Some(body)))
+        // Release ends the body: a read waiting for pieces stops at once.
+        let chunks = stream::unfold(Some(body), move |body| {
+            let released = released.clone();
+            async move {
+                use tokio::io::AsyncReadExt;
+                let mut body = body?;
+                let mut buf = vec![0u8; 64 * 1024];
+                match released.run_until_cancelled(body.read(&mut buf)).await? {
+                    Ok(0) => None,
+                    Ok(n) => {
+                        buf.truncate(n);
+                        Some((Ok(bytes::Bytes::from(buf)), Some(body)))
+                    }
+                    Err(e) => Some((Err(e), None)),
                 }
-                Err(e) => Some((Err(e), None)),
             }
         });
         (status, out, Body::from_stream(chunks)).into_response()
@@ -628,5 +767,22 @@ mod tests {
         assert_eq!(parse_range("bytes=20-10", 100), None);
         assert_eq!(parse_range("bytes=0-1,5-6", 100), None);
         assert_eq!(parse_range("items=0-1", 100), None);
+    }
+
+    #[tokio::test]
+    async fn names_keep_their_extension() {
+        let http = HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let server = StreamServer::start(http).await.unwrap();
+        let upstream = Upstream::Http {
+            url: "http://127.0.0.1:9/v.mkv".into(),
+            headers: Vec::new(),
+            addon_url: None,
+        };
+        let lease = server.register(upstream, "v.mkv");
+        let slot = lease.subtitles();
+        for lang in ["eng", "", "a/../b.srt", &"l".repeat(300)] {
+            let url = slot.add("http://127.0.0.1:9/a.srt", lang, None).unwrap();
+            assert!(url.ends_with(".vtt"), "{url}");
+        }
     }
 }

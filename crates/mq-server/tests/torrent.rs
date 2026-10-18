@@ -35,7 +35,7 @@ async fn serves_torrent_ranges_byte_for_byte() {
         .unwrap();
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http.clone()).await.unwrap();
-    let url = server.register(
+    let lease = server.register(
         Upstream::Torrent {
             engine: s.leecher.clone(),
             torrent: t,
@@ -43,6 +43,8 @@ async fn serves_torrent_ranges_byte_for_byte() {
         },
         "movie.mkv",
     );
+    let url = lease.url.clone();
+    assert!(url.starts_with("http://127.0.0.1:"), "{url}");
     let len = s.movie.len() as u64;
 
     let head = http
@@ -74,4 +76,42 @@ async fn serves_torrent_ranges_byte_for_byte() {
     let all = http.get(&url, &local()).await.unwrap();
     assert_eq!(all.status, 200);
     assert!(all.body[..] == s.movie[..], "whole file differs");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn release_ends_work_in_flight() {
+    let s = support::swarm(true).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    // The seeder leaves before a piece is asked for, so reads wait.
+    let seeded = s._seeder.add_magnet(&s.info_hash, &[], &[]).await.unwrap();
+    s._seeder.remove(seeded, true).await.unwrap();
+    let file = s
+        .leecher
+        .select_file(t, &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = server.register(
+        Upstream::Torrent {
+            engine: s.leecher.clone(),
+            torrent: t,
+            file,
+        },
+        "movie.mkv",
+    );
+    let mut body = http
+        .stream(&lease.url, Some("bytes=0-".into()), &local())
+        .await
+        .unwrap();
+    drop(lease);
+    let ended = tokio::time::timeout(Duration::from_secs(1), async {
+        while let Some(Ok(_)) = body.next_chunk().await {}
+    })
+    .await;
+    assert!(ended.is_ok(), "the body kept waiting for pieces");
 }
