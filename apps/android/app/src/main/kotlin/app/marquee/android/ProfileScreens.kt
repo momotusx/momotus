@@ -1302,7 +1302,11 @@ private fun PinSteps(
         }
     }
     // Leaving the app half way through gives the PIN change up: no PIN stays in memory behind it.
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { onDone(null) }
+    // Closed at once, not at disposal: a save that ends in between is told to the page.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        open.alive = false
+        onDone(null)
+    }
     val title =
         when (steps[step]) {
             "current" -> "Enter your current PIN"
@@ -1359,12 +1363,19 @@ private fun PinSteps(
                     }
                     try {
                         save.await()
-                        if (told.compareAndSet(false, true)) onDone(done)
+                        // A flow already closed (the app went to the back) tells the page instead.
+                        if (told.compareAndSet(false, true)) {
+                            if (open.alive) onDone(done) else saves.tell(null, done)
+                        }
                         Tried.Ok
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         if (!told.compareAndSet(false, true)) return@Keypad Tried.Ok
+                        if (!open.alive) {
+                            saves.tell(e, done)
+                            return@Keypad Tried.Ok
+                        }
                         if ((e as? CoreError)?.code == "pinUnreadable") {
                             onUnreadable()
                             return@Keypad Tried.Ok
