@@ -17,6 +17,12 @@ struct HomeScreen: View {
     /// Rows have scrolled under the status bar.
     @State private var underBar = false
     @State private var position = ScrollPosition(edge: .top)
+    /// The hero's Versions while its Play settles, held while it plays.
+    @State private var heroVersions: VersionsModel?
+    @State private var starting = false
+    @State private var playing: PlayRoute?
+    @State private var showSources = false
+    @State private var showHeroVersions = false
     #if os(tvOS)
     /// The hero's Play is where focus goes back to.
     @Namespace private var startScope
@@ -28,7 +34,7 @@ struct HomeScreen: View {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 // Without catalogs, or with none answering, there is no art to show.
                 if !model.needsSetup && !model.allFailed {
-                    HeroView(hero: model.header.hero, height: heroHeight, startScope: startScopeID)
+                    HeroView(hero: model.header.hero, height: heroHeight, startScope: startScopeID, play: playHero, starting: starting)
                         // Phone: the profile button sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
                             if !metrics.wide { ProfileButton { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
@@ -61,6 +67,15 @@ struct HomeScreen: View {
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
         #endif
         .navigationDestination(isPresented: $showProfiles) { ProfilePicker(mode: .push, core: core) }
+        .navigationDestination(item: $playing) { route in
+            PlayerScreen(route: route, versions: heroVersions, core: core)
+        }
+        .navigationDestination(isPresented: $showSources) { AddonsPage(core: core, sourcesOnly: true) }
+        .navigationDestination(isPresented: $showHeroVersions) {
+            if let heroVersions {
+                VersionsScreen(model: heroVersions, heading: heroVersions.target.title, core: core)
+            }
+        }
         // A restarted core builds Home again: onboarding opens again if it was showing.
         .onAppear { if profiles.resumeOnboarding { onboarding = true } }
         .onChange(of: onboarding) { _, open in profiles.resumeOnboarding = open }
@@ -88,6 +103,28 @@ struct HomeScreen: View {
                 RowView(row: row, retry: model.reload)
             }
             if model.needsSetup { setup.padding(.horizontal, metrics.gutter) }
+        }
+    }
+
+    /// The hero's Play, as the title page's: its pick once it settles; with
+    /// no version at all the Add a source step; still waiting, its Versions.
+    private func playHero(_ tile: Tile) {
+        guard !starting, let videoId = tile.playVideoId else { return }
+        let tapped = ContinuousClock.now
+        let target = PlayTargetInfo(kind: tile.kind, itemId: tile.id, videoId: videoId, title: tile.name, poster: tile.poster, resumeMs: nil)
+        let versions = heroVersions?.target == target ? heroVersions! : VersionsModel(target: target, core: core)
+        heroVersions = versions
+        starting = true
+        Task {
+            let route = await versions.settledPick(tapped: tapped)
+            starting = false
+            if let route {
+                playing = route
+            } else if versions.snapshot?.done == true {
+                showSources = true
+            } else {
+                showHeroVersions = true
+            }
         }
     }
 

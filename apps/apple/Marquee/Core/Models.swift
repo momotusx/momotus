@@ -16,6 +16,11 @@ struct Tile: Decodable, Hashable, Sendable {
     let videoId: String?
     /// The IMDb rating the addon gave, as written ("8.4").
     let rating: String?
+
+    /// What Play on this tile plays, as the web and Android have it: the
+    /// video it names (an episode in progress), else a movie itself. A series
+    /// with no video named has nothing to play from here: its page decides.
+    var playVideoId: String? { videoId ?? (kind == "movie" ? id : nil) }
 }
 
 struct Hero: Decodable, Hashable, Sendable {

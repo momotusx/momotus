@@ -8,6 +8,10 @@ struct HeroView: View {
     let height: CGFloat
     /// TV: the scope whose default focus is Play (Back on Home returns there).
     var startScope: Namespace.ID?
+    /// Plays the hero's video, as the title page's Play does.
+    var play: (Tile) -> Void = { _ in }
+    /// Play was pressed and its pick is settling.
+    var starting = false
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -92,15 +96,27 @@ struct HeroView: View {
                     .padding(.bottom, wide ? 22 : 16)
             }
             HStack(alignment: .top, spacing: wide ? 24 : 14) {
-                NavigationLink(value: TitleRoute(tile)) {
-                    Label("Play", glyph: "play-fill")
+                // Play plays, as on the web and Android; a series with no video named has none.
+                if tile.playVideoId != nil {
+                    Button { play(tile) } label: {
+                        if starting {
+                            HStack(spacing: 10) {
+                                ProgressView().controlSize(.small).tint(Theme.Palette.onPrimary)
+                                Text("Starting")
+                            }
+                        } else {
+                            Label("Play", glyph: "play-fill")
+                        }
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .disabled(starting)
+                    .modifier(StartFocus(scope: startScope))
                 }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .modifier(StartFocus(scope: startScope))
                 NavigationLink(value: TitleRoute(tile)) {
                     Label("Details", glyph: "info")
                 }
                 .buttonStyle(RoundButtonStyle())
+                .modifier(StartFocus(scope: tile.playVideoId == nil ? startScope : nil))
             }
         }
         .frame(maxWidth: wide ? 620 : .infinity, alignment: .leading)

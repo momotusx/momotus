@@ -12,6 +12,18 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
         })
 }
 
+@Test func heroPlayPlaysAVideoOrAMovieAndNothingElse() {
+    func tile(_ kind: String, videoId: String?) -> Tile {
+        Tile(
+            id: "tt1", kind: kind, name: "A", poster: nil, background: nil, logo: nil, posterShape: "poster",
+            releaseInfo: nil, progress: nil, videoId: videoId, rating: nil)
+    }
+    #expect(tile("movie", videoId: nil).playVideoId == "tt1")
+    #expect(tile("series", videoId: "tt1:2:3").playVideoId == "tt1:2:3")
+    // A series with no video named: its page decides what plays.
+    #expect(tile("series", videoId: nil).playVideoId == nil)
+}
+
 @Test func homeOffersOneTryAgainOnlyWhenEveryLaneEndedWithNothingAndOneFailed() {
     let failed = row(.failed(reason: "offline"))
     #expect([failed, failed].allFailed)
