@@ -22,11 +22,13 @@ host: string, name: string, description: string | null, types: Array<string>,
 provides: Array<string>, configuration: Configuration, 
 /**
  * The addon's configure page, always set: the apps offer it by
- * `configuration`, and a `needsSetup` install failure opens it.
+ * `configuration`, and a `needsSetup` install failure opens it. Built
+ * from `key`, so it may hold keys: never show or log it.
  */
 configureUrl: string, installed: Installed, 
 /**
  * With `copyOff`: the first such copy in addon order, for
- * `setAddonEnabled`. May hold keys: never show or log it.
+ * `setAddonEnabled`; none when its link is over 1 KiB as JSON (the
+ * card then has no action). May hold keys: never show or log it.
  */
 copyKey: string | null, };

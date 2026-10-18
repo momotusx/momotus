@@ -15,6 +15,7 @@ host: string, name: string, description: string | null, logo: string | null, ver
 provides: Array<string>, types: Array<string>, configurable: boolean, 
 /**
  * The addon's configure page, when its manifest says it has one
- * (`configurable` or `configurationRequired`).
+ * (`configurable` or `configurationRequired`). Built from the installed
+ * link, so it may hold keys: never show or log it.
  */
 configureUrl: string | null, };
