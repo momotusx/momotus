@@ -194,6 +194,15 @@ object Icons {
         )
     }
 
+    val ExternalLink: ImageVector by lazy {
+        strokeIcon(
+            "external-link",
+        "M15 3h6v6",
+        "M10 14 21 3",
+        "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
+        )
+    }
+
     val Eye: ImageVector by lazy {
         strokeIcon(
             "eye",
@@ -385,6 +394,18 @@ object Icons {
         )
     }
 
+    val PackageSearch: ImageVector by lazy {
+        strokeIcon(
+            "package-search",
+        "M12 22V12",
+        "M20.27 18.27 22 20",
+        "M21 10.498V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.729l7 4a2 2 0 0 0 2 .001l.98-.559",
+        "M3.29 7 12 12l8.71-5",
+        "m7.5 4.27 8.997 5.148",
+        "M16 16.5a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0z",
+        )
+    }
+
     val Pause: ImageVector by lazy {
         strokeIcon(
             "pause",
@@ -423,6 +444,14 @@ object Icons {
         "M10 22 9 8",
         "m14 22 1-14",
         "M20 8c.5 0 .9.4.8 1l-2.6 12c-.1.5-.7 1-1.2 1H7c-.6 0-1.1-.4-1.2-1L3.2 9c-.1-.6.3-1 .8-1Z",
+        )
+    }
+
+    val Power: ImageVector by lazy {
+        strokeIcon(
+            "power",
+        "M12 2v10",
+        "M18.4 6.6a9 9 0 1 1-12.77.04",
         )
     }
 

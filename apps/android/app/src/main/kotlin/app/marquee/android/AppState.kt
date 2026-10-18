@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
+import app.marquee.core.InstallCards
 import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
@@ -38,6 +39,9 @@ class AppState(
 
     /** The one open Versions view, shared by the title page, the Versions screen and the player. */
     val versions = VersionsHolder(session, caps, viewModelScope)
+
+    /** Find addons cards' Installing and failure states: they outlive the page, never the profile. */
+    val installCards = InstallCards(viewModelScope)
 
     private var homeView: HomeView? = null
 
@@ -77,6 +81,7 @@ class AppState(
         homeView?.close()
         homeView = null
         tvHome = TvHomeState()
+        installCards.forgetAll()
         if (home) {
             sentHome = true
             start = Start.Home

@@ -51,6 +51,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DebridCopy
+import app.marquee.core.FindAddonsCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
@@ -101,10 +102,10 @@ class SettingsHolder(
 }
 
 /** The parts of the page an operation can come from. */
-private enum class Place { Addons, Install, Playback }
+internal enum class Place { Addons, Install, Playback }
 
 /** What an operation ended with, shown under the part of the page it came from. */
-private class Said(
+internal class Said(
     val place: Place,
     val text: String,
     val failed: Boolean,
@@ -135,6 +136,7 @@ fun SettingsScreen(
     onSync: () -> Unit,
     onDebrid: () -> Unit,
     onHomeRows: () -> Unit,
+    onFindAddons: () -> Unit,
     /** Opened from "Add a source": the link field first and only the source addons, as on Apple. */
     sourcesOnly: Boolean = false,
 ) {
@@ -217,6 +219,7 @@ fun SettingsScreen(
                     }
                 }
             }
+            item(key = "find") { LinkRow(Icons.PackageSearch, FindAddonsCopy.TITLE, FindAddonsCopy.LEDE, onFindAddons) }
         } else {
             item(key = "head") { BrowseHeader("Settings", "Your Marquee") }
         }
@@ -251,6 +254,10 @@ fun SettingsScreen(
             }
         }
         item(key = "addons-head") { Kicker(if (sourcesOnly) "Your sources" else "Addons") }
+        // Find addons leads the section, as on the web.
+        if (!sourcesOnly) {
+            item(key = "find") { LinkRow(Icons.PackageSearch, FindAddonsCopy.TITLE, FindAddonsCopy.LEDE, onFindAddons) }
+        }
         when {
             holder.addons.status is ViewStatus.Failed -> {
                 item(key = "addons-failed") { Note("Addons could not load", failed = true) }
@@ -367,12 +374,15 @@ fun SettingsScreen(
 
 /** A section card on glass. */
 @Composable
-internal fun Section(content: @Composable () -> Unit) {
+internal fun Section(
+    side: Dp = Marquee.safe.side,
+    content: @Composable () -> Unit,
+) {
     val shape = RoundedCornerShape(Marquee.radius.l)
     val colors = Marquee.colors
     Box(
         Modifier
-            .padding(horizontal = Marquee.safe.side)
+            .padding(horizontal = side)
             .fillMaxWidth()
             .clip(shape)
             .background(colors.surface)
@@ -540,11 +550,12 @@ private fun AddonRow(
 
 /** A field for an addon link (https, http or stremio://) and the button that adds it. */
 @Composable
-private fun InstallField(
+internal fun InstallField(
     busy: Boolean,
     focusRequester: FocusRequester,
     /** How the last add went, shown under the button. */
     status: Said?,
+    side: Dp = Marquee.safe.side,
     /** The link, and what clears the field once it is added. */
     onInstall: (String, () -> Unit) -> Unit,
 ) {
@@ -559,7 +570,7 @@ private fun InstallField(
             onInstall(text.trim()) { text = "" }
         }
     }
-    Section {
+    Section(side) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             MqText("Add an addon", role = TextRole.Headline, weight = FontWeight.Bold)
             MqTextField(

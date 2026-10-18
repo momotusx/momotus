@@ -317,6 +317,7 @@ private fun AppNav(
                             onSync = { backStack.add(if (sync.joined) Route.Sync else Route.Pairing) },
                             onDebrid = { backStack.add(Route.Debrid) },
                             onHomeRows = { backStack.add(Route.HomeRows) },
+                            onFindAddons = { backStack.add(Route.FindAddons) },
                         )
                     }
                     entry<Route.Sources> {
@@ -331,8 +332,16 @@ private fun AppNav(
                             onSync = {},
                             onDebrid = {},
                             onHomeRows = {},
+                            onFindAddons = { backStack.add(Route.FindAddons) },
                             sourcesOnly = true,
                         )
+                    }
+                    entry<Route.FindAddons> {
+                        // TV's Paste a link: the page with the link field, back to it when Find addons came from there.
+                        val fromSources = routes.getOrNull(routes.lastIndex - 1) == Route.Sources
+                        FindAddonsScreen(session, app.installCards, onPasteLink = {
+                            if (fromSources) pop() else backStack.add(Route.Sources)
+                        })
                     }
                     entry<Route.Debrid> { DebridScreen(session) }
                     entry<Route.HomeRows> { HomeRowsScreen(session) }

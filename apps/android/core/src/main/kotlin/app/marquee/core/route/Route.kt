@@ -58,6 +58,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object Sources : Route
 
+    /** Find addons: Cinemeta's Official and Community lists, each installed in one press. */
+    @Serializable
+    data object FindAddons : Route
+
     /** The picker opened over the app (the pill or Settings): Back returns where it was. */
     @Serializable
     data object Profiles : Route

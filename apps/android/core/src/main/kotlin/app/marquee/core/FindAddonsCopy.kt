@@ -46,7 +46,7 @@ object FindAddonsCopy {
     const val TURN_ON = "Turn on"
     const val FROM_HOST = "from {host}"
 
-    /** A Configure press where no app opens web pages (some TVs, a phone without a browser). */
+    /** Android only, not in the shared words: Configure where no app opens web pages. */
     const val NO_BROWSER = "No app here opens web pages. Open the addon's website on another device."
 
     /** "No subtitle addons in this list." */
