@@ -11,6 +11,8 @@ use tokio::net::{TcpListener, TcpStream};
 struct Seen {
     ranges: Arc<Mutex<Vec<String>>>,
     sent: Arc<AtomicU64>,
+    /// Requests that carried an `Authorization` header.
+    credentials: Arc<AtomicU64>,
 }
 
 impl Seen {
@@ -38,6 +40,8 @@ struct Behaviour {
     /// On the first request only, stop sending after this many body bytes
     /// and keep the connection open, as a stuck origin node does.
     hang_after: Option<usize>,
+    /// From the second request on, answer 403, as an expired link does.
+    expires: bool,
 }
 
 /// Bytes that differ with their offset, so a misplaced range shows.
@@ -70,6 +74,9 @@ async fn answer(mut socket: TcpStream, data: Arc<Vec<u8>>, how: Behaviour, seen:
         }
     }
     let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+    if head.contains("\r\nauthorization:") {
+        seen.credentials.fetch_add(1, Ordering::Relaxed);
+    }
     if how.token && !head.contains("x-token: abc") {
         let _ = socket
             .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -84,6 +91,12 @@ async fn answer(mut socket: TcpStream, data: Arc<Vec<u8>>, how: Behaviour, seen:
         .lock()
         .unwrap()
         .push(range.clone().unwrap_or_default());
+    if how.expires && seen.ranges().len() > 1 {
+        let _ = socket
+            .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await;
+        return;
+    }
     if let Some(delay) = how.slow_start.filter(|_| range.as_deref() == Some("0-")) {
         tokio::time::sleep(delay).await;
     }
@@ -153,6 +166,52 @@ async fn answer(mut socket: TcpStream, data: Arc<Vec<u8>>, how: Behaviour, seen:
     if hang.is_some() {
         tokio::time::sleep(Duration::from_secs(300)).await;
     }
+}
+
+/// An origin that only redirects, as archive.org sends every request to a
+/// data node: its `n`th request goes to `to[n]`, the last one from then on.
+/// Counts its requests.
+async fn redirector(to: Vec<String>) -> (String, Arc<AtomicU64>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let hits = Arc::new(AtomicU64::new(0));
+    let count = hits.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let n = count.fetch_add(1, Ordering::Relaxed) as usize;
+            let location = to[n.min(to.len() - 1)].clone();
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut buf = [0u8; 1024];
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match socket.read(&mut buf).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => head.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let reply = format!(
+                    "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    (format!("http://{addr}/download/video.mkv"), hits)
+}
+
+/// A playback of `origin` sending an origin-only credential.
+async fn serve_url(origin: String) -> (StreamServer, String, HttpClient) {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let url = server.register(
+        Upstream::Http {
+            url: origin,
+            headers: vec![("Authorization".into(), "Bearer origin-only".into())],
+            allow_private: true,
+        },
+        "video.mkv",
+    );
+    (server, url, http)
 }
 
 fn local() -> RequestOptions {
@@ -512,6 +571,57 @@ async fn live_redirecting_origin_range_times() {
         times.push(started.elapsed().as_millis());
     }
     println!("range request ms: {times:?}");
+}
+
+/// A seek on a redirecting origin goes straight to where the first read
+/// landed, and the origin's credential never follows it to another host.
+#[tokio::test]
+async fn a_seek_skips_the_origins_redirect() {
+    let data = file(16 << 20);
+    let (target, seen) = range_origin(data.clone(), Behaviour::default()).await;
+    let (origin, redirects) = redirector(vec![target]).await;
+    let (_server, url, http) = serve_url(origin).await;
+    assert_eq!(range(&http, &url, 0, 2).await, data[..2]);
+    let far = 12usize << 20;
+    assert_eq!(
+        range(&http, &url, far as u64, 1000).await,
+        data[far..far + 1000]
+    );
+    assert_eq!(seen.ranges(), ["0-".to_owned(), format!("{far}-")]);
+    assert_eq!(
+        redirects.load(Ordering::Relaxed),
+        1,
+        "one redirect for both reads"
+    );
+    assert_eq!(seen.credentials.load(Ordering::Relaxed), 0);
+}
+
+/// A remembered target that refuses (an expired link) sends the read back
+/// to the original URL, whose fresh redirect serves it.
+#[tokio::test]
+async fn an_expired_redirect_target_falls_back_to_the_original_url() {
+    let data = file(16 << 20);
+    let expiring = Behaviour {
+        expires: true,
+        ..Default::default()
+    };
+    let (old, old_seen) = range_origin(data.clone(), expiring).await;
+    let (new, new_seen) = range_origin(data.clone(), Behaviour::default()).await;
+    let (origin, redirects) = redirector(vec![old, new]).await;
+    let (_server, url, http) = serve_url(origin).await;
+    assert_eq!(range(&http, &url, 0, 2).await, data[..2]);
+    let far = 12usize << 20;
+    assert_eq!(
+        range(&http, &url, far as u64, 1000).await,
+        data[far..far + 1000]
+    );
+    assert_eq!(
+        old_seen.ranges().len(),
+        2,
+        "the remembered target is asked first"
+    );
+    assert_eq!(redirects.load(Ordering::Relaxed), 2);
+    assert_eq!(new_seen.ranges(), [format!("{far}-")]);
 }
 
 #[tokio::test]

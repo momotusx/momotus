@@ -9,7 +9,7 @@
 use crate::lock;
 use axum::http::{HeaderMap, StatusCode, header};
 use bytes::{Bytes, BytesMut};
-use mq_http::{HttpClient, Priority, RequestOptions, StreamingResponse};
+use mq_http::{HttpClient, HttpError, Priority, RequestOptions, StreamingResponse, Url};
 use mq_media::{BLOCK_SIZE, ByteCache, CancellationToken};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -35,6 +35,15 @@ pub(crate) const OPEN: Duration = Duration::from_secs(20);
 const STALL: Duration = Duration::from_secs(6);
 /// Cursor failures in a row that end a response.
 const RETRIES: u32 = 3;
+/// Request headers that never follow a redirect to another origin, as
+/// reqwest drops them on the hop itself.
+const CREDENTIALS: [&str; 5] = [
+    "authorization",
+    "cookie",
+    "cookie2",
+    "proxy-authorization",
+    "www-authenticate",
+];
 
 /// Why a playback cannot be served from the cache.
 #[derive(Debug, Clone)]
@@ -125,12 +134,22 @@ impl Drop for Exit {
     }
 }
 
+/// Where the origin's redirect led, with the request headers that go there.
+struct Redirect {
+    url: String,
+    headers: Vec<(String, String)>,
+}
+
 /// What cursor tasks share with the source.
 struct Shared {
     http: HttpClient,
     url: String,
     headers: Vec<(String, String)>,
     allow_private: bool,
+    /// The redirect target an earlier read reached, so later reads skip the
+    /// hop. It may carry a short-lived token, so it lives only as long as
+    /// this playback.
+    redirect: Mutex<Option<Arc<Redirect>>>,
     cache: ByteCache,
     meta: OnceLock<Arc<Meta>>,
     passthrough: AtomicBool,
@@ -167,6 +186,7 @@ impl Source {
                 url,
                 headers,
                 allow_private,
+                redirect: Mutex::default(),
                 cache: ByteCache::new(CACHE_BYTES),
                 meta: OnceLock::new(),
                 passthrough: AtomicBool::new(false),
@@ -188,6 +208,7 @@ impl Source {
             cursor.close();
         }
         self.shared.cache.clear();
+        *lock(&self.shared.redirect) = None;
     }
 
     /// Cancelled once the playback is released.
@@ -368,27 +389,86 @@ async fn run(shared: Arc<Shared>, cursor: Arc<Cursor>) {
 }
 
 impl Shared {
-    async fn open(&self, start: u64) -> Result<StreamingResponse, Refusal> {
-        let opts = RequestOptions {
+    /// A read from `start`: at the redirect target an earlier read reached,
+    /// else at the original URL, which is also asked when the target answers
+    /// anything but the range (an expired link, a refusal, no connection).
+    async fn request(&self, start: u64) -> Result<StreamingResponse, HttpError> {
+        let range = Some(format!("bytes={start}-"));
+        let redirect = lock(&self.redirect).clone();
+        if let Some(redirect) = redirect {
+            let answer = self
+                .http
+                .stream(
+                    &redirect.url,
+                    range.clone(),
+                    &self.options(&redirect.headers),
+                )
+                .await;
+            match answer {
+                Ok(upstream) if upstream.status == 206 => return Ok(upstream),
+                Ok(upstream) => tracing::info!(
+                    "stream redirect target answered {}; asking the original URL",
+                    upstream.status
+                ),
+                Err(e) => {
+                    tracing::info!("stream redirect target failed: {e}; asking the original URL")
+                }
+            }
+            *lock(&self.redirect) = None;
+        }
+        self.http
+            .stream(&self.url, range, &self.options(&self.headers))
+            .await
+    }
+
+    fn options(&self, headers: &[(String, String)]) -> RequestOptions {
+        RequestOptions {
             priority: Priority::Playback,
             timeout: Duration::from_secs(30),
             allow_private: self.allow_private,
-            headers: self.headers.clone(),
+            headers: headers.to_vec(),
             ..Default::default()
+        }
+    }
+
+    /// Keeps where the original URL's redirect led for this playback's later
+    /// reads.
+    fn remember(&self, target: &Url) {
+        let Ok(first) = Url::parse(&self.url) else {
+            return;
         };
-        let range = Some(format!("bytes={start}-"));
-        let upstream =
-            match tokio::time::timeout(OPEN, self.http.stream(&self.url, range, &opts)).await {
-                Ok(Ok(upstream)) => upstream,
-                Ok(Err(e)) => {
-                    tracing::warn!("stream upstream failed: {e}");
-                    return Err(Refusal::Failed(e.to_string()));
-                }
-                Err(_) => {
-                    tracing::warn!("stream upstream sent no answer in {OPEN:?}");
-                    return Err(Refusal::Failed("no answer in time".into()));
-                }
-            };
+        if *target == first {
+            return;
+        }
+        let cross = target.scheme() != first.scheme()
+            || target.host_str() != first.host_str()
+            || target.port_or_known_default() != first.port_or_known_default();
+        let headers = self
+            .headers
+            .iter()
+            .filter(|(name, _)| !cross || !CREDENTIALS.iter().any(|c| name.eq_ignore_ascii_case(c)))
+            .cloned()
+            .collect();
+        *lock(&self.redirect) = Some(Arc::new(Redirect {
+            url: target.to_string(),
+            headers,
+        }));
+    }
+
+    async fn open(&self, start: u64) -> Result<StreamingResponse, Refusal> {
+        let upstream = match tokio::time::timeout(OPEN, self.request(start)).await {
+            Ok(Ok(upstream)) => upstream,
+            Ok(Err(e)) => {
+                tracing::warn!("stream upstream failed: {e}");
+                return Err(Refusal::Failed(e.to_string()));
+            }
+            Err(_) => {
+                tracing::warn!("stream upstream sent no answer in {OPEN:?}");
+                // A target that never answers is not asked again.
+                *lock(&self.redirect) = None;
+                return Err(Refusal::Failed("no answer in time".into()));
+            }
+        };
         let len = match upstream.status {
             // An origin that caps its answers (sends less than asked) is
             // proxied plainly, as players handle short answers themselves.
@@ -435,6 +515,7 @@ impl Shared {
             tracing::warn!("stream upstream changed during playback");
             return Err(Refusal::Failed("the file changed during playback".into()));
         }
+        self.remember(&upstream.final_url);
         Ok(upstream)
     }
 }

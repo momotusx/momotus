@@ -8,6 +8,7 @@ pub use budget::Priority;
 pub use net::{is_private_host, is_private_ip, redact_url};
 pub use reqwest::Method;
 pub use reqwest::header::HeaderMap;
+pub use url::Url;
 
 use budget::Budget;
 use bytes::{Bytes, BytesMut};
@@ -15,7 +16,6 @@ use futures_util::StreamExt;
 use reqwest::header::{CONTENT_TYPE, HeaderName, HeaderValue, RANGE, RETRY_AFTER};
 use std::sync::{Arc, Once};
 use std::time::Duration;
-use url::Url;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum HttpError {
@@ -372,12 +372,14 @@ impl HttpClient {
         let status = response.status().as_u16();
         let headers = response.headers().clone();
         let idle = opts.timeout;
+        let final_url = response.url().clone();
         let body = response
             .bytes_stream()
             .map(move |chunk| chunk.map_err(|e| HttpError::from_reqwest(e, idle)));
         Ok(StreamingResponse {
             status,
             headers,
+            final_url,
             body: Box::pin(body),
             idle,
             _permit: permit,
@@ -422,6 +424,8 @@ impl HttpClient {
 pub struct StreamingResponse {
     pub status: u16,
     pub headers: HeaderMap,
+    /// Where the answer came from, after redirects.
+    pub final_url: Url,
     body: std::pin::Pin<Box<dyn futures_util::Stream<Item = Result<Bytes, HttpError>> + Send>>,
     idle: Duration,
     _permit: budget::Permit,
