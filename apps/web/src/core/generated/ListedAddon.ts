@@ -21,9 +21,10 @@ host: string, name: string, description: string | null, types: Array<string>,
  */
 provides: Array<string>, configuration: Configuration, 
 /**
- * The addon's configure page, when it has one.
+ * The addon's configure page, always set: the apps offer it by
+ * `configuration`, and a `needsSetup` install failure opens it.
  */
-configureUrl: string | null, installed: Installed, 
+configureUrl: string, installed: Installed, 
 /**
  * With `copyOff`: the first such copy in addon order, for
  * `setAddonEnabled`. May hold keys: never show or log it.

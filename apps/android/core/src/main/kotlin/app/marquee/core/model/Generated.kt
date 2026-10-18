@@ -478,8 +478,8 @@ data class ListedAddon(
     /** "catalog", "meta", "stream", "subtitles", ... */
     val provides: List<String> = emptyList(),
     val configuration: Configuration,
-    /** The addon's configure page, when it has one. */
-    val configureUrl: String? = null,
+    /** The addon's configure page, always set: the apps offer it by `configuration`, and a `needsSetup` install failure opens it. */
+    val configureUrl: String,
     val installed: Installed,
     /** With `copyOff`: the first such copy in addon order, for `setAddonEnabled`. May hold keys: never show or log it. */
     val copyKey: String? = null,
