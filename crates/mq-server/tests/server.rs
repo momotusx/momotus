@@ -1493,3 +1493,27 @@ async fn a_stalled_player_holds_nothing_after_release() {
     let late = player.write_all(b"\r\n").await;
     assert!(late.is_err(), "the connection outlived the server");
 }
+
+#[tokio::test]
+async fn dropping_the_server_ends_bodies_in_flight() {
+    let data = file(64 << 20);
+    let (server, lease, _seen, http) = serve(&data, Behaviour::default()).await;
+    let mut body = http
+        .stream(&lease.url, Some("bytes=0-".into()), &local())
+        .await
+        .unwrap();
+    body.next_chunk().await.unwrap().unwrap();
+    drop(server);
+    let mut got = 0;
+    let drained = tokio::time::timeout(Duration::from_secs(1), async {
+        while let Some(Ok(chunk)) = body.next_chunk().await {
+            got += chunk.len();
+        }
+    })
+    .await;
+    assert!(drained.is_ok(), "the body outlived the server");
+    assert!(got < 32 << 20, "{got} bytes after the drop");
+    // The lease outlived the server; its playback did not.
+    assert_eq!(lease.subtitles().add(PLAYBACK, "eng", None), None);
+    assert!(http.get(&lease.url, &local()).await.is_err());
+}
