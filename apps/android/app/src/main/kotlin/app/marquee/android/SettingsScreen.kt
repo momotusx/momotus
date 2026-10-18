@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +76,7 @@ import app.marquee.design.dpadExits
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -464,7 +466,31 @@ private fun AddonRow(
                     enabled = !last && !busy,
                     spoken = "Move $name down",
                 )
-                RoundButton(Icons.Trash, "Remove", onRemove, showLabel = true, enabled = !busy, spoken = "Remove $name")
+                // Removing takes a second press within 4 s, as on the web (Apple asks in a dialog).
+                var armed by remember(addon.url) { mutableStateOf(false) }
+                LaunchedEffect(armed) {
+                    if (armed) {
+                        delay(4_000)
+                        armed = false
+                    }
+                }
+                RoundButton(
+                    Icons.Trash,
+                    // Short, so the circle barely moves under a finger that presses again.
+                    if (armed) "Press again" else "Remove",
+                    {
+                        if (armed) {
+                            armed = false
+                            onRemove()
+                        } else {
+                            armed = true
+                        }
+                    },
+                    showLabel = true,
+                    selected = armed,
+                    enabled = !busy,
+                    spoken = if (armed) "Press again to remove $name" else "Remove $name",
+                )
             }
         }
     }
