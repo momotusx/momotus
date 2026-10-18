@@ -1269,3 +1269,22 @@ async fn cancelled_requests_free_their_slots() {
         .expect("free after a drop mid-body")
         .unwrap();
 }
+
+#[tokio::test]
+async fn a_network_change_drops_every_pooled_connection() {
+    let (addr, served) = keep_alive_origin().await;
+    let url = format!("http://{addr}/");
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let other = http.clone();
+    http.get(&url, &local_opts()).await.unwrap();
+    http.get(&url, &local_opts()).await.unwrap();
+    // Said through any clone, it holds for all of them: after a network change a
+    // pooled connection may lead nowhere and would hold a request until its timeout.
+    other.network_changed();
+    http.get(&url, &local_opts()).await.unwrap();
+    assert_eq!(
+        *served.lock().unwrap(),
+        [0, 0, 1],
+        "the pooled connection, then a new one"
+    );
+}

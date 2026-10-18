@@ -227,7 +227,8 @@ enum Request {
         by: i64,
     },
     /// The app's life as the OS reports it: `foreground`, `background`,
-    /// `memoryPressure` (frees caches) or `networkChanged`.
+    /// `memoryPressure` (frees caches) or `networkChanged` (drops pooled
+    /// connections).
     Lifecycle {
         id: u64,
         event: String,
@@ -655,9 +656,13 @@ impl Session {
                         core.on_memory_pressure();
                         Ok(json!({}))
                     }
+                    "networkChanged" => {
+                        core.on_network_changed();
+                        Ok(json!({}))
+                    }
                     // ponytail: accepted and ignored until the core has work
-                    // for them (iOS listener reopen, network re-probes).
-                    "foreground" | "background" | "networkChanged" => Ok(json!({})),
+                    // for them (iOS listener reopen).
+                    "foreground" | "background" => Ok(json!({})),
                     other => Err(format!("unknown lifecycle event: {other}")),
                 };
                 self.reply(json!(id), result);

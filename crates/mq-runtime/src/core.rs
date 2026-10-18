@@ -247,6 +247,12 @@ impl Core {
         self.addons().forget_memory();
     }
 
+    /// The device's network changed: connections pooled on the old one are
+    /// dropped (each would hold a request until its timeout).
+    pub fn on_network_changed(&self) {
+        self.http().network_changed();
+    }
+
     /// The clock that stamps this device's writes (sync and roster calls
     /// take it).
     pub fn clock(&self) -> &HlcClock {

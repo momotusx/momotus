@@ -234,6 +234,18 @@ impl Default for ClientConfig {
 
 #[derive(Clone)]
 pub struct HttpClient {
+    /// The unscoped clients, shared by every clone and replaced as a whole by
+    /// `network_changed`.
+    pools: Arc<RwLock<Arc<Pools>>>,
+    budget: Arc<Budget>,
+    scopes: Arc<Scopes>,
+    /// Set on a handle from `scoped`: its addresses, canonical and sorted.
+    /// Each request takes the current generation's client for them.
+    scope: Option<Arc<[IpAddr]>>,
+}
+
+/// The unscoped clients and their connection pools.
+struct Pools {
     /// For requests allowed to reach private addresses (local addons).
     inner: reqwest::Client,
     /// For everything else: names that resolve only to private addresses
@@ -243,11 +255,19 @@ pub struct HttpClient {
     public: reqwest::Client,
     /// `public` without any proxy (`RequestOptions::no_proxy`).
     direct: reqwest::Client,
-    budget: Arc<Budget>,
-    scopes: Arc<Scopes>,
-    /// Set on a handle from `scoped`: its addresses, canonical and sorted.
-    /// Each request takes the current generation's client for them.
-    scope: Option<Arc<[IpAddr]>>,
+}
+
+impl Pools {
+    fn build(config: &ClientConfig) -> Result<Self, HttpError> {
+        let follow = || builder(config).redirect(reqwest::redirect::Policy::custom(redirect));
+        let build =
+            |b: reqwest::ClientBuilder| b.build().map_err(|e| HttpError::Network(e.to_string()));
+        Ok(Self {
+            inner: build(follow())?,
+            public: build(follow().dns_resolver(Arc::new(PublicOnly)))?,
+            direct: build(follow().no_proxy().dns_resolver(Arc::new(PublicOnly)))?,
+        })
+    }
 }
 
 /// The scoped clients of the current interface snapshot, one per address set,
@@ -583,12 +603,15 @@ fn redirect_allowed(first: &Url, next: &Url) -> bool {
     private(first) || !private(next)
 }
 
-/// What every client shares, scoped or not.
+/// What every client shares, scoped or not. TCP keepalive finds a pooled
+/// connection the network dropped on platforms that send no network change
+/// (`network_changed` drops the pools at once where they do).
 fn builder(config: &ClientConfig) -> reqwest::ClientBuilder {
     let builder = reqwest::Client::builder()
         .user_agent(config.user_agent.clone())
         .connect_timeout(config.connect_timeout)
-        .pool_idle_timeout(Duration::from_secs(90));
+        .pool_idle_timeout(Duration::from_secs(90))
+        .tcp_keepalive(Duration::from_secs(15));
     // Test builds only: `test_dns::https` serves a self-signed certificate.
     #[cfg(any(test, feature = "test-dns"))]
     let builder = builder.tls_danger_accept_invalid_certs(true);
@@ -598,16 +621,8 @@ fn builder(config: &ClientConfig) -> reqwest::ClientBuilder {
 impl HttpClient {
     pub fn new(config: ClientConfig) -> Result<Self, HttpError> {
         install_crypto_provider();
-        let follow = || builder(&config).redirect(reqwest::redirect::Policy::custom(redirect));
-        let build =
-            |b: reqwest::ClientBuilder| b.build().map_err(|e| HttpError::Network(e.to_string()));
-        let inner = build(follow())?;
-        let public = build(follow().dns_resolver(Arc::new(PublicOnly)))?;
-        let direct = build(follow().no_proxy().dns_resolver(Arc::new(PublicOnly)))?;
         Ok(Self {
-            inner,
-            public,
-            direct,
+            pools: Arc::new(RwLock::new(Arc::new(Pools::build(&config)?))),
             budget: Arc::new(Budget::new(config.per_host_limit, config.global_limit)),
             scopes: Arc::new(Scopes::new(config)),
             scope: None,
@@ -633,13 +648,25 @@ impl HttpClient {
         // Built here, so a playback's open pays for it rather than its first read.
         let _ = self.scopes.client(&key);
         HttpClient {
-            inner: self.inner.clone(),
-            public: self.public.clone(),
-            direct: self.direct.clone(),
+            pools: self.pools.clone(),
             budget: self.budget.clone(),
             scopes: self.scopes.clone(),
             scope: Some(key.into()),
         }
+    }
+
+    /// The device's network changed (the apps say so): every pooled
+    /// connection may lead nowhere now, and each would hold a request until
+    /// its timeout. The unscoped pools are built again and the scoped
+    /// clients forgotten, for every clone of this client. Requests already
+    /// sent keep their connection.
+    pub fn network_changed(&self) {
+        match Pools::build(&self.scopes.config) {
+            Ok(pools) => *self.pools.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(pools),
+            Err(e) => tracing::warn!("could not build new connection pools: {e}"),
+        }
+        lock(&self.scopes.clients).clear();
+        self.scopes.refresh();
     }
 
     pub async fn get(&self, url: &str, opts: &RequestOptions) -> Result<Response, HttpError> {
@@ -768,12 +795,15 @@ impl HttpClient {
             return Err(HttpError::BlockedPrivate(host));
         }
         let permit = self.budget.acquire(&host, opts.priority).await;
+        // The pools as they are once the slot is held: a network change while
+        // the request waited must not leave it on a dropped pool.
+        let pools = self.pools.read().unwrap_or_else(|e| e.into_inner()).clone();
         let client = if opts.allow_private {
-            &self.inner
+            &pools.inner
         } else if opts.no_proxy {
-            &self.direct
+            &pools.direct
         } else {
-            &self.public
+            &pools.public
         };
         let headers = build_headers(&opts.headers, req.range.clone());
         let response = open(client, &req, headers, opts).await?;
