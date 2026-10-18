@@ -32,8 +32,9 @@ object TitleCopy {
     private const val NBSP = ' '
 
     /**
-     * "Play", "Play S1:E1", "Resume S1:E2 · 36 min left" (from the runtime when the metadata has one),
-     * else "Resume S1:E2 from 41:12".
+     * "Play", "Play S1:E1", "Resume S1:E2 · 36 min left" (from what the file has left, the figure
+     * Continue Watching uses, else from the runtime when the metadata has one), else
+     * "Resume S1:E2 from 41:12".
      */
     fun playLabel(
         target: PlayTarget,
@@ -41,10 +42,10 @@ object TitleCopy {
     ): String {
         val resumed = target.resumeMs?.takeIf { it > 0 } ?: return target.label
         val total = Format.runtimeMinutes(runtime)
-        return if (total != null) {
-            "${target.label} · ${minutesLeft(total, resumed / 60_000.0)}"
-        } else {
-            "${target.label} from ${Format.clock(resumed / 1000)}"
+        return when {
+            target.leftMs != null && target.leftMs > 0 -> "${target.label} · ${minutesLeft(target.leftMs)}"
+            total != null -> "${target.label} · ${minutesLeft(total, resumed / 60_000.0)}"
+            else -> "${target.label} from ${Format.clock(resumed / 1000)}"
         }
     }
 
@@ -52,6 +53,9 @@ object TitleCopy {
         total: Int,
         playedMinutes: Double,
     ) = "${(total - playedMinutes).roundToInt().coerceAtLeast(1)} min left"
+
+    /** Whole minutes rounded up, as the core words Continue Watching. */
+    private fun minutesLeft(leftMs: Long) = "${((leftMs + 59_999) / 60_000).coerceAtLeast(1)} min left"
 
     /**
      * What the primary button does. Play stays while versions are still arriving (the line under it
@@ -142,6 +146,10 @@ object TitleCopy {
         return when {
             episode.watched -> {
                 "Watched"
+            }
+
+            episode.leftMs != null && episode.leftMs > 0 -> {
+                minutesLeft(episode.leftMs)
             }
 
             episode.progress != null -> {

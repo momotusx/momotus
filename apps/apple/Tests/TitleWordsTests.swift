@@ -13,3 +13,10 @@ import Testing
     #expect(resumeText(resumeMs: 21 * 60_000, runtime: nil) == "from 21:00")
     #expect(resumeText(resumeMs: 75 * 60_000 + 3_000, runtime: "unknown") == "from 1:15:03")
 }
+
+@Test func resumeSaysWhatTheFileHasLeftFirst() {
+    // The stored duration wins over the runtime, rounded up as Continue Watching words it.
+    #expect(resumeText(resumeMs: 21 * 60_000, leftMs: 60_001, runtime: "57 min") == "2 min left")
+    #expect(resumeText(resumeMs: 21 * 60_000, leftMs: 60_001, runtime: nil) == "2 min left")
+    #expect(resumeText(resumeMs: 21 * 60_000, leftMs: 0, runtime: "57 min") == "36 min left")
+}

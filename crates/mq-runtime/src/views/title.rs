@@ -102,6 +102,10 @@ pub struct PlayTarget {
     pub label: String,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub resume_ms: Option<i64>,
+    /// What is left of the file, from the stored duration (the figure Continue Watching uses);
+    /// null when nothing was played or the duration is unknown.
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub left_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -121,6 +125,9 @@ pub struct Episode {
     pub released: Option<String>,
     pub watched: bool,
     pub progress: Option<f32>,
+    /// As [`PlayTarget::left_ms`], for this episode.
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub left_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -360,8 +367,12 @@ impl Ctx {
             .videos
             .iter()
             .filter_map(|v| {
-                let info = v.series_info.as_ref()?;
-                (Some(info.season) == season).then(|| Episode {
+                let info = v
+                    .series_info
+                    .as_ref()
+                    .filter(|i| Some(i.season) == season)?;
+                let progress = library.progress(profile, &v.id).ok().flatten();
+                Some(Episode {
                     video_id: v.id.clone(),
                     season: info.season,
                     episode: info.episode,
@@ -370,9 +381,10 @@ impl Ctx {
                     thumbnail: v.thumbnail.clone(),
                     released: v.released.map(|d| d.date_naive().to_string()),
                     watched: watched.contains(&v.id),
-                    progress: library.progress(profile, &v.id).ok().flatten().and_then(
-                        |(pos, dur)| (dur > 0).then(|| (pos as f32 / dur as f32).clamp(0.0, 1.0)),
-                    ),
+                    progress: progress.and_then(|(pos, dur)| {
+                        (dur > 0).then(|| (pos as f32 / dur as f32).clamp(0.0, 1.0))
+                    }),
+                    left_ms: progress.and_then(|(pos, dur)| left(pos, dur)),
                 })
             })
             .collect();
@@ -423,6 +435,7 @@ fn play_target(
             video_id,
             label,
             resume_ms: Some(position),
+            left_ms: left(position, duration),
         });
     }
     if kind == "movie" || meta.videos.is_empty() {
@@ -431,6 +444,7 @@ fn play_target(
             video_id: meta.preview.id.clone(),
             label: if again { "Play again" } else { "Play" }.into(),
             resume_ms: None,
+            left_ms: None,
         });
     }
     let next = meta
@@ -442,7 +456,13 @@ fn play_target(
         video_id: next.id.clone(),
         label: episode_label(meta, &next.id).map_or("Play".to_owned(), |e| format!("Play {e}")),
         resume_ms: None,
+        left_ms: None,
     })
+}
+
+/// The rest of a started file; `None` before it starts or without a duration.
+fn left(position: i64, duration: i64) -> Option<i64> {
+    (position > 0 && duration > position).then(|| duration - position)
 }
 
 fn episode_label(meta: &MetaItem, video_id: &str) -> Option<String> {

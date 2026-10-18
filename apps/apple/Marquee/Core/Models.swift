@@ -135,6 +135,8 @@ struct PlayTarget: Decodable, Hashable, Sendable {
     let videoId: String
     let label: String
     let resumeMs: Int64?
+    /// What the file has left, from the stored duration; nil before it starts.
+    let leftMs: Int64?
 }
 
 struct TitleHeader: Decodable, Hashable, Sendable {
@@ -160,6 +162,7 @@ struct Episode: Decodable, Hashable, Sendable {
     let released: String?
     let watched: Bool
     let progress: Double?
+    let leftMs: Int64?
 }
 
 struct TitleSnapshot: Decodable, Sendable {

@@ -95,8 +95,10 @@ async fn resumes_the_season_being_watched() {
     let target = snap.header.play_target.unwrap();
     assert_eq!(target.label, "Resume S2:E1");
     assert_eq!(target.resume_ms, Some(1000));
+    assert_eq!(target.left_ms, Some(2000), "from the stored duration");
     assert_eq!(snap.episodes.len(), 1);
     assert!((snap.episodes[0].progress.unwrap() - 1.0 / 3.0).abs() < 1e-4);
+    assert_eq!(snap.episodes[0].left_ms, Some(2000));
 
     view.select_season(1);
     let snap = view.snapshot();
@@ -222,6 +224,7 @@ async fn a_watched_movie_plays_again_until_a_rewatch_resumes() {
     let target = settle(&view).await.header.play_target.unwrap();
     assert_eq!(target.label, "Play again");
     assert_eq!(target.resume_ms, None);
+    assert_eq!(target.left_ms, None);
 
     core.library()
         .set_progress("p", progress(120_000, 2), &core.hlc())
@@ -230,6 +233,7 @@ async fn a_watched_movie_plays_again_until_a_rewatch_resumes() {
         let target = view.snapshot().header.play_target.unwrap();
         if target.label == "Resume" {
             assert_eq!(target.resume_ms, Some(120_000));
+            assert_eq!(target.left_ms, Some(768_000));
             return;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;

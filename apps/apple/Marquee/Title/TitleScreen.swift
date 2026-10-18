@@ -402,7 +402,7 @@ private struct PlayBlock: View {
                         Glyph("play-fill")
                         Text(target?.label ?? "Play")
                         if let resume = target?.resumeMs, resume > 0 {
-                            Text(resumeText(resumeMs: resume, runtime: runtime)).fontWeight(.regular).opacity(0.8)
+                            Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(.regular).opacity(0.8)
                         }
                     }
                     .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)

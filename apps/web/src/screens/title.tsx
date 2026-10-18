@@ -157,7 +157,7 @@ function TitlePage(props: { kind: string; id: string }) {
                             <Play aria-hidden class="fill" />
                             {t().label}
                             <Show when={t().resumeMs}>
-                              {(ms) => <small class="num">{resumeText(ms(), runtimeMinutes(x().runtime))}</small>}
+                              {(ms) => <small class="num">{resumeText(ms(), t().leftMs, runtimeMinutes(x().runtime))}</small>}
                             </Show>
                           </A>
                         )}
@@ -265,11 +265,16 @@ function Fact(props: { label: string; value: string }): JSX.Element {
 /** Every addon answered and none offers a version this device can play. */
 const noVersion = (s: VersionsSnapshot | null) => !!s && s.done && !s.recommended && s.rows.length === 0;
 
-/** "36 min left" when the runtime is known, else the position. */
-function resumeText(resumeMs: number, runtime: number | null): string {
+/** "36 min left" from what the file has left (Continue Watching's figure), else from the runtime,
+ * else the position. */
+function resumeText(resumeMs: number, leftMs: number | null, runtime: number | null): string {
+  if (leftMs) return minutesLeft(leftMs);
   if (runtime) return `${Math.max(1, Math.round(runtime - resumeMs / 60_000))} min left`;
   return `from ${clock(resumeMs / 1000)}`;
 }
+
+/** Whole minutes rounded up, as the core words Continue Watching. */
+const minutesLeft = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))} min left`;
 
 function versionCount(s: VersionsSnapshot | null): number | null {
   if (!s) return null;
@@ -344,6 +349,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
   const select = (s: number) => setQuery({ season: String(s) }, { replace: true });
   const left = (e: Episode) => {
     if (e.watched) return "Watched";
+    if (e.leftMs) return minutesLeft(e.leftMs);
     if (e.progress !== null) return props.runtime ? `${Math.max(1, Math.round(props.runtime * (1 - e.progress)))} min left` : `${pct(e.progress)} watched`;
     if (!released(e)) return `Airs ${new Date(e.released as string).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}`;
     return props.runtime ? `${props.runtime} min` : "";

@@ -265,6 +265,8 @@ data class Episode(
     val released: String? = null,
     val watched: Boolean,
     val progress: Float? = null,
+    /** As [`PlayTarget::left_ms`], for this episode. */
+    val leftMs: Long? = null,
 )
 
 @Serializable
@@ -537,6 +539,8 @@ data class PlayTarget(
     val videoId: String,
     val label: String,
     val resumeMs: Long? = null,
+    /** What is left of the file, from the stored duration (the figure Continue Watching uses); null when nothing was played or the duration is unknown. */
+    val leftMs: Long? = null,
 )
 
 @Serializable

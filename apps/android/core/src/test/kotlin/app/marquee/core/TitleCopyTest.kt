@@ -21,6 +21,10 @@ class TitleCopyTest {
         assertEquals("Resume S1:E2 · 11 min left", TitleCopy.playLabel(resume, "52 min"))
         // Never "0 min left" while there is something left to watch.
         assertEquals("Resume S1:E2 · 1 min left", TitleCopy.playLabel(resume, "41 min"))
+        // What the file has left wins over the runtime, rounded up as Continue Watching words it.
+        val stored = resume.copy(leftMs = 60_001)
+        assertEquals("Resume S1:E2 · 2 min left", TitleCopy.playLabel(stored, "52 min"))
+        assertEquals("Resume S1:E2 · 2 min left", TitleCopy.playLabel(stored))
     }
 
     private fun details(
@@ -132,6 +136,7 @@ class TitleCopyTest {
         assertEquals("S2:E1 · 26 min left", TitleCopy.episodeCaption(part, "52 min"))
         assertEquals("50% watched", TitleCopy.episodeNote(part, null))
         assertEquals("Watched", TitleCopy.episodeNote(fresh.copy(watched = true), "52 min"))
+        assertEquals("S2:E1 · 41 min left", TitleCopy.episodeCaption(part.copy(leftMs = 2_460_000), "52 min"))
     }
 
     private fun row() =

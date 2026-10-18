@@ -254,7 +254,9 @@ private struct EpisodeRow: View {
             return "Airs \(released.formatted(Self.day.month(.abbreviated).day()))"
         }
         var parts: [String] = []
-        if let minutes {
+        if let left = episode.leftMs, left > 0, !episode.watched {
+            parts.append(minutesLeft(ms: left))
+        } else if let minutes {
             if let progress = episode.progress, !episode.watched {
                 parts.append("\(max(1, Int((Double(minutes) * (1 - progress)).rounded()))) min left")
             } else {
