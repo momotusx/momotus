@@ -261,9 +261,12 @@ impl TitleView {
             poster_shape: None,
             added_ms: mq_library::hlc::now_ms() as i64,
         };
-        self.core
-            .library()
-            .upsert_item(self.core.profile(), &row, in_library, &self.core.hlc())?;
+        self.core.library().upsert_item(
+            self.core.profile(),
+            &row,
+            in_library,
+            self.core.clock(),
+        )?;
         Ok(())
     }
 
@@ -273,7 +276,7 @@ impl TitleView {
             &self.id,
             video_id,
             watched,
-            &self.core.hlc(),
+            self.core.clock(),
         )?;
         Ok(())
     }

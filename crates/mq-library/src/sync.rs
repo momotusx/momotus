@@ -3,7 +3,7 @@
 //! never skips rows that share an HLC (an import writes thousands with one),
 //! and apply runs the same upsert-if-newer SQL as local writes.
 
-use crate::hlc::Hlc;
+use crate::hlc::{Hlc, HlcClock};
 use crate::store::{AddonRow, Library, LibraryError, LibraryItemRow, ProgressRow};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -911,30 +911,80 @@ fn stored_hlc(c: &Connection, coll: u8, key: &str) -> rusqlite::Result<Option<St
     .optional()
 }
 
-/// A local register write, queued for push when it changed something.
+/// What a local write is stamped with. Every local write takes its hlc
+/// inside its write transaction, so writes are stamped in the order they
+/// commit (C31). Stamped before it held the writer, a write could commit
+/// after a newer one, be stamped again just above it (`local`), and land on
+/// the hlc another waiting write already held, which then changed nothing.
+#[derive(Clone, Copy)]
+pub enum Stamp<'a> {
+    /// A real edit: the device clock ticks when the write holds the writer,
+    /// and when the write goes in again just above a newer stored version
+    /// the clock moves past that hlc too.
+    Clock(&'a HlcClock),
+    /// A given hlc: the zero one of a write that only caches what the device
+    /// saw, another app's import, or a test's.
+    Fixed(&'a str),
+}
+
+impl Stamp<'_> {
+    pub(crate) fn hlc(&self) -> String {
+        match self {
+            Stamp::Clock(clock) => clock.tick(clock.wall_now()).encode(),
+            Stamp::Fixed(hlc) => (*hlc).to_owned(),
+        }
+    }
+}
+
+impl<'a> From<&'a HlcClock> for Stamp<'a> {
+    fn from(clock: &'a HlcClock) -> Self {
+        Stamp::Clock(clock)
+    }
+}
+
+impl<'a> From<&'a str> for Stamp<'a> {
+    fn from(hlc: &'a str) -> Self {
+        Stamp::Fixed(hlc)
+    }
+}
+
+impl<'a> From<&'a String> for Stamp<'a> {
+    fn from(hlc: &'a String) -> Self {
+        Stamp::Fixed(hlc)
+    }
+}
+
+/// A local register write, stamped here (inside the write transaction) and
+/// queued for push when it changed something.
 ///
 /// When the stored version wins by clock (pulled from a device whose clock
 /// runs ahead of this one), the user still acted after seeing it, so the
-/// write goes in once more just above it. Writes that only cache what the
-/// device saw (a zero hlc) or import another app's state (device 0) never
-/// do this, so they never override a real edit.
+/// write goes in once more just above it, and a clock stamp moves past that
+/// hlc so no later local write is stamped at or below it. Writes that only
+/// cache what the device saw (a zero hlc) or import another app's state
+/// (device 0) never do this, so they never override a real edit.
 pub(crate) fn local(
     c: &Connection,
     coll: u8,
     parts: &[&str],
-    hlc: &str,
+    stamp: &Stamp<'_>,
     write: impl Fn(&str) -> rusqlite::Result<usize>,
 ) -> rusqlite::Result<()> {
     refuse_gone(c, parts[0])?;
-    let mut changed = write(hlc)?;
+    let hlc = stamp.hlc();
+    let mut changed = write(&hlc)?;
     if changed == 0
-        && let Some(mine) = Hlc::decode(hlc).filter(|h| h.wall_ms > 0 && h.device != 0)
+        && let Some(mine) = Hlc::decode(&hlc).filter(|h| h.wall_ms > 0 && h.device != 0)
         && let Some(stored) = stored_hlc(c, coll, &key(parts))?
             .as_deref()
             .and_then(Hlc::decode)
         && stored > mine
     {
-        changed = write(&stored.next_for(mine.device).encode())?;
+        let again = stored.next_for(mine.device);
+        changed = write(&again.encode())?;
+        if let Stamp::Clock(clock) = stamp {
+            clock.observe(again, clock.wall_now());
+        }
     }
     queue(c, changed, coll, parts)
 }

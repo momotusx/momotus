@@ -1,5 +1,5 @@
 use crate::schema::migrations;
-use crate::sync::{Gone, coll, local, queue, refuse_gone, sql};
+use crate::sync::{Gone, Stamp, coll, local, queue, refuse_gone, sql};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -306,14 +306,15 @@ impl Library {
 
     /// Replaces the profile's addon list with `addons` in one transaction,
     /// keeping order. An edit of the stored list goes through `edit_addons`.
-    pub fn set_addons(
+    pub fn set_addons<'a>(
         &self,
         profile: &str,
         addons: &[AddonRow],
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::ADDONS, &[profile], hlc, |h| {
+            local(c, coll::ADDONS, &[profile], &stamp, |h| {
                 sql::set_addons(c, profile, addons, h)
             })
         })
@@ -324,18 +325,15 @@ impl Library {
     /// order. Nothing (a pull, another edit) lands between the read and the
     /// write, so the edit never rewrites a list it did not see. An error
     /// from `edit` writes nothing and is returned.
-    ///
-    /// `stamp` gives the edit's hlc and is called inside the transaction, so
-    /// edits are stamped in the order they commit. Stamped before, two edits
-    /// could commit out of order: the older one is then stamped again just
-    /// above the newer (see `local`), which can equal the hlc a third edit
-    /// already holds, and that edit is then lost as no newer than the list.
-    pub fn edit_addons<E: From<LibraryError>>(
+    /// The edit is stamped inside the transaction, as every local write is
+    /// (`Stamp`).
+    pub fn edit_addons<'a, E: From<LibraryError>>(
         &self,
         profile: &str,
-        stamp: impl FnOnce() -> String,
+        stamp: impl Into<Stamp<'a>>,
         edit: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), E>,
     ) -> Result<(), E> {
+        let stamp = stamp.into();
         let mut refused = None;
         self.write(|c| {
             refuse_gone(c, profile)?;
@@ -344,8 +342,7 @@ impl Library {
                 refused = Some(e);
                 return Ok(());
             }
-            let hlc = stamp();
-            local(c, coll::ADDONS, &[profile], &hlc, |h| {
+            local(c, coll::ADDONS, &[profile], &stamp, |h| {
                 sql::set_addons(c, profile, &rows, h)
             })
         })?;
@@ -356,29 +353,31 @@ impl Library {
         self.read(|c| addon_rows(c, profile))
     }
 
-    pub fn upsert_item(
+    pub fn upsert_item<'a>(
         &self,
         profile: &str,
         item: &LibraryItemRow,
         in_library: bool,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::ITEMS, &[profile, &item.item_id], hlc, |h| {
+            local(c, coll::ITEMS, &[profile, &item.item_id], &stamp, |h| {
                 sql::upsert_item(c, profile, item, in_library, h)
             })
         })
     }
 
     /// Records playback progress. Older HLCs never overwrite newer ones.
-    pub fn set_progress(
+    pub fn set_progress<'a>(
         &self,
         profile: &str,
         p: ProgressRow<'_>,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::PROGRESS, &[profile, p.video_id], hlc, |h| {
+            local(c, coll::PROGRESS, &[profile, p.video_id], &stamp, |h| {
                 sql::set_progress(c, profile, &p, h)
             })
         })
@@ -399,16 +398,17 @@ impl Library {
         })
     }
 
-    pub fn set_watched(
+    pub fn set_watched<'a>(
         &self,
         profile: &str,
         item_id: &str,
         video_id: &str,
         watched: bool,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::WATCHED, &[profile, video_id], hlc, |h| {
+            local(c, coll::WATCHED, &[profile, video_id], &stamp, |h| {
                 sql::set_watched(c, profile, item_id, video_id, watched, h)
             })
         })
@@ -766,16 +766,17 @@ impl Library {
 
     /// Remembers the stream played for a title, so its next episode can
     /// prefer the same release line.
-    pub fn set_stream_memory(
+    pub fn set_stream_memory<'a>(
         &self,
         profile: &str,
         item_id: &str,
         binge_group: Option<&str>,
         stream_json: &str,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::STREAM_MEMORY, &[profile, item_id], hlc, |h| {
+            local(c, coll::STREAM_MEMORY, &[profile, item_id], &stamp, |h| {
                 sql::set_stream_memory(c, profile, item_id, binge_group, stream_json, h)
             })
         })
@@ -811,15 +812,16 @@ impl Library {
     }
 
     /// One setting, last writer wins by HLC like every synced row.
-    pub fn set_setting(
+    pub fn set_setting<'a>(
         &self,
         profile: &str,
         key: &str,
         value_json: &str,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::SETTINGS, &[profile, key], hlc, |h| {
+            local(c, coll::SETTINGS, &[profile, key], &stamp, |h| {
                 sql::set_setting(c, profile, key, value_json, h)
             })
         })

@@ -216,6 +216,8 @@ impl Core {
         &self.inner.device.pins
     }
 
+    /// A fresh hlc. Local library writes take `clock()` instead, so they are
+    /// stamped inside their write transaction (`mq_library::Stamp`).
     pub fn hlc(&self) -> String {
         self.clock().tick(self.clock().wall_now()).encode()
     }
@@ -437,7 +439,7 @@ impl Core {
         &self,
         f: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), CoreError>,
     ) -> Result<(), CoreError> {
-        self.library().edit_addons(self.profile(), || self.hlc(), f)
+        self.library().edit_addons(self.profile(), self.clock(), f)
     }
 }
 

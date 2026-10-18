@@ -20,6 +20,6 @@ pub use store::{
     LibraryItemRow, ProgressRow, Table,
 };
 pub use sync::{
-    OWNER, OWNER_NAME, OutboxPage, SignedEntry, SyncCursor, SyncRecord, coll, valid_avatar,
+    OWNER, OWNER_NAME, OutboxPage, SignedEntry, Stamp, SyncCursor, SyncRecord, coll, valid_avatar,
 };
 pub use tracker::{ImportReport, ImportedPlay, Intent, IntentOp, NewIntent, TrackerKey};

@@ -5,7 +5,7 @@
 
 use crate::hlc::Hlc;
 use crate::store::{Library, LibraryError, LibraryItemRow, ProgressRow};
-use crate::sync::{coll, local, refuse_gone, sql};
+use crate::sync::{Stamp, coll, local, refuse_gone, sql};
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// Rows dated further ahead than this are deferred, not imported.
@@ -142,18 +142,19 @@ impl Library {
     /// Marks or unmarks by hand. The register, its sync entry and, when the
     /// value flips and a tracker is connected, a write for the tracker are
     /// one transaction. Returns whether the value flipped.
-    pub fn set_watched_by_hand(
+    pub fn set_watched_by_hand<'a>(
         &self,
         profile: &str,
         item_id: &str,
         video_id: &str,
         watched: bool,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
         tracker: Option<(TrackerKey<'_>, i64)>,
     ) -> Result<bool, LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
             let before = watched_now(c, profile, video_id)?;
-            local(c, coll::WATCHED, &[profile, video_id], hlc, |h| {
+            local(c, coll::WATCHED, &[profile, video_id], &stamp, |h| {
                 sql::set_watched(c, profile, item_id, video_id, watched, h)
             })?;
             let flipped = before != watched && watched_now(c, profile, video_id)? == watched;
@@ -370,12 +371,12 @@ impl Library {
                 };
                 // Only fills a gap (the zero stamp never replaces a row), and
                 // syncs, so other devices know the title's kind and name.
-                local(c, coll::ITEMS, &[profile, &play.item_id], &zero, |h| {
+                local(c, coll::ITEMS, &[profile, &play.item_id], &Stamp::Fixed(&zero), |h| {
                     sql::upsert_item(c, profile, &item, false, h)
                 })?;
                 let hlc = stamp(play.watched_ms);
                 let before = watched_now(c, profile, &play.video_id)?;
-                local(c, coll::WATCHED, &[profile, &play.video_id], &hlc, |h| {
+                local(c, coll::WATCHED, &[profile, &play.video_id], &Stamp::Fixed(&hlc), |h| {
                     sql::set_watched(c, profile, &play.item_id, &play.video_id, true, h)
                 })?;
                 if !before && watched_now(c, profile, &play.video_id)? {
@@ -469,7 +470,7 @@ fn anchor(c: &Connection, profile: &str, play: &ImportedPlay) -> rusqlite::Resul
         c,
         coll::PROGRESS,
         &[profile, &play.video_id],
-        &stamp(play.watched_ms),
+        &Stamp::Fixed(&stamp(play.watched_ms)),
         |h| sql::set_progress(c, profile, &row, h),
     )
 }

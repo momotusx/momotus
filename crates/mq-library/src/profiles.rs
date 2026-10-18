@@ -4,7 +4,7 @@
 //! attempts, the active profile).
 
 use crate::store::{AddonRow, Library, LibraryError};
-use crate::sync::{OWNER, coll, gone, local, queue, refuse_gone, sql};
+use crate::sync::{OWNER, Stamp, coll, gone, local, queue, refuse_gone, sql};
 use rusqlite::{OptionalExtension, params};
 
 /// One profile as stored.
@@ -73,23 +73,24 @@ impl Library {
 
     /// Creates the profile with its lock register (no PIN) and a copy of
     /// the owner's addon list, in one transaction, after the last position.
-    pub fn create_profile(
+    pub fn create_profile<'a>(
         &self,
         id: &str,
         name: &str,
         avatar: &str,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
             let position: i64 = c.query_row(
                 "SELECT COALESCE(MAX(position) + 1, 0) FROM profiles",
                 [],
                 |r| r.get(0),
             )?;
-            local(c, coll::PROFILES, &[id], hlc, |h| {
+            local(c, coll::PROFILES, &[id], &stamp, |h| {
                 sql::set_profile(c, id, name, avatar, position, h)
             })?;
-            local(c, coll::PROFILE_LOCK, &[id], hlc, |h| {
+            local(c, coll::PROFILE_LOCK, &[id], &stamp, |h| {
                 sql::set_lock(c, id, None, h)
             })?;
             let mut stmt = c.prepare(
@@ -107,37 +108,39 @@ impl Library {
                     })
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            local(c, coll::ADDONS, &[id], hlc, |h| {
+            local(c, coll::ADDONS, &[id], &stamp, |h| {
                 sql::set_addons(c, id, &addons, h)
             })
         })
     }
 
     /// Rewrites the cosmetic register (name, avatar, position) whole.
-    pub fn update_profile(
+    pub fn update_profile<'a>(
         &self,
         id: &str,
         name: &str,
         avatar: &str,
         position: i64,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::PROFILES, &[id], hlc, |h| {
+            local(c, coll::PROFILES, &[id], &stamp, |h| {
                 sql::set_profile(c, id, name, avatar, position, h)
             })
         })
     }
 
     /// Sets (a PHC string) or clears the profile's PIN.
-    pub fn set_pin_hash(
+    pub fn set_pin_hash<'a>(
         &self,
         id: &str,
         pin_hash: Option<&str>,
-        hlc: &str,
+        stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
         self.write(|c| {
-            local(c, coll::PROFILE_LOCK, &[id], hlc, |h| {
+            local(c, coll::PROFILE_LOCK, &[id], &stamp, |h| {
                 sql::set_lock(c, id, pin_hash, h)
             })
         })
@@ -146,13 +149,18 @@ impl Library {
     /// Removes the profile for good: its gone register is written and
     /// queued, and every row it had on this device goes, in one
     /// transaction. Refused for the owner.
-    pub fn delete_profile(&self, id: &str, hlc: &str) -> Result<(), LibraryError> {
+    pub fn delete_profile<'a>(
+        &self,
+        id: &str,
+        stamp: impl Into<Stamp<'a>>,
+    ) -> Result<(), LibraryError> {
         if id == OWNER {
             return Err(LibraryError::OwnerProfile);
         }
+        let stamp = stamp.into();
         self.write(|c| {
             self.mark_removal();
-            let changed = sql::set_gone(c, id, hlc)?;
+            let changed = sql::set_gone(c, id, &stamp.hlc())?;
             queue(c, changed, coll::PROFILE_GONE, &[id])
         })?;
         self.checkpoint();

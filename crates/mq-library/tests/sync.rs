@@ -217,25 +217,21 @@ fn a_pull_during_an_addon_edit_lands_after_it_and_keeps_the_other_devices_addon(
     a.set_addons("p", &[row(x), row(y)], &hlc(9, 1)).unwrap();
     let pulled = all(&a);
     std::thread::scope(|s| {
-        b.edit_addons(
-            "p",
-            || hlc(5, 2),
-            |rows| {
-                assert_eq!(*rows, [row(x)]);
-                let (done, applied) = std::sync::mpsc::channel();
-                let (b, pulled) = (&b, &pulled);
-                s.spawn(move || {
-                    b.apply(pulled).unwrap();
-                    let _ = done.send(());
-                });
-                // Time enough for the pull to land if anything let it: the
-                // edit's transaction holds it until the write commits.
-                let landed = applied.recv_timeout(std::time::Duration::from_millis(250));
-                assert!(landed.is_err(), "the pull landed inside the edit");
-                rows.push(row(z));
-                Ok::<_, mq_library::LibraryError>(())
-            },
-        )
+        b.edit_addons("p", &hlc(5, 2), |rows| {
+            assert_eq!(*rows, [row(x)]);
+            let (done, applied) = std::sync::mpsc::channel();
+            let (b, pulled) = (&b, &pulled);
+            s.spawn(move || {
+                b.apply(pulled).unwrap();
+                let _ = done.send(());
+            });
+            // Time enough for the pull to land if anything let it: the
+            // edit's transaction holds it until the write commits.
+            let landed = applied.recv_timeout(std::time::Duration::from_millis(250));
+            assert!(landed.is_err(), "the pull landed inside the edit");
+            rows.push(row(z));
+            Ok::<_, mq_library::LibraryError>(())
+        })
         .unwrap();
     });
     // The pull applied after the edit, and A's newer list won as a whole:
@@ -304,38 +300,135 @@ fn moving_a_sync_state_replaces_it_in_one_step() {
     assert_eq!(lib.sync_state("cancel:01").unwrap().as_deref(), Some("1"));
 }
 
-#[test]
-fn concurrent_addon_edits_stamped_in_commit_order_all_land() {
-    // Many edits wait for the writer at once. Stamped when they hold it, each
-    // commits above the last. Stamped before, an edit that waited was stamped
-    // again just above the newer list, onto the hlc a third edit already held,
-    // and that third edit was lost as no newer than the list.
-    let lib = Library::temporary().unwrap();
+/// A device clock whose every tick falls in one millisecond, far ahead of
+/// the wall time: only the counter orders the writes, as for writes made in
+/// the same millisecond.
+fn one_millisecond_clock() -> mq_library::HlcClock {
     let clock = mq_library::HlcClock::new(7);
+    let ahead = mq_library::Hlc {
+        wall_ms: 5_000_000_000_000,
+        counter: 0,
+        device: 9,
+    };
+    clock.observe(ahead, 0);
+    clock
+}
+
+/// 16 threads make 40 writes each to one register, all waiting for the
+/// writer at once, stamped by one device clock. Every write must change the
+/// register: each queues one outbox entry, so the outbox holds 640. Stamped
+/// before it held the writer, a write could commit after a newer one, be
+/// stamped again just above it, onto the hlc a third write already held,
+/// and that third write was lost as no newer than the register (C31).
+fn all_concurrent_writes_land(
+    write: impl Fn(&Library, &mq_library::HlcClock, usize) + Sync,
+) -> Library {
+    let lib = Library::temporary().unwrap();
+    let clock = one_millisecond_clock();
     std::thread::scope(|s| {
         for t in 0..16 {
-            let (lib, clock) = (&lib, &clock);
+            let (lib, clock, write) = (&lib, &clock, &write);
             s.spawn(move || {
                 for i in 0..40 {
-                    lib.edit_addons(
-                        "p",
-                        // One millisecond for all: only the counter orders them.
-                        || clock.tick(1_000).encode(),
-                        |rows: &mut Vec<AddonRow>| {
-                            rows.push(AddonRow {
-                                transport_url: format!("https://a{t}-{i}.example/manifest.json"),
-                                manifest_json: "{}".into(),
-                                position: 0,
-                                enabled: true,
-                                allow_private: false,
-                            });
-                            Ok::<_, mq_library::LibraryError>(())
-                        },
-                    )
-                    .unwrap();
+                    write(lib, clock, t * 40 + i);
                 }
             });
         }
     });
+    let outbox = lib.outbox(usize::MAX).unwrap();
+    assert_eq!(outbox.last_id, Some(640), "writes were lost");
+    lib
+}
+
+#[test]
+fn concurrent_addon_edits_stamped_in_commit_order_all_land() {
+    let lib = all_concurrent_writes_land(|lib, clock, n| {
+        lib.edit_addons("p", clock, |rows: &mut Vec<AddonRow>| {
+            rows.push(AddonRow {
+                transport_url: format!("https://a{n}.example/manifest.json"),
+                manifest_json: "{}".into(),
+                position: 0,
+                enabled: true,
+                allow_private: false,
+            });
+            Ok::<_, mq_library::LibraryError>(())
+        })
+        .unwrap();
+    });
     assert_eq!(lib.addons("p").unwrap().len(), 640);
+}
+
+#[test]
+fn concurrent_item_writes_all_land() {
+    all_concurrent_writes_land(|lib, clock, n| {
+        let mut row = item("tt1");
+        row.name = format!("name {n}");
+        lib.upsert_item("p", &row, n % 2 == 0, clock).unwrap();
+    });
+}
+
+#[test]
+fn concurrent_progress_writes_all_land() {
+    all_concurrent_writes_land(|lib, clock, n| {
+        let row = ProgressRow {
+            video_id: "tt1",
+            item_id: "tt1",
+            position_ms: n as i64,
+            duration_ms: 10_000,
+            updated_ms: n as i64,
+        };
+        lib.set_progress("p", row, clock).unwrap();
+    });
+}
+
+#[test]
+fn concurrent_watched_marks_all_land() {
+    all_concurrent_writes_land(|lib, clock, n| {
+        lib.set_watched("p", "tt1", "tt1", n % 2 == 0, clock)
+            .unwrap();
+    });
+}
+
+#[test]
+fn concurrent_stream_memory_and_settings_writes_all_land() {
+    all_concurrent_writes_land(|lib, clock, n| {
+        let stream = format!("{{\"key\":\"{n}\"}}");
+        lib.set_stream_memory("p", "tt1", Some("g"), &stream, clock)
+            .unwrap();
+    });
+    all_concurrent_writes_land(|lib, clock, n| {
+        lib.set_setting("p", "notes", &format!("\"{n}\""), clock)
+            .unwrap();
+    });
+}
+
+#[test]
+fn concurrent_profile_and_lock_writes_all_land() {
+    all_concurrent_writes_land(|lib, clock, n| {
+        lib.update_profile("p", &format!("name {n}"), "", 0, clock)
+            .unwrap();
+    });
+    all_concurrent_writes_land(|lib, clock, n| {
+        let hash = format!("$argon2id$v=19$m=1,t=1,p=1$c2FsdA${n}");
+        lib.set_pin_hash("p", Some(&hash), clock).unwrap();
+    });
+}
+
+/// A local write that goes in again just above a newer stored version moves
+/// the device clock past what it wrote, so the next local write is stamped
+/// above it.
+#[test]
+fn a_local_write_above_a_newer_version_moves_the_clock_past_it() {
+    let lib = Library::temporary().unwrap();
+    // Another device, its clock an hour ahead, set the register first.
+    let ahead = mq_library::hlc::now_ms() + 3_600_000;
+    lib.set_watched("p", "tt1", "tt1", true, &hlc(ahead, 9))
+        .unwrap();
+    let clock = mq_library::HlcClock::new(7);
+    lib.set_watched("p", "tt1", "tt1", false, &clock).unwrap();
+    let stored = lib.register(coll::WATCHED, "p\u{1f}tt1").unwrap().unwrap();
+    let stored = mq_library::Hlc::decode(&stored.hlc).unwrap();
+    assert_eq!((stored.wall_ms, stored.device), (ahead, 7), "{stored:?}");
+    let next = clock.tick(clock.wall_now());
+    assert!(next > stored, "{next:?} is not after {stored:?}");
 }

@@ -144,7 +144,7 @@ impl Core {
         getrandom::fill(&mut bytes).expect("os randomness");
         let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         self.library()
-            .create_profile(&id, name, avatar, &self.hlc())?;
+            .create_profile(&id, name, avatar, self.clock())?;
         Ok(id)
     }
 
@@ -168,7 +168,7 @@ impl Core {
             name,
             avatar.unwrap_or(&row.avatar),
             position.unwrap_or(row.position),
-            &self.hlc(),
+            self.clock(),
         )?;
         Ok(())
     }
@@ -182,7 +182,7 @@ impl Core {
             return Err(ProfileError::OwnerProfile);
         }
         self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
-        self.library().delete_profile(id, &self.hlc())?;
+        self.library().delete_profile(id, self.clock())?;
         Ok(())
     }
 
@@ -201,7 +201,7 @@ impl Core {
             if self.profile() != OWNER || pin.is_some() {
                 return Err(ProfileError::NotOwner);
             }
-            self.library().set_pin_hash(id, None, &self.hlc())?;
+            self.library().set_pin_hash(id, None, self.clock())?;
             return self.forgive(id);
         }
         if pin.is_some_and(weak) {
@@ -225,7 +225,7 @@ impl Core {
             None => None,
         };
         self.library()
-            .set_pin_hash(id, hash.as_deref(), &self.hlc())?;
+            .set_pin_hash(id, hash.as_deref(), self.clock())?;
         self.forgive(id)
     }
 
@@ -233,7 +233,7 @@ impl Core {
     /// apps call it only after the device's own lock (an OS prompt), which
     /// the core cannot see, so it has the trust of removing a device.
     pub fn reset_owner_pin(&self) -> Result<(), ProfileError> {
-        self.library().set_pin_hash(OWNER, None, &self.hlc())?;
+        self.library().set_pin_hash(OWNER, None, self.clock())?;
         self.forgive(OWNER)
     }
 

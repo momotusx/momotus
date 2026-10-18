@@ -102,7 +102,6 @@ impl Core {
         let prefs: Prefs =
             serde_json::from_value(merged).map_err(|e| CoreError::BadPrefs(e.to_string()))?;
         let stored = serde_json::to_value(&prefs).unwrap_or_default();
-        let hlc = self.hlc();
         // Objects are stored leaf by leaf, so two devices changing different
         // stream preferences both keep their change.
         let mut writes = Vec::new();
@@ -124,7 +123,7 @@ impl Core {
         // Checked in full above, so a bad patch writes nothing.
         for (leaf, value) in writes {
             self.library()
-                .set_setting(self.profile(), &leaf, &value, &hlc)?;
+                .set_setting(self.profile(), &leaf, &value, self.clock())?;
         }
         Ok(prefs)
     }

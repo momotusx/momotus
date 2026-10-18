@@ -597,7 +597,7 @@ fn save_progress(
             duration_ms: duration_ms as i64,
             updated_ms: mq_library::hlc::now_ms() as i64,
         },
-        &core.hlc(),
+        core.clock(),
     )?;
     if duration_ms > 0 && position_ms as f64 >= duration_ms as f64 * FINISHED_RATIO {
         library.set_watched(
@@ -605,7 +605,7 @@ fn save_progress(
             &target.item_id,
             &target.video_id,
             true,
-            &core.hlc(),
+            core.clock(),
         )?;
     }
     Ok(())
@@ -1160,7 +1160,7 @@ fn remember_stream(core: &Core, target: &PlayTarget, stream: &ParsedStream) {
         &target.item_id,
         stream.binge_group.as_deref(),
         &memory.to_string(),
-        &core.hlc(),
+        core.clock(),
     ) {
         tracing::warn!("stream memory write failed: {e}");
     }
