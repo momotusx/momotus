@@ -46,7 +46,7 @@ export function action(entry: ListedAddon): Action {
       return entry.copyKey ? { kind: "turnOn", url: entry.copyKey, word: w.setUpOff } : { kind: "none", word: w.setUpOff };
     case "absent":
       if (entry.configuration === "required") return { kind: "configure" };
-      return { kind: "install", configure: entry.configuration === "optional" && entry.configureUrl !== null };
+      return { kind: "install", configure: entry.configuration === "optional" };
   }
 }
 

@@ -13,7 +13,7 @@ const entry = (over: Partial<ListedAddon>): ListedAddon => ({
   types: ["movie"],
   provides: ["subtitles"],
   configuration: "none",
-  configureUrl: null,
+  configureUrl: "https://addon.example/configure",
   installed: "absent",
   copyKey: null,
   ...over,
