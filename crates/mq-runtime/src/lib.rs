@@ -18,6 +18,10 @@ pub use crate::debrid::{
 pub use crate::profiles::{MAX_PROFILES, ProfileError};
 pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;
+pub use views::addon_catalog::{
+    AddonCatalogSnapshot, AddonCatalogView, AddonList, CINEMETA, Configuration, Installed,
+    ListState, ListedAddon, ListedEntry, ListedError, ListedFailure,
+};
 pub use views::addons::{AddonInfo, AddonsSnapshot, AddonsView};
 pub use views::calendar::{
     CalendarDay, CalendarItem, CalendarSeries, CalendarSnapshot, CalendarView,

@@ -425,7 +425,7 @@ impl Core {
     }
 
     /// One write of the whole ordered list; positions follow the new order.
-    fn edit_addons(
+    pub(crate) fn edit_addons(
         &self,
         f: impl FnOnce(&mut Vec<AddonRow>) -> Result<(), CoreError>,
     ) -> Result<(), CoreError> {

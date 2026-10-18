@@ -33,6 +33,9 @@ pub struct AddonInfo {
     pub provides: Vec<String>,
     pub types: Vec<String>,
     pub configurable: bool,
+    /// The addon's configure page, when its manifest says it has one
+    /// (`configurable` or `configurationRequired`).
+    pub configure_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -106,6 +109,7 @@ fn list(core: &Core) -> AddonsSnapshot {
         .filter_map(|row| {
             let manifest: Manifest = serde_json::from_str(&row.manifest_json).ok()?;
             let url = url::Url::parse(&row.transport_url).ok()?;
+            let configure_url = crate::views::addon_catalog::configure_page(&url, &manifest);
             Some(AddonInfo {
                 host: url.host_str().unwrap_or_default().to_owned(),
                 url: row.transport_url,
@@ -122,6 +126,7 @@ fn list(core: &Core) -> AddonsSnapshot {
                         ManifestResource::Full { name, .. } => name.clone(),
                     })
                     .collect(),
+                configure_url,
                 types: manifest.types,
                 configurable: manifest.behavior_hints.configurable,
             })

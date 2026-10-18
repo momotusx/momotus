@@ -121,6 +121,19 @@ impl AddonClient {
         }
     }
 
+    /// `fetch` past the cache: waits for the network, and keeps the answer
+    /// as `fetch` does. A failure is a failure, never a stale answer.
+    pub async fn fetch_fresh(
+        &self,
+        addon: &InstalledAddon,
+        path: &ResourcePath,
+        timeout: Duration,
+    ) -> Result<Fetched, AddonError> {
+        let url = resource_url(&addon.transport_url, path)?;
+        let generation = self.cache.generation();
+        self.fetch_network(addon, &url, timeout, generation).await
+    }
+
     async fn fetch_network(
         &self,
         addon: &InstalledAddon,
