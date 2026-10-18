@@ -6,3 +6,8 @@ import SwiftUI
 func tabBarIconsOnly(width: CGFloat, type: DynamicTypeSize) -> Bool {
     width < 360 || type >= .xxxLarge
 }
+
+/// The iPhone bar's height with its gap below, for the room a pushed page keeps at its end.
+enum TabBarMetrics {
+    static let height: CGFloat = 66
+}

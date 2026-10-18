@@ -8,6 +8,7 @@ struct HomeScreen: View {
     @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
     @State private var onboarding = false
+    @State private var showProfiles = false
     /// Rows have scrolled under the status bar.
     @State private var underBar = false
 
@@ -17,6 +18,10 @@ struct HomeScreen: View {
                 // Without catalogs there is no art to show: setup takes the top.
                 if !model.needsSetup {
                     HeroView(hero: model.header.hero, height: heroHeight)
+                        // Phone: the profile button sits at the header's top right.
+                        .overlay(alignment: .topTrailing) {
+                            if !metrics.wide { ProfileButton { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
+                        }
                         .padding(.top, cardTop)
                 }
                 content
@@ -35,6 +40,7 @@ struct HomeScreen: View {
         #if DEBUG
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
         #endif
+        .navigationDestination(isPresented: $showProfiles) { ProfilePicker(mode: .push, core: core) }
         .modifier(FullScreen(isPresented: $onboarding) {
             NavigationStack {
                 OnboardingScreen(core: core) { onboarding = false }

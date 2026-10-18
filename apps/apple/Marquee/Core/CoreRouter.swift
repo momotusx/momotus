@@ -6,11 +6,17 @@ let coreLog = Logger(subsystem: "app.marquee", category: "core")
 
 struct CoreError: LocalizedError, Sendable {
     let message: String
-    /// Stable name for the errors an app acts on (sync errors); never parse `message`.
+    /// Stable name for the errors an app acts on (sync, profiles); never parse `message`.
     var code: String?
-    init(_ message: String, code: String? = nil) {
+    /// With `locked`: how long until the next PIN try.
+    var retryAfterMs: Int64?
+    /// With `viewsOpen`: the views still open.
+    var views: [String]?
+    init(_ message: String, code: String? = nil, retryAfterMs: Int64? = nil, views: [String]? = nil) {
         self.message = message
         self.code = code
+        self.retryAfterMs = retryAfterMs
+        self.views = views
     }
     var errorDescription: String? { message }
 }
@@ -32,6 +38,7 @@ final class CoreRouter: CoreListener {
         var early: [UInt64: [Data]] = [:]
         var highestRouted: UInt64 = 0
         var onDied: (@Sendable (String) -> Void)?
+        var onProfileGone: (@Sendable (String) -> Void)?
     }
 
     private struct Head: Decodable {
@@ -42,6 +49,29 @@ final class CoreRouter: CoreListener {
         let sub: UInt64?
         let core: String?
         let reason: String?
+        let retryAfterMs: Int64?
+        let views: [String]?
+        /// `{"profile": "gone", "id": "<profile>"}`: a profile removed on another device.
+        let profile: String?
+        let profileId: String?
+
+        private enum Key: String, CodingKey { case id, ok, error, code, sub, core, reason, retryAfterMs, views, profile }
+
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: Key.self)
+            // A request id is a number; a profile push carries the profile's id as a string.
+            id = try? c.decodeIfPresent(UInt64.self, forKey: .id)
+            profileId = try? c.decodeIfPresent(String.self, forKey: .id)
+            ok = try c.decodeIfPresent(Bool.self, forKey: .ok)
+            error = try c.decodeIfPresent(String.self, forKey: .error)
+            code = try c.decodeIfPresent(String.self, forKey: .code)
+            sub = try c.decodeIfPresent(UInt64.self, forKey: .sub)
+            core = try c.decodeIfPresent(String.self, forKey: .core)
+            reason = try c.decodeIfPresent(String.self, forKey: .reason)
+            retryAfterMs = try c.decodeIfPresent(Int64.self, forKey: .retryAfterMs)
+            views = try c.decodeIfPresent([String].self, forKey: .views)
+            profile = try c.decodeIfPresent(String.self, forKey: .profile)
+        }
     }
 
     private let state = Mutex(State())
@@ -76,6 +106,11 @@ final class CoreRouter: CoreListener {
         state.withLock { $0.onDied = handler }
     }
 
+    /// A profile was removed on another device (`{"profile": "gone", "id"}`).
+    func onProfileGone(_ handler: @escaping @Sendable (String) -> Void) {
+        state.withLock { $0.onProfileGone = handler }
+    }
+
     /// Answers every waiting request with `error` (the core never opened).
     func fail(_ error: CoreError) {
         let waiters = state.withLock { state in
@@ -96,7 +131,9 @@ final class CoreRouter: CoreListener {
             push(sub, data)
         } else if let id = head.id {
             let waiter = state.withLock { $0.waiters.removeValue(forKey: id) }
-            waiter?(head.ok == true ? .success(data) : .failure(CoreError(head.error ?? "request failed", code: head.code)))
+            waiter?(head.ok == true ? .success(data) : .failure(CoreError(head.error ?? "request failed", code: head.code, retryAfterMs: head.retryAfterMs, views: head.views)))
+        } else if head.profile == "gone", let profile = head.profileId {
+            state.withLock { $0.onProfileGone }?(profile)
         } else if head.core == "died" {
             let reason = head.reason ?? "unknown"
             coreLog.fault("core died: \(reason, privacy: .public)")

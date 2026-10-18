@@ -1,0 +1,339 @@
+import SwiftUI
+
+/// The owner's list of profiles, each opening its edit page, and Add.
+struct ManageProfiles: View {
+    let core: CoreClient
+    @Environment(ProfileSession.self) private var profiles
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                ScreenTitle(text: "Manage profiles")
+                if let snapshot = profiles.snapshot {
+                    if snapshot.current?.isOwner != true {
+                        StateLine(symbol: "lock", text: "Only the main profile manages profiles. You can edit your own from Settings.")
+                    } else {
+                        ForEach(snapshot.profiles) { profile in
+                            NavigationLink { EditProfile(profileId: profile.id) } label: {
+                                ProfileRow(stored: profile.avatar, name: profile.name, detail: ProfileRules.detail(profile))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        if snapshot.profiles.count < snapshot.max {
+                            NavigationLink { EditProfile(profileId: nil) } label: {
+                                SettingsRow(symbol: "plus", title: "Add profile", detail: "A new profile starts with your addons and no PIN.")
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            StateLine(symbol: "users", text: "This account has as many profiles as it can hold (\(snapshot.max)).")
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.gutter)
+            .padding(.vertical, Theme.Space.l)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.bg)
+        .topScrim()
+    }
+}
+
+/// A profile as a Settings row: its avatar, its name and one line.
+struct ProfileRow: View {
+    let stored: String
+    let name: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: Theme.Space.s) {
+            ProfileAvatar(stored, name: name, size: 40)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                Text(detail)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+            Spacer()
+            Glyph("chevron-right").foregroundStyle(Theme.Palette.muted)
+        }
+        .foregroundStyle(Theme.Palette.text)
+        .padding(Theme.Space.s)
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Add a profile, or edit one: the name, the picture and its color, the PIN
+/// changes the core allows, and Delete for the owner on another profile.
+struct EditProfile: View {
+    /// nil adds a profile.
+    let profileId: String?
+    @Environment(ProfileSession.self) private var profiles
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.metrics) private var metrics
+    @State private var name = ""
+    @State private var glyph = "letter"
+    @State private var color = "ember"
+    /// The user picked a picture or a color: only then is `avatar` sent, so a
+    /// newer app's avatar survives a rename.
+    @State private var touched = false
+    @State private var filled = false
+    @State private var said: (text: String, ok: Bool)?
+    @State private var busy = false
+    @State private var flow: PinFlow?
+    @State private var confirmDelete = false
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                if let snapshot = profiles.snapshot, let active = snapshot.current {
+                    let target = profileId.flatMap { id in snapshot.profiles.first { $0.id == id } }
+                    if profileId != nil && target == nil {
+                        StateLine(symbol: "circle-alert", text: "That profile was removed on another device.")
+                    } else if !(active.isOwner || target?.id == active.id) {
+                        StateLine(symbol: "lock", text: "Only the main profile can change other profiles.")
+                    } else if let flow, let target {
+                        PinKeypad(
+                            title: flow.prompt, cancelTitle: "Cancel",
+                            submit: { pin in await step(pin, target) },
+                            cancel: { self.flow = nil })
+                    } else {
+                        ScreenTitle(text: title(target, active))
+                        form(snapshot)
+                        if let target { pin(target, active) }
+                        if let target, active.isOwner, !target.isOwner, target.id != active.id {
+                            Button("Delete profile") { confirmDelete = true }
+                                .buttonStyle(DestructiveTextStyle())
+                                .confirmationDialog("Delete \(target.name)?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                                    Button("Delete \(target.name)", role: .destructive) { delete(target) }
+                                    Button("Keep", role: .cancel) {}
+                                } message: {
+                                    Text("Delete \(target.name)? Their library, progress and settings are removed from this device now and from your other devices when they next sync.")
+                                }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.gutter)
+            .padding(.vertical, Theme.Space.l)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.bg)
+        .topScrim()
+        .onAppear(perform: fill)
+    }
+
+    private func title(_ target: ProfileInfo?, _ active: ProfileInfo) -> String {
+        guard let target else { return "Add profile" }
+        return target.id == active.id ? "Your profile" : "Edit \(target.name)"
+    }
+
+    /// The fields are filled once; later snapshots do not overwrite what is typed.
+    private func fill() {
+        guard !filled, let snapshot = profiles.snapshot else { return }
+        filled = true
+        if let target = profileId.flatMap({ id in snapshot.profiles.first { $0.id == id } }) {
+            name = target.name
+            let avatar = ProfileRules.parseAvatar(target.avatar)
+            glyph = avatar.glyph
+            color = avatar.color ?? "ember"
+        } else {
+            let avatar = ProfileRules.parseAvatar(ProfileRules.nextAvatar(snapshot.profiles.map(\.avatar)))
+            glyph = avatar.glyph
+            color = avatar.color ?? "ember"
+        }
+    }
+
+    private func form(_ snapshot: ProfilesSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            HStack(spacing: Theme.Space.s) {
+                ProfileAvatar(ProfileRules.Avatar(glyph: glyph, color: color), name: name, size: 72)
+                VStack(alignment: .leading, spacing: 6) {
+                    caps("Name")
+                    TextField("Name", text: $name)
+                        .textFieldStyle(.plain)
+                        .font(.text(Theme.type.body))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).fill(Theme.Palette.surface))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous).strokeBorder(Theme.Palette.control))
+                        .onChange(of: name) { _, typed in if typed.count > 30 { name = String(typed.prefix(30)) } }
+                }
+            }
+            caps("Picture")
+            ScrollView(.horizontal) {
+                HStack(spacing: 10) {
+                    ForEach(ProfileRules.glyphs, id: \.self) { item in
+                        choice(selected: item == glyph, label: ProfileRules.glyphName(item)) {
+                            glyph = item
+                            touched = true
+                        } content: {
+                            ProfileAvatar(ProfileRules.Avatar(glyph: item, color: color), name: name, size: 48)
+                        }
+                    }
+                }
+                .padding(4)
+            }
+            .scrollIndicators(.hidden)
+            caps("Color")
+            ScrollView(.horizontal) {
+                HStack(spacing: 10) {
+                    ForEach(ProfileRules.colors, id: \.self) { item in
+                        choice(selected: item == color, label: item.prefix(1).uppercased() + item.dropFirst()) {
+                            color = item
+                            touched = true
+                        } content: {
+                            Circle().fill(ProfileAvatar.color(item)).frame(width: 40, height: 40)
+                                .overlay { if item == color { Glyph("check", size: 18).foregroundStyle(.white) } }
+                        }
+                    }
+                }
+                .padding(4)
+            }
+            .scrollIndicators(.hidden)
+            if let said {
+                Label(said.text, glyph: said.ok ? "circle-check" : "triangle-alert")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(said.ok ? Theme.Palette.muted : Theme.Palette.text)
+            }
+            Button(profileId == nil ? "Add profile" : "Save", action: save)
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .disabled(busy)
+        }
+    }
+
+    private func caps(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+            .tracking(1.6)
+            .foregroundStyle(Theme.Palette.muted)
+    }
+
+    private func choice(selected: Bool, label: String, pick: @escaping () -> Void, @ViewBuilder content: () -> some View) -> some View {
+        Button(action: pick) {
+            content()
+                .padding(3)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(selected ? Theme.Palette.text : .clear, lineWidth: 2))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder private func pin(_ target: ProfileInfo, _ active: ProfileInfo) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            Text("PIN").display(Theme.type.title2).foregroundStyle(Theme.Palette.text)
+            let actions = PinAction.allowed(for: target, by: active)
+            if target.syncing {
+                StateLine(symbol: "clock", text: "Waiting for this profile's lock to arrive from your other devices.")
+            } else if actions.isEmpty {
+                StateLine(symbol: "info", text: "\(target.name) has no PIN. They can set one from their own profile.")
+            } else {
+                FlowRow(spacing: 12) {
+                    ForEach(actions, id: \.self) { action in
+                        Button(label(action, target)) { begin(action, target) }
+                            .buttonStyle(PillButtonStyle())
+                            .disabled(busy)
+                    }
+                }
+            }
+        }
+    }
+
+    private func label(_ action: PinAction, _ target: ProfileInfo) -> String {
+        switch action {
+        case .set: "Set a PIN"
+        case .change: "Change PIN"
+        case .remove: "Remove PIN"
+        case .removeOther: "Remove \(target.name)'s PIN"
+        }
+    }
+
+    private func begin(_ action: PinAction, _ target: ProfileInfo) {
+        said = nil
+        guard action == .removeOther else {
+            flow = PinFlow(action)
+            return
+        }
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                try await profiles.perform("setPin", ["profile": target.id, "pin": JSONValue.null])
+                said = ("\(target.name)'s PIN was removed.", true)
+            } catch {
+                said = (problem(error), false)
+            }
+        }
+    }
+
+    /// One keypad entry in the PIN flow: the next step, or `setPin` once done.
+    private func step(_ pin: String, _ target: ProfileInfo) async -> KeypadResult {
+        guard var current = flow else { return .ok }
+        guard let submit = current.enter(pin) else {
+            flow = current
+            return current.note.map { .problem($0) } ?? .ok
+        }
+        var fields: [String: any Sendable] = ["profile": target.id, "pin": submit.pin.map { JSONValue.string($0) } ?? .null]
+        if let currentPin = submit.currentPin { fields["currentPin"] = currentPin }
+        do {
+            try await profiles.perform("setPin", fields)
+            flow = nil
+            said = (submit.pin == nil ? "PIN removed" : "PIN saved", true)
+            return .ok
+        } catch {
+            let result = KeypadResult.of(error)
+            if (error as? CoreError)?.code == "wrongPin" { current.wrongCurrent() }
+            if (error as? CoreError)?.code == "weakPin" { current.weak() }
+            flow = current
+            return result
+        }
+    }
+
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...30).contains(trimmed.count) else {
+            said = (ProfileRules.problem("badName", fallback: ""), false)
+            return
+        }
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                if let profileId {
+                    var fields: [String: any Sendable] = ["profile": profileId, "name": trimmed]
+                    if touched { fields["avatar"] = ProfileRules.formatAvatar(glyph: glyph, color: color) }
+                    try await profiles.perform("updateProfile", fields)
+                    said = ("Saved", true)
+                } else {
+                    try await profiles.perform("createProfile", ["name": trimmed, "avatar": ProfileRules.formatAvatar(glyph: glyph, color: color)])
+                    dismiss()
+                }
+            } catch {
+                said = (problem(error), false)
+            }
+        }
+    }
+
+    private func delete(_ target: ProfileInfo) {
+        Task {
+            do {
+                try await profiles.perform("deleteProfile", ["profile": target.id])
+                dismiss()
+            } catch {
+                said = (problem(error), false)
+            }
+        }
+    }
+
+    private func problem(_ error: any Error) -> String {
+        ProfileRules.problem((error as? CoreError)?.code, fallback: error.localizedDescription)
+    }
+}

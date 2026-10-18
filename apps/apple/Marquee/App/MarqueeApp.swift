@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct MarqueeApp: App {
     @State private var core: CoreClient
-    @State private var home: HomeModel
+    @State private var profiles: ProfileSession
     @State private var system: SystemEvents
     @State private var sync: SyncModel
 
@@ -12,9 +12,10 @@ struct MarqueeApp: App {
         URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 512 << 20)
         let core = CoreClient()
         _core = State(initialValue: core)
-        _home = State(initialValue: HomeModel(core: core))
         _system = State(initialValue: SystemEvents(core: core))
-        _sync = State(initialValue: SyncModel(core: core))
+        let sync = SyncModel(core: core)
+        _sync = State(initialValue: sync)
+        _profiles = State(initialValue: ProfileSession(core: core, sync: sync))
         #if DEBUG && os(macOS)
         DebugHooks.listenForSnapshots()
         #endif
@@ -22,9 +23,10 @@ struct MarqueeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(home: home)
+            RootView()
                 .environment(core)
                 .environment(sync)
+                .environment(profiles)
                 .modifier(ScenePhaseForward(core: core, sync: sync))
                 // Debrid keys from the Keychain, at start and after the core reopens.
                 .task(id: core.generation) {

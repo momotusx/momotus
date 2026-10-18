@@ -70,6 +70,7 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
         Task {
             do {
                 try await core.command(sub, fields)
+            } catch is CancellationError {
             } catch {
                 failure = error.localizedDescription
             }
@@ -84,6 +85,8 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
             try await core.perform(op, fields)
             failure = nil
             return true
+        } catch is CancellationError {
+            return false
         } catch {
             failure = error.localizedDescription
             return false

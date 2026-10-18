@@ -34,12 +34,64 @@ extension EnvironmentValues {
 
 /// The floating glass navigation: a bar at the bottom on iPhone and iPad, a
 /// pill at the top on the Mac (in the window toolbar) and on TV.
+///
+/// The profile gate: nothing of a profile shows before the core says which
+/// one runs and whether it is locked. While the gate is shut only the picker
+/// shows; each switch builds the profile's screens again from nothing.
 struct RootView: View {
-    let home: HomeModel
     @Environment(CoreClient.self) private var core
+    @Environment(ProfileSession.self) private var profiles
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    var body: some View {
+        Group {
+            if profiles.open {
+                MainShell(core: core).id(profiles.epoch)
+            } else if profiles.snapshot != nil {
+                ProfilePicker(mode: .gate, core: core)
+            } else {
+                Theme.Palette.bg.ignoresSafeArea()
+            }
+        }
+        .preferredColorScheme(.dark)
+        .environment(\.metrics, metrics)
+        // Accent marks focus and the one primary action; everything else takes the text colour.
+        .tint(Theme.Palette.text)
+        // The profiles view, again after a core restart.
+        .task(id: profiles.view.taskId) { profiles.view.start() }
+        .onAppear(perform: Launch.firstFrame)
+        .overlay {
+            if let failure = core.failure {
+                CoreStopped(message: failure, reopen: core.restart)
+            }
+        }
+    }
+
+    private var metrics: Metrics {
+        #if os(tvOS)
+        return .tv
+        #elseif os(macOS)
+        return .regular
+        #else
+        return sizeClass == .regular ? .regular : .compact
+        #endif
+    }
+}
+
+/// One profile's app: the tabs, their navigation and Home's model, all built
+/// again when the profile changes.
+struct MainShell: View {
+    @Environment(CoreClient.self) private var core
+    @State private var home: HomeModel
     @State private var tab = AppTab.home
     @State private var homePath: [TitleRoute] = []
     @State private var immersion = Immersion()
+    @Environment(ProfileSession.self) private var profiles
+    #if os(tvOS)
+    @State private var showProfiles = false
+    #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     /// Tabs opened so far, kept alive so each keeps its place as a tab bar does.
@@ -47,22 +99,17 @@ struct RootView: View {
     @State private var typing = false
     #endif
 
+    init(core: CoreClient) {
+        _home = State(initialValue: HomeModel(core: core))
+    }
+
     var body: some View {
         content
-            .preferredColorScheme(.dark)
             .environment(\.metrics, metrics)
             .environment(\.openTab, OpenTabAction { select($0) })
             .environment(immersion)
-            // Accent marks focus and the one primary action; everything else takes the text colour.
-            .tint(Theme.Palette.text)
-            // Home stays subscribed for the app's life, so Back lands on the same rows.
+            // Home stays subscribed for the profile's life, so Back lands on the same rows.
             .task(id: home.taskId) { await home.run() }
-            .onAppear(perform: Launch.firstFrame)
-            .overlay {
-                if let failure = core.failure {
-                    CoreStopped(message: failure, reopen: core.restart)
-                }
-            }
             #if DEBUG
             .onAppear {
                 if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }
@@ -92,6 +139,10 @@ struct RootView: View {
                     .accessibilityHidden(item != tab)
             }
         }
+        // The bar's inset below does not reach scroll views inside the tabs'
+        // navigation stacks (a page's end stayed under the bar): every page,
+        // pushed or not, keeps the bar's height free at its end.
+        .contentMargins(.bottom, TabBarMetrics.height, for: .scrollContent)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // Off while the keyboard is up, as a tab bar sits behind it.
             if !immersion.active && !typing {
@@ -108,9 +159,14 @@ struct RootView: View {
         #else
         screen(tab).safeAreaInset(edge: .top, spacing: 0) {
             if !immersion.active {
-                TopNav(selection: tab, select: select).padding(.bottom, Theme.Space.m)
+                TopNav(selection: tab, select: select, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
             }
         }
+        .modifier(FullScreen(isPresented: $showProfiles) {
+            NavigationStack { ProfilePicker(mode: .push, core: core) }
+                .environment(profiles)
+                .environment(\.metrics, metrics)
+        })
         #endif
     }
 
@@ -247,6 +303,8 @@ private struct NavToolbar: ToolbarContent {
 private struct TopNav: View {
     let selection: AppTab
     let select: (AppTab) -> Void
+    /// TV: the active profile's avatar at the end, opening the picker.
+    var profiles: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 2) {
@@ -256,6 +314,7 @@ private struct TopNav: View {
             ForEach(AppTab.allCases.filter { !$0.isTool }, id: \.self) { link($0) }
             Capsule().fill(Theme.Palette.lineStrong).frame(width: 1.5, height: Self.mark).padding(.horizontal, 8)
             ForEach(AppTab.allCases.filter(\.isTool), id: \.self) { link($0) }
+            if let profiles { ProfileButton(size: Self.mark + 8, action: profiles).padding(.leading, 6) }
         }
         .padding(Self.inset)
         .fixedSize()
@@ -282,7 +341,7 @@ private struct TopNav: View {
     #endif
 }
 
-private struct NavLinkStyle: ButtonStyle {
+struct NavLinkStyle: ButtonStyle {
     let on: Bool
 
     func makeBody(configuration: Configuration) -> some View {

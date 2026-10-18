@@ -9,6 +9,7 @@ struct SettingsScreen: View {
     @State private var addons: LiveRecord<AddonsSnapshot>
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
+    @Environment(ProfileSession.self) private var profiles
     #if DEBUG
     @State private var previewPairing = false
     #endif
@@ -23,7 +24,31 @@ struct SettingsScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Settings")
-                section("Sources")
+                if let snapshot = profiles.snapshot, let me = snapshot.current {
+                    section("Profiles")
+                    NavigationLink {
+                        ProfilePicker(mode: .push, core: core)
+                    } label: {
+                        ProfileRow(stored: me.avatar, name: me.name,
+                                   detail: snapshot.profiles.count > 1 ? "Switch profile" : "Add a profile for someone else, or switch")
+                    }
+                    .buttonStyle(.plain)
+                    NavigationLink {
+                        EditProfile(profileId: me.id)
+                    } label: {
+                        SettingsRow(symbol: "pencil", title: "Edit profile", detail: "Name, picture and PIN.")
+                    }
+                    .buttonStyle(.plain)
+                    if me.isOwner {
+                        NavigationLink {
+                            ManageProfiles(core: core)
+                        } label: {
+                            SettingsRow(symbol: "users", title: "Manage profiles", detail: "Add, edit and remove profiles on this account.")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                section("Sources").padding(.top, Theme.Space.s)
                 NavigationLink {
                     AddonsScreen(addons: addons)
                 } label: {

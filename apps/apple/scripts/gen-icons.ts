@@ -8,14 +8,16 @@ import { join } from "node:path";
 
 const VERSION = "1.58.0";
 const ICONS = [
-  "arrow-down", "arrow-up", "bookmark-check", "bookmark-plus", "calendar", "calendar-x", "captions",
+  "arrow-down", "arrow-up", "bookmark-check", "bookmark-plus", "calendar", "calendar-x", "captions", "cat",
   "check", "chevron-down", "chevron-left", "chevron-right", "circle-alert", "circle-check", "circle-dashed",
-  "circle-minus", "circle-slash", "circle-x", "clock", "clock-alert", "compass", "door-open", "download",
-  "external-link", "eye", "eye-off", "film", "gauge", "history", "house", "inbox", "info", "key-round",
-  "layers", "library-big", "list-checks", "list-filter", "list-video", "loader-circle", "lock", "log-out",
-  "monitor-check", "monitor-smartphone", "pause", "pause-fill", "play", "play-fill", "plus", "power",
-  "puzzle", "qr-code", "refresh-cw", "rotate-ccw", "rotate-cw", "search", "settings", "skip-forward",
-  "sparkle", "star-fill", "text-align-start", "trash", "triangle-alert", "volume-2", "wrench", "x", "zap",
+  "circle-minus", "circle-slash", "circle-x", "clapperboard", "clock", "clock-alert", "compass", "delete",
+  "dog", "door-open", "download", "external-link", "eye", "eye-off", "film", "flame", "gamepad-2", "gauge",
+  "ghost", "headphones", "history", "house", "inbox", "info", "key-round", "layers", "leaf", "library-big",
+  "list-checks", "list-filter", "list-video", "loader-circle", "lock", "log-out", "monitor-check",
+  "monitor-smartphone", "moon", "pause", "pause-fill", "pencil", "play", "play-fill", "plus", "popcorn",
+  "power", "puzzle", "qr-code", "refresh-cw", "rocket", "rotate-ccw", "rotate-cw", "search", "settings",
+  "skip-forward", "sparkle", "star-fill", "text-align-start", "trash", "triangle-alert", "tv", "users",
+  "volume-2", "wrench", "x", "zap",
 ];
 
 const source = process.argv[2];

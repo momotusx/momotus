@@ -36,6 +36,8 @@ final class CoreClient {
     @ObservationIgnored private var core: MarqueeCore?
     /// Messages sent while the core opens, in order; they go out once it is open.
     @ObservationIgnored private var queued: [String] = []
+    /// A profile removed on another device (the session coordinator listens).
+    @ObservationIgnored var onProfileGone: ((String) -> Void)?
 
     init() {
         openCore()
@@ -55,6 +57,9 @@ final class CoreClient {
         let router = CoreRouter()
         router.onDied { [weak self] reason in
             Task { @MainActor in self?.failure = "The core stopped (\(reason))." }
+        }
+        router.onProfileGone { [weak self] profile in
+            Task { @MainActor in self?.onProfileGone?(profile) }
         }
         (self.router, core, queued, failure) = (router, nil, [], nil)
         let dir = Self.dataDirectory()
@@ -178,6 +183,8 @@ final class CoreClient {
             router.wait(for: id) { result in
                 switch result {
                 case .success(let data): continuation.resume(with: Result { try decode(data) })
+                // A reply from before a profile switch: settled as cancelled, never shown.
+                case .failure(let error) where error.code == "switched": continuation.resume(throwing: CancellationError())
                 case .failure(let error): continuation.resume(throwing: error)
                 }
             }
