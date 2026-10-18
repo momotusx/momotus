@@ -49,14 +49,15 @@ export default function Onboarding() {
     setBusy(url);
     setNote(null);
     try {
-      // Installed and turned off (an empty Home sends people here): turned back on.
-      if (list().some((a) => a.url === url)) {
-        await op("setAddonEnabled", { url, enabled: true });
-        setNote({ tone: "ok", text: `Turned ${name} on` });
-      } else {
-        await op("installAddon", { url });
-        setNote({ tone: "ok", text: `Installed ${name}` });
-      }
+      // Installed and turned off (an empty Home sends people here): turning it on needs no
+      // network, so it is tried first, before the list has loaded too; an addon that is not
+      // installed refuses it. Installing an installed one would keep it off.
+      const turnedOn = await op("setAddonEnabled", { url, enabled: true }).then(
+        () => true,
+        () => false,
+      );
+      if (!turnedOn) await op("installAddon", { url });
+      setNote({ tone: "ok", text: turnedOn ? `Turned ${name} on` : `Installed ${name}` });
     } catch (e) {
       setNote({ tone: "bad", text: `Could not install ${name}: ${reasonOf(e)}` });
     } finally {

@@ -238,32 +238,25 @@ struct OnboardingScreen: View {
     }
 
     /// Makes a standard addon count as added: installed and on. True once it is.
+    /// As on Android, turning it on comes first: it needs no network, and it
+    /// works before the list is read too. An addon that is not installed
+    /// refuses it and is installed; installing an installed one would keep it off.
     @discardableResult
     private func add(_ url: String, _ name: String) async -> Bool {
         guard busy == nil else { return false }
         busy = url
         note = nil
         defer { busy = nil }
-        var step = AddonSetup.step(url, in: addons.snapshot?.addons)
-        if step == .install {
-            if await addons.perform("installAddon", ["url": url]) {
-                note = (true, "Installed \(name)")
-                return true
-            }
-            // Installed after all (a list not read yet, an earlier try that timed out): turned on.
-            guard addons.failure?.contains("already installed") == true else {
-                note = (false, "Could not install \(name): \(addons.failure ?? "unknown error")")
-                return false
-            }
-            step = .turnOn
-        }
-        if step == .turnOn {
-            guard await addons.perform("setAddonEnabled", ["url": url, "enabled": true]) else {
-                note = (false, "Could not turn \(name) on: \(addons.failure ?? "unknown error")")
-                return false
-            }
+        if AddonSetup.step(url, in: addons.snapshot?.addons) == .done { return true }
+        if await addons.perform("setAddonEnabled", ["url": url, "enabled": true]) {
             note = (true, "Turned \(name) on")
+            return true
         }
+        guard await addons.perform("installAddon", ["url": url]) else {
+            note = (false, "Could not install \(name): \(addons.failure ?? "unknown error")")
+            return false
+        }
+        note = (true, "Installed \(name)")
         return true
     }
 

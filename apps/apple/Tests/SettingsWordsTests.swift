@@ -92,7 +92,7 @@ import Testing
     #expect(AddonSetup.step(url, in: [cinemeta(enabled: false)]) == .turnOn)
     #expect(AddonSetup.step(url, in: [cinemeta(enabled: true)]) == .done)
     #expect(AddonSetup.step(url, in: []) == .install)
-    // The list not read yet: install, and a core answering "already installed" has it turned on.
+    // The list not read yet: install (adding turns it on first, so an installed one still ends up on).
     #expect(AddonSetup.step(url, in: nil) == .install)
 }
 

@@ -179,8 +179,9 @@ enum AddonSetup: Equatable {
     case turnOn
     case done
 
-    /// From the installed list; nil (not read yet) means install, and a core
-    /// that answers "already installed" then has it turned on.
+    /// From the installed list; nil (not read yet) means install. Adding one
+    /// tries turning it on first whatever this says, so an installed one in a
+    /// list not read yet still ends up on.
     static func step(_ url: String, in addons: [AddonInfo]?) -> AddonSetup {
         guard let addon = addons?.first(where: { $0.url == url }) else { return .install }
         return addon.enabled ? .done : .turnOn
