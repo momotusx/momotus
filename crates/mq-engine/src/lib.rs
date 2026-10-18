@@ -15,6 +15,8 @@
 mod adapter;
 mod pick;
 mod reader;
+#[cfg(feature = "test-hooks")]
+pub mod test_hooks;
 
 /// The fork itself, for tools and tests (creating a torrent to seed).
 pub use librqbit;
@@ -171,6 +173,8 @@ struct Inner {
     torrents: Mutex<HashMap<TorrentHandle, Arc<Torrent>>>,
     next: AtomicU64,
     next_demand: AtomicU64,
+    #[cfg(feature = "test-hooks")]
+    hold: Mutex<Option<Arc<test_hooks::Hold>>>,
 }
 
 pub(crate) struct Torrent {
@@ -253,6 +257,8 @@ impl Engine {
                 torrents: Mutex::default(),
                 next: AtomicU64::new(1),
                 next_demand: AtomicU64::new(1),
+                #[cfg(feature = "test-hooks")]
+                hold: Mutex::default(),
             }),
         };
         tokio::spawn(maintenance(Arc::downgrade(&engine.inner)));

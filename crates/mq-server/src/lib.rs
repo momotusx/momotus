@@ -772,6 +772,45 @@ mod torrent {
             let stats = s.leecher.stats(t).await.unwrap();
             assert_eq!((stats.readers, stats.pieces_total), (0, 0));
         }
+
+        /// A release while a range's setup waits for the torrent's
+        /// initialization ends the request at once and drops the range;
+        /// initialization going on later brings no demand back.
+        #[cfg(feature = "test-hooks")]
+        #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+        async fn a_release_during_setup_ends_it() {
+            let s = support::swarm(true).await;
+            let t = s
+                .leecher
+                .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+                .await
+                .unwrap();
+            let hint = mq_engine::FileHint::Name("movie.mkv".into());
+            let file = s.leecher.select_file(t, &hint).await.unwrap();
+            let hold = mq_engine::test_hooks::hold_ranges(&s.leecher);
+            let released = CancellationToken::new();
+            let request = tokio::spawn({
+                let (engine, released) = (s.leecher.clone(), released.clone());
+                async move {
+                    let range = Some("bytes=0-");
+                    serve(&engine, t, file, range, false, released)
+                        .await
+                        .status()
+                }
+            });
+            let reached = tokio::time::timeout(Duration::from_secs(5), hold.reached()).await;
+            assert!(reached.is_ok(), "the setup never reached the barrier");
+            let readers = || async { s.leecher.stats(t).await.unwrap().readers };
+            assert_eq!(readers().await, 1, "the range's demand is open");
+            released.cancel();
+            let ended = tokio::time::timeout(Duration::from_secs(1), request).await;
+            let status = ended.expect("the setup outlived its release").unwrap();
+            assert_eq!(status, StatusCode::NOT_FOUND);
+            assert_eq!(readers().await, 0);
+            hold.open();
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            assert_eq!(readers().await, 0, "demand came back");
+        }
     }
 }
 

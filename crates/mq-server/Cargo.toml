@@ -8,6 +8,8 @@ publish.workspace = true
 [features]
 # Serve files of the embedded torrent engine (full builds only).
 torrent = ["dep:mq-engine"]
+# Tests of torrent setup cancelled halfway (the engine's range barrier).
+test-hooks = ["torrent", "mq-engine/test-hooks"]
 
 [dependencies]
 mq-http = { path = "../mq-http" }

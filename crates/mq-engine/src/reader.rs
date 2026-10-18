@@ -78,6 +78,8 @@ impl StreamReader {
             ready,
             torrent: self.torrent.clone(),
         };
+        #[cfg(feature = "test-hooks")]
+        crate::test_hooks::wait(&self.engine).await;
         managed.wait_until_initialized().await?;
         let mut stream = managed.stream(self.file.idx).await?;
         stream.seek(SeekFrom::Start(start)).await?;
