@@ -81,7 +81,8 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
 
     /// Sends a command to this view; a failure shows in `failure`.
     func command(_ fields: [String: any Sendable]) {
-        guard let sub else { return }
+        // A number from a core that was replaced could name another view on the new one.
+        guard let sub, generation == core.generation else { return }
         Task {
             do {
                 try await core.command(sub, fields)

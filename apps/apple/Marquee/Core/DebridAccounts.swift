@@ -19,10 +19,14 @@ enum DebridKeystoreError: Error {
 }
 
 /// The debrid keystore over secret items: one item per record (a service
-/// holds one) and one per tombstone. A record or a tombstone for a service
-/// drops that service's legacy key before the write returns, so a
-/// half-finished move from legacy keys never overwrites a later sign-in or
-/// brings back a disconnect.
+/// holds one) and one per tombstone. A service's record or tombstone and its
+/// legacy key change as one recoverable unit: once a record or a tombstone
+/// for a service is stored, its legacy key is ignored and deleted (after the
+/// write, and again at every start), and a tombstone goes only after the
+/// legacy key did. So a half-finished move from legacy keys never overwrites
+/// a later sign-in or brings back a disconnect, a crash between the two
+/// writes included, and a disconnect is refused only when its tombstone
+/// itself was not stored.
 struct ItemDebridKeystore: DebridKeystore {
     let items: any SecretItems
     /// Whether a service's last record write reached the store: a card that
@@ -47,11 +51,23 @@ struct ItemDebridKeystore: DebridKeystore {
             .compactMap { try? JSONDecoder().decode(DebridTombstone.self, from: $0) }
     }
 
-    /// `(service, key)` pairs from before records, still to move, in the services' order.
-    func legacy() -> [(service: String, key: String)] {
-        DebridWords.services.compactMap { service in
-            items.read(Self.legacy(service.id)).map { (service.id, String(decoding: $0, as: UTF8.self)) }
+    /// `(service, key)` pairs from before records, still to move, in the
+    /// services' order. A service with a record or a tombstone has moved (or
+    /// was disconnected): its key is skipped and deleted.
+    func legacy() async -> [(service: String, key: String)] {
+        let stored = (try? await records()) ?? []
+        let buried = (try? await tombstones()) ?? []
+        let taken = Set(stored.map(\.service) + buried.map(\.service))
+        var left: [(service: String, key: String)] = []
+        for service in DebridWords.services {
+            guard let data = items.read(Self.legacy(service.id)) else { continue }
+            if taken.contains(service.id) {
+                _ = items.delete(Self.legacy(service.id))
+            } else {
+                left.append((service.id, String(decoding: data, as: UTF8.self)))
+            }
         }
+        return left
     }
 
     func writeRecord(_ record: DebridRecord) async throws {
@@ -60,7 +76,9 @@ struct ItemDebridKeystore: DebridKeystore {
             throw DebridKeystoreError.refused
         }
         await report(record.service, true)
-        try dropLegacy(record.service)
+        // The record is stored: from now on its legacy key is ignored, and
+        // deleted here or at the next start.
+        _ = items.delete(Self.legacy(record.service))
     }
 
     func deleteRecord(service: String, generation: String) async throws {
@@ -71,15 +89,14 @@ struct ItemDebridKeystore: DebridKeystore {
 
     func writeTombstone(_ tombstone: DebridTombstone) async throws {
         guard items.write(Self.tombstone(tombstone), try JSONEncoder().encode(tombstone)) else { throw DebridKeystoreError.refused }
-        try dropLegacy(tombstone.service)
+        // Stored: the disconnect goes on even when the legacy key stays for now.
+        _ = items.delete(Self.legacy(tombstone.service))
     }
 
     func deleteTombstone(_ tombstone: DebridTombstone) async throws {
+        // While the legacy key stays, so does the tombstone that makes it ignored.
+        guard items.delete(Self.legacy(tombstone.service)) else { throw DebridKeystoreError.refused }
         guard items.delete(Self.tombstone(tombstone)) else { throw DebridKeystoreError.refused }
-    }
-
-    private func dropLegacy(_ service: String) throws {
-        guard items.delete(Self.legacy(service)) else { throw DebridKeystoreError.refused }
     }
 
     /// Known services first, in the services' order; any other after them, as stored.
@@ -137,9 +154,12 @@ final class DebridAccounts {
         }
         ready = true
         if let pending = current() { store.pending(pending) }
+        // Records already on their way land first: a service they store moves no old key.
+        await store.idle()
         let records = (try? await keystore.records().count) ?? 0
         let tombstones = (try? await keystore.tombstones().count) ?? 0
-        log("debrid: \(records) records restored, \(tombstones) tombstones left, \(keystore.legacy().count) legacy keys to move")
+        let legacy = await keystore.legacy().count
+        log("debrid: \(records) records restored, \(tombstones) tombstones left, \(legacy) legacy keys to move")
         await moveLegacy()
     }
 
@@ -152,7 +172,7 @@ final class DebridAccounts {
     /// whose record, once stored, drops the key. A failure stops here; the
     /// rest moves at the next start.
     private func moveLegacy() async {
-        for (service, key) in keystore.legacy() {
+        for (service, key) in await keystore.legacy() {
             do {
                 try await connect(service, key)
             } catch {

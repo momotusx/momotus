@@ -34,6 +34,18 @@ import Testing
     #expect(DebridWords.inUse(2) == "2 debrid services in use.")
 }
 
+@Test func aSignInByCodeEndsOnlyWithItsOwnStoredRecord() {
+    // Done on the service's side, but the account still has the generation from before.
+    #expect(!DebridWords.signedIn(done: true, before: "old", now: "old", pending: false))
+    // The new generation is listed but its record is not stored yet.
+    #expect(!DebridWords.signedIn(done: true, before: "old", now: "new", pending: true))
+    #expect(DebridWords.signedIn(done: true, before: "old", now: "new", pending: false))
+    #expect(DebridWords.signedIn(done: true, before: nil, now: "new", pending: false))
+    #expect(!DebridWords.signedIn(done: true, before: nil, now: nil, pending: false))
+    #expect(DebridWords.doneWords(stored: true) == "Saving")
+    #expect(DebridWords.doneWords(stored: false) == "Kept for this session")
+}
+
 @Test func aHomeRowToggleReadsTheLastReply() {
     let shown = HomeCatalog(rowId: "a", title: "Popular", source: "Cinemeta", hidden: false)
     let hidden = HomeCatalog(rowId: "a", title: "Popular", source: "Cinemeta", hidden: true)

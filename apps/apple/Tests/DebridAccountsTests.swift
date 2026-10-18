@@ -22,7 +22,13 @@ private final class MemoryItems: SecretItems, @unchecked Sendable {
         lock.withLock { values[account] = data }
         return true
     }
-    func delete(_ account: String) -> Bool { lock.withLock { values[account] = nil }; return true }
+    /// Deletes of these names are refused (a Keychain that says no).
+    var refuseDeletes: Set<String> = []
+    func delete(_ account: String) -> Bool {
+        if refuseDeletes.contains(account) { return false }
+        lock.withLock { values[account] = nil }
+        return true
+    }
     func accounts(prefix: String) -> [String] { lock.withLock { values.keys.filter { $0.hasPrefix(prefix) }.sorted() } }
 }
 
@@ -75,13 +81,13 @@ private func accounts(_ items: MemoryItems, _ core: FakeCore) -> (DebridAccounts
     await first.opened { nil }
     await first.store.idle()
     #expect(try await keystore.records().map(\.service) == ["realdebrid"])
-    #expect(keystore.legacy().map(\.service) == ["torbox"])
+    #expect(await keystore.legacy().map(\.service) == ["torbox"])
     // The next start (a new core) moves what is left.
     core.refuse = []
     await first.opened { nil }
     await first.store.idle()
     #expect(try await keystore.records().map(\.service) == ["realdebrid", "torbox"])
-    #expect(keystore.legacy().isEmpty)
+    #expect(await keystore.legacy().isEmpty)
     #expect(core.connected == ["realdebrid", "torbox"])
 }
 
@@ -144,4 +150,44 @@ private func accounts(_ items: MemoryItems, _ core: FakeCore) -> (DebridAccounts
     accounts.pushed([record("torbox", "G2")])
     await accounts.opened { nil }
     #expect(core.restores.last?.map(\.generation) == ["G2"])
+}
+
+@MainActor @Test func aStoredTombstoneDisconnectsEvenWhenTheLegacyKeyStays() async throws {
+    // AllDebrid half-moved: its record is stored, its old key still there, and
+    // the Keychain refuses to delete that key for now.
+    let items = MemoryItems(legacy: [("alldebrid", "k3")])
+    let core = FakeCore()
+    let (accounts, keystore) = accounts(items, core)
+    items.refuseDeletes = [ItemDebridKeystore.legacy("alldebrid")]
+    try await keystore.writeRecord(record("alldebrid", "A"))
+    // The tombstone is stored, so the disconnect is not refused.
+    try await accounts.store.disconnect(service: "alldebrid", generation: "A").value
+    await accounts.store.idle()
+    #expect(try await keystore.records().isEmpty)
+    // The tombstone stays while the old key does: that key is never moved back.
+    #expect(try await keystore.tombstones().map(\.generation) == ["A"])
+    #expect(await keystore.legacy().isEmpty)
+    // The next start, with the Keychain willing again, clears both.
+    items.refuseDeletes = []
+    await accounts.opened { nil }
+    await accounts.store.idle()
+    #expect(core.connected.isEmpty)
+    #expect(try await keystore.tombstones().isEmpty)
+    #expect(items.read(ItemDebridKeystore.legacy("alldebrid")) == nil)
+}
+
+@MainActor @Test func aCrashBetweenTheRecordAndTheLegacyDeleteNeverBringsTheOldKeyBack() async throws {
+    // TorBox signed in with a code; the app stopped before its old key was deleted.
+    let items = MemoryItems(legacy: [("torbox", "old")])
+    let core = FakeCore()
+    let (accounts, keystore) = accounts(items, core)
+    items.refuseDeletes = [ItemDebridKeystore.legacy("torbox")]
+    try await keystore.writeRecord(record("torbox", "code"))
+    items.refuseDeletes = []
+    #expect(items.read(ItemDebridKeystore.legacy("torbox")) != nil)
+    await accounts.opened { nil }
+    await accounts.store.idle()
+    #expect(core.connected.isEmpty)
+    #expect(try await keystore.records().map(\.generation) == ["code"])
+    #expect(items.read(ItemDebridKeystore.legacy("torbox")) == nil)
 }

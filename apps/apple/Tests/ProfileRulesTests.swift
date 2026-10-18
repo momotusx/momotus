@@ -90,3 +90,19 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     #expect(PinAction.allowed(for: main, by: main, unreadable: true) == [.removeUnreadable])
     #expect(PinAction.allowed(for: main, by: main) == [.set])
 }
+
+@Test func aPinAnswerNeverTouchesANewerFlow() {
+    let sent = PinFlow(.change)
+    var newer = PinFlow(.set)
+    _ = newer.enter("2719")
+    // The flow that asked left and a newer one is on screen: it stays as it is.
+    #expect(PinFlow.settle(newer, sent: sent, ok: true, code: nil) == newer)
+    #expect(PinFlow.settle(newer, sent: sent, ok: false, code: "wrongPin") == newer)
+    #expect(PinFlow.settle(nil, sent: sent, ok: true, code: nil) == nil)
+    // Its own flow closes when it went through, and steps back when refused.
+    var mine = PinFlow(.change)
+    _ = mine.enter("1357")
+    #expect(PinFlow.settle(mine, sent: mine, ok: true, code: nil) == nil)
+    #expect(PinFlow.settle(mine, sent: mine, ok: false, code: "wrongPin")?.prompt == "Enter your current PIN")
+    #expect(PinFlow.settle(mine, sent: mine, ok: false, code: "weakPin")?.prompt == "Enter the new PIN")
+}

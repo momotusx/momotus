@@ -155,6 +155,8 @@ struct PinFlow: Equatable, Sendable {
     }
 
     let action: PinAction
+    /// This flow's identity: an answer for an earlier flow never touches a newer one.
+    let id = UUID()
     private(set) var step: Step
     private(set) var note: String?
     private var current: String?
@@ -205,6 +207,17 @@ struct PinFlow: Equatable, Sendable {
     mutating func weak() {
         first = nil
         step = .new
+    }
+
+    /// The flow on screen once `setPin` answered for the flow `sent`: closed
+    /// when it went through, a step back for a wrong or too obvious PIN. A
+    /// newer flow, or none, stays as it is: the page says how the save ended.
+    static func settle(_ onScreen: PinFlow?, sent: PinFlow, ok: Bool, code: String?) -> PinFlow? {
+        guard let onScreen, onScreen.id == sent.id else { return onScreen }
+        if ok { return nil }
+        var next = onScreen
+        if code == "wrongPin" { next.wrongCurrent() } else if code == "weakPin" { next.weak() }
+        return next
     }
 }
 

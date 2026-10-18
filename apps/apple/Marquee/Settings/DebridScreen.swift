@@ -11,7 +11,8 @@ struct DebridScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
     /// The sign-in by code under way, and its service.
-    @State private var login: (service: String, view: LiveRecord<DebridLoginSnapshot>)?
+    /// `before` is the account's generation when it started: done only counts once that moved on.
+    @State private var login: (service: String, view: LiveRecord<DebridLoginSnapshot>, before: String?)?
     /// Cards with the key field open (Premiumize always has it).
     @State private var keyFields: Set<String> = []
     @State private var drafts: [String: String] = [:]
@@ -39,13 +40,20 @@ struct DebridScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .task(id: login?.view.taskId) { login?.view.start() }
-        // A sign-in that went through closes; the card says Connected once stored.
-        .onChange(of: login?.view.snapshot) { _, phase in
-            if case .done? = phase, let service = login?.service { closeLogin(service) }
+        // A sign-in closes once its own record is the account's and stored; the card then says Connected.
+        .onChange(of: loginFinished) { _, finished in
+            if finished, let service = login?.service { closeLogin(service) }
         }
     }
 
     private var snapshot: DebridSnapshot? { debrid.view.snapshot }
+
+    private var loginFinished: Bool {
+        guard let login, case .done? = login.view.snapshot else { return false }
+        let account = snapshot?.accounts.first { $0.service == login.service }
+        let pending = snapshot?.pending.contains { $0.service == login.service } ?? false
+        return DebridWords.signedIn(done: true, before: login.before, now: account?.generation, pending: pending)
+    }
 
     private func card(_ service: DebridWords.Service) -> some View {
         let account = snapshot?.accounts.first { $0.service == service.id }
@@ -61,6 +69,7 @@ struct DebridScreen: View {
             }
             if let login, login.service == service.id {
                 LoginPanel(phase: login.view.snapshot, failure: login.view.failure,
+                           stored: !debrid.health.unstored.contains(service.id),
                            again: { begin(service.id) }, close: { closeLogin(service.id) }, focus: $focus)
             } else {
                 FlowRow(spacing: 12) {
@@ -69,9 +78,9 @@ struct DebridScreen: View {
                             .buttonStyle(PillButtonStyle(prominent: account == nil))
                             .focused($focus, equals: .signIn(service.id))
                             .accessibilityLabel("Sign in to \(service.name) with a code")
-                        // A connected account takes a new key without a disconnect, except
-                        // when it asks for a new sign-in, which is offered above.
-                        if !keyFields.contains(service.id) && account?.state != "reconnect" {
+                        // A connected account takes a new key without a disconnect, and one
+                        // that asks for a new sign-in can take a key instead.
+                        if !keyFields.contains(service.id) {
                             Button("Use a key instead") { keyFields.insert(service.id) }
                                 .buttonStyle(PillButtonStyle())
                         }
@@ -143,7 +152,7 @@ struct DebridScreen: View {
         said = nil
         let view = LiveRecord<DebridLoginSnapshot>("debridLogin", params: ["service": service], core: core)
         view.start()
-        login = (service, view)
+        login = (service, view, snapshot?.accounts.first { $0.service == service }?.generation)
         // Into the sign-in once it is on screen.
         Task { focus = .panel }
     }
@@ -193,6 +202,8 @@ enum DebridScreenFocus: Hashable { case signIn(String), panel }
 private struct LoginPanel: View {
     let phase: DebridLoginSnapshot?
     let failure: String?
+    /// The Keychain took the service's last record write.
+    let stored: Bool
     let again: () -> Void
     let close: () -> Void
     var focus: FocusState<DebridScreenFocus?>.Binding
@@ -236,7 +247,8 @@ private struct LoginPanel: View {
                 #endif
                 buttons(again: false)
             case .done?:
-                Label(DebridWords.login(.done), glyph: "circle-check").font(.text(Theme.type.body))
+                // Through on the service's side; the panel closes once the record is stored.
+                Label(DebridWords.doneWords(stored: stored), glyph: stored ? "clock" : "triangle-alert").font(.text(Theme.type.body))
             case let other?:
                 Text(DebridWords.login(other)).font(.text(Theme.type.body)).fixedSize(horizontal: false, vertical: true)
                 buttons(again: true)

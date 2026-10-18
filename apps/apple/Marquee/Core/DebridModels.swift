@@ -216,6 +216,18 @@ enum DebridWords {
         return text
     }
 
+    /// A sign-in by code is finished once its record is the account's: the
+    /// generation moved on from the one before it started, and nothing is
+    /// pending for the service.
+    static func signedIn(done: Bool, before: String?, now: String?, pending: Bool) -> Bool {
+        done && now != nil && now != before && !pending
+    }
+
+    /// What a sign-in that went through says until its record is stored.
+    static func doneWords(stored: Bool) -> String {
+        stored ? "Saving" : "Kept for this session"
+    }
+
     /// A disconnect whose tombstone could not be saved: nothing changed.
     static let notSaved = "This device could not save that, so it stays connected."
 }

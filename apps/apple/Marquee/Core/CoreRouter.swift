@@ -134,8 +134,10 @@ final class CoreRouter: CoreListener {
             waiter?(head.ok == true ? .success(data) : .failure(CoreError(head.error ?? "request failed", code: head.code, retryAfterMs: head.retryAfterMs, views: head.views)))
         } else if head.profile == "gone", let profile = head.profileId {
             state.withLock { $0.onProfileGone }?(profile)
-        } else if head.core == "died" {
-            let reason = head.reason ?? "unknown"
+        } else if head.core == "died" || head.core == "overflow" {
+            // An overflow: the app fell behind the core's output budget and that
+            // session ended (core backlog C20); a new core opens, as after a death.
+            let reason = head.core == "overflow" ? "overflow: the app fell behind the core's messages" : head.reason ?? "unknown"
             coreLog.fault("core died: \(reason, privacy: .public)")
             let (waiters, onDied) = state.withLock { state in
                 defer { state.waiters.removeAll() }

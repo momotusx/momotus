@@ -87,6 +87,8 @@ struct EditProfile: View {
     @State private var busy = false
     @State private var flow: PinFlow?
     @State private var confirmDelete = false
+    /// A delete is out: Delete and Keep wait for its answer.
+    @State private var deleting = false
     /// The delete confirmation opens on Keep, so a held Select or Return never
     /// deletes; Keep gives the focus back to Delete profile.
     @FocusState private var deleteFocus: DeleteFocus?
@@ -163,8 +165,11 @@ struct EditProfile: View {
                 .keyboardShortcut(.defaultAction)
                 #endif
                 .focused($deleteFocus, equals: .keep)
+                // Sent once: both wait for the answer.
+                .disabled(deleting)
                 Button("Delete \(target.name)", role: .destructive) { delete(target) }
                     .buttonStyle(DestructiveTextStyle())
+                    .disabled(deleting)
             }
         }
         .padding(Theme.Space.s)
@@ -337,24 +342,29 @@ struct EditProfile: View {
             flow = current
             return current.note.map { .problem($0) } ?? .ok
         }
+        // The flow this save belongs to: its answer never closes or rewinds a newer one.
+        let sent = current
         var fields: [String: any Sendable] = ["profile": target.id, "pin": submit.pin.map { JSONValue.string($0) } ?? .null]
         if let currentPin = submit.currentPin { fields["currentPin"] = currentPin }
         do {
             try await profiles.perform("setPin", fields)
-            flow = nil
+            flow = PinFlow.settle(flow, sent: sent, ok: true, code: nil)
+            // Said on the page whatever is on screen now: the save went through.
             said = (submit.pin == nil ? "PIN removed" : "PIN saved", true)
             return .ok
-        } catch let error as CoreError where error.code == "pinUnreadable" {
-            // A PIN a newer version stored: the steps close and Remove is offered.
-            flow = nil
-            unreadable = target.id
-            return .ok
         } catch {
-            let result = KeypadResult.of(error)
-            if (error as? CoreError)?.code == "wrongPin" { current.wrongCurrent() }
-            if (error as? CoreError)?.code == "weakPin" { current.weak() }
-            flow = current
-            return result
+            let code = (error as? CoreError)?.code
+            if code == "pinUnreadable" {
+                // A PIN a newer version stored: the steps close and Remove is offered.
+                if flow?.id == sent.id { flow = nil }
+                unreadable = target.id
+                return .ok
+            }
+            flow = PinFlow.settle(flow, sent: sent, ok: false, code: code)
+            // The flow that asked is gone (the app went to the back, or a newer
+            // one started): the page says how its save ended.
+            if flow?.id != sent.id { said = (problem(error), false) }
+            return .of(error)
         }
     }
 
@@ -384,11 +394,15 @@ struct EditProfile: View {
     }
 
     private func delete(_ target: ProfileInfo) {
+        // One delete at a time: a second press never sends another.
+        guard !deleting else { return }
+        deleting = true
         Task {
             do {
                 try await profiles.perform("deleteProfile", ["profile": target.id])
                 dismiss()
             } catch {
+                deleting = false
                 said = (problem(error), false)
             }
         }

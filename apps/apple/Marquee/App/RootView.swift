@@ -125,6 +125,9 @@ struct MainShell: View {
             .environment(immersion)
             // Home stays subscribed for the profile's life, so Back lands on the same rows.
             .task(id: home.taskId) { await home.run() }
+            // A switch waits until these screens have left.
+            .onAppear { profiles.shell(onScreen: true) }
+            .onDisappear { profiles.shell(onScreen: false) }
             #if DEBUG
             .onAppear {
                 if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }

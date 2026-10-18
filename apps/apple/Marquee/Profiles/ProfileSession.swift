@@ -37,6 +37,9 @@ final class ProfileSession {
     /// again; a switch or a lock starts on Home.
     @ObservationIgnored var resumeOnboarding = false
     @ObservationIgnored private var retrying: Task<Void, Never>?
+    /// The profile's screens are on screen: the root says when they appear and
+    /// when they have left, and a switch waits for the second.
+    @ObservationIgnored private var shellOnScreen = false
     /// The core generation the last snapshot came from: after a restart
     /// nothing of the profile shows until the new core says which one runs.
     private var seen = -1
@@ -82,6 +85,11 @@ final class ProfileSession {
 
     private func removed(_ id: String) {
         gone = (id, (gone?.count ?? 0) + 1)
+    }
+
+    /// The root: the profile's screens appeared, or left.
+    func shell(onScreen: Bool) {
+        shellOnScreen = onScreen
     }
 
     /// The current profile, unlocked: the start picker's answer.
@@ -134,6 +142,11 @@ final class ProfileSession {
         var fields: [String: any Sendable] = ["profile": id]
         if let pin { fields["pin"] = pin }
         defer { inFlight = false }
+        // The old profile's screens have left (the root acknowledges it), so
+        // their views are closed or closing before the core is asked.
+        for _ in 0..<50 where shellOnScreen {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
         for attempt in 1...10 {
             do {
                 try await core.perform("switchProfile", fields)

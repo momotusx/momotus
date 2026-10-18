@@ -63,7 +63,11 @@ final class CoreClient {
     private func openCore() {
         let router = CoreRouter()
         router.onDied { [weak self] reason in
-            Task { @MainActor in self?.failure = "The core stopped (\(reason))." }
+            Task { @MainActor in
+                guard let self, self.router === router else { return }
+                // Falling behind is no crash: a new core opens at once.
+                if reason.hasPrefix("overflow") { self.restart() } else { self.failure = "The core stopped (\(reason))." }
+            }
         }
         router.onProfileGone { [weak self] profile in
             Task { @MainActor in self?.onProfileGone?(profile) }
@@ -143,7 +147,12 @@ final class CoreClient {
         }
         sink.onTermination = { [weak self] _ in
             router.unroute(sub: sub)
-            Task { @MainActor in self?.send("unsubscribe", ["sub": sub]) }
+            // Only to the core that made it: numbers start at 1 again on a new
+            // core, where this one could name another view.
+            Task { @MainActor in
+                guard let self, self.router === router else { return }
+                self.send("unsubscribe", ["sub": sub])
+            }
         }
         return CoreView(sub: sub, events: events)
     }
