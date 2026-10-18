@@ -2154,20 +2154,19 @@ async fn a_child_path_cannot_change_the_origin() {
         assert!(reply.starts_with("HTTP/1.1 404"), "{id}: {reply}");
     }
     assert_eq!(log.lock().unwrap().len(), before, "the origin was asked");
-    // A DASH template directory: its tail can leave neither the origin nor
-    // the directory.
+    // A DASH directory on this test's origin (the MPD's own, inserted as
+    // its BaseURL): its tail can leave neither the origin nor the directory.
     let (base, log) = hls_origin(move |_| {
         let mpd = "<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" \
-                   type=\"static\"><Period><SegmentTemplate media=\"https://cdn.example/d/$Number$.m4s\"/>\
+                   type=\"static\"><Period><SegmentTemplate media=\"d/$Number$.m4s\"/>\
                    </Period></MPD>";
         Reply::ok("application/dash+xml", mpd)
     })
     .await;
     let lease = open_dash(&server, format!("{base}/m.mpd")).await;
     let mpd = text(&http.get(&lease.url, &local()).await.unwrap());
-    let media = mpd_attrs(&mpd, "media").remove(0);
-    let (directory, _) = media.rsplit_once('/').unwrap();
-    let id = directory.rsplit('/').next().unwrap();
+    let directory = mpd_texts(&mpd, "BaseURL").remove(0);
+    let id = directory.trim_end_matches('/').rsplit('/').next().unwrap();
     let prefix = format!("http://{}/t/{}", server.addr(), token(&lease.url));
     let before = log.lock().unwrap().len();
     let tails = [
@@ -2188,10 +2187,15 @@ async fn a_child_path_cannot_change_the_origin() {
         assert!(reply.starts_with("HTTP/1.1 404"), "{tail}: {reply}");
     }
     for id in ["+0", "00", "-1", "4294967296", "0x0"] {
-        let reply = raw(&server, &format!("{prefix}/{id}/1.m4s"), "GET", None).await;
+        let reply = raw(&server, &format!("{prefix}/{id}/d/1.m4s"), "GET", None).await;
         assert!(reply.starts_with("HTTP/1.1 404"), "{id}: {reply}");
     }
     assert_eq!(log.lock().unwrap().len(), before, "the origin was asked");
+    // The same id with a plain tail does reach it.
+    let reply = raw(&server, &format!("{prefix}/{id}/d/1.m4s"), "GET", None).await;
+    assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+    let asked = log.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(asked.path, "/d/1.m4s");
 }
 
 #[tokio::test]
