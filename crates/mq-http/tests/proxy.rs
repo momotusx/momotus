@@ -21,6 +21,17 @@ async fn a_proxy_from_the_environment_is_never_used() {
             drop(socket);
         }
     });
+    // HTTPS_PROXY's own, so an https request shows which one it took.
+    let tls_proxy = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let tls_proxy_addr = tls_proxy.local_addr().unwrap();
+    let tls_proxied = Arc::new(AtomicUsize::new(0));
+    let count = tls_proxied.clone();
+    tokio::spawn(async move {
+        while let Ok((socket, _)) = tls_proxy.accept().await {
+            count.fetch_add(1, Ordering::SeqCst);
+            drop(socket);
+        }
+    });
     let origin = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = origin.local_addr().unwrap().port();
     tokio::spawn(async move {
@@ -41,6 +52,9 @@ async fn a_proxy_from_the_environment_is_never_used() {
         std::env::remove_var("no_proxy");
         for name in ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"] {
             std::env::set_var(name, format!("http://{proxy_addr}"));
+        }
+        for name in ["HTTPS_PROXY", "https_proxy"] {
+            std::env::set_var(name, format!("http://{tls_proxy_addr}"));
         }
     }
     // A name, so no loopback exception in the proxy rules can apply.
@@ -85,5 +99,30 @@ async fn a_proxy_from_the_environment_is_never_used() {
         proxied.load(Ordering::SeqCst),
         1,
         "the environment's proxy was not in effect, so the check above proves nothing"
+    );
+
+    // Over https, with HTTPS_PROXY set: the listed path still goes direct
+    // to the (public, self-signed) origin; without it the request goes to
+    // HTTPS_PROXY's proxy.
+    let tls_port = test_dns::https(|_| {
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".into()
+    });
+    test_dns::set_public("tls.m12.test", &[IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    let url = format!("https://tls.m12.test:{tls_port}/");
+    let ok = tokio::time::timeout(Duration::from_secs(5), unscoped.get(&url, &listed))
+        .await
+        .expect("finishes within 5 s")
+        .expect("reaches the https origin directly");
+    assert_eq!(&ok.body[..], b"ok");
+    assert_eq!(
+        tls_proxied.load(Ordering::SeqCst),
+        0,
+        "the listed https request used HTTPS_PROXY"
+    );
+    let _ = tokio::time::timeout(Duration::from_secs(5), unscoped.get(&url, &opts)).await;
+    assert_eq!(
+        tls_proxied.load(Ordering::SeqCst),
+        1,
+        "HTTPS_PROXY was not in effect, so the check above proves nothing"
     );
 }
