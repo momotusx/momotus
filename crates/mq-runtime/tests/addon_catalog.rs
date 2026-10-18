@@ -881,6 +881,45 @@ async fn commands_find_an_imported_row_by_its_canonical_link() {
     );
 }
 
+#[tokio::test]
+async fn the_card_and_its_commands_pick_the_same_row() {
+    let key = "https://h.example/manifest.json";
+    let list = json!({"addons": [raw(key, "h", json!({}))]}).to_string();
+    let source = Source::start(&list, COMMUNITY).await;
+    let core = Core::temporary("p").unwrap();
+    let view = AddonCatalogView::open_from(&core, &source.url(), false);
+    settled(&view).await;
+    let card = |s: &AddonCatalogSnapshot| one(s, "h").installed;
+    let set = |rows: &[AddonRow]| core.library().set_addons("p", rows, &core.hlc()).unwrap();
+    let enabled = || -> Vec<bool> {
+        let rows = core.library().addons("p").unwrap();
+        rows.iter().map(|r| r.enabled).collect()
+    };
+    // An imported copy that kept its fragment, off, before the exact link,
+    // on: the card reads the exact row, as Turn on and Turn off act on it.
+    let imported = format!("{key}#imported");
+    set(&[row(&imported, "h", false), row(key, "h", true)]);
+    until(&view, |s| card(s) == Installed::On).await;
+    core.set_addon_enabled(key, false).unwrap();
+    assert_eq!(enabled(), [false, false]);
+    until(&view, |s| card(s) == Installed::Off).await;
+    core.set_addon_enabled(key, true).unwrap();
+    assert_eq!(enabled(), [false, true]);
+    until(&view, |s| card(s) == Installed::On).await;
+    // No exact link: the enabled canonical match first, for both.
+    set(&[]);
+    until(&view, |s| card(s) == Installed::Absent).await;
+    let (a, b) = (format!("{key}#a"), format!("{key}#b"));
+    set(&[row(&a, "h", false), row(&b, "h", true)]);
+    until(&view, |s| card(s) == Installed::On).await;
+    core.set_addon_enabled(key, false).unwrap();
+    assert_eq!(enabled(), [false, false]);
+    until(&view, |s| card(s) == Installed::Off).await;
+    core.set_addon_enabled(key, true).unwrap();
+    assert_eq!(enabled(), [true, false]);
+    until(&view, |s| card(s) == Installed::On).await;
+}
+
 /// Takes every slot the core's client gives `host` (6, `ClientConfig`'s
 /// default) with answers whose bodies never end, then stops the clock: a
 /// request waiting for a slot now waits on virtual time, which jumps to the

@@ -3,7 +3,7 @@
 //! 3.3). The lists come from Cinemeta's fixed address, whatever the user has
 //! installed: "Official" is that address, never a field a publisher controls.
 
-use crate::core::{canonical, position};
+use crate::core::{canonical, find_row, position};
 use crate::{Core, CoreError};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
@@ -705,7 +705,11 @@ impl Row {
 }
 
 fn installed_state(entry: &ListedAddon, rows: &[Row]) -> (Installed, Option<String>) {
-    if let Some(row) = rows.iter().find(|row| row.url == entry.key) {
+    // The row Turn on and the other commands would act on.
+    let links = rows
+        .iter()
+        .map(|row| (row.stored.as_str(), row.url.as_str(), row.enabled));
+    if let Some(row) = find_row(links, &entry.key).map(|at| &rows[at]) {
         let state = if row.enabled {
             Installed::On
         } else {

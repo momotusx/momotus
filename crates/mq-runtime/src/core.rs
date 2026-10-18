@@ -435,17 +435,39 @@ impl Core {
     }
 }
 
-/// The installed addon a command names: its exact link, else the same link
-/// in canonical form (the Stremio importer keeps fragments the lists drop).
+/// The installed addon a command names (`find_row`).
 pub(crate) fn position(rows: &[AddonRow], transport_url: &str) -> Result<usize, CoreError> {
-    rows.iter()
-        .position(|r| r.transport_url == transport_url)
-        .or_else(|| {
-            let wanted = canonical(transport_url);
-            rows.iter()
-                .position(|r| canonical(&r.transport_url) == wanted)
-        })
-        .ok_or_else(|| CoreError::NotInstalled(redact(transport_url)))
+    let canonicals: Vec<String> = rows.iter().map(|r| canonical(&r.transport_url)).collect();
+    let rows = rows.iter().zip(&canonicals);
+    find_row(
+        rows.map(|(r, c)| (r.transport_url.as_str(), c.as_str(), r.enabled)),
+        transport_url,
+    )
+    .ok_or_else(|| CoreError::NotInstalled(redact(transport_url)))
+}
+
+/// The row a link names, one rule for the addon commands and Find addons'
+/// `installed`: the exact stored link, else a row with the same canonical
+/// link (the Stremio importer keeps fragments the lists drop), an enabled
+/// one first. Rows are `(stored link, canonical link, enabled)`.
+pub(crate) fn find_row<'a>(
+    rows: impl IntoIterator<Item = (&'a str, &'a str, bool)>,
+    link: &str,
+) -> Option<usize> {
+    let wanted = canonical(link);
+    let (mut same, mut same_on) = (None, None);
+    for (at, (stored, canonical, enabled)) in rows.into_iter().enumerate() {
+        if stored == link {
+            return Some(at);
+        }
+        if canonical == wanted {
+            same.get_or_insert(at);
+            if enabled {
+                same_on.get_or_insert(at);
+            }
+        }
+    }
+    same_on.or(same)
 }
 
 /// The canonical form of a link, or the link as given.
