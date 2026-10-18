@@ -197,6 +197,31 @@ fun PhonePlayer(
     ) {
         PlayerVideo(controller.player, Modifier.fillMaxSize())
 
+        // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
+        AnimatedVisibility(
+            visible = ((osd && !ended) || !live) && !inPip,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                Scrim(top = true, height = 120.dp, peak = 0.85f)
+                Row(
+                    Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RoundButton(Icons.ArrowLeft, "Back", onBack)
+                    Column(Modifier.weight(1f)) {
+                        MqText(controller.title, role = TextRole.Title3, maxLines = 1)
+                        controller.episode?.let {
+                            MqText(it, role = TextRole.Callout, maxLines = 1)
+                        }
+                    }
+                    if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
+                }
+            }
+        }
+        // Above the top scrim: the status sits under the title bar on a phone.
         if (!inPip) {
             hint?.let { (side, _) ->
                 SeekHint(
@@ -227,30 +252,6 @@ fun PhonePlayer(
             }
         }
 
-        // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
-        AnimatedVisibility(
-            visible = ((osd && !ended) || !live) && !inPip,
-            enter = fadeIn(),
-            exit = fadeOut(),
-        ) {
-            Box(Modifier.fillMaxSize()) {
-                Scrim(top = true, height = 120.dp, peak = 0.85f)
-                Row(
-                    Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RoundButton(Icons.ArrowLeft, "Back", onBack)
-                    Column(Modifier.weight(1f)) {
-                        MqText(controller.title, role = TextRole.Title3, maxLines = 1)
-                        controller.episode?.let {
-                            MqText(it, role = TextRole.Callout, maxLines = 1)
-                        }
-                    }
-                    if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
-                }
-            }
-        }
         AnimatedVisibility(
             visible = showControls,
             modifier = Modifier.align(Alignment.BottomCenter),
