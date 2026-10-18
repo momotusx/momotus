@@ -554,7 +554,9 @@ fn rewrite_list(
         if !seen.insert(*name) {
             return Err("a duplicate attribute");
         }
-        if name.contains("URI") && *name != "URI" {
+        // In any case: Media3 and FFmpeg read names as written, another
+        // player may not.
+        if name.to_ascii_uppercase().contains("URI") && *name != "URI" {
             return Err("an attribute named like URI");
         }
     }
@@ -723,46 +725,102 @@ mod tests {
         let media =
             |line: &str| format!("#EXTM3U\n#EXT-X-TARGETDURATION:4\n{line}\n#EXTINF:4,\nseg.ts\n");
         let canary = "http://127.0.0.1:9";
+        let (scheme, named, control) = (
+            "a URI that is not http or https",
+            "an attribute named like URI",
+            "a control character",
+        );
+        // Each refused by its own rule, so a rule that stops working shows
+        // even when another layer (the output check) still refuses.
         let refused = [
-            media("#EXT-X-DEFINE:NAME=\"a\",VALUE=\"b\""),
-            media("#EXT-X-DEFINE:QUERYPARAM=\"token\""),
-            media(
-                "#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\",KEYFORMAT=\"com.apple.streamingkeydelivery\"",
+            (
+                media("#EXT-X-DEFINE:NAME=\"a\",VALUE=\"b\""),
+                "EXT-X-DEFINE",
             ),
-            media(
-                "#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"k\",KEYFORMAT=\"urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed\"",
+            (media("#EXT-X-DEFINE:QUERYPARAM=\"token\""), "EXT-X-DEFINE"),
+            (
+                media(
+                    "#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\",KEYFORMAT=\"com.apple.streamingkeydelivery\"",
+                ),
+                "a key format other than identity",
             ),
-            media("ftp://a.example/seg.ts"),
-            media("#EXT-X-MAP:URI=\"data:text/plain,x\""),
-            "#EXTM3U\n#EXTINF:10,Channel\nhttp://a.example/stream\n".into(),
-            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n".into(),
-            media(&format!(
-                "#EXT-X-KEY:METHOD=AES-128,X-URI=\"{canary}/x\",URI=\"k\""
-            )),
-            media(&format!("#EXT-X-MAP:X-URI=\"{canary}/x\",URI=\"i.mp4\"")),
+            (
+                media(
+                    "#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"k\",KEYFORMAT=\"urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed\"",
+                ),
+                "a key format other than identity",
+            ),
+            (media("ftp://a.example/seg.ts"), scheme),
+            (media("#EXT-X-MAP:URI=\"data:text/plain,x\""), scheme),
+            (
+                "#EXTM3U\n#EXTINF:10,Channel\nhttp://a.example/stream\n".into(),
+                "neither or both a master and a media playlist",
+            ),
+            (
+                "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n".into(),
+                "neither or both a master and a media playlist",
+            ),
+            (
+                media(&format!(
+                    "#EXT-X-KEY:METHOD=AES-128,X-URI=\"{canary}/x\",URI=\"k\""
+                )),
+                named,
+            ),
+            (
+                media(&format!("#EXT-X-MAP:X-URI=\"{canary}/x\",URI=\"i.mp4\"")),
+                named,
+            ),
             // Unquoted, so only the name rule stops it: the output check
             // looks for `URI="` as Media3 does, other players may not.
-            media(&format!("#EXT-X-MAP:X-URI={canary}/x,URI=\"i.mp4\"")),
-            media("#EXT-X-KEY:METHOD=AES-128,URI=\"a\",URI=\"b\""),
-            media(&format!(
-                "#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00Z\r{canary}/seg.ts"
-            )),
-            media("#EXT-X-KEY:METHOD=AES-128,URI=\"a\r\""),
-            media("#EXT-X-VERSION:3\u{0}"),
-            media("#EXT-X-VERSION:3\u{85}"),
-            media("#EXT-X-VERSION:3\u{2028}"),
+            (
+                media(&format!("#EXT-X-MAP:X-URI={canary}/x,URI=\"i.mp4\"")),
+                named,
+            ),
+            (
+                media(&format!("#EXT-X-MAP:uri=\"{canary}/x\",URI=\"i.mp4\"")),
+                named,
+            ),
+            (media("#EXT-X-MAP:URI=i.mp4"), "an unquoted URI"),
+            (
+                media("#EXT-X-KEY:METHOD=AES-128,URI=\"a\",URI=\"b\""),
+                "a duplicate attribute",
+            ),
+            (
+                media(&format!(
+                    "#EXT-X-PROGRAM-DATE-TIME:2026-01-01T00:00:00Z\r{canary}/seg.ts"
+                )),
+                control,
+            ),
+            (media("#EXT-X-KEY:METHOD=AES-128,URI=\"a\r\""), control),
+            (media("#EXT-X-VERSION:3\u{0}"), control),
+            (media("#EXT-X-VERSION:3\u{85}"), control),
+            (media("#EXT-X-VERSION:3\u{2028}"), control),
             // A kept tag copied verbatim cannot carry a URL past the check.
-            media(&format!("#EXT-X-PROGRAM-DATE-TIME:URI=\"{canary}/x\"")),
+            (
+                media(&format!("#EXT-X-PROGRAM-DATE-TIME:URI=\"{canary}/x\"")),
+                "the output check",
+            ),
+            (
+                format!(
+                    "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",X-URI=\"{canary}/x\",URI=\"a.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n"
+                ),
+                named,
+            ),
         ];
-        for body in refused {
-            assert!(rewrite(&body, false).is_err(), "{body:?}");
+        for (body, reason) in refused {
+            assert_eq!(rewrite(&body, false).unwrap_err(), reason, "{body:?}");
         }
-        let master_media = format!(
-            "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"a\",NAME=\"x\",X-URI=\"{canary}/x\",URI=\"a.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n"
-        );
-        assert!(rewrite(&master_media, false).is_err());
         // A master as a media child.
-        assert!(rewrite("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n", true).is_err());
+        assert_eq!(
+            rewrite("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n", true).unwrap_err(),
+            "a master playlist named as a media playlist"
+        );
+        // A lowercase tag is no tag: it goes as a comment, URL and all.
+        let lowercase = rewrite(
+            &media(&format!("#ext-x-key:METHOD=AES-128,URI=\"{canary}/k\"")),
+            true,
+        );
+        assert!(!lowercase.unwrap().text.contains(canary));
         // Inline keys stay.
         assert!(
             rewrite(
