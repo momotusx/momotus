@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Testing
 
@@ -146,17 +147,33 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 }
 
 @Test func aFailoverNamesTheAttemptThatWasLoaded() {
-    let command = failOverCommand(error: "decoder error", attempt: 3)
+    let command = failOverCommand(PlayerFailure(kind: "decode", error: "decoder error"), attempt: 3)
     #expect(command["type"] as? String == "failOver")
     #expect(command["error"] as? String == "decoder error")
+    #expect(command["kind"] as? String == "decode")
     #expect(command["attempt"] as? Int64 == 3)
-    #expect(command.count == 3)
+    #expect(command.count == 4)
 }
 
 @Test func anUnknownAttemptIsLeftOutOfTheFailover() {
-    let command = failOverCommand(error: "decoder error", attempt: nil)
+    let command = failOverCommand(PlayerFailure(kind: "network", error: "offline"), attempt: nil)
     #expect(command["attempt"] == nil)
-    #expect(command.count == 2)
+    #expect(command["kind"] as? String == "network")
+    #expect(command.count == 3)
+}
+
+@Test func playerErrorsAreSortedIntoWhatFailed() {
+    let url = { (code: Int) in NSError(domain: NSURLErrorDomain, code: code) }
+    #expect(playerFailure(url(NSURLErrorTimedOut)).kind == "timeout")
+    #expect(playerFailure(url(NSURLErrorCannotConnectToHost)).kind == "network")
+    #expect(playerFailure(url(NSURLErrorNotConnectedToInternet)).kind == "network")
+    let av = { (code: AVError.Code) in NSError(domain: AVFoundationErrorDomain, code: code.rawValue) }
+    #expect(playerFailure(av(.decoderNotFound)).kind == "decode")
+    #expect(playerFailure(av(.fileFormatNotRecognized)).kind == "decode")
+    #expect(playerFailure(av(.unknown)).kind == "other")
+    let media = NSError(domain: "CoreMediaErrorDomain", code: -12939, userInfo: [NSLocalizedDescriptionKey: "gone"])
+    #expect(playerFailure(media) == PlayerFailure(kind: "other", error: "gone"))
+    #expect(playerFailure(nil).kind == "other")
 }
 
 @Test func aFailoverContinuesWhereTheFailedSourceStopped() {

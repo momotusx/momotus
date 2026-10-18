@@ -334,13 +334,14 @@ final class PlayerModel {
 
     /// The player cannot play this source: stop it, then ask the core for the next.
     private func sourceFailed(_ error: Error?) {
-        let reason = error?.localizedDescription ?? "the player could not open this source"
+        let failure = playerFailure(error)
+        let reason = failure.error
         coreLog.error("source failed: \(reason, privacy: .public)")
         notice = "This source failed: \(reason). Trying the next one."
         generation += 1
         player.pause()
         player.replaceCurrentItem(with: nil)
-        let command = failOverCommand(error: reason, attempt: loadedAttempt)
+        let command = failOverCommand(failure, attempt: loadedAttempt)
         stoppedAt = position
         (loadedURL, loadedAttempt) = (nil, nil)
         guard let sub else { return }

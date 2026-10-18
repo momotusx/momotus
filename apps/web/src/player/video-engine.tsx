@@ -3,6 +3,7 @@
  * crossorigin, so both load directly. */
 
 import { createSignal, Show } from "solid-js";
+import { mediaFailure } from "../lib/failover";
 import type { Engine, EngineEvents, Track } from "./engine";
 
 export function createVideoEngine(events: EngineEvents): Engine {
@@ -62,16 +63,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
         setBuffered(out);
       }}
       onEnded={() => events.onEnded()}
-      onError={() => {
-        const err = video.error;
-        events.onError(
-          err?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
-            ? "this device cannot decode the file"
-            : err?.code === MediaError.MEDIA_ERR_NETWORK
-              ? "the network dropped"
-              : (err?.message ?? "player error"),
-        );
-      }}
+      onError={() => events.onError(mediaFailure(video.error))}
     >
       <Show when={subtitle()} keyed>
         {(t) => <track kind="subtitles" src={t.url} srclang={t.lang} default onError={() => events.onSubtitleError(t.lang)} />}

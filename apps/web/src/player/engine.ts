@@ -4,6 +4,7 @@
  * an Engine only; everything engine-specific stays behind it. */
 
 import type { Accessor, JSX } from "solid-js";
+import type { PlayerFailure } from "../lib/failover";
 
 /** An audio or subtitle track the engine itself knows, as mpv lists them
  * (`track-list`). The `<video>` engine knows none: Chromium lists no audio
@@ -26,8 +27,8 @@ export interface EngineEvents {
   onPause(): void;
   /** The end of the file. */
   onEnded(): void;
-  /** The source cannot play here, in plain words: the player fails over. */
-  onError(reason: string): void;
+  /** The source cannot play here: the player fails over. */
+  onError(failure: PlayerFailure): void;
   /** The file's length is known (after any resume seek); may repeat. */
   onLoaded(): void;
   /** A subtitle file did not load. */

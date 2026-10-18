@@ -285,14 +285,19 @@ class VersionsView(
 
 /**
  * The `failOver` command for the source the player loaded as [attempt]. An unknown attempt names
- * none, and the core then acts on the current source.
+ * none, and the core then acts on the current source. [kind] (with the HTTP [status]) says what
+ * failed, and the core words it for the attempt list; [error] counts only for `other`.
  */
 internal fun failOverCommand(
     error: String,
     attempt: Long?,
+    kind: String,
+    status: Int?,
 ): JsonObject =
     command("failOver") {
         put("error", error)
+        put("kind", kind)
+        if (status != null) put("status", status)
         if (attempt != null) put("attempt", attempt)
     }
 
@@ -326,7 +331,9 @@ class PlaybackView(
     fun failOver(
         error: String,
         attempt: Long?,
-    ) = post(failOverCommand(error, attempt))
+        kind: String,
+        status: Int?,
+    ) = post(failOverCommand(error, attempt, kind, status))
 
     /**
      * Tell the core how long the version that plays is, as soon as the player knows: it looks up

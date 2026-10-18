@@ -1,6 +1,32 @@
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 
-export type FailOverCommand = { type: "failOver"; error: string; attempt?: number };
+/** What failed, as `failOver` reports it; the core words it for the attempt list. */
+export type FailureKind = "http" | "network" | "timeout" | "unreadable" | "decode" | "audio" | "other";
+
+/** A player failure: what failed, the HTTP status when there was one, and the
+ * player's own words, which the core keeps only for `other`. */
+export type PlayerFailure = { kind: FailureKind; status?: number; error: string };
+
+export type FailOverCommand = { type: "failOver"; error: string; kind: FailureKind; status?: number; attempt?: number };
+
+// MediaError's codes (the global does not exist outside a browser).
+const MEDIA_ERR_NETWORK = 2;
+const MEDIA_ERR_DECODE = 3;
+const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
+
+/** Sorts a `<video>` element's error into what failed. */
+export function mediaFailure(error: { code: number; message: string } | null): PlayerFailure {
+  const said = error?.message || "player error";
+  switch (error?.code) {
+    case MEDIA_ERR_SRC_NOT_SUPPORTED:
+    case MEDIA_ERR_DECODE:
+      return { kind: "decode", error: said };
+    case MEDIA_ERR_NETWORK:
+      return { kind: "network", error: said };
+    default:
+      return { kind: "other", error: said };
+  }
+}
 
 /** Remembers the core's attempt number of the source the engine loaded, so a
  * failover names that source even after the snapshot moved on: the core then
@@ -13,9 +39,12 @@ export function loadedSource(current: () => PlaybackSnapshot | null) {
     load() {
       attempt = current()?.attempt ?? null;
     },
-    /** The failOver command for an error of the loaded source. */
-    failOver(error: string): FailOverCommand {
-      return attempt == null ? { type: "failOver", error } : { type: "failOver", error, attempt };
+    /** The failOver command for a failure of the loaded source. */
+    failOver(failure: PlayerFailure): FailOverCommand {
+      const command: FailOverCommand = { type: "failOver", error: failure.error, kind: failure.kind };
+      if (failure.status != null) command.status = failure.status;
+      if (attempt != null) command.attempt = attempt;
+      return command;
     },
   };
 }

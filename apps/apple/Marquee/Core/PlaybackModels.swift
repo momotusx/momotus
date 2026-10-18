@@ -3,6 +3,9 @@
 // Enumerations the UI only displays (group, reason, hide reason) stay strings
 // so a new value from the core never breaks decoding.
 
+import AVFoundation
+import Foundation
+
 struct VersionsSnapshot: Decodable, Hashable, Sendable {
     let recommended: VersionRow?
     let rows: [VersionRow]
@@ -104,17 +107,49 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let nextAtMs: Int64?
 }
 
-/// The `failOver` command for the source the player loaded as `attempt` (the
-/// snapshot's when it was loaded). An unknown attempt is left out, and the
-/// core then acts on the current source.
 /// Where a source starts: where the last one stopped when a failover
 /// replaced it, else the saved position.
 func sourceStart(stoppedAt: Double?, resumeMs: Int64?) -> Double {
     stoppedAt ?? Double(resumeMs ?? 0) / 1000
 }
 
-func failOverCommand(error: String, attempt: Int64?) -> [String: any Sendable] {
-    var command: [String: any Sendable] = ["type": "failOver", "error": error]
+/// What failed, as `failOver` reports it: the core words `kind` for the
+/// attempt list, and keeps `error` (the player's own words) only for "other".
+struct PlayerFailure: Equatable, Sendable {
+    let kind: String
+    let error: String
+}
+
+/// AVFoundation's decode and format errors: the device cannot play the file.
+private let decodeErrors: Set<Int> = [
+    AVError.Code.decodeFailed.rawValue,
+    AVError.Code.decoderNotFound.rawValue,
+    AVError.Code.decoderTemporarilyUnavailable.rawValue,
+    AVError.Code.fileFormatNotRecognized.rawValue,
+]
+
+/// Sorts a player item's error into what failed: a URL loading error is a
+/// timeout or a network failure, an AVFoundation decode or format error is
+/// decode, and anything else is other with its own description.
+func playerFailure(_ error: Error?) -> PlayerFailure {
+    guard let error else { return PlayerFailure(kind: "other", error: "the player could not open this source") }
+    let ns = error as NSError
+    let said = ns.localizedDescription
+    switch ns.domain {
+    case NSURLErrorDomain:
+        return PlayerFailure(kind: ns.code == NSURLErrorTimedOut ? "timeout" : "network", error: said)
+    case AVFoundationErrorDomain where decodeErrors.contains(ns.code):
+        return PlayerFailure(kind: "decode", error: said)
+    default:
+        return PlayerFailure(kind: "other", error: said)
+    }
+}
+
+/// The `failOver` command for `failure` of the source the player loaded as
+/// `attempt` (the snapshot's when it was loaded). An unknown attempt is left
+/// out, and the core then acts on the current source.
+func failOverCommand(_ failure: PlayerFailure, attempt: Int64?) -> [String: any Sendable] {
+    var command: [String: any Sendable] = ["type": "failOver", "error": failure.error, "kind": failure.kind]
     if let attempt { command["attempt"] = attempt }
     return command
 }

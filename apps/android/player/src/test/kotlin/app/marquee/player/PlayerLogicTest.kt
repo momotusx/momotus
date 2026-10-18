@@ -56,24 +56,30 @@ class PlayerLogicTest {
     }
 
     @Test
-    fun `errors are sorted by the part that failed, with a sentence`() {
+    fun `errors are sorted into what failed, with the status and a sentence`() {
         assertEquals(
-            Failure(FailureKind.Source, "The source answered with HTTP 404"),
+            Failure(FailureKind.Http, "The source answered with HTTP 404", 404),
             classifyFailure(PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS, 404),
         )
-        assertEquals(
-            FailureKind.Network,
-            classifyFailure(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT, null).kind,
-        )
-        assertEquals(
-            FailureKind.Source,
-            classifyFailure(PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED, null).kind,
-        )
-        assertEquals(FailureKind.Decoder, classifyFailure(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, null).kind)
-        assertEquals(
-            FailureKind.Audio,
-            classifyFailure(PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED, null).kind,
-        )
+        val kinds =
+            mapOf(
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED to "network",
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT to "timeout",
+                PlaybackException.ERROR_CODE_TIMEOUT to "timeout",
+                PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND to "unreadable",
+                PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE to "unreadable",
+                PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED to "unreadable",
+                PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED to "unreadable",
+                PlaybackException.ERROR_CODE_DECODER_INIT_FAILED to "decode",
+                PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED to "decode",
+                PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED to "audio",
+                PlaybackException.ERROR_CODE_UNSPECIFIED to "other",
+            )
+        for ((code, wire) in kinds) {
+            val failure = classifyFailure(code, null)
+            assertEquals(wire, failure.kind.wire, PlaybackException.getErrorCodeName(code))
+            assertEquals(null, failure.status)
+        }
         assertEquals(
             "Playback stopped unexpectedly",
             classifyFailure(PlaybackException.ERROR_CODE_UNSPECIFIED, null).message,

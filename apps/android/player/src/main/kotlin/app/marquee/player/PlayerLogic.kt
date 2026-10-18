@@ -94,15 +94,27 @@ fun upNextDue(
     return if (nextAtMs != null) positionMs >= nextAtMs else durationMs - positionMs <= NEXT_AT_MS
 }
 
-enum class FailureKind { Network, Source, Decoder, Audio }
+/** What failed, as `failOver` reports it: the core words it for the attempt list. */
+enum class FailureKind(
+    val wire: String,
+) {
+    Http("http"),
+    Network("network"),
+    Timeout("timeout"),
+    Unreadable("unreadable"),
+    Decode("decode"),
+    Audio("audio"),
+    Other("other"),
+}
 
-/** A playback error in a plain sentence, and which part failed (the core only needs the sentence). */
+/** A playback error: what failed, the HTTP status when there was one, and a sentence for the player's own status line. */
 data class Failure(
     val kind: FailureKind,
     val message: String,
+    val status: Int? = null,
 )
 
-/** Sorts a Media3 error code into the part that failed, with a sentence a viewer can read. */
+/** Sorts a Media3 error code into what failed, with a sentence a viewer can read. */
 fun classifyFailure(
     code: Int,
     httpStatus: Int?,
@@ -110,8 +122,9 @@ fun classifyFailure(
     when (code) {
         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
             Failure(
-                FailureKind.Source,
+                FailureKind.Http,
                 httpStatus?.let { "The source answered with HTTP $it" } ?: "The source refused the request",
+                httpStatus,
             )
         }
 
@@ -120,14 +133,17 @@ fun classifyFailure(
         PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
         PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED,
         -> {
-            Failure(FailureKind.Source, "The source could not be opened")
+            Failure(FailureKind.Unreadable, "The source could not be opened")
         }
 
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> {
+            Failure(FailureKind.Network, "The connection to the source failed")
+        }
+
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
         PlaybackException.ERROR_CODE_TIMEOUT,
         -> {
-            Failure(FailureKind.Network, "The connection to the source failed")
+            Failure(FailureKind.Timeout, "The connection to the source failed")
         }
 
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
@@ -135,7 +151,7 @@ fun classifyFailure(
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
         -> {
-            Failure(FailureKind.Source, "The file could not be read")
+            Failure(FailureKind.Unreadable, "The file could not be read")
         }
 
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
@@ -144,7 +160,7 @@ fun classifyFailure(
         PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         -> {
-            Failure(FailureKind.Decoder, "This device cannot decode the video")
+            Failure(FailureKind.Decode, "This device cannot decode the video")
         }
 
         PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
@@ -156,7 +172,7 @@ fun classifyFailure(
         }
 
         else -> {
-            Failure(FailureKind.Source, "Playback stopped unexpectedly")
+            Failure(FailureKind.Other, "Playback stopped unexpectedly")
         }
     }
 
