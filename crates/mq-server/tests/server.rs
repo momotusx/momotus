@@ -559,6 +559,83 @@ async fn rejects_unknown_tokens_and_foreign_hosts() {
     assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
 }
 
+/// The status line of `request`, sent as is.
+async fn status_line(server: &StreamServer, request: &str) -> String {
+    let mut socket = TcpStream::connect(server.addr()).await.unwrap();
+    socket.write_all(request.as_bytes()).await.unwrap();
+    let mut reply = Vec::new();
+    socket.read_to_end(&mut reply).await.unwrap();
+    let reply = String::from_utf8_lossy(&reply);
+    reply.lines().next().unwrap_or_default().to_owned()
+}
+
+#[tokio::test]
+async fn a_foreign_host_gets_403_on_every_path() {
+    let data = file(1000);
+    let (server, lease, seen, _) = serve(&data, Behaviour::default()).await;
+    let core = server.addr().to_string();
+    let token = token(&lease.url).to_owned();
+    let name = lease.url.rsplit('/').next().unwrap().to_owned();
+    let paths = [
+        format!("/s/{token}/{name}"),
+        format!("/c/{token}/0/s.ts"),
+        format!("/t/{token}/0/s.m4s"),
+        format!("/sub/{token}/0/eng.vtt"),
+        "/".to_owned(),
+        "/nowhere/at/all".to_owned(),
+        format!("/s/{token}"),
+    ];
+    // Let the prefetch settle, so any later origin request is the guard's.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let before = seen.ranges().len() + seen.heads().len();
+    for path in &paths {
+        for method in ["GET", "HEAD", "POST"] {
+            // A rebinding page, and a player using the core as its proxy for
+            // another host (absolute form, as FFmpeg sends it).
+            let requests = [
+                format!(
+                    "{method} {path} HTTP/1.1\r\nHost: evil.example\r\nConnection: close\r\n\r\n"
+                ),
+                format!(
+                    "{method} http://canary.example{path} HTTP/1.1\r\nHost: canary.example\r\nConnection: close\r\n\r\n"
+                ),
+                format!(
+                    "{method} http://canary.example{path} HTTP/1.1\r\nHost: {core}\r\nConnection: close\r\n\r\n"
+                ),
+                format!("{method} {path} HTTP/1.0\r\n\r\n"),
+            ];
+            for request in requests {
+                let status = status_line(&server, &request).await;
+                assert_eq!(status.split(' ').nth(1), Some("403"), "{status}: {request}");
+            }
+        }
+    }
+    assert_eq!(
+        seen.ranges().len() + seen.heads().len(),
+        before,
+        "the origin was asked"
+    );
+    // The core's own URLs, in origin form and in absolute form, are served.
+    let path = &paths[0];
+    for request in [
+        format!("GET {path} HTTP/1.1\r\nHost: {core}\r\nConnection: close\r\n\r\n"),
+        format!("GET http://{core}{path} HTTP/1.1\r\nHost: {core}\r\nConnection: close\r\n\r\n"),
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: localhost:{}\r\nConnection: close\r\n\r\n",
+            server.addr().port()
+        ),
+    ] {
+        let status = status_line(&server, &request).await;
+        assert!(status.starts_with("HTTP/1.1 200"), "{status}: {request}");
+    }
+    let unknown = format!("GET /nowhere HTTP/1.1\r\nHost: {core}\r\nConnection: close\r\n\r\n");
+    assert!(
+        status_line(&server, &unknown)
+            .await
+            .starts_with("HTTP/1.1 404")
+    );
+}
+
 /// Origin serving one Russian SRT in windows-1251, as many subtitle sites do.
 /// Counts its requests.
 async fn subtitle_origin() -> (String, Arc<AtomicU64>) {

@@ -153,8 +153,17 @@ async fn upstream_logs_never_name_the_origin() {
     test_dns::set("memo-log.test", &home);
     assert!(read(8).await.is_ok());
     assert!(read(14).await.is_err());
+    // A request through the core as a proxy for another host.
+    let mut socket = tokio::net::TcpStream::connect(server.addr()).await.unwrap();
+    let foreign = "GET http://log-foreign.test/x HTTP/1.1\r\nHost: log-foreign.test\r\nConnection: close\r\n\r\n";
+    socket.write_all(foreign.as_bytes()).await.unwrap();
+    let mut reply = Vec::new();
+    socket.read_to_end(&mut reply).await.unwrap();
+    assert!(reply.starts_with(b"HTTP/1.1 403"));
 
     let logs = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
+    let refusals = logs.matches("refused a request for another host").count();
+    assert_eq!(refusals, 1, "one line per refusal: {logs}");
     // Every upstream call site wrote its line, with its fixed words.
     for line in [
         "stream upstream refused: blocked address",
@@ -167,7 +176,12 @@ async fn upstream_logs_never_name_the_origin() {
     ] {
         assert!(logs.contains(line), "no {line:?} in {logs}");
     }
-    for name in ["log-origin.test", "memo-log.test", "10.0.0.1"] {
+    for name in [
+        "log-origin.test",
+        "memo-log.test",
+        "10.0.0.1",
+        "log-foreign.test",
+    ] {
         assert!(!logs.contains(name), "{logs}");
     }
     for port in [refusing, silent, dead, flaky, target, redirector] {

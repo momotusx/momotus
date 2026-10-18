@@ -30,6 +30,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use bytes::{Bytes, BytesMut};
@@ -201,6 +202,11 @@ impl StreamServer {
                 get(serve_template).head(serve_template),
             )
             .route("/sub/{token}/{id}/{name}", get(serve_subtitle))
+            // On every path, the fallback's and wrong methods' included.
+            .layer(axum::middleware::from_fn_with_state(
+                shared.clone(),
+                only_loopback,
+            ))
             .with_state(shared.clone());
         let shutdown = CancellationToken::new();
         let stop = shutdown.clone().cancelled_owned();
@@ -768,13 +774,26 @@ const PASSTHROUGH: [header::HeaderName; 6] = [
     header::ETAG,
 ];
 
-/// DNS rebinding guard: only answer requests addressed to our loopback.
-fn host_ok(shared: &Shared, headers: &HeaderMap) -> bool {
+/// DNS rebinding and proxy guard, before anything else on every path: only
+/// a request addressed to this server is answered, by its `Host` and by the
+/// authority of an absolute-form target (a player sending everything through
+/// the core as its proxy). Any other gets 403, and one log line that names
+/// no address.
+async fn only_loopback(
+    State(shared): State<Arc<Shared>>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
     let port = shared.addr.port();
-    headers
-        .get(header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .is_some_and(|h| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}"))
+    let ours = |h: &str| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}");
+    let host = request.headers().get(header::HOST);
+    let host = host.and_then(|h| h.to_str().ok());
+    let authority = request.uri().authority().map(|a| a.as_str());
+    if host.is_some_and(ours) && authority.is_none_or(ours) {
+        return next.run(request).await;
+    }
+    tracing::info!("refused a request for another host");
+    StatusCode::FORBIDDEN.into_response()
 }
 
 /// The playback a token names, while its lease lives.
@@ -788,11 +807,7 @@ fn playback(shared: &Shared, token: &str) -> Option<Arc<Playback>> {
 async fn serve_subtitle(
     State(shared): State<Arc<Shared>>,
     Path((token, id, _name)): Path<(String, String, String)>,
-    headers: HeaderMap,
 ) -> Response {
-    if !host_ok(&shared, &headers) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
     let Some(playback) = playback(&shared, &token) else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -827,9 +842,6 @@ async fn serve(
     Path((token, _name)): Path<(String, String)>,
     request: Request<Body>,
 ) -> Response {
-    if !host_ok(&shared, request.headers()) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
     let Some(playback) = playback(&shared, &token) else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -871,9 +883,6 @@ async fn serve_child(
     Path((token, id, _name)): Path<(String, String, String)>,
     request: Request<Body>,
 ) -> Response {
-    if !host_ok(&shared, request.headers()) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
     let Some(playback) = playback(&shared, &token) else {
         return cors(StatusCode::NOT_FOUND.into_response());
     };
@@ -921,9 +930,6 @@ async fn serve_template(
     Path((token, id, _tail)): Path<(String, String, String)>,
     request: Request<Body>,
 ) -> Response {
-    if !host_ok(&shared, request.headers()) {
-        return StatusCode::FORBIDDEN.into_response();
-    }
     let Some(playback) = playback(&shared, &token) else {
         return cors(StatusCode::NOT_FOUND.into_response());
     };
