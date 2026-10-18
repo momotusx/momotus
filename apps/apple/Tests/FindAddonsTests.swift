@@ -10,23 +10,18 @@ private typealias W = FindAddonsWords
 private func entry(
     _ name: String = "OpenSubtitles v3", installed: ListedAddon.Installed = .absent,
     configuration: ListedAddon.Configuration = .none, copyKey: String? = nil,
-    provides: [String] = ["subtitles"], types: [String] = ["movie", "series"], host: String = "opensubtitles-v3.strem.io"
+    provides: [String] = ["subtitles"], types: [String] = ["movie", "series"], host: String = "opensubtitles-v3.strem.io",
+    key: String? = nil, configureUrl: String? = nil
 ) -> ListedAddon {
     ListedAddon(
-        key: "https://\(host)/manifest.json", id: "org.example", host: host, name: name, description: nil,
+        key: key ?? "https://\(host)/manifest.json", id: "org.example", host: host, name: name, description: nil,
         types: types, provides: provides, configuration: configuration,
-        configureUrl: "https://\(host)/configure", installed: installed, copyKey: copyKey)
+        configureUrl: configureUrl ?? "https://\(host)/configure", installed: installed, copyKey: copyKey)
 }
 
-/// A refusal as the core sends it: a code and the words for the card.
-private struct Refused: Error {
-    let code: String
-    let words: String
-}
-
-private func refusal(_ error: any Error) -> (code: String?, words: String) {
-    let refused = error as? Refused
-    return (refused?.code, refused?.words ?? "unknown")
+private func recorded() throws -> AddonCatalogSnapshot {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "Fixtures/addon-catalog.json")
+    return try JSONDecoder().decode(AddonCatalogSnapshot.self, from: Data(contentsOf: url))
 }
 
 /// Requests that wait until the test answers them (all at once, so a
@@ -59,21 +54,30 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
         for (key, value) in shared { #expect(W.table[key] == value, "\(key)") }
     }
 
-    @Test func aRecordedSnapshotDecodes() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "Fixtures/addon-catalog.json")
-        let snapshot = try JSONDecoder().decode(AddonCatalogSnapshot.self, from: Data(contentsOf: url))
+    @Test func aRecordedSnapshotDecodesEveryInstalledState() throws {
+        // Recorded from a bridge on an empty profile: OpenSubtitles v3 installed,
+        // YouTube installed and turned off, a copy of WatchHub (its link plus a
+        // query) on, a copy of Public Domain Movies off.
+        let snapshot = try recorded()
         #expect(snapshot.lists.map(\.id) == ["official", "community"])
         #expect(snapshot.lists.map(\.name) == ["Official", "Community"])
         #expect(snapshot.lists.allSatisfy { $0.state == .ready })
         let official = snapshot.lists[0].entries
         #expect(official.map(\.name) == ["Cinemeta", "YouTube", "WatchHub", "Public Domain Movies", "OpenSubtitles v3"])
-        #expect(official[0].installed == .on)
-        #expect(official[2].installed == .absent && official[2].provides == ["stream"])
-        #expect(official.allSatisfy { $0.configureUrl.hasSuffix("/configure") && $0.copyKey == nil })
+        #expect(official.map(\.installed) == [.absent, .off, .copyOn, .copyOff, .on])
+        #expect(official[3].copyKey == official[3].key + "?copy=1")
+        #expect(official.filter { $0.copyKey != nil }.count == 1)
+        #expect(official.allSatisfy { $0.configureUrl.hasSuffix("/configure") })
+        #expect(official[1].action == .turnOn(url: official[1].key, word: "Off"))
+        #expect(official[3].action == .turnOn(url: official[3].key + "?copy=1", word: "Set up, off"))
         let community = snapshot.lists[1].entries
         #expect(community.contains { $0.configuration == .required })
         #expect(community.contains { $0.configuration == .optional })
-        #expect(community.contains { $0.name.readsRightToLeft })
+        // Two entries of the live list share a manifest id; cards are told apart by key.
+        let shared = community.filter { $0.id == "community.opensubtitles" }
+        #expect(shared.count == 2)
+        #expect(Set(shared.map(\.key)).count == 2)
+        #expect(Set(community.map(\.key)).count == community.count)
     }
 
     @Test func listStatesAndCopiesDecode() throws {
@@ -114,6 +118,9 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
         #expect(entry().cardAction(lastCode: "timeout") == .install(configure: false))
         #expect(entry().cardAction(lastCode: nil) == .install(configure: false))
         #expect(entry(installed: .copyOn).cardAction(lastCode: "needsSetup") == .none(word: "Set up"))
+        // Installed but off since: Turn on wins over the old refusal.
+        let off = entry(installed: .off)
+        #expect(off.cardAction(lastCode: "needsSetup") == .turnOn(url: off.key, word: "Off"))
     }
 
     @Test func whatAnActionShowsAndOffers() {
@@ -124,6 +131,14 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
         #expect(!FindAction.configure.pressable && !FindAction.none(word: "Installed").pressable)
         #expect(FindAction.turnOn(url: "u", word: "Off").word == "Off")
         #expect(FindAction.install(configure: true).word == nil)
+    }
+
+    @Test func onlyHttpsConfigurePagesOpen() {
+        #expect(entry(configureUrl: "https://a.example/configure").configurePage?.absoluteString == "https://a.example/configure")
+        #expect(entry(configureUrl: "http://a.example/configure").configurePage == nil)
+        #expect(entry(configureUrl: "stremio://a.example/configure").configurePage == nil)
+        #expect(entry(configureUrl: "javascript:alert(1)").configurePage == nil)
+        #expect(entry(configureUrl: "HTTPS://a.example/configure").configurePage != nil)
     }
 
     @Test func theProvidesLineNamesResourcesAndKinds() {
@@ -162,6 +177,42 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
         #expect(entry("Bare", provides: []).spoken(.none(word: ""), sameName: false) == "Bare")
     }
 
+    @Test func aCardThatNeedsSetupSaysHowOnEachDevice() {
+        let plexio = entry("Plexio", configuration: .required, provides: ["stream"])
+        #expect(plexio.cardLabel(.configure, sameName: false, tv: false)
+            == "Configure Plexio, streams. Set it up on its website, copy the link it gives you, then paste it here.")
+        #expect(plexio.cardLabel(.configure, sameName: false, tv: true)
+            == "Configure Plexio, streams. Set it up on its website, then add the link in Marquee on your phone or computer. With sync on, it follows you here.")
+        #expect(plexio.cardLabel(.install(configure: false), sameName: false, tv: true) == "Install Plexio, streams")
+        #expect(plexio.cardLabel(.none(word: "Installed"), sameName: false, tv: false) == "Plexio, streams, installed")
+    }
+
+    @Test func noKeyIsEverSpokenOrShown() {
+        // Every link of an entry may hold someone's keys: none of the words a card shows or says carries them.
+        let secret = "SECRET-7f3a"
+        let installs: [ListedAddon.Installed] = [.absent, .on, .off, .copyOn, .copyOff]
+        let configurations: [ListedAddon.Configuration] = [.none, .optional, .required]
+        for installed in installs {
+            for configuration in configurations {
+                for code in [nil, "needsSetup", "timeout"] {
+                    let card = entry(
+                        "Name", installed: installed, configuration: configuration,
+                        copyKey: "https://copy.example/\(secret)/manifest.json", host: "addon.example",
+                        key: "https://addon.example/\(secret)/manifest.json", configureUrl: "https://addon.example/\(secret)/configure")
+                    let act = card.cardAction(lastCode: code)
+                    var words = [card.providesLine, card.initial, act.word ?? ""]
+                    for tv in [false, true] {
+                        for same in [false, true] {
+                            words.append(card.cardLabel(act, sameName: same, tv: tv))
+                            words.append(card.spoken(act, sameName: same))
+                        }
+                    }
+                    #expect(!words.contains { $0.contains(secret) }, "\(installed) \(configuration) \(code ?? "-")")
+                }
+            }
+        }
+    }
+
     @Test func filtersShowWhatAnEntryProvides() {
         let both = entry(provides: ["stream", "subtitles"])
         #expect(FindFilter.allCases.map(\.label) == ["All", "Sources", "Subtitles", "Catalogs"])
@@ -185,55 +236,74 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
         #expect(!"".readsRightToLeft)
     }
 
+    @Test func aRefusalKeepsTheCoresCodeAndWords() {
+        let refused = InstallCards.refusal(CoreError("This addon now needs setup first", code: "needsSetup"))
+        #expect(refused.code == "needsSetup")
+        #expect(refused.words == "This addon now needs setup first")
+        // A code the app does not know shows its words all the same.
+        #expect(InstallCards.refusal(CoreError("Something new", code: "later")) == ("later", "Something new"))
+        #expect(InstallCards.refusal(CoreError("No code")).code == nil)
+    }
+
     @MainActor @Test func aSecondPressWhileBusyDoesNothingAndTheResultLandsOnItsCard() async {
         let cards = InstallCards()
         let held = Held()
-        let run = Task { await cards.run("a", held.request, failure: refusal) }
+        let run = Task { await cards.run("a", held.request) }
         await held.waitForStart()
         #expect(cards["a"].busy)
-        let second = Task { await cards.run("a", held.request, failure: refusal) }
+        let second = Task { await cards.run("a", held.request) }
         for _ in 0..<20 { await Task.yield() }
         #expect(held.started == 1)
-        held.answer(.failure(Refused(code: "needsSetup", words: "This addon now needs setup first")))
-        await run.value
-        await second.value
+        held.answer(.failure(CoreError("This addon now needs setup first", code: "needsSetup")))
+        #expect(await run.value == InstallCards.Card(busy: false, code: "needsSetup", words: "This addon now needs setup first"))
+        #expect(await second.value == nil)
         #expect(cards["a"] == InstallCards.Card(busy: false, code: "needsSetup", words: "This addon now needs setup first"))
         #expect(cards["b"] == InstallCards.Card())
         // A success clears the card.
         let before = held.started
-        let again = Task { await cards.run("a", held.request, failure: refusal) }
+        let again = Task { await cards.run("a", held.request) }
         await held.waitForStart(before + 1)
         held.answer(.success(()))
-        await again.value
+        #expect(await again.value == InstallCards.Card())
         #expect(cards["a"] == InstallCards.Card())
     }
 
     @MainActor @Test func aResultFromBeforeANewProfileLandsNowhere() async {
         let cards = InstallCards()
         let held = Held()
-        let run = Task { await cards.run("a", held.request, failure: refusal) }
+        let run = Task { await cards.run("a", held.request) }
         await held.waitForStart()
         cards.forgetAll()
         #expect(cards["a"] == InstallCards.Card())
-        held.answer(.failure(Refused(code: "timeout", words: "This addon's server did not answer in time")))
-        await run.value
+        held.answer(.failure(CoreError("This addon's server did not answer in time", code: "timeout")))
+        #expect(await run.value == nil)
+        #expect(cards["a"] == InstallCards.Card())
+    }
+
+    @MainActor @Test func aCancelledRequestLeavesNothing() async {
+        let cards = InstallCards()
+        let held = Held()
+        let run = Task { await cards.run("a", held.request) }
+        await held.waitForStart()
+        held.answer(.failure(CancellationError()))
+        #expect(await run.value == nil)
         #expect(cards["a"] == InstallCards.Card())
     }
 
     @MainActor @Test func tryAgainForgetsResultsButKeepsRunningCards() async {
         let cards = InstallCards()
         let held = Held()
-        let failed = Task { await cards.run("done", held.request, failure: refusal) }
+        let failed = Task { await cards.run("done", held.request) }
         await held.waitForStart()
-        held.answer(.failure(Refused(code: "unreachable", words: "This addon's server could not be reached")))
-        await failed.value
-        let run = Task { await cards.run("a", held.request, failure: refusal) }
+        held.answer(.failure(CoreError("This addon's server could not be reached", code: "unreachable")))
+        _ = await failed.value
+        let run = Task { await cards.run("a", held.request) }
         await held.waitForStart(2)
         cards.forgetAll(running: false)
         #expect(cards["done"] == InstallCards.Card())
         #expect(cards["a"].busy)
-        held.answer(.failure(Refused(code: "timeout", words: "This addon's server did not answer in time")))
-        await run.value
+        held.answer(.failure(CoreError("This addon's server did not answer in time", code: "timeout")))
+        _ = await run.value
         #expect(cards["a"].words == "This addon's server did not answer in time")
         #expect(cards["a"].code == "timeout")
     }
@@ -241,12 +311,12 @@ private func refusal(_ error: any Error) -> (code: String?, words: String) {
     @MainActor @Test func aNewInstalledStateForgetsOnlyAFinishedResult() async {
         let cards = InstallCards()
         let held = Held()
-        let run = Task { await cards.run("a", held.request, failure: refusal) }
+        let run = Task { await cards.run("a", held.request) }
         await held.waitForStart()
         cards.forget("a")
         #expect(cards["a"].busy)
-        held.answer(.failure(Refused(code: "mismatch", words: "This addon is not the one the list named")))
-        await run.value
+        held.answer(.failure(CoreError("This addon is not the one the list named", code: "mismatch")))
+        _ = await run.value
         cards.forget("a")
         #expect(cards["a"] == InstallCards.Card())
     }

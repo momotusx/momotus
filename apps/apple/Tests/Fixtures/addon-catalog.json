@@ -9,7 +9,7 @@
      "description": "The official addon for movie and series catalogs",
      "host": "v3-cinemeta.strem.io",
      "id": "com.linvo.cinemeta",
-     "installed": "on",
+     "installed": "absent",
      "key": "https://v3-cinemeta.strem.io/manifest.json",
      "name": "Cinemeta",
      "provides": [
@@ -29,7 +29,7 @@
      "description": "Watch your favourite YouTube channels ad-free and get notified when they upload new videos.",
      "host": "v3-channels.strem.io",
      "id": "com.linvo.stremiochannels",
-     "installed": "absent",
+     "installed": "off",
      "key": "https://v3-channels.strem.io/manifest.json",
      "name": "YouTube",
      "provides": [
@@ -47,7 +47,7 @@
      "description": "Find where to stream your favorite movies and shows amongst Netflix, iTunes, Hulu, Amazon, HBO GO and many others. Supports many countries.",
      "host": "watchhub.strem.io",
      "id": "org.stremio.watchhub",
-     "installed": "absent",
+     "installed": "copyOn",
      "key": "https://watchhub.strem.io/manifest.json",
      "name": "WatchHub",
      "provides": [
@@ -61,11 +61,11 @@
     {
      "configuration": "none",
      "configureUrl": "https://caching.stremio.net/publicdomainmovies.now.sh/configure",
-     "copyKey": null,
+     "copyKey": "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json?copy=1",
      "description": "Torrents for public domain movies. Includes a collection of more then 500 public domain movies.",
      "host": "caching.stremio.net",
      "id": "org.stremio.pubdomainmovies",
-     "installed": "absent",
+     "installed": "copyOff",
      "key": "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json",
      "name": "Public Domain Movies",
      "provides": [
@@ -194,6 +194,42 @@
       "subtitles"
      ],
      "types": [
+      "series"
+     ]
+    },
+    {
+     "configuration": "required",
+     "configureUrl": "https://32d94ecc2689-stremio-addon-opensubtitles.baby-beamup.club/pick/configure",
+     "copyKey": null,
+     "description": "Community add-on for subtitles from OpenSubtitles",
+     "host": "32d94ecc2689-stremio-addon-opensubtitles.baby-beamup.club",
+     "id": "community.opensubtitles",
+     "installed": "absent",
+     "key": "https://32d94ecc2689-stremio-addon-opensubtitles.baby-beamup.club/pick/manifest.json",
+     "name": "Community OpenSubtitles",
+     "provides": [
+      "subtitles"
+     ],
+     "types": [
+      "movie",
+      "series"
+     ]
+    },
+    {
+     "configuration": "required",
+     "configureUrl": "https://2ecbbd610840-opensubtitles.baby-beamup.club/configure",
+     "copyKey": null,
+     "description": "Addon for getting subtitles from opensubtitles.org, by Dexter21767.",
+     "host": "2ecbbd610840-opensubtitles.baby-beamup.club",
+     "id": "community.opensubtitles",
+     "installed": "absent",
+     "key": "https://2ecbbd610840-opensubtitles.baby-beamup.club/manifest.json",
+     "name": "opensubtitles.org subtitles by dexter21767",
+     "provides": [
+      "subtitles"
+     ],
+     "types": [
+      "movie",
       "series"
      ]
     },

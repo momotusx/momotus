@@ -4,23 +4,6 @@ import os
 
 let coreLog = Logger(subsystem: "app.marquee", category: "core")
 
-struct CoreError: LocalizedError, Sendable {
-    let message: String
-    /// Stable name for the errors an app acts on (sync, profiles); never parse `message`.
-    var code: String?
-    /// With `locked`: how long until the next PIN try.
-    var retryAfterMs: Int64?
-    /// With `viewsOpen`: the views still open.
-    var views: [String]?
-    init(_ message: String, code: String? = nil, retryAfterMs: Int64? = nil, views: [String]? = nil) {
-        self.message = message
-        self.code = code
-        self.retryAfterMs = retryAfterMs
-        self.views = views
-    }
-    var errorDescription: String? { message }
-}
-
 /// Receives every core message on a core thread (the protocol in
 /// plans/core-protocol.md). Replies go to the waiter registered for their
 /// `id`; view pushes go to the handler routed for their `sub`. Messages

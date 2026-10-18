@@ -14,6 +14,8 @@ struct ChipRow<ID: Hashable>: View {
     let chips: [Chip<ID>]
     let isSelected: (ID) -> Bool
     let select: (ID) -> Void
+    /// A page that moves focus itself (TV Find addons) binds its chips here.
+    var focus: FocusState<ID?>.Binding?
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -64,7 +66,14 @@ struct ChipRow<ID: Hashable>: View {
             }
             .buttonStyle(ChipStyle(selected: isSelected(chip.id)))
             .accessibilityAddTraits(isSelected(chip.id) ? .isSelected : [])
+            .chipFocus(focus, chip.id)
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder func chipFocus<ID: Hashable>(_ binding: FocusState<ID?>.Binding?, _ id: ID) -> some View {
+        if let binding { focused(binding, equals: id) } else { self }
     }
 }
 

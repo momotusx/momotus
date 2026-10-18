@@ -152,6 +152,21 @@ extension ListedAddon {
         return parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
+    /// What VoiceOver reads for the whole card, one element: its action and
+    /// name (an installed card its name and state), and for Configure how to
+    /// set it up, which differs on a TV (no browser there).
+    func cardLabel(_ act: FindAction, sameName: Bool, tv: Bool) -> String {
+        let label = spoken(act, sameName: sameName)
+        guard act == .configure else { return label }
+        return "\(label). \(tv ? W.configureTv : W.configureHelp)"
+    }
+
+    /// The configure page to open in the browser: https only, whatever the list sent.
+    var configurePage: URL? {
+        guard let url = URL(string: configureUrl), url.scheme?.lowercased() == "https", url.host() != nil else { return nil }
+        return url
+    }
+
     /// Names shown by more than one card of a list: their cards also say the host.
     static func repeatedNames(_ entries: [ListedAddon]) -> Set<String> {
         var seen = Set<String>()
@@ -209,26 +224,33 @@ final class InstallCards {
     }
 
     /// Runs one card's request; a second press while it runs does nothing.
-    /// `failure` gives a refusal's code and the words the card shows.
-    func run(
-        _ key: String, _ request: @MainActor () async throws -> Void,
-        failure: (any Error) -> (code: String?, words: String)
-    ) async {
-        guard cards[key]?.busy != true else { return }
+    /// Returns the card as the request left it (no words: it worked), or nil
+    /// when nothing landed: a second press, a cancelled request (the core
+    /// settles a switch so), or a new profile since.
+    @discardableResult
+    func run(_ key: String, _ request: @MainActor () async throws -> Void) async -> Card? {
+        guard cards[key]?.busy != true else { return nil }
         let mine = generation
         cards[key] = Card(busy: true)
         do {
             try await request()
-            if mine == generation { cards[key] = nil }
+            guard mine == generation else { return nil }
+            cards[key] = nil
+            return Card()
         } catch {
-            guard mine == generation else { return }
-            // A request the core settled as cancelled (a switch) shows nothing.
+            guard mine == generation else { return nil }
             if error is CancellationError {
                 cards[key] = nil
-            } else {
-                let (code, words) = failure(error)
-                cards[key] = Card(code: code, words: words)
+                return nil
             }
+            let (code, words) = Self.refusal(error)
+            cards[key] = Card(code: code, words: words)
+            return cards[key]
         }
+    }
+
+    /// A refusal's code (the card's action may follow it) and the core's words.
+    nonisolated static func refusal(_ error: any Error) -> (code: String?, words: String) {
+        ((error as? CoreError)?.code, error.localizedDescription)
     }
 }
