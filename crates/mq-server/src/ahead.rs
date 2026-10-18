@@ -208,6 +208,17 @@ impl Source {
         &self.shared.url
     }
 
+    /// Where the original URL's redirect led, else the URL itself.
+    pub(crate) fn final_url(&self) -> String {
+        let redirect = lock(&self.shared.redirect).clone();
+        redirect.map_or_else(|| self.shared.url.clone(), |target| target.to_string())
+    }
+
+    /// The stream's `proxyHeaders`.
+    pub(crate) fn headers(&self) -> &[(String, String)] {
+        &self.shared.headers
+    }
+
     /// The playback's scoped handle.
     pub(crate) fn http(&self) -> &HttpClient {
         &self.shared.http

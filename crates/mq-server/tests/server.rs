@@ -980,7 +980,7 @@ const WHOLE_FILE: &str = "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: cl
 #[tokio::test]
 async fn the_player_never_sees_a_redirect() {
     let http = HttpClient::new(ClientConfig::default()).unwrap();
-    let server = StreamServer::start(http).await.unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
     // The first answer of a registered playback (the cache path).
     let origin = scripted(vec![REDIRECT_WITHOUT_LOCATION.into()]).await;
     let lease = server.register(local_upstream(origin), "v.mkv");
@@ -993,6 +993,17 @@ async fn the_player_never_sees_a_redirect() {
     let lease = server.register(local_upstream(origin), "v.mkv");
     let url = lease.url.clone();
     let (head, _) = raw_full(&server, &url, "bytes=0-").await;
+    assert!(head.starts_with("http/1.1 502"), "{head}");
+    assert!(!head.contains("location"), "{head}");
+    // A child of an HLS playback.
+    let (base, _) = hls_origin(|asked| match asked.path.as_str() {
+        "/m.m3u8" => Reply::playlist("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n"),
+        _ => Reply::status(302),
+    })
+    .await;
+    let lease = open_hls(&server, format!("{base}/m.m3u8")).await;
+    let playlist = text(&http.get(&lease.url, &local()).await.unwrap());
+    let (head, _) = raw_full(&server, &named_urls(&playlist)[0], "bytes=0-").await;
     assert!(head.starts_with("http/1.1 502"), "{head}");
     assert!(!head.contains("location"), "{head}");
 }
@@ -1231,10 +1242,35 @@ async fn a_released_playback_answers_404_everywhere() {
     assert!(head.starts_with("HTTP/1.1 200"), "{head}");
     assert_eq!(http.get(&sub, &local()).await.unwrap().status, 200);
 
-    drop(lease);
-    for (url, method) in [(&url, "GET"), (&url, "HEAD"), (&sub, "GET")] {
+    // An HLS playback and one of its children.
+    let (base, _) = hls_origin(pages(vec![
+        (
+            "/m.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n".to_vec(),
+        ),
+        ("/s.ts", "video/mp2t", b"segment".to_vec()),
+    ]))
+    .await;
+    let hls = open_hls(&server, format!("{base}/m.m3u8")).await;
+    let main = hls.url.clone();
+    let child = named_urls(&text(&http.get(&main, &local()).await.unwrap())).remove(0);
+    for (url, method) in [(&main, "HEAD"), (&child, "GET"), (&child, "HEAD")] {
         let reply = raw(&server, url, method, None).await;
-        assert!(reply.starts_with("HTTP/1.1 404"), "{method} {reply}");
+        assert!(reply.starts_with("HTTP/1.1 200"), "{method} {reply}");
+    }
+
+    drop((lease, hls));
+    for (url, method) in [
+        (&url, "GET"),
+        (&url, "HEAD"),
+        (&sub, "GET"),
+        (&main, "GET"),
+        (&child, "GET"),
+        (&child, "HEAD"),
+    ] {
+        let reply = raw(&server, url, method, None).await;
+        assert!(reply.starts_with("HTTP/1.1 404"), "{method} {url}: {reply}");
     }
 }
 
@@ -1265,6 +1301,26 @@ async fn ids_reach_only_their_own_playback() {
     assert_eq!(asked.load(Ordering::SeqCst), 0, "A's origin was asked");
     assert_eq!(http.get(&track, &local()).await.unwrap().status, 200);
     assert_eq!(asked.load(Ordering::SeqCst), 1);
+    // A's playlist children under B's token: a file's, and another
+    // playlist's with fewer children.
+    let one = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n";
+    let three =
+        "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n#EXTINF:4,\nc.ts\n";
+    let (a_base, a_log) = hls_origin(move |_| Reply::playlist(three)).await;
+    let (b_base, _) = hls_origin(move |_| Reply::playlist(one)).await;
+    let a = open_hls(&server, format!("{a_base}/a.m3u8")).await;
+    let b = open_hls(&server, format!("{b_base}/b.m3u8")).await;
+    let file = server.register(local_upstream(PLAYBACK.into()), "f.mkv");
+    let before = a_log.lock().unwrap().len();
+    for other in [&b, &file] {
+        let prefix = format!("http://{}/c/{}", server.addr(), token(&other.url));
+        for id in ["1", "2"] {
+            let reply = raw(&server, &format!("{prefix}/{id}/b.ts"), "GET", None).await;
+            assert!(reply.starts_with("HTTP/1.1 404"), "{id}: {reply}");
+        }
+    }
+    assert_eq!(a_log.lock().unwrap().len(), before, "A's origin was asked");
+    drop(a);
 }
 
 #[tokio::test]
@@ -1312,7 +1368,34 @@ async fn subtitle_work_keeps_its_playback() {
 #[tokio::test]
 async fn release_ends_work_in_flight() {
     let data = file(64 << 20);
-    let (_server, lease, _seen, http) = serve(&data, Behaviour::default()).await;
+    let (server, lease, _seen, http) = serve(&data, Behaviour::default()).await;
+    // A media playlist whose origin trickles it: its collection is in flight.
+    let collecting = Arc::new(AtomicU64::new(0));
+    let count = collecting.clone();
+    let (base, _) = hls_origin(move |asked| {
+        if asked.path == "/master.m3u8" {
+            return Reply::playlist("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nslow.m3u8\n");
+        }
+        count.fetch_add(1, Ordering::SeqCst);
+        Reply {
+            status: 200,
+            headers: vec![("Content-Type", "application/vnd.apple.mpegurl".into())],
+            parts: b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n"
+                .iter()
+                .map(|b| vec![*b])
+                .collect(),
+            gap: Duration::from_millis(200),
+            ..Reply::default()
+        }
+    })
+    .await;
+    let hls = open_hls(&server, format!("{base}/master.m3u8")).await;
+    let variant = named_urls(&text(&http.get(&hls.url, &local()).await.unwrap())).remove(0);
+    let collect = tokio::spawn({
+        let http = http.clone();
+        async move { http.get(&variant, &local()).await }
+    });
+    asked_once(&collecting).await;
     let (slow, asked) = trickle().await;
     let sub = lease
         .subtitles()
@@ -1328,17 +1411,19 @@ async fn release_ends_work_in_flight() {
         async move { http.get(&sub, &local()).await }
     });
     asked_once(&asked).await;
-    drop(lease);
+    drop((lease, hls));
     let ended = tokio::time::timeout(Duration::from_secs(1), async {
         while let Some(Ok(_)) = body.next_chunk().await {}
-        fetch.await.unwrap()
+        (fetch.await.unwrap(), collect.await.unwrap())
     })
     .await
     .expect("work went on after release");
-    assert!(
-        matches!(ended, Err(mq_http::HttpError::Status { status: 404, .. })),
-        "{ended:?}"
-    );
+    for ended in [ended.0, ended.1] {
+        assert!(
+            matches!(ended, Err(mq_http::HttpError::Status { status: 404, .. })),
+            "{ended:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1516,4 +1601,770 @@ async fn dropping_the_server_ends_bodies_in_flight() {
     // The lease outlived the server; its playback did not.
     assert_eq!(lease.subtitles().add(PLAYBACK, "eng", None), None);
     assert!(http.get(&lease.url, &local()).await.is_err());
+}
+
+// C22: HLS through the loopback server (plans/c21-c23-loopback.md 3.3).
+
+/// A request an `hls_origin` saw.
+#[derive(Clone, Debug)]
+struct Asked {
+    path: String,
+    query: Option<String>,
+    /// The request head, lowercased.
+    head: String,
+}
+
+impl Asked {
+    /// The `Range` asked for, as `(first, last)`.
+    fn range(&self) -> Option<(usize, Option<usize>)> {
+        let spec = self
+            .head
+            .lines()
+            .find_map(|l| l.strip_prefix("range: bytes="))?;
+        let (a, b) = spec.trim().split_once('-')?;
+        Some((a.parse().ok()?, b.parse().ok()))
+    }
+}
+
+/// What an `hls_origin` answers: after `wait`, `status` with `headers`, then
+/// the body in `parts`, each after `gap`.
+#[derive(Clone, Default)]
+struct Reply {
+    status: u16,
+    headers: Vec<(&'static str, String)>,
+    parts: Vec<Vec<u8>>,
+    wait: Duration,
+    gap: Duration,
+}
+
+impl Reply {
+    fn ok(content_type: &str, body: impl Into<Vec<u8>>) -> Reply {
+        Reply {
+            status: 200,
+            headers: vec![("Content-Type", content_type.into())],
+            parts: vec![body.into()],
+            ..Reply::default()
+        }
+    }
+
+    fn playlist(body: impl Into<Vec<u8>>) -> Reply {
+        Reply::ok("application/vnd.apple.mpegurl", body)
+    }
+
+    fn status(status: u16) -> Reply {
+        Reply {
+            status,
+            ..Reply::default()
+        }
+    }
+
+    /// `data` with single byte ranges, as a file server answers.
+    fn ranged(asked: &Asked, content_type: &str, data: &[u8]) -> Reply {
+        let Some((first, last)) = asked.range() else {
+            return Reply::ok(content_type, data);
+        };
+        let end = last.map_or(data.len(), |l| (l + 1).min(data.len()));
+        let mut reply = Reply::ok(content_type, &data[first..end]);
+        reply.status = 206;
+        let span = format!("bytes {first}-{}/{}", end - 1, data.len());
+        reply.headers.push(("Content-Range", span));
+        reply
+    }
+}
+
+type Log = Arc<Mutex<Vec<Asked>>>;
+
+/// An origin answering every request with `answer`, one request per
+/// connection; returns its base URL and what it was asked.
+async fn hls_origin(answer: impl Fn(&Asked) -> Reply + Send + Sync + 'static) -> (String, Log) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let log: Log = Arc::default();
+    let seen = log.clone();
+    let answer = Arc::new(answer);
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let (seen, answer) = (seen.clone(), answer.clone());
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut buf = [0u8; 4096];
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match socket.read(&mut buf).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => head.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let head = String::from_utf8_lossy(&head).into_owned();
+                let target = head.split_whitespace().nth(1).unwrap_or("/").to_owned();
+                let (path, query) = match target.split_once('?') {
+                    Some((p, q)) => (p.to_owned(), Some(q.to_owned())),
+                    None => (target, None),
+                };
+                let asked = Asked {
+                    path,
+                    query,
+                    head: head.to_ascii_lowercase(),
+                };
+                seen.lock().unwrap().push(asked.clone());
+                let reply = answer(&asked);
+                tokio::time::sleep(reply.wait).await;
+                let len: usize = reply.parts.iter().map(Vec::len).sum();
+                let mut out = format!(
+                    "HTTP/1.1 {} X\r\nContent-Length: {len}\r\nConnection: close\r\n",
+                    reply.status
+                );
+                for (name, value) in &reply.headers {
+                    out.push_str(&format!("{name}: {value}\r\n"));
+                }
+                out.push_str("\r\n");
+                if socket.write_all(out.as_bytes()).await.is_err() {
+                    return;
+                }
+                for part in &reply.parts {
+                    tokio::time::sleep(reply.gap).await;
+                    if socket.write_all(part).await.is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    (base, log)
+}
+
+/// Pages by path, files answering ranges; 404 for anything else.
+fn pages(
+    map: Vec<(&'static str, &'static str, Vec<u8>)>,
+) -> impl Fn(&Asked) -> Reply + Send + Sync + 'static {
+    move |asked| match map.iter().find(|(path, _, _)| *path == asked.path) {
+        Some((_, kind, body)) if kind.contains("mpegurl") => Reply::playlist(body.clone()),
+        Some((_, kind, body)) => Reply::ranged(asked, kind, body),
+        None => Reply::status(404),
+    }
+}
+
+async fn open_hls(server: &StreamServer, url: String) -> Lease {
+    let lease = server
+        .open(local_upstream(url), "v.mkv", Duration::from_secs(5))
+        .await
+        .expect("an HLS playback opens");
+    assert_eq!(lease.format, Some(mq_server::Format::Hls));
+    assert!(lease.url.ends_with("/v.m3u8"), "{}", lease.url);
+    lease
+}
+
+/// Every URL a playlist names: its URI lines and its `URI="..."` values.
+fn named_urls(playlist: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in playlist.lines() {
+        if !line.is_empty() && !line.starts_with('#') {
+            out.push(line.to_owned());
+        }
+        for (at, _) in line.match_indices("URI=\"") {
+            let rest = &line[at + 5..];
+            out.push(rest[..rest.find('"').unwrap()].to_owned());
+        }
+    }
+    out
+}
+
+fn text(response: &mq_http::Response) -> String {
+    String::from_utf8(response.body.to_vec()).unwrap()
+}
+
+#[tokio::test]
+async fn an_hls_playback_is_served_entirely_through_loopback() {
+    let media = file(2100);
+    let key = b"0123456789abcdef".to_vec();
+    let (far, far_log) = hls_origin(pages(vec![
+        (
+            "/far/index.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n#EXT-X-ENDLIST\n".to_vec(),
+        ),
+        ("/far/seg.ts", "video/mp2t", b"far segment".to_vec()),
+    ]))
+    .await;
+    let master = format!(
+        "#EXTM3U\n#EXT-X-INDEPENDENT-SEGMENTS\n\
+         #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"English\",DEFAULT=YES,URI=\"audio/en.m3u8\"\n\
+         #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"sub\",NAME=\"English\",LANGUAGE=\"en\",URI=\"/subs/en.m3u8\"\n\
+         #EXT-X-STREAM-INF:BANDWIDTH=800000,AUDIO=\"aud\",SUBTITLES=\"sub\"\nlow/index.m3u8\n\
+         #EXT-X-STREAM-INF:BANDWIDTH=2000000,AUDIO=\"aud\",SUBTITLES=\"sub\"\n/v/high/index.m3u8\n\
+         #EXT-X-STREAM-INF:BANDWIDTH=4000000,AUDIO=\"aud\",SUBTITLES=\"sub\"\n{far}/far/index.m3u8\n"
+    );
+    let low = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n\
+               #EXT-X-KEY:METHOD=AES-128,URI=\"../key.bin\",IV=0x00000000000000000000000000000001\n\
+               #EXT-X-MAP:URI=\"media.mp4\",BYTERANGE=\"100@0\"\n\
+               #EXTINF:4.0,\n#EXT-X-BYTERANGE:1000@100\nmedia.mp4\n\
+               #EXTINF:4.0,\n#EXT-X-BYTERANGE:1000@1100\nmedia.mp4\n#EXT-X-ENDLIST\n";
+    let plain = |seg: &str| {
+        format!("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\n{seg}\n#EXT-X-ENDLIST\n")
+            .into_bytes()
+    };
+    let (base, log) = hls_origin(pages(vec![
+        (
+            "/v/master.m3u8",
+            "application/vnd.apple.mpegurl",
+            master.into_bytes(),
+        ),
+        (
+            "/v/low/index.m3u8",
+            "application/vnd.apple.mpegurl",
+            low.as_bytes().to_vec(),
+        ),
+        (
+            "/v/high/index.m3u8",
+            "application/vnd.apple.mpegurl",
+            plain("h.ts"),
+        ),
+        (
+            "/v/audio/en.m3u8",
+            "application/vnd.apple.mpegurl",
+            plain("a.aac"),
+        ),
+        (
+            "/subs/en.m3u8",
+            "application/vnd.apple.mpegurl",
+            plain("en.vtt"),
+        ),
+        ("/v/key.bin", "application/octet-stream", key.clone()),
+        ("/v/low/media.mp4", "video/mp4", media.to_vec()),
+        ("/v/high/h.ts", "video/mp2t", b"high segment".to_vec()),
+        ("/v/audio/a.aac", "audio/aac", b"audio segment".to_vec()),
+        ("/subs/en.vtt", "text/vtt", b"WEBVTT\n".to_vec()),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/v/master.m3u8")).await;
+    let core = format!("http://{}/", server.addr());
+    // Walk every playlist; every URL in them is the core's.
+    let mut playlists = vec![lease.url.clone()];
+    let mut files = Vec::new();
+    while let Some(url) = playlists.pop() {
+        let response = http.get(&url, &local()).await.unwrap();
+        assert_eq!(
+            response.header("access-control-allow-origin"),
+            Some("*"),
+            "{url}"
+        );
+        assert_eq!(
+            response.header("content-type"),
+            Some("application/vnd.apple.mpegurl")
+        );
+        for named in named_urls(&text(&response)) {
+            assert!(named.starts_with(&core), "{named}");
+            if named.ends_with(".m3u8") {
+                playlists.push(named);
+            } else {
+                files.push(named);
+            }
+        }
+    }
+    files.sort();
+    files.dedup();
+    let by_end = |end: &str| files.iter().find(|f| f.ends_with(end)).unwrap().clone();
+    // Ranges as BYTERANGE gives them, the key whole, every other file whole.
+    let mp4 = by_end("/media.mp4");
+    for (first, len) in [(0, 100), (100, 1000), (1100, 1000)] {
+        let response = http.get_range(&mp4, first, len, &local()).await.unwrap();
+        assert_eq!(response.status, 206);
+        assert_eq!(response.header("access-control-allow-origin"), Some("*"));
+        assert_eq!(
+            response.body[..],
+            media[first as usize..(first + len) as usize]
+        );
+    }
+    let fetched = http.get(&by_end("/key.bin"), &local()).await.unwrap();
+    assert_eq!(fetched.body[..], key[..]);
+    assert_eq!(fetched.header("access-control-allow-origin"), Some("*"));
+    for (end, body) in [
+        ("/h.ts", &b"high segment"[..]),
+        ("/seg.ts", b"far segment"),
+        ("/a.aac", b"audio segment"),
+        ("/en.vtt", b"WEBVTT\n"),
+    ] {
+        assert_eq!(
+            http.get(&by_end(end), &local()).await.unwrap().body[..],
+            *body,
+            "{end}"
+        );
+    }
+    // The origins saw only the core.
+    for asked in log
+        .lock()
+        .unwrap()
+        .iter()
+        .chain(far_log.lock().unwrap().iter())
+    {
+        assert!(
+            asked.head.contains("user-agent: marquee/"),
+            "{}",
+            asked.head
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_relative_child_is_not_answered_with_the_master() {
+    let (base, _) = hls_origin(pages(vec![
+        (
+            "/live/index.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nseg0.ts\n".to_vec(),
+        ),
+        ("/live/seg0.ts", "video/mp2t", b"the first segment".to_vec()),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/live/index.m3u8")).await;
+    let playlist = text(&http.get(&lease.url, &local()).await.unwrap());
+    let first = named_urls(&playlist).remove(0);
+    assert_eq!(
+        http.get(&first, &local()).await.unwrap().body[..],
+        b"the first segment"[..]
+    );
+}
+
+/// The canary by literal, by mapped literal (an IPv4 canary) and by name.
+fn canary_hosts(canary: &Canary, name: &str) -> Vec<String> {
+    mq_http::test_dns::set(name, &[canary.addr.ip()]);
+    let port = canary.addr.port();
+    let mut hosts = vec![canary.addr.to_string(), format!("{name}:{port}")];
+    if let std::net::IpAddr::V4(v4) = canary.addr.ip() {
+        hosts.push(format!("[::ffff:{v4}]:{port}"));
+    }
+    hosts
+}
+
+#[tokio::test]
+async fn a_manifest_naming_the_canary_never_reaches_it() {
+    let canary = Canary::start(0).await;
+    let hosts = canary_hosts(&canary, "hls-canary.c22.test");
+    let mut master = String::from("#EXTM3U\n");
+    let mut media = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+    for host in &hosts {
+        master.push_str(&format!(
+            "#EXT-X-STREAM-INF:BANDWIDTH=1\nhttp://{host}/v.m3u8\n"
+        ));
+        media.push_str(&format!("#EXTINF:4,\nhttp://{host}/s.ts\n"));
+    }
+    media.push_str(&format!(
+        "#EXT-X-KEY:METHOD=AES-128,URI=\"http://{}/k\"\n#EXTINF:4,\nlocal.ts\n",
+        hosts[0]
+    ));
+    let (base, _) = hls_origin(pages(vec![
+        (
+            "/master.m3u8",
+            "application/vnd.apple.mpegurl",
+            master.into_bytes(),
+        ),
+        (
+            "/media.m3u8",
+            "application/vnd.apple.mpegurl",
+            media.into_bytes(),
+        ),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    for main in ["master", "media"] {
+        let lease = open_hls(&server, format!("{base}/{main}.m3u8")).await;
+        let playlist = text(&http.get(&lease.url, &local()).await.unwrap());
+        for child in named_urls(&playlist)
+            .into_iter()
+            .filter(|c| !c.ends_with("/local.ts"))
+        {
+            let err = http.get(&child, &local()).await.unwrap_err();
+            assert!(
+                matches!(err, mq_http::HttpError::Status { status: 502, .. }),
+                "{child}: {err:?}"
+            );
+        }
+    }
+    assert_eq!(canary.accepted(), 0);
+}
+
+#[tokio::test]
+async fn media_children_are_never_sniffed() {
+    let canary = Canary::start(0).await;
+    let playlist_like = format!(
+        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttp://{}/x.m3u8\n",
+        canary.addr
+    )
+    .into_bytes();
+    let mut mpd_like = vec![b' '; 2048];
+    mpd_like.extend_from_slice(format!("<mpd profiles=\"urn:mpeg:dash:profile:isoff-live:2011\"><BaseURL>http://{}/</BaseURL></mpd>", canary.addr).as_bytes());
+    let (base, _) = hls_origin(pages(vec![
+        (
+            "/m.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\none.ts\n#EXTINF:4,\ntwo.ts\n".to_vec(),
+        ),
+        ("/one.ts", "video/mp2t", playlist_like.clone()),
+        ("/two.ts", "application/dash+xml", mpd_like.clone()),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/m.m3u8")).await;
+    let children = named_urls(&text(&http.get(&lease.url, &local()).await.unwrap()));
+    assert_eq!(
+        http.get(&children[0], &local()).await.unwrap().body[..],
+        playlist_like[..]
+    );
+    assert_eq!(
+        http.get(&children[1], &local()).await.unwrap().body[..],
+        mpd_like[..]
+    );
+    assert_eq!(canary.accepted(), 0);
+}
+
+#[tokio::test]
+async fn a_child_redirect_to_the_canary_is_refused() {
+    let canary = Canary::start(0).await;
+    let hosts = canary_hosts(&canary, "redirect-canary.c22.test");
+    let mut media = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+    for i in 0..hosts.len() {
+        media.push_str(&format!("#EXTINF:4,\nhop{i}.ts\n"));
+    }
+    let (base, _) = hls_origin(move |asked| {
+        if asked.path == "/m.m3u8" {
+            return Reply::playlist(media.clone());
+        }
+        let i: usize = asked
+            .path
+            .trim_start_matches("/hop")
+            .trim_end_matches(".ts")
+            .parse()
+            .unwrap();
+        let mut reply = Reply::status(302);
+        reply
+            .headers
+            .push(("Location", format!("http://{}/s.ts", hosts[i])));
+        reply
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/m.m3u8")).await;
+    for child in named_urls(&text(&http.get(&lease.url, &local()).await.unwrap())) {
+        let (head, _) = raw_full(&server, &child, "bytes=0-").await;
+        assert!(head.starts_with("http/1.1 502"), "{child}: {head}");
+    }
+    assert_eq!(canary.accepted(), 0);
+}
+
+#[tokio::test]
+async fn a_child_path_cannot_change_the_origin() {
+    let (base, log) = hls_origin(pages(vec![
+        (
+            "/m.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n".to_vec(),
+        ),
+        ("/s.ts", "video/mp2t", b"segment".to_vec()),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/m.m3u8")).await;
+    let before = log.lock().unwrap().len();
+    let prefix = format!("http://{}/c/{}", server.addr(), token(&lease.url));
+    for id in ["+0", "00", "-1", "4294967296", "0x0"] {
+        let reply = raw(&server, &format!("{prefix}/{id}/s.ts"), "GET", None).await;
+        assert!(reply.starts_with("HTTP/1.1 404"), "{id}: {reply}");
+    }
+    assert_eq!(log.lock().unwrap().len(), before, "the origin was asked");
+}
+
+#[tokio::test]
+async fn ll_hls_directives_reach_only_playlists() {
+    let (base, log) = hls_origin(pages(vec![
+        (
+            "/master.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlive.m3u8?sig=1\n".to_vec(),
+        ),
+        (
+            "/live.m3u8",
+            "application/vnd.apple.mpegurl",
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n".to_vec(),
+        ),
+        ("/s.ts", "video/mp2t", b"segment".to_vec()),
+    ]))
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/master.m3u8")).await;
+    let asked = "?_HLS_msn=5&_HLS_part=1&x=1";
+    let variant = named_urls(&text(
+        &http
+            .get(&format!("{}{asked}", lease.url), &local())
+            .await
+            .unwrap(),
+    ))
+    .remove(0);
+    let segment = named_urls(&text(
+        &http
+            .get(&format!("{variant}{asked}"), &local())
+            .await
+            .unwrap(),
+    ))
+    .remove(0);
+    http.get(&format!("{segment}{asked}"), &local())
+        .await
+        .unwrap();
+    let log = log.lock().unwrap();
+    let last = |path: &str| {
+        log.iter()
+            .rev()
+            .find(|a| a.path == path)
+            .unwrap()
+            .query
+            .clone()
+    };
+    assert_eq!(
+        last("/master.m3u8").as_deref(),
+        Some("_HLS_msn=5&_HLS_part=1")
+    );
+    assert_eq!(
+        last("/live.m3u8").as_deref(),
+        Some("sig=1&_HLS_msn=5&_HLS_part=1")
+    );
+    assert_eq!(last("/s.ts"), None);
+}
+
+#[tokio::test]
+async fn a_blocking_reload_may_wait_three_target_durations() {
+    let opened = Arc::new(AtomicU64::new(0));
+    let count = opened.clone();
+    let (base, _) = hls_origin(move |_| {
+        let mut reply = Reply::playlist("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n");
+        // Open's own reads answer at once; a player's reload waits 11 s.
+        if count.load(Ordering::SeqCst) == 1 {
+            reply.wait = Duration::from_secs(11);
+        }
+        reply
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/live.m3u8")).await;
+    opened.store(1, Ordering::SeqCst);
+    let slow = RequestOptions {
+        timeout: Duration::from_secs(30),
+        ..local()
+    };
+    let blocking = http.get(&format!("{}?_HLS_msn=9", lease.url), &slow).await;
+    assert_eq!(blocking.map(|r| r.status).ok(), Some(200));
+    let plain = http.get(&lease.url, &slow).await.unwrap_err();
+    assert!(
+        matches!(plain, mq_http::HttpError::Status { status: 502, .. }),
+        "{plain:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_live_playlist_is_fetched_fresh() {
+    let reloads = Arc::new(AtomicU64::new(0));
+    let count = reloads.clone();
+    let (base, _) = hls_origin(move |_| {
+        let n = count.fetch_add(1, Ordering::SeqCst);
+        Reply::playlist(format!(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:{n}\n#EXTINF:4,\ns{n}.ts\n#EXTINF:4,\ns{}.ts\n",
+            n + 1
+        ))
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = open_hls(&server, format!("{base}/live.m3u8")).await;
+    let a = named_urls(&text(&http.get(&lease.url, &local()).await.unwrap()));
+    let b = named_urls(&text(&http.get(&lease.url, &local()).await.unwrap()));
+    assert_ne!(a, b, "a reload was answered from a cache");
+    // A segment both reloads name keeps its id; a new one gets the next.
+    assert_eq!(a[1], b[0]);
+    let id = |url: &str| -> u64 { url.rsplit('/').nth(1).unwrap().parse().unwrap() };
+    assert_eq!(id(&b[1]), id(&a[1]) + 1);
+}
+
+#[tokio::test]
+async fn declared_playlists_never_pass_raw() {
+    let mkv = b"\x1aE\xdf\xa3 a matroska file".to_vec();
+    let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
+        "/stream" => Reply::ranged(asked, "Application/X-MpegURL; charset=UTF-8", &mkv),
+        "/manifest.mpd" => Reply::ok("application/octet-stream", "garbage, not an MPD"),
+        _ => Reply::status(404),
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    for path in ["/stream", "/manifest.mpd"] {
+        let opened = server
+            .open(
+                local_upstream(format!("{base}{path}")),
+                "v.mkv",
+                Duration::from_secs(5),
+            )
+            .await;
+        assert_eq!(
+            opened.unwrap_err(),
+            "The stream's playlist could not be read",
+            "{path}"
+        );
+    }
+    assert_eq!(server.playbacks(), 0);
+}
+
+#[tokio::test]
+async fn chunk_split_signatures_are_found() {
+    let (base, _) = hls_origin(|asked| {
+        let mut reply = Reply {
+            status: 200,
+            headers: vec![("Content-Type", "application/octet-stream".into())],
+            gap: Duration::from_millis(50),
+            ..Reply::default()
+        };
+        reply.parts = match asked.path.as_str() {
+            "/a" => vec![
+                b"#EXT".to_vec(),
+                b"M3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\ns.ts\n".to_vec(),
+            ],
+            _ => vec![
+                b"<?xml version=\"1.0\"?>".to_vec(),
+                format!("<!--{}-->", "c".repeat(2048)).into_bytes(),
+                b"<d:MPD xmlns:d=\"urn:mpeg:dash:schema:mpd:2011\"></d:MPD>".to_vec(),
+            ],
+        };
+        reply
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    let hls = server
+        .open(
+            local_upstream(format!("{base}/a")),
+            "v.mkv",
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hls.format, Some(mq_server::Format::Hls));
+    let dash = server
+        .open(
+            local_upstream(format!("{base}/b")),
+            "v.mkv",
+            Duration::from_secs(5),
+        )
+        .await;
+    assert_eq!(dash.unwrap_err(), "This player cannot play DASH streams");
+}
+
+#[tokio::test]
+async fn doctype_and_patch_are_refused() {
+    let (base, _) = hls_origin(|asked| match asked.path.as_str() {
+        "/doctype" => Reply::ok("application/xml", "<?xml version=\"1.0\"?><!DOCTYPE MPD [<!ENTITY x \"y\">]><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\"/>"),
+        _ => Reply::ok("application/xml", "<?xml version=\"1.0\"?><Patch xmlns=\"urn:mpeg:dash:schema:mpd-patch:2020\"/>"),
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    for path in ["/doctype", "/patch"] {
+        let opened = server
+            .open(
+                local_upstream(format!("{base}{path}")),
+                "v.mkv",
+                Duration::from_secs(5),
+            )
+            .await;
+        assert_eq!(
+            opened.unwrap_err(),
+            "The stream's playlist could not be read",
+            "{path}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn manifest_limits_and_deadlines() {
+    let mut huge = b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n".to_vec();
+    huge.resize((8 << 20) + 1, b'\n');
+    let mut wide = String::from("#EXTM3U\n#EXT-X-TARGETDURATION:4\n");
+    for i in 0..180_000 {
+        wide.push_str(&format!("#EXTINF:1,\n{i}\n"));
+    }
+    assert!(wide.len() < 8 << 20);
+    let (base, _) = hls_origin(move |asked| match asked.path.as_str() {
+        "/huge.m3u8" => Reply::playlist(huge.clone()),
+        "/wide.m3u8" => Reply::playlist(wide.clone()),
+        _ => Reply {
+            status: 200,
+            headers: vec![("Content-Type", "application/vnd.apple.mpegurl".into())],
+            parts: b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n"
+                .iter()
+                .map(|b| vec![*b])
+                .collect(),
+            gap: Duration::from_millis(500),
+            ..Reply::default()
+        },
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    // The wide one is rewritten in full before it is refused: in a debug
+    // build that alone takes several seconds.
+    let s = Duration::from_secs;
+    for (path, deadline, words) in [
+        (
+            "/huge.m3u8",
+            s(5),
+            "The stream's playlist could not be read",
+        ),
+        (
+            "/wide.m3u8",
+            s(30),
+            "The stream's playlist could not be read",
+        ),
+        ("/trickle.m3u8", s(3), "The source did not answer in time"),
+    ] {
+        let started = std::time::Instant::now();
+        let opened = server
+            .open(local_upstream(format!("{base}{path}")), "v.mkv", deadline)
+            .await;
+        assert_eq!(opened.unwrap_err(), words, "{path}");
+        let took = started.elapsed();
+        assert!(took < deadline + s(1), "{path} took {took:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_video_file_is_never_sniffed() {
+    let mkv = file(4 << 20);
+    let (base, log) = hls_origin(move |asked| {
+        let mut reply = Reply::ranged(asked, "video/x-matroska", &mkv);
+        reply.gap = Duration::from_secs(2);
+        reply
+    })
+    .await;
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http).await.unwrap();
+    let started = std::time::Instant::now();
+    let lease = server
+        .open(
+            local_upstream(format!("{base}/v.mkv")),
+            "v.mkv",
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(lease.format, None);
+    assert_eq!(log.lock().unwrap().len(), 1, "only the prefetch request");
 }

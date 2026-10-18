@@ -8,8 +8,14 @@
 //! Its subtitles get `http://127.0.0.1:<port>/sub/<token>/<id>/<lang>.vtt`
 //! under the same token: the addon's file fetched on request and served as
 //! UTF-8 WebVTT. A token exists only while its `Lease` does.
+//!
+//! An HLS stream is found at open and served as a playlist rewritten on
+//! every request (`manifest`): each child it names is
+//! `http://127.0.0.1:<port>/c/<token>/<id>/<name>`, served by the role that
+//! named it, so a player never fetches from an origin.
 
 mod ahead;
+mod manifest;
 mod subtitles;
 #[cfg(all(test, feature = "torrent"))]
 #[allow(dead_code)]
@@ -24,8 +30,10 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
+use bytes::{Bytes, BytesMut};
 use futures_util::{Stream, StreamExt, stream};
-use mq_http::{HttpClient, Priority, RequestOptions, Url};
+use manifest::{Children, Declared, Role, Sniffed};
+use mq_http::{HttpClient, HttpError, Priority, RequestOptions, Url};
 use mq_media::CancellationToken;
 use std::collections::HashMap;
 use std::future::Future;
@@ -77,6 +85,8 @@ fn scope(addon_url: Option<&Url>) -> Vec<IpAddr> {
 /// Where one playback's bytes come from.
 enum Content {
     Http(Arc<ahead::Source>),
+    /// An HLS playlist, fetched fresh and rewritten for every request.
+    Hls(Arc<Hls>),
     #[cfg(feature = "torrent")]
     Torrent {
         engine: mq_engine::Engine,
@@ -104,6 +114,44 @@ impl Playback {
     }
 }
 
+/// An HLS playback: the stream URL's playlist and the children its
+/// rewrites named, all fetched through the playback's scoped handle.
+struct Hls {
+    url: String,
+    http: HttpClient,
+    /// The stream's `proxyHeaders`: in full only to the stream URL's origin.
+    headers: Vec<(String, String)>,
+    table: Mutex<manifest::Table>,
+    /// The last `#EXT-X-TARGETDURATION` of each playlist (`None`: the main
+    /// one), for how long a blocking reload may wait.
+    targets: Mutex<HashMap<Option<u32>, u64>>,
+}
+
+impl Hls {
+    fn options(&self) -> RequestOptions {
+        RequestOptions {
+            priority: Priority::Playback,
+            headers: self.headers.clone(),
+            owner: Url::parse(&self.url).ok(),
+            ..Default::default()
+        }
+    }
+}
+
+/// How a playback's main URL is served, when it is not a file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    /// An HLS playlist: the main URL ends in `.m3u8`.
+    Hls,
+}
+
+/// The attempt list's words for a manifest that cannot be played.
+const UNREADABLE_PLAYLIST: &str = "The stream's playlist could not be read";
+/// DASH is not served until its rewrite exists (phase 6 of the plan).
+const NO_DASH: &str = "This player cannot play DASH streams";
+/// A playlist's fetch, unless a blocking reload may wait longer.
+const MANIFEST_DEADLINE: Duration = Duration::from_secs(10);
+
 /// What the routes and every lease share.
 struct Shared {
     http: HttpClient,
@@ -128,6 +176,7 @@ impl StreamServer {
         });
         let app = Router::new()
             .route("/s/{token}/{name}", get(serve).head(serve))
+            .route("/c/{token}/{id}/{name}", get(serve_child).head(serve_child))
             .route("/sub/{token}/{id}/{name}", get(serve_subtitle))
             .with_state(shared.clone());
         let shutdown = CancellationToken::new();
@@ -148,15 +197,22 @@ impl StreamServer {
     /// CLI and examples. `filename` only helps players guess the container;
     /// it carries no secrets. An HTTP upstream starts reading at once.
     pub fn register(&self, upstream: Upstream, filename: &str) -> Lease {
-        self.lease(self.playback(upstream), filename)
+        self.lease(
+            new_token(),
+            self.playback(upstream),
+            &file_name(filename),
+            None,
+        )
     }
 
     /// A playback whose origin answered within `deadline`, so a dead link
-    /// fails here instead of in the player. For HTTP that answer is the read
-    /// that goes on to serve the player; no extra request is made. The token
-    /// exists only once the answer came: dropping this future first leaves
-    /// none, and stops the read.
-    #[allow(irrefutable_let_patterns)] // one variant without `torrent`
+    /// fails here instead of in the player. For a file that answer is the
+    /// read that goes on to serve the player; no extra request is made. A
+    /// body declared or sniffed as a playlist is fetched whole and rewritten
+    /// once within the same deadline, and then served as one (`format`); a
+    /// declared one that is not a playlist, and DASH, fail. The token exists
+    /// only once all that is done: dropping this future first leaves none,
+    /// and stops the reads.
     pub async fn open(
         &self,
         upstream: Upstream,
@@ -164,26 +220,139 @@ impl StreamServer {
         deadline: Duration,
     ) -> Result<Lease, String> {
         let playback = self.playback(upstream);
+        // The token goes in the map only at the end, but a playlist's dry run
+        // writes it into the children's URLs, so the size limit sees them.
+        let token = new_token();
         // Torrent playbacks are checked before they get here.
-        if let Content::Http(source) = &playback.body {
-            let error = match tokio::time::timeout(deadline, source.meta(0)).await {
-                Ok(Ok(_) | Err(ahead::Refusal::Passthrough)) => None,
-                Ok(Err(ahead::Refusal::Status(status, _))) => Some(refused(status)),
-                Ok(Err(ahead::Refusal::Blocked)) => {
-                    Some("The source points to a private network address".into())
-                }
-                Ok(Err(ahead::Refusal::Failed(reason))) => {
-                    tracing::info!("stream source unreachable: {reason}");
-                    Some(UNREACHABLE.into())
-                }
-                Err(_) => Some(SILENT.into()),
-            };
-            if let Some(error) = error {
+        #[allow(irrefutable_let_patterns)] // one variant without `torrent`
+        let Content::Http(source) = &playback.body else {
+            return Ok(self.lease(token, playback, &file_name(filename), None));
+        };
+        let source = source.clone();
+        match tokio::time::timeout(deadline, self.detect(&source, &token)).await {
+            Ok(Ok(None)) => Ok(self.lease(token, playback, &file_name(filename), None)),
+            Ok(Ok(Some(hls))) => {
+                // The cursors stop: every request fetches the playlist fresh.
                 playback.release();
-                return Err(error);
+                let playback = Arc::new(Playback {
+                    body: Content::Hls(hls),
+                    released: CancellationToken::new(),
+                    subtitles: Mutex::default(),
+                });
+                Ok(self.lease(token, playback, &hls_name(filename), Some(Format::Hls)))
+            }
+            Ok(Err(error)) => {
+                playback.release();
+                Err(error)
+            }
+            Err(_) => {
+                playback.release();
+                Err(SILENT.into())
             }
         }
-        Ok(self.lease(playback, filename))
+    }
+
+    /// A file (`None`) or an HLS playlist, by the first answer's type, the
+    /// URLs' paths and the body's first bytes (plans/c21-c23-loopback.md
+    /// 3.3). A ranged origin's first bytes come from the read-ahead cache, a
+    /// passthrough origin's from one fresh request; a video or audio type of
+    /// a size no playlist has is a file at once, so files keep their start.
+    async fn detect(
+        &self,
+        source: &ahead::Source,
+        token: &str,
+    ) -> Result<Option<Arc<Hls>>, String> {
+        let listed = source.url().to_owned();
+        let (declared, prefix) = match source.meta(0).await {
+            Ok(meta) => {
+                let content_type = header_text(&meta.headers);
+                let urls = [listed.as_str(), &source.final_url()];
+                let declared = manifest::declared(content_type, &urls);
+                if declared.is_none() && !manifest::candidate(content_type, Some(meta.len)) {
+                    return Ok(None);
+                }
+                let want = meta.len.min(manifest::SNIFF as u64);
+                let mut prefix = BytesMut::new();
+                while (prefix.len() as u64) < want {
+                    let more = source.read(prefix.len() as u64, want).await;
+                    let more = more.map_err(|_| UNREACHABLE.to_owned())?;
+                    if more.is_empty() {
+                        break;
+                    }
+                    prefix.extend_from_slice(&more);
+                }
+                (declared, prefix.freeze())
+            }
+            Err(ahead::Refusal::Passthrough) => {
+                let opts = source.options();
+                let upstream = source.http().stream(&listed, None, &opts).await;
+                let mut upstream = upstream.map_err(|e| error_words(&e))?;
+                if !(200..300).contains(&upstream.status) {
+                    let status = StatusCode::from_u16(upstream.status);
+                    return Err(status.map_or(UNREACHABLE.to_owned(), refused));
+                }
+                let content_type = header_text(&upstream.headers);
+                let urls = [listed.as_str(), upstream.final_url.as_str()];
+                let declared = manifest::declared(content_type, &urls);
+                if declared.is_none() && !manifest::candidate(content_type, None) {
+                    return Ok(None);
+                }
+                let mut prefix = BytesMut::new();
+                while prefix.len() < manifest::SNIFF {
+                    match upstream.next_chunk().await {
+                        Some(Ok(chunk)) => prefix.extend_from_slice(&chunk),
+                        // A body cut short is judged by what arrived.
+                        Some(Err(_)) | None => break,
+                    }
+                }
+                prefix.truncate(manifest::SNIFF);
+                (declared, prefix.freeze())
+            }
+            Err(ahead::Refusal::Status(status, _)) => return Err(refused(status)),
+            Err(ahead::Refusal::Blocked) => return Err(PRIVATE.into()),
+            Err(ahead::Refusal::Failed(reason)) => {
+                tracing::info!("stream source unreachable: {reason}");
+                return Err(UNREACHABLE.into());
+            }
+        };
+        match (manifest::sniff(&prefix), declared) {
+            (Sniffed::Hls, None | Some(Declared::Hls)) => {}
+            (Sniffed::Dash, None | Some(Declared::Dash)) => return Err(NO_DASH.into()),
+            (Sniffed::File, None) => return Ok(None),
+            // Declared but not that format, a DASH patch, a DOCTYPE: a
+            // declared body is never served raw.
+            _ => return Err(UNREADABLE_PLAYLIST.into()),
+        }
+        let hls = Arc::new(Hls {
+            url: listed,
+            http: source.http().clone(),
+            headers: source.headers().to_vec(),
+            table: Mutex::default(),
+            targets: Mutex::default(),
+        });
+        let first = Url::parse(&hls.url).map_err(|_| UNREADABLE_PLAYLIST.to_owned())?;
+        let (body, base) = fetch_playlist(&hls, &first, &[], MANIFEST_DEADLINE)
+            .await
+            .map_err(|e| error_words(&e))?;
+        let core = format!("http://{}/", self.shared.addr);
+        // A dry run: the ids it registers stay valid for the real requests.
+        let prefix = format!("{core}c/{token}/");
+        let mut table = lock(&hls.table);
+        let mut children = Children {
+            core: &core,
+            prefix: &prefix,
+            table: &mut table,
+        };
+        let rewritten = manifest::rewrite_hls(&body, &base, false, &mut children);
+        drop(table);
+        let rewritten = rewritten.map_err(|reason| {
+            tracing::info!("stream playlist refused: {reason}");
+            UNREADABLE_PLAYLIST.to_owned()
+        })?;
+        if let Some(target) = rewritten.target_duration {
+            lock(&hls.targets).insert(None, target);
+        }
+        Ok(Some(hls))
     }
 
     fn playback(&self, upstream: Upstream) -> Arc<Playback> {
@@ -216,16 +385,19 @@ impl StreamServer {
         })
     }
 
-    fn lease(&self, playback: Arc<Playback>, filename: &str) -> Lease {
-        let token = new_token();
+    /// `name` is already the main URL's name (`file_name`, `hls_name`).
+    fn lease(
+        &self,
+        token: String,
+        playback: Arc<Playback>,
+        name: &str,
+        format: Option<Format>,
+    ) -> Lease {
         lock(&self.shared.playbacks).insert(token.clone(), playback.clone());
-        let url = format!(
-            "http://{}/s/{token}/{}",
-            self.shared.addr,
-            sanitize(filename)
-        );
+        let url = format!("http://{}/s/{token}/{name}", self.shared.addr);
         Lease {
             url,
+            format,
             token,
             playback,
             shared: self.shared.clone(),
@@ -358,6 +530,8 @@ where
 /// every upstream read.
 pub struct Lease {
     pub url: String,
+    /// `None` for a file.
+    pub format: Option<Format>,
     token: String,
     playback: Arc<Playback>,
     shared: Arc<Shared>,
@@ -461,6 +635,8 @@ fn new_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// A URL's last part as a name: safe characters only, at most 120 of them,
+/// cut in the stem so the extension players read stays.
 fn sanitize(name: &str) -> String {
     let clean: String = name
         .chars()
@@ -471,13 +647,51 @@ fn sanitize(name: &str) -> String {
                 '_'
             }
         })
-        .take(120)
         .collect();
+    // Every character is ASCII now, so byte offsets are character offsets.
+    let clean = match clean.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() && ext.len() <= 16 => {
+            let keep = 120 - ext.len() - 1;
+            format!("{}.{ext}", &stem[..stem.len().min(keep)])
+        }
+        _ => clean[..clean.len().min(120)].to_owned(),
+    };
     if clean.is_empty() {
         "stream".into()
     } else {
         clean
     }
+}
+
+/// Extensions players take for a playlist: Media3 by its source factory
+/// (`.ism`, `.isml` for SmoothStreaming, which the app does not ship), mpv by
+/// its headerless M3U probe.
+const PLAYLIST_EXTENSIONS: [&str; 7] = ["m3u", "m3u8", "mpd", "strm", "pls", "ism", "isml"];
+
+/// A file's main URL name: a playlist extension becomes `.bin`, so no
+/// player takes the file for a playlist.
+fn file_name(filename: &str) -> String {
+    let name = sanitize(filename);
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if PLAYLIST_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()) => {
+            format!("{stem}.bin")
+        }
+        _ => name,
+    }
+}
+
+/// An HLS playback's main URL name: Media3 picks the source by `.m3u8`.
+fn hls_name(filename: &str) -> String {
+    let name = file_name(filename);
+    let stem = name
+        .rsplit_once('.')
+        .map_or(name.as_str(), |(stem, _)| stem);
+    format!("{stem}.m3u8")
+}
+
+/// A response's `Content-Type`.
+fn header_text(headers: &HeaderMap) -> Option<&str> {
+    headers.get(header::CONTENT_TYPE)?.to_str().ok()
 }
 
 /// Response headers forwarded from the origin to the player.
@@ -570,6 +784,15 @@ async fn serve(
     let head_only = request.method() == Method::HEAD;
     match &playback.body {
         Content::Http(source) => serve_http(source.clone(), range, head_only).await,
+        Content::Hls(hls) => {
+            let query = request.uri().query();
+            let main = Url::parse(&hls.url).ok();
+            let Some(main) = main else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            let out = serve_playlist(&shared, &token, &playback, hls, None, main, query).await;
+            cors(out)
+        }
         #[cfg(feature = "torrent")]
         Content::Torrent {
             engine,
@@ -590,8 +813,207 @@ async fn serve(
     }
 }
 
+/// A child of an HLS playback, by the role that named it: a media playlist
+/// rewritten, media bytes with `Range`, or a small key read whole. Every
+/// answer may be read by any page; the token is the capability.
+async fn serve_child(
+    State(shared): State<Arc<Shared>>,
+    Path((token, id, _name)): Path<(String, String, String)>,
+    request: Request<Body>,
+) -> Response {
+    if !host_ok(&shared, request.headers()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(playback) = playback(&shared, &token) else {
+        return cors(StatusCode::NOT_FOUND.into_response());
+    };
+    let Content::Hls(hls) = &playback.body else {
+        return cors(StatusCode::NOT_FOUND.into_response());
+    };
+    let found = parse_id(&id).and_then(|id| {
+        let id = u32::try_from(id).ok()?;
+        lock(&hls.table).get(id).map(|(url, role)| (id, url, role))
+    });
+    let Some((id, url, role)) = found else {
+        return cors(StatusCode::NOT_FOUND.into_response());
+    };
+    let released = playback.released.clone();
+    let out = match role {
+        Role::Playlist => {
+            let query = request.uri().query();
+            serve_playlist(&shared, &token, &playback, hls, Some(id), url, query).await
+        }
+        Role::Media => {
+            let range = request
+                .headers()
+                .get(header::RANGE)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned);
+            let head_only = request.method() == Method::HEAD;
+            proxy(
+                &hls.http,
+                url.as_str(),
+                hls.options(),
+                released,
+                range,
+                head_only,
+            )
+            .await
+        }
+        Role::Small => serve_small(hls, &url, &released).await,
+    };
+    cors(out)
+}
+
+/// Lets any page read the answer (`<video crossorigin>` and Safari's HLS).
+fn cors(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+    response
+}
+
+/// The request's LL-HLS directives (`_HLS_msn`, `_HLS_part`, `_HLS_skip`),
+/// the only part of a request's query passed on to a playlist's origin.
+fn hls_directives(query: Option<&str>) -> Vec<(String, String)> {
+    let Some(query) = query else {
+        return Vec::new();
+    };
+    let mut parsed = Url::parse("http://q/").expect("a valid URL");
+    parsed.set_query(Some(query));
+    parsed
+        .query_pairs()
+        .filter(|(name, _)| name.starts_with("_HLS_"))
+        .map(|(name, value)| (name.into_owned(), value.into_owned()))
+        .collect()
+}
+
+/// A playlist fetched whole (at most `MANIFEST_MAX`), with `directives`
+/// added to its query; and the final URL it came from, its base.
+async fn fetch_playlist(
+    hls: &Hls,
+    url: &Url,
+    directives: &[(String, String)],
+    deadline: Duration,
+) -> Result<(Bytes, Url), HttpError> {
+    let mut url = url.clone();
+    if !directives.is_empty() {
+        let mut query = url.query_pairs_mut();
+        for (name, value) in directives {
+            query.append_pair(name, value);
+        }
+    }
+    let opts = RequestOptions {
+        timeout: deadline,
+        max_bytes: manifest::MANIFEST_MAX,
+        ..hls.options()
+    };
+    let response = hls.http.get(url.as_str(), &opts).await?;
+    Ok((response.body, response.final_url))
+}
+
+/// A playlist (`id`: a child's, `None`: the main one) fetched fresh and
+/// rewritten: never cached, as a live one changes with every reload. A
+/// blocking reload (`_HLS_msn`) may wait three of its target durations.
+async fn serve_playlist(
+    shared: &Shared,
+    token: &str,
+    playback: &Playback,
+    hls: &Hls,
+    id: Option<u32>,
+    url: Url,
+    query: Option<&str>,
+) -> Response {
+    let directives = hls_directives(query);
+    let mut deadline = MANIFEST_DEADLINE;
+    if directives.iter().any(|(name, _)| name == "_HLS_msn")
+        && let Some(&target) = lock(&hls.targets).get(&id)
+    {
+        deadline = deadline.max(Duration::from_secs(target.saturating_mul(3)));
+    }
+    let fetch = fetch_playlist(hls, &url, &directives, deadline);
+    let (body, base) = match playback.released.run_until_cancelled(fetch).await {
+        None => return StatusCode::NOT_FOUND.into_response(),
+        Some(Ok(fetched)) => fetched,
+        Some(Err(e)) => {
+            tracing::warn!("playlist upstream failed: {}", e.kind());
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+    let core = format!("http://{}/", shared.addr);
+    let prefix = format!("{core}c/{token}/");
+    let mut table = lock(&hls.table);
+    let mut children = Children {
+        core: &core,
+        prefix: &prefix,
+        table: &mut table,
+    };
+    let rewritten = manifest::rewrite_hls(&body, &base, id.is_some(), &mut children);
+    drop(table);
+    let rewritten = match rewritten {
+        Ok(rewritten) => rewritten,
+        Err(reason) => {
+            tracing::warn!("playlist refused: {reason}");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+    if let Some(target) = rewritten.target_duration {
+        lock(&hls.targets).insert(id, target);
+    }
+    (
+        [
+            (header::CONTENT_TYPE, "application/vnd.apple.mpegurl"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        rewritten.text,
+    )
+        .into_response()
+}
+
+/// A key, read whole: at most `SMALL_MAX`, else 502.
+async fn serve_small(hls: &Hls, url: &Url, released: &CancellationToken) -> Response {
+    let opts = RequestOptions {
+        timeout: MANIFEST_DEADLINE,
+        max_bytes: manifest::SMALL_MAX,
+        ..hls.options()
+    };
+    let fetch = hls.http.get(url.as_str(), &opts);
+    match released.run_until_cancelled(fetch).await {
+        None => StatusCode::NOT_FOUND.into_response(),
+        Some(Ok(response)) => {
+            let mut out = HeaderMap::new();
+            if let Some(value) = response.headers.get(header::CONTENT_TYPE) {
+                out.insert(header::CONTENT_TYPE, value.clone());
+            }
+            (out, response.body).into_response()
+        }
+        Some(Err(e)) => {
+            tracing::warn!("key upstream failed: {}", e.kind());
+            StatusCode::BAD_GATEWAY.into_response()
+        }
+    }
+}
+
+/// The attempt list's words for a failed fetch at open.
+fn error_words(e: &HttpError) -> String {
+    match e {
+        HttpError::Status { status, .. } => {
+            StatusCode::from_u16(*status).map_or(UNREACHABLE.to_owned(), refused)
+        }
+        HttpError::BlockedPrivate(_) => PRIVATE.into(),
+        HttpError::Timeout(_) => SILENT.into(),
+        HttpError::TooLarge { .. } => UNREADABLE_PLAYLIST.into(),
+        _ => {
+            tracing::info!("stream source unreachable: {}", e.kind());
+            UNREACHABLE.into()
+        }
+    }
+}
+
 const UNREACHABLE: &str = "The source could not be reached";
 const SILENT: &str = "The source did not answer in time";
+const PRIVATE: &str = "The source points to a private network address";
 
 /// A source's error answer in plain words for the attempt list, with the
 /// status kept for support.
@@ -904,15 +1326,26 @@ async fn serve_http(
 }
 
 /// Plain proxy with Range passthrough, for origins that ignore ranges or
-/// give no length. A redirect the client did not follow answers 502, and an
-/// error status goes on with its `Content-Range` but without its body.
+/// give no length.
 async fn proxy_http(source: &ahead::Source, range: Option<String>, head_only: bool) -> Response {
-    let opts = source.options();
     let released = source.released().clone();
-    let open = tokio::time::timeout(
-        ahead::OPEN,
-        source.http().stream(source.url(), range, &opts),
-    );
+    let (http, url) = (source.http(), source.url());
+    proxy(http, url, source.options(), released, range, head_only).await
+}
+
+/// `url` through `http` with `Range` passed through, its body ending at
+/// release. A redirect the client did not follow answers 502, and an error
+/// status goes on with its `Content-Range` but without its body. HEAD makes
+/// the same request and drops it after the headers.
+async fn proxy(
+    http: &HttpClient,
+    url: &str,
+    opts: RequestOptions,
+    released: CancellationToken,
+    range: Option<String>,
+    head_only: bool,
+) -> Response {
+    let open = tokio::time::timeout(ahead::OPEN, http.stream(url, range, &opts));
     let upstream = match released.run_until_cancelled(open).await {
         None => return StatusCode::NOT_FOUND.into_response(),
         Some(Ok(Ok(response))) => response,
@@ -1036,5 +1469,17 @@ mod tests {
             let url = slot.add("http://127.0.0.1:9/a.srt", lang, None).unwrap();
             assert!(url.ends_with(".vtt"), "{url}");
         }
+        // A long segment name is cut in its stem.
+        let segment = sanitize(&format!("{}.m4s", "s".repeat(300)));
+        assert!(
+            segment.ends_with(".m4s") && segment.len() == 120,
+            "{segment}"
+        );
+        // A file is never named like a playlist.
+        assert_eq!(file_name("x.m3u8"), "x.bin");
+        assert_eq!(file_name("x.ism"), "x.bin");
+        assert_eq!(file_name("Movie.2010.mkv"), "Movie.2010.mkv");
+        assert_eq!(hls_name("tt1727587.mkv"), "tt1727587.m3u8");
+        assert!(lease.url.ends_with("/v.mkv"));
     }
 }
