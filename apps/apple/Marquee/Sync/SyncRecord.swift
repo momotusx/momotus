@@ -30,6 +30,7 @@ struct SyncRecord: Sendable {
             coreLog.error("sync: a key left by a deleted install could not be deleted")
             return false
         }
+        coreLog.notice("sync: deleted a key left by a deleted install")
         return true
     }
 
