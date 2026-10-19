@@ -232,6 +232,9 @@ class SubtitleFailureTest {
         // The core answered empty WebVTT and took the file out of the list, with a note.
         push(snapshot(subtitles = listOf(other), notes = """[{"source":"SubSense","problem":"trackFailed"}]"""))
         until("the item is set again without the file") { player.items.size == 3 }
+        // The item set again shows its first frame at once: the note stays its few seconds.
+        player.renderFirstFrame()
+        until("the first frame is heard") { true }
         assertEquals(video, player.items.last().uri)
         assertEquals(emptyList(), player.items.last().subtitles)
         assertTrue(
@@ -286,6 +289,12 @@ class SubtitleFailureTest {
                 .build()
 
         override fun getState(): State = current
+
+        fun renderFirstFrame() {
+            current = current.buildUpon().setNewlyRenderedFirstFrame(true).build()
+            invalidateState()
+            current = current.buildUpon().setNewlyRenderedFirstFrame(false).build()
+        }
 
         fun fail(error: PlaybackException) {
             current =

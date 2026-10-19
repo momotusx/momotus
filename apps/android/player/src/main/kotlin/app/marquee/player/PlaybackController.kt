@@ -417,7 +417,9 @@ class PlaybackController(
 
     private fun renderedFirstFrame() {
         firstFrame = true
-        status = null
+        // A line said for a few seconds (a subtitle note, a source change) keeps them: the item set
+        // again with one subtitle fewer shows a first frame at once.
+        if (noticeJob?.isActive != true) status = null
         if (firstFrameMs == null) {
             mark("first frame")
             firstFrameMs = marks["first frame"]
