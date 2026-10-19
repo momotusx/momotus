@@ -1,6 +1,5 @@
 package app.marquee.core
 
-import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.HideReason
@@ -145,6 +144,11 @@ object VersionsCopy {
                 VersionLine.Finding
             }
 
+            // Versions were found and none plays here: why, in the core's words (3.11).
+            blockedText(snapshot) != null -> {
+                VersionLine.Problem(blockedText(snapshot)!!)
+            }
+
             snapshot.rows.isEmpty() -> {
                 VersionLine.Problem(
                     "No playable version found. A source is an addon that finds a playable stream for a title.",
@@ -156,6 +160,10 @@ object VersionsCopy {
             }
         }
     }
+
+    /** Why every version found is hidden ("Marquee found 12 versions. This version of the app..."), or null. */
+    fun blockedText(snapshot: VersionsSnapshot?): String? =
+        snapshot?.blocked?.let { StreamChoiceCopy.blocked(it.reason, it.count)?.first }
 
     /** The heading of the card shown while there is no recommendation. */
     fun waitingTitle(snapshot: VersionsSnapshot): String =
@@ -240,36 +248,17 @@ object VersionsCopy {
                 "${names(snapshot.failedAddons)} did not answer" to Tone.Bad
             }
 
+            // What was found, none of it listed (the card says why).
+            snapshot.blocked != null -> {
+                StreamChoiceCopy.counted("versions", snapshot.blocked.count) to Tone.Warn
+            }
+
             else -> {
                 val n = snapshot.rows.size + (if (snapshot.recommended != null) 1 else 0)
                 (if (n == 1) "1 version" else "$n versions") to Tone.Ok
             }
         }
     }
-
-    /** "This screen: 1080p, HDR, plays H.264, HEVC in MKV, MP4": what the ranking was made for. */
-    fun device(caps: DeviceCapsParams): String {
-        val screen = if (caps.displayHeight >= 2160) "4K" else "${caps.displayHeight}p"
-        val plays = caps.decoders?.takeIf { it.isNotEmpty() }?.joinToString(", ") { CODECS[it] ?: it.uppercase() }
-        val boxes =
-            caps.containers?.takeIf { it.isNotEmpty() }?.joinToString(", ") {
-                if (it ==
-                    "webm"
-                ) {
-                    "WebM"
-                } else {
-                    it.uppercase()
-                }
-            }
-        return buildString {
-            append("This screen: $screen")
-            if (caps.hdr.isNotEmpty()) append(", HDR")
-            if (plays != null) append(", plays $plays")
-            if (plays != null && boxes != null) append(" in $boxes")
-        }
-    }
-
-    private val CODECS = mapOf("h264" to "H.264", "h265" to "HEVC", "av1" to "AV1", "vp9" to "VP9")
 
     /** A recommendation's facts, in the web's order: size, status, where from, more features, languages. */
     fun facts(row: VersionRow): List<Pair<String, String>> =

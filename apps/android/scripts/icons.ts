@@ -45,6 +45,7 @@ export const ICONS = [
   "flame",
   "gamepad-2",
   "gauge",
+  "gem",
   "ghost",
   "grip-vertical",
   "headphones",
@@ -64,6 +65,7 @@ export const ICONS = [
   "monitor",
   "monitor-smartphone",
   "moon",
+  "octagon-alert",
   "package-search",
   "pause",
   "picture-in-picture-2",
@@ -84,11 +86,14 @@ export const ICONS = [
   "shield-alert",
   "skip-back",
   "skip-forward",
+  "sliders-horizontal",
   "smartphone",
+  "sparkles",
   "star",
   "trash",
   "triangle-alert",
   "tv",
+  "undo-2",
   "unlink",
   "user-pen",
   "users",
@@ -96,6 +101,7 @@ export const ICONS = [
   "wifi-off",
   "wrench",
   "x",
+  "zap",
 ] as const;
 
 type Attrs = Record<string, string | number>;

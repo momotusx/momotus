@@ -1,5 +1,7 @@
 package app.marquee.core
 
+import app.marquee.core.model.BlockedReason
+import app.marquee.core.model.BlockedVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.Reason
@@ -78,6 +80,15 @@ class PlayPickTest {
         assertEquals(
             PlayPick.None("No version is ready to play yet"),
             pickVersion(snapshot(rows = listOf(row("a")), done = true), null, settled = true),
+        )
+    }
+
+    @Test
+    fun `versions that none of plays here say why instead of failing over nothing`() {
+        val blocked = snapshot(done = true).copy(blocked = BlockedVersions(BlockedReason.NothingPlaysHere, 42))
+        assertEquals(
+            PlayPick.None("Found 42 versions, but none plays on this device."),
+            pickVersion(blocked, null, settled = true),
         )
     }
 

@@ -346,6 +346,8 @@ fun StateMessage(
     actionFocus: FocusRequester? = null,
     secondaryLabel: String? = null,
     onSecondary: (() -> Unit)? = null,
+    actionIcon: ImageVector? = null,
+    secondaryIcon: ImageVector? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     Column(
@@ -370,9 +372,11 @@ fun StateMessage(
             verticalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
         ) {
             if (actionLabel != null && onAction != null) {
-                PrimaryButton(actionLabel, onAction, focusRequester = primary)
+                PrimaryButton(actionLabel, onAction, icon = actionIcon, focusRequester = primary)
             }
-            if (secondaryLabel != null && onSecondary != null) SecondaryButton(secondaryLabel, onSecondary)
+            if (secondaryLabel != null && onSecondary != null) {
+                SecondaryButton(secondaryLabel, onSecondary, icon = secondaryIcon)
+            }
         }
     }
 }
@@ -444,6 +448,36 @@ private val Status.tint: Color
 private fun StatusDot(tone: Status) {
     val size = if (Marquee.form == Form.Tv) 12.dp else 8.dp
     Box(Modifier.size(size).clip(CircleShape).background(tone.tint))
+}
+
+/**
+ * A version's line (plans/m13-stream-choice.md 3.7): the words after an icon whose shape says the tone
+ * (a check, a triangle, an octagon), so the tone never rests on color alone.
+ */
+@Composable
+fun ToneWord(
+    text: String,
+    tone: Status,
+    modifier: Modifier = Modifier,
+    maxLines: Int = 2,
+) {
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(
+            when (tone) {
+                Status.Bad -> Icons.OctagonAlert
+                Status.Warn -> Icons.TriangleAlert
+                else -> Icons.CircleCheck
+            },
+            tint = tone.tint,
+            size = if (tv) 26.dp else 18.dp,
+        )
+        MqText(text, role = TextRole.Callout, maxLines = maxLines)
+    }
 }
 
 /** A status as a word with a dot in front (the word always carries the meaning; the dot only tints it). */

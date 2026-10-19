@@ -22,15 +22,21 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -40,8 +46,12 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
+import app.marquee.core.model.BlockedReason
+import app.marquee.core.model.BlockedVersions
 import app.marquee.core.model.Group
+import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
@@ -51,6 +61,7 @@ import app.marquee.design.Eyebrow
 import app.marquee.design.FactsGrid
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
+import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
@@ -63,35 +74,48 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
+import app.marquee.design.ToneWord
 import app.marquee.design.focusClickable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /** How many rows of a group show before "Show all", as on the web. */
 private const val SHOWN = 3
 
 /**
  * The ranked sources of one video on a phone (plans/android-design-v2.md 5.6, the web's v2
- * screen): the heading, how the search goes and what this phone plays; the recommendation as a
- * glass card with its facts; every other source by group; and what is hidden and why. The first
- * scroll freezes the recommendation so it does not change while results still stream in.
+ * screen): the heading, how the search goes and what the ranking read of this phone; the
+ * recommendation as a glass card with its facts; every other source by group with its line (a tone
+ * and plain words, plans/m13-stream-choice.md 3.7); and what is hidden and why. A tap opens a row to
+ * the line's details and its own Play, so the card's white Play stays the one primary. When versions
+ * were found and none plays here, the card says why with its way on (3.11). A note says once what
+ * the picks taught, with Undo. The first scroll freezes the recommendation so it does not change
+ * while results still stream in.
  *
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
- * @param device what the ranking was made for ("This screen: 1080p, plays H.264 in MP4").
  * @param onPlay a version was chosen.
  * @param onAddSource no addon gave a version: go where one is added.
+ * @param onAddAccount the versions play only through a streaming service account: go where one is added.
+ * @param onUndo Undo on the learned note.
  */
 @Composable
 fun PhoneVersions(
     heading: String,
-    device: String?,
     versions: VersionsView?,
     onPlay: (VersionRow) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
+    onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val side = Marquee.safe.side
     val colors = Marquee.colors
     val snapshot = versions?.snapshot
+    val blocked = snapshot?.blocked?.takeIf { snapshot.recommended == null }
+    // "Show them": the blocked rows, as they would rank once the reason is fixed.
+    var showBlocked by remember { mutableStateOf(false) }
+    // The row a tap opened to its details and Play.
+    var opened by remember { mutableStateOf<String?>(null) }
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
     val listState = rememberLazyListState()
     // The first scroll pins the recommendation, once there is one: a pin before that would keep the
@@ -102,7 +126,7 @@ fun PhoneVersions(
             versions.freeze()
         }
     }
-    val groups = snapshot?.rows.orEmpty().groupBy { it.group }
+    val groups = (if (showBlocked && blocked != null) blocked.rows else snapshot?.rows.orEmpty()).groupBy { it.group }
     val open = remember { mutableStateMapOf<Group, Boolean>() }
     LazyColumn(
         state = listState,
@@ -116,6 +140,7 @@ fun PhoneVersions(
                 MqText("Versions", role = TextRole.Title1, maxLines = 1)
                 val (text, tone) = VersionsCopy.progress(snapshot)
                 StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
+                val device = snapshot?.conditions?.let { StreamChoiceCopy.header(tv = false, it) }
                 if (device != null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                         MqIcon(Icons.Monitor, tint = colors.muted, size = 16.dp)
@@ -132,8 +157,13 @@ fun PhoneVersions(
                 onAddSource,
                 onPlay,
                 Modifier.padding(vertical = Marquee.space.s),
-            )
+            ) {
+                if (blocked != null) {
+                    Blocked(snapshot, blocked, showBlocked, { showBlocked = !showBlocked }, onAddAccount)
+                }
+            }
         }
+        snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
         for (group in Group.entries) {
             val rows = groups[group].orEmpty()
             if (rows.isEmpty()) continue
@@ -148,7 +178,9 @@ fun PhoneVersions(
                     MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
                 }
             }
-            items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row -> SourceRow(row, onPlay) }
+            items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
+                SourceRow(row, opened == row.key, { opened = if (opened == row.key) null else row.key }, onPlay)
+            }
             if (rows.size > SHOWN) {
                 item(key = "fold:$group") {
                     SecondaryButton(
@@ -195,6 +227,7 @@ private fun Pick(
     onAddSource: () -> Unit,
     onPlay: (VersionRow) -> Unit,
     modifier: Modifier,
+    blocked: @Composable () -> Unit,
 ) {
     val colors = Marquee.colors
     val shape = RoundedCornerShape(Marquee.radius.l)
@@ -258,6 +291,10 @@ private fun Pick(
                 }
             }
 
+            snapshot?.blocked != null -> {
+                blocked()
+            }
+
             snapshot == null || !snapshot.done -> {
                 CapsLabel("Recommended for this screen")
                 Skeleton(Modifier.size(160.dp, 36.dp))
@@ -298,48 +335,149 @@ private fun qualityWidth(): Dp {
     }
 }
 
-/** One source: the quality, then its status and size, where from and its features, on a hairline. */
+/**
+ * Why no version is listed, in the core's words, with its way on: "Add an account" (and "Show them"
+ * beside it) when the versions play only through a streaming service account, else "Show them".
+ */
+@Composable
+private fun Blocked(
+    snapshot: VersionsSnapshot,
+    blocked: BlockedVersions,
+    shown: Boolean,
+    onShow: () -> Unit,
+    onAddAccount: () -> Unit,
+) {
+    val (text, action) = StreamChoiceCopy.blocked(blocked.reason, blocked.count) ?: (null to StreamChoiceCopy.SHOW_ROWS)
+    val account = blocked.reason == BlockedReason.NeedsAccount
+    StateMessage(
+        title = "No playable version found",
+        // A reason from a newer core: the hidden rows say why.
+        body = text ?: VersionsCopy.waitingBody(snapshot),
+        actionLabel = action,
+        onAction = if (account) onAddAccount else onShow,
+        actionIcon =
+            if (account) {
+                Icons.KeyRound
+            } else if (shown) {
+                Icons.EyeOff
+            } else {
+                Icons.Eye
+            },
+        secondaryLabel = StreamChoiceCopy.SHOW_ROWS.takeIf { account },
+        onSecondary = onShow.takeIf { account },
+        secondaryIcon = if (shown) Icons.EyeOff else Icons.Eye,
+        modifier = Modifier.padding(0.dp),
+    )
+}
+
+/** The one-time note of what the picks taught (3.9), until Undo. */
+@Composable
+private fun LearnedLine(
+    note: LearnedNote,
+    onUndo: suspend (LearnedNote) -> Unit,
+) {
+    val colors = Marquee.colors
+    val scope = rememberCoroutineScope()
+    var undone by remember(note) { mutableStateOf(false) }
+    val text = StreamChoiceCopy.learnedNote(note.choice, note.up, tv = false, note.prefs)
+    if (undone || text == null) return
+    GlassBar(Modifier.padding(bottom = Marquee.space.xs)) {
+        MqIcon(Icons.Sparkles, tint = colors.muted)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Said once when it appears.
+            LiveSpoken(text) { MqText(text, role = TextRole.Callout) }
+            SecondaryButton(StreamChoiceCopy.UNDO, {
+                undone = true
+                scope.launch { runCatching { onUndo(note) }.onFailure { undone = false } }
+            }, icon = Icons.Undo2)
+        }
+    }
+}
+
+/**
+ * One source: the quality, then its line and its size, where from and its features, on a hairline.
+ * A tap opens it to the line's details, the release name and its own Play.
+ */
 @Composable
 private fun SourceRow(
     row: VersionRow,
+    open: Boolean,
+    onToggle: () -> Unit,
     onPlay: (VersionRow) -> Unit,
 ) {
     val colors = Marquee.colors
+    val line = StreamChoiceCopy.line(row.line)
     val spoken =
         listOfNotNull(
             VersionsCopy.headline(row),
             row.sizeBytes?.let(Format::bytes),
             "via ${row.via}",
+            line.text,
         ).joinToString(", ")
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .semantics {
-                contentDescription = spoken
-                stateDescription = VersionsCopy.status(row.status)
-            }.focusClickable({ onPlay(row) }, Role.Button)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // One width for every quality, "Unknown" measured at the current text size, so the statuses
-        // line up whatever the font scale.
-        MqText(
-            VersionsCopy.cell(row.quality),
-            Modifier.width(qualityWidth()),
-            weight = FontWeight.SemiBold,
-            maxLines = 1,
-        )
-        // The status on its own line, then the size, the source and the features: both wrap on a
-        // small phone or a large font instead of cutting what helps the choice.
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            StatusWord(VersionsCopy.status(row.status), statusTone(row))
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = spoken
+                    // Said as expandable: a tap opens it to its details and its own Play.
+                    if (open) {
+                        collapse {
+                            onToggle()
+                            true
+                        }
+                    } else {
+                        expand {
+                            onToggle()
+                            true
+                        }
+                    }
+                }.focusClickable(onToggle, Role.Button)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // One width for every quality, "Unknown" measured at the current text size, so the statuses
+            // line up whatever the font scale.
             MqText(
-                (listOfNotNull(row.sizeBytes?.let(Format::bytes), "via ${row.via}") + row.features).joinToString(" · "),
-                role = TextRole.Caption,
-                color = colors.muted,
-                maxLines = 2,
+                VersionsCopy.cell(row.quality),
+                Modifier.width(qualityWidth()),
+                weight = FontWeight.SemiBold,
+                maxLines = 1,
             )
+            // The line on its own line, then the size, the source and the features: both wrap on a
+            // small phone or a large font instead of cutting what helps the choice.
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                ToneWord(line.text, tone(line.tone))
+                MqText(
+                    (
+                        listOfNotNull(
+                            row.sizeBytes?.let(Format::bytes),
+                            "via ${row.via}",
+                        ) + row.features
+                    ).joinToString(" · "),
+                    role = TextRole.Caption,
+                    color = colors.muted,
+                    maxLines = 2,
+                )
+            }
+        }
+        if (open) {
+            Column(
+                Modifier.padding(start = qualityWidth() + 26.dp, end = 12.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)
+                // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
+                MqText(
+                    Format.releaseWrapped(row.releaseName),
+                    role = TextRole.Caption,
+                    color = colors.muted,
+                    fontFamily = FontFamily.Monospace,
+                )
+                MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted)
+                SecondaryButton("Play this version", { onPlay(row) }, icon = PlayFilled)
+            }
         }
     }
 }

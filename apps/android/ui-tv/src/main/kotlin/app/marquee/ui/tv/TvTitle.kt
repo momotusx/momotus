@@ -105,6 +105,7 @@ private const val RETRY = "retry"
  * @param onVersions the Versions screen for [videoId] was asked for (also what Play does while no
  * version is known yet).
  * @param onAddSource no addon gave a version: go where one is added.
+ * @param onAddAccount the versions play only through a streaming service account: go where one is added.
  * @param onEpisode an episode was chosen: it plays.
  * @param onEpisodeVersions "Choose a version" for an episode, from its hold-select menu.
  */
@@ -116,6 +117,7 @@ fun TvTitle(
     onPlay: (key: String, videoId: String) -> Unit,
     onVersions: (videoId: String) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
     onEpisode: (Episode) -> Unit,
     onEpisodeVersions: (Episode) -> Unit,
     modifier: Modifier = Modifier,
@@ -199,7 +201,16 @@ fun TvTitle(
                             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xl),
                         ) {
                             Box(Modifier.weight(1f)) {
-                                Info(title, versions, versionsFailed, focus, onPlay, onVersions, onAddSource)
+                                Info(
+                                    title,
+                                    versions,
+                                    versionsFailed,
+                                    focus,
+                                    onPlay,
+                                    onVersions,
+                                    onAddSource,
+                                    onAddAccount,
+                                )
                             }
                             FactsTable(
                                 TitleCopy.facts(details, TitleCopy.seasonCount(header.seasons)),
@@ -274,6 +285,7 @@ private fun Info(
     onPlay: (String, String) -> Unit,
     onVersions: (String) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -307,11 +319,13 @@ private fun Info(
                         is PrimaryAction.Play -> PlayFilled
                         PrimaryAction.ChooseVersion -> Icons.Layers
                         PrimaryAction.AddSource -> Icons.Plus
+                        PrimaryAction.AddAccount -> Icons.KeyRound
                     },
                 enabled = primary !is PrimaryAction.Play || target != null,
                 onClick = {
                     when {
                         primary == PrimaryAction.AddSource -> onAddSource()
+                        primary == PrimaryAction.AddAccount -> onAddAccount()
                         target == null -> Unit
                         primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
                         else -> onPlay(recommended.key, target.videoId)

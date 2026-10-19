@@ -2,10 +2,7 @@ package app.marquee.android
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.createSavedStateHandle
@@ -14,9 +11,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
-import app.marquee.core.VersionsCopy
 import app.marquee.core.client.TitleFacts
 import app.marquee.core.model.Episode
+import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.VersionRow
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
@@ -84,6 +81,7 @@ fun TitleScreen(
     onVersions: (videoId: String, title: String) -> Unit,
     onPlayEpisode: (videoId: String, title: String) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
 ) {
     val holder =
         viewModel<TitleHolder>(
@@ -120,6 +118,7 @@ fun TitleScreen(
             play,
             onVersions = { onVersions(it, title) },
             onAddSource = onAddSource,
+            onAddAccount = onAddAccount,
             onEpisode = episode,
             onEpisodeVersions = episodeVersions,
             versionsFailed = failed,
@@ -131,6 +130,7 @@ fun TitleScreen(
             play,
             onVersions = { onVersions(it, title) },
             onAddSource = onAddSource,
+            onAddAccount = onAddAccount,
             onEpisode = episode,
             onEpisodeVersions = episodeVersions,
             versionsFailed = failed,
@@ -145,22 +145,19 @@ fun VersionsScreen(
     form: Form,
     onPlay: (VersionRow) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
+    onUndo: suspend (LearnedNote) -> Unit,
 ) {
     val key = keyFor(route.kind, route.videoId, route.title)
     LaunchedEffect(key) { app.versions.use(key) }
     val view = app.versions.view(key)
     val heading =
         key.episode?.let { "${route.title}, ${Format.episodeLabel(key.season ?: 0, it)}" } ?: route.title
-    // What the ranking was made for, read as the Versions view reads it.
-    val context = LocalContext.current
-    val device by produceState<String?>(null) {
-        value = runCatching { VersionsCopy.device((context.applicationContext as MarqueeApp).deviceCaps()) }.getOrNull()
-    }
     if (form == Form.Tv) {
         val focus = viewModel<VersionsFocus>(key = "versions:${route.videoId}").focus
-        TvVersions(heading, device, view, focus, onPlay, onAddSource)
+        TvVersions(heading, view, focus, onPlay, onAddSource, onAddAccount, onUndo)
     } else {
-        PhoneVersions(heading, device, view, onPlay, onAddSource)
+        PhoneVersions(heading, view, onPlay, onAddSource, onAddAccount, onUndo)
     }
 }
 

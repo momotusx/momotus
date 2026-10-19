@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.BlockedReason
 import app.marquee.core.model.Episode
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.TitleDetails
@@ -24,6 +25,11 @@ sealed interface PrimaryAction {
     /** Every addon answered and none gave a version: the only useful step is adding a source. */
     data object AddSource : PrimaryAction {
         override val label = "Add a source"
+    }
+
+    /** Versions were found, and this build plays them only through a streaming service account (3.11). */
+    data object AddAccount : PrimaryAction {
+        override val label = StreamChoiceCopy.BLOCKED.getValue(BlockedReason.NeedsAccount).second
     }
 }
 
@@ -69,7 +75,11 @@ object TitleCopy {
     ): PrimaryAction =
         when {
             versions != null && versions.done && versions.recommended == null -> {
-                if (versions.rows.isEmpty()) PrimaryAction.AddSource else PrimaryAction.ChooseVersion
+                when {
+                    versions.blocked?.reason == BlockedReason.NeedsAccount -> PrimaryAction.AddAccount
+                    versions.rows.isEmpty() -> PrimaryAction.AddSource
+                    else -> PrimaryAction.ChooseVersion
+                }
             }
 
             else -> {

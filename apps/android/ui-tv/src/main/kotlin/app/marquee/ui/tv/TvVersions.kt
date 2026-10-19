@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -52,8 +53,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
+import app.marquee.core.model.BlockedReason
+import app.marquee.core.model.BlockedVersions
 import app.marquee.core.model.Group
+import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
@@ -63,6 +68,7 @@ import app.marquee.design.Eyebrow
 import app.marquee.design.FactsGrid
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
+import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
@@ -74,10 +80,12 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
+import app.marquee.design.ToneWord
 import app.marquee.design.endFade
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import app.marquee.design.scrollByKey
+import kotlinx.coroutines.launch
 
 private const val PLAY = "play"
 private const val ADD = "add"
@@ -88,34 +96,44 @@ private const val SHOWN = 3
 
 /**
  * The ranked sources of one video (plans/android-design-v2.md 5.6, the web's v2 screen): the
- * heading, how the search goes and what this screen plays; the recommendation as a glass card
- * with its facts and plain reasons; every other source in a table by group, the focused row
- * opened to its release name; and what is hidden and why. The first arrow key freezes the
- * recommendation, so the pick under the cursor never changes while results still stream in.
+ * heading, how the search goes and what the ranking read of this TV; the recommendation as a glass
+ * card with its facts and plain reasons; every other source in a table by group with its line (a
+ * tone and plain words, plans/m13-stream-choice.md 3.7), the focused row opened to the line's
+ * details and its release name; and what is hidden and why. When versions were found and none plays
+ * here, the card says why with its way on (3.11). A note says once what the picks taught, with
+ * Undo. The first arrow key freezes the recommendation, so the pick under the cursor never changes
+ * while results still stream in.
  *
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
- * @param device what the ranking was made for ("This screen: 1080p, plays H.264 in MP4").
  * @param onPlay a version was chosen.
  * @param onAddSource no addon gave a version: go where one is added.
+ * @param onAddAccount the versions play only through a streaming service account: go where one is added.
+ * @param onUndo Undo on the learned note.
  */
 @Composable
 fun TvVersions(
     heading: String,
-    device: String?,
     versions: VersionsView?,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
+    onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safe = Marquee.safe
     val snapshot = versions?.snapshot
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
-    val nothing = snapshot != null && snapshot.done && snapshot.recommended == null && snapshot.rows.isEmpty()
-    // The target exists once there is something to focus: the card's Play (or Try again, or Add a source), else the first row.
+    val blocked = snapshot?.blocked?.takeIf { snapshot.recommended == null }
+    val nothing =
+        snapshot != null && snapshot.done && snapshot.recommended == null && snapshot.rows.isEmpty() && blocked == null
+    // "Show them": the blocked rows, as they would rank once the reason is fixed.
+    var showBlocked by remember { mutableStateOf(false) }
+    // The target exists once there is something to focus: the card's Play (or Try again, or the blocked
+    // card's action, or Add a source), else the first row.
     val target =
         when {
-            failure != null || snapshot?.recommended != null -> PLAY
+            failure != null || snapshot?.recommended != null || blocked != null -> PLAY
             nothing -> ADD
             else -> snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
         }
@@ -139,10 +157,23 @@ fun TvVersions(
             }.padding(start = safe.side, end = safe.side, top = safe.top, bottom = safe.bottom),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
     ) {
-        Header(heading, device, snapshot)
+        Header(heading, snapshot)
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
-            Pick(snapshot, failure, { versions?.retry() }, onAddSource, focus, onPlay)
-            Sources(snapshot, focus, onPlay, Modifier.weight(1f))
+            Pick(snapshot, failure, { versions?.retry() }, onAddSource, focus, onPlay) {
+                if (blocked != null) {
+                    Blocked(snapshot, blocked, showBlocked, { showBlocked = !showBlocked }, onAddAccount, focus)
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                snapshot?.note?.let { LearnedLine(it, onUndo) }
+                Sources(
+                    snapshot,
+                    if (showBlocked && blocked != null) blocked.rows else snapshot?.rows.orEmpty(),
+                    focus,
+                    onPlay,
+                    Modifier.weight(1f),
+                )
+            }
         }
     }
 }
@@ -161,13 +192,13 @@ private fun tone(tone: VersionsCopy.Tone) =
 
 private fun statusTone(row: VersionRow) = if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn
 
-/** The heading as an eyebrow over "Versions", and at the right how the search goes and this screen. */
+/** The heading as an eyebrow over "Versions", and at the right how the search goes and what the ranking read of this TV. */
 @Composable
 private fun Header(
     heading: String,
-    device: String?,
     snapshot: VersionsSnapshot?,
 ) {
+    val device = snapshot?.conditions?.let { StreamChoiceCopy.header(tv = true, it) }
     val colors = Marquee.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -190,7 +221,7 @@ private fun Header(
     }
 }
 
-/** The recommendation card, or why there is none yet. */
+/** The recommendation card, or why there is none yet ([blocked]: versions were found and none plays here). */
 @Composable
 private fun Pick(
     snapshot: VersionsSnapshot?,
@@ -199,6 +230,7 @@ private fun Pick(
     onAddSource: () -> Unit,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
+    blocked: @Composable () -> Unit,
 ) {
     val colors = Marquee.colors
     val shape = RoundedCornerShape(Marquee.radius.l)
@@ -286,6 +318,10 @@ private fun Pick(
                 }
             }
 
+            snapshot?.blocked != null -> {
+                blocked()
+            }
+
             snapshot == null || !snapshot.done -> {
                 CapsLabel("Recommended for this screen")
                 Skeleton(Modifier.size(260.dp, 56.dp))
@@ -334,18 +370,78 @@ private val SIZE: Dp = 150.dp
 private val STATUS: Dp = 300.dp
 private val VIA: Dp = 220.dp
 
+/**
+ * Why no version is listed, in the core's words, with its way on: "Add an account" (and "Show them"
+ * beside it) when the versions play only through a streaming service account, else "Show them".
+ */
+@Composable
+private fun Blocked(
+    snapshot: VersionsSnapshot,
+    blocked: BlockedVersions,
+    shown: Boolean,
+    onShow: () -> Unit,
+    onAddAccount: () -> Unit,
+    focus: FocusMemory,
+) {
+    val (text, action) = StreamChoiceCopy.blocked(blocked.reason, blocked.count) ?: (null to StreamChoiceCopy.SHOW_ROWS)
+    val account = blocked.reason == BlockedReason.NeedsAccount
+    StateMessage(
+        title = "No playable version found",
+        // A reason from a newer core: the hidden rows say why.
+        body = text ?: VersionsCopy.waitingBody(snapshot),
+        actionLabel = action,
+        onAction = if (account) onAddAccount else onShow,
+        actionFocus = focus.requesterFor(PLAY),
+        actionIcon =
+            if (account) {
+                Icons.KeyRound
+            } else if (shown) {
+                Icons.EyeOff
+            } else {
+                Icons.Eye
+            },
+        secondaryLabel = StreamChoiceCopy.SHOW_ROWS.takeIf { account },
+        onSecondary = onShow.takeIf { account },
+        secondaryIcon = if (shown) Icons.EyeOff else Icons.Eye,
+        modifier = Modifier.padding(0.dp),
+    )
+}
+
+/** The one-time note of what the picks taught (3.9), until Undo. */
+@Composable
+private fun LearnedLine(
+    note: LearnedNote,
+    onUndo: suspend (LearnedNote) -> Unit,
+) {
+    val colors = Marquee.colors
+    val scope = rememberCoroutineScope()
+    var undone by remember(note) { mutableStateOf(false) }
+    val text = StreamChoiceCopy.learnedNote(note.choice, note.up, tv = true, note.prefs)
+    if (undone || text == null) return
+    GlassBar {
+        MqIcon(Icons.Sparkles, tint = colors.muted, size = 26.dp)
+        // Said once when it appears; the list under it keeps the focus.
+        Box(Modifier.weight(1f)) { LiveSpoken(text) { MqText(text, role = TextRole.Callout, maxLines = 2) } }
+        SecondaryButton(StreamChoiceCopy.UNDO, {
+            undone = true
+            scope.launch { runCatching { onUndo(note) }.onFailure { undone = false } }
+        }, icon = Icons.Undo2)
+    }
+}
+
 @Composable
 private fun Sources(
     snapshot: VersionsSnapshot?,
+    rows: List<VersionRow>,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
     modifier: Modifier,
 ) {
     val colors = Marquee.colors
-    val groups = snapshot?.rows.orEmpty().groupBy { it.group }
+    val groups = rows.groupBy { it.group }
     val open = remember { mutableStateMapOf<Group, Boolean>() }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        if (snapshot?.rows.orEmpty().isNotEmpty()) {
+        if (rows.isNotEmpty()) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -432,7 +528,7 @@ private fun Line(color: Color) {
     ) {}
 }
 
-/** One source: its cells on a hairline, opened to the release name and its languages while focused. */
+/** One source: its cells on a hairline, its line in the Status column, opened to the line's details, the release name and its languages while focused. */
 @Composable
 private fun SourceRow(
     row: VersionRow,
@@ -444,6 +540,7 @@ private fun SourceRow(
     val shape = RoundedCornerShape(Marquee.radius.m)
     val watch = focus.watch(ROWS, key)
     var focused by remember { mutableStateOf(false) }
+    val line = StreamChoiceCopy.line(row.line)
     val spoken =
         listOfNotNull(
             VersionsCopy.headline(row),
@@ -462,7 +559,8 @@ private fun SourceRow(
             .background(if (focused) colors.raised else Color.Transparent)
             .semantics {
                 contentDescription = spoken
-                stateDescription = VersionsCopy.status(row.status)
+                // The line, then its details: what the eye gets from the row while it has focus.
+                stateDescription = listOf(line.text, line.details).filter { it.isNotEmpty() }.joinToString(". ")
             }.focusClickable({ onPlay(row) }, Role.Button)
             .padding(horizontal = 22.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -483,11 +581,12 @@ private fun SourceRow(
                 role = TextRole.Callout,
                 maxLines = 1,
             )
-            StatusWord(VersionsCopy.status(row.status), statusTone(row), Modifier.width(STATUS))
+            ToneWord(line.text, tone(line.tone), Modifier.width(STATUS), maxLines = 1)
             MqText(row.via, Modifier.width(VIA), role = TextRole.Callout, maxLines = 1)
         }
         if (focused) {
             Column(Modifier.padding(start = QUALITY), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout, maxLines = 2)
                 Release(row.releaseName, maxLines = 2)
                 MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted, maxLines = 1)
             }

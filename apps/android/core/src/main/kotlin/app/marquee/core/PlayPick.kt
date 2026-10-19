@@ -49,7 +49,14 @@ fun pickVersion(
         // Every addon answered and nothing is recommended: sources that need a download first, or none at all.
         best == null && snapshot.done -> {
             PlayPick.None(
-                if (snapshot.rows.isEmpty()) "No playable version found" else "No version is ready to play yet",
+                when {
+                    // Versions were found and none plays here: say why (3.11).
+                    snapshot.blocked != null -> VersionsCopy.blockedText(snapshot) ?: "No playable version found"
+
+                    snapshot.rows.isEmpty() -> "No playable version found"
+
+                    else -> "No version is ready to play yet"
+                },
             )
         }
 

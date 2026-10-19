@@ -1,5 +1,7 @@
 package app.marquee.core
 
+import app.marquee.core.model.BlockedReason
+import app.marquee.core.model.BlockedVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.HideReason
@@ -10,6 +12,7 @@ import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -171,21 +174,23 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `the device line names the screen, the codecs and the containers`() {
-        val caps =
-            app.marquee.core.client.DeviceCapsParams(
-                displayHeight = 2160,
-                hdr = listOf("hdr10"),
-                decoders = listOf("h264", "h265", "av1"),
-                containers = listOf("mkv", "webm"),
+    fun `versions that none of plays here say why under Play and in the header`() {
+        val blocked =
+            snapshot(done = true).copy(
+                blocked = BlockedVersions(BlockedReason.NeedsAccount, 12),
+                hidden = HiddenSummary(12, listOf(Tuple2(HideReason.NeedsDebrid, 12))),
             )
-        assertEquals("This screen: 4K, HDR, plays H.264, HEVC, AV1 in MKV, WebM", VersionsCopy.device(caps))
+        val line = VersionsCopy.line(blocked)
+        assertIs<VersionLine.Problem>(line)
+        assertTrue(line.text.startsWith("Marquee found 12 versions. This version of the app plays them only through"))
+        assertEquals("12 versions" to VersionsCopy.Tone.Warn, VersionsCopy.progress(blocked))
+        // A reason from a newer core still says something.
+        val unknown = blocked.copy(blocked = BlockedVersions(BlockedReason.Unknown, 3))
         assertEquals(
-            "This screen: 1080p",
-            VersionsCopy.device(
-                app.marquee.core.client
-                    .DeviceCapsParams(displayHeight = 1080, hdr = emptyList()),
+            VersionLine.Problem(
+                "No playable version found. A source is an addon that finds a playable stream for a title.",
             ),
+            VersionsCopy.line(unknown),
         )
     }
 

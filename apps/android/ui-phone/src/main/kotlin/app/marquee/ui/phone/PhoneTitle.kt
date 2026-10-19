@@ -96,6 +96,7 @@ private val HERO_FADE = 96.dp
  * and hold opens more), and last the details.
  *
  * @param onAddSource no addon gave a version: go where one is added.
+ * @param onAddAccount the versions play only through a streaming service account: go where one is added.
  * @param onEpisode an episode was tapped: it plays.
  * @param onEpisodeVersions "Choose a version" for an episode, from its press-and-hold menu.
  */
@@ -106,6 +107,7 @@ fun PhoneTitle(
     onPlay: (key: String, videoId: String) -> Unit,
     onVersions: (videoId: String) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
     onEpisode: (Episode) -> Unit,
     onEpisodeVersions: (Episode) -> Unit,
     modifier: Modifier = Modifier,
@@ -179,7 +181,9 @@ fun PhoneTitle(
                     item(
                         key = "art",
                     ) { Hero(details.background ?: details.poster, details.logo, details.name, hasArt, side) }
-                    item(key = "info") { Info(title, versions, versionsFailed, onPlay, onVersions, onAddSource) }
+                    item(
+                        key = "info",
+                    ) { Info(title, versions, versionsFailed, onPlay, onVersions, onAddSource, onAddAccount) }
                     if (header.seasons.isNotEmpty()) {
                         item(key = "seasons") {
                             val compact = TitleCopy.compactSeasons(header.seasons)
@@ -321,6 +325,7 @@ private fun Info(
     onPlay: (String, String) -> Unit,
     onVersions: (String) -> Unit,
     onAddSource: () -> Unit,
+    onAddAccount: () -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -348,12 +353,14 @@ private fun Info(
                         is PrimaryAction.Play -> PlayFilled
                         PrimaryAction.ChooseVersion -> Icons.Layers
                         PrimaryAction.AddSource -> Icons.Plus
+                        PrimaryAction.AddAccount -> Icons.KeyRound
                     },
                 modifier = Modifier.widthIn(min = PRIMARY_MIN).weight(1f),
                 enabled = primary !is PrimaryAction.Play || target != null,
                 onClick = {
                     when {
                         primary == PrimaryAction.AddSource -> onAddSource()
+                        primary == PrimaryAction.AddAccount -> onAddAccount()
                         target == null -> Unit
                         primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
                         else -> onPlay(recommended.key, target.videoId)

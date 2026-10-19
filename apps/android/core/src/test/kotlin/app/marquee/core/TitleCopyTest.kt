@@ -1,5 +1,7 @@
 package app.marquee.core
 
+import app.marquee.core.model.BlockedReason
+import app.marquee.core.model.BlockedVersions
 import app.marquee.core.model.Episode
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
@@ -186,5 +188,15 @@ class TitleCopyTest {
             TitleCopy.primary(target, snapshot(rows = listOf(row()), done = true)),
         )
         assertEquals(PrimaryAction.Play("Play"), TitleCopy.primary(null, null))
+    }
+
+    @Test
+    fun `versions that play only through an account make the button Add an account`() {
+        val target = PlayTarget("tt1", "Play", null)
+        val blocked = { reason: BlockedReason -> snapshot(done = true).copy(blocked = BlockedVersions(reason, 9)) }
+        assertEquals(PrimaryAction.AddAccount, TitleCopy.primary(target, blocked(BlockedReason.NeedsAccount)))
+        assertEquals("Add an account", PrimaryAction.AddAccount.label)
+        // Nothing an account fixes: a source is the way on.
+        assertEquals(PrimaryAction.AddSource, TitleCopy.primary(target, blocked(BlockedReason.NothingPlaysHere)))
     }
 }

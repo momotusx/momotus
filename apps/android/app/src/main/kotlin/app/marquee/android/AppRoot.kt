@@ -444,6 +444,7 @@ private fun AppNav(
                                 backStack.add(Route.Player(route.kind, route.id, videoId, name))
                             },
                             onAddSource = { backStack.add(Route.Sources) },
+                            onAddAccount = { backStack.add(Route.Debrid) },
                         )
                     }
                     entry<Route.Versions> { route ->
@@ -455,6 +456,8 @@ private fun AppNav(
                                 backStack.add(Route.Player(route.kind, route.id, route.videoId, route.title, row.key))
                             },
                             onAddSource = { backStack.add(Route.Sources) },
+                            onAddAccount = { backStack.add(Route.Debrid) },
+                            onUndo = { session.ops.undoLearned(it.screenClass, it.choice) },
                         )
                     }
                     entry<Route.Player> { route ->
