@@ -166,14 +166,17 @@ class PhoneVersionsTest {
                 )
             }
         }
-        // The core's state thread writes the snapshot; Compose hears of it once the change is applied.
-        compose.waitUntil(15_000) {
+        // The core's state thread writes the snapshot; Compose hears of it once the change is applied and a frame
+        // runs. Each round applies, idles and looks again (the header counts the versions once the screen drew the
+        // snapshot). The bound is for a stuck screen only: on a machine at load 70 a draw took over 30 s.
+        val deadline = System.currentTimeMillis() + 120_000
+        while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) {
+                "the screen never drew the snapshot (snapshot ${view.snapshot != null}, status ${view.status})"
+            }
             Snapshot.sendApplyNotifications()
-            view.snapshot != null
-        }
-        // The header counts the versions once the screen drew the snapshot.
-        compose.waitUntil(15_000) {
-            compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isNotEmpty()
+            compose.waitForIdle()
+            Thread.sleep(10)
         }
     }
 
@@ -217,7 +220,7 @@ class PhoneVersionsTest {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), note = note))
         // Its words are a live region (LiveSpoken), checked in StreamChoiceCopyTest.
         compose.onNodeWithText("Undo").performClick()
-        compose.waitUntil(5_000) { undone.isNotEmpty() }
+        compose.waitUntil(120_000) { undone.isNotEmpty() }
         assertEquals(listOf(note), undone)
         compose.onAllNodesWithText("Undo").assertCountEquals(0)
     }
