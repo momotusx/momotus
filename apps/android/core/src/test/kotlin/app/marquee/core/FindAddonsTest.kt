@@ -66,6 +66,50 @@ class FindAddonsTest {
     }
 
     @Test
+    fun `an installed state wins over required setup`() {
+        assertEquals(
+            Action.TurnOn("https://addon.example/manifest.json", "Off"),
+            FindAddons.action(entry(Installed.Off, configuration = Configuration.Required)),
+        )
+        val copy =
+            entry(
+                Installed.CopyOff,
+                configuration = Configuration.Required,
+                copyKey = "https://addon.example/abc/manifest.json",
+            )
+        assertEquals(Action.TurnOn("https://addon.example/abc/manifest.json", "Set up, off"), FindAddons.action(copy))
+        assertEquals(
+            Action.None("Set up"),
+            FindAddons.action(entry(Installed.CopyOn, configuration = Configuration.Required)),
+        )
+    }
+
+    @Test
+    fun `a card's whole description carries the busy word, the setup line and the failure`() {
+        val subs = entry(name = "OpenSubtitles v3")
+        assertEquals("Install OpenSubtitles v3, subtitles", FindAddons.described(subs, FindAddons.action(subs), false))
+        assertEquals(
+            "OpenSubtitles v3, subtitles, installing",
+            FindAddons.described(subs, FindAddons.action(subs), false, busyWord = "Installing"),
+        )
+        val plexio = entry(name = "Plexio", provides = listOf("stream"), configuration = Configuration.Required)
+        assertEquals(
+            "Plexio, streams. Set it up on its website, then add the link in Marquee on your phone or computer. " +
+                "With sync on, it follows you here.",
+            FindAddons.described(plexio, Action.None(""), false, help = FindAddonsCopy.CONFIGURE_TV),
+        )
+        assertEquals(
+            "Install OpenSubtitles v3, subtitles. This addon's server did not answer in time.",
+            FindAddons.described(
+                subs,
+                FindAddons.action(subs),
+                false,
+                failure = "This addon's server did not answer in time",
+            ),
+        )
+    }
+
+    @Test
     fun `an install refused as needing setup asks for Configure until the addon is installed another way`() {
         assertEquals(Action.Configure, FindAddons.cardAction(entry(), "needsSetup"))
         assertEquals(Action.Install(configure = false), FindAddons.cardAction(entry(), "timeout"))

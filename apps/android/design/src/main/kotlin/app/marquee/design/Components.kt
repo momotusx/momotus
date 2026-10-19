@@ -86,6 +86,8 @@ private fun ButtonShell(
     selected: Boolean,
     focusRequester: FocusRequester?,
     onFocusChange: ((Boolean) -> Unit)?,
+    busy: Boolean = false,
+    spoken: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -120,14 +122,27 @@ private fun ButtonShell(
                     } else {
                         Modifier
                     },
-                ).focusClickable(onClick, Role.Button, enabled)
+                ).then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
+                .focusClickable(onClick, Role.Button, enabled)
                 .padding(horizontal = pad, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) MqIcon(icon, tint = content)
+        if (busy) {
+            Spinner(size = if (tv) 26.dp else 18.dp)
+        } else if (icon != null) {
+            MqIcon(icon, tint = content)
+        }
         // A label that does not fit (a small phone, a large font) takes a second line, never an ellipsis.
-        MqText(label, color = content, weight = FontWeight.SemiBold, maxLines = 2, textAlign = TextAlign.Center)
+        MqText(
+            label,
+            // With [spoken] the button says that alone, not the label after it.
+            modifier = if (spoken != null) Modifier.clearAndSetSemantics { } else Modifier,
+            color = content,
+            weight = FontWeight.SemiBold,
+            maxLines = 2,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -144,7 +159,11 @@ fun PrimaryButton(
     onFocusChange: ((Boolean) -> Unit)? = null,
 ) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, false, focusRequester, onFocusChange)
 
-/** @param selected a toggle that is on (Watched, In Library): drawn with the raised fill. */
+/**
+ * @param selected a toggle that is on (Watched, In Library): drawn with the raised fill.
+ * @param busy its request runs: a spinner in place of the icon; the button stays, so focus does too.
+ * @param spoken what a screen reader says in place of the label (the label with what it acts on).
+ */
 @Composable
 fun SecondaryButton(
     label: String,
@@ -156,6 +175,8 @@ fun SecondaryButton(
     selected: Boolean = false,
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
+    busy: Boolean = false,
+    spoken: String? = null,
 ) = ButtonShell(
     label,
     onClick,
@@ -167,6 +188,8 @@ fun SecondaryButton(
     selected,
     focusRequester,
     onFocusChange,
+    busy,
+    spoken,
 )
 
 /**

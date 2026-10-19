@@ -77,6 +77,8 @@ fun MqText(
     letterSpacing: TextUnit = TextUnit.Unspecified,
     /** A face other than the role's: monospace for a release name. */
     fontFamily: FontFamily? = null,
+    /** Where a cut goes: the end, or the middle of one line (a host keeps its domain). */
+    overflow: TextOverflow = TextOverflow.Ellipsis,
 ) {
     val size = Marquee.type.size(role)
     BasicText(
@@ -102,6 +104,6 @@ fun MqText(
             ),
         maxLines = maxLines,
         minLines = minLines,
-        overflow = TextOverflow.Ellipsis,
+        overflow = overflow,
     )
 }

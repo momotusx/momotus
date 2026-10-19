@@ -54,7 +54,7 @@ class InstallCards(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                after = State(busy = false, code = (e as? CoreError)?.code, words = e.message ?: CoreLog.describe(e))
+                after = State(busy = false, code = (e as? CoreError)?.code, words = wordsOf(e))
             } finally {
                 if (mine == generation) states[key] = after
             }
@@ -78,6 +78,19 @@ class InstallCards(
         } else {
             states.keys.filter { states[it]?.busy == false }.forEach(states::remove)
         }
+    }
+
+    companion object {
+        /**
+         * A failure in words for the card: the core's own words, the client's when the core did not
+         * answer, else the error's kind and message, as Settings shows them.
+         */
+        fun wordsOf(e: Throwable): String =
+            when {
+                e is CoreError && e.timedOut -> "The core is not responding."
+                e is CoreError -> e.message ?: "The core refused the request."
+                else -> CoreLog.describe(e)
+            }
     }
 
     /**

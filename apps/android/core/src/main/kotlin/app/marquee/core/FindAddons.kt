@@ -163,6 +163,25 @@ object FindAddons {
         )
 
     /**
+     * The whole description of a card for a screen reader: its spoken label, or while a request runs
+     * the name with [busyWord] ("installing") in place of the action; then the setup line and the
+     * failure as sentences. A TV card is one stop, so it says all of it; a phone button says the
+     * first part, the card's own lines carry the rest.
+     */
+    fun described(
+        entry: ListedAddon,
+        action: Action,
+        sameName: Boolean,
+        busyWord: String? = null,
+        help: String? = null,
+        failure: String? = null,
+    ): String {
+        val head = spoken(entry, busyWord?.let { Action.None(it) } ?: action, sameName)
+        if (help == null && failure == null) return head
+        return listOfNotNull(head, help, failure).joinToString(" ") { if (it.endsWith(".")) it else "$it." }
+    }
+
+    /**
      * What the card does, in words, for a screen reader: "Install OpenSubtitles v3, subtitles",
      * with the host when another card in the list has the same name. An installed card says its
      * state instead of an action.

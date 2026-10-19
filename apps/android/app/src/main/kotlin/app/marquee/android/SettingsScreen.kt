@@ -219,7 +219,15 @@ fun SettingsScreen(
                     }
                 }
             }
-            item(key = "find") { LinkRow(Icons.PackageSearch, FindAddonsCopy.TITLE, FindAddonsCopy.LEDE, onFindAddons) }
+            item(key = "find") {
+                LinkRow(
+                    Icons.PackageSearch,
+                    FindAddonsCopy.TITLE,
+                    FindAddonsCopy.LEDE,
+                    onFindAddons,
+                    lines = Int.MAX_VALUE,
+                )
+            }
         } else {
             item(key = "head") { BrowseHeader("Settings", "Your Marquee") }
         }
@@ -239,7 +247,12 @@ fun SettingsScreen(
                                 },
                                 onProfiles,
                             )
-                            LinkRow(Icons.UserPen, "Edit profile", "Name, picture and PIN.") { onEditProfile(me.id) }
+                            LinkRow(
+                                Icons.UserPen,
+                                "Edit profile",
+                                "Name, picture and PIN.",
+                                onClick = { onEditProfile(me.id) },
+                            )
                             if (me.isOwner) {
                                 LinkRow(
                                     Icons.Users,
@@ -256,7 +269,15 @@ fun SettingsScreen(
         item(key = "addons-head") { Kicker(if (sourcesOnly) "Your sources" else "Addons") }
         // Find addons leads the section, as on the web.
         if (!sourcesOnly) {
-            item(key = "find") { LinkRow(Icons.PackageSearch, FindAddonsCopy.TITLE, FindAddonsCopy.LEDE, onFindAddons) }
+            item(key = "find") {
+                LinkRow(
+                    Icons.PackageSearch,
+                    FindAddonsCopy.TITLE,
+                    FindAddonsCopy.LEDE,
+                    onFindAddons,
+                    lines = Int.MAX_VALUE,
+                )
+            }
         }
         when {
             holder.addons.status is ViewStatus.Failed -> {
@@ -430,6 +451,8 @@ private fun LinkRow(
     title: String,
     text: String,
     onClick: () -> Unit,
+    /** Lines the text may take; Find addons' lede is never cut. */
+    lines: Int = 2,
 ) {
     val shape = RoundedCornerShape(Marquee.radius.l)
     val colors = Marquee.colors
@@ -450,7 +473,7 @@ private fun LinkRow(
         MqIcon(icon, tint = colors.muted)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             MqText(title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-            MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = 2)
+            MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = lines)
         }
         MqIcon(Icons.ChevronRight, tint = colors.muted)
     }
@@ -556,6 +579,8 @@ internal fun InstallField(
     /** How the last add went, shown under the button. */
     status: Said?,
     side: Dp = Marquee.safe.side,
+    /** Find addons' phone page: no heading and the button beside the field, so the cards start higher. */
+    compact: Boolean = false,
     /** The link, and what clears the field once it is added. */
     onInstall: (String, () -> Unit) -> Unit,
 ) {
@@ -570,25 +595,42 @@ internal fun InstallField(
             onInstall(text.trim()) { text = "" }
         }
     }
+    val field: @Composable (Modifier) -> Unit = { modifier ->
+        MqTextField(
+            value = text,
+            onValueChange = { text = it },
+            label = "Addon link",
+            placeholder = "https://... manifest.json",
+            modifier = modifier,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+            // The keyboard's Go adds it, as the button does.
+            keyboardActions = KeyboardActions(onGo = { add() }),
+        )
+    }
+    val button: @Composable () -> Unit = {
+        PrimaryButton(
+            label = "Add",
+            icon = Icons.Plus,
+            enabled = !busy && text.isNotBlank(),
+            onClick = add,
+            focusRequester = focusRequester,
+        )
+    }
     Section(side) {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            MqText("Add an addon", role = TextRole.Headline, weight = FontWeight.Bold)
-            MqTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = "Addon link",
-                placeholder = "https://... manifest.json",
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                // The keyboard's Go adds it, as the button does.
-                keyboardActions = KeyboardActions(onGo = { add() }),
-            )
-            PrimaryButton(
-                label = "Add",
-                icon = Icons.Plus,
-                enabled = !busy && text.isNotBlank(),
-                onClick = add,
-                focusRequester = focusRequester,
-            )
+            if (compact) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    field(Modifier.weight(1f))
+                    button()
+                }
+            } else {
+                MqText("Add an addon", role = TextRole.Headline, weight = FontWeight.Bold)
+                field(Modifier)
+                button()
+            }
             if (status != null) SaidLine(status, side = 0.dp)
         }
     }

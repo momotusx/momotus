@@ -6,51 +6,64 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,13 +72,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.FindAddons
 import app.marquee.core.FindAddons.Action
 import app.marquee.core.FindAddonsCopy
+import app.marquee.core.FindAddonsPage
 import app.marquee.core.InstallCards
-import app.marquee.core.client.CoreError
-import app.marquee.core.client.CoreLog
 import app.marquee.core.model.ListState
 import app.marquee.core.model.ListedAddon
 import app.marquee.core.session.CoreSession
-import app.marquee.core.views.AddonCatalogView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
 import app.marquee.design.Form
@@ -75,6 +86,7 @@ import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
+import app.marquee.design.Spinner
 import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
@@ -82,7 +94,9 @@ import app.marquee.design.Tokens
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.max
 
 // Find addons (plans/m12-addon-discovery.md 3.4 to 3.7): Cinemeta's Official and Community lists as
 // glass cards, each installed or turned on in one press. The web's screens/find-addons.tsx.
@@ -91,26 +105,110 @@ private const val OFFICIAL = "official"
 private const val COMMUNITY = "community"
 
 class FindAddonsHolder(
-    private val session: CoreSession,
+    session: CoreSession,
+    cards: InstallCards,
 ) : ViewModel() {
-    var view: AddonCatalogView by mutableStateOf(session.addonCatalog())
-        private set
+    val page = FindAddonsPage(session.ops, cards, session::addonCatalog)
 
     /** The list and filter, kept while the page is on the stack; a new visit opens on Official, All. */
     var list by mutableStateOf(OFFICIAL)
     var filter by mutableStateOf(FindAddons.Filter.All)
 
-    /** TV: focus is on a card, so Back goes to the chips. */
-    var inCards by mutableStateOf(false)
+    /** TV: the card that has focus, by entry key (memory only); null once a control above has it. */
+    var focusedCard by mutableStateOf<String?>(null)
 
-    /** Try again and Refresh: the view closes and opens with `fresh`, which waits for the network. */
-    fun reopen() {
-        view.close()
-        view = session.addonCatalog(fresh = true)
+    /** TV: the card focus last left for the controls above, so Down into the cards comes back to it. */
+    var lastCard: String? = null
+
+    fun cardFocused(key: String) {
+        focusedCard = key
+        lastCard = key
     }
 
-    override fun onCleared() = view.close()
+    override fun onCleared() = page.close()
 }
+
+/**
+ * Where TV focus lands on Find addons (plans/m12-addon-discovery.md 3.6), apart from Compose: at
+ * open the List chip, or Try again when the list failed, or Paste a link when no list came in
+ * time; after Back from the cards, Refresh or Try again the List chip; Down into the cards the card
+ * left last, else the first; when the focused card goes, the first card, else the chip.
+ */
+internal object FindAddonsFocus {
+    sealed interface Target {
+        data object Chip : Target
+
+        data object TryAgain : Target
+
+        data object Paste : Target
+
+        data class Card(
+            val key: String,
+        ) : Target
+    }
+
+    enum class Ask { Open, Back, Retry, EnterCards, CardGone }
+
+    /** Null: nothing to land on yet (the list is on its way and [waited] is false); ask again next frame. */
+    fun target(
+        ask: Ask,
+        failed: Boolean,
+        loading: Boolean,
+        visible: List<String>,
+        lastCard: String?,
+        waited: Boolean,
+    ): Target? =
+        when (ask) {
+            Ask.Open -> {
+                when {
+                    failed -> Target.TryAgain
+                    !loading -> Target.Chip
+                    waited -> Target.Paste
+                    else -> null
+                }
+            }
+
+            Ask.Back, Ask.Retry -> {
+                Target.Chip
+            }
+
+            Ask.EnterCards -> {
+                (lastCard?.takeIf { it in visible } ?: visible.firstOrNull())?.let { Target.Card(it) }
+            }
+
+            Ask.CardGone -> {
+                visible.firstOrNull()?.let { Target.Card(it) } ?: Target.Chip
+            }
+        }
+}
+
+/**
+ * A TV card's select acts on the key up only after a key down on the same card: a key up whose down
+ * went to another control (a select that moved focus here) does nothing.
+ */
+internal class SelectGate {
+    private var down = false
+
+    fun keyDown() {
+        down = true
+    }
+
+    /** True when this up ends a press that began here. */
+    fun keyUp(): Boolean = down.also { down = false }
+
+    fun reset() {
+        down = false
+    }
+}
+
+/** What the landing reads each frame, newer than the composition that started it. */
+private class Now(
+    val failed: Boolean,
+    val loading: Boolean,
+    val visible: List<String>,
+    val rows: Int,
+    val columns: Int,
+)
 
 @Composable
 fun FindAddonsScreen(
@@ -122,10 +220,11 @@ fun FindAddonsScreen(
     val holder =
         viewModel<FindAddonsHolder>(
             key = "find-addons",
-            factory = viewModelFactory { initializer { FindAddonsHolder(session) } },
+            factory = viewModelFactory { initializer { FindAddonsHolder(session, cards) } },
         )
     val tv = Marquee.form == Form.Tv
-    val view = holder.view
+    val page = holder.page
+    val view = page.view
     val snapshot = view.snapshot
     // A result is about the state it was pressed in: a new installed state clears it.
     LaunchedEffect(snapshot) { snapshot?.let { s -> cards.follow(s.lists.flatMap { it.entries }) } }
@@ -139,6 +238,7 @@ fun FindAddonsScreen(
     val filter = holder.filter
     val visible = remember(entries, filter) { entries.filter { FindAddons.shows(it, filter) } }
     val repeated = remember(entries) { FindAddons.repeatedNames(entries) }
+    val visibleKeys = remember(visible) { visible.map { it.key } }
 
     fun count(id: String) =
         lists
@@ -147,129 +247,215 @@ fun FindAddonsScreen(
             ?.entries
             ?.size
 
-    // TV focus lands on the list chip: at open (a return from Paste a link included), after Back
-    // from the cards, and after Refresh or Try again, whose button goes while the list loads. No
-    // other page opens from this one on TV, and within the page the grid's focusRestorer brings
-    // focus back to the card it left.
-    var chipAsks by remember { mutableIntStateOf(0) }
-
-    fun retry() {
-        cards.forgetAll(running = false)
-        holder.reopen()
-        chipAsks++
-    }
-
-    fun press(
-        entry: ListedAddon,
-        action: Action,
-    ) {
-        when (action) {
-            is Action.Install -> cards.run(entry.key) { session.ops.installListed(entry.key) }
-            is Action.TurnOn -> cards.run(entry.key) { session.ops.setAddonEnabled(action.url, true) }
-            else -> Unit
-        }
-    }
-
-    val grid = rememberLazyGridState()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val listChip = remember { FocusRequester() }
+    val tryAgain = remember { FocusRequester() }
+    val paste = remember { FocusRequester() }
+    val cardFocus = remember { HashMap<String, FocusRequester>() }
+    val landing = remember { arrayOfNulls<Job>(1) }
 
-    LaunchedEffect(chipAsks) {
-        if (!tv) return@LaunchedEffect
-        repeat(LAND_FRAMES) {
-            withFrameNanos {}
-            if (runCatching { listChip.requestFocus() }.isSuccess) return@LaunchedEffect
-            // The chip is off screen, so not composed: bring the top of the page back first.
-            grid.scrollToItem(0)
-        }
-    }
-    BackHandler(enabled = tv && holder.inCards) {
-        holder.inCards = false
-        chipAsks++
-    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val side = Marquee.safe.side
+        val gap = if (tv) 22.dp else 12.dp
+        // As many columns as fit cards of this width, as the web's auto-fill grid; a row is as tall
+        // as its tallest card.
+        val columns = max(1, ((maxWidth - side * 2 + gap) / ((if (tv) 660.dp else 340.dp) + gap)).toInt())
+        val rows = remember(visible, columns) { visible.chunked(columns) }
+        val now = rememberUpdatedState(Now(failure != null, loading, visibleKeys, rows.size, columns))
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(if (tv) 660.dp else 340.dp),
-        state = grid,
-        modifier = Modifier.fillMaxSize().focusRestorer(listChip),
-        contentPadding =
-            pagePadding(framed = false).let {
-                PaddingValues(
-                    start = Marquee.safe.side,
-                    end = Marquee.safe.side,
-                    top = it.calculateTopPadding(),
-                    bottom = it.calculateBottomPadding(),
-                )
-            },
-        horizontalArrangement = Arrangement.spacedBy(if (tv) 22.dp else 12.dp),
-        verticalArrangement = Arrangement.spacedBy(if (tv) 22.dp else 12.dp),
-    ) {
-        full("head") { BrowseHeader(FindAddonsCopy.EYEBROW, FindAddonsCopy.TITLE, side = 0.dp) }
-        full("lede") { MqText(FindAddonsCopy.LEDE, color = Marquee.colors.muted) }
-        full("paste") {
-            if (tv) {
-                Row {
-                    SecondaryButton(FindAddonsCopy.PASTE_LINK, onPasteLink, icon = Icons.Link)
+        // Puts TV focus where [ask] says, scrolling its item into view first (a card far down the list
+        // is not composed, so it has no node to focus until it is).
+        fun land(ask: FindAddonsFocus.Ask) {
+            if (!tv) return
+            landing[0]?.cancel()
+            landing[0] =
+                scope.launch {
+                    repeat(LAND_FRAMES) { frame ->
+                        withFrameNanos {}
+                        val state = now.value
+                        val target =
+                            FindAddonsFocus.target(
+                                ask,
+                                state.failed,
+                                state.loading,
+                                state.visible,
+                                holder.lastCard,
+                                waited = frame == LAND_FRAMES - 1,
+                            ) ?: return@repeat
+                        val (requester, item) =
+                            when (target) {
+                                FindAddonsFocus.Target.Chip -> {
+                                    listChip to LISTS_ITEM
+                                }
+
+                                FindAddonsFocus.Target.TryAgain -> {
+                                    tryAgain to LISTS_ITEM
+                                }
+
+                                FindAddonsFocus.Target.Paste -> {
+                                    paste to PASTE_ITEM
+                                }
+
+                                is FindAddonsFocus.Target.Card -> {
+                                    val row = state.visible.indexOf(target.key) / state.columns
+                                    cardFocus[target.key] to listState.layoutInfo.totalItemsCount - state.rows + row
+                                }
+                            }
+                        // False while its node is not composed (Compose then only prints a warning).
+                        if (requester?.requestFocus(FocusDirection.Enter) == true) return@launch
+                        listState.scrollToItem(item.coerceAtLeast(0))
+                    }
                 }
-            } else {
-                PasteLink(session)
-            }
         }
-        full("lists") {
-            Choices(
-                FindAddonsCopy.LIST_LABEL,
-                listOf(
-                    OFFICIAL to listOfNotNull(FindAddonsCopy.OFFICIAL, count(OFFICIAL)).joinToString(" "),
-                    COMMUNITY to listOfNotNull(FindAddonsCopy.COMMUNITY_LIST, count(COMMUNITY)).joinToString(" "),
-                ),
-                holder.list,
-                listChip,
-            ) { holder.list = it }
-        }
-        full("filters") {
-            Choices(FindAddonsCopy.SHOW_LABEL, FindAddons.Filter.entries.map { it to it.label }, filter, null) {
-                holder.filter = it
-            }
-        }
-        if (holder.list == COMMUNITY) full("community") { CommunityNote() }
-        when {
-            loading -> {
-                full("loading") { StatusNote(FindAddonsCopy.LOADING, tone = Status.Warn, busy = true) }
-                items(6, key = { "skeleton:$it" }) { Skeleton(Modifier.fillMaxWidth().heightIn(min = 160.dp)) }
-            }
 
-            failure != null -> {
-                full("failed") {
-                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                        Note(failure, failed = true, side = 0.dp)
-                        Row {
-                            SecondaryButton(FindAddonsCopy.TRY_AGAIN, ::retry, icon = Icons.RotateCw)
+        fun retry() {
+            page.retry()
+            land(FindAddonsFocus.Ask.Retry)
+        }
+
+        LaunchedEffect(Unit) { land(FindAddonsFocus.Ask.Open) }
+        // The focused card went (the list changed under it): the first card, else the chip.
+        LaunchedEffect(visibleKeys) {
+            val gone = holder.focusedCard
+            if (gone != null && gone !in visibleKeys) land(FindAddonsFocus.Ask.CardGone)
+        }
+        BackHandler(enabled = tv && holder.focusedCard != null) {
+            holder.focusedCard = null
+            land(FindAddonsFocus.Ask.Back)
+        }
+        // Focus on a control above the cards: Back leaves from there, and the cards remember theirs.
+        val onControl: (Boolean) -> Unit = { if (it) holder.focusedCard = null }
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding =
+                pagePadding(framed = false).let {
+                    PaddingValues(
+                        start = side,
+                        end = side,
+                        top = it.calculateTopPadding(),
+                        bottom = it.calculateBottomPadding(),
+                    )
+                },
+            verticalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            item(key = "head") { BrowseHeader(FindAddonsCopy.EYEBROW, FindAddonsCopy.TITLE, side = 0.dp) }
+            item(key = "lede") { MqText(FindAddonsCopy.LEDE, color = Marquee.colors.muted) }
+            item(key = "paste") {
+                if (tv) {
+                    Row {
+                        SecondaryButton(
+                            FindAddonsCopy.PASTE_LINK,
+                            onPasteLink,
+                            icon = Icons.Link,
+                            focusRequester = paste,
+                            onFocusChange = onControl,
+                        )
+                    }
+                } else {
+                    PasteLink(session)
+                }
+            }
+            item(key = "lists") {
+                Choices(
+                    FindAddonsCopy.LIST_LABEL,
+                    listOf(
+                        OFFICIAL to listOfNotNull(FindAddonsCopy.OFFICIAL, count(OFFICIAL)).joinToString(" "),
+                        COMMUNITY to listOfNotNull(FindAddonsCopy.COMMUNITY_LIST, count(COMMUNITY)).joinToString(" "),
+                    ),
+                    holder.list,
+                    listChip,
+                    onControl,
+                ) { holder.list = it }
+            }
+            item(key = "filters") {
+                Choices(
+                    FindAddonsCopy.SHOW_LABEL,
+                    FindAddons.Filter.entries.map { it to it.label },
+                    filter,
+                    null,
+                    onControl,
+                ) { holder.filter = it }
+            }
+            if (holder.list == COMMUNITY) item(key = "community") { CommunityNote() }
+            when {
+                loading -> {
+                    item(key = "loading") { StatusNote(FindAddonsCopy.LOADING, tone = Status.Warn, busy = true) }
+                    items(3, key = { "skeleton:$it" }) { Skeleton(Modifier.fillMaxWidth().heightIn(min = 160.dp)) }
+                }
+
+                failure != null -> {
+                    item(key = "failed") {
+                        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                            Note(failure, failed = true, side = 0.dp)
+                            Row {
+                                SecondaryButton(
+                                    FindAddonsCopy.TRY_AGAIN,
+                                    ::retry,
+                                    icon = Icons.RotateCw,
+                                    focusRequester = tryAgain,
+                                    onFocusChange = onControl,
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            else -> {
-                full("refresh") { Row { SecondaryButton(FindAddonsCopy.REFRESH, ::retry, icon = Icons.RotateCw) } }
-                when {
-                    entries.isEmpty() -> {
-                        full("empty") { Note(FindAddonsCopy.EMPTY, side = 0.dp) }
-                    }
-
-                    visible.isEmpty() -> {
-                        full("filter-empty") { Note(FindAddons.filterEmpty(filter).orEmpty(), side = 0.dp) }
-                    }
-
-                    else -> {
-                        // Keyed by place in the whole list: an entry's key may hold keys, and item keys are saved.
-                        val places = entries.withIndex().associate { (at, e) -> e.key to at }
-                        items(visible, key = { "card:${holder.list}:${places[it.key]}" }) { entry ->
-                            Card(
-                                entry = entry,
-                                sameName = entry.name in repeated,
-                                state = cards[entry.key],
-                                onFocus = { holder.inCards = it },
-                                onPress = { press(entry, it) },
+                else -> {
+                    item(key = "refresh") {
+                        Row {
+                            SecondaryButton(
+                                FindAddonsCopy.REFRESH,
+                                ::retry,
+                                // Down from here goes into the cards at the one focus left last.
+                                modifier =
+                                    Modifier.onPreviewKeyEvent { e ->
+                                        val into =
+                                            tv && visible.isNotEmpty() && e.key == Key.DirectionDown &&
+                                                e.type == KeyEventType.KeyDown
+                                        if (into) land(FindAddonsFocus.Ask.EnterCards)
+                                        into
+                                    },
+                                icon = Icons.RotateCw,
+                                onFocusChange = onControl,
                             )
+                        }
+                    }
+                    when {
+                        entries.isEmpty() -> {
+                            item(key = "empty") { Note(FindAddonsCopy.EMPTY, side = 0.dp) }
+                        }
+
+                        visible.isEmpty() -> {
+                            item(key = "filter-empty") { Note(FindAddons.filterEmpty(filter).orEmpty(), side = 0.dp) }
+                        }
+
+                        else -> {
+                            // Keyed by place in the whole list: an entry's key may hold keys, and item keys are saved.
+                            val places = entries.withIndex().associate { (at, e) -> e.key to at }
+                            items(rows, key = { "row:${holder.list}:${places[it.first().key]}" }) { row ->
+                                Row(
+                                    Modifier.height(IntrinsicSize.Max),
+                                    horizontalArrangement = Arrangement.spacedBy(gap),
+                                ) {
+                                    for (entry in row) {
+                                        key(entry.key) {
+                                            Card(
+                                                entry = entry,
+                                                sameName = entry.name in repeated,
+                                                state = cards[entry.key],
+                                                focus = cardFocus,
+                                                onFocus = { holder.cardFocused(entry.key) },
+                                                onPress = { page.press(entry, it) },
+                                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                                            )
+                                        }
+                                    }
+                                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                                }
+                            }
                         }
                     }
                 }
@@ -278,10 +464,17 @@ fun FindAddonsScreen(
     }
 }
 
-/** Frames a focus landing tries for (about 1.5 s): the page may still be laying out. */
+/** Frames a focus landing tries for (about 1.5 s): the list may still be on its way. */
 private const val LAND_FRAMES = 90
 
-/** A row of choices under its kicker; it wraps on a narrow phone. [requester] goes to the selected one. */
+/** The page's items above the cards, by place: the header, the lede, Paste a link, then the List chips. */
+private const val PASTE_ITEM = 2
+private const val LISTS_ITEM = 3
+
+/**
+ * A row of choices under its kicker; it wraps on a narrow phone. [requester] goes to the selected
+ * one; Left and Right stop at the row's ends instead of leaving it.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T : Any> Choices(
@@ -289,6 +482,7 @@ private fun <T : Any> Choices(
     choices: List<Pair<T, String>>,
     selected: T,
     requester: FocusRequester?,
+    onFocusChange: (Boolean) -> Unit,
     onSelect: (T) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -298,13 +492,19 @@ private fun <T : Any> Choices(
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
             // Keyed by value, so a count arriving in a label keeps focus on its chip.
-            for ((value, name) in choices) {
+            choices.forEachIndexed { at, (value, name) ->
                 key(value) {
                     Chip(
                         name,
                         selected = value == selected,
                         onClick = { onSelect(value) },
+                        modifier =
+                            Modifier.focusProperties {
+                                if (at == 0) left = FocusRequester.Cancel
+                                if (at == choices.lastIndex) right = FocusRequester.Cancel
+                            },
                         focusRequester = requester.takeIf { value == selected },
+                        onFocusChange = onFocusChange,
                     )
                 }
             }
@@ -338,7 +538,7 @@ private fun PasteLink(session: CoreSession) {
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<Said?>(null) }
     val focus = remember { FocusRequester() }
-    InstallField(busy, focus, said, side = 0.dp) { url, clear ->
+    InstallField(busy, focus, said, side = 0.dp, compact = true) { url, clear ->
         busy = true
         said = Said(Place.Install, "Adding the addon", failed = false, pending = true)
         scope.launch {
@@ -350,8 +550,7 @@ private fun PasteLink(session: CoreSession) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    val why = (e as? CoreError)?.message ?: CoreLog.describe(e)
-                    Said(Place.Install, "Adding the addon did not work: $why", failed = true)
+                    Said(Place.Install, "Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
                 } finally {
                     busy = false
                 }
@@ -362,8 +561,8 @@ private fun PasteLink(session: CoreSession) {
 /**
  * One entry. On a phone the card holds its buttons (Install or Turn on, and Configure); on a TV the
  * card is one focus stop whose select performs Install or Turn on, and Configure is a line saying
- * where to set it up. While a request runs the control stays and says Installing, so focus never
- * jumps.
+ * where to set it up. While a request runs the control stays and says Installing with a spinner, so
+ * focus never jumps.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -371,8 +570,11 @@ private fun Card(
     entry: ListedAddon,
     sameName: Boolean,
     state: InstallCards.State?,
-    onFocus: (Boolean) -> Unit,
+    /** TV: each card's requester by entry key, while it is composed. */
+    focus: HashMap<String, FocusRequester>,
+    onFocus: () -> Unit,
     onPress: (Action) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -385,22 +587,47 @@ private fun Card(
     val verb = if (action is Action.TurnOn) FindAddonsCopy.TURN_ON else FindAddonsCopy.INSTALL
     val busyWord = if (action is Action.TurnOn) FindAddonsCopy.TURNING_ON else FindAddonsCopy.INSTALLING
     val configure = !tv && (action == Action.Configure || (action as? Action.Install)?.configure == true)
+    val help =
+        when {
+            action != Action.Configure -> null
+            tv -> FindAddonsCopy.CONFIGURE_TV
+            else -> FindAddonsCopy.CONFIGURE_HELP
+        }
     var noBrowser by remember(entry.key) { mutableStateOf(false) }
     val perform = { if (!busy) onPress(action) }
     val shape = RoundedCornerShape(if (tv) Marquee.radius.l else Marquee.radius.card)
-    // What a screen reader says for the card: its action, or on TV what it is when select does nothing.
-    val spoken =
-        FindAddons.spoken(entry, if (!tv || pressable) action else Action.None(word.orEmpty()), sameName)
+    // The press, the busy state and the failure, as a screen reader says them: on TV the card is one
+    // stop and says all of it (what it is when select does nothing); on a phone the button says what
+    // it does or that it is installing, and the card's lines say the rest.
+    val pressWords = FindAddons.described(entry, action, sameName, busyWord.takeIf { busy })
+    val cardWords =
+        FindAddons.described(
+            entry,
+            if (pressable) action else Action.None(word.orEmpty()),
+            sameName,
+            busyWord.takeIf { busy },
+            help,
+            failure,
+        )
     var focused by remember { mutableStateOf(false) }
+    val requester = remember { FocusRequester() }
+    val gate = remember { SelectGate() }
+    if (tv) {
+        DisposableEffect(entry.key, requester) {
+            focus[entry.key] = requester
+            onDispose { if (focus[entry.key] === requester) focus.remove(entry.key) }
+        }
+    }
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .then(
                 if (tv) {
                     Modifier
+                        .focusRequester(requester)
                         .onFocusChanged {
                             focused = it.isFocused
-                            onFocus(it.isFocused)
+                            if (it.isFocused) onFocus() else gate.reset()
                         }.marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
                 } else {
                     Modifier
@@ -413,18 +640,23 @@ private fun Card(
                     // One stop, the same node whatever the state, so an install that ends keeps focus here.
                     Modifier
                         .semantics(mergeDescendants = true) {
-                            contentDescription = spoken
-                            // An installed card is not a button.
-                            if (pressable) {
+                            contentDescription = cardWords
+                            // An installed card is not a button; a failure is read when it comes.
+                            if (pressable && !busy) {
                                 role = Role.Button
                                 onClick {
                                     perform()
                                     true
                                 }
                             }
+                            if (failure != null) liveRegion = LiveRegionMode.Polite
                         }.onKeyEvent { e ->
                             val select = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
-                            if (select && e.type == KeyEventType.KeyUp && pressable) perform()
+                            when {
+                                !select -> Unit
+                                e.type == KeyEventType.KeyDown -> gate.keyDown()
+                                e.type == KeyEventType.KeyUp -> if (gate.keyUp() && pressable) perform()
+                            }
                             select
                         }.focusable()
                 } else {
@@ -433,57 +665,68 @@ private fun Card(
             ).padding(if (tv) 28.dp else 16.dp),
         verticalArrangement = Arrangement.spacedBy(if (tv) 22.dp else 12.dp),
     ) {
-        Row(
-            if (tv) Modifier.clearAndSetSemantics { } else Modifier,
-            horizontalArrangement = Arrangement.spacedBy(if (tv) 26.dp else 14.dp),
-        ) {
-            Mark(entry.name)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 4.dp)) {
-                MqText(
-                    entry.name,
-                    role = TextRole.Headline,
-                    color = if (focused) colors.accent else colors.text,
-                    weight = FontWeight.Bold,
-                )
-                // The link may hold keys: the host stands in for it.
-                MqText(
-                    entry.host,
-                    role = TextRole.Caption,
-                    color = colors.dim,
-                    maxLines = 1,
-                    fontFamily = FontFamily.Monospace,
-                )
-                MqText(
-                    FindAddons.providesLine(entry),
-                    modifier = Modifier.padding(top = if (tv) 8.dp else 4.dp),
-                    role = TextRole.Caption,
-                    weight = FontWeight.SemiBold,
-                )
-                entry.description?.let {
+        val about: @Composable (Modifier) -> Unit = { textModifier ->
+            Row(textModifier, horizontalArrangement = Arrangement.spacedBy(if (tv) 26.dp else 14.dp)) {
+                Mark(entry.name)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 4.dp)) {
                     MqText(
-                        it,
-                        role = if (tv) TextRole.Callout else TextRole.Caption,
-                        color = colors.muted,
-                        maxLines = 2,
+                        entry.name,
+                        role = TextRole.Headline,
+                        color = if (focused) colors.accent else colors.text,
+                        weight = FontWeight.Bold,
                     )
-                }
-                if (action == Action.Configure) {
+                    // The link may hold keys: the host stands in for it, cut in the middle so the
+                    // owner's domain at its end always shows.
                     MqText(
-                        if (tv) FindAddonsCopy.CONFIGURE_TV else FindAddonsCopy.CONFIGURE_HELP,
+                        entry.host,
+                        role = TextRole.Caption,
+                        color = colors.dim,
+                        maxLines = 1,
+                        fontFamily = FontFamily.Monospace,
+                        overflow = TextOverflow.MiddleEllipsis,
+                    )
+                    MqText(
+                        FindAddons.providesLine(entry),
                         modifier = Modifier.padding(top = if (tv) 8.dp else 4.dp),
-                        role = if (tv) TextRole.Callout else TextRole.Caption,
-                        weight = FontWeight.Medium,
+                        role = TextRole.Caption,
+                        weight = FontWeight.SemiBold,
                     )
+                    entry.description?.let {
+                        MqText(
+                            it,
+                            role = if (tv) TextRole.Callout else TextRole.Caption,
+                            color = colors.muted,
+                            maxLines = 2,
+                        )
+                    }
+                    help?.let {
+                        MqText(
+                            it,
+                            modifier = Modifier.padding(top = if (tv) 8.dp else 4.dp),
+                            role = if (tv) TextRole.Callout else TextRole.Caption,
+                            weight = FontWeight.Medium,
+                        )
+                    }
+                    failure?.let {
+                        Box(
+                            Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        ) { Note(it, failed = true, side = 0.dp) }
+                    }
+                    if (noBrowser) Note(FindAddonsCopy.NO_BROWSER, failed = true, side = 0.dp)
                 }
-                failure?.let { Note(it, failed = true, side = 0.dp) }
-                if (noBrowser) Note(FindAddonsCopy.NO_BROWSER, failed = true, side = 0.dp)
             }
-            if (tv && (word != null || pressable)) {
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    word?.let { StateWord(it, installed = action is Action.None) }
-                    if (pressable) ActionPill(if (busy) busyWord else verb, action is Action.TurnOn, busy, focused)
+        }
+        if (tv) {
+            EndOrBelow(Modifier.clearAndSetSemantics { }, { about(Modifier) }) {
+                if (word != null || pressable) {
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        word?.let { StateWord(it, installed = action is Action.None) }
+                        if (pressable) ActionPill(if (busy) busyWord else verb, action is Action.TurnOn, busy, focused)
+                    }
                 }
             }
+        } else {
+            about(Modifier)
         }
         if (!tv && (word != null || pressable || configure)) {
             FlowRow(
@@ -497,26 +740,17 @@ private fun Card(
                     SecondaryButton(
                         if (busy) busyWord else verb,
                         perform,
-                        modifier = Modifier.semantics { contentDescription = spoken },
-                        icon =
-                            if (busy) {
-                                null
-                            } else if (action is Action.TurnOn) {
-                                Icons.Power
-                            } else {
-                                Icons.Plus
-                            },
+                        icon = if (action is Action.TurnOn) Icons.Power else Icons.Plus,
+                        busy = busy,
+                        spoken = pressWords,
                     )
                 }
                 if (configure) {
                     SecondaryButton(
                         FindAddonsCopy.CONFIGURE,
                         { noBrowser = !openLink(context, entry.configureUrl) },
-                        modifier =
-                            Modifier.semantics {
-                                contentDescription = FindAddons.spoken(entry, Action.Configure, sameName)
-                            },
                         icon = Icons.ExternalLink,
+                        spoken = FindAddons.spoken(entry, Action.Configure, sameName),
                     )
                 }
             }
@@ -524,7 +758,46 @@ private fun Card(
     }
 }
 
-/** The name's first letter on the brand surface: no remote logo, so a list contacts no image host. */
+/**
+ * A TV card's text with its action at the end, or under the text when the card is too narrow for
+ * both (a large font, a third column): the card wraps by its own width, not a screen breakpoint.
+ */
+@Composable
+private fun EndOrBelow(
+    modifier: Modifier,
+    text: @Composable () -> Unit,
+    end: @Composable () -> Unit,
+) {
+    Layout(contents = listOf(text, end), modifier = modifier) { (texts, ends), constraints ->
+        val gap = 26.dp.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val endPlaced = ends.map { it.measure(loose) }
+        val endWidth = endPlaced.maxOfOrNull { it.width } ?: 0
+        val endHeight = endPlaced.maxOfOrNull { it.height } ?: 0
+        val beside = endWidth == 0 || constraints.maxWidth - endWidth - gap >= MIN_TEXT.roundToPx()
+        val textWidth = if (beside && endWidth > 0) constraints.maxWidth - endWidth - gap else constraints.maxWidth
+        val textPlaced = texts.map { it.measure(loose.copy(maxWidth = textWidth)) }
+        val textHeight = textPlaced.maxOfOrNull { it.height } ?: 0
+        val height =
+            when {
+                endWidth == 0 -> textHeight
+                beside -> max(textHeight, endHeight)
+                else -> textHeight + gap + endHeight
+            }
+        layout(constraints.maxWidth, height) {
+            textPlaced.forEach { it.place(0, 0) }
+            endPlaced.forEach { it.place(constraints.maxWidth - it.width, if (beside) 0 else textHeight + gap) }
+        }
+    }
+}
+
+/** The narrowest a TV card's text may get before its action goes under it. */
+private val MIN_TEXT = 380.dp
+
+/**
+ * The name's first letter on the brand surface: no remote logo, so a list contacts no image host.
+ * Decoration: a screen reader skips it.
+ */
 @Composable
 private fun Mark(name: String) {
     val tv = Marquee.form == Form.Tv
@@ -532,6 +805,7 @@ private fun Mark(name: String) {
     Box(
         Modifier
             .size(if (tv) 80.dp else 48.dp)
+            .clearAndSetSemantics { }
             .clip(shape)
             .background(Marquee.colors.raised)
             .border(1.dp, Marquee.colors.edge, shape),
@@ -587,7 +861,13 @@ private fun ActionPill(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!busy) MqIcon(if (turnOn) Icons.Power else Icons.Plus, tint = content, size = 26.dp)
+        if (busy) {
+            Spinner(
+                size = 26.dp,
+            )
+        } else {
+            MqIcon(if (turnOn) Icons.Power else Icons.Plus, tint = content, size = 26.dp)
+        }
         MqText(label, role = TextRole.Callout, color = content, weight = FontWeight.SemiBold, maxLines = 1)
     }
 }

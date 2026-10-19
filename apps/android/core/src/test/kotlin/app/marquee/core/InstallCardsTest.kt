@@ -103,6 +103,38 @@ class InstallCardsTest {
         }
 
     @Test
+    fun `forgetting a card while its request runs keeps it running`() =
+        runTest {
+            val cards = cards()
+            val reply = CompletableDeferred<Unit>()
+            cards.run(a) { reply.await() }
+            runCurrent()
+            cards.forget(a)
+            assertEquals(InstallCards.State(busy = true), cards[a])
+            reply.complete(Unit)
+            runCurrent()
+            assertEquals(InstallCards.State(busy = false), cards[a])
+        }
+
+    @Test
+    fun `a failure reads in the core's words, never as raw exception text`() =
+        runTest {
+            assertEquals(
+                "This addon is not the one the list named",
+                InstallCards.wordsOf(CoreError("This addon is not the one the list named", code = "mismatch")),
+            )
+            assertEquals(
+                "The core is not responding.",
+                InstallCards.wordsOf(CoreError("installListed did not answer in 1m", timedOut = true)),
+            )
+            assertEquals("IllegalStateException: boom", InstallCards.wordsOf(IllegalStateException("boom")))
+            val cards = cards()
+            cards.run(a) { throw java.io.IOException("socket closed") }
+            runCurrent()
+            assertEquals("IOException: socket closed", cards[a]?.words)
+        }
+
+    @Test
     fun `a changed installed state forgets that card's result`() =
         runTest {
             val cards = cards()
