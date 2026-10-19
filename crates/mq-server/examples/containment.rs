@@ -1,9 +1,15 @@
 //! The phase 7 containment gate's runs that need no network
 //! (plans/c21-c23-loopback.md, "Phase 7 gate"): a canary on `[::1]`, a
 //! fixture origin on 127.0.0.1 serving F1 to F6 and N1 to N4, the core, and
-//! mpv started headless for each run. Prints one JSON line per run.
+//! mpv started headless for each run. Prints the versions it ran and its
+//! preconditions, then one JSON line per run, checks each run against the
+//! gate and exits 1 when one fails (2 when a precondition is missing, so a
+//! part of the gate went untested).
 //! `cargo run -p mq-server --example containment -- [mpv]`; needs mpv and
 //! the ffmpeg command on the path (the benign media is made by ffmpeg).
+
+#[path = "mpv/options.rs"]
+mod options;
 
 use mq_http::{ClientConfig, HttpClient, Url};
 use mq_server::{Format, Lease, StreamServer, Upstream};
@@ -16,27 +22,31 @@ use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-/// The environment every run has: a typical `no_proxy` the canary does not
-/// match.
-const NO_PROXY: &str = "localhost,127.0.0.1,.local";
+/// The user's environment in every run: a typical `no_proxy`, which names
+/// the canary (`::1`, and `localhost` for the variant that names it so).
+/// The app removes it (3.3); the controls of the old design keep it.
+const USER_NO_PROXY: &str = "localhost,127.0.0.1,::1,.local";
 const IV: &str = "0x00000000000000000000000000000001";
 /// FFmpeg's HLS guard (2.4).
 const GUARD: &str = "Opening this file was forbidden for security reasons";
-/// The desktop app's options on every mpv instance (m3-desktop 4.3), but
-/// `access-references`, which each run sets.
-const HARDENED: [&str; 12] = [
-    "--ytdl=no",
-    "--load-scripts=no",
-    "--osc=no",
-    "--input-default-bindings=no",
-    "--input-vo-keyboard=no",
-    "--load-stats-overlay=no",
-    "--load-auto-profiles=no",
-    "--ordered-chapters=no",
-    "--sub-auto=no",
-    "--audio-file-auto=no",
-    "--cover-art-auto=no",
-    "--load-unsafe-playlists=no",
+/// The log evidence of each layer that can stop a probe: mpv's log first,
+/// then the core's.
+const LAYERS: [(&str, &str); 8] = [
+    ("guard", GUARD),
+    ("hls_probe", "Not detecting m3u8/hls"),
+    ("concat_safe_mode", "Unsafe file name"),
+    (
+        "unsafe_playlist_entry",
+        "Refusing to load potentially unsafe URL",
+    ),
+    ("no_demuxer", "Failed to recognize file format"),
+    ("forbidden_403", "HTTP error 403"),
+    ("not_on_whitelist", "not on whitelist"),
+    ("hls_segment_failed", "Failed to open segment"),
+];
+const CORE_LAYERS: [(&str, &str); 2] = [
+    ("host_check", "refused a request for another host"),
+    ("blocked_address", "blocked address"),
 ];
 
 /// What the canary saw: HTTP request lines, and accepts on the raw ports.
@@ -255,18 +265,26 @@ fn fixtures(
     ]
 }
 
-/// N1 to N3, one per scheme: (name, nested file, the scheme's counter).
+/// N1 to N3, one per scheme, and `http` once more by the name `localhost`:
+/// (name, nested file, the scheme's counter). N1 is a valid MPD padded
+/// after its declaration.
 fn nested(ports: &Ports) -> Vec<(String, String, &'static str)> {
+    let localhost = format!("localhost:{}", ports.http.port());
     let mut out = Vec::new();
-    for (scheme, host, counter) in [
-        ("http", ports.http, "http"),
-        ("tcp", ports.tcp, "tcp"),
-        ("crypto+tcp", ports.crypto, "crypto"),
+    for (scheme, host, counter, tag) in [
+        ("http", ports.http.to_string(), "http", "http"),
+        ("http", localhost, "http", "http-localhost"),
+        ("tcp", ports.tcp.to_string(), "tcp", "tcp"),
+        (
+            "crypto+tcp",
+            ports.crypto.to_string(),
+            "crypto",
+            "crypto-tcp",
+        ),
     ] {
-        let tag = scheme.replace('+', "-");
         let url = |n: &str| format!("{scheme}://{host}/{n}-{tag}");
         let mpd = format!(
-            "{}<?xml version=\"1.0\"?><MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" profiles=\"urn:mpeg:dash:profile:isoff-live:2011\" \
+            "<?xml version=\"1.0\"?>{}<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" profiles=\"urn:mpeg:dash:profile:isoff-live:2011\" \
              type=\"static\" mediaPresentationDuration=\"PT2S\" minBufferTime=\"PT1S\"><Period><AdaptationSet mimeType=\"video/mp2t\">\
              <Representation id=\"1\" bandwidth=\"1\"><BaseURL>{}/</BaseURL><SegmentList duration=\"1\"><SegmentURL media=\"s.ts\"/>\
              </SegmentList></Representation></AdaptationSet></Period></MPD>\n",
@@ -288,13 +306,63 @@ fn nested(ports: &Ports) -> Vec<(String, String, &'static str)> {
     out
 }
 
-/// One mpv run, headless, killed at `limit`; returns its log and how long it took.
-fn mpv(bin: &str, url: &str, options: &[String], limit: Duration) -> (String, Duration, bool) {
+/// How a run's mpv sees the world.
+#[derive(Clone, Copy, PartialEq)]
+enum Env {
+    /// The user's, `no_proxy` included.
+    User,
+    /// The app's: the user's without `no_proxy` (3.3).
+    App,
+}
+
+/// What one run left behind.
+struct Seen {
+    http: Vec<String>,
+    https: u64,
+    tcp: u64,
+    crypto: u64,
+    log: String,
+    core: String,
+    took: Duration,
+    killed: bool,
+    /// mpv's exit code; `None` when it was killed or died by a signal.
+    exit: Option<i32>,
+}
+
+impl Seen {
+    fn reached(&self) -> bool {
+        !self.http.is_empty() || self.https + self.tcp + self.crypto > 0
+    }
+
+    fn lines(&self, needle: &str) -> usize {
+        self.log.lines().filter(|l| l.contains(needle)).count()
+    }
+
+    fn core_lines(&self, needle: &str) -> usize {
+        self.core.matches(needle).count()
+    }
+
+    /// The layers whose evidence is in the logs.
+    fn stopped_by(&self) -> Vec<&'static str> {
+        let mpv = LAYERS.iter().filter(|(_, n)| self.lines(n) > 0);
+        let core = CORE_LAYERS.iter().filter(|(_, n)| self.core_lines(n) > 0);
+        mpv.chain(core).map(|(layer, _)| *layer).collect()
+    }
+}
+
+/// One mpv run, headless, killed at `limit`.
+fn mpv(
+    bin: &str,
+    url: &str,
+    options: &[String],
+    env: Env,
+    limit: Duration,
+) -> (String, Duration, bool, Option<i32>) {
     let log = tempfile::NamedTempFile::new().unwrap();
     let started = Instant::now();
-    let mut child = Command::new(bin)
+    let mut command = Command::new(bin);
+    command
         .args([
-            "--no-config",
             "--idle=no",
             "--vo=null",
             "--ao=null",
@@ -302,7 +370,7 @@ fn mpv(bin: &str, url: &str, options: &[String], limit: Duration) -> (String, Du
             "--network-timeout=5",
         ])
         .args(["--msg-level=all=debug"])
-        .args(HARDENED)
+        .args(options::HARDENED)
         .arg(format!("--log-file={}", log.path().display()))
         .args(options)
         .arg(url)
@@ -310,34 +378,58 @@ fn mpv(bin: &str, url: &str, options: &[String], limit: Duration) -> (String, Du
         .env_remove("HTTP_PROXY")
         .env_remove("https_proxy")
         .env_remove("HTTPS_PROXY")
-        .env("no_proxy", NO_PROXY)
-        .env("NO_PROXY", NO_PROXY)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("mpv runs");
+        .stderr(Stdio::null());
+    for name in options::CLEARED {
+        match env {
+            Env::User => command.env(name, USER_NO_PROXY),
+            Env::App => command.env_remove(name),
+        };
+    }
+    let mut child = command.spawn().expect("mpv runs");
     let mut killed = false;
-    while child.try_wait().unwrap().is_none() {
-        if started.elapsed() > limit {
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if started.elapsed() > limit && !killed {
             let _ = child.kill();
             killed = true;
         }
         std::thread::sleep(Duration::from_millis(50));
-    }
+    };
     let took = started.elapsed();
-    (
-        std::fs::read_to_string(log.path()).unwrap_or_default(),
-        took,
-        killed,
-    )
+    let log = std::fs::read_to_string(log.path()).unwrap_or_default();
+    (log, took, killed, status.code().filter(|_| !killed))
 }
 
+/// The protected run's options (3.3): every instance's, then a manifest's.
 fn protected(core: SocketAddr) -> Vec<String> {
+    let mut out: Vec<String> = options::proxy(core).into();
+    out.extend(options::MANIFEST.map(String::from));
+    out
+}
+
+/// The design before the 2026-10-19 review: no `demuxer=lavf`, and the
+/// app's environment kept `no_proxy`.
+fn old_design(core: SocketAddr) -> Vec<String> {
+    let mut out: Vec<String> = options::proxy(core).into();
+    out.extend(
+        options::MANIFEST
+            .iter()
+            .filter(|o| **o != "--demuxer=lavf")
+            .map(|o| o.to_string()),
+    );
+    out
+}
+
+/// The backstop run's options: only the proxy and lavf's whitelist (no
+/// `demuxer=lavf`, so mpv's playlist fallback runs too).
+fn backstop(core: SocketAddr) -> Vec<String> {
     vec![
-        "--access-references=yes".into(),
+        "--access-references=yes".to_owned(),
         format!("--http-proxy=http://{core}"),
-        "--demuxer-lavf-propagate-opts=yes".into(),
-        "--demuxer-lavf-o=protocol_whitelist=[http,tcp,crypto]".into(),
+        "--demuxer-lavf-o=protocol_whitelist=[http,tcp,crypto]".to_owned(),
     ]
 }
 
@@ -355,47 +447,54 @@ fn json(s: &str) -> String {
     out
 }
 
-/// Prints one run's line: what reached the canary during it, and the log
-/// evidence asked for.
-#[allow(clippy::too_many_arguments)]
-fn record(
-    run: &str,
-    fixture: &str,
-    canary: &Canary,
-    before: (usize, u64, u64, u64),
-    log: &str,
-    took: Duration,
-    killed: bool,
-    core: &str,
-) {
-    let after = canary.snapshot();
-    let seen: Vec<String> = canary.requests.lock().unwrap()[before.0..].to_vec();
-    let lines = |needle: &str| log.lines().filter(|l| l.contains(needle)).count();
-    let core_count = |needle: &str| core.matches(needle).count();
-    println!(
-        "{{\"date\": \"2026-10-19\", \"phase\": \"7\", \"run\": {}, \"fixture\": {}, \"canary_http\": {}, \"canary_https_accepts\": {}, \
-         \"canary_tcp_accepts\": {}, \"canary_crypto_accepts\": {}, \"guard_lines\": {}, \"forbidden_403_lines\": {}, \"not_on_whitelist_lines\": {}, \
-         \"hls_probe_refusals\": {}, \"concat_unsafe_lines\": {}, \"unsafe_playlist_refusals\": {}, \"mpv_entries_played\": {}, \"video_out\": {}, \
-         \"core_foreign_host_refusals\": {}, \"core_blocked_address\": {}, \"seconds\": {:.1}, \"killed\": {}}}",
-        json(run),
-        json(fixture),
-        json(&seen.join(" | ")),
-        after.1 - before.1,
-        after.2 - before.2,
-        after.3 - before.3,
-        lines(GUARD),
-        lines("HTTP error 403"),
-        lines("not on whitelist"),
-        lines("Not detecting m3u8/hls"),
-        lines("Unsafe file name"),
-        lines("Refusing to load potentially unsafe URL"),
-        lines("[cplayer] Playing: "),
-        lines("VO: [null]"),
-        core_count("refused a request for another host"),
-        core_count("blocked address"),
-        took.as_secs_f64(),
-        killed,
-    );
+fn list(items: &[&str]) -> String {
+    let items: Vec<String> = items.iter().map(|i| json(i)).collect();
+    format!("[{}]", items.join(", "))
+}
+
+/// The gate's verdicts so far.
+struct Gate {
+    date: String,
+    failed: Vec<String>,
+    untested: Vec<String>,
+}
+
+impl Gate {
+    fn check(&mut self, run: &str, fixture: &str, ok: bool, rule: &str) {
+        if !ok {
+            let line = format!("{run} {fixture}: {rule}");
+            eprintln!("FAILED {line}");
+            self.failed.push(line);
+        }
+    }
+
+    /// Prints one run's line.
+    fn record(&self, run: &str, fixture: &str, seen: &Seen, untested: Option<&str>) {
+        let exit = seen.exit.map_or("null".to_owned(), |c| c.to_string());
+        let untested = untested.map_or("null".to_owned(), json);
+        println!(
+            "{{\"date\": {}, \"phase\": \"7\", \"run\": {}, \"fixture\": {}, \"canary_http\": {}, \"canary_https_accepts\": {}, \
+             \"canary_tcp_accepts\": {}, \"canary_crypto_accepts\": {}, \"stopped_by\": {}, \"guard_lines\": {}, \"forbidden_403_lines\": {}, \
+             \"not_on_whitelist_lines\": {}, \"video_out\": {}, \"core_foreign_host_refusals\": {}, \"core_blocked_address\": {}, \
+             \"mpv_exit\": {exit}, \"seconds\": {:.1}, \"killed\": {}, \"untested\": {untested}}}",
+            json(&self.date),
+            json(run),
+            json(fixture),
+            json(&seen.http.join(" | ")),
+            seen.https,
+            seen.tcp,
+            seen.crypto,
+            list(&seen.stopped_by()),
+            seen.lines(GUARD),
+            seen.lines("HTTP error 403"),
+            seen.lines("not on whitelist"),
+            seen.lines("VO: [null]"),
+            seen.core_lines("refused a request for another host"),
+            seen.core_lines("blocked address"),
+            seen.took.as_secs_f64(),
+            seen.killed,
+        );
+    }
 }
 
 struct Sink(Arc<Mutex<Vec<u8>>>);
@@ -411,15 +510,83 @@ impl std::io::Write for Sink {
     }
 }
 
+/// A command's standard output, or nothing.
+fn output(bin: &str, args: &[&str]) -> String {
+    Command::new(bin)
+        .args(args)
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+/// The first line of `text` that holds `key`, after it, trimmed.
+fn after(text: &str, key: &str) -> String {
+    text.lines()
+        .find_map(|l| l.split_once(key).map(|(_, v)| v.trim().to_owned()))
+        .unwrap_or_default()
+}
+
 #[tokio::main]
 async fn main() {
     let bin = std::env::args().nth(1).unwrap_or_else(|| "mpv".into());
+    // Debug: the core's foreign-Host refusal is a debug line.
     let logs = Arc::new(Mutex::new(Vec::new()));
     let sink = logs.clone();
     tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
         .with_writer(move || Sink(sink.clone()))
         .init();
     let core_log = || String::from_utf8_lossy(&logs.lock().unwrap()).into_owned();
+
+    // Versions and preconditions, from the mpv under test.
+    let mut gate = Gate {
+        date: output("date", &["-u", "+%F"]).trim().to_owned(),
+        failed: Vec::new(),
+        untested: Vec::new(),
+    };
+    let version = output(&bin, &["--no-config", "--version"]);
+    let probe = output(
+        &bin,
+        &[
+            "--no-config",
+            "--idle=no",
+            "--vo=null",
+            "--ao=null",
+            "--end=0.1",
+            "--term-playing-msg=LAVF=${demuxer-lavf-list}",
+            "av://lavfi:anullsrc",
+        ],
+    );
+    let demuxers = after(&probe, "LAVF=");
+    let has = |d: &str| demuxers.split(',').any(|x| x == d);
+    let missing: Vec<&str> = ["dash", "hls", "concat"]
+        .into_iter()
+        .filter(|d| !has(d))
+        .collect();
+    let curl = output(&bin, &["--no-config", "--list-options"])
+        .to_lowercase()
+        .contains("curl");
+    println!(
+        "{{\"date\": {}, \"phase\": \"7\", \"check\": \"versions and preconditions\", \"mpv\": {}, \"ffmpeg\": {}, \
+         \"libavformat\": {}, \"missing_demuxers\": {}, \"curl_option\": {curl}}}",
+        json(&gate.date),
+        json(version.split_whitespace().nth(1).unwrap_or_default()),
+        json(&after(&version, "FFmpeg version:")),
+        json(&after(&version, "libavformat")),
+        list(&missing),
+    );
+    gate.check("precondition", "mpv", !curl, "no curl option");
+    gate.check(
+        "precondition",
+        "lavf",
+        has("hls") && has("concat"),
+        "hls and concat demuxers",
+    );
+    let n1 = (!has("dash")).then_some("no dash demuxer in this mpv's libavformat");
+    if let Some(why) = n1 {
+        gate.untested.push(format!("N1: {why}"));
+    }
+    let untested = |fixture: &str| n1.filter(|_| fixture.contains("n1-"));
 
     let (canary, ports) = canary().await;
     let pages: Pages = Arc::default();
@@ -442,42 +609,26 @@ async fn main() {
         HLS,
         media_playlist(&[seg("seg0.ts"), seg("seg1.ts")]).into_bytes(),
     );
-    for (name, text) in fixtures(
-        &ports,
-        "clear.m3u8",
-        ["seg0.ts", "seg1.ts", "enc0.ts", "enc1.ts"],
-        "key.bin",
-    ) {
+    let names = ["seg0.ts", "seg1.ts", "enc0.ts", "enc1.ts"];
+    for (name, text) in fixtures(&ports, "clear.m3u8", names, "key.bin") {
         page(&format!("/{name}.m3u8"), HLS, text.into_bytes());
     }
     let nested = nested(&ports);
     for (name, body, _) in &nested {
+        let body = body.clone().into_bytes();
         page(
             &format!("/{name}.top"),
             "application/octet-stream",
-            body.clone().into_bytes(),
+            body.clone(),
         );
-        page(
-            &format!("/{name}.ts"),
-            "video/mp2t",
-            body.clone().into_bytes(),
-        );
-        page(
-            &format!("/wrap-{name}.m3u8"),
-            HLS,
-            media_playlist(&[seg(&format!("{name}.ts"))]).into_bytes(),
-        );
+        page(&format!("/{name}.ts"), "video/mp2t", body);
+        let wrap = media_playlist(&[seg(&format!("{name}.ts"))]);
+        page(&format!("/wrap-{name}.m3u8"), HLS, wrap.into_bytes());
     }
-    page(
-        "/n4.ts",
-        "video/mp2t",
-        b"ffconcat version 1.0\nfile 'n4.ts'\n".to_vec(),
-    );
-    page(
-        "/wrap-n4.m3u8",
-        HLS,
-        media_playlist(&[seg("n4.ts")]).into_bytes(),
-    );
+    let n4 = b"ffconcat version 1.0\nfile 'n4.ts'\n".to_vec();
+    page("/n4.ts", "video/mp2t", n4);
+    let wrap = media_playlist(&[seg("n4.ts")]);
+    page("/wrap-n4.m3u8", HLS, wrap.into_bytes());
 
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http).await.unwrap();
@@ -489,87 +640,175 @@ async fn main() {
         addon_url: scope.clone(),
     };
     let limit = Duration::from_secs(20);
-    let run = |name: &str, fixture: &str, url: &str, options: &[String]| {
+    let run = |name: &str, fixture: &str, url: &str, options: &[String], env: Env| {
         let before = canary.snapshot();
         let log_before = core_log().len();
-        let (log, took, killed) = mpv(&bin, url, options, limit);
+        let (log, took, killed, exit) = mpv(&bin, url, options, env, limit);
         // CONTAINMENT_LOGS=<dir> keeps each run's mpv log.
         if let Some(dir) = std::env::var_os("CONTAINMENT_LOGS") {
-            let file = format!("{name}-{fixture}.log").replace([' ', ':', '/'], "_");
+            let file = format!("{name}-{fixture}.log").replace([' ', ':', '/', '='], "_");
             let _ = std::fs::write(std::path::Path::new(&dir).join(file), &log);
         }
-        let core = core_log()[log_before..].to_owned();
-        record(name, fixture, &canary, before, &log, took, killed, &core);
+        let after = canary.snapshot();
+        Seen {
+            http: canary.requests.lock().unwrap()[before.0..].to_vec(),
+            https: after.1 - before.1,
+            tcp: after.2 - before.2,
+            crypto: after.3 - before.3,
+            log,
+            core: core_log()[log_before..].to_owned(),
+            took,
+            killed,
+            exit,
+        }
     };
-
-    // Preconditions: the benign playlist plays through the core.
-    let lease = server
-        .open_for(
-            upstream(format!("{base}/clear.m3u8")),
+    let open = |name: String| {
+        server.open_for(
+            upstream(format!("{base}/{name}")),
             "v.mkv",
             limit,
             &[Format::Hls],
         )
-        .await
-        .unwrap();
-    run(
-        "precondition: benign HLS through open",
+    };
+    let mut leases: Vec<Lease> = Vec::new();
+
+    // Precondition: the benign playlist plays through the core, its own
+    // URLs going through the core as the proxy (no `no_proxy`).
+    let lease = open("clear.m3u8".into()).await.unwrap();
+    let seen = run(
+        "precondition",
         "clear",
         &lease.url,
         &protected(core),
+        Env::App,
     );
+    gate.record(
+        "precondition: benign HLS through open",
+        "clear",
+        &seen,
+        None,
+    );
+    let played = seen.lines("VO: [null]") > 0 && seen.exit == Some(0);
+    gate.check(
+        "precondition",
+        "clear",
+        played && !seen.reached(),
+        "plays, reaches nothing",
+    );
+    leases.push(lease);
 
-    // Control, F1 to F6: the raw fixture, no protection.
+    // Control, F1 to F6: the raw fixture, no protection; each reaches.
     let refs = ["--access-references=yes".to_owned()];
     for (name, _) in fixtures(&ports, "", ["", "", "", ""], "") {
-        run("control", name, &format!("{base}/{name}.m3u8"), &refs);
+        let seen = run(
+            "control",
+            name,
+            &format!("{base}/{name}.m3u8"),
+            &refs,
+            Env::User,
+        );
+        gate.record("control", name, &seen, None);
+        let own = seen.http.iter().any(|l| l.contains(&format!("/{name}")));
+        let reached = if name == "f6" { seen.https > 0 } else { own };
+        gate.check("control", name, reached, "its probe reaches the canary");
     }
     // Control, nested: top level, then as an HLS segment, no protection.
+    // N3's http entries reach the canary through mpv's playlist fallback;
+    // FFmpeg and mpv refuse every other one first.
     for (name, _, _) in &nested {
-        run(
-            "control nested top-level",
-            name,
-            &format!("{base}/{name}.top"),
-            &refs,
-        );
-        run(
-            "control nested as segment",
-            name,
-            &format!("{base}/wrap-{name}.m3u8"),
-            &refs,
-        );
+        for (run_name, url) in [
+            ("control nested top-level", format!("{base}/{name}.top")),
+            (
+                "control nested as segment",
+                format!("{base}/wrap-{name}.m3u8"),
+            ),
+        ] {
+            let seen = run(run_name, name, &url, &refs, Env::User);
+            gate.record(run_name, name, &seen, untested(name));
+            if untested(name).is_none() {
+                let fallback = name.starts_with("n3-http");
+                let rule = if fallback {
+                    "reaches the canary"
+                } else {
+                    "reaches nothing"
+                };
+                gate.check(run_name, name, seen.reached() == fallback, rule);
+            }
+        }
     }
-    // Protected: F1 to F6 and N1 to N4 through open, with 3.3's options.
-    let mut leases: Vec<Lease> = Vec::new();
-    let names: Vec<String> = fixtures(&ports, "", ["", "", "", ""], "")
+    // The design before review: `no_proxy` kept, no `demuxer=lavf`. A
+    // child the user's `no_proxy` names goes around the proxy; each fix
+    // alone closes it.
+    for name in ["n3-http", "n3-http-localhost"] {
+        let wrap = format!("wrap-{name}.m3u8");
+        for (run_name, options, env, escapes) in [
+            (
+                "old design: no_proxy kept",
+                old_design(core),
+                Env::User,
+                true,
+            ),
+            (
+                "demuxer=lavf alone, no_proxy kept",
+                protected(core),
+                Env::User,
+                false,
+            ),
+            ("no_proxy cleared alone", old_design(core), Env::App, false),
+        ] {
+            let lease = open(wrap.clone()).await.unwrap();
+            let seen = run(run_name, &wrap, &lease.url, &options, env);
+            gate.record(run_name, &wrap, &seen, None);
+            let rule = if escapes {
+                "reaches the canary"
+            } else {
+                "reaches nothing"
+            };
+            gate.check(run_name, &wrap, seen.reached() == escapes, rule);
+            leases.push(lease);
+        }
+    }
+    // Protected: F1 to F6 and N1 to N4 through open, with 3.3's options and
+    // environment; nothing reaches the canary.
+    let protect: Vec<String> = fixtures(&ports, "", ["", "", "", ""], "")
         .into_iter()
         .map(|(n, _)| format!("{n}.m3u8"))
         .chain(nested.iter().map(|(n, _, _)| format!("wrap-{n}.m3u8")))
         .chain(["wrap-n4.m3u8".to_owned()])
         .collect();
-    for name in &names {
-        let opened = server.open_for(
-            upstream(format!("{base}/{name}")),
-            "v.mkv",
-            limit,
-            &[Format::Hls],
-        );
-        match opened.await {
-            Ok(lease) => {
-                run("protected", name, &lease.url, &protected(core));
-                leases.push(lease);
+    for name in &protect {
+        let lease = match open(name.clone()).await {
+            Ok(lease) => lease,
+            Err(words) => {
+                println!(
+                    "{{\"date\": {}, \"phase\": \"7\", \"run\": \"protected\", \"fixture\": {}, \"open_refused\": {}}}",
+                    json(&gate.date),
+                    json(name),
+                    json(&words)
+                );
+                continue;
             }
-            Err(words) => println!(
-                "{{\"date\": \"2026-10-19\", \"phase\": \"7\", \"run\": \"protected\", \"fixture\": {}, \"open_refused\": {}}}",
-                json(name),
-                json(&words)
-            ),
+        };
+        let seen = run("protected", name, &lease.url, &protected(core), Env::App);
+        gate.record("protected", name, &seen, untested(name));
+        gate.check("protected", name, !seen.reached(), "reaches nothing");
+        if name.starts_with('f') {
+            let blocked = seen.core_lines("blocked address") > 0;
+            gate.check("protected", name, blocked, "the core refuses its probe");
+        } else if name == "wrap-n4.m3u8" {
+            let errs = !seen.killed && seen.exit != Some(0) && seen.took < Duration::from_secs(10);
+            gate.check("protected", name, errs, "an error within 10 s");
+        } else if untested(name).is_none() {
+            let shown = !seen.stopped_by().is_empty();
+            gate.check("protected", name, shown, "the log shows what stopped it");
         }
+        leases.push(lease);
     }
-    // Backstop: F1 to F6 raw through register; the benign parts are the
-    // core's own registered URLs, so they pass the Host check.
+    // Backstop: F1 to F6 and the nested formats raw through register, with
+    // only the proxy and the whitelist; the benign parts are the core's own
+    // registered URLs, so they pass the Host check.
     let reg = |path: &str, name: &str| server.register(upstream(format!("{base}{path}")), name);
-    let s = ["seg0.ts", "seg1.ts", "enc0.ts", "enc1.ts"].map(|n| reg(&format!("/{n}"), n));
+    let s = names.map(|n| reg(&format!("/{n}"), n));
     let k = reg("/key.bin", "key.bin");
     let segs = [
         s[0].url.as_str(),
@@ -583,17 +822,54 @@ async fn main() {
         media_playlist(&[seg(segs[0]), seg(segs[1])]).into_bytes(),
     );
     let clear = reg("/bk/clear.m3u8", "clear.m3u8");
-    let backstop: Vec<String> = [
-        "--access-references=yes".to_owned(),
-        format!("--http-proxy=http://{core}"),
-        "--demuxer-lavf-o=protocol_whitelist=[http,tcp,crypto]".into(),
-        "--demuxer-lavf-format=hls".into(),
-    ]
-    .into();
+    let mut backstops: Vec<(String, Lease)> = Vec::new();
     for (name, text) in fixtures(&ports, &clear.url, segs, &k.url) {
         page(&format!("/bk/{name}.m3u8"), HLS, text.into_bytes());
         let lease = reg(&format!("/bk/{name}.m3u8"), &format!("{name}.m3u8"));
-        run("backstop", name, &lease.url, &backstop);
+        backstops.push((name.to_owned(), lease));
     }
-    drop((s, k, clear, leases));
+    for (name, _, _) in &nested {
+        let segment = reg(&format!("/{name}.ts"), &format!("{name}.ts"));
+        let wrap = media_playlist(&[seg(&segment.url)]);
+        page(&format!("/bk/wrap-{name}.m3u8"), HLS, wrap.into_bytes());
+        let lease = reg(&format!("/bk/wrap-{name}.m3u8"), "wrap.m3u8");
+        backstops.push((format!("wrap-{name}"), lease));
+        leases.push(segment);
+    }
+    for (name, lease) in &backstops {
+        let seen = run("backstop", name, &lease.url, &backstop(core), Env::App);
+        gate.record("backstop", name, &seen, untested(name));
+        gate.check("backstop", name, !seen.reached(), "reaches nothing");
+        let refused = seen.lines("HTTP error 403") > 0
+            && seen.core_lines("refused a request for another host") > 0;
+        if (name.starts_with('f') && name != "f6") || name.starts_with("wrap-n3-http") {
+            gate.check(
+                "backstop",
+                name,
+                refused,
+                "the core's Host check refuses its probe",
+            );
+        } else if untested(name).is_none() {
+            let shown = !seen.stopped_by().is_empty();
+            gate.check("backstop", name, shown, "the log shows what stopped it");
+        }
+    }
+
+    let verdict = if !gate.failed.is_empty() {
+        1
+    } else if !gate.untested.is_empty() {
+        2
+    } else {
+        0
+    };
+    let failed: Vec<&str> = gate.failed.iter().map(String::as_str).collect();
+    let untested: Vec<&str> = gate.untested.iter().map(String::as_str).collect();
+    println!(
+        "{{\"date\": {}, \"phase\": \"7\", \"check\": \"gate verdict\", \"failed\": {}, \"untested\": {}, \"exit\": {verdict}}}",
+        json(&gate.date),
+        list(&failed),
+        list(&untested),
+    );
+    drop((s, k, clear, leases, backstops));
+    std::process::exit(verdict);
 }

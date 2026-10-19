@@ -5,7 +5,13 @@
 //! raw, as the gate's backstop run needs; with it, it is opened as the apps
 //! open it for a player that plays HLS, so a playlist is found and rewritten.
 //! The URL's own host is in scope, as an install's is, so a loopback or LAN
-//! literal plays. The second line is mpv's options for that URL (3.3).
+//! literal plays. The second line is the whole mpv command for that URL:
+//! the app's options on every instance (m3-desktop 4.3, `ytdl=no` and
+//! `load-unsafe-playlists=no` included), the file's options and the
+//! environment of 3.3. Leaving any of them out leaves mpv uncontained.
+
+#[path = "mpv/options.rs"]
+mod options;
 
 use mq_http::{ClientConfig, HttpClient};
 use mq_server::{StreamServer, Upstream};
@@ -38,15 +44,19 @@ async fn main() {
     };
     println!("{}", lease.url);
     // A file plays with references off; a playlist (or a raw URL that may
-    // be one) only with the core as the proxy and lavf's whitelist.
-    let proxy = server.addr();
-    if playlist {
-        println!(
-            "--access-references=yes --http-proxy=http://{proxy} --demuxer-lavf-propagate-opts=yes \
-             --demuxer-lavf-o=protocol_whitelist=[http,tcp,crypto]"
-        );
+    // be one) only with the core as the proxy, lavf alone and its whitelist.
+    let file: &[&str] = if playlist {
+        &options::MANIFEST
     } else {
-        println!("--access-references=no");
-    }
+        &["--access-references=no"]
+    };
+    let env = options::CLEARED.map(|v| format!("-u {v}")).join(" ");
+    println!(
+        "env {env} mpv {} {} {} '{}'",
+        options::HARDENED.join(" "),
+        options::proxy(server.addr()).join(" "),
+        file.join(" "),
+        lease.url
+    );
     std::future::pending::<()>().await;
 }
