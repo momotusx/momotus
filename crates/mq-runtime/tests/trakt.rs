@@ -375,6 +375,13 @@ async fn start_pause_and_stop_follow_the_player() {
     fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
     // A seek in the same state sends nothing.
     view.report_progress(at(30), MINUTES, false);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(
+        fake.scrobbles().len(),
+        1,
+        "a seek sent {:?}",
+        fake.scrobbles()
+    );
     view.report_progress(at(31), MINUTES, true);
     fake.wait_for("pause", |f| f.scrobbles().len() == 2).await;
     view.report_progress(at(40), MINUTES, false);
