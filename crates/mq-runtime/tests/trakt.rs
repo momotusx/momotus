@@ -2500,3 +2500,50 @@ async fn a_dead_sign_in_never_spins_the_scheduler() {
         "{n} rounds in 2 s: the scheduler waits for a sign-in"
     );
 }
+
+#[tokio::test]
+async fn an_episode_found_again_forgets_its_failed_looks() {
+    let (core, fake) = signed_in("a-recover").await;
+    // Three failed looks for S2E1, over a day already.
+    let failing = json!({"first": now() - 2 * 86_400_000, "last": now() - 86_400_000,
+                         "looks": 3});
+    core.library()
+        .set_tracker_state(
+            key("a-recover"),
+            "failing:episode:tt100:2:1",
+            &failing.to_string(),
+        )
+        .unwrap();
+    // Then a second meta addon lists it once (kept by no cache), and not
+    // after; the title page reads only the first addon.
+    let later = Fake::new("a-recover");
+    let base = later.start().await;
+    core.install_addon(&format!("{base}/manifest.json"))
+        .await
+        .unwrap();
+    let mut two = meta("/meta/series/tt100.json");
+    two["meta"]["videos"].as_array_mut().unwrap().push(
+        json!({"id": "tt100:2:1", "title": "S2E1", "season": 2, "episode": 1, "tvdb_id": 2001}),
+    );
+    later.queue(
+        "GET /meta/series/tt100.json",
+        vec![Reply {
+            status: 200,
+            body: two.to_string(),
+            delay: Duration::ZERO,
+            headers: "Cache-Control: no-store\r\n".into(),
+        }],
+    );
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:2:1", true).unwrap();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        history_writes(&fake),
+        [("/sync/history".to_owned(), vec![2001])]
+    );
+    // A miss after the success is a first failed look, not the fourth.
+    title.set_watched("tt100:2:1", false).unwrap();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(pending(&core, "a-recover"), 1, "the unmark waits");
+    assert!(status(&core).unmapped.is_empty(), "never listed");
+}

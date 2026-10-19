@@ -199,19 +199,30 @@ pub(super) async fn ids(
         return Err(Miss::Permanent("a special (season 0)".into()));
     }
     let tvdb = show_ids(core, key, item_id).await?;
-    match tvdb.get(video_id) {
-        Some(&tvdb) => Ok(TraktIds::Episode {
-            tvdb,
-            show_imdb: item_id.to_owned(),
-        }),
-        // No addon lists it yet (a new episode, a season to come).
-        None => Err(failed(
-            core,
-            key,
-            Look::Episode,
-            video_id,
-            "no addon gives this episode a TVDB id".into(),
-        )),
+    // No addon may list it yet (a new episode, a season to come).
+    let reason = "no addon gives this episode a TVDB id";
+    let tvdb = episode_id(core, key, video_id, tvdb.get(video_id).copied(), reason)?;
+    Ok(TraktIds::Episode {
+        tvdb,
+        show_imdb: item_id.to_owned(),
+    })
+}
+
+/// One episode in its show's details: found, its failed looks are
+/// forgotten; missing, the look counts as failed.
+fn episode_id<T>(
+    core: &Core,
+    key: TrackerKey<'_>,
+    item: &str,
+    found: Option<T>,
+    reason: &str,
+) -> Result<T, Miss> {
+    match found {
+        Some(found) => {
+            succeeded(core, key, Look::Episode, item);
+            Ok(found)
+        }
+        None => Err(failed(core, key, Look::Episode, item, reason.to_owned())),
     }
 }
 
@@ -299,26 +310,28 @@ impl<'a> Mapper<'a> {
             Err(Miss::Permanent(reason)) => return permanent(reason.as_str()),
             Err(Miss::Transient(reason)) => return Err(PlaceMiss::Transient(reason.clone())),
         };
-        match by_tvdb.get(&tvdb) {
-            Some(video) => Ok(Mapped {
+        // No addon may list it yet: a look that failed, as above.
+        let item = format!("{imdb}:tvdb{tvdb}");
+        let found = by_tvdb.get(&tvdb).cloned();
+        match episode_id(
+            self.core,
+            self.key,
+            &item,
+            found,
+            "no addon lists this episode yet",
+        ) {
+            Ok(video_id) => Ok(Mapped {
                 item_id: imdb.to_owned(),
-                video_id: video.clone(),
+                video_id,
                 kind: "series".into(),
                 name,
             }),
-            // No addon lists it yet: a look that failed, as above.
-            None => {
-                let item = format!("{imdb}:tvdb{tvdb}");
-                let reason = "no addon lists this episode yet".to_owned();
-                match failed(self.core, self.key, Look::Episode, &item, reason) {
-                    Miss::Permanent(reason) => Err(PlaceMiss::Permanent(Unplaced {
-                        id: imdb.to_owned(),
-                        name,
-                        reason,
-                    })),
-                    Miss::Transient(reason) => Err(PlaceMiss::Transient(reason)),
-                }
-            }
+            Err(Miss::Permanent(reason)) => Err(PlaceMiss::Permanent(Unplaced {
+                id: imdb.to_owned(),
+                name,
+                reason,
+            })),
+            Err(Miss::Transient(reason)) => Err(PlaceMiss::Transient(reason)),
         }
     }
 }
