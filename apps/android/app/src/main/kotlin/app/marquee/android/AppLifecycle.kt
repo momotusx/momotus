@@ -75,8 +75,9 @@ class AppLifecycle(
 }
 
 /**
- * The default network as the callbacks report it, on their one thread: each new network, and not the
- * one current at registration, is a change, sent once with its type.
+ * The default network as the callbacks report it, on their one thread: each new network is sent once
+ * with its type, the one current at registration too. The core starts every run on `other`, so without
+ * it Settings' This device and Measure again would read and clear another network's speeds.
  */
 internal class DefaultNetwork(
     private val send: (NetworkType) -> Unit,
@@ -87,8 +88,8 @@ internal class DefaultNetwork(
         network: Any,
         type: NetworkType,
     ) {
-        val was = current
+        if (network == current) return
         current = network
-        if (was != null && was != network) send(type)
+        send(type)
     }
 }

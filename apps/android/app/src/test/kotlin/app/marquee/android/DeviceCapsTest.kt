@@ -135,15 +135,16 @@ class DeviceCapsTest {
     }
 
     @Test
-    fun `a new default network is a change with its type, the one at start and a repeat are not`() {
+    fun `each new default network is sent once with its type, the one at start too`() {
         val sent = mutableListOf<Network>()
         val default = DefaultNetwork { sent += it }
         default.seen("net-1", Network.Wifi)
         default.seen("net-1", Network.Wifi)
-        assertEquals(emptyList(), sent, "the network current at registration is no change")
+        // The core starts each run on "other": it hears the network current at registration.
+        assertEquals(listOf(Network.Wifi), sent)
         default.seen("net-2", Network.Cellular)
         default.seen("net-2", Network.Cellular)
         default.seen("net-3", Network.Wifi)
-        assertEquals(listOf(Network.Cellular, Network.Wifi), sent)
+        assertEquals(listOf(Network.Wifi, Network.Cellular, Network.Wifi), sent)
     }
 }
