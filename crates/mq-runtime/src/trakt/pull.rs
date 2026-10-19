@@ -5,7 +5,7 @@
 //! is bound to the connection the round started under.
 
 use super::map::{self, Look, Mapper, Miss, PlaceMiss, TraktIds};
-use super::{Conn, Trakt};
+use super::{Bind, Conn, Trakt};
 use crate::Core;
 use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
 use mq_library::hlc::now_ms;
@@ -81,7 +81,13 @@ pub(super) async fn round(
         gate: &gate,
         key,
         bound: &bound,
-        mapper: Mapper::new(core, key),
+        mapper: Mapper::new(
+            core,
+            Bind {
+                conn,
+                bound: &bound,
+            },
+        ),
         report: TraktReport::default(),
         now: now_ms() as i64,
         left: None,
@@ -94,12 +100,9 @@ pub(super) async fn round(
     conn.set_importing(None);
     // The app is in use: failed looks not seen again over two days of
     // rounds start over (`map::failed`).
-    if let Ok(_fence) = round.fence() {
-        let at = now_ms().to_string();
-        let _ = core
-            .library()
-            .set_tracker_state(round.key, map::LAST_ROUND, &at);
-    }
+    round
+        .at()
+        .set_state(core, map::LAST_ROUND, &now_ms().to_string());
     let pending = core.library().tracker_pending(round.key).map_or(0, |p| p.0);
     round.report.pending = pending as u32;
     result.map(|()| round.report)
@@ -292,7 +295,8 @@ impl<'a> Round<'a> {
                 // No runtime anywhere: nothing to place it on.
                 Ok(None) => continue,
                 Err(reason) => {
-                    match map::failed(self.core, self.key, Look::Runtime, &placed.item_id, reason) {
+                    let (at, item) = (self.at(), &placed.item_id);
+                    match map::failed(self.core, at, Look::Runtime, item, reason) {
                         Miss::Transient(reason) => self.left = Some(reason),
                         Miss::Permanent(_) => {}
                     }
@@ -367,7 +371,7 @@ impl<'a> Round<'a> {
             return Ok(Some(((percent / 100.0 * duration as f64) as i64, duration)));
         }
         let (meta, _) = self.core.fetch_meta(&placed.kind, &placed.item_id).await?;
-        map::succeeded(self.core, self.key, Look::Runtime, &placed.item_id);
+        map::succeeded(self.core, self.at(), Look::Runtime, &placed.item_id);
         let runtime = meta.preview.runtime.as_deref().and_then(runtime_ms);
         Ok(runtime.map(|runtime| {
             (
@@ -452,8 +456,14 @@ impl<'a> Round<'a> {
                 } else {
                     "series"
                 };
-                let ids =
-                    map::ids(self.core, self.key, kind, &intent.item_id, &intent.video_id).await;
+                let ids = map::ids(
+                    self.core,
+                    self.at(),
+                    kind,
+                    &intent.item_id,
+                    &intent.video_id,
+                )
+                .await;
                 match ids {
                     Ok(ids) if intent.op == IntentOp::Add => {
                         if self.already_there(&intent, &ids).await {
@@ -602,7 +612,7 @@ impl<'a> Round<'a> {
 
     fn unplaced(&mut self, u: &map::Unplaced) {
         self.report.unmapped += 1;
-        map::record(self.core, self.key, &u.id, &u.name, &u.reason);
+        map::record(self.core, self.at(), &u.id, &u.name, &u.reason);
     }
 
     fn importing(&self, done: u32, total: u32) {
@@ -611,16 +621,18 @@ impl<'a> Round<'a> {
         self.core.trakt_refresh(self.conn);
     }
 
+    /// The connection this round started under, for its account's writes.
+    fn at(&self) -> Bind<'a> {
+        Bind {
+            conn: self.conn,
+            bound: self.bound,
+        }
+    }
+
     /// The connection this round started under is still the one in use,
     /// and stays so while the guard is held (a sign-out waits for it).
     fn fence(&self) -> Result<std::sync::MutexGuard<'a, ()>, CallError> {
-        let fence = super::lock(&self.conn.fence);
-        let now = futures_util::FutureExt::now_or_never(self.conn.auth.bound()).flatten();
-        if now.as_ref() == Some(self.bound) {
-            Ok(fence)
-        } else {
-            Err(CallError::Auth(AuthError::Off))
-        }
+        self.at().fence().ok_or(CallError::Auth(AuthError::Off))
     }
 
     async fn get(&self, path: &str) -> Result<Value, CallError> {

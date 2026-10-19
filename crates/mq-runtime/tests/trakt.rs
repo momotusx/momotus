@@ -2695,3 +2695,33 @@ async fn looks_add_up_however_rarely_the_app_is_opened() {
         "a first look again: it waits"
     );
 }
+
+#[tokio::test]
+async fn a_lookup_answered_after_sign_out_writes_nothing() {
+    let (core, fake) = signed_in("a-out-map").await;
+    // A pulled row's show answers its lookup late, with an error (a look).
+    fake.queue(
+        "GET /meta/series/tt300.json",
+        vec![Reply {
+            status: 503,
+            body: "{}".into(),
+            delay: Duration::from_secs(2),
+            headers: String::new(),
+        }],
+    );
+    let (_, row) = other_show("tt300", 76, now());
+    fake.list("/sync/history", vec![row]);
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    let round = tokio::spawn({
+        let core = core.clone();
+        async move { core.trakt_sync().await }
+    });
+    fake.wait_for("the lookup", |f| {
+        !f.seen("GET", "/meta/series/tt300.json").is_empty()
+    })
+    .await;
+    core.trakt_sign_out().await.unwrap();
+    let _ = round.await.unwrap();
+    let rows = core.library().tracker_states(key("a-out-map"), "").unwrap();
+    assert!(rows.is_empty(), "written after the sign-out: {rows:?}");
+}

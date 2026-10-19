@@ -19,7 +19,7 @@ use futures_util::{Stream, StreamExt};
 use mq_http::HttpClient;
 use mq_library::TrackerKey;
 use mq_library::hlc::now_ms;
-use mq_tracking::trakt::{Api, Auth, AuthError, Gate, Hosts, TraktRecord};
+use mq_tracking::trakt::{Api, Auth, AuthError, Bound, Gate, Hosts, TraktRecord};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -299,6 +299,44 @@ impl Trakt {
 
     fn conns(&self) -> Vec<Arc<Conn>> {
         lock(&self.conns).values().cloned().collect()
+    }
+}
+
+/// A connection as work started under it: the account's rows that work
+/// writes land only while it is still the connection in use.
+#[derive(Clone, Copy)]
+pub(super) struct Bind<'a> {
+    pub conn: &'a Conn,
+    pub bound: &'a Bound,
+}
+
+impl<'a> Bind<'a> {
+    pub(super) fn key(self) -> TrackerKey<'a> {
+        self.conn.key(&self.bound.account)
+    }
+
+    /// Whether this is still the connection in use. It stays so while the
+    /// guard is held: a sign-out takes the same lock to move the generation.
+    pub(super) fn fence(self) -> Option<MutexGuard<'a, ()>> {
+        let fence = lock(&self.conn.fence);
+        let now = futures_util::FutureExt::now_or_never(self.conn.auth.bound()).flatten();
+        (now.as_ref() == Some(self.bound)).then_some(fence)
+    }
+
+    /// Writes one of the account's state rows, behind the fence.
+    pub(super) fn set_state(self, core: &Core, name: &str, value: &str) {
+        if let Some(_fence) = self.fence()
+            && let Err(e) = core.library().set_tracker_state(self.key(), name, value)
+        {
+            tracing::debug!("trakt: state not written: {e}");
+        }
+    }
+
+    /// Deletes one of the account's state rows, behind the fence.
+    pub(super) fn delete_state(self, core: &Core, name: &str) {
+        if let Some(_fence) = self.fence() {
+            let _ = core.library().delete_tracker_state(self.key(), name);
+        }
     }
 }
 

@@ -6,7 +6,7 @@
 //! account's tokens.
 
 use super::map::{self, Miss, TraktIds};
-use super::{ACCOUNT_SETTING, Conn, TRACKER, lock};
+use super::{ACCOUNT_SETTING, Bind, Conn, TRACKER, lock};
 use crate::Core;
 use crate::core::WeakCore;
 use mq_library::hlc::now_ms;
@@ -442,9 +442,12 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
             }
             continue;
         }
-        let key = conn.key(&bound.account);
+        let at = Bind {
+            conn,
+            bound: &bound,
+        };
         if s.ids.is_none() {
-            match resolve(core, key, &s.target).await {
+            match resolve(core, at, &s.target).await {
                 Ok(ids) => {
                     (s.report)(TraktPlayback::On);
                     s.ids = Some(Ok(ids));
@@ -488,7 +491,7 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
             } else if stop_expired(s.stop_failing_since, Instant::now()) {
                 // Its hour is up: given up before another request goes.
                 changed = true;
-                unanswered(core, key, s);
+                unanswered(core, at, s);
                 true
             } else {
                 let body = ids.scrobble(s.percent);
@@ -498,7 +501,7 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
                 let path = "/scrobble/stop";
                 let answer = call::post(&api, &gate, &conn.auth, &bound, path, &body, deadline);
                 changed = true;
-                stopped(core, conn, key, s, &ids, read(answer.await))
+                stopped(core, conn, at, s, &ids, read(answer.await))
             };
             if !done {
                 retry = earliest(
@@ -534,17 +537,17 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
                 s.not_before = None;
                 s.sent = next;
                 if action == "pause" {
-                    remember(core, key, &s.target.video_id, s.percent);
+                    remember(core, at, &s.target.video_id, s.percent);
                 }
                 if !ids.resolved(&answer) {
-                    map::wrong_show(core, key, &s.target.item_id, &s.target.name);
+                    map::wrong_show(core, at, &s.target.item_id, &s.target.name);
                     (s.report)(TraktPlayback::Unmapped);
                     s.ids = Some(Err("Trakt matched it to another title".into()));
                 }
             }
             Reply::Duplicate => s.sent = next,
             Reply::Unmapped(reason) => {
-                map::record(core, key, &s.target.item_id, &s.target.name, &reason);
+                map::record(core, at, &s.target.item_id, &s.target.name, &reason);
                 (s.report)(TraktPlayback::Unmapped);
                 s.ids = Some(Err(reason));
             }
@@ -578,7 +581,7 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
 fn stopped(
     core: &Core,
     conn: &Conn,
-    key: TrackerKey<'_>,
+    at: Bind<'_>,
     s: &mut Sess,
     ids: &TraktIds,
     answer: Reply,
@@ -586,7 +589,7 @@ fn stopped(
     let confirm = |s: &Sess| {
         let t = &s.target;
         if let Err(e) = core.library().confirm_watched(
-            key.profile,
+            at.key().profile,
             &t.item_id,
             &t.video_id,
             &s.since,
@@ -598,10 +601,10 @@ fn stopped(
     match answer {
         Reply::Ok(body) => {
             conn.ok();
-            remember(core, key, &s.target.video_id, s.percent);
+            remember(core, at, &s.target.video_id, s.percent);
             if !ids.resolved(&body) {
                 // A play went to another title: none follows it there.
-                map::wrong_show(core, key, &s.target.item_id, &s.target.name);
+                map::wrong_show(core, at, &s.target.item_id, &s.target.name);
                 (s.report)(TraktPlayback::Unmapped);
                 end(core, s, true);
             } else if body["action"].as_str() == Some("scrobble") {
@@ -618,7 +621,7 @@ fn stopped(
             true
         }
         Reply::Unmapped(reason) => {
-            map::record(core, key, &s.target.item_id, &s.target.name, &reason);
+            map::record(core, at, &s.target.item_id, &s.target.name, &reason);
             (s.report)(TraktPlayback::Unmapped);
             end(core, s, false);
             true
@@ -640,7 +643,7 @@ fn stopped(
                 s.not_before = Some(Instant::now() + wait);
                 return false;
             }
-            unanswered(core, key, s);
+            unanswered(core, at, s);
             true
         }
     }
@@ -648,11 +651,10 @@ fn stopped(
 
 /// A stop given up: Trakt may have the play or not. The held write goes
 /// out, after a look at the minutes around the stop.
-fn unanswered(core: &Core, key: TrackerKey<'_>, s: &Sess) {
+fn unanswered(core: &Core, at: Bind<'_>, s: &Sess) {
     if s.percent >= PLAY_PERCENT && s.held.load(Ordering::SeqCst) {
-        let at = now_ms().to_string();
         let name = format!("check:{}", s.target.video_id);
-        let _ = core.library().set_tracker_state(key, &name, &at);
+        at.set_state(core, &name, &now_ms().to_string());
     }
     end(core, s, false);
 }
@@ -683,18 +685,16 @@ fn end(core: &Core, s: &Sess, delivered: bool) {
 
 /// This device's own pause or stop, so a pull does not take it back as
 /// another device's.
-fn remember(core: &Core, key: TrackerKey<'_>, video_id: &str, percent: f64) {
+fn remember(core: &Core, at: Bind<'_>, video_id: &str, percent: f64) {
     let value = json!({"percent": percent, "at": now_ms()}).to_string();
-    let _ = core
-        .library()
-        .set_tracker_state(key, &format!("sent:{video_id}"), &value);
+    at.set_state(core, &format!("sent:{video_id}"), &value);
 }
 
 /// The session's ids; a permanent miss is listed as unmapped.
-async fn resolve(core: &Core, key: TrackerKey<'_>, target: &Target) -> Result<TraktIds, Miss> {
-    let resolved = map::ids(core, key, &target.kind, &target.item_id, &target.video_id).await;
+async fn resolve(core: &Core, at: Bind<'_>, target: &Target) -> Result<TraktIds, Miss> {
+    let resolved = map::ids(core, at, &target.kind, &target.item_id, &target.video_id).await;
     if let Err(Miss::Permanent(reason)) = &resolved {
-        map::record(core, key, &target.item_id, &target.name, reason);
+        map::record(core, at, &target.item_id, &target.name, reason);
     }
     resolved
 }
