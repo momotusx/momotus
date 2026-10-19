@@ -252,6 +252,8 @@ pub struct Pick {
 pub struct PickHandle {
     state: std::sync::Weak<Mutex<State>>,
     recommended: bool,
+    /// The device's engine shows HEVC only from `hvc1` entries.
+    pub hvc1_only: bool,
 }
 
 impl PickHandle {
@@ -489,6 +491,7 @@ impl VersionsView {
             debrid: core.debrid().is_some(),
             dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
             limit_chosen: core.size_limit_chosen(),
+            no_picture: crate::speed::no_picture(core.library()),
         };
         let item_id = item_id.map_or_else(
             || {
@@ -666,6 +669,7 @@ impl VersionsView {
         let handle = PickHandle {
             state: Arc::downgrade(&self.state),
             recommended,
+            hvc1_only: self.learning.caps.hvc1_only,
         };
         if recommended {
             s.recommendation_starting = true;

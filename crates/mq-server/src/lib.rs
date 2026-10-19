@@ -140,7 +140,7 @@ struct Playback {
     trouble: Mutex<Option<Reporter>>,
     /// File offsets of `hev1` and `dvhe` types and the types they are
     /// served as, found by the first body of a file (`relabels`).
-    relabel: tokio::sync::OnceCell<Arc<[Relabelled]>>,
+    relabel: tokio::sync::OnceCell<Scan>,
 }
 
 /// Why a subtitle was answered with an empty WebVTT instead of its cues.
@@ -710,6 +710,14 @@ impl Lease {
             _ => None,
         }
     }
+
+    /// Whether the file has an `hev1` or `dvhe` entry with no parameter
+    /// sets: Apple shows no picture from it, even relabelled. The same scan
+    /// as the relabel (one per playback, an MP4 or MOV file only).
+    pub fn picture_missing_on_apple(&self) -> futures_util::future::BoxFuture<'static, bool> {
+        let playback = self.playback.clone();
+        Box::pin(async move { scan(&playback).await.bare })
+    }
 }
 
 impl std::fmt::Debug for Lease {
@@ -1058,6 +1066,16 @@ const RELABEL_BUDGET: mq_media::ProbeBudget = mq_media::ProbeBudget {
 /// A four-byte sample entry type at a file offset, and the type served.
 type Relabelled = (u64, [u8; 4]);
 
+/// What the scan of a file's sample entries found.
+#[derive(Clone, Default)]
+struct Scan {
+    /// The entries to serve under the type Apple decodes.
+    relabel: Arc<[Relabelled]>,
+    /// An `hev1` or `dvhe` entry whose `hvcC` has no parameter sets:
+    /// Apple shows no picture from it in any form.
+    bare: bool,
+}
+
 /// A body's relabels, awaited before its first bytes: the headers never
 /// wait for the scan, and a HEAD request never starts it.
 type Relabel = futures_util::future::BoxFuture<'static, Arc<[Relabelled]>>;
@@ -1068,10 +1086,10 @@ type Relabel = futures_util::future::BoxFuture<'static, Arc<[Relabelled]>>;
 /// first body sent, wherever `moov` sits; only entries whose `hvcC` holds
 /// the parameter sets, since the label does not add them.
 fn relabels(playback: Arc<Playback>) -> Relabel {
-    Box::pin(async move { scan(&playback).await })
+    Box::pin(async move { scan(&playback).await.relabel })
 }
 
-async fn scan(playback: &Playback) -> Arc<[Relabelled]> {
+async fn scan(playback: &Playback) -> Scan {
     let found = playback.relabel.get_or_init(|| async {
         let reader: Box<dyn mq_media::RangeReader> = match &playback.body {
             Content::Http(source) if !source.passthrough() => {
@@ -1084,20 +1102,24 @@ async fn scan(playback: &Playback) -> Arc<[Relabelled]> {
                 Ok(reader) if torrent::iso_bmff(&reader.file().path) => {
                     Box::new(torrent::TorrentBytes(reader))
                 }
-                _ => return Arc::from([]),
+                _ => return Scan::default(),
             },
-            _ => return Arc::from([]),
+            _ => return Scan::default(),
         };
         let cancel = playback.released.clone();
         let entries = mq_media::hev1_entries(reader.as_ref(), RELABEL_BUDGET, &cancel).await;
-        if entries.iter().any(|e| !e.parameter_sets) {
+        let bare = entries.iter().any(|e| !e.parameter_sets);
+        if bare {
             tracing::warn!("an hev1 video entry without parameter sets: no picture on Apple");
         }
-        entries
-            .iter()
-            .filter(|e| e.parameter_sets)
-            .map(|e| (e.fourcc_at, e.serve_as))
-            .collect()
+        Scan {
+            relabel: entries
+                .iter()
+                .filter(|e| e.parameter_sets)
+                .map(|e| (e.fourcc_at, e.serve_as))
+                .collect(),
+            bare,
+        }
     });
     found.await.clone()
 }

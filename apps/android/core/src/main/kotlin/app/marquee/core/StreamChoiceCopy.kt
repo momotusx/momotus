@@ -82,6 +82,12 @@ object StreamChoiceCopy {
                     "Did not start here last time",
                     listOf("Almost nothing arrived when this device last tried it"),
                 ),
+            "noPicture" to
+                LineWords(
+                    bad,
+                    "No picture on this device",
+                    listOf("Its HEVC video is stored in a form this device cannot show"),
+                ),
             "veryFew" to LineWords(bad, "May not start", listOf("{seeders}")),
             "otherYear" to LineWords(warn, "May be a different film or show", listOf("The release says {year}")),
             "mayPause" to
@@ -294,6 +300,10 @@ object StreamChoiceCopy {
 
             ReasonLine.Stalled -> {
                 "stalled" to emptyMap()
+            }
+
+            ReasonLine.NoPicture -> {
+                "noPicture" to emptyMap()
             }
 
             is ReasonLine.VeryFew -> {

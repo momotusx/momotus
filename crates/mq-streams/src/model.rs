@@ -22,6 +22,10 @@ pub struct DeviceCaps {
     pub containers: Vec<String>,
     /// A second engine (libmpv) exists for what the primary cannot play.
     pub has_fallback_engine: bool,
+    /// The primary engine shows HEVC in MP4 or MOV only from a sample
+    /// entry that carries its parameter sets (Apple's AVFoundation): an
+    /// `hev1` entry without them plays as sound alone.
+    pub hvc1_only: bool,
 }
 
 impl DeviceCaps {
@@ -47,6 +51,7 @@ impl DeviceCaps {
                 .map(str::to_owned)
                 .to_vec(),
             has_fallback_engine: true,
+            hvc1_only: false,
         }
     }
 }
@@ -162,6 +167,9 @@ pub struct Conditions {
     /// The size limit is one the user set (or an older app's quality set),
     /// not the default: the line says "the size you chose".
     pub limit_chosen: bool,
+    /// Stream keys whose file showed no picture on this device (an `hev1`
+    /// entry without parameter sets on an `hvc1_only` engine).
+    pub no_picture: Vec<String>,
 }
 
 impl Default for Conditions {
@@ -184,6 +192,7 @@ impl Default for Conditions {
             debrid: false,
             dead_swarms: Vec::new(),
             limit_chosen: false,
+            no_picture: Vec::new(),
         }
     }
 }
@@ -395,6 +404,9 @@ pub enum ReasonLine {
     WashedOut,
     /// The swarm sent almost nothing when this device last tried it.
     Stalled,
+    /// The file's video showed no picture on this device: it plays as
+    /// sound alone.
+    NoPicture,
     #[serde(rename_all = "camelCase")]
     Large {
         #[cfg_attr(feature = "ts", ts(type = "number"))]

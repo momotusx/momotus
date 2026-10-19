@@ -443,9 +443,12 @@ async fn a_pick_while_the_recommendation_starts_waits_for_it() {
     );
 }
 
-/// A loopback origin serving `len` bytes with `Range` support, about
-/// 12 MB/s, so a read is in flight long enough to count as a sample.
-async fn throttled_origin(len: usize) -> String {
+/// A loopback origin serving `body` with `Range` support, 64 KiB at a
+/// time with `pause` between (5 ms: about 12 MB/s, so a read is in flight
+/// long enough to count as a sample).
+async fn range_origin(body: Vec<u8>, pause: Duration) -> String {
+    let body = std::sync::Arc::new(body);
+    let len = body.len();
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -454,6 +457,7 @@ async fn throttled_origin(len: usize) -> String {
             let Ok((mut socket, _)) = listener.accept().await else {
                 return;
             };
+            let body = body.clone();
             tokio::spawn(async move {
                 let mut head = Vec::new();
                 let mut buf = [0u8; 2048];
@@ -477,15 +481,11 @@ async fn throttled_origin(len: usize) -> String {
                 if socket.write_all(answer.as_bytes()).await.is_err() {
                     return;
                 }
-                let chunk = vec![0u8; 64 << 10];
-                let mut left = body_len;
-                while left > 0 {
-                    let n = left.min(chunk.len());
-                    if socket.write_all(&chunk[..n]).await.is_err() {
+                for chunk in body[start..].chunks(64 << 10) {
+                    if socket.write_all(chunk).await.is_err() {
                         return;
                     }
-                    left -= n;
-                    tokio::time::sleep(Duration::from_millis(5)).await;
+                    tokio::time::sleep(pause).await;
                 }
             });
         }
@@ -498,7 +498,7 @@ async fn throttled_origin(len: usize) -> String {
 /// closes before 30 s, and the first sample is the estimate.
 #[tokio::test]
 async fn one_short_playback_measures_the_connection() {
-    let base = throttled_origin(6 << 20).await;
+    let base = range_origin(vec![0; 6 << 20], Duration::from_millis(5)).await;
     let core = Core::temporary("p").unwrap();
     assert_eq!(core.speed(mq_runtime::speed::Kind::Http).samples, 0);
     let mut stream = mq_streams::normalize(
@@ -530,6 +530,98 @@ async fn one_short_playback_measures_the_connection() {
     let speed = core.speed(mq_runtime::speed::Kind::Http);
     assert_eq!(speed.samples, 1, "{speed:?}");
     assert!(speed.mbps > 1.0, "{speed:?}");
+}
+
+/// A synthetic MP4 from mq-media's fixtures (ffmpeg's testsrc, 64x64, 1 s).
+fn media_fixture(name: &str) -> Vec<u8> {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    std::fs::read(format!("{dir}/../mq-media/tests/fixtures/{name}")).unwrap()
+}
+
+/// Apple shows no picture from an hev1 entry without parameter sets, even
+/// served as hvc1: on an hvc1-only device that version does not start, the
+/// attempt says why, and the next Versions view ranks it last with its
+/// line. A device that shows it plays it.
+#[tokio::test]
+async fn a_file_with_no_picture_here_does_not_start_and_ranks_last() {
+    let mut bare = media_fixture("hev1-moov-tail.mp4");
+    let record = bare.windows(4).position(|w| w == b"hvcC").unwrap() + 4;
+    bare[record + 22] = 0; // numOfArrays: no parameter sets
+    let bare_base = range_origin(bare, Duration::ZERO).await;
+    let fine_base = range_origin(media_fixture("hvc1.mp4"), Duration::ZERO).await;
+    let streams = serde_json::json!({ "streams": [
+        { "name": "Direct\n1080p", "title": "Show.S01E01.1080p.WEB-DL.HEVC-BARE",
+          "url": format!("{bare_base}/bare.mp4") },
+        { "name": "Direct\n720p", "title": "Show.S01E01.720p.WEB-DL.HEVC-FINE",
+          "url": format!("{fine_base}/fine.mp4") },
+    ]});
+    let server = Server::start(vec![
+        route(
+            "GET",
+            "/stream/series/tt1%3A1%3A1.json",
+            200,
+            &streams.to_string(),
+        ),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    let bare_key = format!("url:{bare_base}/bare.mp4");
+    let fine_key = format!("url:{fine_base}/fine.mp4");
+    let facts = || TitleFacts::read(Some("52 min"), Some("2019-"), Some("2019-05-01"), Some(2));
+    let open = |caps: DeviceCaps| async {
+        let view = VersionsView::open(
+            &core,
+            VersionsParams {
+                caps,
+                ..params(facts())
+            },
+        );
+        until("done", || view.snapshot().done).await;
+        view
+    };
+    let play = |view: &VersionsView| {
+        let pick = view.pick(&bare_key);
+        let target = mq_runtime::PlayTarget::default();
+        mq_runtime::PlaybackView::open_picked(&core, pick, target, &view.plays())
+    };
+    let shows = DeviceCaps::basic_1080p();
+    let apple = DeviceCaps {
+        hvc1_only: true,
+        ..shows.clone()
+    };
+
+    let view = open(apple.clone()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, bare_key);
+    let playback = play(&view);
+    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("the version to fail", failed).await;
+    let s = playback.snapshot();
+    assert!(s.url.is_none());
+    assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
+    assert_eq!(s.attempts[0].key, bare_key);
+    assert_eq!(
+        s.attempts[0].error,
+        "This file's video shows no picture on this device"
+    );
+    drop((playback, view));
+
+    let view = open(apple).await;
+    let snapshot = view.snapshot();
+    assert_eq!(snapshot.recommended.unwrap().key, fine_key);
+    let row = snapshot.rows.iter().find(|r| r.key == bare_key).unwrap();
+    assert_eq!(row.line, mq_streams::ReasonLine::NoPicture);
+    drop(view);
+
+    let view = open(shows).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, bare_key);
+    let playback = play(&view);
+    until("the file where it shows", || {
+        playback.snapshot().url.is_some()
+    })
+    .await;
+    assert_eq!(playback.snapshot().key.as_deref(), Some(bare_key.as_str()));
+    assert!(playback.snapshot().attempts.is_empty());
 }
 
 /// After a restart the core reads the network the app last reported, not

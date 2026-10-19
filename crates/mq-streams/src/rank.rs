@@ -527,6 +527,11 @@ fn size_ok(size: Option<u64>, class: SourceClass, prefs: &StreamPrefs) -> bool {
     }
 }
 
+/// This version's file showed no picture here: it does not play here.
+fn no_picture(s: &ParsedStream, input: &RankInput<'_>) -> bool {
+    input.caps.hvc1_only && input.conditions.no_picture.contains(&s.key)
+}
+
 /// Whether the screen shows this dynamic range. Dolby Vision and HDR10+
 /// carry an HDR10 base, so an HDR10 screen shows them as HDR10.
 fn shows(h: Hdr, caps: &DeviceCaps) -> bool {
@@ -561,6 +566,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
     } else {
         start(class, s.seeders, input.prefs)
     };
+    let no_picture = no_picture(s, input);
     let key = RankKey {
         language: input.prefs.languages.is_empty()
             || langs.is_empty()
@@ -568,8 +574,12 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         legit: legit(s),
         year_ok: year_ok(s, input.conditions, input.target),
         sustains,
-        playability: playability(s, input.caps).unwrap_or(Playability::NeedsTranscode),
-        viable: start > 0,
+        playability: if no_picture {
+            Playability::NeedsTranscode
+        } else {
+            playability(s, input.caps).unwrap_or(Playability::NeedsTranscode)
+        },
+        viable: start > 0 && !no_picture,
         size_ok: size_ok(weight.size, class, input.prefs),
         start,
         binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
@@ -597,6 +607,9 @@ fn line(
 ) -> ReasonLine {
     let (size, bitrate) = (weight.size, weight.mbps);
     let torrent = matches!(class, SourceClass::Swarm | SourceClass::Unknown);
+    if no_picture(s, input) {
+        return ReasonLine::NoPicture;
+    }
     if !key.legit {
         let quality = match s.release.quality {
             Quality::Cam => "cam",

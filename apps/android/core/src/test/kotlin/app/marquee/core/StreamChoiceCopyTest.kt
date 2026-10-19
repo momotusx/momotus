@@ -258,6 +258,14 @@ class StreamChoiceCopyTest {
             ),
             line(ReasonLine.Stalled),
         )
+        assertEquals(
+            StreamChoiceCopy.Line(
+                bad,
+                "No picture on this device",
+                "Its HEVC video is stored in a form this device cannot show",
+            ),
+            line(ReasonLine.NoPicture),
+        )
         assertEquals(StreamChoiceCopy.Line(warn, "May start slowly", "31 seeders"), line(ReasonLine.Few(31)))
         assertEquals(
             StreamChoiceCopy.Line(ok, "Starts right away", "Ready on TorBox, 7.4 GB"),

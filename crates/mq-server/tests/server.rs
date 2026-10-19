@@ -3109,6 +3109,26 @@ async fn other_files_are_served_as_they_are() {
     }
 }
 
+/// The lease says when a file shows no picture on Apple: an hev1 whose
+/// `hvcC` has no parameter sets. A relabelled hev1, an hvc1 and an H.264
+/// file show one.
+#[tokio::test]
+async fn a_bare_hev1_is_reported_as_no_picture_on_apple() {
+    let mut bare = fixture("hev1-moov-tail.mp4").to_vec();
+    let record = type_at(&bare, b"hvcC") + 4;
+    bare[record + 22] = 0; // numOfArrays
+    let files = [
+        (Arc::new(bare), true),
+        (fixture("hev1-moov-tail.mp4"), false),
+        (fixture("hvc1.mp4"), false),
+        (fixture("h264.mp4"), false),
+    ];
+    for (i, (data, missing)) in files.into_iter().enumerate() {
+        let (_server, lease, _seen, _http) = serve(&data, Behaviour::default()).await;
+        assert_eq!(lease.picture_missing_on_apple().await, missing, "file {i}");
+    }
+}
+
 /// Live: a real hev1 file (`MQ_HVC1_FILE`, read only) served through the
 /// server from a local origin, its URL checked by AVFoundation with
 /// `swift MQ_HVC1_CHECK <url>`, which prints `playable=` and a frame.

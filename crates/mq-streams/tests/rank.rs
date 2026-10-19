@@ -1372,6 +1372,42 @@ fn a_swarm_that_stalled_here_is_not_started_first() {
     assert_eq!(dead.line, ReasonLine::Stalled);
 }
 
+/// A file that showed no picture on an hvc1-only player (an hev1 entry
+/// without parameter sets) is not started first there and says why; a
+/// player that shows it ranks it as before.
+#[test]
+fn a_file_that_showed_no_picture_here_is_not_started_first() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2020.1080p.WEB-DL.HEVC-BARE", 900, 4.0),
+            seeded(2, "Movie.2020.1080p.BluRay.x264-FINE", 60, 2.0),
+        ]
+    };
+    let mut case = Case::stick();
+    let bare = row(&case.rank(rows()), "Movie.2020.1080p.WEB-DL")
+        .stream
+        .key
+        .clone();
+    case.conditions = Conditions {
+        no_picture: vec![bare],
+        ..engine().clone()
+    };
+    let shows = case.rank(rows());
+    assert_eq!(
+        first_line(shows.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.HEVC-BARE"
+    );
+    case.caps.hvc1_only = true;
+    let ranked = case.rank(rows());
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-FINE"
+    );
+    let bare = row(&ranked, "Movie.2020.1080p.WEB-DL");
+    assert!(!bare.key.viable);
+    assert_eq!(bare.line, ReasonLine::NoPicture);
+}
+
 /// 3.7: a large file says whether the limit is one the user chose.
 #[test]
 fn a_large_file_says_whether_the_limit_was_chosen() {

@@ -996,6 +996,7 @@ async fn resolve_next(
             return;
         }
     };
+    let hvc1_only = lock(&state).pick.as_ref().is_some_and(|p| p.hvc1_only);
     loop {
         let stream = {
             let mut s = lock(&state);
@@ -1015,10 +1016,15 @@ async fn resolve_next(
                 let name = filename
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
-                server
+                match server
                     .open_for(upstream.clone(), &name, PROBE_TIMEOUT, &plays)
                     .await
-                    .map(|lease| (upstream, filename, size, lease))
+                {
+                    Ok(lease) => shows_picture(&core, &stream, &lease, hvc1_only)
+                        .await
+                        .map(|()| (upstream, filename, size, lease)),
+                    Err(e) => Err(e),
+                }
             }
             Err(e) => Err(e),
         };
@@ -1114,6 +1120,23 @@ async fn resolve_next(
             }
         }
     }
+}
+
+/// On an engine that shows HEVC only from `hvc1` entries (Apple), a file
+/// with an `hev1` entry that has no parameter sets plays as sound alone,
+/// even relabelled: the version fails over, and the ranking remembers it.
+async fn shows_picture(
+    core: &Core,
+    stream: &ParsedStream,
+    lease: &Lease,
+    hvc1_only: bool,
+) -> Result<(), String> {
+    if !hvc1_only || !lease.picture_missing_on_apple().await {
+        return Ok(());
+    }
+    let now = mq_library::hlc::now_ms();
+    crate::speed::record_no_picture(core.library(), &stream.key, now);
+    Err("This file's video shows no picture on this device".into())
 }
 
 type Opened = (Upstream, Option<String>, Option<u64>);

@@ -26,7 +26,7 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
 }
 
 @Test func theSharedWordsLoadWithEveryLine() {
-    let kinds = ["copy", "fetch", "stalled", "veryFew", "otherYear", "mayPause", "washedOut", "large", "few", "ready", "quick", "should"]
+    let kinds = ["copy", "fetch", "stalled", "noPicture", "veryFew", "otherYear", "mayPause", "washedOut", "large", "few", "ready", "quick", "should"]
     #expect(Set(StreamChoice.words.lines.keys) == Set(kinds))
     #expect(StreamChoice.words.question.fast.patch.sizeLimitBytes == 5_368_709_120)
 }

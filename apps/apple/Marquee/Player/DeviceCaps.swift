@@ -30,6 +30,8 @@ enum DeviceCaps {
             "audioDecoders": ["aac", "ac3", "eac3", "atmos", "flac", "mp3", "pcm"],
             "containers": containers,
             "hasFallbackEngine": false,
+            // AVFoundation shows HEVC in MP4 only from an entry with its parameter sets.
+            "hvc1Only": true,
             "language": Locale.current.language.languageCode?.identifier ?? "en",
         ]
     }

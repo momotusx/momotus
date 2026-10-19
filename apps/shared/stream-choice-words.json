@@ -21,6 +21,11 @@
       "text": "Did not start here last time",
       "details": ["Almost nothing arrived when this device last tried it"]
     },
+    "noPicture": {
+      "tone": "bad",
+      "text": "No picture on this device",
+      "details": ["Its HEVC video is stored in a form this device cannot show"]
+    },
     "veryFew": {
       "tone": "bad",
       "text": "May not start",

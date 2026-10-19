@@ -202,46 +202,68 @@ pub fn remember_network(lib: &Library, network: Network) {
 // ponytail: one day, whatever the network; per network if the race shows a
 // swarm that stalls on cellular and starts on Wi-Fi.
 const DEAD_FOR_MS: u64 = 86_400_000;
-/// Stalled swarms kept at most (the oldest go first).
-const DEAD_KEPT: usize = 200;
+/// Entries a stamped list keeps at most (the oldest go first).
+const KEPT: usize = 200;
 const DEAD_KEY: &str = "dead_swarms";
+/// A file does not change: kept until the list is full.
+const NO_PICTURE_KEY: &str = "no_picture";
 
-fn dead_map(lib: &Library) -> std::collections::BTreeMap<String, u64> {
-    lib.device_value(DEAD_KEY)
+/// The entries of the stamped list `store_key` younger than `keep_ms`.
+fn stamped(lib: &Library, store_key: &str, keep_ms: u64, now_ms: u64) -> Vec<String> {
+    stamped_map(lib, store_key)
+        .into_iter()
+        .filter(|(_, at)| now_ms.saturating_sub(*at) < keep_ms)
+        .map(|(entry, _)| entry)
+        .collect()
+}
+
+fn stamped_map(lib: &Library, store_key: &str) -> std::collections::BTreeMap<String, u64> {
+    lib.device_value(store_key)
         .ok()
         .flatten()
         .and_then(|v| serde_json::from_str(&v).ok())
         .unwrap_or_default()
 }
 
+fn stamp(lib: &Library, store_key: &str, entry: String, keep_ms: u64, now_ms: u64) {
+    let mut map = stamped_map(lib, store_key);
+    map.retain(|_, at| now_ms.saturating_sub(*at) < keep_ms);
+    map.insert(entry, now_ms);
+    while map.len() > KEPT {
+        let Some(oldest) = map
+            .iter()
+            .min_by_key(|(_, at)| **at)
+            .map(|(e, _)| e.clone())
+        else {
+            break;
+        };
+        map.remove(&oldest);
+    }
+    let value = serde_json::to_string(&map).unwrap_or_default();
+    let _ = lib.set_device_value(store_key, &value);
+}
+
 /// Info hashes (lowercase) whose swarm stalled on this device in the last
 /// day: the ranking does not start them first (seeders an addon lists
 /// are a hint).
 pub fn dead_swarms(lib: &Library, now_ms: u64) -> Vec<String> {
-    dead_map(lib)
-        .into_iter()
-        .filter(|(_, at)| now_ms.saturating_sub(*at) < DEAD_FOR_MS)
-        .map(|(hash, _)| hash)
-        .collect()
+    stamped(lib, DEAD_KEY, DEAD_FOR_MS, now_ms)
 }
 
 /// The swarm of `info_hash` sent almost nothing after its metadata.
 pub fn record_dead(lib: &Library, info_hash: &str, now_ms: u64) {
-    let mut dead = dead_map(lib);
-    dead.retain(|_, at| now_ms.saturating_sub(*at) < DEAD_FOR_MS);
-    dead.insert(info_hash.to_ascii_lowercase(), now_ms);
-    while dead.len() > DEAD_KEPT {
-        let Some(oldest) = dead
-            .iter()
-            .min_by_key(|(_, at)| **at)
-            .map(|(h, _)| h.clone())
-        else {
-            break;
-        };
-        dead.remove(&oldest);
-    }
-    let value = serde_json::to_string(&dead).unwrap_or_default();
-    let _ = lib.set_device_value(DEAD_KEY, &value);
+    let hash = info_hash.to_ascii_lowercase();
+    stamp(lib, DEAD_KEY, hash, DEAD_FOR_MS, now_ms);
+}
+
+/// Stream keys whose file showed no picture on this device.
+pub fn no_picture(lib: &Library) -> Vec<String> {
+    stamped(lib, NO_PICTURE_KEY, u64::MAX, 0)
+}
+
+/// The file of `stream_key` showed no picture on this device.
+pub fn record_no_picture(lib: &Library, stream_key: &str, now_ms: u64) {
+    stamp(lib, NO_PICTURE_KEY, stream_key.to_owned(), u64::MAX, now_ms);
 }
 
 #[cfg(test)]

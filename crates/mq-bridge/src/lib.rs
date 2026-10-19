@@ -1682,7 +1682,9 @@ async fn watch_gone(
 /// `decoders` ("h264", "h265", "av1", "vp9", ...), `tenBitHevc`,
 /// `passthrough` and `audioDecoders` ("aac", "ac3", "eac3", "dts",
 /// "true_hd", "atmos", ...), `containers` ("mkv", "mp4", ...) and
-/// `hasFallbackEngine`. What is left out keeps a 1080p SDR stick's default.
+/// `hasFallbackEngine`, and `hvc1Only` (Apple: HEVC in MP4 shows only from
+/// an entry with its parameter sets). What is left out keeps a 1080p SDR
+/// stick's default.
 /// The title as the app knows it (plans/m13-stream-choice.md 4.3): `runtime`
 /// ("142 min"), `releaseInfo` ("2002", "2022-"), the episode's `released`
 /// ("2013-09-16") and `episodesInSeason`; the core reads the meta for what
@@ -1715,6 +1717,9 @@ fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsPar
     }
     if let Some(fallback) = field(params, "hasFallbackEngine")? {
         caps.has_fallback_engine = fallback;
+    }
+    if let Some(hvc1_only) = field(params, "hvc1Only")? {
+        caps.hvc1_only = hvc1_only;
     }
     if let Some(audio) = field(params, "audioDecoders")? {
         caps.audio_decoders = audio;
@@ -1760,7 +1765,7 @@ mod tests {
         let params = json!({
             "kind": "movie", "videoId": "tt1", "displayHeight": 2160,
             "decoders": ["h264", "h265", "av1"], "tenBitHevc": false,
-            "passthrough": ["eac3", "atmos"], "hasFallbackEngine": false,
+            "passthrough": ["eac3", "atmos"], "hasFallbackEngine": false, "hvc1Only": true,
             "audioDecoders": ["aac", "opus"], "containers": ["MP4", "webm"],
             "language": "tr", "runtime": "52 min", "releaseInfo": "2008-2013",
             "released": "2013-09-29", "episodesInSeason": 16, "network": "wifi"
@@ -1769,7 +1774,7 @@ mod tests {
         let caps = parsed.caps;
         assert_eq!(caps.display_height, 2160);
         assert_eq!(json!(caps.decoders), json!(["h264", "h265", "av1"]));
-        assert!(!caps.ten_bit_hevc && !caps.has_fallback_engine);
+        assert!(!caps.ten_bit_hevc && !caps.has_fallback_engine && caps.hvc1_only);
         assert_eq!(json!(caps.passthrough), json!(["eac3", "atmos"]));
         assert_eq!(json!(caps.audio_decoders), json!(["aac", "opus"]));
         assert_eq!(caps.containers, ["mp4", "webm"]);

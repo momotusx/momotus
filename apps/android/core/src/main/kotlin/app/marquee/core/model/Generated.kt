@@ -1052,6 +1052,10 @@ sealed interface ReasonLine {
     data object Stalled : ReasonLine
 
     @Serializable
+    @SerialName("noPicture")
+    data object NoPicture : ReasonLine
+
+    @Serializable
     @SerialName("large")
     data class Large(
         val sizeBytes: Long,
