@@ -539,11 +539,10 @@ impl Core {
         }
     }
 
-    /// Starts the profile's round scheduler, or wakes it.
+    /// Starts the profile's round scheduler, or wakes it. A kids profile
+    /// never gets here with a record (`set_trakt` and scrobbles refuse it);
+    /// one turned kids later is stopped by the loop's own check.
     fn trakt_schedule(&self, conn: &Arc<Conn>) {
-        if kids(self) {
-            return;
-        }
         if !conn.scheduler.swap(true, Ordering::SeqCst) {
             tokio::spawn(schedule(self.downgrade(), conn.clone()));
         }
