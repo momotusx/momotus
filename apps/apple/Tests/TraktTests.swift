@@ -276,9 +276,11 @@ enum DevCore {
         try await model.signOut()
         #expect(model.deleteFailed && keys.held["default"] != nil)
         #expect(await eventually(10) { model.status?.state == .off })
-        // A switch and back, or the next launch: the kept record is never sent again.
-        let again = TraktModel(core: first.client, keystore: keys.keystore, defaults: store)
+        // The next launch (a core that would take the record back): it is never sent again.
         model.end()
+        let next = RealCore()
+        #expect(await next.ready())
+        let again = TraktModel(core: next.client, keystore: keys.keystore, defaults: store)
         await again.begin(profile: "default")
         #expect(again.deleteFailed)
         try await Task.sleep(for: .milliseconds(500))
@@ -288,6 +290,7 @@ enum DevCore {
         await again.begin(profile: "default")
         #expect(!again.deleteFailed && keys.held["default"] == nil)
         #expect(store.stringArray(forKey: TraktModel.signedOutKey) == [])
+        withExtendedLifetime(first) {}
     }
 
     private func fresh() throws -> UserDefaults {
