@@ -1793,6 +1793,9 @@ async fn deleting_a_profile_ends_its_trakt_work() {
     .await;
     kid_core.trakt_sync().await.unwrap();
     owner.delete_profile(&kid).unwrap();
+    // At once, before any round wakes and finds the profile gone.
+    let state = TraktView::open(&kid_core).snapshot().state;
+    assert_ne!(state, TraktState::Connected, "its tokens left memory");
     let deleted = std::time::Instant::now();
     core.trakt_foreground();
     tokio::time::sleep(Duration::from_millis(1500)).await;
@@ -1804,8 +1807,6 @@ async fn deleting_a_profile_ends_its_trakt_work() {
         .filter(|r| r.token == "kid-access" && r.at > deleted)
         .count();
     assert_eq!(late, 0, "no call for a deleted profile");
-    let state = TraktView::open(&kid_core).snapshot().state;
-    assert_ne!(state, TraktState::Connected, "its tokens left memory");
 }
 
 #[tokio::test]
