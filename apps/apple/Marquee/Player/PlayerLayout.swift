@@ -17,6 +17,16 @@ enum PlayerLayout {
         return SubtitleTrouble(say: note.words, off: !tracks.contains { $0.url == picked.url })
     }
 
+    /// The picture never came while the sound runs: AVFoundation plays an HEVC
+    /// file tagged hev1 (and any track it cannot show) as audio over a black
+    /// layer, with no error. More than 4 s of playhead or of playing without a
+    /// frame means this version's picture cannot be shown here.
+    static func pictureMissing(shown: Bool, advanced: Double, playingFor: Double) -> Bool {
+        !shown && (advanced > pictureWait || playingFor > pictureWait)
+    }
+
+    static let pictureWait: Double = 4
+
     /// What `progress` tells Trakt when the player's state changes: a pause, or a
     /// play after one, from anywhere (the Lock Screen, a call); buffering is
     /// neither. Nil when there is nothing new to say.

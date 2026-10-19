@@ -72,6 +72,11 @@ final class PlayerModel {
     /// Bumped per URL so a late error from a dead source is ignored.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var rendered = false
+    /// The loaded source has shown a frame (`rendered` counts the first of the playback).
+    @ObservationIgnored private var pictureShown = false
+    /// Where the loaded source started, and since when it has played without a frame.
+    @ObservationIgnored private var loadStart: Double = 0
+    @ObservationIgnored private var playingSince: ContinuousClock.Instant?
     @ObservationIgnored private var lastReport = ContinuousClock.now
     /// The player calls the time observer only while this token is held.
     @ObservationIgnored private var timeObserver: Any?
@@ -277,6 +282,8 @@ final class PlayerModel {
     func seek(to seconds: Double) {
         let target = CMTime(seconds: max(0, min(seconds, duration > 0 ? duration : seconds)), preferredTimescale: 600)
         position = target.seconds
+        // A seek is not playback: the missing-picture count starts again where it lands.
+        loadStart = target.seconds
         // The viewer's seek replaces a start that has not landed yet, and stays pending itself.
         pendingStart = target.seconds
         ended = false
@@ -302,6 +309,7 @@ final class PlayerModel {
 
     /// The video surface drew its first frame.
     func firstFrame() {
+        pictureShown = true
         guard !rendered else { return }
         rendered = true
         let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
@@ -382,6 +390,7 @@ final class PlayerModel {
         loadedAttempt = attempt
         notice = nil
         itemBag = []
+        (pictureShown, loadStart, playingSince) = (false, start, nil)
         let item = AVPlayerItem(url: address)
         item.publisher(for: \.status)
             .receive(on: DispatchQueue.main)
@@ -438,9 +447,19 @@ final class PlayerModel {
     /// The player cannot play this source: stop it, then ask the core for the next.
     private func sourceFailed(_ error: Error?) {
         let failure = playerFailure(error)
-        let reason = failure.error
-        coreLog.error("source failed: \(reason, privacy: .public)")
-        notice = "This source failed: \(reason). Trying the next one."
+        fail(failure, notice: "This source failed: \(failure.error). Trying the next one.")
+    }
+
+    /// The sound runs but no frame ever came: never a spinner over a running
+    /// audio track. The core tries the next version, or says Try again.
+    private func pictureFailed() {
+        fail(PlayerFailure(kind: "decode", error: "this version's picture cannot be shown on this device"),
+             notice: "This version's picture cannot be shown here, trying the next one")
+    }
+
+    private func fail(_ failure: PlayerFailure, notice words: String) {
+        coreLog.error("source failed: \(failure.error, privacy: .public)")
+        notice = words
         generation += 1
         player.pause()
         player.replaceCurrentItem(with: nil)
@@ -464,6 +483,8 @@ final class PlayerModel {
                     guard let self else { return }
                     self.playing = status == .playing
                     self.waiting = status == .waitingToPlayAtSpecifiedRate
+                    // Playing without a pause or a stall: buffering is not a missing picture.
+                    self.playingSince = status == .playing ? self.playingSince ?? .now : nil
                     self.publishNowPlaying()
                     // A pause or a play from anywhere (the Lock Screen, a call) reaches Trakt at once;
                     // buffering is neither.
@@ -492,6 +513,13 @@ final class PlayerModel {
     private func tick(_ time: CMTime) {
         guard time.isNumeric else { return }
         if let now = ticked(time: time.seconds, pending: pendingStart) { position = now }
+        if loadedURL != nil, PlayerLayout.pictureMissing(
+            shown: pictureShown, advanced: position - loadStart,
+            playingFor: playingSince.map { (ContinuousClock.now - $0) / .seconds(1) } ?? 0
+        ) {
+            pictureFailed()
+            return
+        }
         if let total = player.currentItem?.duration, total.isNumeric { duration = total.seconds }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }

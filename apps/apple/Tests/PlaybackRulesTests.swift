@@ -244,3 +244,13 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     // After it, the same note counts as new again.
     #expect(SubtitleNote.added(from: [], to: [slow]) == [slow])
 }
+
+@Test func aPictureThatNeverComesFailsTheVersionOver() {
+    // The sound runs past 4 s with no frame (an HEVC file tagged hev1): this version cannot be shown here.
+    #expect(PlayerLayout.pictureMissing(shown: false, advanced: 4.5, playingFor: 0))
+    #expect(PlayerLayout.pictureMissing(shown: false, advanced: 0, playingFor: 4.5))
+    // Still starting: a frame usually comes within a second of the sound.
+    #expect(!PlayerLayout.pictureMissing(shown: false, advanced: 3, playingFor: 3))
+    // A shown frame is never a missing picture, however long it plays.
+    #expect(!PlayerLayout.pictureMissing(shown: true, advanced: 600, playingFor: 600))
+}
