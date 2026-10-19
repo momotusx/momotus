@@ -2,7 +2,7 @@
 
 .browse.page { position: absolute; inset: 0; padding: var(--content-top) var(--safe-side) var(--safe-bottom); }
 .browse h1 { font: var(--weight-display) var(--type-title1) / 1.05 var(--font-display); letter-spacing: var(--tracking-display); margin: 14px 0 34px;
-  background: linear-gradient(180deg, #FFFFFF 30%, #B9BDC6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  background: linear-gradient(180deg, var(--text) 30%, var(--dim)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 /* An accent eyebrow over the page title. */
 .browse h1[data-eyebrow]::before { content: attr(data-eyebrow); display: block; margin-bottom: 14px;
   font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); -webkit-text-fill-color: var(--accent); }
@@ -10,6 +10,9 @@
 .chips-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
 .chips-row > .kicker { width: 130px; flex: none; }
 .chips-track { position: relative; flex: 1; min-width: 0; display: flex; gap: 14px; padding: 26px 30px; margin: -26px -30px; }
+/* A row that scrolls sideways fades at its end, so a cut chip reads as more
+ * (focus scrolling keeps the focused chip clear of the fade). */
+.chips-track:not(.wrap) { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 96px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 96px), transparent); }
 .chips-track.wrap { flex-wrap: wrap; overflow: visible; }
 .chips-row.wrap-row { align-items: flex-start; }
 .chips-row.wrap-row > .kicker { padding-top: 18px; }
@@ -18,12 +21,15 @@
   background: linear-gradient(145deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 2px var(--control); }
 .chip small { font: 400 var(--type-caption) var(--font-text); opacity: .8; }
 .chip svg { width: 24px; height: 24px; }
-.chip.on { background: var(--primary); color: var(--on-primary); box-shadow: none; }
+/* Selected is a lighter fill, a bright edge and the check, as the season
+ * tabs: a white pill is only ever the screen's primary action. */
+.chip.on { color: var(--text); font-weight: 700; background: color-mix(in srgb, var(--text) 16%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 55%, transparent); }
 .chip:focus-visible, [data-form="tv"] .chip:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
-.chip.on:focus-visible, [data-form="tv"] .chip.on:focus { color: var(--on-primary); }
 @media (hover: hover) { [data-form="desktop"] .chip:not(.on):hover { color: var(--text); } }
 
-.grid { display: grid; gap: 48px 32px; padding: 34px; margin: -34px; justify-content: start; }
+/* Columns spread over the full width, so no gutter is left at the right. */
+.grid { display: grid; gap: 48px 32px; padding: 34px; margin: -34px; justify-content: space-between; }
 .grid > .tile { position: relative; }
 .grid-foot { margin-top: 40px; font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
 .sentinel { height: 1px; }
@@ -55,6 +61,7 @@
 [data-form="phone"] .chips-row { flex-direction: column; align-items: stretch; gap: 6px; }
 [data-form="phone"] .chips-row > .kicker { width: auto; }
 [data-form="phone"] .chips-track { overflow-x: auto; gap: 8px; padding: 2px 16px; margin: 0 -16px; }
+[data-form="phone"] .chips-track:not(.wrap) { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
 [data-form="phone"] .chip { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; }
 [data-form="phone"] .chip small { font-size: 12px; }
 [data-form="phone"] .chip svg { width: 16px; height: 16px; }

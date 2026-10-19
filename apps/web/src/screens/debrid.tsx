@@ -139,7 +139,7 @@ function Card(props: {
       >
         <div class="dcard-acts">
           <Show when={byCode() && needsSignIn()}>
-            <button class="btn primary" data-f={`debrid:${id()}:code`} aria-label={`Sign in to ${props.service.name} with a code`} onClick={props.onSignIn}>
+            <button class="btn" data-f={`debrid:${id()}:code`} aria-label={`Sign in to ${props.service.name} with a code`} onClick={props.onSignIn}>
               <QrCode aria-hidden />
               {props.account ? "Sign in again" : "Sign in with a code"}
             </button>

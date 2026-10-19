@@ -16,8 +16,14 @@ import "./browse.css";
 import "./settings.css";
 
 /** Installs an addon by URL with a status line under the field. */
-export function InstallField(props: { autofocus?: boolean; fkey?: string }) {
-  const [url, setUrl] = createSignal("");
+/** `onDraft` hears the link as it is typed: a screen with its own primary
+ * action gives up the white pill while there is a link to install. */
+export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraft?: (url: string) => void }) {
+  const [url, setDraft] = createSignal("");
+  const setUrl = (v: string) => {
+    setDraft(v);
+    props.onDraft?.(v);
+  };
   const [state, setState] = createSignal<{ tone: string; text: string } | null>(null);
   const install = async (e?: Event) => {
     e?.preventDefault();
@@ -49,7 +55,8 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string }) {
           spellcheck={false}
         />
       </label>
-      <button class="btn primary" type="submit" data-f={`${key}:go`}>
+      {/* White only with a link to install: an empty field has no primary action. */}
+      <button class="btn" classList={{ primary: !!url().trim() }} type="submit" data-f={`${key}:go`}>
         <Plus aria-hidden />
         Install
       </button>

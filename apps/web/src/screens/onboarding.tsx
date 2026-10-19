@@ -45,6 +45,8 @@ export default function Onboarding() {
   const list = () => addons.state.data?.addons ?? [];
   const [busy, setBusy] = createSignal<string | null>(null);
   const [note, setNote] = createSignal<{ tone: Tone; text: string } | null>(null);
+  // One primary: Continue, unless a link waits in the field (then Install).
+  const [link, setLink] = createSignal("");
   const add = async (url: string, name: string) => {
     setBusy(url);
     setNote(null);
@@ -113,7 +115,7 @@ export default function Onboarding() {
           <section class="step-body" aria-label="Add a source">
             <h1>Add a source</h1>
             <p class="lead">Paste the link an addon's website gives you. Sources find streams; Marquee does not include any.</p>
-            <InstallField fkey="welcome" />
+            <InstallField fkey="welcome" onDraft={setLink} />
             <A class="btn find-link" href="/find-addons" data-f="welcome:find">
               <PackageSearch aria-hidden />
               {findAddons.title}
@@ -149,7 +151,7 @@ export default function Onboarding() {
               )}
             </Show>
             <div class="acts">
-              <button class="btn primary" data-f="welcome:next" data-autofocus onClick={() => go(3)}>
+              <button class="btn" classList={{ primary: !link().trim() }} data-f="welcome:next" data-autofocus onClick={() => go(3)}>
                 Continue
                 <ChevronRight aria-hidden />
               </button>
