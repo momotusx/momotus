@@ -23,7 +23,7 @@ import ShieldAlert from "lucide-solid/icons/shield-alert";
 import Trash from "lucide-solid/icons/trash";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import X from "lucide-solid/icons/x";
-import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { privateLink } from "../core/client";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import * as sync from "../core/sync";
@@ -65,7 +65,11 @@ import "./settings.css";
 import "./sync.css";
 
 const tv = () => form() === "tv";
-const codeOf = (e: unknown) => (e && typeof e === "object" && "code" in e ? (e as { code?: string }).code : undefined);
+// Only the protocol's string codes: a DOMException carries a numeric `code` of its own.
+const codeOf = (e: unknown) => {
+  const c = e && typeof e === "object" && "code" in e ? (e as { code?: unknown }).code : undefined;
+  return typeof c === "string" ? c : undefined;
+};
 const say = (e: unknown, step: SyncStep) => stepProblem(codeOf(e), e instanceof Error ? e.message : String(e), step);
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 /** After the page changed under it, focus goes to the step's own target (remote and keys only). */
@@ -192,16 +196,31 @@ function Locked() {
       setBusy(false);
     }
   };
+  // The storage could not be read: it may hold an account, so the page waits for a check or a forget.
+  const unreadable = () => sync.memoryProblem() === w.vaultUnreadable;
   return (
     <section class="set">
-      <p class="note sync-lead">{w.locked}</p>
+      <Show when={!unreadable()}>
+        <p class="note sync-lead">{w.locked}</p>
+      </Show>
+      <Show when={sync.memoryProblem()}>{(p) => <Said tone="bad">{p()}</Said>}</Show>
       <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
       <div class="acts">
-        <button class="btn primary" data-f="sync:unlock" data-autofocus aria-busy={busy() || undefined} onClick={() => void unlock()}>
-          <Fingerprint aria-hidden />
-          {busy() ? w.unlocking : w.unlock}
-        </button>
-        <button class="btn" data-f="sync:forget-browser" onClick={() => void sync.forgetBrowser()}>
+        <Show
+          when={!unreadable()}
+          fallback={
+            <button class="btn primary" data-f="sync:recheck" data-autofocus onClick={() => void sync.recheckVault()}>
+              <RefreshCw aria-hidden />
+              {w.checkAgain}
+            </button>
+          }
+        >
+          <button class="btn primary" data-f="sync:unlock" data-autofocus aria-busy={busy() || undefined} onClick={() => void unlock()}>
+            <Fingerprint aria-hidden />
+            {busy() ? w.unlocking : w.unlock}
+          </button>
+        </Show>
+        <button class="btn" data-f="sync:forget-browser" onClick={() => void sync.forgetBrowser().catch(() => undefined)}>
           {w.forgetBrowser}
         </button>
       </div>
@@ -292,6 +311,7 @@ function Joined() {
   };
   return (
     <>
+      <StorageNote />
       <section class="set sync-card" aria-label={w.thisDevice} data-round={sync.rounds()} data-syncing={sync.syncing() ? "" : undefined}>
         <div class="sync-state">
           <Said tone={state().tone} live={false}>
@@ -452,7 +472,7 @@ function Remember() {
     try {
       await sync.remember();
     } catch (e) {
-      setError(say(e, "unlock"));
+      setError(say(e, "remember"));
     } finally {
       setBusy(false);
     }
@@ -466,7 +486,6 @@ function Remember() {
           <Show when={can()} fallback={<p class="note small sync-lead">{can.loading ? "" : w.noPasskey}</p>}>
             <p class="note small sync-lead">{w.rememberText}</p>
             <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
-            <Show when={sync.memoryProblem()}>{(p) => <Said tone="bad">{p()}</Said>}</Show>
             <p class="note small sync-lead">{w.notRemembered}</p>
             <div class="acts">
               <button class="btn" data-f="sync:remember" aria-busy={busy() || undefined} onClick={() => void turnOn()}>
@@ -479,7 +498,7 @@ function Remember() {
       >
         <Said tone="ok">{w.remembered}</Said>
         <div class="acts">
-          <button class="btn" data-f="sync:forget-browser" onClick={() => void sync.forgetBrowser()}>
+          <button class="btn" data-f="sync:forget-browser" onClick={() => void sync.forgetBrowser().catch(() => undefined)}>
             {w.forgetBrowser}
           </button>
         </div>
@@ -488,10 +507,42 @@ function Remember() {
   );
 }
 
+/** Codes after which the sync server will not let this device leave: only a local leave helps. */
+const stuck = (code: string | undefined) => code === "fork" || code === "wrongRelay" || code === "relayBehind";
+
+/** Stop syncing here only: nothing sent, this device forgets the account. */
+function LeaveHere(props: { fkey: string }) {
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const go = async () => {
+    if (busy()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await sync.signOut(true, true);
+    } catch (e) {
+      setError(say(e, "leave"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div class="sync-leave-here">
+      <p class="note small sync-lead">{w.leaveHereText}</p>
+      <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
+      <button class="btn danger" data-f={props.fkey} aria-busy={busy() || undefined} onClick={() => void go()}>
+        <LogOut aria-hidden />
+        {w.leaveHere}
+      </button>
+    </div>
+  );
+}
+
 function Leave() {
   const [unsent, setUnsent] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
+  const [refused, setRefused] = createSignal(false);
   const leave = async (force: boolean) => {
     if (busy()) return;
     setBusy(true);
@@ -503,6 +554,7 @@ function Leave() {
         setUnsent(true);
         focusSoon('[data-f="sync:leave-again"]');
       }
+      if (stuck(codeOf(e))) setRefused(true);
       setError(say(e, "leave"));
     } finally {
       setBusy(false);
@@ -512,6 +564,9 @@ function Leave() {
     <section class="set">
       <h2>{w.leaveTitle}</h2>
       <p class="note small sync-lead">{w.leaveText}</p>
+      <Show when={sync.remembered()}>
+        <p class="note small sync-lead">{w.passkeyAsk}</p>
+      </Show>
       <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
       <div class="acts">
         <Show
@@ -541,6 +596,9 @@ function Leave() {
           </button>
         </Show>
       </div>
+      <Show when={refused() || stuck(sync.problem()?.code)}>
+        <LeaveHere fkey="sync:leave-here" />
+      </Show>
     </section>
   );
 }
@@ -552,12 +610,14 @@ function NoSecondAccount(props: { children: JSX.Element }) {
       <Show
         when={sync.settled() && !sync.joined() && !sync.locked()}
         fallback={
-          <section class="problem" hidden={!sync.settled()}>
-            <p>{sync.locked() ? w.lockedFirst : w.alreadyJoined}</p>
-            <A class="btn primary" href="/sync" data-f="sync:back" data-autofocus>
-              {w.title}
-            </A>
-          </section>
+          <Show when={sync.settled()} fallback={<Said tone="warn">{w.checking}</Said>}>
+            <section class="problem">
+              <p>{sync.locked() ? (sync.memoryProblem() ?? w.lockedFirst) : w.alreadyJoined}</p>
+              <A class="btn primary" href="/sync" data-f="sync:back" data-autofocus>
+                {w.title}
+              </A>
+            </section>
+          </Show>
         }
       >
         {props.children}
@@ -629,6 +689,25 @@ function JoinForm(props: { kit: boolean }) {
 export const StartAccount = () => <JoinForm kit={false} />;
 export const RecoverAccount = () => <JoinForm kit />;
 
+/** What this browser's storage just did wrong, at the top of the page the user is on. */
+function StorageNote() {
+  return (
+    <Show when={sync.memoryProblem()}>
+      {(p) => (
+        <div class="sync-note bad sync-storage" role="alert">
+          <TriangleAlert aria-hidden />
+          <span>{p()}</span>
+          <Show when={p() === w.saveFailed}>
+            <button class="btn" data-f="sync:save-again" onClick={() => void sync.saveAgain()}>
+              {w.saveAgain}
+            </button>
+          </Show>
+        </div>
+      )}
+    </Show>
+  );
+}
+
 /** Pages that need a joined device say so instead of failing on their first op. */
 function NeedsAccount(props: { children: JSX.Element }) {
   return (
@@ -643,6 +722,7 @@ function NeedsAccount(props: { children: JSX.Element }) {
         </section>
       }
     >
+      <StorageNote />
       {props.children}
     </Show>
   );
@@ -746,7 +826,7 @@ export function AddDevice() {
       void sync.loadDevices().catch(() => undefined);
     } catch (e) {
       // A cancelled passkey or a failed call changes nothing: the button stays.
-      setDifferError(say(e, "remove"));
+      setDifferError(say(e, "differ"));
     } finally {
       setBusy(false);
     }
@@ -823,6 +903,9 @@ export function AddDevice() {
                 <p class="step">{w.approvedStep}</p>
                 <Spoken class="code" text={a().digits} label="Code" />
                 <p class="note small">{w.approvedHelp}</p>
+                <Show when={sync.remembered()}>
+                  <p class="note small">{w.passkeyAsk}</p>
+                </Show>
                 <Show when={differ()}>{(d) => <Said tone="warn">{d()}</Said>}</Show>
                 <Show when={differError()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
                 <div class="acts">
@@ -1070,7 +1153,9 @@ export function ForkReview() {
   const navigate = useNavigate();
   const done = () => navigate("/sync", { replace: true });
   // Only a device whose list differs compares: anything else would rotate the key for nothing.
-  const forked = () => sync.problem()?.code === "fork";
+  // Read once: continuing clears the fork before the page leaves, which must not flip it.
+  const fork = untrack(() => sync.problem()?.code === "fork");
+  const forked = () => fork;
   const [data, { refetch }] = createResource(() => forked() || undefined, () => sync.forkPreview());
   const got = () => (data.error ? undefined : data());
   const sides = () => {
@@ -1088,6 +1173,9 @@ export function ForkReview() {
   };
   const drop = () => forkDrop(got()?.server ?? [], got()?.drops ?? [], ticked());
   const kitsOf = (id: string) => got()?.kits.find((k) => k.device === id)?.kits.filter((k) => !goes(k)) ?? [];
+  // A kit whose maker is ticked goes with it: shown as going, not as a box of its own.
+  const withTicked = (m: MemberInfo) => m.kit && !!m.sponsor && ticked().has(m.sponsor);
+  const isKit = (id: string) => got()?.server.some((m) => m.id === id && m.kit) === true;
   const kitsGo = () => forkKits(got()?.kits ?? [], drop(), got()?.drops ?? []);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -1133,6 +1221,9 @@ export function ForkReview() {
           fallback={
             <section class="problem">
               <Said tone="bad">{say(data.error, "compare")}</Said>
+              <Show when={codeOf(data.error) === undefined && String((data.error as Error | undefined)?.message) === "http status 401"}>
+                <LeaveHere fkey="sync-fork:leave-here" />
+              </Show>
               <div class="acts">
                 <button class="btn primary" data-f="sync-fork:retry" data-autofocus onClick={() => void refetch()}>
                   <RefreshCw aria-hidden />
@@ -1156,6 +1247,7 @@ export function ForkReview() {
                     {w.cancel}
                   </button>
                 </div>
+                <LeaveHere fkey="sync-fork:leave-here" />
               </section>
             }
           >
@@ -1167,7 +1259,7 @@ export function ForkReview() {
                   {(m) => (
                     <li>
                       <Show
-                        when={!m.thisDevice && !goes(m.id)}
+                        when={!m.thisDevice && !goes(m.id) && !withTicked(m)}
                         fallback={
                           <div class="sync-member" classList={{ me: m.thisDevice }} data-member={m.id}>
                             <span class="sync-mtext">
@@ -1175,7 +1267,7 @@ export function ForkReview() {
                                 {memberName(m)}
                                 {tag(m)}
                                 <span class="sync-tag" classList={{ bad: goes(m.id) }}>
-                                  {m.thisDevice ? w.thisDevice : w.forkGoes}
+                                  {m.thisDevice ? w.thisDevice : goes(m.id) ? w.forkGoes : named(w.goesWithTicked, sponsorName(m, all()) ?? "")}
                                 </span>
                               </b>
                               <small>{addedLine(m.kit, m.addedMs, sponsorName(m, all()))}</small>
@@ -1231,7 +1323,7 @@ export function ForkReview() {
             <div class="acts sync-lost-acts">
               <button class="btn" classList={{ danger: drop().length > 0 }} data-f="sync-fork:go" aria-busy={busy() || undefined} onClick={() => void go()}>
                 <MonitorSmartphone aria-hidden />
-                {busy() ? w.forkGoing : forkButton(drop().length, kitsGo().length)}
+                {busy() ? w.forkGoing : forkButton(drop().filter((id) => !isKit(id)).length, new Set([...drop().filter(isKit), ...kitsGo()]).size)}
               </button>
               <button class="btn" data-f="sync-fork:cancel" onClick={done}>
                 {w.cancel}

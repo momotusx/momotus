@@ -93,3 +93,6 @@
 [data-form="phone"] .sync-note .btn { height: 38px; padding: 0 14px; }
 .sync-tag.bad { color: var(--bg); background: var(--bad); box-shadow: none; }
 .sync-mtext .sync-goes { color: var(--text); font-weight: 600; }
+/* What this browser's storage did wrong, at the top of the page. */
+.sync-storage { margin-bottom: 28px; max-width: 1100px; }
+.sync-leave-here { display: grid; gap: 12px; justify-items: start; margin-top: 20px; }

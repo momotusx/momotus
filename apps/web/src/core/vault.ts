@@ -22,8 +22,8 @@ interface Sealed {
 }
 
 export class VaultError extends Error {
-  constructor(readonly code: "noPrf" | "passkey") {
-    super(code === "noPrf" ? "this passkey has no PRF" : "the passkey did not confirm");
+  constructor(readonly code: "noPrf" | "passkey" | "forget") {
+    super(code === "noPrf" ? "this passkey has no PRF" : code === "forget" ? "the sealed copy could not be deleted" : "the passkey did not confirm");
   }
 }
 
@@ -78,13 +78,11 @@ export async function available(): Promise<boolean> {
   }
 }
 
-/** A sealed record waits in this browser (it needs the passkey to open). */
+/** A sealed record waits in this browser (it needs the passkey to open).
+ * A storage that cannot be read rejects: it may hold one, so callers never
+ * read the failure as "none". */
 export async function stored(): Promise<boolean> {
-  try {
-    return (await read()) !== undefined;
-  } catch {
-    return false;
-  }
+  return (await read()) !== undefined;
 }
 
 /** Remembering is on for this page: the key is in memory. */
@@ -157,23 +155,24 @@ export async function enable(record: SyncRecord): Promise<void> {
   } catch {
     throw new VaultError("passkey");
   }
-  const prf = (made.getClientExtensionResults() as Prf).prf;
-  if (!prf?.enabled) throw new VaultError("noPrf");
-  // Some authenticators answer PRF only when asked to sign in.
-  const first = prf.results?.first ?? (await evaluate(made.rawId, salt));
-  const k = await derive(first);
-  const sealed = await seal(record, k, made.rawId, salt);
   try {
+    const prf = (made.getClientExtensionResults() as Prf).prf;
+    if (!prf?.enabled) throw new VaultError("noPrf");
+    // Some authenticators answer PRF only when asked to sign in.
+    const first = prf.results?.first ?? (await evaluate(made.rawId, salt));
+    const k = await derive(first);
+    const sealed = await seal(record, k, made.rawId, salt);
     await write(sealed);
+    // Ask the browser not to evict this storage when it runs low or sits idle.
+    void navigator.storage?.persist?.().catch(() => false);
+    key = k;
+    held = sealed;
   } catch (e) {
-    // The passkey exists but guards nothing: ask its manager to drop it, where the browser can.
+    // From here on any failure (no PRF, a cancelled sign-in, a seal or write that failed) leaves
+    // a passkey that guards nothing: ask its manager to drop it, where the browser can.
     void forgetPasskey(made.rawId);
     throw e;
   }
-  // Ask the browser not to evict this storage when it runs low or sits idle.
-  void navigator.storage?.persist?.().catch(() => false);
-  key = k;
-  held = sealed;
 }
 
 /** Tells the passkey manager a credential guards nothing (WebAuthn Signal API; best effort). */
@@ -217,10 +216,22 @@ export function save(record: SyncRecord): Promise<void> {
   return run;
 }
 
-/** Forgets the sealed record here; the passkey itself stays with its authenticator. */
+/** Forgets the sealed record here.
+ * A delete that does not commit rejects (`forget`) and keeps what this page held. Once deleted, the
+ * passkey manager is told the passkey guards nothing (where the browser can). */
 export async function clear(): Promise<void> {
+  const [k, h] = [key, held];
   key = null;
   held = null;
   await saving;
-  await tx("readwrite", (s) => s.delete(ENTRY)).catch(() => undefined);
+  // Which passkey guarded it: held when unlocked, else read (a locked page never opened it).
+  const entry = h ?? (await read().catch(() => undefined));
+  try {
+    await tx("readwrite", (s) => s.delete(ENTRY));
+  } catch {
+    if (key === null) [key, held] = [k, h];
+    throw new VaultError("forget");
+  }
+  // Nothing sealed here any more: that passkey guards nothing.
+  if (entry) void forgetPasskey(entry.credential);
 }

@@ -97,7 +97,7 @@ test("this device leads, then devices, then kits, oldest first", () => {
   expect(memberName(member("k", { kit: true, name: null }))).toBe("Recovery kit");
   expect(memberName(member("x", { name: null }))).toBe("Unnamed device");
   expect(sponsorName(member("b", { sponsor: "a" }), list)).toBe("A");
-  expect(sponsorName(member("b", { sponsor: "gone" }), list)).toBe("a removed device");
+  expect(sponsorName(member("b", { sponsor: "gone" }), list)).toBe("a device no longer in your account");
   expect(sponsorName(member("a"), list)).toBeNull();
 });
 
@@ -152,6 +152,8 @@ test("both sides of a different list, and what continuing removes", () => {
   expect(forkKits(kits, [], [])).toEqual([]);
   expect(forkButton(1, 1)).toBe("Continue and remove 1 device and 1 recovery kit");
   expect(forkButton(2, 3)).toBe("Continue and remove 2 devices and 3 recovery kits");
+  // A ticked kit counts as a kit, never as a device.
+  expect(forkButton(0, 2)).toBe("Continue and remove 2 recovery kits");
   expect(goesWith(1)).toBe("Its recovery kit goes with it.");
   expect(goesWith(2)).toBe("Its 2 recovery kits go with it.");
 });
@@ -199,6 +201,11 @@ test("sync failures read by code and by action, and never show the server's addr
   // A passkey without PRF is not a server that did not answer.
   expect(syncProblem("noPrf", "this passkey has no PRF")).toBe(syncWords.noPrf);
   expect(syncProblem("rosterChanged", "x")).toBe(syncWords.forkChanged);
+  // Remembering fails in this browser's storage, never on the sync server.
+  expect(stepProblem(undefined, "AbortError", "remember")).toBe(syncWords.storageFailed);
+  expect(stepProblem("passkey", "x", "remember")).toBe("The passkey did not confirm it, so nothing changed.");
+  expect(syncProblem("forget", "x")).toBe(syncWords.forgetFailed);
+  expect(stepProblem(undefined, "http status 502", "differ")).toStartWith("The approval is still open.");
   // A relay that lost this device's token cannot be read: it says so, never "try again".
   expect(stepProblem(undefined, "http status 401", "compare")).toBe(syncWords.forkTokenLost);
   expect(stepProblem(undefined, "http status 502", "compare")).toStartWith("The lists could not be compared.");
@@ -207,7 +214,7 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(syncProblem("alreadyJoined", "x")).toBe(syncWords.alreadyJoined);
   expect(syncProblem(undefined, "roster: this device cannot report itself")).toBe("This device cannot report itself.");
   expect(syncProblem(undefined, "pairing: not a pairing code")).toBe("Not a pairing code.");
-  const steps = ["start", "recover", "approve", "load", "kit", "remove", "lost", "leave", "serverList", "unlock", "compare"] as const;
+  const steps = ["start", "recover", "approve", "load", "kit", "remove", "lost", "leave", "serverList", "unlock", "compare", "differ", "remember"] as const;
   for (const raw of ["network: error sending request for url (http://user:secret@relay.example/v1/push)", "http status 502", "timed out after 10s"]) {
     for (const words of [syncProblem(undefined, raw), ...steps.map((s) => stepProblem(undefined, raw, s))]) {
       expect(words.includes("relay.example") || words.includes("secret") || words.includes("http")).toBe(false);

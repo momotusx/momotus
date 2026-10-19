@@ -265,7 +265,8 @@ export const syncWords = {
   forkLoading: "Asking the sync server for its list",
   forkServer: "On the sync server's list",
   forkServerHelp: "Ticked devices are removed when you continue. Those marked as going are removed anyway: this device had removed them, or they are recovery kits only the server knows.",
-  forkGoes: "Goes",
+  forkGoes: "Removed anyway",
+  goesWithTicked: "Goes with {name}",
   forkMine: "Only this device knew these",
   forkMineHelp: "They are not on the server's list, so they are gone once you continue. Make a new recovery kit afterwards if one of them was yours.",
   forkSame: "Both lists name the same devices.",
@@ -291,7 +292,7 @@ export const syncWords = {
   approvedStep: "The new device now shows six digits. They must be these:",
   approvedHelp: "If they match, confirm on the new device. If they differ, say so there, and press They differ here.",
   differ: "They differ",
-  differEnded: "The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed.",
+  differEnded: "The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed, with any device it added.",
   done: "Done",
   // The joining device's side
   copyCode: "Copy the code",
@@ -326,7 +327,16 @@ export const syncWords = {
   forgetBrowser: "Forget in this browser",
   noPasskey: "This browser cannot lock the sync key with a passkey, so it stays in this tab only and a reload forgets it.",
   noPrf: "This passkey cannot lock the sync key, so this browser keeps it in this tab only. A passkey from another manager may work.",
-  rememberLost: "This browser could not keep the sync key, so it no longer remembers this account. Remember it again, or it lasts until this tab closes.",
+  forgetFailed: "This browser could not forget the sync account: its sealed copy is still here. Try again.",
+  vaultUnreadable: "This browser could not check whether it remembers a sync account, so nothing new starts here. Check again, or forget what it may remember.",
+  checkAgain: "Check again",
+  saveFailed: "This browser could not store the newest sync key. The copy it keeps still opens this account, and it tries again with the next change.",
+  saveAgain: "Save again",
+  storageFailed: "This browser could not store the sync key, so it does not remember this account. It lasts until this tab closes.",
+  checking: "Checking whether this browser remembers a sync account",
+  leaveHere: "Stop syncing here only",
+  leaveHereText: "This device forgets the account without telling the sync server, which lists it until another device removes it. Your library stays here, and you can pair this device again.",
+  leftHere: "This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again.",
   notRemembered: "Not remembered: the sync key lasts until this tab closes or reloads.",
   lockedFirst: "This browser remembers a sync account. Unlock it or forget it on Devices and sync before joining another.",
   forkNone: "This device and the sync server list the same devices. There is nothing to compare.",
@@ -353,8 +363,10 @@ export const lostKits = (kits: number) =>
   `${kits === 1 ? "1 recovery kit made on these devices stops" : `${kits} recovery kits made on these devices stop`} working. Make a new one afterwards.`;
 
 /** The button that continues with the server's list, naming what the user ticked. */
-export const forkButton = (devices: number, kits = 0) =>
-  devices ? `Continue and remove ${count(devices, "device", "devices")}${kits ? ` and ${kits === 1 ? "1 recovery kit" : `${kits} recovery kits`}` : ""}` : syncWords.forkGo;
+export function forkButton(devices: number, kits = 0): string {
+  const parts = [devices ? count(devices, "device", "devices") : "", kits ? count(kits, "recovery kit", "recovery kits") : ""].filter(Boolean);
+  return parts.length ? `Continue and remove ${parts.join(" and ")}` : syncWords.forkGo;
+}
 
 /** On a ticked row of the server's list: the kits that go with it. */
 export const goesWith = (kits: number) => (kits === 1 ? "Its recovery kit goes with it." : `Its ${kits} recovery kits go with it.`);
@@ -390,6 +402,8 @@ export function syncProblem(code: string | undefined, message: string): string {
       return "The passkey did not confirm it, so nothing changed.";
     case "noPrf":
       return syncWords.noPrf;
+    case "forget":
+      return syncWords.forgetFailed;
     case "plainLink":
       return syncWords.plainLink;
     case "alreadyJoined":
@@ -414,15 +428,18 @@ const notDone = {
   serverList: "Nothing changed.",
   compare: "The lists could not be compared.",
   unlock: "Sync is still locked.",
+  differ: "The approval is still open.",
 } as const;
 
-export type SyncStep = "start" | "recover" | keyof typeof notDone;
+export type SyncStep = "start" | "recover" | "remember" | keyof typeof notDone;
 
 /** A failure of one action in words: by code, then the step's own statuses
  * (an invite on start, an unknown kit on recover, a used code on approve),
  * then what did not happen. Never the raw text: it can name the server. */
 export function stepProblem(code: string | undefined, message: string, step: SyncStep): string {
   if (code) return syncProblem(code, message);
+  // Remembering fails in this browser's storage, not on the sync server.
+  if (step === "remember") return syncWords.storageFailed;
   if (step === "start" && message === "http status 403") return "This sync server needs an invite code, or the one entered is wrong.";
   if (step === "recover" && message === "http status 404") return syncWords.wrongKit;
   if (step === "start" || step === "recover") return pairingProblem(message);

@@ -64,17 +64,26 @@ function inTurn<T>(work: () => Promise<T>): Promise<T> {
   return run;
 }
 
-function store(next: SyncRecord) {
+/** Keeps a newer record, and seals it before the op that brought it returns. */
+async function store(next: SyncRecord) {
   record = keepNewer(record, next);
-  if (vault.active()) void vault.save(record).catch(lostMemory);
+  if (vault.active()) await vault.save(record).then(savedNewest, saveFailed);
 }
 
-/** A sealed write that did not commit: this browser no longer claims to remember the account. */
-function lostMemory() {
-  vaultGen++;
-  setRemembered(false);
-  setMemoryProblem(syncWords.rememberLost);
-  void vault.clear();
+/** A sealed write that did not commit. The copy sealed before stays (it is older but still
+ * opens this account, and the core brings an older record up to date), and so do the passkey
+ * gate and the claim to remember; the user is told where they are, and can save again. */
+function saveFailed() {
+  setMemoryProblem(syncWords.saveFailed);
+}
+
+function savedNewest() {
+  if (memoryProblem() === syncWords.saveFailed) setMemoryProblem(null);
+}
+
+/** "Save again" after a failed sealed write. */
+export async function saveAgain() {
+  if (record && vault.active()) await vault.save(record).then(savedNewest, saveFailed);
 }
 
 /** Runs an op on the record, in turn. A record in the answer is stored at
@@ -87,7 +96,7 @@ function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: 
     try {
       const result = await op<T>(name, { ...fields, record });
       const next = recordIn(result);
-      if (next && mine === account) store(next);
+      if (next && mine === account) await store(next);
       return result;
     } catch (e) {
       if (mine === account && e instanceof BridgeError && (e.code === "dropped" || e.code === "fork")) {
@@ -118,7 +127,7 @@ function forget() {
   vaultGen++;
   setLocked(false);
   setRemembered(false);
-  void vault.clear();
+  void vault.clear().catch(() => setMemoryProblem(syncWords.forgetFailed));
 }
 
 /** A new account record replaces none: a device that syncs (or remembers an
@@ -267,14 +276,15 @@ export async function reportLost(lost: string, keep: string[]) {
 }
 
 /** Leaves the account; the library stays. Without `force` the core refuses while edits are unsent (`unsent`). */
-export async function signOut(force: boolean) {
+export async function signOut(force: boolean, local = false) {
   const mine = account;
   await gate();
-  await withRecord("signOut", { force }, () => null);
+  // `local`: nothing sent; only this device forgets the account (the way out of a list it is not on).
+  await withRecord("signOut", { force, local }, () => null);
   if (mine !== account) return;
   forget();
   setProblem(null);
-  setNotice(syncWords.left);
+  setNotice(local ? syncWords.leftHere : syncWords.left);
 }
 
 /** Both sides of a different device list, read only. */
@@ -299,18 +309,29 @@ export async function remember() {
   await vault.enable(r);
   // Left or told to forget during the prompt: nothing stays sealed.
   if (gen !== vaultGen || mine !== account) return void (await vault.clear());
-  // A record that changed during the prompt replaces the one sealed.
-  if (record && record !== r) await vault.save(record);
-  setRemembered(true);
+  // A record that changed during the prompt replaces the one sealed, and the checks hold after it.
+  // The new copy is sealed: this browser remembers, with the newer record if that save works.
   setMemoryProblem(null);
+  if (record && record !== r) {
+    await vault.save(record).then(savedNewest, saveFailed);
+    if (gen !== vaultGen || mine !== account) return void (await vault.clear());
+  }
+  setRemembered(true);
 }
 
 /** Stops remembering: the sealed copy goes; a joined page keeps syncing until it closes. */
 export async function forgetBrowser() {
   vaultGen++;
-  await vault.clear();
+  try {
+    await vault.clear();
+  } catch (e) {
+    // Still sealed here: the page keeps saying so.
+    setMemoryProblem(syncWords.forgetFailed);
+    throw e;
+  }
   setRemembered(false);
   setLocked(false);
+  setMemoryProblem(null);
 }
 
 /** Opens what this browser remembers, with the passkey, then syncs. */
@@ -321,15 +342,33 @@ export async function unlock() {
   if (gen !== vaultGen || record) return void (await vault.clear());
   setLocked(false);
   join(opened);
+  setMemoryProblem(null);
+}
+
+/** Checks this browser for a remembered account. A storage that cannot be read may hold one:
+ * that counts as locked, with its own words, so nothing new starts over it. */
+async function discover() {
+  try {
+    // A storage that does not answer in time counts as one that could not be read.
+    const late = new Promise<never>((_, fail) => setTimeout(() => fail(new Error("the storage did not answer")), 10_000));
+    const has = await Promise.race([vault.stored(), late]);
+    if (!record) {
+      setLocked(has);
+      setMemoryProblem(null);
+    }
+  } catch {
+    if (!record) {
+      setLocked(true);
+      setMemoryProblem(syncWords.vaultUnreadable);
+    }
+  }
 }
 
 /** Settles once this browser was checked for a remembered account. */
-export const vaultReady: Promise<void> = vault
-  .stored()
-  .then((has) => {
-    if (has && !record) setLocked(true);
-  })
-  .finally(() => setSettled(true));
+export const vaultReady: Promise<void> = discover().finally(() => setSettled(true));
+
+/** "Check again" after a storage that could not be read. */
+export const recheckVault = discover;
 
 const SERVER_KEY = "mq.syncServer";
 const NAME_KEY = "mq.syncName";

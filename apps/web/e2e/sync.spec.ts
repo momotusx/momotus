@@ -36,7 +36,7 @@ const consoleLines: string[] = [];
 /** Every secret that crossed a socket: record fields and kits. */
 const secrets = new Set<string>();
 /** The next request of this op from the page on a core's port is answered as a relay failure. */
-const failOnce = new Map<number, string>();
+const failOnce = new Map<number, { op: string; code?: string }>();
 /** Every request a page sent its core, by the core's port: op and view, nothing else. */
 const asked: { port: number; op?: string; view?: string }[] = [];
 /** The next answer to this op on a core's port is edited before the page sees it. */
@@ -92,6 +92,18 @@ const FORMS = {
 
 /** On a load the test marks (a session flag), IndexedDB answers 5 s late: the check for a remembered account is slow. */
 function slowVaultOnMark() {
+  if (sessionStorage.getItem("mq.e2e.failIdb") === "1") {
+    sessionStorage.removeItem("mq.e2e.failIdb");
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (this: IDBFactory, ...args: Parameters<typeof open>) {
+      // Only the first open fails; the next one works again.
+      IDBFactory.prototype.open = open;
+      const failed = { onsuccess: null, onerror: null, onupgradeneeded: null, result: null, error: new DOMException("unreadable", "UnknownError") } as unknown as IDBOpenDBRequest & Record<string, unknown>;
+      setTimeout(() => (failed.onerror as ((e: Event) => void) | null)?.(new Event("error")));
+      return failed;
+    };
+    return;
+  }
   if (sessionStorage.getItem("mq.e2e.slowIdb") !== "1") return;
   sessionStorage.removeItem("mq.e2e.slowIdb");
   const real = IDBFactory.prototype.open;
@@ -147,9 +159,10 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS, 
       const request = JSON.parse(String(m)) as { id?: number; op?: string; view?: string };
       asked.push({ port, op: request.op, view: request.view });
       if (request.id !== undefined && request.op) ops.set(request.id, request.op);
-      if (request.op && request.op === failOnce.get(port)) {
+      const fail = failOnce.get(port);
+      if (request.op && request.op === fail?.op) {
         failOnce.delete(port);
-        ws.send(JSON.stringify({ id: request.id, ok: false, error: "http status 502" }));
+        ws.send(JSON.stringify({ id: request.id, ok: false, error: fail.code ? "the relay shows a roster that conflicts" : "http status 502", code: fail.code }));
         return;
       }
       if (core.readyState === WebSocket.OPEN) core.send(String(m));
@@ -313,11 +326,52 @@ test.describe.serial("sync across three devices", () => {
       options: { protocol: "ctap2", ctap2Version: "ctap2_1", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
     } as never)) as { authenticatorId: string };
     passkey.id = added.authenticatorId;
+    // Every passkey the page tells its manager to drop.
+    await desk.evaluate(() => {
+      const w = window as unknown as { dropped: string[] };
+      w.dropped = [];
+      (PublicKeyCredential as unknown as { signalUnknownCredential: (o: { credentialId: string }) => Promise<void> }).signalUnknownCredential = async (o) => void w.dropped.push(o.credentialId);
+    });
     const fp = await desk.locator(".sync-fp").textContent();
+
+    // A passkey made without PRF guards nothing: the page says so and asks its manager to drop it.
+    await desk.evaluate(() => {
+      const create = navigator.credentials.create.bind(navigator.credentials);
+      (window as unknown as { restoreCreate: () => void }).restoreCreate = () => (navigator.credentials.create = create);
+      navigator.credentials.create = async (o) => {
+        const made = (await create(o)) as PublicKeyCredential;
+        const ext = made.getClientExtensionResults.bind(made);
+        Object.defineProperty(made, "getClientExtensionResults", { value: () => ({ ...ext(), prf: { enabled: false } }) });
+        return made;
+      };
+    });
+    await desk.locator('[data-f="sync:remember"]').click();
+    await expect(desk.getByText("This passkey cannot lock the sync key, so this browser keeps it in this tab only.")).toBeVisible();
+    const orphan = ((await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: { credentialId: string }[] }).credentials;
+    expect(orphan).toHaveLength(1);
+    const asUrl = (b64: string) => b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(await desk.evaluate(() => (window as unknown as { dropped: string[] }).dropped)).toEqual([asUrl(orphan[0]?.credentialId ?? "")]);
+    await desk.evaluate(() => (window as unknown as { restoreCreate: () => void }).restoreCreate());
+    // A Remember whose sealed write the browser aborts: the words name this browser's storage,
+    // never the sync server, and that passkey is dropped too.
+    await desk.evaluate(() => {
+      const put = IDBObjectStore.prototype.put;
+      (window as unknown as { restorePut: () => void }).restorePut = () => (IDBObjectStore.prototype.put = put);
+      IDBObjectStore.prototype.put = function (...args: Parameters<typeof put>) {
+        const request = put.apply(this, args);
+        request.addEventListener("success", () => this.transaction.abort());
+        return request;
+      };
+    });
+    await desk.locator('[data-f="sync:remember"]').click();
+    await expect(desk.getByText("This browser could not store the sync key, so it does not remember this account.")).toBeVisible();
+    await expect.poll(() => desk.evaluate(() => (window as unknown as { dropped: string[] }).dropped.length)).toBe(2);
+    await desk.evaluate(() => (window as unknown as { restorePut: () => void }).restorePut());
+
     await desk.locator('[data-f="sync:remember"]').click();
     await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
     const { credentials } = (await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: unknown[] };
-    expect(credentials).toHaveLength(1);
+    expect(credentials).toHaveLength(3);
     const { dbs } = await kept(desk);
     expect(dbs).toContain("marquee-vault");
     await noSecretKept(desk);
@@ -334,6 +388,37 @@ test.describe.serial("sync across three devices", () => {
       await expect(desk.getByText("This browser remembers a sync account. Unlock it or forget it on Devices and sync before joining another.")).toBeVisible({ timeout: 10_000 });
       expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.a && a.view === "pairing")).toEqual([]);
     }
+    // Storage that cannot be read at load may hold an account: /pair starts nothing and says why.
+    await desk.evaluate(() => sessionStorage.setItem("mq.e2e.failIdb", "1"));
+    let from = asked.length;
+    await desk.goto("/pair");
+    await expect(desk.getByText('This browser could not check whether it remembers a sync account, so nothing new starts here.')).toBeVisible();
+    expect(await desk.locator(".qrbox").count()).toBe(0);
+    expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.a && a.view === "pairing")).toEqual([]);
+    // The same on Devices and sync, with Check again in place of Unlock.
+    await desk.evaluate(() => sessionStorage.setItem("mq.e2e.failIdb", "1"));
+    from = asked.length;
+    await desk.goto("/sync");
+    await expect(desk.locator(".set .st.bad")).toHaveText("This browser could not check whether it remembers a sync account, so nothing new starts here. Check again, or forget what it may remember.");
+    await expect(desk.locator('[data-f="sync:unlock"]')).toHaveCount(0);
+    await desk.locator('[data-f="sync:recheck"]').click();
+    await expect(desk.locator('[data-f="sync:unlock"]')).toBeVisible();
+
+    // Forget whose delete the browser aborts: the page says so and stays locked.
+    await desk.evaluate(() => {
+      const del = IDBObjectStore.prototype.delete;
+      (window as unknown as { restoreDelete: () => void }).restoreDelete = () => (IDBObjectStore.prototype.delete = del);
+      IDBObjectStore.prototype.delete = function (...args: Parameters<typeof del>) {
+        const request = del.apply(this, args);
+        request.addEventListener("success", () => this.transaction.abort());
+        return request;
+      };
+    });
+    await desk.locator('[data-f="sync:forget-browser"]').click();
+    await expect(desk.locator(".set .st.bad")).toHaveText("This browser could not forget the sync account: its sealed copy is still here. Try again.");
+    await expect(desk.locator('[data-f="sync:unlock"]')).toBeVisible();
+    expect((await kept(desk)).text).toContain("credential");
+    await desk.evaluate(() => (window as unknown as { restoreDelete: () => void }).restoreDelete());
     await desk.goto("/sync");
     await expect(desk.locator('[data-f="sync:unlock"]')).toBeVisible();
     await expect(desk.locator(".sync-card")).toHaveCount(0);
@@ -374,15 +459,27 @@ test.describe.serial("sync across three devices", () => {
       const put = IDBObjectStore.prototype.put;
       (window as unknown as { restorePut: () => void }).restorePut = () => (IDBObjectStore.prototype.put = put);
       IDBObjectStore.prototype.put = function (...args: Parameters<typeof put>) {
+        const store = this;
         const request = put.apply(this, args);
-        // The request succeeds; the transaction then aborts before it commits.
-        request.addEventListener("success", () => this.transaction.abort());
+        // The request succeeds; the transaction stays busy for 1.5 s, then aborts before it
+        // commits (so a save nobody waits for would show the digits long before its note).
+        const until = Date.now() + 1500;
+        const spin = () => {
+          if (Date.now() < until) store.count().onsuccess = spin;
+          else store.transaction.abort();
+        };
+        request.addEventListener("success", spin);
         return request;
       };
     });
     await desk.locator('[data-f="sync-add:review-approve"]').click();
     const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
     expect(digits).toMatch(/^\d{6}$/);
+    // The approval returns only after its record was sealed, or said not to be: the note is
+    // already there when the digits are.
+    expect(await desk.locator(".sync-storage").isVisible()).toBe(true);
+    // Where the user is: the add page says the newest key was not stored.
+    await expect(desk.locator(".sync-storage")).toContainText("could not store the newest sync key");
     await shot(desk, "sync-add-desktop");
 
     await expect(phone.locator(".confirm .code")).toHaveText(digits);
@@ -393,13 +490,14 @@ test.describe.serial("sync across three devices", () => {
     await synced(phone);
     await desk.locator('[data-f="sync-add:done"]').click();
     await expect(member(desk, "Phone")).toContainText("through Desk");
-    // The page no longer claims to remember, and nothing stale stays sealed.
-    await expect(desk.getByText("This browser could not keep the sync key, so it no longer remembers this account.")).toBeVisible();
-    await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toHaveCount(0);
-    await expect.poll(async () => (await kept(desk)).text.includes("credential")).toBe(false);
-    await desk.evaluate(() => (window as unknown as { restorePut: () => void }).restorePut());
-    await desk.locator('[data-f="sync:remember"]').click();
+    // The older sealed copy, the passkey gate and the claim stay; the note is at the top of the page.
+    const note = "This browser could not store the newest sync key. The copy it keeps still opens this account, and it tries again with the next change.";
+    await expect(desk.locator(".sync-storage")).toContainText(note);
     await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
+    expect((await kept(desk)).text).toContain("credential");
+    await desk.evaluate(() => (window as unknown as { restorePut: () => void }).restorePut());
+    await desk.locator('[data-f="sync:save-again"]').click();
+    await expect(desk.locator(".sync-storage")).toHaveCount(0);
   });
 
   test("the camera stops when the page is left", async () => {
@@ -532,7 +630,7 @@ test.describe.serial("sync across three devices", () => {
     const before = await signCount();
     const fp = await desk.locator(".sync-fp").textContent();
     // The first read fails: the page says so and offers to try again or leave.
-    failOnce.set(SYNC_PORTS.a, "lostPreview");
+    failOnce.set(SYNC_PORTS.a, { op: "lostPreview" });
     await member(desk, "Phone").locator('[data-f$=":lost"]').click();
     await expect(desk.locator(".problem .st.bad")).toHaveText("The device list did not load. The sync server did not answer. Try again in a moment.");
     await expect(desk.locator('[data-f="sync-lost:cancel"]')).toBeVisible();
@@ -599,7 +697,7 @@ test.describe.serial("sync across three devices", () => {
     await passkey.cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId: passkey.id, isBadUV: false });
     // Desk says the digits differ before the device confirmed: the approval ends now.
     await desk.locator('[data-f="sync-add:differ"]').click();
-    await expect(desk.locator(".confirm .st")).toHaveText("The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed.");
+    await expect(desk.locator(".confirm .st")).toHaveText("The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed, with any device it added.");
     // Whoever holds the other screen confirms anyway: the join no longer fits.
     await phone.locator('[data-f="pair:yes"]').click();
     await expect(phone.locator(".problem h2")).toHaveText("Pairing stopped");
@@ -683,6 +781,8 @@ test.describe.serial("sync across three devices", () => {
     await expect(desk).toHaveURL(/\/sync\/fork$/);
     await expect(desk.locator(".problem .st.bad")).toHaveText("The sync server's list no longer includes this device: it was removed there. Pair this device again from one that still syncs.");
     await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveCount(0);
+    // Its way out: stop syncing on this device only.
+    await expect(desk.locator('[data-f="sync-fork:leave-here"]')).toBeVisible();
     await desk.locator('[data-f="sync-fork:cancel"]').click();
     await expect(desk).toHaveURL(/\/sync$/);
     await desk.locator('[data-f="sync:server-list"]').click();
@@ -690,7 +790,7 @@ test.describe.serial("sync across three devices", () => {
     // Phone's kit is only on the server's list and goes; Desk's own kit only Desk knew.
     const serverOnly = desk.locator(".sync-member", { hasText: "only on the server's list" });
     await expect(serverOnly).toHaveCount(1);
-    await expect(serverOnly).toContainText("Goes");
+    await expect(serverOnly).toContainText("Removed anyway");
     await expect(serverOnly).toContainText("on Phone");
     const mineOnly = desk.locator(".set", { has: desk.locator("h2", { hasText: "Only this device knew these" }) });
     await expect(mineOnly.locator(".sync-member")).toHaveCount(1);
@@ -706,8 +806,10 @@ test.describe.serial("sync across three devices", () => {
     await phoneTick.click();
     await expect(phoneTick).toContainText("Its recovery kit goes with it.");
     await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveText("Continue and remove 1 device and 1 recovery kit");
-    await phoneTick.click();
+    // The shot shows a ticked device, its kit line and the Continue that names both.
+    await desk.locator('[data-f="sync-fork:go"]').scrollIntoViewIfNeeded();
     await shot(desk, "sync-fork-desktop");
+    await phoneTick.click();
     // Phone adds a kit while Desk looks: continuing is refused and the lists are shown again.
     await go(phone, "/sync/kit");
     await phone.locator('[data-f="sync-kit:make"]').click();
@@ -733,7 +835,7 @@ test.describe.serial("sync across three devices", () => {
     await row.locator('[data-f$=":remove"]').click();
     await expect(row.locator(".sync-ask")).toContainText("Remove Living room TV? It stops syncing");
     // The removal lands; reading the list after it fails: the removal still counts.
-    failOnce.set(SYNC_PORTS.a, "syncDevices");
+    failOnce.set(SYNC_PORTS.a, { op: "syncDevices" });
     await row.locator('[data-f$=":confirm"]').click();
     await expect(desk.getByText("Removed: Living room TV. Done, but the device list did not refresh. Try again to see it.")).toBeVisible();
     await syncNow(desk);
@@ -750,11 +852,24 @@ test.describe.serial("sync across three devices", () => {
     await kitRow.locator('[data-f$=":confirm"]').click();
     await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
 
-    const beforeLeave = await signCount();
+    const credentials = async () => ((await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: unknown[] }).credentials.length;
+    const held = await credentials();
+    // Count the passkey prompts: stopping sync asks it first.
+    await desk.evaluate(() => {
+      const w = window as unknown as { asked: number };
+      w.asked = 0;
+      const get = navigator.credentials.get.bind(navigator.credentials);
+      navigator.credentials.get = (o) => {
+        w.asked++;
+        return get(o);
+      };
+    });
     await desk.locator('[data-f="sync:leave"]').click();
     await expect(desk.locator('[data-f="sync:start"]')).toBeVisible();
     await expect(desk.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
-    expect(await signCount()).toBeGreaterThan(beforeLeave);
+    expect(await desk.evaluate(() => (window as unknown as { asked: number }).asked)).toBeGreaterThan(0);
+    // Nothing is sealed here any more, and the passkey that guarded it was dropped by its manager.
+    await expect.poll(credentials).toBe(held - 1);
     expect((await kept(desk)).text).not.toContain("credential");
     await go(desk, "/settings");
     await expect(desk.locator('[data-f="settings:sync"]')).toContainText("Keep your library, progress and addons the same on every device.");
@@ -763,6 +878,13 @@ test.describe.serial("sync across three devices", () => {
   test("Phone reloads without remembering: the page no longer holds the account", async () => {
     await go(phone, "/sync");
     await expect(phone.getByText("This browser cannot lock the sync key with a passkey")).toBeVisible();
+    // The sync server will not let it leave (here: a different list): it stops syncing here only.
+    failOnce.set(SYNC_PORTS.b, { op: "signOut", code: "fork" });
+    await phone.locator('[data-f="sync:leave"]').click();
+    await expect(phone.getByText("The sync server lists different devices than this device knows. Compare the lists to keep syncing.").first()).toBeVisible();
+    await phone.locator('[data-f="sync:leave-here"]').click();
+    await expect(phone.getByText("This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again.")).toBeVisible();
+    expect(asked.filter((a) => a.port === SYNC_PORTS.b && a.op === "signOut")).toHaveLength(2);
     await phone.reload();
     await expect(phone.locator('[data-f="sync:pair"]')).toBeVisible();
     await expect(phone.locator(".sync-card")).toHaveCount(0);

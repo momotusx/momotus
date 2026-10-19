@@ -28,7 +28,7 @@ export const memberName = (m: Pick<MemberInfo, "kit" | "name">) => (m.kit ? w.ki
 export function sponsorName(m: Pick<MemberInfo, "sponsor">, members: readonly MemberInfo[]): string | null {
   if (!m.sponsor) return null;
   const s = members.find((x) => x.id === m.sponsor);
-  return s ? memberName(s) : "a removed device";
+  return s ? memberName(s) : "a device no longer in your account";
 }
 
 /** What a lost report drops: the lost device and what it added that the user did not untick. */

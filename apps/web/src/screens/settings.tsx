@@ -103,7 +103,7 @@ export default function SettingsScreen() {
   const syncLine = () =>
     syncSummary({
       locked: sync.locked(),
-      problem: sync.problem()?.words ?? null,
+      problem: sync.problem()?.words ?? sync.memoryProblem(),
       joined: sync.joined(),
       refused: sync.failed().refused,
       unreadable: sync.failed().unreadable,

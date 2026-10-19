@@ -229,12 +229,20 @@ export default function PairingScreen() {
     <main class="browse page settings-page" data-vscroll>
       <h1>Pair this device</h1>
       <p class="lede">Joins your sync account so library, progress and addons follow you. Nothing is kept until both screens show the same code.</p>
-      <Show when={allowed.state === "ready"}>
+      <Show
+        when={allowed.state === "ready"}
+        fallback={
+          <p class="st warn" role="status">
+            <i class="dot" />
+            {syncWords.checking}
+          </p>
+        }
+      >
         <Show
           when={allowed()}
           fallback={
             <section class="problem">
-              <p>{!privateLink ? syncWords.plainLink : sync.locked() ? syncWords.lockedFirst : syncWords.alreadyJoined}</p>
+              <p>{!privateLink ? syncWords.plainLink : sync.locked() ? (sync.memoryProblem() ?? syncWords.lockedFirst) : syncWords.alreadyJoined}</p>
               <A class="btn primary" href="/sync" data-f="pair:back" data-autofocus>
                 {syncWords.title}
               </A>
