@@ -584,3 +584,137 @@ async fn an_unreadable_profile_reads_its_own_addons() {
     drop(owner);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+fn tile_faces(view: &HomeView, row: &str) -> Vec<(String, String, Option<String>)> {
+    view.snapshot()
+        .rows
+        .into_iter()
+        .filter(|r| r.row_id == row)
+        .flat_map(|r| r.tiles)
+        .map(|t| (t.id, t.name, t.poster))
+        .collect()
+}
+
+fn allow_with_poster(kid: &Core, id: &str, name: &str, poster: &str, added_ms: i64) {
+    let row = AllowedRow {
+        item_id: id.into(),
+        kind: "movie".into(),
+        name: name.into(),
+        names: vec![],
+        poster: Some(poster.into()),
+        allowed: true,
+        added_ms,
+    };
+    kid.library()
+        .write_allowed(kid.profile(), &row, &kid.hlc())
+        .unwrap();
+}
+
+/// An imported library row pairing an allowed id with another title's name
+/// and poster: the kid's tile shows the list's own name and poster, before
+/// and after the meta lands.
+#[tokio::test]
+async fn a_kids_tile_shows_its_lists_name_and_poster() {
+    let fixture = Fixture::default();
+    let (_owner, kid) = kid(&fixture).await;
+    allow_with_poster(&kid, "tt1", "Up", "https://img.example/up.jpg", 1);
+    played(&kid, "movie", "tt1", "tt1", 10, false);
+    let foreign = LibraryItemRow {
+        item_id: "tt1".into(),
+        kind: "movie".into(),
+        name: "Not for kids".into(),
+        poster: Some("https://img.example/foreign.jpg".into()),
+        poster_shape: None,
+        added_ms: 1,
+    };
+    kid.library()
+        .upsert_item(kid.profile(), &foreign, false, &kid.hlc())
+        .unwrap();
+    let home = HomeView::open(&kid);
+    let up = (
+        "tt1".to_owned(),
+        "Up".to_owned(),
+        Some("https://img.example/up.jpg".to_owned()),
+    );
+    until("the quick tile", || {
+        tile_faces(&home, CONTINUE_ROW_ID) == [up.clone()]
+    })
+    .await;
+    until("the meta's artwork", || {
+        home.snapshot()
+            .rows
+            .into_iter()
+            .flat_map(|r| r.tiles)
+            .any(|t| t.background.is_some())
+    })
+    .await;
+    assert_eq!(tile_faces(&home, CONTINUE_ROW_ID), [up]);
+}
+
+/// Taken off the list while metas are still on their way: the tile, its
+/// name and its poster leave at once, not when the metas land.
+#[tokio::test]
+async fn a_removal_while_metas_are_pending_leaves_at_once() {
+    let fixture = Fixture::default();
+    *fixture.delay.lock().unwrap() = Duration::from_secs(3);
+    let (_owner, kid) = kid(&fixture).await;
+    allow_with_poster(&kid, "tt1", "Up", "https://img.example/up.jpg", 1);
+    allow_with_poster(&kid, "tt3", "Cars", "https://img.example/cars.jpg", 2);
+    played(&kid, "movie", "tt1", "tt1", 30, false);
+    played(&kid, "movie", "tt3", "tt3", 20, false);
+    let home = HomeView::open(&kid);
+    until("the quick row", || {
+        row_ids(&home, CONTINUE_ROW_ID) == ["tt1", "tt3"]
+    })
+    .await;
+    remove(&kid, "tt1");
+    let gone = || {
+        tile_faces(&home, CONTINUE_ROW_ID)
+            .iter()
+            .all(|(id, name, poster)| {
+                id != "tt1"
+                    && name != "Up"
+                    && poster.as_deref() != Some("https://img.example/up.jpg")
+            })
+    };
+    // Within a second; the metas take three.
+    for _ in 0..40 {
+        if gone() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(
+        gone(),
+        "still shown: {:?}",
+        tile_faces(&home, CONTINUE_ROW_ID)
+    );
+    assert_eq!(row_ids(&home, CONTINUE_ROW_ID), ["tt3"]);
+}
+
+/// A kid's Search shows no recent searches: an old query can name a title
+/// since taken off the list. An open profile's are as before.
+#[tokio::test]
+async fn a_kids_search_shows_no_recent_names() {
+    let fixture = Fixture::default();
+    let (owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", 1);
+    let search = SearchView::open(&kid);
+    search.set_query("up");
+    until("the match", || search_ids(&search) == ["tt1"]).await;
+    search.remember().unwrap();
+    remove(&kid, "tt1");
+    search.set_query("");
+    assert!(
+        search.snapshot().recent.is_empty(),
+        "{:?}",
+        search.snapshot().recent
+    );
+    assert!(SearchView::open(&kid).snapshot().recent.is_empty());
+    let owners = SearchView::open(&owner);
+    owners.set_query("up");
+    until("the owner's query", || owners.snapshot().query == "up").await;
+    owners.remember().unwrap();
+    owners.set_query("");
+    assert_eq!(owners.snapshot().recent, ["up"]);
+}

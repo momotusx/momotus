@@ -174,7 +174,12 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// Recent searches, none for a kids profile: an old query can name a title
+/// since taken off its list.
 fn recent(core: &Core) -> Vec<String> {
+    if core.policy().kids() {
+        return Vec::new();
+    }
     core.library()
         .recent_searches(core.profile(), RECENT)
         .unwrap_or_default()

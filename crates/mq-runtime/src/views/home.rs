@@ -16,6 +16,7 @@ use mq_addons::InstalledAddon;
 use mq_library::{AllowedRow, ContinueItem, Policy, Table};
 use mq_protocol::{ResourcePath, ResourceResponse};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -700,7 +701,9 @@ async fn watch_continue(
     }
 }
 
-/// A kids Home's own row follows the list at once (local reads only).
+/// A kids Home follows the list at once, before any network work: its own
+/// row is read again, and Continue Watching and Next Up tiles off the list
+/// go (a refresh waiting on metas puts back nothing, `apply_continue`).
 async fn watch_kids_row(
     core: Core,
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
@@ -710,6 +713,20 @@ async fn watch_kids_row(
         if tables.contains(&Table::Access) {
             let next = kids_row(&core);
             update_row(&rows, KIDS_ROW_ID, |row| *row = next);
+            let policy = core.policy();
+            let mut rows = lock(&rows);
+            if let Some(index) = find_row(&rows, CONTINUE_ROW_ID) {
+                let mut row = rows[index].clone();
+                row.tiles.retain(|t| {
+                    let video = t.video_id.as_deref().unwrap_or(&t.id);
+                    shows(&policy, &t.kind, &t.id, video)
+                });
+                if row.tiles.is_empty() {
+                    rows.remove(index);
+                } else if row != rows[index] {
+                    rows.set(index, row);
+                }
+            }
         }
     }
 }
@@ -778,12 +795,32 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     } else {
         ROW_TILES
     };
+    // A kid's tile wears its allowlist entry's name and poster: a library
+    // row (an import, a sync) may pair an allowed id with another title's.
+    let entries: HashMap<String, AllowedRow> = if policy.kids() {
+        library
+            .allowed_list(core.profile())
+            .map(|l| l.counted)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| (r.item_id.clone(), r))
+            .collect()
+    } else {
+        HashMap::new()
+    };
     let unfinished: Vec<ContinueItem> = library
         .continue_watching(core.profile(), read)
         .unwrap_or_default()
         .into_iter()
         .filter(|item| shows(&policy, &item.kind, &item.item_id, &item.video_id))
         .take(ROW_TILES)
+        .map(|mut item| {
+            if let Some(entry) = entries.get(&item.item_id) {
+                item.name = entry.name.clone();
+                item.poster = entry.poster.clone();
+            }
+            item
+        })
         .collect();
     let finished: Vec<_> = library
         .finished_series(core.profile(), read)
