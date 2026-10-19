@@ -26,6 +26,7 @@ import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, sourceStart } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
+import { byLanguage, trackDetail } from "../lib/subtitles";
 import { blockedWords, languageName, qualityCell, qualityText, subtitleNote } from "../lib/words";
 import "./player.css";
 
@@ -576,7 +577,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 <b>Subtitles</b>
                 <small>
                   {track()
-                    ? languageName(track()?.lang ?? "")
+                    ? (snap()?.subtitles.find((t) => t.url === track()?.url)?.languageName ?? languageName(track()?.lang ?? ""))
                     : snap()?.subtitlesPending
                       ? "Searching"
                       : snap()?.subtitles.length
@@ -665,17 +666,25 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </Show>
               Off
             </button>
-            <For each={snap()?.subtitles ?? []}>
-              {(t, i) => (
-                <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${i()}`} onClick={() => pickSubtitle(t)}>
-                  <Show when={track()?.url === t.url}>
-                    <Check aria-hidden class="opt-check" />
-                  </Show>
-                  <b>{languageName(t.lang)}</b>
-                  <span>
-                    {[t.label, t.source, t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null].filter(Boolean).join(", ")}
-                  </span>
-                </button>
+            {/* One section per language, preferred first, as the core orders them. */}
+            <For each={byLanguage(snap()?.subtitles ?? [])}>
+              {(section) => (
+                <section class="sub-lang" aria-label={section.name}>
+                  <h3>{section.name}</h3>
+                  <For each={section.tracks}>
+                    {({ track: t, index }) => (
+                      <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${index}`} onClick={() => pickSubtitle(t)}>
+                        <Show when={track()?.url === t.url}>
+                          <Check aria-hidden class="opt-check" />
+                        </Show>
+                        <b>{t.name}</b>
+                        <Show when={trackDetail(t)}>
+                          <span>{trackDetail(t)}</span>
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </section>
               )}
             </For>
             <Show when={fileSubs().length}>

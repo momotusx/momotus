@@ -85,6 +85,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .opt-check { position: absolute; left: 18px; top: 16px; width: 24px; height: 24px; }
 .opt:focus-visible, [data-form="tv"] .opt:focus { background: color-mix(in srgb, var(--text) 12%, transparent); }
 .opt-note { padding: 14px 18px 14px 56px; font: 400 var(--type-caption) var(--font-text); color: var(--muted); }
+.sub-lang > h3 { padding: 18px 18px 6px 56px; font: 700 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); letter-spacing: 0.02em; }
 
 .next { position: absolute; right: var(--safe-side); bottom: 330px; display: flex; gap: 28px; align-items: flex-end; padding: 24px; border-radius: var(--radius-l);
   max-width: 900px; }

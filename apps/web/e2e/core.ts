@@ -22,6 +22,8 @@ export const TRAKT_PORTS = { bridge: 17807 + shift, fake: 17808 + shift, plain: 
 export const DEFAULTS_PORT = 17810 + shift;
 /** The subtitle notes spec's own: a core with one addon whose subtitle files fail. */
 export const NOTES_PORT = 17811 + shift;
+/** The subtitle languages spec's own: a core whose stream names subtitles in many languages. */
+export const LANGS_PORT = 17812 + shift;
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
