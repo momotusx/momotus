@@ -190,6 +190,9 @@ export function plainAddress(url: string): boolean {
  * built-in source itself (`AddonInfo.builtIn`). */
 export const addonHost = (a: { builtIn: boolean; host: string }) => (a.builtIn ? "Built into Marquee, runs on this device" : a.host);
 
+/** Settings, About: the built-in source's credit (plans/m13-turkcealtyazi.md 7). */
+export const turkceAltyaziCredit = "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.";
+
 export const tokenInLink = {
   warn: "This link carries a sign-in: a token or a key. Whoever has it uses that account. Install it only if it is yours.",
   confirm: "It is mine, install",

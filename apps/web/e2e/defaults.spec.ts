@@ -353,4 +353,9 @@ test("the built-in TurkceAltyazi.org row says where it runs instead of a host", 
   await expect(builtIn).not.toContainText("Settings live on its website");
   await expect(page.locator("li.addon", { hasText: "Cinemeta" }).locator(".host")).toHaveText("v3-cinemeta.strem.io");
   await shot(page, "addons-built-in", "desktop");
+  // Settings credits the site once, under About.
+  await page.goto("/settings?form=desktop");
+  await expect(page.locator("section.set", { hasText: "About" })).toContainText(
+    "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.",
+  );
 });
