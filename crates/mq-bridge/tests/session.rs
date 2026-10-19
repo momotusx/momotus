@@ -300,6 +300,20 @@ async fn sync_account_then_two_devices_share_preferences() {
         "{devices}"
     );
     assert_eq!(devices["result"]["fingerprint"].as_str().unwrap().len(), 12);
+    // Without a fork both sides of the preview are the same, and nothing drops.
+    a.handle_text(&json!({"id": 10, "op": "forkPreview", "record": record}).to_string())
+        .await;
+    let preview = next(&mut rx_a).await;
+    assert_eq!(preview["result"]["mine"][0]["name"], "Phone", "{preview}");
+    assert_eq!(
+        preview["result"]["mine"][0]["thisDevice"], true,
+        "{preview}"
+    );
+    assert_eq!(
+        preview["result"]["mine"], preview["result"]["server"],
+        "{preview}"
+    );
+    assert_eq!(preview["result"]["drops"], json!([]), "{preview}");
 
     a.handle_text(
         &json!({"id": 2, "op": "setPrefs", "patch": {"subtitleLanguages": ["tur"]}}).to_string(),

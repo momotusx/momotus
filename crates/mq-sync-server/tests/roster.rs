@@ -912,6 +912,105 @@ async fn after_a_fork_the_servers_roster_is_taken_and_the_drops_redone() {
     assert!(matches!(err, SyncError::Dropped), "{err:?}");
 }
 
+/// The same fork, previewed first: both sides as they are, and the drops
+/// `use_server_roster` then makes on its own. Reading it writes nothing.
+#[tokio::test]
+async fn a_fork_preview_shows_both_sides_and_writes_nothing() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    let mut laptop = phone.pair(&relay, "Laptop").await;
+    for device in [&mut tv, &mut laptop, &mut phone] {
+        device.sync().await;
+    }
+    let before = relay.snapshot();
+    phone.remove(vec![laptop.id()]).await;
+    phone.sync().await;
+    let restored = relay.restored(&before, false).await;
+    for device in [&mut phone, &mut tv] {
+        device.record.server = restored.url.clone();
+    }
+    tv.remove(vec![]).await;
+    let (_, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+        .await
+        .unwrap();
+    tv.record = record;
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+
+    let genesis = hex::encode(phone.record.keys.genesis.0);
+    let stored = |d: &Device| {
+        (
+            d.library.sync_states("").unwrap(),
+            d.library.roster_entries(&genesis).unwrap(),
+            d.library
+                .roster_entries(&format!("fork:{genesis}"))
+                .unwrap(),
+        )
+    };
+    let untouched = stored(&phone);
+    let preview = mq_sync::fork_preview(&phone.library, &http(), &phone.record)
+        .await
+        .unwrap();
+    let again = mq_sync::fork_preview(&phone.library, &http(), &phone.record)
+        .await
+        .unwrap();
+    assert_eq!(preview, again);
+    assert_eq!(stored(&phone), untouched, "a preview writes nothing");
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "still forked: {err:?}");
+
+    let names = |side: &[mq_sync::MemberInfo]| {
+        let mut n: Vec<String> = side
+            .iter()
+            .map(|m| m.name.clone().unwrap_or_else(|| "kit".into()))
+            .collect();
+        n.sort();
+        n
+    };
+    assert_eq!(names(&preview.mine), ["Phone", "TV"]);
+    assert_eq!(names(&preview.server), ["Laptop", "Phone", "TV", "kit"]);
+    let kit = preview.server.iter().find(|m| m.kit).unwrap().id;
+    let mut drops = preview.drops.clone();
+    drops.sort();
+    let mut expected = vec![laptop.id(), kit];
+    expected.sort();
+    assert_eq!(
+        drops, expected,
+        "the laptop this branch dropped and the server's own kit"
+    );
+    assert!(
+        preview
+            .mine
+            .iter()
+            .any(|m| m.this_device && m.id == phone.id())
+    );
+
+    // Taking the server's roster with no ticks keeps exactly what the
+    // preview said would stay.
+    phone.record =
+        mq_sync::use_server_roster(&phone.library, &http(), &phone.record, &phone.clock, vec![])
+            .await
+            .unwrap();
+    phone.sync().await;
+    let mut kept: Vec<_> = mq_sync::devices(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap()
+        .members
+        .into_iter()
+        .map(|m| m.id)
+        .collect();
+    kept.sort();
+    let mut stays: Vec<_> = preview
+        .server
+        .iter()
+        .map(|m| m.id)
+        .filter(|id| !preview.drops.contains(id))
+        .collect();
+    stays.sort();
+    assert_eq!(kept, stays);
+}
+
 #[tokio::test]
 async fn a_token_from_a_replay_request_needs_no_token() {
     let relay = Relay::new().await;

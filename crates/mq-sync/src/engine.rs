@@ -876,15 +876,7 @@ impl<'a> Session<'a> {
     ) -> Result<(), SyncError> {
         let at_ms = self.clock.tick(self.clock.wall_now()).wall_ms;
         self.propose(|s| {
-            let mut drop: Vec<Id> = dropped(&s.roster)
-                .into_iter()
-                .filter(|id| s.roster.members().contains_key(id))
-                .collect();
-            for kit in s.roster.kits_of(&drop) {
-                if !drop.contains(&kit) {
-                    drop.push(kit);
-                }
-            }
+            let drop = with_kits(&s.roster, dropped(&s.roster));
             let (entry, _) = s
                 .roster
                 .revoke(&s.member, &s.record.keys, drop, at_ms)
@@ -1366,6 +1358,38 @@ pub struct Devices {
     pub record: Option<SyncConfig>,
 }
 
+/// What a revoke on `roster` drops for `dropped`: those that are members,
+/// and the kits that would be left without their device.
+fn with_kits(roster: &Roster, dropped: Vec<Id>) -> Vec<Id> {
+    let mut drop: Vec<Id> = dropped
+        .into_iter()
+        .filter(|id| roster.members().contains_key(id))
+        .collect();
+    for kit in roster.kits_of(&drop) {
+        if !drop.contains(&kit) {
+            drop.push(kit);
+        }
+    }
+    drop
+}
+
+/// The members of `roster` as the devices screen shows them. Names are
+/// sealed under `idKey`, which never changes, so any branch's open.
+fn member_infos(roster: &Roster, keys: &Bundle, me: &Id) -> Vec<MemberInfo> {
+    roster
+        .members()
+        .iter()
+        .map(|(id, m)| MemberInfo {
+            id: *id,
+            kit: m.role == Role::Kit,
+            name: m.name.as_deref().and_then(|n| open_name(keys, id, n)),
+            sponsor: m.sponsor,
+            added_ms: m.added_ms,
+            this_device: id == me,
+        })
+        .collect()
+}
+
 pub async fn devices(
     library: &Library,
     http: &HttpClient,
@@ -1373,25 +1397,8 @@ pub async fn devices(
     clock: &HlcClock,
 ) -> Result<Devices, SyncError> {
     let session = Session::open(library, http, config, clock).await?;
-    let me = session.member.id();
-    let members = session
-        .roster
-        .members()
-        .iter()
-        .map(|(id, m)| MemberInfo {
-            id: *id,
-            kit: m.role == Role::Kit,
-            name: m
-                .name
-                .as_deref()
-                .and_then(|n| open_name(&session.record.keys, id, n)),
-            sponsor: m.sponsor,
-            added_ms: m.added_ms,
-            this_device: *id == me,
-        })
-        .collect();
     Ok(Devices {
-        members,
+        members: member_infos(&session.roster, &session.record.keys, &session.member.id()),
         fingerprint: session.roster.fingerprint(),
         epoch: session.roster.epoch(),
         rotation_pending: session.roster.rotation_pending(),
@@ -1511,6 +1518,75 @@ pub async fn sign_out(
     Ok(())
 }
 
+/// What taking the relay's roster drops besides the user's ticks (`also`):
+/// every member this device's branch had dropped and every kit only the
+/// relay's branch has (a thief's kit looks like any other). Never this
+/// device.
+fn fork_drops(local: &Roster, server: &Roster, me: &Id, also: &[Id]) -> Vec<Id> {
+    let kits = server
+        .members()
+        .iter()
+        .filter(|(id, m)| m.role == Role::Kit && !local.admitted(id))
+        .map(|(id, _)| *id);
+    let mut drop: Vec<Id> = local
+        .gone()
+        .into_iter()
+        .chain(also.iter().copied())
+        .chain(kits)
+        .filter(|id| id != me)
+        .collect();
+    drop.sort();
+    drop.dedup();
+    drop
+}
+
+/// Both sides of a fork, for the user to choose from before
+/// `use_server_roster`: this device's members, the relay's, and what taking
+/// the relay's would drop on its own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ForkPreview {
+    pub mine: Vec<MemberInfo>,
+    pub server: Vec<MemberInfo>,
+    /// Members of the relay's branch that go whatever the user ticks.
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
+    pub drops: Vec<Id>,
+}
+
+/// Reads both sides of a fork and writes nothing: this device's branch from
+/// its store, the relay's read and checked in memory with the record's token.
+pub async fn fork_preview(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+) -> Result<ForkPreview, SyncError> {
+    require_secure(&config.server)?;
+    let local =
+        rebuild(&stored_entries(library, &genesis_key(&config.keys))?).map_err(roster_error)?;
+    let (entries, _) = fetch_roster(http, &config.server, &config.device_token, 0).await?;
+    if entries.first().map(Entry::hash) != Some(config.keys.genesis) {
+        return Err(SyncError::Roster(
+            "the relay serves another account's roster".into(),
+        ));
+    }
+    let server = rebuild(&entries).map_err(|e| {
+        SyncError::Roster(format!(
+            "the relay served an entry that does not check: {e}"
+        ))
+    })?;
+    let me = config.secret().id();
+    Ok(ForkPreview {
+        mine: member_infos(&local, &config.keys, &me),
+        server: member_infos(&server, &config.keys, &me),
+        drops: with_kits(&server, fork_drops(&local, &server, &me, &[])),
+    })
+}
+
 /// After a fork: takes the relay's roster instead of this device's, drops
 /// again what this device's branch had dropped (plus `also_drop`, ticked by
 /// the user, and every kit only the relay's branch has), and starts a new
@@ -1575,23 +1651,7 @@ pub async fn use_server_roster(
     session.record.keys = session.roster.adopt(&member, &base).map_err(roster_error)?;
     session.record.checkpoint = session.head();
     session
-        .rotate(|server| {
-            let kits = server
-                .members()
-                .iter()
-                .filter(|(id, m)| m.role == Role::Kit && !local.admitted(id))
-                .map(|(id, _)| *id);
-            let mut drop: Vec<Id> = local
-                .gone()
-                .into_iter()
-                .chain(also_drop.iter().copied())
-                .chain(kits)
-                .filter(|id| *id != me)
-                .collect();
-            drop.sort();
-            drop.dedup();
-            drop
-        })
+        .rotate(|server| fork_drops(&local, server, &me, &also_drop))
         .await?;
     // Landed: the store takes the relay's branch, then everything is sent
     // and read again under the new key. The fork flag goes last.

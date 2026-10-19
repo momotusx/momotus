@@ -7,8 +7,8 @@
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" |
-//! "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" | "setPin" |
-//! "switchProfile" | "unlockProfile" | "lockSession",
+//! "forkPreview" | "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" |
+//! "setPin" | "switchProfile" | "unlockProfile" | "lockSession",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, addonCatalog,
 //! import, settings, pairing, profiles, debrid, debridLogin.
@@ -189,6 +189,12 @@ enum Request {
         record: Box<SyncConfig>,
         #[serde(default)]
         force: bool,
+    },
+    /// Both sides of a fork, read only: this device's members, the relay's,
+    /// and what taking the relay's drops on its own.
+    ForkPreview {
+        id: u64,
+        record: Box<SyncConfig>,
     },
     /// After a fork: takes the relay's roster, dropping again what this
     /// device's roster had dropped plus `drop`; replies the record to store.
@@ -639,6 +645,12 @@ impl Session {
                     mq_sync::sign_out(library, http, &record, clock, force)
                         .await
                         .map(|()| json!({}))
+                });
+            }
+            Request::ForkPreview { id, record } => {
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    answer(mq_sync::fork_preview(core.library(), core.http(), &record).await)
                 });
             }
             Request::UseServerRoster { id, record, drop } => {

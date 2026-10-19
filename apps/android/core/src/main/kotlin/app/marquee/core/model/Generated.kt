@@ -292,6 +292,15 @@ data class Episode(
     val leftMs: Long? = null,
 )
 
+/** Both sides of a fork, for the user to choose from before `use_server_roster`: this device's members, the relay's, and what taking the relay's would drop on its own. */
+@Serializable
+data class ForkPreview(
+    val mine: List<MemberInfo> = emptyList(),
+    val server: List<MemberInfo> = emptyList(),
+    /** Members of the relay's branch that go whatever the user ticks. */
+    val drops: List<String> = emptyList(),
+)
+
 @Serializable
 enum class Group {
     @SerialName("best") Best,
