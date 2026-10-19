@@ -282,10 +282,15 @@ fun DefaultsScreen(
                 Kicker(DefaultsCopy.group(group), side = 0.dp)
                 for (addon in addons) {
                     // After an import, the ones it brought keep how they are and say where they came from.
-                    val on = holder.switches[addon.key] ?: DefaultsCopy.initial(addon, mode)
+                    val on = DefaultsCopy.on(addon, mode, holder.switches)
                     DefaultRow(addon, on.takeIf { DefaultsCopy.hasSwitch(addon, mode) }) {
                         if (!holder.busy) holder.switches[addon.key] = !on
                     }
+                }
+                if (group == DefaultsCopy.CATALOGS &&
+                    DefaultsCopy.catalogMissing(answer?.addons.orEmpty(), mode, holder.switches)
+                ) {
+                    Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp)
                 }
             }
             holder.failed?.let {
@@ -341,11 +346,6 @@ private fun DefaultRow(
                         switch = true,
                     )
                 }
-            }
-            if (addon.key == DefaultsCopy.CATALOG_KEY &&
-                on == false
-            ) {
-                Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp)
             }
         }
     }

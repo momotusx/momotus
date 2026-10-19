@@ -29,12 +29,12 @@ object DefaultsCopy {
     const val SETTINGS_ROW = "Recommended addons"
     const val SETTINGS_ROW_LINE = "Turn the addons Marquee starts with on or off, or add back one you removed."
 
-    /** The catalog addon whose absence leaves Home and search empty. */
-    const val CATALOG_KEY = "cinemeta"
+    /** The group of the defaults that give Home and search their titles. */
+    const val CATALOGS = "catalogs"
 
     fun group(key: String): String =
         when (key) {
-            "catalogs" -> "Catalogs and details"
+            CATALOGS -> "Catalogs and details"
             "streams" -> "Streams"
             "subtitles" -> "Subtitles"
             "lists" -> "Lists"
@@ -85,6 +85,13 @@ object DefaultsCopy {
         mode: DefaultsMode,
     ): Boolean = mode != DefaultsMode.AfterImport || addon.installed == DefaultInstalled.Absent
 
+    /** Whether [addon] ends up on: its switch while the step shows one, else as the profile has it. */
+    fun on(
+        addon: DefaultAddonInfo,
+        mode: DefaultsMode,
+        switches: Map<String, Boolean>,
+    ): Boolean = switches[addon.key]?.takeIf { hasSwitch(addon, mode) } ?: initial(addon, mode)
+
     /**
      * The choices for `installDefaults`, which adds or switches only the keys it is given. Onboarding
      * names all nine (an import's own keep how they are), Review the missing ones it shows, and
@@ -94,13 +101,18 @@ object DefaultsCopy {
         addons: List<DefaultAddonInfo>,
         mode: DefaultsMode,
         switches: Map<String, Boolean>,
-    ): List<DefaultChoice> {
-        val on = { a: DefaultAddonInfo -> switches[a.key]?.takeIf { hasSwitch(a, mode) } ?: initial(a, mode) }
-        return when (mode) {
+    ): List<DefaultChoice> =
+        when (mode) {
             DefaultsMode.Settings -> addons.filter { a -> switches[a.key]?.let { it != initial(a, mode) } == true }
             else -> rows(addons, mode)
-        }.map { DefaultChoice(it.key, on(it)) }
-    }
+        }.map { DefaultChoice(it.key, on(it, mode, switches)) }
+
+    /** The switches leave no catalog addon on (as the web's `catalogMissing`): Home and search would be empty. */
+    fun catalogMissing(
+        addons: List<DefaultAddonInfo>,
+        mode: DefaultsMode,
+        switches: Map<String, Boolean>,
+    ): Boolean = addons.none { it.group == CATALOGS && on(it, mode, switches) }
 
     /** The Home card shows once per list version, never on a kids profile, and only when one is missing. */
     fun offer(

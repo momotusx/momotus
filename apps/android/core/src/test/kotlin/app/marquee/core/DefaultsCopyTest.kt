@@ -14,7 +14,8 @@ class DefaultsCopyTest {
     private fun addon(
         key: String,
         installed: DefaultInstalled,
-    ) = DefaultAddonInfo(key, key.replaceFirstChar { it.uppercase() }, "One line.", "lists", installed)
+        group: String = "lists",
+    ) = DefaultAddonInfo(key, key.replaceFirstChar { it.uppercase() }, "One line.", group, installed)
 
     private val list =
         listOf(
@@ -61,6 +62,37 @@ class DefaultsCopyTest {
         )
         assertEquals(emptyList(), DefaultsCopy.choices(list, DefaultsMode.Settings, emptyMap()))
         assertEquals(listOf(true, true, false, true), list.map { DefaultsCopy.initial(it, DefaultsMode.FirstRun) })
+    }
+
+    @Test
+    fun `the catalog note shows only when no catalog default stays on`() {
+        val catalogs =
+            listOf(
+                addon("cinemeta", DefaultInstalled.On, "catalogs"),
+                addon("kitsu", DefaultInstalled.Absent, "catalogs"),
+                addon("trakt", DefaultInstalled.On),
+            )
+        // Cinemeta off while Anime Kitsu goes in on: Home still has a catalog.
+        assertFalse(DefaultsCopy.catalogMissing(catalogs, DefaultsMode.FirstRun, mapOf("cinemeta" to false)))
+        assertTrue(
+            DefaultsCopy.catalogMissing(catalogs, DefaultsMode.FirstRun, mapOf("cinemeta" to false, "kitsu" to false)),
+        )
+        // Settings starts the missing Kitsu off: Cinemeta off leaves nothing until Kitsu is switched on.
+        assertTrue(DefaultsCopy.catalogMissing(catalogs, DefaultsMode.Settings, mapOf("cinemeta" to false)))
+        assertFalse(
+            DefaultsCopy.catalogMissing(catalogs, DefaultsMode.Settings, mapOf("cinemeta" to false, "kitsu" to true)),
+        )
+        // A list addon is not a catalog for this note.
+        assertTrue(
+            DefaultsCopy.catalogMissing(
+                catalogs.take(2),
+                DefaultsMode.FirstRun,
+                mapOf(
+                    "cinemeta" to false,
+                    "kitsu" to false,
+                ),
+            ),
+        )
     }
 
     @Test
