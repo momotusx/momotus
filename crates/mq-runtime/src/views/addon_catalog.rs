@@ -410,36 +410,44 @@ pub fn listable(raw: &str) -> Option<Url> {
     Some(url)
 }
 
-/// Field names that hold a sign-in or a key in an addon's settings.
-const TOKEN_FIELDS: [&str; 5] = [
-    "access_token",
-    "refresh_token",
-    "token",
-    "apikey",
-    "api_key",
+/// Debrid services whose key Torrentio and its forks keep under the
+/// service's own name (`realdebrid=<key>`).
+const DEBRID_FIELDS: [&str; 7] = [
+    "realdebrid",
+    "alldebrid",
+    "premiumize",
+    "torbox",
+    "debridlink",
+    "offcloud",
+    "putio",
 ];
 
+/// How deep one setting is unwrapped (percent, base64, JSON in a string).
+const UNWRAP_DEPTH: u8 = 5;
+
 /// Whether an addon link carries a sign-in in its settings: a path segment
-/// before `manifest.json` that reads (percent-decoded, or as base64) as a
-/// JSON object with a token-like field at any depth, or as `key=value`
-/// pairs with one. Such a link from someone else gives their account away;
-/// Find addons never lists one, and installing one by paste is confirmed
-/// first (plans/m13-default-addons.md, decision 11).
+/// before `manifest.json`, or a query parameter, whose name or contents
+/// name a token, an API key, a secret or a debrid key. Contents are read
+/// percent-decoded (twice encoded too), as base64 (leniently), as JSON
+/// (strings inside it again) and as `key=value` pairs, at any depth. Such
+/// a link from someone else gives their account away; Find addons never
+/// lists one, and installing one by paste is confirmed first
+/// (plans/m13-default-addons.md, decision 11). This is a guard against
+/// sharing an account by mistake, not a security boundary.
 pub fn carries_token(url: &Url) -> bool {
-    let Some(segments) = url.path_segments() else {
-        return false;
-    };
-    let segments: Vec<&str> = segments.collect();
-    let config = &segments[..segments.len().saturating_sub(1)];
-    config.iter().any(|segment| {
-        let text = percent_encoding::percent_decode_str(segment).decode_utf8_lossy();
-        token_json(&text)
-            || base64_text(&text).is_some_and(|t| token_json(&t))
-            || text.split(['|', '&', ';']).any(|pair| {
-                pair.split_once('=')
-                    .is_some_and(|(name, _)| token_name(name))
-            })
-    })
+    let config = url
+        .path_segments()
+        .map(|s| {
+            let s: Vec<&str> = s.collect();
+            s[..s.len().saturating_sub(1)]
+                .iter()
+                .any(|segment| holds_token(segment, UNWRAP_DEPTH))
+        })
+        .unwrap_or(false);
+    config
+        || url.query_pairs().any(|(name, value)| {
+            (token_name(&name) && !value.trim().is_empty()) || holds_token(&value, UNWRAP_DEPTH)
+        })
 }
 
 /// `carries_token` for a link as the user typed or pasted it.
@@ -447,31 +455,83 @@ pub fn link_carries_token(raw: &str) -> bool {
     normalize_transport_url(raw).is_ok_and(|url| carries_token(&url))
 }
 
+/// A setting's name that holds a secret, whatever its case and separators:
+/// `access_token`, `accessToken`, `api-key`, `clientSecret`, `realdebrid`.
 fn token_name(name: &str) -> bool {
-    TOKEN_FIELDS.contains(&name.trim().to_ascii_lowercase().as_str())
+    let name: String = name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    name.ends_with("token")
+        || name.ends_with("apikey")
+        || name.ends_with("secret")
+        || name.ends_with("password")
+        || DEBRID_FIELDS.contains(&name.as_str())
 }
 
-fn token_json(text: &str) -> bool {
-    fn walk(v: &Value) -> bool {
-        match v {
-            Value::Object(o) => o.iter().any(|(k, v)| token_name(k) || walk(v)),
-            Value::Array(a) => a.iter().any(walk),
-            _ => false,
-        }
+/// Whether a piece of a link's settings holds a secret, unwrapping it
+/// `depth` times at most.
+fn holds_token(text: &str, depth: u8) -> bool {
+    let Some(depth) = depth.checked_sub(1) else {
+        return false;
+    };
+    let decoded = percent_encoding::percent_decode_str(text).decode_utf8_lossy();
+    if decoded != text {
+        return holds_token(&decoded, depth);
     }
-    serde_json::from_str::<Value>(text).is_ok_and(|v| walk(&v))
+    if let Ok(value) = serde_json::from_str::<Value>(text) {
+        return json_holds_token(&value, depth);
+    }
+    let pairs = text.split(['|', '&', ';']).any(|pair| {
+        pair.split_once('=').is_some_and(|(name, value)| {
+            (token_name(name) && !value.trim().is_empty()) || holds_token(value, depth)
+        })
+    });
+    pairs || base64_text(text).is_some_and(|t| holds_token(&t, depth))
 }
 
-/// A segment read as base64 (standard or URL-safe, padded or not) to text.
-fn base64_text(segment: &str) -> Option<String> {
+fn json_holds_token(value: &Value, depth: u8) -> bool {
+    match value {
+        Value::Object(o) => o.iter().any(|(k, v)| {
+            let filled =
+                !matches!(v, Value::Null) && v.as_str().is_none_or(|s| !s.trim().is_empty());
+            (token_name(k) && filled) || json_holds_token(v, depth)
+        }),
+        Value::Array(a) => a.iter().any(|v| json_holds_token(v, depth)),
+        Value::String(s) => holds_token(s, depth),
+        _ => false,
+    }
+}
+
+/// Text read as base64 the way browsers and Node do: either alphabet,
+/// padding or not, stray characters and trailing bits ignored. `None` when
+/// it is too short to hold anything or does not decode to text.
+fn base64_text(text: &str) -> Option<String> {
     use base64::Engine as _;
-    use base64::engine::general_purpose::{STANDARD_NO_PAD, URL_SAFE_NO_PAD};
-    let trimmed = segment.trim_end_matches('=');
-    let bytes = URL_SAFE_NO_PAD
-        .decode(trimmed)
-        .or_else(|_| STANDARD_NO_PAD.decode(trimmed))
-        .ok()?;
-    String::from_utf8(bytes).ok()
+    use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
+    const LENIENT: GeneralPurpose = GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_decode_allow_trailing_bits(true)
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+    let mut clean: String = text
+        .chars()
+        .filter_map(|c| match c {
+            '-' => Some('+'),
+            '_' => Some('/'),
+            c if c.is_ascii_alphanumeric() || c == '+' || c == '/' => Some(c),
+            _ => None,
+        })
+        .collect();
+    if clean.len() % 4 == 1 {
+        clean.pop();
+    }
+    if clean.len() < 8 {
+        return None;
+    }
+    String::from_utf8(LENIENT.decode(&clean).ok()?).ok()
 }
 
 /// The configure page of an addon whose manifest says it has one.

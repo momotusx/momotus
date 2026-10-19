@@ -160,9 +160,12 @@ async fn run(
     });
     match decision.await {
         Ok(true) => match request.claim(core.http(), offer, &name).await {
-            Ok(record) => end(PairingSnapshot::Joined {
-                record: Box::new(record),
-            }),
+            Ok(record) => {
+                core.joined_sync_account();
+                end(PairingSnapshot::Joined {
+                    record: Box::new(record),
+                })
+            }
             Err(e) => end(fail(e.to_string())),
         },
         _ => end(fail("the codes did not match; nothing was kept".into())),

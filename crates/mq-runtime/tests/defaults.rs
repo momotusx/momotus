@@ -20,6 +20,14 @@ fn choice(key: &str, on: bool) -> DefaultChoice {
     serde_json::from_value(serde_json::json!({ "key": key, "on": on })).unwrap()
 }
 
+/// Every default named, as the defaults step sends them: on unless listed in `off`.
+fn switches(off: &[&str]) -> Vec<DefaultChoice> {
+    defaults::list()
+        .iter()
+        .map(|d| choice(&d.key, !off.contains(&d.key.as_str())))
+        .collect()
+}
+
 fn stamp(core: &Core) -> Hlc {
     Hlc::decode(
         &core
@@ -45,7 +53,7 @@ async fn a_fresh_profile_gets_the_nine_in_order_with_its_switches() {
             .iter()
             .all(|d| d.installed == DefaultInstalled::Absent)
     );
-    core.install_defaults(&[choice("torrentio", false), choice("trakt", false)])
+    core.install_defaults(&switches(&["torrentio", "trakt"]))
         .unwrap();
     let list = defaults::list();
     let expected: Vec<(String, bool)> = list
@@ -60,8 +68,22 @@ async fn a_fresh_profile_gets_the_nine_in_order_with_its_switches() {
             serde_json::to_string(&d.manifest).unwrap()
         );
     }
-    // A switch turned off is the user's choice: an edit, stamped with the clock.
-    assert!(stamp(&core).wall_ms > 0);
+    // A switch turned off: still below any list a person built (wall time
+    // zero), above untouched defaults (counter 1).
+    let device = Hlc::decode(&core.zero_hlc()).unwrap().device;
+    assert_eq!(
+        stamp(&core),
+        Hlc {
+            wall_ms: 0,
+            counter: 1,
+            device
+        }
+    );
+    assert_eq!(
+        core.prefs().defaults_seen,
+        defaults::LIST_VERSION,
+        "answered: no card for this list"
+    );
     assert!(
         !core.addons_fresh(),
         "a profile with a list no longer starts there"
@@ -83,7 +105,7 @@ async fn a_fresh_profile_gets_the_nine_in_order_with_its_switches() {
 #[tokio::test]
 async fn untouched_defaults_take_the_zero_hlc_and_never_outrank_another_devices_list() {
     let c = Core::temporary(OWNER).unwrap();
-    c.install_defaults(&[]).unwrap();
+    c.install_defaults(&switches(&[])).unwrap();
     let s = stamp(&c);
     assert_eq!(
         s,
@@ -122,11 +144,11 @@ async fn untouched_defaults_take_the_zero_hlc_and_never_outrank_another_devices_
 #[tokio::test]
 async fn a_retried_continue_changes_nothing_and_pushes_nothing() {
     let core = Core::temporary(OWNER).unwrap();
-    core.install_defaults(&[]).unwrap();
+    core.install_defaults(&switches(&[])).unwrap();
     let first = stamp(&core);
     let queued = core.library().outbox(1_000).unwrap().records.len();
     // The answer was lost: the app sends the same Continue again.
-    core.install_defaults(&[]).unwrap();
+    core.install_defaults(&switches(&[])).unwrap();
     assert_eq!(stamp(&core), first, "untouched defaults stay untouched");
     assert_eq!(core.library().outbox(1_000).unwrap().records.len(), queued);
     assert_eq!(urls(&core).len(), 9, "nothing added twice");
@@ -158,8 +180,7 @@ async fn a_default_already_there_by_manifest_id_is_only_switched() {
             &core.hlc(),
         )
         .unwrap();
-    core.install_defaults(&[choice("torrentio", false)])
-        .unwrap();
+    core.install_defaults(&switches(&["torrentio"])).unwrap();
     let rows = urls(&core);
     assert_eq!(rows.len(), 9, "Torrentio is not added a second time");
     assert_eq!(
@@ -169,6 +190,138 @@ async fn a_default_already_there_by_manifest_id_is_only_switched() {
     );
     // Imported first, defaults after, with the clock: the list existed.
     assert!(stamp(&core).wall_ms > 0);
+    // Review names only the missing ones: a present default left out keeps its switch.
+    core.install_defaults(&[choice("kitsu", true)]).unwrap();
+    assert_eq!(
+        urls(&core)[0],
+        (theirs.to_owned(), false),
+        "left out, left off"
+    );
+}
+
+/// A call adds only what it names: a Review or a resent Continue made before
+/// a pull never brings back a default another device removed.
+#[tokio::test]
+async fn a_default_not_named_is_never_added() {
+    let a = Core::temporary(OWNER).unwrap();
+    a.install_defaults(&switches(&[])).unwrap();
+    let torrentio = &defaults::list()[1];
+    assert_eq!(torrentio.key, "torrentio");
+    a.remove_addon(&torrentio.url).unwrap();
+    let b = Core::temporary(OWNER).unwrap();
+    b.install_defaults(&switches(&[])).unwrap();
+    let from_a = a
+        .library()
+        .changed_since(&SyncCursor::default(), 1_000)
+        .unwrap();
+    b.library().apply(&from_a).unwrap();
+    assert_eq!(urls(&b).len(), 8, "the account's list, without Torrentio");
+    // The card's Review, built before the pull, named only Trakt.
+    b.install_defaults(&[choice("trakt", true)]).unwrap();
+    assert!(
+        urls(&b).iter().all(|(url, _)| *url != torrentio.url),
+        "Torrentio stays removed"
+    );
+    assert_eq!(urls(&b).len(), 8);
+    // Nothing named, nothing written.
+    let before = stamp(&b);
+    b.install_defaults(&[]).unwrap();
+    assert_eq!(stamp(&b), before);
+}
+
+/// The switch lands on the default's own row, found by its link when a
+/// refresh changed its manifest id, never on whatever row is last.
+#[tokio::test]
+async fn a_default_whose_manifest_id_changed_is_switched_on_its_own_row() {
+    let core = Core::temporary(OWNER).unwrap();
+    let kitsu = defaults::list().iter().find(|d| d.key == "kitsu").unwrap();
+    let mut renamed = kitsu.manifest.clone();
+    renamed.id = "org.kitsu.renamed".into();
+    let other = "https://other.example/manifest.json";
+    let mut other_manifest = kitsu.manifest.clone();
+    other_manifest.id = "example.other".into();
+    let row = |url: &str, manifest: &mq_protocol::Manifest| AddonRow {
+        transport_url: url.into(),
+        manifest_json: serde_json::to_string(manifest).unwrap(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    core.library()
+        .set_addons(
+            OWNER,
+            &[row(&kitsu.url, &renamed), row(other, &other_manifest)],
+            &core.hlc(),
+        )
+        .unwrap();
+    core.install_defaults(&[choice("kitsu", false)]).unwrap();
+    let rows = core.library().addons(OWNER).unwrap();
+    assert_eq!(rows.len(), 2, "nothing added");
+    assert_eq!(
+        (rows[0].transport_url.as_str(), rows[0].enabled),
+        (kitsu.url.as_str(), false)
+    );
+    assert!(
+        rows[0].manifest_json.contains("org.kitsu.renamed"),
+        "the live manifest kept"
+    );
+    assert_eq!(
+        (rows[1].transport_url.as_str(), rows[1].enabled),
+        (other, true),
+        "the other addon untouched"
+    );
+    let shown = core.default_addons().unwrap();
+    let kitsu_state = shown
+        .addons
+        .iter()
+        .find(|d| d.key == "kitsu")
+        .unwrap()
+        .installed;
+    assert_eq!(kitsu_state, DefaultInstalled::Off);
+}
+
+/// Onboarding lists meet on a pull: a list a person built beats any of
+/// them, and one with a switch turned off beats untouched ones, whichever
+/// device pairs first.
+#[tokio::test]
+async fn onboarding_lists_lose_to_real_ones_and_a_choice_beats_untouched() {
+    let changes = |c: &Core| {
+        c.library()
+            .changed_since(&SyncCursor::default(), 1_000)
+            .unwrap()
+    };
+    let real = Core::temporary(OWNER).unwrap();
+    real.install_defaults(&switches(&[])).unwrap();
+    real.remove_addon(&defaults::list()[0].url).unwrap();
+    let chose = Core::temporary(OWNER).unwrap();
+    chose.install_defaults(&switches(&["torrentio"])).unwrap();
+    let untouched = Core::temporary(OWNER).unwrap();
+    untouched.install_defaults(&switches(&[])).unwrap();
+    let off = |c: &Core| urls(c).iter().filter(|(_, on)| !on).count();
+
+    // A real list against a choice, either way round.
+    let (from_real, from_chose) = (changes(&real), changes(&chose));
+    real.library().apply(&from_chose).unwrap();
+    assert_eq!(
+        (urls(&real).len(), off(&real)),
+        (8, 0),
+        "the real list stays"
+    );
+    chose.library().apply(&from_real).unwrap();
+    assert_eq!(
+        (urls(&chose).len(), off(&chose)),
+        (8, 0),
+        "the real list wins"
+    );
+
+    // A choice against untouched defaults, either way round.
+    let chose = Core::temporary(OWNER).unwrap();
+    chose.install_defaults(&switches(&["torrentio"])).unwrap();
+    let (from_chose, from_untouched) = (changes(&chose), changes(&untouched));
+    chose.library().apply(&from_untouched).unwrap();
+    assert_eq!(off(&chose), 1, "the choice stays");
+    untouched.library().apply(&from_chose).unwrap();
+    assert_eq!(off(&untouched), 1, "the choice wins");
 }
 
 #[tokio::test]
@@ -183,7 +336,7 @@ async fn unknown_keys_and_kids_profiles_are_refused() {
         !kids.addons_fresh(),
         "a kids profile reads the owner's list"
     );
-    assert!(kids.install_defaults(&[]).is_err());
+    assert!(kids.install_defaults(&switches(&[])).is_err());
 }
 
 #[tokio::test]

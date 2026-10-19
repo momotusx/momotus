@@ -674,8 +674,9 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
     assert_eq!(addons[1]["installed"], "absent");
     session
         .handle_text(
-            &json!({"id": 2, "op": "installDefaults", "choices": [{"key": "torrentio", "on": false}]})
-                .to_string(),
+            &json!({"id": 2, "op": "installDefaults", "choices": [
+                {"key": "cinemeta", "on": true}, {"key": "torrentio", "on": false}]})
+            .to_string(),
         )
         .await;
     assert_eq!(next(&mut rx).await["ok"], true);
@@ -685,6 +686,10 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
     let listed = next(&mut rx).await;
     assert_eq!(listed["result"]["addons"][1]["installed"], "off");
     assert_eq!(listed["result"]["addons"][0]["installed"], "on");
+    assert_eq!(
+        listed["result"]["addons"][2]["installed"], "absent",
+        "a key left out is not installed"
+    );
 
     let theirs = "https://trakt.example/eyJ0b2tlbiI6IngifQ/manifest.json";
     session
@@ -709,4 +714,86 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
     let tried = next(&mut rx).await;
     assert_eq!(tried["ok"], false);
     assert_ne!(tried["code"], "tokenInLink", "{tried}");
+}
+
+/// A device that creates, pairs into or recovers a sync account gets the
+/// account's addons by sync: it never starts at the defaults step, also
+/// before its first sync has stored the roster.
+#[tokio::test]
+async fn joining_a_sync_account_ends_the_defaults_step() {
+    use mq_runtime::views::pairing::{PairingSnapshot, PairingView};
+    let dir = std::env::temp_dir().join(format!("mq-bridge-join-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+
+    let core_a = Core::temporary("p").unwrap();
+    assert!(core_a.addons_fresh());
+    let (tx_a, mut rx_a) = Output::channel();
+    let mut a = Session::new(core_a.clone(), tx_a);
+    a.handle_text(
+        &json!({"id": 1, "op": "createSyncAccount", "server": server, "name": "Phone"}).to_string(),
+    )
+    .await;
+    let record = next(&mut rx_a).await["result"].clone();
+    assert!(!core_a.addons_fresh(), "created an account");
+
+    // Paired: B shows its QR, A approves it, B confirms the code.
+    let core_b = Core::temporary("p").unwrap();
+    assert!(core_b.addons_fresh());
+    let pairing = PairingView::open(&core_b, &server, "TV");
+    let until = |want: fn(&PairingSnapshot) -> bool| {
+        let pairing = &pairing;
+        async move {
+            tokio::time::timeout(Duration::from_secs(20), async {
+                loop {
+                    let now = pairing.snapshot();
+                    if want(&now) {
+                        return now;
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .expect("pairing moved on")
+        }
+    };
+    let PairingSnapshot::Waiting { qr, .. } =
+        until(|s| matches!(s, PairingSnapshot::Waiting { .. })).await
+    else {
+        unreachable!()
+    };
+    a.handle_text(
+        &json!({"id": 2, "op": "approvePairing", "record": record, "qr": qr}).to_string(),
+    )
+    .await;
+    let approved = next(&mut rx_a).await;
+    assert_eq!(approved["ok"], true, "{approved}");
+    until(|s| matches!(s, PairingSnapshot::Confirm { .. })).await;
+    pairing.confirm();
+    until(|s| matches!(s, PairingSnapshot::Joined { .. })).await;
+    assert!(!core_b.addons_fresh(), "paired");
+
+    // Recovered with a kit.
+    a.handle_text(
+        &json!({"id": 3, "op": "createRecoveryKit", "record": approved["result"]["record"]})
+            .to_string(),
+    )
+    .await;
+    let made = next(&mut rx_a).await;
+    let core_c = Core::temporary("p").unwrap();
+    assert!(core_c.addons_fresh());
+    let (tx_c, mut rx_c) = Output::channel();
+    let mut c = Session::new(core_c.clone(), tx_c);
+    c.handle_text(
+        &json!({"id": 1, "op": "recover", "server": server, "kit": made["result"]["kit"], "name": "Laptop"})
+            .to_string(),
+    )
+    .await;
+    let recovered = next(&mut rx_c).await;
+    assert_eq!(recovered["ok"], true, "{recovered}");
+    assert!(!core_c.addons_fresh(), "recovered");
+    let _ = std::fs::remove_dir_all(&dir);
 }

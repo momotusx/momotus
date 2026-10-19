@@ -77,7 +77,8 @@ enum Request {
     DefaultAddons {
         id: u64,
     },
-    /// Installs the defaults with the user's switches (a key left out is on).
+    /// Installs the defaults with the user's switches (a key left out is
+    /// installed on when absent and left as it is when present).
     InstallDefaults {
         id: u64,
         #[serde(default)]
@@ -634,8 +635,13 @@ impl Session {
                 name,
             } => {
                 self.spawn(id, async move {
-                    let http = core.http();
-                    answer(mq_sync::create_account(http, &server, invite.as_deref(), &name).await)
+                    let made =
+                        mq_sync::create_account(core.http(), &server, invite.as_deref(), &name)
+                            .await;
+                    if made.is_ok() {
+                        core.joined_sync_account();
+                    }
+                    answer(made)
                 });
             }
             Request::SyncNow { id, record } => {
@@ -666,7 +672,11 @@ impl Session {
                 name,
             } => {
                 self.spawn(id, async move {
-                    answer(mq_sync::pair::recover(core.http(), &server, &kit, &name).await)
+                    let joined = mq_sync::pair::recover(core.http(), &server, &kit, &name).await;
+                    if joined.is_ok() {
+                        core.joined_sync_account();
+                    }
+                    answer(joined)
                 });
             }
             Request::SyncDevices { id, record } => {

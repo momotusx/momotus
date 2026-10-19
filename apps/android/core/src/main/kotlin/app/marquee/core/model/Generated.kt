@@ -251,7 +251,7 @@ data class DefaultChoice(
     val on: Boolean,
 )
 
-/** Whether a default is in the profile's list, by manifest id: a copy installed another way (another config, a Stremio import) counts. */
+/** Whether a default is in the profile's list, by manifest id or its own link: a copy installed another way (another config, a Stremio import) counts. */
 @Serializable
 enum class DefaultInstalled {
     @SerialName("absent") Absent,

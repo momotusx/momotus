@@ -668,13 +668,13 @@ impl Core {
     }
 
     /// The default addons and whether each is in this profile's list, by
-    /// manifest id (plans/m13-default-addons.md 5).
+    /// manifest id or its own link (plans/m13-default-addons.md 5).
     pub fn default_addons(&self) -> Result<DefaultAddons, CoreError> {
         let rows = self.library().addons(self.profile())?;
-        let state = |id: &str| {
-            rows.iter()
-                .filter(|r| manifest_id(&r.manifest_json).as_deref() == Some(id))
-                .map(|r| r.enabled)
+        let state = |d: &defaults::DefaultAddon| {
+            default_rows(&rows, d)
+                .into_iter()
+                .map(|i| rows[i].enabled)
                 .reduce(|a, b| a || b)
                 .map_or(DefaultInstalled::Absent, |on| {
                     if on {
@@ -693,21 +693,26 @@ impl Core {
                     name: d.name.clone(),
                     line: d.line.clone(),
                     group: d.group.clone(),
-                    installed: state(&d.manifest.id),
+                    installed: state(d),
                 })
                 .collect(),
         })
     }
 
-    /// Installs the defaults the user kept on and the ones turned off (off),
-    /// in one write with their bundled manifests: no network. A default
-    /// already in the list (by manifest id) only takes its switch. A key
-    /// left out of `choices` is on. Untouched defaults (a profile that never
-    /// had a list, every switch on) are stamped with this device's zero hlc,
-    /// so any list another device wrote wins over them; a switch turned off,
-    /// or a list that was there, makes it an edit. A call that changes
-    /// nothing (a retried Continue) writes nothing. Then the live manifests
-    /// are fetched in the background.
+    /// Installs the defaults `choices` names, on or off as chosen, in one
+    /// write with their bundled manifests: no network. Only named keys are
+    /// touched: a default already in the list (by manifest id, or still on
+    /// its own link) takes its switch, an absent one is appended, and a
+    /// key left out is never added or switched (the Review card names only
+    /// the missing ones; a resent call never brings back what a pull
+    /// removed). A profile that never had a list gets wall time zero, so
+    /// any list a person built on another device wins over it: all nine on
+    /// is this device's zero hlc (it ties with other untouched defaults),
+    /// any other answer counter 1 (it beats untouched defaults only). A
+    /// list that was there makes it an edit. A call that changes nothing (a
+    /// retried Continue) writes nothing. The profile has then seen this
+    /// list version (`defaultsSeen`), and the live manifests are fetched in
+    /// the background.
     pub fn install_defaults(&self, choices: &[DefaultChoice]) -> Result<(), CoreError> {
         if self.policy().kids() {
             return Err(CoreError::Defaults(
@@ -720,35 +725,44 @@ impl Core {
         {
             return Err(CoreError::Defaults(format!("no default named {}", c.key)));
         }
-        let on = |key: &str| choices.iter().find(|c| c.key == key).is_none_or(|c| c.on);
-        let untouched = self.library().addon_list_hlc(self.profile())?.is_none()
-            && choices.iter().all(|c| c.on);
-        let zero = self.zero_hlc();
+        if choices.is_empty() {
+            return Ok(());
+        }
+        let chosen = |key: &str| choices.iter().find(|c| c.key == key).map(|c| c.on);
         let edit = |rows: &mut Vec<AddonRow>| {
             for d in defaults::list() {
-                let id = d.manifest.id.as_str();
-                let present: Vec<usize> = (0..rows.len())
-                    .filter(|&i| manifest_id(&rows[i].manifest_json).as_deref() == Some(id))
-                    .collect();
+                let Some(on) = chosen(&d.key) else { continue };
+                let present = default_rows(rows, d);
                 if present.is_empty() {
                     let json = serde_json::to_string(&d.manifest)
                         .map_err(|e| CoreError::BadManifest(e.to_string()))?;
                     put_addon(rows, &d.url, json);
-                    if let Some(row) = rows.last_mut() {
-                        row.enabled = on(&d.key);
-                    }
+                    let at = position(rows, &d.url)?;
+                    rows[at].enabled = on;
                 } else {
                     for i in present {
-                        rows[i].enabled = on(&d.key);
+                        rows[i].enabled = on;
                     }
                 }
             }
             Ok(())
         };
-        if untouched {
-            self.library().edit_addons(self.profile(), &zero, edit)?;
+        if self.library().addon_list_hlc(self.profile())?.is_none() {
+            let all_on = defaults::list()
+                .iter()
+                .all(|d| chosen(&d.key) == Some(true));
+            let first = Hlc {
+                wall_ms: 0,
+                counter: if all_on { 0 } else { 1 },
+                device: self.clock().device(),
+            };
+            self.library()
+                .edit_addons(self.profile(), &first.encode(), edit)?;
         } else {
             self.edit_addons(edit)?;
+        }
+        if self.prefs().defaults_seen < defaults::LIST_VERSION {
+            self.set_prefs(&serde_json::json!({ "defaultsSeen": defaults::LIST_VERSION }))?;
         }
         // The live manifests now, not in a day: bundled ones may be older.
         self.library().set_device_value(ADDONS_REFRESHED, "0")?;
@@ -762,6 +776,15 @@ impl Core {
             });
         }
         Ok(())
+    }
+
+    /// This device joined a sync account (created one, paired or
+    /// recovered): it gets the account's addons by sync and never starts at
+    /// the defaults step, also before its first sync stores the roster.
+    pub fn joined_sync_account(&self) {
+        if let Err(e) = self.library().set_device_value(DEFAULTS_ERA, "joined") {
+            tracing::warn!("could not mark the sync join: {e}");
+        }
     }
 
     /// Whether this profile starts at the defaults step: it never had an
@@ -819,6 +842,17 @@ fn error_kind(e: &CoreError) -> &'static str {
 /// Puts a fetched manifest in the list: in place over the row the link
 /// names (position, whether it is on and the stored link kept), else at the
 /// end, on.
+/// The rows of a default: by manifest id, or still on the default's own
+/// link after a refresh changed its id.
+fn default_rows(rows: &[AddonRow], d: &defaults::DefaultAddon) -> Vec<usize> {
+    (0..rows.len())
+        .filter(|&i| {
+            rows[i].transport_url == d.url
+                || manifest_id(&rows[i].manifest_json).as_deref() == Some(d.manifest.id.as_str())
+        })
+        .collect()
+}
+
 pub(crate) fn put_addon(rows: &mut Vec<AddonRow>, url: &str, manifest_json: String) {
     if let Ok(at) = position(rows, url) {
         rows[at].manifest_json = manifest_json;

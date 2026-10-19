@@ -26,8 +26,9 @@ pub struct DefaultAddon {
     pub manifest: Manifest,
 }
 
-/// Whether a default is in the profile's list, by manifest id: a copy
-/// installed another way (another config, a Stremio import) counts.
+/// Whether a default is in the profile's list, by manifest id or its own
+/// link: a copy installed another way (another config, a Stremio import)
+/// counts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(
     feature = "ts",

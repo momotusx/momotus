@@ -1357,14 +1357,46 @@ fn links_that_carry_a_sign_in_are_never_listed() {
     assert!(link_carries_token(
         "https://a.example/Access_Token=k/manifest.json"
     ));
+    // Query strings, any case and separators, debrid keys by service name.
+    for secret in [
+        "https://a.example/manifest.json?api_key=K",
+        "https://a.example/manifest.json?accessToken=K",
+        "https://a.example/refreshToken=k/manifest.json",
+        "https://a.example/apiKey=k/manifest.json",
+        "https://a.example/api-key=k/manifest.json",
+        "https://a.example/clientSecret=k/manifest.json",
+        "https://torrentio.strem.fun/providers=yts|realdebrid=ABCDEF0123/manifest.json",
+        "https://torrentio.strem.fun/alldebrid=k/manifest.json",
+        "https://torrentio.strem.fun/premiumize=k/manifest.json",
+        "https://torrentio.strem.fun/torbox=k/manifest.json",
+        "https://torrentio.strem.fun/debridlink=k/manifest.json",
+        "https://torrentio.strem.fun/offcloud=k/manifest.json",
+        "https://torrentio.strem.fun/putio=k/manifest.json",
+        // A value that is base64 JSON ({"apiKey":"k"}), in the path and the query.
+        "https://a.example/config=eyJhcGlLZXkiOiJrIn0/manifest.json",
+        "https://a.example/manifest.json?config=eyJhcGlLZXkiOiJrIn0",
+        // JSON inside a JSON string: {"settings":"{\"token\":\"x\"}"}.
+        "https://a.example/%7B%22settings%22%3A%22%7B%5C%22token%5C%22%3A%5C%22x%5C%22%7D%22%7D/manifest.json",
+        // Percent-encoded twice: {"token":"x"}.
+        "https://a.example/%257B%2522token%2522%253A%2522x%2522%257D/manifest.json",
+        // Base64 with stray trailing bits, as Node and browsers still decode it.
+        "https://trakt.example/eyJ0b2tlbiI6IngifR/manifest.json",
+    ] {
+        assert!(link_carries_token(secret), "{secret}");
+    }
     // Settings without one: Torrentio's providers, SubSense's languages, a bare link.
     for plain in [
+        "https://torrentio.strem.fun/realdebrid=/manifest.json",
+        "https://a.example/manifest.json?lang=tr&sort=seeders",
         "https://torrentio.strem.fun/providers=yts,tokyotosho|sizefilter=15GB,5GB/manifest.json",
         "https://subsense.nepiraw.com/%7B%22languages%22%3A%5B%22tur%22%5D%7D/manifest.json",
         "https://v3-cinemeta.strem.io/manifest.json",
         "https://a.example/token/manifest.json",
     ] {
         assert!(!link_carries_token(plain), "{plain}");
+    }
+    for d in mq_runtime::defaults::list() {
+        assert!(!link_carries_token(&d.url), "default {}", d.key);
     }
     let listed = |url: &str| {
         mq_runtime::views::addon_catalog::entries(&[serde_json::json!({
