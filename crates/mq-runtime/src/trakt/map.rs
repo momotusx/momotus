@@ -106,7 +106,9 @@ impl Look {
 
 /// The show's TVDB ids, or why not. A failure is transient until it has
 /// lasted (`FAILED_LOOKS` over a day); every addon saying it has no such
-/// show is permanent at once.
+/// show is permanent at once. Only an answer counts as a look: when no
+/// addon answered at all (no network, or none in time) the device may be
+/// offline, and nothing is counted.
 pub(super) async fn show_ids(
     core: &Core,
     key: TrackerKey<'_>,
@@ -118,6 +120,7 @@ pub(super) async fn show_ids(
             Ok(ids)
         }
         Err(TvdbMiss::Unknown(reason)) => Err(Miss::Permanent(reason)),
+        Err(TvdbMiss::Unreached(reason)) => Err(Miss::Transient(reason)),
         Err(TvdbMiss::Unavailable(reason)) => Err(failed(core, key, Look::Show, show, reason)),
     }
 }

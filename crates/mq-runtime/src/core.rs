@@ -22,6 +22,9 @@ pub enum TvdbMiss {
     Unknown(String),
     /// None gave them now: an addon failed, or answered without TVDB ids.
     Unavailable(String),
+    /// No addon answered at all: each one asked could not be reached or
+    /// did not answer in time (the device may be offline).
+    Unreached(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -385,8 +388,11 @@ impl Core {
         // Every addon asked answered that it has no such title.
         let mut unknown = None;
         let mut ids = HashMap::new();
+        // Addons asked, and those that gave no answer at all.
+        let (mut asked, mut silent) = (0, 0);
         for addon in addons.iter().filter(|a| a.supports(&path)) {
             let name = &addon.manifest.name;
+            asked += 1;
             let raw = match self.addons().fetch(addon, &path, META_TIMEOUT).await {
                 Ok(fetched) => serde_json::from_slice::<serde_json::Value>(&fetched.body).ok(),
                 Err(AddonError::Http(mq_http::HttpError::Status {
@@ -398,6 +404,7 @@ impl Core {
                 }
                 Err(e) => {
                     unknown = Some(false);
+                    silent += usize::from(unanswered(&e));
                     reason = meta_failure(name, &e);
                     continue;
                 }
@@ -428,6 +435,7 @@ impl Core {
         match unknown {
             _ if !ids.is_empty() => Ok(ids),
             Some(true) => Err(TvdbMiss::Unknown(reason)),
+            _ if asked > 0 && silent == asked => Err(TvdbMiss::Unreached(reason)),
             _ => Err(TvdbMiss::Unavailable(reason)),
         }
     }
@@ -733,6 +741,16 @@ impl CacheStore for LibraryCache {
     fn generation(&self) -> u64 {
         self.0.removals()
     }
+}
+
+/// No answer came at all: no connection (no network, no route, a name that
+/// does not resolve) or none in time.
+fn unanswered(error: &AddonError) -> bool {
+    use mq_http::HttpError;
+    matches!(
+        error,
+        AddonError::TimedOut | AddonError::Http(HttpError::Timeout(_) | HttpError::Network(_))
+    )
 }
 
 /// Why an addon gave no details, in a sentence the title page shows as is,

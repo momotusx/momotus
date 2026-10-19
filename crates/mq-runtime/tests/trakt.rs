@@ -69,6 +69,8 @@ struct Fake {
     meta_no_tvdb: Arc<std::sync::atomic::AtomicBool>,
     /// The meta addon also lists a second season (TVDB ids 2001 to 2003).
     meta_season_two: Arc<std::sync::atomic::AtomicBool>,
+    /// The meta addon drops each connection unanswered (no network).
+    meta_silent: Arc<std::sync::atomic::AtomicBool>,
     seen: Arc<Mutex<Vec<Req>>>,
 }
 
@@ -87,6 +89,7 @@ impl Fake {
             meta_status: Arc::default(),
             meta_no_tvdb: Arc::default(),
             meta_season_two: Arc::default(),
+            meta_silent: Arc::default(),
             seen: Arc::default(),
         }
     }
@@ -324,6 +327,9 @@ impl Fake {
                             })
                             .unwrap_or_default(),
                     };
+                    if req.path.starts_with("/meta/") && fake.meta_silent.load(Ordering::SeqCst) {
+                        return;
+                    }
                     let answer = fake.answer(&req);
                     fake.seen.lock().unwrap().push(req);
                     tokio::time::sleep(answer.delay).await;
@@ -2546,4 +2552,34 @@ async fn an_episode_found_again_forgets_its_failed_looks() {
     core.trakt_sync().await.unwrap();
     assert_eq!(pending(&core, "a-recover"), 1, "the unmark waits");
     assert!(status(&core).unmapped.is_empty(), "never listed");
+}
+
+#[tokio::test]
+async fn an_addon_that_never_answers_is_not_a_look() {
+    let (core, fake) = signed_in("a-offline").await;
+    // The show's details have failed on separate looks for a day already.
+    let failing = json!({"first": now() - 2 * 86_400_000, "last": now() - 3_600_000,
+                         "looks": 3});
+    core.library()
+        .set_tracker_state(key("a-offline"), "failing:show:tt100", &failing.to_string())
+        .unwrap();
+    // No addon answers now (as with no network); Trakt does.
+    fake.meta_silent.store(true, Ordering::SeqCst);
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(pending(&core, "a-offline"), 1, "the mark waits");
+    assert!(status(&core).unmapped.is_empty(), "never listed");
+    assert_eq!(
+        state(&core, "a-offline", "failing:show:tt100"),
+        Some(failing.to_string()),
+        "not counted"
+    );
+    // An addon that answers with an error is a look: the fourth gives up.
+    fake.meta_silent.store(false, Ordering::SeqCst);
+    fake.meta_down.store(true, Ordering::SeqCst);
+    due(&core, "a-offline");
+    core.trakt_sync().await.unwrap();
+    assert_eq!(unmapped_ids(&core), [SHOW]);
+    assert_eq!(pending(&core, "a-offline"), 0);
 }
