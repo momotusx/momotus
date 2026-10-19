@@ -6,7 +6,6 @@ import app.marquee.core.client.CoreTransport
 import app.marquee.core.model.LearnedChoice
 import app.marquee.core.session.CoreOps
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -29,12 +28,17 @@ import kotlin.test.assertTrue
 class StreamChoiceSettingsTest {
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
     private val client = CoreClient(executor.asCoroutineDispatcher())
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // One thread, as the page's main thread: writes start in the order they were made (on several threads
+    // the three of the first test raced to the core in any order).
+    private val main = Executors.newSingleThreadExecutor { Thread(it, "test-main") }
+    private val scope = CoroutineScope(SupervisorJob() + main.asCoroutineDispatcher())
     private val sent = CopyOnWriteArrayList<JsonObject>()
 
     @AfterTest
     fun stop() {
         scope.cancel()
+        main.shutdownNow()
         client.close()
         executor.shutdownNow()
     }
