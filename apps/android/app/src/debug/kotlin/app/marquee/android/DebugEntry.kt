@@ -14,11 +14,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
 import app.marquee.design.Form
 import app.marquee.design.Tokens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Debug builds only: launch extras open the design gallery (`screen=gallery`) or the diagnostics
@@ -58,7 +60,8 @@ object DebugEntry {
      * `kill_core_after=<seconds>` hands the app the message a panicking core sends, that long
      * after launch, to walk what the app does across a core death and its restart.
      * `legacy_debrid=<service>:<key>` stores a debrid key the way builds before records did; the next
-     * core open moves it to a record.
+     * core open moves it to a record. `prefs_patch=<json>` merges a `setPrefs` patch at launch: what the
+     * picks taught (`{"learned":{"fhd":{"size":2}}}`), so a walk reaches a learned note in one pick.
      */
     fun launched(activity: ComponentActivity) {
         val session = (activity.application as MarqueeApp).session
@@ -79,6 +82,13 @@ object DebugEntry {
                 delay(killAfter * 1_000L)
                 CoreLog.d("debug: the core dies")
                 session.client.onMessage("""{"core":"died","reason":"debug: a simulated panic"}""")
+            }
+        }
+        activity.intent.getStringExtra("prefs_patch")?.let { patch ->
+            session.scope.launch {
+                runCatching { session.ops.setPrefs(CoreJson.parseToJsonElement(patch).jsonObject) }
+                    .onSuccess { CoreLog.d("debug: prefs patched") }
+                    .onFailure { CoreLog.w("debug: prefs patch failed: ${it.message}") }
             }
         }
         val url = activity.intent.getStringExtra("install_addon") ?: return
