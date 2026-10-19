@@ -691,6 +691,17 @@ impl VersionsView {
             .is_some_and(|m| m["key"] == key)
     }
 
+    /// The row the addons listed first (addon order, then their own): the
+    /// live race's other arm (plans/m13-stream-choice.md 6.4).
+    pub fn first_listed(&self) -> Option<String> {
+        let s = lock(&self.state);
+        s.ranked
+            .rows
+            .iter()
+            .min_by_key(|r| (r.stream.addon_rank, r.stream.index))
+            .map(|r| r.stream.key.clone())
+    }
+
     pub fn recommended(&self) -> Option<RankedRow> {
         lock(&self.state).recommended.clone()
     }

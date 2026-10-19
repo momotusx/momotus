@@ -34,6 +34,13 @@ struct Cli {
     command: Command,
 }
 
+#[derive(Clone, Copy, clap::ValueEnum, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+enum Arm {
+    Recommended,
+    First,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Install an addon by manifest URL (http, https or stremio://).
@@ -70,6 +77,13 @@ enum Command {
         headless: bool,
         #[arg(long, default_value_t = 5)]
         seconds: u64,
+        /// Which version: the recommendation, or the first the addons
+        /// listed (the live race's two arms, plans/m13-stream-choice.md 6.4).
+        #[arg(long, value_enum, default_value_t = Arm::Recommended)]
+        pick: Arm,
+        /// Start from an empty torrent folder and delete it after the run.
+        #[arg(long)]
+        fresh_cache: bool,
     },
     /// Stream a torrent through the engine and the loopback server: time to
     /// metadata, first byte, Ready (head and tail verified), first frame in
@@ -194,6 +208,16 @@ async fn main() {
         }
         return;
     }
+    // The engine keeps torrents in `<data>/torrents` (Core::open).
+    let fresh = match &cli.command {
+        Command::Play {
+            fresh_cache: true, ..
+        } => Some(cli.data.join("torrents")),
+        _ => None,
+    };
+    if let Some(dir) = &fresh {
+        let _ = std::fs::remove_dir_all(dir);
+    }
     let core = match Core::open(CoreConfig {
         data_dir: cli.data.clone(),
         profile_id: cli.profile.clone(),
@@ -235,7 +259,9 @@ async fn main() {
             id,
             headless,
             seconds,
-        } => play(&core, kind, id, headless, seconds).await,
+            pick,
+            ..
+        } => play(&core, kind, id, headless, seconds, pick).await,
         Command::PlayMagnet { .. } => unreachable!("handled before the core opens"),
         Command::PlayUrl {
             url,
@@ -253,6 +279,9 @@ async fn main() {
         .await
         .map(emit),
     };
+    if let Some(dir) = &fresh {
+        let _ = std::fs::remove_dir_all(dir);
+    }
     if let Err(e) = result {
         fail(&e);
     }
@@ -400,6 +429,7 @@ async fn play(
     id: String,
     headless: bool,
     seconds: u64,
+    arm: Arm,
 ) -> Result<(), String> {
     let started = Instant::now();
     core.set_debrid_keys(&StoreId::keys_from_env());
@@ -442,17 +472,29 @@ async fn play(
     })
     .await
     .unwrap_or_else(|| versions.snapshot());
-    let pick = snapshot.recommended.ok_or("no playable version")?;
+    let key = match arm {
+        Arm::Recommended => snapshot.recommended.as_ref().map(|r| r.key.clone()),
+        Arm::First => versions.first_listed(),
+    }
+    .ok_or("no playable version")?;
+    let pick = snapshot
+        .recommended
+        .iter()
+        .chain(&snapshot.rows)
+        .find(|r| r.key == key)
+        .cloned()
+        .ok_or("no playable version")?;
     emit(json!({
-        "event": "versions", "rows": snapshot.rows.len() + 1, "hidden": snapshot.hidden.count,
+        "event": "versions", "arm": arm, "rows": snapshot.rows.len() + 1, "hidden": snapshot.hidden.count,
         "pick": { "quality": pick.quality, "via": pick.via, "release": pick.release_name,
-                  "reasons": pick.reasons, "failover": pick.failover_count },
+                  "reasons": pick.reasons, "failover": pick.failover_count,
+                  "line": pick.line, "sizeBytes": pick.size_bytes, "bitrateMbps": pick.bitrate_mbps },
         "ms": ms(started.elapsed()),
     }));
 
     let playback = PlaybackView::open(
         core,
-        versions.candidates(&pick.key),
+        versions.candidates(&key),
         PlayTarget {
             kind,
             item_id,
