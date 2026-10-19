@@ -35,7 +35,7 @@ struct SyncJoinScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 SyncField(label: W.server, text: $server, prompt: W.serverHint, typing: $typing, url: true)
-                if kit { SyncField(label: W.kit, text: $extra, prompt: W.kitHint, typing: $typing, mono: true) }
+                if kit { SyncField(label: W.kit, text: $extra, prompt: W.kitHint, typing: $typing, mono: true, secret: true) }
                 SyncField(label: W.device, text: $name, prompt: DeviceName.current, typing: $typing, help: W.deviceHelp)
                 if !kit { SyncField(label: W.invite, text: $extra, prompt: W.inviteHint, typing: $typing) }
                 if let error { Said(tone: .bad, text: error) }
@@ -109,15 +109,27 @@ struct SyncField: View {
     var typing: FocusState<String?>.Binding
     var url = false
     var mono = false
+    /// A recovery kit: hidden as it is typed, unless the user shows it.
+    var secret = false
     var help: String?
+    @State private var revealed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(caps: label)
-                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
-                .tracking(1.6)
-                .foregroundStyle(Theme.Palette.muted)
-            TextField(prompt, text: $text)
+            HStack {
+                Text(caps: label)
+                    .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                    .tracking(1.6)
+                    .foregroundStyle(Theme.Palette.muted)
+                if secret {
+                    Spacer()
+                    Button(revealed ? W.hideKit : W.showKit) { revealed.toggle() }
+                        .buttonStyle(.textLink)
+                        .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                        .foregroundStyle(Theme.Palette.text)
+                }
+            }
+            field
                 .focused(typing, equals: label)
                 .textFieldStyle(.plain)
                 .font(mono ? .mono(Theme.type.body) : .text(Theme.type.body))
@@ -134,6 +146,14 @@ struct SyncField: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
             }
+        }
+    }
+
+    @ViewBuilder private var field: some View {
+        if secret, !revealed {
+            SecureField(prompt, text: $text)
+        } else {
+            TextField(prompt, text: $text)
         }
     }
 }

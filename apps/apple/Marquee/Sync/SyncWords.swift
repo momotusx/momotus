@@ -21,6 +21,8 @@ enum SyncWords {
     static let inviteHint = "Only if your sync server asks for one"
     static let kit = "Recovery kit"
     static let kitHint = "XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+    static let showKit = "Show"
+    static let hideKit = "Hide"
     static let badAddress = "Enter the address without a user name or password."
     static let noKitEntered = "Enter the recovery kit."
     static let startButton = "Start the account"
@@ -62,6 +64,9 @@ enum SyncWords {
     static let leaveAnyway = "Stop anyway"
     static let syncAgain = "Sync again"
     static let useServer = "Use the server's device list"
+    static let useServerAsk = "Use the server's device list?"
+    static let useServerText = "This device and the sync server list different devices. Using the server's list lets sync go on; any device this device knew that the server does not is no longer in the list. Check the list right after, and remove any device you do not know."
+    static let useServerDone = "This device now uses the server's list. Check it below, and remove any device you do not know."
     static let forgetHere = "Forget it on this device"
     static let forgetHereText = "Forgetting needs no sync server and keeps your library. Your other devices still list this one until you remove it there."
     // Add a device

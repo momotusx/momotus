@@ -65,6 +65,8 @@ private struct JoinedSync: View {
     /// A line under the list or a member: what just happened.
     @State private var said: (id: String, tone: StatusDot.Tone, text: String)?
     @State private var busy = false
+    /// The server's device list waits on this second step.
+    @State private var adopting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -77,6 +79,22 @@ private struct JoinedSync: View {
             LeaveSync()
         }
         .task { await load() }
+        .confirmationDialog(W.useServerAsk, isPresented: $adopting, titleVisibility: .visible) {
+            Button(W.useServer) {
+                Task {
+                    do {
+                        try await sync.useServerRoster()
+                        await load()
+                        said = ("list", .warn, W.useServerDone)
+                    } catch {
+                        said = ("list", .bad, SyncProblem(error, action: .devices).words)
+                    }
+                }
+            }
+            Button(W.cancel, role: .cancel) {}
+        } message: {
+            Text(W.useServerText)
+        }
         .confirmationDialog(
             removing.map { "\(W.remove) \(SyncRules.memberName($0))?" } ?? "",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
@@ -152,10 +170,13 @@ private struct JoinedSync: View {
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 
+    /// Green only for a round with nothing to say: a refused, unreadable,
+    /// waiting or blocked change is a warning, never "synced" in green.
     private var stateTone: StatusDot.Tone {
         if sync.problem != nil { return .bad }
         if sync.syncing { return .warn }
-        return sync.lastSynced == nil ? .idle : .ok
+        guard let report = sync.lastReport, sync.lastSynced != nil else { return .idle }
+        return report.notes.isEmpty ? .ok : .warn
     }
 
     /// "Synced at 3:15: 2 sent, 5 received", or the problem in words.
@@ -172,16 +193,8 @@ private struct JoinedSync: View {
     @ViewBuilder private func fixes(_ problem: SyncProblem) -> some View {
         switch problem.code {
         case "fork":
-            Button {
-                Task {
-                    do {
-                        try await sync.useServerRoster()
-                        await load()
-                    } catch {
-                        said = ("list", .bad, SyncProblem(error, action: .devices).words)
-                    }
-                }
-            } label: { Label(W.useServer, glyph: "monitor-smartphone") }
+            // A second step that says what it means; the list it brings shows right after, to check.
+            Button { adopting = true } label: { Label(W.useServer, glyph: "monitor-smartphone") }
                 .buttonStyle(PillButtonStyle())
         case "wrongRelay", "relayBehind", "notJoined":
             // Forgetting is destructive, so it reads as such and never wears the accent.
