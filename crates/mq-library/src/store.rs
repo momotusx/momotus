@@ -302,7 +302,9 @@ impl Library {
     /// profile this call creates. Called with the zero hlc, so versions
     /// synced from another device win. A profile already here waits for
     /// its creator's access record: guessed, a kids profile whose record is
-    /// still on its way would open as standard.
+    /// still on its way would open as standard. Only test cores and the
+    /// importer's tests create a profile other than the owner here
+    /// (plans/m11-kids.md 3.5).
     pub fn ensure_profile(&self, id: &str, name: &str, hlc: &str) -> Result<(), LibraryError> {
         self.write(|c| {
             refuse_gone(c, id)?;

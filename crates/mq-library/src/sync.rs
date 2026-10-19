@@ -1076,6 +1076,18 @@ pub(crate) fn local(
     stamp: &Stamp<'_>,
     write: impl Fn(&str) -> rusqlite::Result<usize>,
 ) -> rusqlite::Result<()> {
+    local_changed(c, coll, parts, stamp, write).map(drop)
+}
+
+/// `local`, telling whether the write went in (a stored version at or above
+/// a fixed stamp keeps it out).
+pub(crate) fn local_changed(
+    c: &Connection,
+    coll: u8,
+    parts: &[&str],
+    stamp: &Stamp<'_>,
+    write: impl Fn(&str) -> rusqlite::Result<usize>,
+) -> rusqlite::Result<bool> {
     refuse_gone(c, parts[0])?;
     let hlc = stamp.hlc();
     let mut changed = write(&hlc)?;
@@ -1092,7 +1104,8 @@ pub(crate) fn local(
             clock.observe(again, clock.wall_now());
         }
     }
-    queue(c, changed, coll, parts)
+    queue(c, changed, coll, parts)?;
+    Ok(changed > 0)
 }
 
 /// Queues a register for push when a local write changed it.

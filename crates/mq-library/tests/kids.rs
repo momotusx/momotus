@@ -259,6 +259,22 @@ fn a_profile_already_here_never_gets_a_guessed_access() {
     assert_eq!(b.policy("p"), Policy::Open);
 }
 
+/// A test core opening `x` by id before its creator's records arrive: `x`
+/// is standard at the zero hlc until they do, then kids (plans/m11-kids.md
+/// 3.5).
+#[test]
+fn a_profile_ensure_creates_yields_to_its_creators_access() {
+    let [profile, lock, access, ..] = source_records();
+    let b = Library::temporary().unwrap();
+    b.ensure_profile("x", "x", &hlc(0, 7)).unwrap();
+    assert!(b.profile("x").unwrap().unwrap().ready());
+    assert_eq!(b.policy("x"), Policy::Open);
+    b.apply(&[profile, lock, access]).unwrap();
+    let x = b.profile("x").unwrap().unwrap();
+    assert!(x.ready() && x.kids());
+    assert_eq!(b.policy("x"), Policy::Kids(Default::default()));
+}
+
 #[test]
 fn a_removed_profile_takes_both_tables() {
     let local = kid(&[("tt1", "movie")]);
@@ -833,4 +849,29 @@ fn kids_edits_read_the_state_they_change() {
     assert!(!lib.make_standard("kid", &hlc(7, 1)).unwrap());
     assert_eq!(lib.addons("kid").unwrap(), [own]);
     assert!(!lib.make_standard("std", &hlc(8, 1)).unwrap());
+}
+
+/// make_standard reports what its write did: a fixed stamp at the stored
+/// access version is kept out, so nothing changed and no addons are copied.
+#[test]
+fn make_standard_reports_a_write_its_stamp_kept_out() {
+    let lib = Library::temporary().unwrap();
+    lib.ensure_profile(OWNER, "Main", &hlc(0, 1)).unwrap();
+    let owners = mq_library::AddonRow {
+        transport_url: "https://owner/manifest.json".into(),
+        manifest_json: "{}".into(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    lib.set_addons(OWNER, std::slice::from_ref(&owners), &hlc(1, 1))
+        .unwrap();
+    lib.create_kids_profile("kid", "Kid", "", &hlc(4, 1))
+        .unwrap();
+    assert!(!lib.make_standard("kid", &hlc(4, 1)).unwrap());
+    assert!(lib.profile("kid").unwrap().unwrap().kids());
+    assert!(lib.addons("kid").unwrap().is_empty(), "no copy");
+    assert!(lib.make_standard("kid", &hlc(5, 1)).unwrap());
+    assert!(!lib.profile("kid").unwrap().unwrap().kids());
+    assert_eq!(lib.addons("kid").unwrap().len(), 1);
 }

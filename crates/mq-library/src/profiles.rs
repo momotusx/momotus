@@ -4,7 +4,7 @@
 //! attempts, the active profile).
 
 use crate::store::{AddonRow, Library, LibraryError};
-use crate::sync::{OWNER, Stamp, coll, gone, local, queue, refuse_gone, sql};
+use crate::sync::{OWNER, Stamp, coll, gone, local, local_changed, queue, refuse_gone, sql};
 use rusqlite::{OptionalExtension, params};
 
 /// One profile as stored.
@@ -168,7 +168,8 @@ impl Library {
     /// with a copy of the owner's addon list, in one transaction. There is
     /// no way back: a standard profile never becomes kids. Read inside the
     /// write: anything but a kids profile is left as it is (its addon edits
-    /// never rewritten from the owner's). Returns whether it changed.
+    /// never rewritten from the owner's), and so is one whose stored access
+    /// version is at or above a fixed stamp. Returns whether it changed.
     pub fn make_standard<'a>(
         &self,
         id: &str,
@@ -186,9 +187,11 @@ impl Library {
             if kids != Some(true) {
                 return Ok(false);
             }
-            local(c, coll::PROFILE_ACCESS, &[id], &stamp, |h| {
+            if !local_changed(c, coll::PROFILE_ACCESS, &[id], &stamp, |h| {
                 sql::set_access(c, id, false, h)
-            })?;
+            })? {
+                return Ok(false);
+            }
             copy_owner_addons(c, id, &stamp)?;
             Ok(true)
         })
