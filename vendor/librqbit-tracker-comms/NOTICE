@@ -22,3 +22,7 @@ the torrent address policy (plans/c27-torrent-policy.md, appendix A.1):
   resolver, which keeps only permitted answers; every HTTP announce whose
   host is an IP literal is checked against the policy before it is sent.
 - src/lib.rs: re-exports `Policy` and `AnnounceFields`.
+- src/tracker_comms_udp.rs: under the policy a UDP answer is taken only
+  from the address its request went to.
+- src/tracker_comms.rs: under the policy an HTTP tracker's answer is read up
+  to 256 KiB, never to its end.

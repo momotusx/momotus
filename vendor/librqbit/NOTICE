@@ -45,6 +45,9 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
 - src/session.rs, src/lib.rs: `Destinations::trackers`, the tracker policy
   handed to the UDP tracker client; with it the session's tracker HTTP
   client uses no proxy, follows no redirect, keeps no idle connection and
-  resolves names through the policy. `tracker_comms` is re-exported.
+  resolves names through the policy. `tracker_comms` is re-exported. It
+  gives up on a tracker after 10 s to connect and 30 s in all. A proxy
+  cannot be combined with the policy (the session refuses to start), and a
+  `.torrent` URL's literal host is checked against it.
 - src/session.rs: `Destinations::dht`, the DHT's check, handed to both DHT
   constructors (persisted and not).

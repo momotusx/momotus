@@ -143,6 +143,8 @@ pub struct Session {
     pub allowlist: Option<IpRanges>,
     // Marquee fork (C27): incoming peers must pass it.
     peer_permits: Option<Permits>,
+    // Marquee fork (C27): a `.torrent` URL's literal host must pass it.
+    url_permits: Option<Permits>,
 
     // Monitoring / tracing / logging
     pub(crate) stats: Arc<SessionStats>,
@@ -758,11 +760,18 @@ impl Session {
                 // redirects (a literal target would skip the resolver), and
                 // no idle connections, so every announce opens a new
                 // connection checked under the current interface snapshot.
+                // Bounded in time: a tracker that accepts and stalls fails
+                // and is retried instead of holding its task forever.
                 let builder = match &opts.destinations {
+                    Some(_) if proxy_url.is_some() => {
+                        bail!("a proxy cannot be used with the address policy")
+                    }
                     Some(d) => builder
                         .no_proxy()
                         .redirect(reqwest::redirect::Policy::none())
                         .pool_max_idle_per_host(0)
+                        .connect_timeout(Duration::from_secs(10))
+                        .timeout(Duration::from_secs(30))
                         .dns_resolver(d.trackers.resolver.clone()),
                     None => builder,
                 };
@@ -866,6 +875,10 @@ impl Session {
                 blocklist,
                 allowlist,
                 peer_permits,
+                url_permits: opts
+                    .destinations
+                    .as_ref()
+                    .map(|d| Permits(d.trackers.permits.clone())),
                 lsd,
             });
 
@@ -1188,6 +1201,19 @@ impl Session {
                         AddTorrent::Url(url)
                             if url.starts_with("http://") || url.starts_with("https://") =>
                         {
+                            // Marquee fork (C27): names go through the
+                            // client's resolver; a literal host is checked
+                            // here.
+                            if let Some(p) = &self.url_permits {
+                                let literal = match url::Url::parse(&url)?.host() {
+                                    Some(url::Host::Ipv4(ip)) => Some(IpAddr::V4(ip)),
+                                    Some(url::Host::Ipv6(ip)) => Some(IpAddr::V6(ip)),
+                                    _ => None,
+                                };
+                                if literal.is_some_and(|ip| !(p.0)(ip)) {
+                                    bail!("torrent URL outside the address policy");
+                                }
+                            }
                             torrent_from_url(&self.reqwest_client, &url).await?
                         }
                         AddTorrent::Url(url) => {

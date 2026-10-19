@@ -25,6 +25,10 @@ use url::Url;
 use crate::tracker_comms_http;
 use crate::tracker_comms_udp;
 use crate::tracker_comms_udp::Policy;
+
+/// Marquee fork (C27): the most an HTTP tracker answer may hold. An announce
+/// answer with a few hundred compact peers is a few KiB.
+const MAX_HTTP_ANSWER: usize = 256 * 1024;
 use crate::tracker_comms_udp::UdpTrackerClient;
 use librqbit_core::hash_id::Id20;
 
@@ -325,7 +329,22 @@ impl TrackerComms {
         if !response.status().is_success() {
             anyhow::bail!("tracker responded with {:?}", response.status());
         }
-        let bytes = response.bytes().await?;
+        // Marquee fork (C27): tracker URLs come from addons, so under the
+        // policy an answer is read up to a cap, never to its end.
+        let bytes = match &self.policy {
+            Some(_) => {
+                let mut response = response;
+                let mut body = Vec::new();
+                while let Some(chunk) = response.chunk().await? {
+                    body.extend_from_slice(&chunk);
+                    if body.len() > MAX_HTTP_ANSWER {
+                        bail!("tracker answer over {MAX_HTTP_ANSWER} bytes");
+                    }
+                }
+                body
+            }
+            None => response.bytes().await?.to_vec(),
+        };
         if let Ok((error, _)) =
             bencode::from_bytes_with_rest::<tracker_comms_http::TrackerError>(&bytes)
         {

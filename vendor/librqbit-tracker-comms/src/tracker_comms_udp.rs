@@ -248,7 +248,8 @@ struct ConnectionIdMeta {
 #[derive(Default)]
 struct ClientLocked {
     connections: HashMap<SocketAddr, ConnectionIdMeta>,
-    transactions: HashMap<TransactionId, tokio::sync::oneshot::Sender<Response>>,
+    // Marquee fork (C27): with the address the request went to.
+    transactions: HashMap<TransactionId, (tokio::sync::oneshot::Sender<Response>, SocketAddr)>,
 }
 
 struct ClientShared {
@@ -332,7 +333,19 @@ impl UdpTrackerClient {
 
             trace!(?tid, ?response, ?addr, "received");
 
-            let t = self.state.locked.write().transactions.remove(&tid);
+            let t = {
+                let mut g = self.state.locked.write();
+                match g.transactions.get(&tid) {
+                    // Marquee fork (C27): under the policy only the address
+                    // a request went to may answer it.
+                    Some((_, to)) if self.state.policy.is_some() && !same_source(*to, addr) => {
+                        debug!(tid, "answer from another address");
+                        None
+                    }
+                    Some(_) => g.transactions.remove(&tid).map(|(tx, _)| tx),
+                    None => None,
+                }
+            };
             match t {
                 Some(tx) => match tx.send(response) {
                     Ok(_) => {}
@@ -380,7 +393,7 @@ impl UdpTrackerClient {
             bail!("tracker outside the address policy");
         }
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let tid_g = self.reserve_transaction_id(tx)?;
+        let tid_g = self.reserve_transaction_id(tx, addr)?;
 
         let mut write_buf = [0u8; 1024];
         let len = request.serialize(tid_g.tid, &mut write_buf)?;
@@ -409,6 +422,7 @@ impl UdpTrackerClient {
     fn reserve_transaction_id(
         &self,
         tx: tokio::sync::oneshot::Sender<Response>,
+        addr: SocketAddr,
     ) -> anyhow::Result<TransactionIdGuard<'_>> {
         let mut g = self.state.locked.write();
         for _ in 0..10 {
@@ -416,7 +430,7 @@ impl UdpTrackerClient {
             match g.transactions.entry(t) {
                 Entry::Occupied(_) => continue,
                 Entry::Vacant(vac) => {
-                    vac.insert(tx);
+                    vac.insert((tx, addr));
                     return Ok(TransactionIdGuard {
                         tid: t,
                         state: &self.state,
@@ -440,6 +454,12 @@ impl UdpTrackerClient {
             other => bail!("unexpected response {other:?}, expected announce"),
         }
     }
+}
+
+/// Marquee fork (C27): one address, written either way (a dual-stack
+/// socket reports an IPv4 source as `::ffff:a.b.c.d`).
+fn same_source(a: SocketAddr, b: SocketAddr) -> bool {
+    a.ip().to_canonical() == b.ip().to_canonical() && a.port() == b.port()
 }
 
 #[cfg(test)]
