@@ -400,3 +400,91 @@ async fn a_start_peer_by_peer() {
     );
     engine.remove(t, false).await.ok();
 }
+
+/// A controlled slow start: a free file (`MQ_SLOW_FILE`) seeded on loopback
+/// at `MQ_SLOW_BPS` bytes per second (200,000 by default, a slow swarm),
+/// played by each release CLI in `MQ_SLOW_CLIS` (`label=path,label=path`)
+/// in turn for `MQ_SLOW_ROUNDS` rounds: `mq play-magnet --peer --headless
+/// --no-upload`, its data deleted after each run. One JSON line per run.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "release CLIs, mpv and a local file"]
+async fn a_slow_seeder_start() {
+    let file = std::path::PathBuf::from(std::env::var("MQ_SLOW_FILE").expect("MQ_SLOW_FILE"));
+    let bps: u32 = std::env::var("MQ_SLOW_BPS").map_or(200_000, |v| v.parse().unwrap());
+    let rounds: u32 = std::env::var("MQ_SLOW_ROUNDS").map_or(3, |v| v.parse().unwrap());
+    let clis: Vec<(String, String)> = std::env::var("MQ_SLOW_CLIS")
+        .expect("MQ_SLOW_CLIS")
+        .split(',')
+        .filter_map(|c| c.split_once('=').map(|(l, p)| (l.to_owned(), p.to_owned())))
+        .collect();
+    let name = file.file_name().unwrap().to_string_lossy().into_owned();
+    let seed_dir = tempfile::tempdir().unwrap();
+    let src = seed_dir.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::copy(&file, src.join(&name)).unwrap();
+    let spawner = mq_engine::librqbit::spawn_utils::BlockingSpawner::new(2);
+    let created = mq_engine::librqbit::create_torrent(
+        &src,
+        mq_engine::librqbit::CreateTorrentOptions {
+            name: Some("Slow"),
+            trackers: vec![],
+            piece_length: Some(256 * 1024),
+        },
+        &spawner,
+    )
+    .await
+    .unwrap();
+    let hash = created.info_hash().as_string();
+    let data = seed_dir.path().join("engine").join(&hash);
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::rename(src.join(&name), data.join(&name)).unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let loopback = [std::net::IpAddr::from([127, 0, 0, 1])];
+    let seeder = Engine::start(EngineConfig {
+        discovery: false,
+        limits: mq_engine::librqbit::limits::LimitsConfig {
+            upload_bps: std::num::NonZeroU32::new(bps),
+            download_bps: None,
+        },
+        ..EngineConfig::new(
+            seed_dir.path().join("engine"),
+            http.torrent_scope(&loopback),
+        )
+    })
+    .await
+    .unwrap();
+    let t = seeder
+        .add_torrent_bytes(created.as_bytes().unwrap().to_vec(), &[])
+        .await
+        .unwrap();
+    seeder
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
+    for _ in 0..400 {
+        let s = seeder.stats(t).await.unwrap();
+        if s.pieces_total > 0 && s.pieces_have == s.pieces_total {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let port = seeder.listen_addr().unwrap().port();
+    for round in 1..=rounds {
+        for (label, cli) in &clis {
+            let out = tokio::process::Command::new(cli)
+                .args(["play-magnet", &hash, "--headless", "--no-upload"])
+                .arg("--peer")
+                .arg(format!("127.0.0.1:{port}"))
+                .output()
+                .await
+                .unwrap();
+            let text = String::from_utf8_lossy(&out.stdout);
+            let last = text
+                .lines()
+                .rev()
+                .find(|l| l.starts_with('{'))
+                .unwrap_or("{}");
+            println!("{{\"round\":{round},\"build\":\"{label}\",\"bps\":{bps},\"run\":{last}}}");
+        }
+    }
+}

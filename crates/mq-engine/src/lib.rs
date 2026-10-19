@@ -92,6 +92,8 @@ pub struct EngineConfig {
     pub discovery: bool,
     /// Where the engine may connect: `HttpClient::torrent_scope(&[])`.
     pub policy: AddressScope,
+    /// Session rate limits; none by default (a slow seeder in live checks).
+    pub limits: librqbit::limits::LimitsConfig,
 }
 
 impl EngineConfig {
@@ -105,6 +107,7 @@ impl EngineConfig {
             dwh: true,
             discovery: true,
             policy,
+            limits: Default::default(),
         }
     }
 }
@@ -207,6 +210,7 @@ fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
         connect: Some(ConnectionOptions::default()),
         peer_limit: Some(cfg.device_class.peer_limit()),
         disable_upload: !cfg.upload,
+        ratelimits: cfg.limits,
         destinations: Some(destinations(&scopes.peers, &scopes.trackers, &scopes.dht)),
         ..Default::default()
     }

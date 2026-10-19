@@ -28,6 +28,8 @@ pub struct MagnetOptions {
     pub data_dir: Option<PathBuf>,
     /// Serve pieces to other peers.
     pub upload: bool,
+    /// A peer to dial, allowed by the policy; the DHT stays off with it.
+    pub peer: Option<std::net::SocketAddr>,
 }
 
 const SEEKS: [f64; 3] = [25.0, 50.0, 75.0];
@@ -138,13 +140,16 @@ async fn run(
 ) -> Result<Value, String> {
     let started = Instant::now();
     let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
+    let local: Vec<std::net::IpAddr> = o.peer.iter().map(|p| p.ip()).collect();
     let config = EngineConfig {
         dwh: !o.stock,
         upload: o.upload,
-        ..EngineConfig::new(dir, http.torrent_scope(&[]))
+        discovery: o.peer.is_none(),
+        ..EngineConfig::new(dir, http.torrent_scope(&local))
     };
     let engine = Engine::start(config).await.map_err(|e| e.to_string())?;
-    let t = tokio::time::timeout(METADATA_TIMEOUT, engine.add_magnet(hash, trackers, &[]))
+    let peers: Vec<std::net::SocketAddr> = o.peer.into_iter().collect();
+    let t = tokio::time::timeout(METADATA_TIMEOUT, engine.add_magnet(hash, trackers, &peers))
         .await
         .map_err(|_| "no metadata in time".to_owned())?
         .map_err(|e| e.to_string())?;

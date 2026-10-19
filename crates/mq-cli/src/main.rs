@@ -112,6 +112,10 @@ enum Command {
         /// Serve no pieces to other peers.
         #[arg(long)]
         no_upload: bool,
+        /// A peer to dial (a seeder on this machine for a controlled run):
+        /// the address policy allows it and the DHT stays off.
+        #[arg(long)]
+        peer: Option<std::net::SocketAddr>,
     },
     /// Probe an http(s) stream, play it in mpv and report time to first frame.
     PlayUrl {
@@ -190,6 +194,7 @@ async fn main() {
         bytes,
         data_dir,
         no_upload,
+        peer,
     } = cli.command
     {
         let options = magnet::MagnetOptions {
@@ -201,6 +206,7 @@ async fn main() {
             bytes,
             data_dir,
             upload: !no_upload,
+            peer,
         };
         match magnet::play_magnet(&magnet, options).await {
             Ok(run) => emit(run),

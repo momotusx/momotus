@@ -28,3 +28,4 @@ tracing.workspace = true
 [dev-dependencies]
 tempfile = "3"
 mq-http = { path = "../mq-http", features = ["test-dns"] }
+tokio = { workspace = true, features = ["process"] }
