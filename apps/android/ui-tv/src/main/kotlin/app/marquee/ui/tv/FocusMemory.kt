@@ -143,6 +143,9 @@ class TvHomeState {
     private val rows = HashMap<String, LazyListState>()
 
     fun rowState(rowId: String): LazyListState = rows.getOrPut(rowId) { LazyListState() }
+
+    /** Home shows a card between its lanes (the recommended addons card): the lanes under it sit one item lower. */
+    var cardShown = false
 }
 
 /**

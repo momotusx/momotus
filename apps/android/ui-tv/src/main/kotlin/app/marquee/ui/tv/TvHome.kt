@@ -152,7 +152,8 @@ fun TvHome(
                 item(key = "failed") { AllFailed(home, Modifier.padding(start = Marquee.safe.side)) }
             } else {
                 val rows = home.rows.toList()
-                val split = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
+                val split = cardSplit(rows)
+                state.cardShown = card != null
                 items(rows.subList(0, split), key = { it.rowId }) { row -> TvRow(row, state, onOpen) }
                 if (card != null) item(key = "card") { card() }
                 items(rows.subList(split, rows.size), key = { it.rowId }) { row -> TvRow(row, state, onOpen) }
@@ -529,6 +530,17 @@ internal fun startRow(
 
 private const val PATIENCE_MS = 3_000L
 
+/** Where Home's one-time card goes: under Continue Watching, else first. */
+internal fun cardSplit(rows: List<HomeRow>): Int = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
+
+/** The page item of lane [rowIndex]: after the hero, and one lower under the card. */
+internal fun pageIndex(
+    rows: List<HomeRow>,
+    rowIndex: Int,
+    hasHero: Boolean,
+    card: Boolean,
+): Int = rowIndex + (if (hasHero) 1 else 0) + (if (card && rowIndex >= cardSplit(rows)) 1 else 0)
+
 /** Scrolls the page and the key's lane until the key's node is composed. False when the key is not in the data (yet). */
 private suspend fun reveal(
     rows: List<HomeRow>,
@@ -543,7 +555,7 @@ private suspend fun reveal(
     for ((rowIndex, row) in rows.withIndex()) {
         val tileIndex = row.tileKeys().indexOf(key)
         if (tileIndex < 0) continue
-        val itemIndex = rowIndex + (if (hasHero) 1 else 0)
+        val itemIndex = pageIndex(rows, rowIndex, hasHero, state.cardShown)
         if (state.page.layoutInfo.visibleItemsInfo
                 .none { it.index == itemIndex }
         ) {
