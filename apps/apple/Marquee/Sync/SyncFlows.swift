@@ -801,9 +801,8 @@ struct ReportLostScreen: View {
                 ForEach(rows) { row in tick(row) }
             }
         }
-        let kits = SyncRules.kitsGoing(previewKits: preview.kits, members: members, keep: keep)
-        if !kits.going.isEmpty { Callout(glyph: "key-round", text: W.lostKits(kits.going.count)) }
-        if !kits.unsure.isEmpty { Callout(glyph: "triangle-alert", text: W.lostKitsUnsure(kits.unsure.count)) }
+        let kits = SyncRules.lostKitsGoing(preview, keep: keep)
+        if !kits.isEmpty { Callout(glyph: "key-round", text: W.lostKits(kits.count)) }
         if let error { Said(tone: .bad, text: error) }
         FlowRow(spacing: Theme.Space.xs) {
             Button {

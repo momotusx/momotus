@@ -166,7 +166,10 @@ enum JSONValue: Codable, Hashable, Sendable {
 /// it vouched for, ticked for the user to untick, and the kits that always go.
 struct LostPreview: Decodable, Hashable, Sendable {
     let devices: [String]
+    /// The kits that go with everything ticked.
     let kits: [String]
+    /// The kits each of `devices` made: they stay with a device the user unticks.
+    let deviceKits: [DeviceKits]
 }
 
 /// Both sides of a different device list (ForkPreview.ts), read only: this

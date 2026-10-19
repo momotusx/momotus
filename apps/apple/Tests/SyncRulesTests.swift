@@ -55,33 +55,32 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         // Ticked: the tablet and the phone go, and the tablet's kit with them.
         let drop = SyncRules.lostDrop(lost: tablet.id, added: preview.devices, keep: [])
         #expect(drop.count == 2)
-        #expect(SyncRules.kitsGoing(previewKits: preview.kits, members: devices.members, keep: []).going == preview.kits)
+        #expect(SyncRules.lostKitsGoing(preview, keep: []) == preview.kits)
         #expect(W.lostButton(drop.count) == "Remove 2 devices")
         // The phone unticked: only the tablet goes; its kit still does.
         let kept = SyncRules.lostDrop(lost: tablet.id, added: preview.devices, keep: Set(preview.devices))
         #expect(kept == [tablet.id])
-        #expect(SyncRules.kitsGoing(previewKits: preview.kits, members: devices.members, keep: Set(preview.devices)).going == preview.kits)
+        #expect(SyncRules.lostKitsGoing(preview, keep: Set(preview.devices)) == preview.kits)
     }
 
     @Test func aDeviceTheListDoesNotHaveYetIsStillShown() {
         // The preview names a device added after the list was read: it is listed, never dropped unseen.
         let members = [member("a", name: "Desk", this: true), member("b", name: "Tablet", sponsor: "a", addedMs: 1_700_000_000_000)]
-        let rows = SyncRules.lostRows(preview: LostPreview(devices: ["b", "zz"], kits: []), members: members)
+        let rows = SyncRules.lostRows(preview: LostPreview(devices: ["b", "zz"], kits: [], deviceKits: []), members: members)
         #expect(rows.map(\.id) == ["b", "zz"])
         #expect(rows[1].name == "Unknown device")
         #expect(SyncRules.lostDrop(lost: "x", added: ["b", "zz"], keep: ["b"]) == ["x", "zz"])
     }
 
     @Test func kitsGoUnlessTheirMakerStays() {
-        // The lost device "l" added "t"; "l" made k1 and "t" made k2.
-        let members = [member("a", this: true), member("l"), member("t", sponsor: "l"), member("k1", kit: true, sponsor: "l"), member("k2", kit: true, sponsor: "t")]
-        // A kit whose maker goes goes too; one whose maker the user unticked stays.
-        #expect(SyncRules.kitsGoing(previewKits: ["k1", "k2"], members: members, keep: []).going == ["k1", "k2"])
-        #expect(SyncRules.kitsGoing(previewKits: ["k1", "k2"], members: members, keep: ["t"]) == (["k1"], []))
-        // A kit the list does not have yet: going while nothing is kept, else nobody can say.
-        #expect(SyncRules.kitsGoing(previewKits: ["k9"], members: members, keep: []) == (["k9"], []))
-        #expect(SyncRules.kitsGoing(previewKits: ["k9"], members: members, keep: ["t"]) == ([], ["k9"]))
-        #expect(W.lostKitsUnsure(1) == "1 recovery kit this device does not list yet may stop working too, if the device that made it goes. Check the list afterwards.")
+        // The core's answer: the lost device "l" made k1, the device "t" it added made k2 and k3.
+        let preview = LostPreview(devices: ["t", "u"], kits: ["k1", "k2", "k3"],
+                                  deviceKits: [DeviceKits(device: "t", kits: ["k2", "k3"]), DeviceKits(device: "u", kits: [])])
+        // Everything ticked: every kit goes.
+        #expect(SyncRules.lostKitsGoing(preview, keep: []) == ["k1", "k2", "k3"])
+        // "t" unticked: its kits stay with it, the lost device's still go.
+        #expect(SyncRules.lostKitsGoing(preview, keep: ["t"]) == ["k1"])
+        #expect(SyncRules.lostKitsGoing(preview, keep: ["u"]) == ["k1", "k2", "k3"])
         #expect(W.lostKits(1) == "1 recovery kit made on these devices stops working. Make a new one afterwards.")
         #expect(W.lostKits(2).hasPrefix("2 recovery kits made on these devices stop working."))
     }

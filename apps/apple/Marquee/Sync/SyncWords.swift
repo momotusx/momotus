@@ -190,11 +190,6 @@ enum SyncWords {
             + (kits == 0 ? "" : kits == 1 ? " The recovery kit made on it stops working too." : " The \(kits) recovery kits made on it stop working too.")
     }
 
-    /// Kits of a lost report the device list does not have yet: who made them is not known here.
-    static func lostKitsUnsure(_ kits: Int) -> String {
-        "\(count(kits, "recovery kit", "recovery kits")) this device does not list yet may stop working too, if the device that made \(kits == 1 ? "it" : "them") goes. Check the list afterwards."
-    }
-
     /// Failures since this device joined, kept until the user dismisses them.
     static func failedSince(_ failed: SyncFailed) -> String? {
         let parts = [
@@ -458,22 +453,11 @@ enum SyncRules {
         [lost] + added.filter { !keep.contains($0) }
     }
 
-    /// The kits that go with a lost report, as the core works them out: every
-    /// kit of the preview whose maker does not stay (a device the user unticked
-    /// keeps its kits). A kit the device list does not have yet has no known
-    /// maker: it is said to go only while the user keeps nothing, else it is
-    /// `unsure`, never claimed gone.
-    static func kitsGoing(previewKits: [String], members: [MemberInfo], keep: Set<String>) -> (going: [String], unsure: [String]) {
-        var going: [String] = [], unsure: [String] = []
-        for kit in previewKits {
-            guard let member = members.first(where: { $0.id == kit }) else {
-                if keep.isEmpty { going.append(kit) } else { unsure.append(kit) }
-                continue
-            }
-            if let maker = member.sponsor, keep.contains(maker) { continue }
-            going.append(kit)
-        }
-        return (going, unsure)
+    /// The kits that go with a lost report, from the core's answer: every kit
+    /// of the preview less those of the devices the user unticked (they keep theirs).
+    static func lostKitsGoing(_ preview: LostPreview, keep: Set<String>) -> [String] {
+        let kept = Set(preview.deviceKits.filter { keep.contains($0.device) }.flatMap(\.kits))
+        return preview.kits.filter { !kept.contains($0) }
     }
 
     /// The recovery kits made on `device`: removing it stops them too.
