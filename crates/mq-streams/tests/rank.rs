@@ -1034,6 +1034,35 @@ fn hdr10_plus_plays_on_an_hdr10_screen() {
     assert_ne!(kind(&best.line), "washedOut");
 }
 
+/// A release naming the work in two languages matches either name.
+#[test]
+fn a_title_named_in_two_languages_matches_either() {
+    let case = Case {
+        target: Target {
+            title: "Game of Thrones".into(),
+            year: None,
+            season: Some(1),
+            episode: Some(1),
+        },
+        ..Case::stick()
+    };
+    // The file name carries the Russian title only (the default recording).
+    let mut row = seeded(
+        1,
+        "Игра престолов / Game of Thrones / Сезон: 1 / Серии: 1-10 из 10 [2011 WEB-DL 1080p]",
+        123,
+        2.0,
+    );
+    row["behaviorHints"] = json!({ "filename": "Игра престолов.S01E01.WEB-DL.1080p.mkv" });
+    let ranked = case.rank(vec![row]);
+    assert_eq!(
+        hidden(&ranked, HideReason::WrongTitle),
+        0,
+        "{:?}",
+        ranked.hidden
+    );
+}
+
 /// 3.3: phones count as their class.
 #[test]
 fn a_display_counts_as_its_screen_class() {

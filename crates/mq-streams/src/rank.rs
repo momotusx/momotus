@@ -154,14 +154,22 @@ fn wrong_episode(s: &ParsedStream, target: &Target) -> bool {
 /// Only rejects when the parsed title is clearly another work; short or
 /// missing titles never hide a stream.
 /// Only rejects when the parsed title is clearly another work; short or
-/// missing titles never hide a stream.
+/// missing titles never hide a stream. A release may name the work in
+/// several languages, split by " / " in its title line ("Игра престолов /
+/// Game of Thrones / Сезон: 1") while its file name carries one: any name
+/// matching is enough.
 fn wrong_title(s: &ParsedStream, target: &Target) -> bool {
     let parsed = normalize_title(&s.release.title);
     let wanted = normalize_title(&target.title);
     if parsed.len() < 3 || wanted.len() < 3 {
         return false;
     }
-    title_similarity(&parsed, &wanted) < 0.5
+    let line = s.raw_description.lines().next().unwrap_or_default();
+    let others = line.contains(" / ").then(|| line.split(" / "));
+    std::iter::once(parsed)
+        .chain(others.into_iter().flatten().map(normalize_title))
+        .filter(|n| n.len() >= 3)
+        .all(|n| title_similarity(&n, &wanted) < 0.5)
 }
 
 fn normalize_title(t: &str) -> String {
