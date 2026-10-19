@@ -12,10 +12,6 @@ private func member(_ id: String, kit: Bool = false, sponsor: String? = nil, thi
     MemberInfo(id: id, kit: kit, name: nil, sponsor: sponsor, addedMs: 0, thisDevice: this)
 }
 
-private func list(_ members: [MemberInfo]) -> SyncDevices {
-    SyncDevices(members: members, fingerprint: "ABCDEFGHIJKL", epoch: 1, rotationPending: false, record: nil)
-}
-
 @Suite struct SyncKitTests {
     @Test func aKitIsHeldUntilSavedAndOnlyItsIdIsKept() {
         var ledger = KitLedger()
@@ -74,17 +70,6 @@ private func list(_ members: [MemberInfo]) -> SyncDevices {
         #expect(ledger.pending == ["k2"])
         ledger.drop()
         #expect(ledger == KitLedger())
-    }
-
-    @Test func theNewKitsIdComesOnlyFromListsThatCannotMeanAnother() {
-        let before = list([member("a", this: true), member("k0", kit: true, sponsor: "a")])
-        let after = list(before.members + [member("k1", kit: true, sponsor: "a")])
-        #expect(KitLedger.newKitId(before: before, after: after) == "k1")
-        // No list before or after, two new kits, or a kit another device made: unknown.
-        #expect(KitLedger.newKitId(before: nil, after: after) == "")
-        #expect(KitLedger.newKitId(before: before, after: nil) == "")
-        #expect(KitLedger.newKitId(before: before, after: list(after.members + [member("k2", kit: true, sponsor: "a")])) == "")
-        #expect(KitLedger.newKitId(before: before, after: list(before.members + [member("t"), member("k3", kit: true, sponsor: "t")])) == "")
     }
 
     @Test func leavingTheFrontCoversTheKit() {
@@ -257,20 +242,6 @@ final class FakeKeychain: @unchecked Sendable {
         gate.cover()
         #expect(!gate.shows(now: t0, holding: true, mac: true))
         #expect(W.hiddenIn(1) == "Hides in 1 second" && W.hiddenIn(20) == "Hides in 20 seconds")
-    }
-
-    @Test func aNewKitIsPendingAtOnceAndNamedOnceTheListShowsIt() {
-        var ledger = KitLedger()
-        let kit = HeldKit(id: "", kit: "DDDD")
-        ledger.hold(kit)
-        #expect(ledger.pending == [KitLedger.unknown])
-        ledger.name("k9")
-        #expect(ledger.held == HeldKit(id: "k9", kit: "DDDD") && ledger.pending == ["k9"])
-        // Named once only, and a hold that began before the name still runs out.
-        ledger.name("k10")
-        #expect(ledger.held?.id == "k9")
-        ledger.expire(kit)
-        #expect(ledger.held == nil && ledger.unseen == ["k9"])
     }
 
     @Test func withoutALockOnlyStoppingSyncAsksTwiceAndRuns() {

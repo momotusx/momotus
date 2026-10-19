@@ -308,15 +308,13 @@ final class SyncModel {
                     kits.settle(id)
                 }
             }
-            struct Made: Decodable, Sendable { let kit: String; let record: JSONValue }
+            // `id` is the kit's own entry in the device list.
+            struct Made: Decodable, Sendable { let kit: String; let id: String; let record: JSONValue }
             let made: Made = try await withRecord("createRecoveryKit") { $0.record }
             guard mine == account else { return }
             recovered = false
-            // Held at once, pending as unknown: an app stopped before the list answers still marks it.
-            hold(HeldKit(id: "", kit: made.kit))
-            let after = try? await loadDevices()
-            guard mine == account else { return }
-            kits.name(KitLedger.newKitId(before: before, after: after))
+            hold(HeldKit(id: made.id, kit: made.kit))
+            try? await loadDevices()
         }.value
         #endif
     }

@@ -51,14 +51,6 @@ struct KitLedger: Equatable {
         pending.append(kit.id.isEmpty ? Self.unknown : kit.id)
     }
 
-    /// The held kit's id, read once the list shows it: until then it is pending
-    /// as unknown, so an app stopped in between never leaves it unmarked.
-    mutating func name(_ id: String) {
-        guard let kit = held, kit.id.isEmpty, !id.isEmpty else { return }
-        held = HeldKit(id: id, kit: kit.kit)
-        if let i = pending.firstIndex(of: Self.unknown) { pending[i] = id }
-    }
-
     /// "I saved it": the letters leave memory and nothing marks the kit pending.
     mutating func saved() {
         if let entry = heldEntry, let i = pending.firstIndex(of: entry) { pending.remove(at: i) }
@@ -95,17 +87,6 @@ struct KitLedger: Equatable {
     /// A join or a leave: kits of the old account mean nothing now.
     mutating func drop() {
         self = KitLedger()
-    }
-
-    /// The id of the kit just made. The core answers the kit without it, so it
-    /// comes from the lists read before and after, and only when it cannot be
-    /// another's: a kit this device made that the list before did not have,
-    /// and only one such. Anything else stays unknown ("").
-    static func newKitId(before: SyncDevices?, after: SyncDevices?) -> String {
-        guard let before, let after, let me = after.members.first(where: \.thisDevice)?.id else { return "" }
-        let known = Set(before.members.map(\.id))
-        let made = after.members.filter { $0.kit && $0.sponsor == me && !known.contains($0.id) }
-        return made.count == 1 ? made[0].id : ""
     }
 }
 
