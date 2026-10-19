@@ -50,7 +50,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -91,6 +90,7 @@ import app.marquee.design.endFade
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import app.marquee.design.scrollByKey
+import app.marquee.design.windowDp
 
 /** 3725 s as "1:02:05". */
 fun clockText(ms: Long): String = Format.clock(ms / 1000)
@@ -358,7 +358,7 @@ fun UpNextCard(
         verticalAlignment = Alignment.Bottom,
     ) {
         // A short landscape phone keeps the card to its words and button.
-        if (tv || LocalConfiguration.current.screenHeightDp >= SHORT_PHONE_DP) {
+        if (tv || windowDp().height >= SHORT_PHONE_DP.dp) {
             RemoteImage(
                 url = next.thumbnail,
                 width = if (tv) 320.dp else 120.dp,

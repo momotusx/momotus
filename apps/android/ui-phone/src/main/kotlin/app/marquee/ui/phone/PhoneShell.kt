@@ -36,7 +36,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -57,6 +56,7 @@ import app.marquee.design.MqText
 import app.marquee.design.TextRole
 import app.marquee.design.focusSelectable
 import app.marquee.design.marqueeFocus
+import app.marquee.design.windowDp
 
 /**
  * How much of the bottom the floating bar covers (its height, margin and the system navigation
@@ -83,7 +83,7 @@ fun PhoneShell(
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
     // Under 360 dp the bar gives up some margin, so six places keep 48 dp each (320 dp: 50).
-    val narrow = LocalConfiguration.current.screenWidthDp < 360
+    val narrow = windowDp().width < 360.dp
     val inset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val space: Dp = if (showBar) BAR_HEIGHT + BAR_MARGIN * 2 + inset else 0.dp
     Box(modifier.fillMaxSize()) {
@@ -155,7 +155,7 @@ private fun PhoneBar(
             val style = TextStyle(fontSize = caption, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.Bold)
             places.values.maxOf { measurer.measure(it.label, style, maxLines = 1).size.width }
         }
-    val width = LocalConfiguration.current.screenWidthDp.dp
+    val width = windowDp().width
     // The bar's widest margins (16 dp a side) and its inner padding (6 dp a side).
     val slot = (width - 32.dp - 12.dp) / TOP_LEVEL.size
     val compact = with(density) { widest.toDp() } > slot - 4.dp

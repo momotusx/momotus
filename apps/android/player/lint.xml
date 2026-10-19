@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The player is built on Media3's unstable APIs on purpose (the renderers factory, track selection,
+     the loopback data sources): Media3's own advice is to opt in once per module rather than per call. -->
+<lint>
+    <issue id="UnsafeOptInUsageError">
+        <ignore regexp="\(markerClass = androidx\.media3\.common\.util\.UnstableApi\.class\)" />
+    </issue>
+</lint>

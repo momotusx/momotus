@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.hardware.display.DisplayManager
 import android.media.AudioAttributes
@@ -71,6 +72,8 @@ object DeviceCaps {
      */
     private val containers = listOf("mkv", "mp4", "m4v", "webm", "ts", "m2ts", "mov", "m3u8", "mpd")
 
+    // Constants from newer releases are compiled in as numbers: an older system never reports them.
+    @SuppressLint("InlinedApi")
     private val hdrTypes =
         mapOf(
             Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION to "dolby_vision",
@@ -79,6 +82,7 @@ object DeviceCaps {
             Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS to "hdr10_plus",
         )
 
+    @SuppressLint("InlinedApi")
     private val passthroughEncodings =
         mapOf(
             AudioFormat.ENCODING_AC3 to "ac3",
@@ -195,6 +199,7 @@ object DeviceCaps {
             !name.startsWith("omx.google.") && !name.startsWith("c2.android.") && !name.startsWith("omx.ffmpeg.")
         }
 
+    @SuppressLint("InlinedApi")
     private fun takesTenBit(info: MediaCodecInfo): Boolean =
         runCatching {
             info.getCapabilitiesForType("video/hevc").profileLevels.any {

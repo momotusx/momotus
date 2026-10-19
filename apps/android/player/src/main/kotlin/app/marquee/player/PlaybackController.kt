@@ -1,6 +1,5 @@
 package app.marquee.player
 
-import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -8,6 +7,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -312,12 +312,12 @@ class PlaybackController(
                     .Builder()
                     .setTitle(title)
                     .setSubtitle(episode)
-                    .setArtworkUri(artwork?.let(Uri::parse))
+                    .setArtworkUri(artwork?.toUri())
                     .build(),
             ).setSubtitleConfigurations(
                 subs.mapIndexed { i, t ->
                     MediaItem.SubtitleConfiguration
-                        .Builder(Uri.parse(t.url))
+                        .Builder(t.url.toUri())
                         .setId("$EXTERNAL$i")
                         .setMimeType(subtitleMime(t.url))
                         .setLanguage(t.lang)

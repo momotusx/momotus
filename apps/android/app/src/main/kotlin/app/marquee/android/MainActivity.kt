@@ -2,7 +2,6 @@ package app.marquee.android
 
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,6 +9,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.drawable.toDrawable
 import app.marquee.core.route.Route
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
@@ -27,7 +27,11 @@ class MainActivity : ComponentActivity() {
         val form = FormFactor.detect(this, if (debuggable) intent.getStringExtra("form") else null)
         applyBars()
         // The first frame shows the page color.
-        window.setBackgroundDrawable(ColorDrawable(Tokens.dark.bg.toArgb()))
+        window.setBackgroundDrawable(
+            Tokens.dark.bg
+                .toArgb()
+                .toDrawable(),
+        )
 
         DebugEntry.launched(this)
         if (DebugEntry.show(this, form)) return

@@ -24,6 +24,7 @@ import android.os.SystemClock
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -70,7 +71,9 @@ class OwnerCheck internal constructor(
     suspend fun confirm(title: String): Owner {
         if (!secure) return Owner.NoLock
         return try {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            // BiometricPrompt takes the device's PIN, pattern or password from Android 10; before that the
+            // system's own confirm-credential screen asks.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 if (legacy(title)) Owner.Confirmed else Owner.Cancelled
             } else {
                 prompt(title)
@@ -84,6 +87,7 @@ class OwnerCheck internal constructor(
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private suspend fun prompt(title: String): Owner =
         suspendCancellableCoroutine { done ->
             val cancel = CancellationSignal()

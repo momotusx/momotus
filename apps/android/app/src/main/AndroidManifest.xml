@@ -15,9 +15,13 @@
     <!-- The screen-lock prompt before a sync account's devices change (approve, remove, report lost, They differ, the server's list), a recovery kit is made, or this device stops syncing. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- PlayerWindow sets picture in picture's auto-enter on Android 12 and later; lint cannot see it. -->
     <application
         android:name=".MarqueeApp"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        tools:ignore="PictureInPictureIssue"
         android:banner="@drawable/banner"
         android:icon="@drawable/ic_launcher"
         android:label="Marquee"

@@ -2,6 +2,7 @@ package app.marquee.android
 
 import android.content.Context
 import androidx.compose.runtime.snapshotFlow
+import androidx.core.content.edit
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import app.marquee.core.sync.SecretRecordStore
@@ -29,13 +30,7 @@ class SyncController(
         session.scope,
         running = { snapshotFlow { session.health }.first { it == CoreHealth.Running } },
         recoveredAtStart = context.prefs().getBoolean(RECOVERED, false),
-        saveRecovered = {
-            context
-                .prefs()
-                .edit()
-                .putBoolean(RECOVERED, it)
-                .apply()
-        },
+        saveRecovered = { context.prefs().edit { putBoolean(RECOVERED, it) } },
         pendingKitsAtStart =
             context
                 .prefs()
@@ -43,13 +38,7 @@ class SyncController(
                 ?.split(',')
                 ?.filter { it.isNotEmpty() }
                 .orEmpty(),
-        savePendingKits = {
-            context
-                .prefs()
-                .edit()
-                .putString(PENDING_KITS, it.joinToString(","))
-                .apply()
-        },
+        savePendingKits = { context.prefs().edit { putString(PENDING_KITS, it.joinToString(",")) } },
     ) {
     private var timer: Job? = null
 

@@ -23,11 +23,16 @@ android {
         // UniFFI Kotlin, written by scripts/build-core.sh.
         getByName("main").kotlin.directories.add("src/main/generated")
     }
+
+    lint {
+        // Deliberate: arm64 first (plans/m6-android.md D10), as the app.
+        disable += "ChromeOsAbiSupport"
+    }
 }
 
 dependencies {
     // The aar variant carries libjnidispatch.so for Android.
-    api("${libs.jna.get().module}:${libs.versions.jna.get()}@aar")
+    api(libs.jna) { artifact { type = "aar" } }
     api(libs.kotlinx.coroutines.android)
     api(libs.kotlinx.serialization.json)
     api(platform(libs.compose.bom))

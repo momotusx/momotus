@@ -300,7 +300,7 @@ fun SettingsScreen(
             }
         }
         itemsIndexed(addons, key = { _, addon -> "addon:${addon.url}" }) { index, addon ->
-            val requester = requesters.getOrPut(addon.url) { FocusRequester() }
+            val requester = remember(addon.url) { requesters.getOrPut(addon.url) { FocusRequester() } }
             AddonRow(
                 addon = addon,
                 first = index == 0,

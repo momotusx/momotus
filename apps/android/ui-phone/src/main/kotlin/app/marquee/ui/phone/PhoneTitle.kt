@@ -36,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -82,6 +81,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
 import app.marquee.design.openLink
+import app.marquee.design.windowDp
 
 /** How many lines of the synopsis show before "More". */
 private const val SYNOPSIS_LINES = 3
@@ -242,8 +242,8 @@ private val PRIMARY_MIN = 220.dp
 /** The artwork's height: the width at [HERO_RATIO], held to 60% of the window (landscape, tablets). */
 @Composable
 private fun heroHeight(): Dp {
-    val window = LocalConfiguration.current
-    return minOf(window.screenWidthDp.dp / HERO_RATIO, window.screenHeightDp.dp * 0.6f)
+    val window = windowDp()
+    return minOf(window.width / HERO_RATIO, window.height * 0.6f)
 }
 
 /**

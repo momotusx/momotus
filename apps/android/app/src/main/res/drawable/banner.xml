@@ -2,6 +2,8 @@
 <!-- Placeholder TV banner until the owner supplies the logo: warm black with a row of amber
      "marquee bulbs" (design/DECISION.md). Colors are the dark bg and accent tokens. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="VectorRaster"
     android:width="320dp"
     android:height="180dp"
     android:viewportWidth="320"

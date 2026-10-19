@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.core.net.toUri
 import kotlinx.coroutines.flow.first
 
 private enum class ButtonKind { Primary, Secondary }
@@ -725,7 +726,7 @@ fun openLink(
     try {
         context.startActivity(
             android.content
-                .Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .Intent(android.content.Intent.ACTION_VIEW, url.toUri())
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         true

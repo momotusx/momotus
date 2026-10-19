@@ -32,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -71,6 +70,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
 import app.marquee.design.laneHeight
+import app.marquee.design.windowDp
 
 /** Home on a phone: a hero card, then one swipeable lane per catalog. */
 @Composable
@@ -202,7 +202,7 @@ private fun PhoneHero(
                     .toDp()
             } < SHORT_WINDOW
         // Held to most of the window, so a landscape phone or a tablet still shows Play.
-        val least = minOf(maxWidth / HERO_RATIO, LocalConfiguration.current.screenHeightDp.dp * HERO_WINDOW)
+        val least = minOf(maxWidth / HERO_RATIO, windowDp().height * HERO_WINDOW)
         Box(
             Modifier
                 .fillMaxWidth()

@@ -2,10 +2,13 @@ package app.marquee.design
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 
 /** The TV canvas: tokens are points on 1920x1080. */
 const val TV_CANVAS_WIDTH = 1920f
@@ -25,10 +28,27 @@ fun tvScale(
  */
 @Composable
 fun TvCanvas(content: @Composable () -> Unit) {
+    val window = windowPx()
+    CompositionLocalProvider(LocalDensity provides Density(tvScale(window.width, window.height), fontScale = 1f)) {
+        content()
+    }
+}
+
+/** The window in pixels; the display's size on the first frame, when the window can still say 0x0. */
+@Composable
+fun windowPx(): IntSize {
     val window = LocalWindowInfo.current.containerSize
-    // The window can report 0x0 on the first frame; the display size is the right answer then.
-    val screen = LocalContext.current.resources.displayMetrics
-    val width = if (window.width > 0) window.width else screen.widthPixels
-    val height = if (window.height > 0) window.height else screen.heightPixels
-    CompositionLocalProvider(LocalDensity provides Density(tvScale(width, height), fontScale = 1f)) { content() }
+    val screen = LocalResources.current.displayMetrics
+    return IntSize(
+        if (window.width > 0) window.width else screen.widthPixels,
+        if (window.height > 0) window.height else screen.heightPixels,
+    )
+}
+
+/** The window in dp at the display's own density (what Configuration's screen size said), also inside [TvCanvas]. */
+@Composable
+fun windowDp(): DpSize {
+    val px = windowPx()
+    val density = LocalResources.current.displayMetrics.density
+    return DpSize((px.width / density).dp, (px.height / density).dp)
 }

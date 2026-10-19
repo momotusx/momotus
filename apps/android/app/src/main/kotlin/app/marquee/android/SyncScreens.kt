@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -122,11 +123,10 @@ private fun Context.knownServer(): String =
 private fun Context.rememberJoin(
     server: String,
     name: String,
-) = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    .edit()
-    .putString(SERVER, server)
-    .putString(NAME, name)
-    .apply()
+) = getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+    putString(SERVER, server)
+    putString(NAME, name)
+}
 
 /** How other devices list this one: the name it joined with last, else one by its form. */
 private fun Context.deviceName(tv: Boolean): String =
@@ -621,7 +621,7 @@ private fun DeviceList(
                         val next = (others.getOrNull(at + 1) ?: others.getOrNull(at - 1))?.let { removeFocus[it.id] }
                         scope.refocus(*listOfNotNull(next, afterList).toTypedArray())
                     },
-                    removeFocus = removeFocus.getOrPut(member.id) { FocusRequester() },
+                    removeFocus = remember(member.id) { removeFocus.getOrPut(member.id) { FocusRequester() } },
                 )
             }
         }
