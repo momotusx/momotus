@@ -30,6 +30,9 @@
         android:theme="@style/Theme.Marquee"
         tools:replace="android:networkSecurityConfig">
 
+        <!-- Macrobenchmark and baseline profiles read a release build's traces from the shell. -->
+        <profileable android:shell="true" tools:targetApi="29" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

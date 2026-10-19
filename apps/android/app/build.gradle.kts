@@ -25,6 +25,13 @@ android {
             // Local release builds only; store signing is a release-process decision.
             signingConfig = signingConfigs.getByName("debug")
         }
+        // What :macrobenchmark measures: release code (R8, no debugging), profileable from the shell.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            proguardFiles("benchmark-rules.pro")
+        }
     }
 
     compileOptions {
@@ -45,6 +52,8 @@ android {
     sourceSets {
         // The recorded protocol traces double as the bridge benchmark input in debug builds.
         getByName("debug").assets.directories.add("../core/src/test/resources")
+        // The benchmark build is the release build: no debug screens or fakes.
+        getByName("benchmark").kotlin.directories.add("src/release/kotlin")
     }
 }
 
@@ -69,6 +78,8 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
     implementation(libs.zxing.core)
+    // Installs the baseline profile (src/main/baseline-prof.txt) where the store does not.
+    implementation(libs.androidx.profileinstaller)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
