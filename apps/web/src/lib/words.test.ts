@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { hiddenSummary, languageName, pairingProblem, plainAddress, reasonText, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, hiddenSummary, languageName, pairingProblem, plainAddress, reasonText, serverHost, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { Learned } from "../core/generated/Learned";
 import type { ReasonLine } from "../core/generated/ReasonLine";
@@ -173,4 +173,9 @@ test("the Settings row sums up the size and the seeders as the chips say them", 
 
 test("a display's lines fall into the core's screen classes", () => {
   expect([2160, 2000, 1440, 1179, 1000, 720, 700, 576].map(screenClass)).toEqual([2160, 2160, 1080, 1080, 1080, 720, 720, 480]);
+});
+
+test("a built-in source says where it runs instead of a host", () => {
+  expect(addonHost({ builtIn: true, host: "5a0d1888fa64-turkcealtyaziorg.baby-beamup.club" })).toBe("Built into Marquee, runs on this device");
+  expect(addonHost({ builtIn: false, host: "v3-cinemeta.strem.io" })).toBe("v3-cinemeta.strem.io");
 });

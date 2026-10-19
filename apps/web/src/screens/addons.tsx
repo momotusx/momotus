@@ -11,7 +11,7 @@ import { isTokenInLink, liveView, op, reasonOf } from "../core/client";
 import type { AddonInfo } from "../core/generated/AddonInfo";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import { form } from "../form";
-import { findAddons, kindLabel, providesText, tokenInLink } from "../lib/words";
+import { addonHost, findAddons, kindLabel, providesText, tokenInLink } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 
@@ -121,7 +121,7 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
           {a().name}
           <small class="num">{a().version}</small>
         </h2>
-        <p class="host">{a().host}</p>
+        <p class="host">{addonHost(a())}</p>
         <Show when={a().description}>
           <p class="desc">{a().description}</p>
         </Show>

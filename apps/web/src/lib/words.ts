@@ -186,6 +186,10 @@ export function plainAddress(url: string): boolean {
  * and Apple's `FindAddonsWords` (each is tested against
  * `apps/shared/find-addons-words.json`). `{kind}` and `{host}` are filled in. */
 /** A pasted link whose settings carry a sign-in (`tokenInLink`). */
+/** Where an addon runs, shown instead of its host: the core reads a
+ * built-in source itself (`AddonInfo.builtIn`). */
+export const addonHost = (a: { builtIn: boolean; host: string }) => (a.builtIn ? "Built into Marquee, runs on this device" : a.host);
+
 export const tokenInLink = {
   warn: "This link carries a sign-in: a token or a key. Whoever has it uses that account. Install it only if it is yours.",
   confirm: "It is mine, install",

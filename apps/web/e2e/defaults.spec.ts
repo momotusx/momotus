@@ -335,3 +335,22 @@ test("an empty Home offers Set up Marquee alone, not the defaults card beside it
   await page.waitForTimeout(1500);
   await expect(page.locator(".defaults-card")).toHaveCount(0);
 });
+
+test("the built-in TurkceAltyazi.org row says where it runs instead of a host", async ({ browser }) => {
+  // Bundled manifests: nothing is fetched to install them.
+  await client.req("installDefaults", {
+    choices: [
+      { key: "cinemeta", on: true },
+      { key: "turkcealtyazi", on: true },
+    ],
+  });
+  await client.req("setPrefs", { patch: { defaultsSeen: 1 } });
+  const page = await device(browser, "desktop");
+  await page.goto("/addons?form=desktop");
+  const builtIn = page.locator("li.addon", { hasText: "TurkceAltyazi" });
+  await expect(builtIn.locator(".host")).toHaveText("Built into Marquee, runs on this device");
+  // Never configurable: its old host is never opened.
+  await expect(builtIn).not.toContainText("Settings live on its website");
+  await expect(page.locator("li.addon", { hasText: "Cinemeta" }).locator(".host")).toHaveText("v3-cinemeta.strem.io");
+  await shot(page, "addons-built-in", "desktop");
+});
