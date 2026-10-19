@@ -9,7 +9,7 @@ const KEY: &str = "turkcealtyazi";
 /// The source name on its tracks and notes.
 pub(crate) const NAME: &str = "TurkceAltyazi.org";
 
-fn default() -> &'static DefaultAddon {
+pub(crate) fn default() -> &'static DefaultAddon {
     defaults::list()
         .iter()
         .find(|d| d.key == KEY)

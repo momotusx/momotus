@@ -122,11 +122,19 @@ fn list(core: &Core) -> AddonsSnapshot {
             // Its old host is never opened: not even to configure it.
             let configure_url =
                 crate::views::addon_catalog::configure_page(&url, &manifest).filter(|_| !built_in);
+            // The core's own source: its name and line, not the old addon's
+            // (whose text is Turkish and speaks of Stremio).
+            let (name, description) = if built_in {
+                let d = crate::turkcealtyazi::default();
+                (d.name.clone(), Some(d.line.clone()))
+            } else {
+                (manifest.name, manifest.description)
+            };
             Some(AddonInfo {
                 host: url.host_str().unwrap_or_default().to_owned(),
                 url: row.transport_url,
-                name: manifest.name,
-                description: manifest.description,
+                name,
+                description,
                 logo: manifest.logo.map(|u| u.to_string()),
                 version: manifest.version.to_string(),
                 enabled: row.enabled,

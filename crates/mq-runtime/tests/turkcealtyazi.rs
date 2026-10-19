@@ -553,4 +553,11 @@ async fn the_addon_list_says_built_in_and_offers_no_configure_page() {
             (false, false, false)
         ]
     );
+    // Its own name and line, not the old addon's Turkish description.
+    let words: Vec<_> = addons
+        .iter()
+        .map(|a| (a.name.as_str(), a.description.as_deref()))
+        .collect();
+    let line = Some("Turkish subtitles from TurkceAltyazi.org.");
+    assert_eq!(words, [(NAME, line), (NAME, line), ("other", None)]);
 }
