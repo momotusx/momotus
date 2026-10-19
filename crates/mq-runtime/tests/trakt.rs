@@ -2744,3 +2744,39 @@ async fn a_round_looks_a_shows_details_up_once_for_its_writes() {
     assert_eq!(looks, 1, "three writes, one look");
     assert_eq!(pending(&core, "a-memo"), 3, "they wait");
 }
+
+#[tokio::test]
+async fn an_offline_round_is_not_time_passing_for_failed_looks() {
+    let (core, fake) = signed_in("a-away").await;
+    fake.meta_status.lock().unwrap().insert(SHOW.into(), 503);
+    // Three failed looks, the last three days ago, in the last session.
+    let failing = json!({"first": now() - 9 * 86_400_000, "last": now() - 3 * 86_400_000,
+                         "looks": 3});
+    let last_round = (now() - 3 * 86_400_000 + 60_000).to_string();
+    let library = core.library();
+    library
+        .set_tracker_state(key("a-away"), "failing:show:tt100", &failing.to_string())
+        .unwrap();
+    library
+        .set_tracker_state(key("a-away"), "round_ms", &last_round)
+        .unwrap();
+    // Opened offline: Trakt cannot be reached.
+    let gone = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let offline = format!("http://{}", gone.local_addr().unwrap());
+    drop(gone);
+    // A second listener for the same fake: its first address is not kept.
+    let online = fake.start().await;
+    core.set_trakt_config(Some(config(&offline)));
+    assert!(core.trakt_sync().await.is_err());
+    assert_eq!(
+        state(&core, "a-away", "round_ms").as_deref(),
+        Some(last_round.as_str()),
+        "an offline round is not a round"
+    );
+    // Online again: the fourth answered look gives up.
+    core.set_trakt_config(Some(config(&online)));
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(unmapped_ids(&core), [SHOW]);
+}

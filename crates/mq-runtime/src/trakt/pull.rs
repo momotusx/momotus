@@ -91,6 +91,7 @@ pub(super) async fn round(
         report: TraktReport::default(),
         now: now_ms() as i64,
         left: None,
+        reached: false,
     };
     let result = round.run().await;
     match &result {
@@ -98,11 +99,14 @@ pub(super) async fn round(
         Err(e) => conn.failed(&super::reason(e)),
     }
     conn.set_importing(None);
-    // The app is in use: failed looks not seen again over two days of
-    // rounds start over (`map::failed`).
-    round
-        .at()
-        .set_state(core, map::LAST_ROUND, &now_ms().to_string());
+    // The app is in use and online: failed looks not seen again over two
+    // days of such rounds start over (`map::failed`). A round Trakt never
+    // answered (offline) is not time passing for them.
+    if round.reached {
+        round
+            .at()
+            .set_state(core, map::LAST_ROUND, &now_ms().to_string());
+    }
     let pending = core.library().tracker_pending(round.key).map_or(0, |p| p.0);
     round.report.pending = pending as u32;
     result.map(|()| round.report)
@@ -121,6 +125,8 @@ struct Round<'a> {
     /// Why a row was left for a later round, if one was: the activities
     /// stay as they were, so the next round reads it again.
     left: Option<String>,
+    /// Trakt answered one of its calls: the device is online.
+    reached: bool,
 }
 
 /// Rows placed, and the earliest date of a row left for later.
@@ -141,6 +147,7 @@ impl<'a> Round<'a> {
 
     async fn pull(&mut self) -> Result<(), CallError> {
         let acts = self.get("/sync/last_activities").await?;
+        self.reached = true;
         let stored = self.state_json("activities");
         let first = stored.is_null();
         let moved = |kind: &str, field: &str| acts[kind][field] != stored[kind][field];
@@ -542,6 +549,7 @@ impl<'a> Round<'a> {
         match answer {
             Ok(answer) => {
                 self.conn.ok();
+                self.reached = true;
                 let missing = &answer["not_found"];
                 for (intent, ids) in &batch {
                     let (list, entry) = ids.history(None);
