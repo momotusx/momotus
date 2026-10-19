@@ -3,6 +3,8 @@ package app.marquee.player
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.util.Util
+import app.marquee.core.model.SubtitleNote
+import app.marquee.core.model.SubtitleProblem
 import java.util.Locale
 
 /** One row of the audio or subtitles menu. */
@@ -28,6 +30,51 @@ fun PlaybackController.subtitlesDetail(): String {
             "Off, $found found"
         }
 }
+
+/** "Still asking subtitle addons": under the subtitle list while the core still waits for some. */
+const val SUBTITLES_PENDING = "Still asking subtitle addons"
+
+/**
+ * What a subtitle note says (plans/m13-turkcealtyazi.md 4.2, the web's `subtitleNote`): a subtitle
+ * source that gave nothing this time, and why. A problem from a newer core gets the general line.
+ */
+fun subtitleNoteWords(note: SubtitleNote): String =
+    when (note.problem) {
+        SubtitleProblem.Unreachable -> {
+            "${note.source} did not answer. Try its subtitles again in a moment."
+        }
+
+        SubtitleProblem.Blocked -> {
+            "${note.source} is turning requests away. Marquee will try again in a few minutes."
+        }
+
+        SubtitleProblem.Changed -> {
+            "${note.source} changed its pages, so Marquee cannot read them. An update will fix this."
+        }
+
+        SubtitleProblem.TrackFailed -> {
+            "A subtitle file from ${note.source} could not be read. Pick another one."
+        }
+
+        SubtitleProblem.Unknown -> {
+            "Subtitles from ${note.source} did not load."
+        }
+    }
+
+/** Under the subtitle list: the pending line while it shows, then one line per note in the core's order. */
+fun subtitlePanelNote(
+    pending: Boolean,
+    notes: List<SubtitleNote>,
+): String? =
+    (listOfNotNull(SUBTITLES_PENDING.takeIf { pending }) + notes.map(::subtitleNoteWords))
+        .joinToString("\n")
+        .ifEmpty { null }
+
+/** The notes in [now] that [before] did not have: what just happened. */
+fun newSubtitleNotes(
+    before: List<SubtitleNote>,
+    now: List<SubtitleNote>,
+): List<SubtitleNote> = now.filter { it !in before }
 
 /** What the Audio action says under its name: the chosen track ("English, E-AC-3, 5.1"), or null while there is none. */
 fun PlaybackController.audioDetail(): String? =

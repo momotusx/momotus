@@ -322,7 +322,7 @@ fun PhonePlayer(
                             panel = null
                         },
                         modifier = sheet,
-                        note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
+                        note = controller.subtitlePanelNote,
                     )
                 }
 

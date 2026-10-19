@@ -403,7 +403,7 @@ fun TvPlayer(
                 TrackPanel(
                     title = "Subtitles",
                     rows = controller.text,
-                    note = if (controller.subtitlesPending) "Still asking subtitle addons" else null,
+                    note = controller.subtitlePanelNote,
                     onPick = {
                         controller.selectText(it)
                         closePanel()

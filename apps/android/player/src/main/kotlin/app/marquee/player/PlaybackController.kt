@@ -24,6 +24,7 @@ import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Segment
+import app.marquee.core.model.SubtitleNote
 import app.marquee.core.model.SubtitleTrack
 import app.marquee.core.model.TraktPlayback
 import app.marquee.core.views.PlaybackView
@@ -96,6 +97,13 @@ class PlaybackController(
 
     var subtitlesPending by mutableStateOf(false)
         private set
+
+    /** Subtitle sources that gave nothing this time (plans/m13-turkcealtyazi.md 4.2), in the core's order. */
+    var subtitleNotes by mutableStateOf<List<SubtitleNote>>(emptyList())
+        private set
+
+    /** Under the subtitle list: the pending line, then the notes. */
+    val subtitlePanelNote: String? get() = subtitlePanelNote(subtitlesPending, subtitleNotes)
 
     var next: NextEpisode? by mutableStateOf(null)
         private set
@@ -255,6 +263,16 @@ class PlaybackController(
         trakt = s.trakt
         subtitlesPending = s.subtitlesPending
         snapshotSubs = s.subtitles
+        val added = newSubtitleNotes(subtitleNotes, s.subtitleNotes)
+        subtitleNotes = s.subtitleNotes
+        // A note while one of the core's tracks is on is about it (only the picked file is fetched).
+        if (pick?.external == true) added.lastOrNull()?.let { announce(subtitleNoteWords(it)) }
+        // A side-loaded file that left the list (the core could not read it) leaves this item too, quietly:
+        // the note above already said so. Not on a new source, whose files the load below takes.
+        if (s.url != null && s.url == loadedUrl) {
+            val gone = loadedSubs.filter { sub -> s.subtitles.none { it.url == sub.url } }
+            if (gone.isNotEmpty()) dropSubtitles(gone, words = null)
+        }
         when (s.phase) {
             PlaybackPhase.Ready -> {
                 val url = s.url
@@ -413,7 +431,7 @@ class PlaybackController(
         if (handlingFailure || playback == null || released) return
         // A subtitle file that did not load costs that track, never the video.
         failedSubtitle(error, loadedSubs)?.let {
-            dropSubtitle(it)
+            dropSubtitles(listOf(it), "Subtitles from ${it.source} did not load")
             return
         }
         val cause = error.cause as? HttpDataSource.InvalidResponseCodeException
@@ -428,18 +446,31 @@ class PlaybackController(
         playback.failOver(failure.message, playingAttempt, failure.kind.wire, failure.status)
     }
 
-    /** Sets the item again without [sub] at the same position, and says so for a few seconds. */
-    private fun dropSubtitle(sub: SubtitleTrack) {
-        CoreLog.w("a subtitle file from ${sub.source} did not load: dropped, the video goes on")
-        dead += sub.url
-        // The viewer's language stays wanted: another file in it can still be found.
-        pick = pick?.takeIf { it.url == sub.url }?.copy(url = null) ?: pick
+    /**
+     * Sets the item again without [subs] at the same position; if one of them was on, subtitles go off. Says
+     * [words] for a few seconds when given. The files are not side-loaded or offered again in this play.
+     */
+    private fun dropSubtitles(
+        subs: List<SubtitleTrack>,
+        words: String?,
+    ) {
+        CoreLog.w("${subs.size} subtitle file(s) could not be read: dropped, the video goes on")
+        val urls = subs.map { it.url }.toSet()
+        dead += urls
+        if (pick?.url in urls) {
+            pick = null
+            player.trackSelectionParameters =
+                player.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build()
+        }
         val url = loadedUrl ?: return
         val at = player.currentPosition.coerceAtLeast(0L)
-        loadedSubs = loadedSubs.filter { it.url != sub.url }
+        loadedSubs = loadedSubs.filter { it.url !in urls }
         player.setMediaItem(item(url, loadedSubs), at)
         player.prepare()
-        announce("Subtitles from ${sub.source} did not load")
+        words?.let(::announce)
     }
 
     private suspend fun tickLoop() {

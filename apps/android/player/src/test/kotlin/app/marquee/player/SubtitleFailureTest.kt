@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -69,10 +70,46 @@ class SubtitleFailureTest {
         }
     private val scope = CoroutineScope(SupervisorJob() + main)
 
-    private val snapshot =
-        """{"phase":"ready","url":"$video","key":"k1","attempt":1,"manifest":false,"subtitlesPending":false,""" +
-            """"trakt":"off","subtitles":[{"url":"$subtitle","lang":"tur","source":"SubSense","forced":false,""" +
-            """"hearingImpaired":false}]}"""
+    private val other = "http://127.0.0.1:7781/opensubtitles/tur.srt"
+
+    /** The core's playback snapshot with these subtitle files and notes. */
+    private fun snapshot(
+        subtitles: List<String> = listOf(subtitle),
+        notes: String = "[]",
+    ) = """{"phase":"ready","url":"$video","key":"k1","attempt":1,"manifest":false,"subtitlesPending":false,""" +
+        """"trakt":"off","subtitleNotes":$notes,"subtitles":[""" +
+        subtitles.joinToString(",") {
+            """{"url":"$it","lang":"tur","source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
+                """"forced":false,"hearingImpaired":false}"""
+        } + "]}"
+
+    private val snapshot = snapshot()
+
+    /** The core's view and a controller on a fake player, the stream loaded. */
+    private fun open(first: String = snapshot): Pair<FakePlayer, PlaybackController> {
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            sent += msg
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content ==
+                    "subscribe"
+                ) {
+                    """{"sub":7,"snapshot":$first}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val player = FakePlayer()
+        val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
+        controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
+        until("the stream loads") { player.items.size == 1 }
+        return player to controller
+    }
+
+    /** A later snapshot of the core's view. */
+    private fun push(next: String) = client.onMessage("""{"sub":7,"updates":[$next]}""")
 
     @After
     fun stop() {
@@ -163,6 +200,70 @@ class SubtitleFailureTest {
         controller.release()
     }
 
+    @Test
+    fun `a note while one of the core's tracks is on says so for a few seconds, and nothing else changes`() {
+        val (player, controller) = open()
+        controller.selectText("late:$subtitle")
+        until("the subtitle is side-loaded") { player.items.size == 2 }
+        push(snapshot(notes = """[{"source":"SubSense","problem":"unreachable"}]"""))
+        until(
+            "the note is said",
+        ) { controller.status == "SubSense did not answer. Try its subtitles again in a moment." }
+        assertEquals(2, player.items.size, "the item was set again")
+        assertEquals("SubSense did not answer. Try its subtitles again in a moment.", controller.subtitlePanelNote)
+        assertTrue(failOvers().isEmpty())
+        controller.release()
+    }
+
+    @Test
+    fun `a note while no core track is on is listed but not said`() {
+        val (_, controller) = open()
+        push(snapshot(notes = """[{"source":"SubSense","problem":"blocked"}]"""))
+        until("the note is listed") { controller.subtitlePanelNote != null }
+        assertEquals(null, controller.status)
+        controller.release()
+    }
+
+    @Test
+    fun `a track the core could not read leaves the list, subtitles go off, the same stream plays on`() {
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
+        controller.selectText("late:$subtitle")
+        until("the subtitle is side-loaded") { player.items.size == 2 }
+        // The core answered empty WebVTT and took the file out of the list, with a note.
+        push(snapshot(subtitles = listOf(other), notes = """[{"source":"SubSense","problem":"trackFailed"}]"""))
+        until("the item is set again without the file") { player.items.size == 3 }
+        assertEquals(video, player.items.last().uri)
+        assertEquals(emptyList(), player.items.last().subtitles)
+        assertTrue(
+            player.current.trackSelectionParameters.disabledTrackTypes
+                .contains(C.TRACK_TYPE_TEXT),
+            "subtitles stayed on",
+        )
+        // One message, the note's: no "did not load" on top.
+        assertEquals("A subtitle file from SubSense could not be read. Pick another one.", controller.status)
+        assertEquals(0, player.stops)
+        assertTrue(failOvers().isEmpty())
+        assertTrue(controller.text.none { it.id == "late:$subtitle" }, "the file is still offered")
+        controller.release()
+    }
+
+    @Test
+    fun `a new source sets its own item once, with no drop on top`() {
+        val (player, controller) = open()
+        controller.selectText("late:$subtitle")
+        until("the subtitle is side-loaded") { player.items.size == 2 }
+        // A failover: a new loopback URL, and the subtitle files under new addresses.
+        val failedOver =
+            snapshot(subtitles = listOf(other))
+                .replace(video, "http://127.0.0.1:7780/second.mp4")
+                .replace("\"attempt\":1", "\"attempt\":2")
+        push(failedOver)
+        until("the new source loads") { player.items.lastOrNull()?.uri == "http://127.0.0.1:7780/second.mp4" }
+        repeat(20) { until("the looper idles") { true } }
+        assertEquals(3, player.items.size, "the old item was set again before the new one")
+        controller.release()
+    }
+
     /** A player that records the items it is given and raises the errors a test hands it. */
     private class FakePlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         class Item(
@@ -173,7 +274,7 @@ class SubtitleFailureTest {
         val items = ArrayList<Item>()
         var stops = 0
 
-        private var state =
+        var current =
             State
                 .Builder()
                 .setAvailableCommands(
@@ -184,11 +285,11 @@ class SubtitleFailureTest {
                 ).setPlaybackState(Player.STATE_IDLE)
                 .build()
 
-        override fun getState(): State = state
+        override fun getState(): State = current
 
         fun fail(error: PlaybackException) {
-            state =
-                state
+            current =
+                current
                     .buildUpon()
                     .setPlaybackState(Player.STATE_IDLE)
                     .setPlayerError(error)
@@ -205,8 +306,8 @@ class SubtitleFailureTest {
                 val local = m.localConfiguration!!
                 items += Item(local.uri.toString(), local.subtitleConfigurations.map { it.uri.toString() })
             }
-            state =
-                state
+            current =
+                current
                     .buildUpon()
                     .setPlaylist(
                         mediaItems.mapIndexed {
@@ -224,19 +325,19 @@ class SubtitleFailureTest {
         }
 
         override fun handlePrepare(): ListenableFuture<*> {
-            state =
-                state
+            current =
+                current
                     .buildUpon()
                     .setPlayerError(null)
-                    .setPlaybackState(if (state.playlist.isEmpty()) Player.STATE_IDLE else Player.STATE_BUFFERING)
+                    .setPlaybackState(if (current.playlist.isEmpty()) Player.STATE_IDLE else Player.STATE_BUFFERING)
                     .build()
             return Futures.immediateVoidFuture()
         }
 
         override fun handleStop(): ListenableFuture<*> {
             stops++
-            state =
-                state
+            current =
+                current
                     .buildUpon()
                     .setPlaybackState(Player.STATE_IDLE)
                     .setPlayerError(null)
@@ -248,8 +349,8 @@ class SubtitleFailureTest {
             fromIndex: Int,
             toIndex: Int,
         ): ListenableFuture<*> {
-            state =
-                state
+            current =
+                current
                     .buildUpon()
                     .setPlaylist(emptyList())
                     .setPlaybackState(Player.STATE_IDLE)
@@ -258,8 +359,8 @@ class SubtitleFailureTest {
         }
 
         override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
-            state =
-                state
+            current =
+                current
                     .buildUpon()
                     .setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
                     .build()
@@ -269,7 +370,7 @@ class SubtitleFailureTest {
         override fun handleSetTrackSelectionParameters(
             trackSelectionParameters: TrackSelectionParameters,
         ): ListenableFuture<*> {
-            state = state.buildUpon().setTrackSelectionParameters(trackSelectionParameters).build()
+            current = current.buildUpon().setTrackSelectionParameters(trackSelectionParameters).build()
             return Futures.immediateVoidFuture()
         }
 

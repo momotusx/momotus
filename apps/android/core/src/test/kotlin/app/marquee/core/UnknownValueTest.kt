@@ -4,7 +4,9 @@ import app.marquee.core.client.CoreJson
 import app.marquee.core.model.FallbackEnumSerializer
 import app.marquee.core.model.Group
 import app.marquee.core.model.HideReason
+import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Reason
+import app.marquee.core.model.SubtitleProblem
 import app.marquee.core.model.VersionsSnapshot
 import kotlinx.serialization.encodeToString
 import kotlin.test.Test
@@ -59,6 +61,21 @@ class UnknownValueTest {
         assertEquals(Speed.Unknown, CoreJson.decodeFromString(Speed.Serializer, "\"warp\""))
         assertEquals(Speed.Fast, CoreJson.decodeFromString(Speed.Serializer, "\"fast\""))
         assertEquals("\"unknown\"", CoreJson.encodeToString(Speed.Serializer, Speed.Unknown))
+    }
+
+    @Test
+    fun `a playback snapshot decodes without subtitle notes and with a problem from a newer core`() {
+        val base =
+            """{"phase":"ready","url":"http://127.0.0.1:1/v.mp4","attempt":1,"manifest":false,""" +
+                """"subtitlesPending":false,"trakt":"off""""
+        assertEquals(emptyList(), CoreJson.decodeFromString(PlaybackSnapshot.serializer(), "$base}").subtitleNotes)
+        val notes =
+            CoreJson
+                .decodeFromString(
+                    PlaybackSnapshot.serializer(),
+                    """$base,"subtitleNotes":[{"source":"A","problem":"trackFailed"},{"source":"B","problem":"quota"}]}""",
+                ).subtitleNotes
+        assertEquals(listOf(SubtitleProblem.TrackFailed, SubtitleProblem.Unknown), notes.map { it.problem })
     }
 
     @Test
