@@ -123,6 +123,8 @@ struct Inner {
     debrid: Arc<crate::debrid::Accounts>,
     /// Skip segment lookups and their session cache.
     segments: crate::segments::Finder,
+    /// Tests: the free space read instead of the disk's.
+    free_bytes: std::sync::OnceLock<u64>,
     /// TurkceAltyazi.org, read on this device: its caches and its one
     /// request at a time.
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
@@ -242,6 +244,7 @@ impl Core {
                 engine: OnceCell::new(),
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
+                free_bytes: std::sync::OnceLock::new(),
                 turkcealtyazi: std::sync::OnceLock::new(),
             }),
             profile: profile.into(),
@@ -379,6 +382,9 @@ impl Core {
     /// Free space where the engine keeps torrents (the nearest folder that
     /// exists); `None` without the engine or where it cannot be read.
     pub fn free_bytes(&self) -> Option<u64> {
+        if let Some(&bytes) = self.inner.free_bytes.get() {
+            return Some(bytes);
+        }
         #[cfg(all(unix, feature = "torrent"))]
         {
             let mut dir = self.inner.torrent_dir.as_path();
@@ -395,6 +401,14 @@ impl Core {
     pub fn speed(&self, kind: crate::speed::Kind) -> mq_streams::Speed {
         let now = mq_library::hlc::now_ms();
         crate::speed::estimate(self.library(), self.network(), kind, now)
+    }
+
+    /// Tests: the ranking, Settings and the engine's cache read `bytes` as
+    /// the free space, so no test depends on the host's disk. Set it once,
+    /// before opening a view.
+    #[doc(hidden)]
+    pub fn set_free_bytes(&self, bytes: u64) {
+        let _ = self.inner.free_bytes.set(bytes);
     }
 
     /// This device's connection and disk, for Settings.

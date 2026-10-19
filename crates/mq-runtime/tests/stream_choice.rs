@@ -68,8 +68,13 @@ fn params(facts: TitleFacts) -> VersionsParams {
     }
 }
 
+/// Free space the cores here read: an engine build hides a swarm larger
+/// than the free space, and no test depends on the host's disk.
+const FREE: u64 = 1 << 40;
+
 fn core_with(server: &Server) -> Core {
     let core = Core::temporary("p").unwrap();
+    core.set_free_bytes(FREE);
     core.library()
         .set_addons("p", &[addon(server)], &core.hlc())
         .unwrap();
@@ -173,17 +178,14 @@ async fn done_waits_for_the_meta_the_app_did_not_send() {
 
 /// r4 N4: the cache check races `done`. TorBox says the less seeded
 /// torrent is cached; the view waits for the answer, so that row is the
-/// pick, ready on the service. Small files, so an engine build's free space
-/// check never hides the other.
+/// pick, ready on the service. The free space is the core's, so a full
+/// host disk never hides the other.
 #[tokio::test]
 async fn a_torrent_the_check_finds_cached_is_ready_before_done() {
-    let small = torrents()
-        .replace("2.0 GB", "200 MB")
-        .replace("1.5 GB", "150 MB");
     let cached =
         format!(r#"{{"success":true,"error":null,"detail":"ok","data":[{{"hash":"{HASH_B}"}}]}}"#);
     let server = Server::start(vec![
-        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &small),
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
         route("GET", "/meta/series/tt1.json", 200, &meta()),
         route("POST", "/v1/api/torrents/checkcached", 200, &cached)
             .delayed(Duration::from_millis(500)),
@@ -195,6 +197,7 @@ async fn a_torrent_the_check_finds_cached_is_ready_before_done() {
     let view = VersionsView::open(&core, params(TitleFacts::default()));
     until("done", || view.snapshot().done).await;
     let s = view.snapshot();
+    assert_eq!(s.conditions.free_bytes, Some(FREE), "the core's free space");
     let best = s
         .recommended
         .clone()
