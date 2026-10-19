@@ -154,6 +154,8 @@
 [data-form="phone"] .info .acts .btn { font-size: 12px; gap: 6px; }
 [data-form="phone"] .info .acts .btn svg { width: 20px; height: 20px; padding: 13px; }
 [data-form="phone"] .vline { padding-left: 2px; gap: 4px 12px; justify-content: center; }
+/* A reason that wraps reads as one block beside its dot. */
+[data-form="phone"] .vline.wrap > span { text-align: left; }
 [data-form="phone"] .facts { margin-top: 22px; max-width: none; text-align: left; }
 [data-form="phone"] .facts dt, [data-form="phone"] .facts dd { padding: 11px 14px; font-size: 13px; }
 [data-form="phone"] .title-skel { width: 100%; margin-top: 0; }
@@ -164,21 +166,25 @@
 [data-form="phone"] .tab { height: 36px; padding: 0 14px; font-size: 14px; }
 [data-form="phone"] .seasons.compact .tab { min-width: 36px; padding: 0 10px; }
 [data-form="phone"] .toc { margin: 0; padding: 6px 0 0; gap: 10px; }
-[data-form="phone"] .ep { flex-direction: column; gap: 6px; }
-[data-form="phone"] .ep-main { width: 100%; gap: 12px; padding: 10px; }
-[data-form="phone"] .ep-still { width: 128px; height: 72px; border-radius: 8px; }
+/* The two secondary actions are round icon buttons beside the card, not a
+ * line of words under every episode (as Netflix and Apple TV on phones). */
+[data-form="phone"] .ep { align-items: center; gap: 8px; }
+[data-form="phone"] .ep-main { gap: 12px; padding: 10px; }
+[data-form="phone"] .ep-still { width: 112px; height: 63px; border-radius: 8px; }
 [data-form="phone"] .ep-n { left: 6px; bottom: 5px; min-width: 22px; height: 22px; padding: 0 5px; font-size: 13px; border-radius: 6px; }
 [data-form="phone"] .ep-chip { top: 5px; right: 5px; height: 20px; padding: 0 6px; font-size: 11px; gap: 3px; }
 [data-form="phone"] .ep-chip svg { width: 11px; height: 11px; }
 [data-form="phone"] .ep-t { font-size: 15px; }
 [data-form="phone"] .ep-r { font-size: 12px; }
 [data-form="phone"] .ep-ov { font-size: 13px; }
-[data-form="phone"] .ep-acts { display: flex; flex-direction: row; justify-content: flex-start; margin-left: 4px; }
-[data-form="phone"] .ep-act { height: 32px; padding: 0 12px; font-size: 13px; }
-[data-form="phone"] .ep-act svg { width: 16px; height: 16px; }
+[data-form="phone"] .ep-acts { display: flex; gap: 8px; }
+[data-form="phone"] .ep-act { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 50%; }
+[data-form="phone"] .ep-act svg { width: 18px; height: 18px; }
 
-/* Long lists fade at the bottom so a cut card reads as "more below". */
+/* Long lists fade at the bottom so a cut card reads as "more below"; focus
+ * scrolls a card clear of the fade. */
 .toc { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 56px), transparent); }
+.toc [data-f] { scroll-margin-bottom: 72px; }
 [data-form="phone"] .toc { -webkit-mask-image: none; mask-image: none; }
 
 /* Trailer over the page: the frame, then its title and our own controls. */

@@ -416,7 +416,8 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
               <div class="ep-acts" data-fentry>
                 <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`}>
                   <Layers aria-hidden />
-                  Choose a version
+                  {/* A phone shows the icon in a circle; the word stays for screen readers. */}
+                  <span classList={{ sr: form() === "phone" }}>Choose a version</span>
                 </A>
                 <button
                   class="ep-act"
@@ -425,7 +426,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                   onClick={() => props.view.command({ type: "setWatched", videoId: e.videoId, value: !e.watched })}
                 >
                   <Check aria-hidden />
-                  {e.watched ? "Watched" : "Mark as watched"}
+                  <span classList={{ sr: form() === "phone" }}>{e.watched ? "Watched" : "Mark as watched"}</span>
                 </button>
               </div>
             </li>

@@ -1,16 +1,20 @@
 /* Profiles (plans/m11-profiles.md, P1 apps C to F). The picker centers on the
  * screen; tiles take the white focus edge and the card scale as tiles do. */
 
-.profiles { display: grid; place-items: center; min-height: 100vh; padding: 80px var(--safe-side, 80px); }
+/* Centered in the canvas, not the window: desktop scales a taller canvas. */
+.profiles { display: grid; place-items: center; min-height: 100%; padding: 80px var(--safe-side, 80px); }
 .picker { display: grid; justify-items: center; gap: 28px; text-align: center; }
 .picker h1 { font: var(--weight-display) var(--type-title1) / 1.05 var(--font-display); letter-spacing: var(--tracking-display); }
 .picker .lede { color: var(--muted); font: 400 var(--type-body) / 1.4 var(--font-text); max-width: 900px; }
 .pgrid { display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; max-width: 1400px; margin: 24px 0 12px; }
 .ptile { display: grid; justify-items: center; gap: 16px; width: 200px; padding: 16px 0; border-radius: var(--radius-l); color: var(--text); transform-origin: center top; }
 .ptile .avatar { transition: box-shadow var(--motion-focus) var(--ease, ease), transform var(--motion-focus) var(--ease, ease); }
-.ptile:focus-visible .avatar, [data-form="tv"] .ptile:focus .avatar { box-shadow: 0 0 0 4px var(--text), 0 12px 40px rgba(0, 0, 0, 0.45); transform: scale(var(--focus-scale-card)); }
+/* One focus mark, on the picture, as on poster tiles: the ring, its halo and the lift. */
+.ptile:focus-visible, [data-form="tv"] .ptile:focus { outline: none; box-shadow: none; }
+.ptile:focus-visible .avatar, [data-form="tv"] .ptile:focus .avatar { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+  box-shadow: var(--focus-shadow), inset 0 0 0 1px rgba(255, 255, 255, .5); transform: scale(var(--focus-scale-card)); }
 .ptile:focus-visible .pname, [data-form="tv"] .ptile:focus .pname { color: var(--accent); }
-@media (hover: hover) { [data-form="desktop"] .ptile:hover .avatar { box-shadow: 0 0 0 4px var(--text); } }
+@media (hover: hover) { [data-form="desktop"] .ptile:hover .avatar { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .55); transform: translateY(-6px); } }
 .pname { display: inline-flex; align-items: center; gap: 10px; font: 700 var(--type-headline) / 1.2 var(--font-text); color: var(--muted); }
 .plock { width: 22px; height: 22px; color: var(--dim); }
 .ptile small { font: 500 var(--type-callout) var(--font-text); color: var(--dim); }
