@@ -181,3 +181,12 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
         #expect(p.streams.sizeLimitBytes == nil && p.streams.minSeeders == 20)
     }
 }
+
+@Test func aRowReadsItsLineToAScreenReader() throws {
+    let base = #"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1, "status": {"kind": "torrent", "seeds": 7}, "via": "Torrentio", "releaseName": "A.mp4", "languages": [], "reasons": [], "group": "best", "failoverCount": 0"#
+    let row = try JSONDecoder().decode(VersionRow.self, from: Data((base + #", "line": {"kind": "few", "seeders": 7}}"#).utf8))
+    #expect(StreamChoice.spoken(row) == "720p, May start slowly, 7 seeders, via Torrentio")
+    // An older core's row says its status.
+    let old = try JSONDecoder().decode(VersionRow.self, from: Data((base + "}").utf8))
+    #expect(StreamChoice.spoken(old) == "720p, Torrent, 7 seeds, via Torrentio")
+}

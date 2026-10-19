@@ -389,6 +389,13 @@ enum StreamChoice {
         return "other"
     }
 
+    /// A row for a screen reader: "1080p, May start slowly, 7 seeders, via Torrentio".
+    static func spoken(_ row: VersionRow) -> String {
+        let line = row.line.flatMap { lineWords($0) }
+        let state = line.map { [$0.text, $0.details].filter { !$0.isEmpty }.joined(separator: ", ") } ?? VersionWords.status(row.status)
+        return "\(row.quality), \(state), via \(row.via)"
+    }
+
     /// The HDR formats the core ranks for: none on a screen without HDR;
     /// Dolby Vision only where the player offers it.
     static func hdrNames(eligible: Bool, hdr10: Bool, hlg: Bool, dolbyVision: Bool) -> [String] {

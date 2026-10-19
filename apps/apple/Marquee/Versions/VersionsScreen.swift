@@ -8,6 +8,11 @@ struct VersionsScreen: View {
     let core: CoreClient
     @State private var playing: PlayRoute?
     @State private var addSource = false
+    @State private var addAccount = false
+    /// Blocked (3.11): "Show them" lists the versions as they would rank once fixed.
+    @State private var showBlocked = false
+    /// The learning note was undone here: it goes at once.
+    @State private var undone = false
     @Environment(\.metrics) private var metrics
     @State private var expanded: Set<String> = []
     /// TV: the page enters on the pick's Play.
@@ -43,6 +48,7 @@ struct VersionsScreen: View {
             PlayerScreen(route: route, versions: model, core: core)
         }
         .navigationDestination(isPresented: $addSource) { AddonsPage(core: core, sourcesOnly: true) }
+        .navigationDestination(isPresented: $addAccount) { DebridScreen(core: core) }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -95,7 +101,7 @@ struct VersionsScreen: View {
             DotLine(text: progress.text, tone: progress.tone)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.text)
-            Label(DeviceCaps.line, glyph: "monitor-check")
+            Label(snapshot?.conditions.map { StreamChoice.conditionsHeader(device: StreamChoice.device, $0) } ?? DeviceCaps.line, glyph: "monitor-check")
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
                 .padding(.top, 4)
@@ -105,6 +111,32 @@ struct VersionsScreen: View {
     @ViewBuilder private var pick: some View {
         if let best = snapshot?.recommended {
             PickCard(row: best, play: { playing = model.play(best.key) }, focus: $pickFocused)
+        } else if let blocked = snapshot?.blocked, let words = StreamChoice.blockedWords(blocked) {
+            // Every addon answered and the hidden rows say why: the way on, as one action.
+            VStack(alignment: .leading, spacing: 10) {
+                Text("No playable version found")
+                    .display(Theme.type.title2)
+                    .foregroundStyle(Theme.Palette.text)
+                    .accessibilityAddTraits(.isHeader)
+                Text(words.text)
+                    .font(.text(Theme.type.body))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if blocked.reason == "needsAccount" {
+                    Button { addAccount = true } label: { Label(words.action, glyph: "plus") }
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                        .focused($pickFocused)
+                        .padding(.top, 6)
+                } else if !showBlocked {
+                    Button { showBlocked = true } label: { Label(words.action, glyph: "eye") }
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                        .focused($pickFocused)
+                        .padding(.top, 6)
+                }
+            }
+            .padding(Theme.Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 if let snapshot, snapshot.done {
@@ -141,6 +173,9 @@ struct VersionsScreen: View {
 
     private var table: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if let note = snapshot?.note, !undone, let text = StreamChoice.learnedNote(note, device: StreamChoice.device) {
+                LearnedNoteBar(text: text) { undo(note) }
+            }
             if columns, !groups.isEmpty {
                 ColumnHeadings()
             }
@@ -201,9 +236,22 @@ struct VersionsScreen: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Rows by intent group, in the design's order, empty groups left out.
+    /// The note's Undo: that choice goes back to zero on that screen class and stops learning there.
+    private func undo(_ note: LearnedNote) {
+        undone = true
+        Task {
+            do {
+                try await core.perform("undoLearned", ["screenClass": note.screenClass, "choice": note.choice])
+            } catch {
+                undone = false
+            }
+        }
+    }
+
+    /// Rows by intent group, in the design's order, empty groups left out;
+    /// blocked versions once the user asked to see them.
     private var groups: [(String, [VersionRow])] {
-        let rows = snapshot?.rows ?? []
+        let rows = showBlocked ? snapshot?.blocked?.rows ?? [] : snapshot?.rows ?? []
         let known = VersionWords.groupOrder
         let others = Set(rows.map(\.group)).subtracting(known).sorted()
         return (known + others).compactMap { group in
@@ -321,6 +369,8 @@ private struct VersionRowView: View {
     let play: () -> Void
     @State private var hovered = false
     @FocusState private var focused: Bool
+    /// Phone: the first tap opens the row (its details and Play), as on the web.
+    @State private var tapped = false
 
     #if os(tvOS)
     static let qualityWidth: CGFloat = 120, sizeWidth: CGFloat = 150, statusWidth: CGFloat = 330, viaWidth: CGFloat = 220
@@ -331,7 +381,7 @@ private struct VersionRowView: View {
     private var open: Bool { hovered || focused }
 
     var body: some View {
-        Button(action: play) {
+        Button(action: { if wide || tapped { play() } else { tapped = true } }) {
             VStack(alignment: .leading, spacing: 6) {
                 if wide {
                     HStack(spacing: 16) {
@@ -352,9 +402,14 @@ private struct VersionRowView: View {
                         .joined(separator: " \u{B7} "))
                         .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                     HStack(spacing: 6) {
-                        Circle().fill(VersionWords.tone(row.status).color).frame(width: 8, height: 8)
-                        Text("\(VersionWords.status(row.status)) \u{B7} \(row.via)")
+                        status
+                        Text("\u{B7} \(row.via)").foregroundStyle(Theme.Palette.muted)
                     }
+                }
+                // The line's numbers: "7 seeders", "Ready on TorBox, 2.1 GB".
+                if open || (!wide && tapped), let details = words?.details, !details.isEmpty {
+                    Text(details)
+                        .foregroundStyle(Theme.Palette.muted)
                 }
                 if !wide || open {
                     // One line on a phone, cut in the middle so the name never splits inside a token;
@@ -369,6 +424,11 @@ private struct VersionRowView: View {
                     Text(VersionWords.detail(row))
                         .foregroundStyle(Theme.Palette.muted)
                 }
+                if !wide && tapped {
+                    Label("Play this version", glyph: "play-fill")
+                        .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                        .padding(.top, 2)
+                }
             }
             .font(.text(Theme.type.callout, relativeTo: .callout))
             .foregroundStyle(Theme.Palette.text)
@@ -382,14 +442,50 @@ private struct VersionRowView: View {
         #if !os(tvOS)
         .onHover { hovered = $0 }
         #endif
-        .accessibilityLabel("\(row.quality), \(VersionWords.status(row.status)), via \(row.via)")
+        .accessibilityLabel(StreamChoice.spoken(row))
     }
 
-    private var status: some View {
-        HStack(spacing: 6) {
-            Circle().fill(VersionWords.tone(row.status).color).frame(width: 8, height: 8)
-            Text(VersionWords.status(row.status))
+    /// The core's line in words, else (an older core) the status.
+    private var words: LineWords? { row.line.flatMap { StreamChoice.lineWords($0) } }
+
+    /// How it will start, with its tone as an icon and a word (stream choice 3.7).
+    @ViewBuilder private var status: some View {
+        if let words {
+            Label {
+                Text(words.text)
+            } icon: {
+                Glyph(words.tone.glyph).foregroundStyle(words.tone.color)
+            }
+            .labelStyle(.titleAndIcon)
+        } else {
+            HStack(spacing: 6) {
+                Circle().fill(VersionWords.tone(row.status).color).frame(width: 8, height: 8)
+                Text(VersionWords.status(row.status))
+            }
         }
+    }
+}
+
+/// The one-time learning note over the table, with Undo (stream choice 3.9).
+private struct LearnedNoteBar: View {
+    let text: String
+    let undo: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Glyph("sparkle").foregroundStyle(Theme.Palette.text).accessibilityHidden(true)
+            Text(text)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button(action: undo) { Label(StreamChoice.words.learned.undo, glyph: "undo-2") }
+                .buttonStyle(PillButtonStyle())
+                .accessibilityLabel("\(StreamChoice.words.learned.undo): \(text)")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 }
 
@@ -407,6 +503,16 @@ private struct DotLine: View {
 }
 
 extension VersionWords.Tone {
+    /// The tone as an icon beside its word, never color alone.
+    var glyph: String {
+        switch self {
+        case .ok: "circle-check"
+        case .warn: "triangle-alert"
+        case .bad: "circle-x"
+        case .idle: "circle-dashed"
+        }
+    }
+
     var color: Color {
         switch self {
         case .idle: Theme.Palette.dim
