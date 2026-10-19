@@ -13,7 +13,8 @@ internal object VersionsFixtures {
     /** The same fields as JSON, for hand-written rows and snapshots. */
     const val ROW_JSON =
         """"line":{"kind":"quick","seeders":null,"sizeBytes":null},"sourceClass":"ready","bitrateMbps":null,""" +
-            """"score":{"language":true,"legit":true,"viable":true,"yearOk":true,"sustains":true,"playability":"native",""" +
+            """"score":{"language":true,"legit":true,"viable":true,"yearOk":true,"sustains":true,""" +
+            """"playability":"native",""" +
             """"sizeOk":true,"start":3,"binge":false,"effectiveHeight":1080,"within":0}"""
 
     const val SNAPSHOT_JSON =
