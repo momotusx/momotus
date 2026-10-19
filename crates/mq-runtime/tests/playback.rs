@@ -172,6 +172,24 @@ fn target() -> PlayTarget {
     }
 }
 
+/// The first snapshot that `holds`: waits on the state a test asserts,
+/// for as long as a loaded machine needs, and names it if it never comes.
+async fn until(
+    view: &PlaybackView,
+    what: &str,
+    holds: impl Fn(&PlaybackSnapshot) -> bool,
+) -> PlaybackSnapshot {
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    loop {
+        let s = view.snapshot();
+        if holds(&s) {
+            return s;
+        }
+        assert!(std::time::Instant::now() < deadline, "{what}: {s:?}");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
 async fn settled(view: &PlaybackView) -> PlaybackSnapshot {
     for _ in 0..200 {
         let s = view.snapshot();
@@ -317,7 +335,7 @@ async fn a_failing_subtitle_leaves_a_note() {
     );
     let streams = format!(r#"{{"streams":[{stream},{stream}]}}"#);
     let view = PlaybackView::open(&core, setup(&core, &streams), target());
-    let s = settled(&view).await;
+    let s = until(&view, "a source", |s| s.phase != PlaybackPhase::Resolving).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
     assert_eq!(s.subtitles.len(), 3, "{s:?}");
     assert!(s.subtitle_notes.is_empty());
@@ -330,7 +348,7 @@ async fn a_failing_subtitle_leaves_a_note() {
         let served = http.get(&track.url, &local).await.unwrap();
         assert_eq!(&served.body[..], b"WEBVTT\n\n", "{}", track.lang);
     }
-    let after = view.snapshot();
+    let after = until(&view, "both notes", |s| s.subtitle_notes.len() == 2).await;
     let langs: Vec<_> = after.subtitles.iter().map(|t| t.lang.as_str()).collect();
     assert_eq!(langs, ["eng", "fre"], "the unreadable file left");
     let notes: Vec<_> = after
@@ -347,15 +365,10 @@ async fn a_failing_subtitle_leaves_a_note() {
     );
 
     view.fail_over(None, None, None, "decoder error");
-    let mut next = view.snapshot();
-    for _ in 0..200 {
-        if next.phase == PlaybackPhase::Ready && next.attempt == s.attempt + 1 {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-        next = view.snapshot();
-    }
-    assert_eq!(next.attempt, s.attempt + 1, "{next:?}");
+    let next = until(&view, "the next source", |n| {
+        n.phase == PlaybackPhase::Ready && n.attempt == s.attempt + 1
+    })
+    .await;
     assert!(next.subtitle_notes.is_empty(), "{next:?}");
     assert_eq!(next.subtitles.len(), 3);
 }
@@ -424,22 +437,12 @@ async fn a_public_subtitles_answer_gets_no_reach() {
         listed(&stream_addon, "own", "Own", &streams),
         target(),
     );
-    let mut done = None;
-    for _ in 0..1500 {
-        let s = view.snapshot();
-        if s.phase != PlaybackPhase::Resolving && !s.subtitles_pending {
-            done = Some(s);
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    let s = done.expect("subtitles settled");
+    let s = until(&view, "the public install's track", |s| {
+        s.subtitles.iter().any(|t| t.source == "pubsubs")
+    })
+    .await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
-    let track = s
-        .subtitles
-        .iter()
-        .find(|t| t.source == "pubsubs")
-        .unwrap_or_else(|| panic!("the public install answered: {s:?}"));
+    let track = s.subtitles.iter().find(|t| t.source == "pubsubs").unwrap();
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let local = RequestOptions {
         allow_private: true,
@@ -448,7 +451,12 @@ async fn a_public_subtitles_answer_gets_no_reach() {
     // Refused: an empty track, and a note that the file could not be read.
     let served = http.get(&track.url, &local).await.unwrap();
     assert_eq!(&served.body[..], b"WEBVTT\n\n");
-    let notes = view.snapshot().subtitle_notes;
+    let after = until(&view, "the note", |s| !s.subtitle_notes.is_empty()).await;
+    assert!(
+        after.subtitles.iter().all(|t| t.url != track.url),
+        "{after:?}"
+    );
+    let notes = after.subtitle_notes;
     assert_eq!(notes.len(), 1, "{notes:?}");
     assert_eq!(
         (notes[0].source.as_str(), notes[0].problem),
