@@ -125,6 +125,8 @@ struct Inner {
     segments: crate::segments::Finder,
     /// Tests: the free space read instead of the disk's.
     free_bytes: std::sync::OnceLock<u64>,
+    /// Tests: live seeders answered instead of the trackers'.
+    live_seeders: std::sync::Mutex<Option<HashMap<String, u32>>>,
     /// TurkceAltyazi.org, read on this device: its caches and its one
     /// request at a time.
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
@@ -216,6 +218,9 @@ impl Core {
         let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
         let device = Device::new(Library::temporary()?, 1)?;
         let core = Self::with_device(device, profile, torrents)?;
+        // A throwaway core never asks real trackers: no swarm has a live
+        // count unless a test gives one.
+        core.set_live_seeders(HashMap::new());
         core.library()
             .ensure_profile(profile, profile, &core.zero_hlc())?;
         core.library().set_active_profile(profile)?;
@@ -245,6 +250,7 @@ impl Core {
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
                 free_bytes: std::sync::OnceLock::new(),
+                live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
             }),
             profile: profile.into(),
@@ -409,6 +415,45 @@ impl Core {
     #[doc(hidden)]
     pub fn set_free_bytes(&self, bytes: u64) {
         let _ = self.inner.free_bytes.set(bytes);
+    }
+
+    /// Tests: `live_seeders` answers from `counts` (lowercase info hash to
+    /// seeders; a hash left out has no answer), in any build. Set it before
+    /// opening a view.
+    #[doc(hidden)]
+    pub fn set_live_seeders(&self, counts: HashMap<String, u32>) {
+        *self.fake_seeders() = Some(counts);
+    }
+
+    fn fake_seeders(&self) -> std::sync::MutexGuard<'_, Option<HashMap<String, u32>>> {
+        self.inner
+            .live_seeders
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Live seeders can be asked here: the engine counts swarms.
+    pub fn counts_swarms(&self) -> bool {
+        self.fake_seeders().is_some() || self.has_engine()
+    }
+
+    /// The seeders of `torrents` (lowercase info hash, the stream's
+    /// trackers) as their trackers count them now, within about a second;
+    /// `None` where none answered, and for every one without the engine.
+    pub async fn live_seeders(&self, torrents: &[(String, Vec<String>)]) -> Vec<Option<u32>> {
+        if let Some(fake) = self.fake_seeders().as_ref() {
+            return torrents.iter().map(|(h, _)| fake.get(h).copied()).collect();
+        }
+        #[cfg(feature = "torrent")]
+        if let Ok(engine) = self.torrent_engine().await {
+            let asked: Vec<(&str, &[String])> = torrents
+                .iter()
+                .map(|(h, t)| (h.as_str(), t.as_slice()))
+                .collect();
+            let counts = engine.scrape(&asked).await;
+            return counts.into_iter().map(|c| c.map(|c| c.seeders)).collect();
+        }
+        vec![None; torrents.len()]
     }
 
     /// This device's connection and disk, for Settings.

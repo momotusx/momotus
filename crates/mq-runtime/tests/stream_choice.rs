@@ -217,6 +217,75 @@ async fn a_torrent_the_check_finds_cached_is_ready_before_done() {
     assert!(server.count("POST", "/v1/api/torrents/checkcached") >= 1);
 }
 
+/// Live seeders (C21 scrape): a swarm's count from its trackers stands
+/// over the addon's number. A listed 900 its own trackers count at 0 may
+/// not start; a zero from the default trackers alone (the stream named
+/// none) and a swarm no tracker answered for keep the addon's number.
+#[tokio::test]
+async fn live_seeders_stand_over_the_addons_number() {
+    const HASH_C: &str = "cccccccccccccccccccccccccccccccccccccccc";
+    let own = ["tracker:udp://tracker.example:1337/announce"];
+    let streams = serde_json::json!({ "streams": [
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-AAA\n👤 900 💾 2.0 GB",
+          "infoHash": HASH_A, "fileIdx": 0, "sources": own },
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-BBB\n👤 100 💾 1.5 GB",
+          "infoHash": HASH_B, "fileIdx": 1 },
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-CCC\n👤 60 💾 1.4 GB",
+          "infoHash": HASH_C, "fileIdx": 2, "sources": own },
+    ]});
+    let server = Server::start(vec![
+        route(
+            "GET",
+            "/stream/series/tt1%3A1%3A1.json",
+            200,
+            &streams.to_string(),
+        ),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    let live = [(HASH_A.to_owned(), 0), (HASH_B.to_owned(), 0)];
+    core.set_live_seeders(std::collections::HashMap::from(live));
+    let view = VersionsView::open(&core, params(TitleFacts::default()));
+    // `done` does not wait for the counts; they rank the rows when they come.
+    let counted = || {
+        let s = view.snapshot();
+        s.done
+            && s.rows.iter().chain(&s.recommended).any(|r| {
+                r.release_name.ends_with("AAA")
+                    && matches!(
+                        r.status,
+                        mq_runtime::VersionStatus::Torrent { seeds: Some(0) }
+                    )
+            })
+    };
+    until("the live counts", counted).await;
+    let s = view.snapshot();
+    let best = s
+        .recommended
+        .clone()
+        .unwrap_or_else(|| panic!("no pick: {s:?}"));
+    assert_eq!(best.release_name, "Show.S01E01.1080p.WEB-DL.x264-BBB");
+    let seeds = |r: &mq_runtime::VersionRow| match r.status {
+        mq_runtime::VersionStatus::Torrent { seeds } => seeds,
+        _ => panic!("a torrent row: {r:?}"),
+    };
+    assert_eq!(seeds(&best), Some(100), "a zero from the defaults alone");
+    let row = |name: &str| {
+        s.rows
+            .iter()
+            .find(|r| r.release_name == format!("Show.S01E01.1080p.WEB-DL.x264-{name}"))
+            .unwrap_or_else(|| panic!("row {name}: {s:?}"))
+    };
+    assert_eq!(seeds(row("CCC")), Some(60), "no answer: the addon's number");
+    assert_eq!(seeds(row("AAA")), Some(0));
+    assert_eq!(
+        row("AAA").line,
+        mq_streams::ReasonLine::VeryFew { seeders: 0 }
+    );
+}
+
 /// Learning (3.9): two 1080p torrents, R small and well seeded (the
 /// recommendation), C three times its size.
 fn sizes() -> String {
@@ -754,4 +823,134 @@ async fn a_restart_keeps_the_last_network() {
     assert_eq!(core.stream_conditions().network, Network::Wifi);
     drop(core);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Live: how long the first scrape takes when it also starts the engine,
+/// against a second one on a running engine (legally free Blender films;
+/// a scrape only, nothing is downloaded). Prints one JSON line for
+/// bench/m13/live-seeders.jsonl.
+#[cfg(feature = "torrent")]
+#[tokio::test]
+#[ignore = "live trackers"]
+async fn live_the_first_scrape_starts_the_engine() {
+    // An opened core asks the real trackers; a temporary one never does.
+    let dir = std::env::temp_dir().join(format!("mq-live-{}", std::process::id()));
+    let core = Core::open(mq_runtime::CoreConfig {
+        data_dir: dir.clone(),
+        profile_id: "p".into(),
+        device_id: 0,
+    })
+    .unwrap();
+    let swarm = |hash: &str| vec![(hash.to_owned(), Vec::new())];
+    let at = Instant::now();
+    let sintel = core
+        .live_seeders(&swarm("08ada5a7a6183aae1e09d831df6748d566095a10"))
+        .await;
+    let first_ms = at.elapsed().as_millis();
+    let at = Instant::now();
+    let tears = core
+        .live_seeders(&swarm("209c8226b299b308beaf2b9cd3fb49212dbd13ec"))
+        .await;
+    let second_ms = at.elapsed().as_millis();
+    println!(
+        "{}",
+        serde_json::json!({
+            "first_scrape_ms": first_ms, "second_scrape_ms": second_ms,
+            "sintel_seeders": sintel[0], "tears_of_steel_seeders": tears[0],
+        })
+    );
+    drop(core);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Live: what live seeders cost the Versions view on a real answer. Sintel
+/// (a legally free film) from the shipped Torrentio link, two rounds, each
+/// a fresh core with the trackers' counts and one without: the time to
+/// `done`, the pick, and the rows whose count changed. Prints JSON lines
+/// for bench/m13/live-seeders.jsonl; nothing is downloaded.
+#[cfg(feature = "torrent")]
+#[tokio::test]
+#[ignore = "live addon and trackers"]
+async fn live_versions_done_with_live_seeders() {
+    let link = "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/manifest.json";
+    for round in 0..2 {
+        let mut seeds = Vec::new();
+        for live in [false, true] {
+            let dir =
+                std::env::temp_dir().join(format!("mq-done-{}-{round}-{live}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let core = Core::open(mq_runtime::CoreConfig {
+                data_dir: dir.clone(),
+                profile_id: "p".into(),
+                device_id: 0,
+            })
+            .unwrap();
+            core.set_free_bytes(FREE);
+            if !live {
+                core.set_live_seeders(std::collections::HashMap::new());
+            }
+            core.install_addon(link).await.unwrap();
+            let params = VersionsParams {
+                kind: "movie".into(),
+                video_id: "tt1727587".into(),
+                target: Target {
+                    title: "Sintel".into(),
+                    year: Some(2010),
+                    season: None,
+                    episode: None,
+                },
+                caps: DeviceCaps::basic_1080p(),
+                prefs: StreamPrefs::default(),
+                last_binge_group: None,
+                facts: TitleFacts::read(Some("15 min"), Some("2010"), None, None),
+            };
+            let at = Instant::now();
+            let view = VersionsView::open(&core, params);
+            until("done", || view.snapshot().done).await;
+            let done_ms = at.elapsed().as_millis();
+            let rows_of = |s: &mq_runtime::VersionsSnapshot| -> Vec<(String, Option<u32>)> {
+                s.rows
+                    .iter()
+                    .map(|r| match r.status {
+                        mq_runtime::VersionStatus::Torrent { seeds } => (r.key.clone(), seeds),
+                        _ => (r.key.clone(), None),
+                    })
+                    .collect()
+            };
+            // The counts come after `done`: the last change in the rows.
+            let mut rows = rows_of(&view.snapshot());
+            let mut counted_ms = done_ms;
+            while at.elapsed() < Duration::from_millis(2500) {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                let now = rows_of(&view.snapshot());
+                if now != rows {
+                    rows = now;
+                    counted_ms = at.elapsed().as_millis();
+                }
+            }
+            let s = view.snapshot();
+            println!(
+                "{}",
+                serde_json::json!({
+                    "round": round, "live": live, "done_ms": done_ms, "counted_ms": counted_ms,
+                    "rows": rows.len(), "pick": s.recommended.map(|r| r.release_name),
+                })
+            );
+            seeds.push(rows);
+            drop(view);
+            drop(core);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+        let changed: Vec<_> = seeds[0]
+            .iter()
+            .filter_map(|(key, listed)| {
+                let live = seeds[1].iter().find(|(k, _)| k == key)?.1;
+                (live != *listed).then(|| serde_json::json!({ "listed": listed, "live": live }))
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({ "round": round, "changed": changed })
+        );
+    }
 }

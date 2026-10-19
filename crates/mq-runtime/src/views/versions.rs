@@ -196,6 +196,10 @@ struct State {
     /// rows (code review r1 P3).
     cache: HashMap<CacheKey, bool>,
     asked: HashSet<CacheKey>,
+    /// Live seeders by lowercase info hash, and the hashes asked: a swarm's
+    /// count from its trackers stands over the addon's number.
+    live: HashMap<String, u32>,
+    scraped: HashSet<String>,
     blocked: Option<BlockedVersions>,
     streams: Vec<ParsedStream>,
     ranked: Ranked,
@@ -568,6 +572,8 @@ impl VersionsView {
             rank: conditions,
             cache: HashMap::new(),
             asked: HashSet::new(),
+            live: HashMap::new(),
+            scraped: HashSet::new(),
             blocked: None,
             streams: Vec::new(),
             ranked: Ranked::default(),
@@ -621,6 +627,8 @@ impl VersionsView {
             rank: Conditions::default(),
             cache: HashMap::new(),
             asked: HashSet::new(),
+            live: HashMap::new(),
+            scraped: HashSet::new(),
             blocked: None,
             streams: Vec::new(),
             ranked: Ranked::default(),
@@ -906,6 +914,10 @@ async fn collect(
     let mut next_index = 0u32;
     // The meta and the cache checks: `done` waits for them (or 3 s each).
     let mut side: JoinSet<Side> = JoinSet::new();
+    // Live seeders: `done` never waits for them (a scrape takes its whole
+    // second); they rank the rows again when they come, until the view is
+    // frozen.
+    let mut live: JoinSet<Side> = JoinSet::new();
     if needs_meta(params, &lock(&state).rank) {
         side.spawn(meta_facts(
             core.clone(),
@@ -926,6 +938,15 @@ async fn collect(
                 }
             },
             Some(joined) = side.join_next() => {
+                let mut s = lock(&state);
+                if let Ok(found) = joined {
+                    found.apply(&mut s);
+                }
+                settle(&core, &mut s, &ranking, answered && side.is_empty());
+                snapshot.set(render(&s));
+                continue;
+            }
+            Some(joined) = live.join_next() => {
                 let mut s = lock(&state);
                 if let Ok(found) = joined {
                     found.apply(&mut s);
@@ -984,6 +1005,12 @@ async fn collect(
                 for (store, hashes) in cache_asks(&core, &parsed, &mut s.asked) {
                     side.spawn(cache_check(core.clone(), store, hashes));
                 }
+                // Asked as each addon answers, alongside the others still
+                // on the way.
+                let swarms = live_asks(&core, &parsed, &mut s.scraped);
+                if !swarms.is_empty() {
+                    live.spawn(live_check(core.clone(), swarms));
+                }
                 s.streams.extend(parsed);
                 s.pending.retain(|(url, _)| *url != transport_url);
                 s.slow.retain(|(url, _)| *url != transport_url);
@@ -1020,6 +1047,7 @@ fn settle(core: &Core, s: &mut State, ranking: &Ranking, done: bool) {
     s.done = done;
     let stores = core.debrid().map(|r| r.stores()).unwrap_or_default();
     apply_cache(&mut s.streams, &s.cache, &stores);
+    apply_live(&mut s.streams, &s.live);
     rerank(s, ranking);
     let target = &ranking.params.target;
     if s.done {
@@ -1035,6 +1063,7 @@ type CacheKey = (Option<mq_debrid::StoreId>, String);
 enum Side {
     Meta(TitleFacts),
     Cache(Vec<(CacheKey, bool)>),
+    Live(Vec<(String, u32)>),
 }
 
 impl Side {
@@ -1049,6 +1078,7 @@ impl Side {
                 s.conditions.runtime_min = c.runtime_s.map(|r| r / 60);
             }
             Side::Cache(found) => s.cache.extend(found),
+            Side::Live(found) => s.live.extend(found),
         }
     }
 }
@@ -1136,6 +1166,72 @@ fn cache_asks(
         }
     }
     asks
+}
+
+/// Swarms asked at most per answer: one UDP scrape packet.
+// ponytail: an addon's first 70 swarms, in its order; rank first and ask
+// the top ones if an addon lists more and the live ones sit past 70.
+const LIVE_MAX: usize = 70;
+
+/// The swarms of `streams` the engine would fetch (no service has them
+/// ready) and no one asked about yet, with their trackers.
+fn live_asks(
+    core: &Core,
+    streams: &[ParsedStream],
+    scraped: &mut HashSet<String>,
+) -> Vec<(String, Vec<String>)> {
+    if !core.counts_swarms() {
+        return Vec::new();
+    }
+    let mut asks = Vec::new();
+    for s in streams.iter().filter(|s| s.cached != Some(true)) {
+        let Some(hash) = info_hash(s) else {
+            continue;
+        };
+        if asks.len() == LIVE_MAX || !scraped.insert(hash.clone()) {
+            continue;
+        }
+        let trackers = match &s.source {
+            mq_protocol::Source::Torrent { trackers, .. } => trackers.clone(),
+            _ => Vec::new(),
+        };
+        asks.push((hash, trackers));
+    }
+    asks
+}
+
+/// One scrape of the trackers, within 3 s. A swarm no tracker answered
+/// for keeps the addon's number, and so does a zero when the stream named
+/// no trackers of its own: the default ones answer zero for a swarm they
+/// do not track, which says nothing about one that lives on the DHT.
+async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
+    let counts = tokio::time::timeout(SIDE_WAIT, core.live_seeders(&swarms)).await;
+    let Ok(counts) = counts else {
+        return Side::Live(Vec::new());
+    };
+    Side::Live(
+        swarms
+            .into_iter()
+            .zip(counts)
+            .filter_map(|((hash, trackers), n)| {
+                let own = trackers.iter().any(|t| t.contains("://"));
+                let n = n?;
+                (n > 0 || own).then_some((hash, n))
+            })
+            .collect(),
+    )
+}
+
+/// Live seeders over the addons' numbers, on every row of the swarm.
+fn apply_live(streams: &mut [ParsedStream], live: &HashMap<String, u32>) {
+    if live.is_empty() {
+        return;
+    }
+    for stream in streams.iter_mut() {
+        if let Some(n) = info_hash(stream).and_then(|h| live.get(&h)) {
+            stream.seeders = Some(*n);
+        }
+    }
 }
 
 /// One cache check, within 3 s; a store without a reliable check, an error
