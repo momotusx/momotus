@@ -15,6 +15,7 @@ import RotateCw from "lucide-solid/icons/rotate-cw";
 import SkipForward from "lucide-solid/icons/skip-forward";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
+import { TraktMark } from "../components/trakt-mark";
 import { liveView, prefsView } from "../core/client";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 import type { Segment } from "../core/generated/Segment";
@@ -129,7 +130,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const report = () => {
     const p = playback();
     if (!p || duration() <= 0) return;
-    void p.command({ type: "progress", positionMs: Math.round(engine.position() * 1000), durationMs: Math.round(duration() * 1000) });
+    void p.command({ type: "progress", positionMs: Math.round(engine.position() * 1000), durationMs: Math.round(duration() * 1000), paused: paused() });
   };
 
   // The page says which engine draws the picture; with mpv under it, the
@@ -379,6 +380,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       <header class="ptitle">
         <h1>{ctx.details()?.name ?? ""}</h1>
         <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
+        <TraktMark state={snap()?.trakt} />
       </header>
       <Show when={endsAt()}>{(t) => <p class="clock num">Ends at {t()}</p>}</Show>
 

@@ -5,13 +5,16 @@
  * answered with user verification. Each page load asks for it again, and so
  * do removing a device, reporting one lost and making a kit. Without PRF
  * (or on an address a passkey cannot belong to, such as a bare IP) nothing
- * is stored and the record stays in the tab's memory. */
+ * is stored and the record stays in the tab's memory. The profiles' Trakt
+ * records are sealed the same way, under the same key, in an entry of their
+ * own, and go with it. */
 
 import type { SyncRecord } from "../lib/sync";
 
 const DB = "marquee-vault";
 const STORE = "sealed";
 const ENTRY = "sync";
+const TRAKT = "trakt";
 const INFO = new TextEncoder().encode("marquee/web-record/v1");
 
 interface Sealed {
@@ -150,16 +153,16 @@ async function evaluate(credential: ArrayBuffer, salt: Uint8Array<ArrayBuffer>):
   return first;
 }
 
-async function seal(record: SyncRecord, with_: CryptoKey, credential: ArrayBuffer, salt: Uint8Array<ArrayBuffer>): Promise<Sealed> {
+async function seal(record: unknown, with_: CryptoKey, credential: ArrayBuffer, salt: Uint8Array<ArrayBuffer>): Promise<Sealed> {
   const iv = random(12);
   const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: INFO }, with_, new TextEncoder().encode(JSON.stringify(record)));
   return { credential, salt, iv, data };
 }
 
-async function open(sealed: Sealed, with_: CryptoKey): Promise<SyncRecord> {
+async function open<T = SyncRecord>(sealed: Sealed, with_: CryptoKey): Promise<T> {
   try {
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: sealed.iv, additionalData: INFO }, with_, sealed.data);
-    return JSON.parse(new TextDecoder().decode(plain)) as SyncRecord;
+    return JSON.parse(new TextDecoder().decode(plain)) as T;
   } catch {
     throw new VaultError("passkey");
   }
@@ -198,6 +201,7 @@ export async function enable(record: SyncRecord): Promise<void> {
     void navigator.storage?.persist?.().catch(() => false);
     key = k;
     held = sealed;
+    opened();
   } catch (e) {
     // From here on any failure (no PRF, a cancelled sign-in, a seal or write that failed) leaves
     // a passkey that guards nothing: ask its manager to drop it, where the browser can.
@@ -221,6 +225,7 @@ export async function unlock(): Promise<SyncRecord> {
   const record = await open(sealed, k);
   key = k;
   held = sealed;
+  opened();
   return record;
 }
 
@@ -260,7 +265,7 @@ export async function clear(): Promise<void> {
     // Which passkey guarded it: held when unlocked, else read (a locked page never opened it).
     const entry = held ?? (await read().catch(() => undefined));
     try {
-      await tx("readwrite", (s) => s.delete(ENTRY));
+      await tx("readwrite", (s) => (s.delete(TRAKT), s.delete(ENTRY)));
     } catch {
       throw new VaultError("forget");
     }
@@ -276,4 +281,36 @@ export async function clear(): Promise<void> {
  * whose sealed copy could not be deleted). */
 export function drop() {
   [key, held] = [null, null];
+}
+
+const listeners = new Set<() => void>();
+/** Runs `fn` each time remembering starts here: a Remember sealed the record, or the passkey opened it. */
+export const onOpened = (fn: () => void) => void listeners.add(fn);
+const opened = () => {
+  for (const fn of listeners) fn();
+};
+
+/** Seals the profiles' Trakt records beside the sync record, in turn with its saves; nothing
+ * while remembering is off or a Forget runs. No record at all deletes the entry. */
+export function saveTrakt(records: Record<string, unknown>): Promise<void> {
+  const k = key;
+  const h = held;
+  if (!k || !h || clearing > 0) return Promise.resolve();
+  const run = saving.then(async () => {
+    if (key !== k || clearing > 0) return;
+    if (Object.keys(records).length === 0) return void (await tx("readwrite", (s) => s.delete(TRAKT)));
+    const sealed = await seal(records, k, h.credential, h.salt);
+    if (key !== k || clearing > 0) return;
+    await tx("readwrite", (s) => s.put(sealed, TRAKT));
+  });
+  saving = run.catch(() => undefined);
+  return run;
+}
+
+/** The Trakt records sealed here, once remembering is on (none before). */
+export async function openTrakt(): Promise<Record<string, unknown>> {
+  const k = key;
+  if (!k) return {};
+  const sealed = await tx<Sealed | undefined>("readonly", (s) => s.get(TRAKT));
+  return sealed ? open<Record<string, unknown>>(sealed, k) : {};
 }

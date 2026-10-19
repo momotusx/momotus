@@ -11,6 +11,7 @@ import { AvatarArt } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
+import "./core/trakt";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { installFocus, restore } from "./focus/dom";
 import { form } from "./form";
@@ -32,6 +33,7 @@ import Search from "./screens/search";
 import SettingsScreen from "./screens/settings";
 import SyncScreen, { AddDevice, ForkReview, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
 import { Stub } from "./screens/stub";
+import TraktScreen from "./screens/trakt";
 import Title from "./screens/title";
 import Versions from "./screens/versions";
 
@@ -45,7 +47,7 @@ const destinations: Destination[] = [
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid", "/sync"];
+const settingsPages = ["/settings", "/addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid", "/sync", "/trakt"];
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
@@ -243,6 +245,7 @@ export function App() {
       <Route path="/sync/fork" component={ForkReview} />
       <Route path="/home-rows" component={HomeRows} />
       <Route path="/debrid" component={Debrid} />
+      <Route path="/trakt" component={TraktScreen} />
       <Route path="/profiles" component={ProfilesScreen} />
       <Route path="/profiles/manage" component={ManageProfiles} />
       <Route path="/profiles/new" component={EditProfile} />

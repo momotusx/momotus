@@ -13,6 +13,8 @@ import { BBB_ID } from "./source";
 export const PORTS = { bridge: 17801, vite: 15301, source: 17802 };
 /** The sync spec's own: a relay and one core per device, so the shared core never joins an account. */
 export const SYNC_PORTS = { relay: 17803, a: 17804, b: 17805, c: 17806 };
+/** The Trakt spec's own: a core whose Trakt is the fake, the fake, and a core built without a Trakt app. */
+export const TRAKT_PORTS = { bridge: 17807, fake: 17808, plain: 17809 };
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
@@ -39,10 +41,11 @@ function binary(pkg: "mq-bridge" | "mq-sync-server", env: string): string {
 
 export const bridgeBinary = () => binary("mq-bridge", "MQ_BRIDGE_BIN");
 
-export function startBridge(port = PORTS.bridge): Promise<{ proc: ChildProcess; data: string }> {
+/** A core on `port` with a data directory of its own; `env` adds variables such as MQ_DEV_TRAKT. */
+export function startBridge(port = PORTS.bridge, env: Record<string, string> = {}): Promise<{ proc: ChildProcess; data: string }> {
   const data = mkdtempSync(join(tmpdir(), "mq-e2e-"));
   const proc = spawn(bridgeBinary(), [], {
-    env: { ...process.env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
+    env: { ...process.env, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],
   });
   return ready(proc, "bridge_ready", data);

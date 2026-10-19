@@ -5,6 +5,7 @@
 
 import { afterEach, expect, mock, test } from "bun:test";
 import type { SyncRecord } from "../lib/sync";
+import { clientMock, fake } from "./fake-client";
 
 const g = globalThis as unknown as Record<string, unknown>;
 type Call = { name: string; fields: Record<string, unknown>; answer: (v: unknown) => void; fail: (e: unknown) => void };
@@ -12,15 +13,13 @@ const calls: Call[] = [];
 
 /** Rounds and leaving answer at once; a start waits for the test to answer it. */
 const QUIET = { record: null, fingerprint: "ABCD", again: false, refused: 0, unreadable: 0, newer: 0 };
-mock.module("./client", () => ({
-  privateLink: true,
-  op: (name: string, fields: Record<string, unknown> = {}) =>
-    new Promise((answer, fail) => {
-      calls.push({ name, fields, answer, fail });
-      if (name === "syncNow") answer(QUIET);
-      if (name === "signOut") answer({});
-    }),
-}));
+mock.module("./client", clientMock);
+fake.op = (name, fields) =>
+  new Promise((answer, fail) => {
+    calls.push({ name, fields, answer, fail });
+    if (name === "syncNow") answer(QUIET);
+    if (name === "signOut") answer({});
+  });
 mock.module("../form", () => ({ form: () => "desktop" }));
 // What the module touches as it loads: the page's events and a storage that holds nothing.
 g.document ??= { addEventListener: () => undefined, hidden: false };

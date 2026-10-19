@@ -43,17 +43,17 @@ export function gateOpen(): boolean {
   return !s.locked && (chosen() || !startsOnPicker(s));
 }
 
-const resets = new Set<() => void>();
-/** Module state a screen keeps outside its views (recent searches) registers its reset here. */
-export function onProfileReset(fn: () => void) {
+const resets = new Set<() => void | Promise<void>>();
+/** Module state a screen keeps outside its views (recent searches, the Trakt view) registers its
+ * reset here; a reset that closes a view returns once it closed. */
+export function onProfileReset(fn: () => void | Promise<void>) {
   resets.add(fn);
 }
 
 /** Everything the old profile left outside the core: views kept for the app's life, focus memory, caches. */
 export async function resetProfileState() {
   forgetFocus();
-  for (const fn of resets) fn();
-  await closeProfileViews();
+  await Promise.all([...[...resets].map((fn) => fn()), closeProfileViews()]);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

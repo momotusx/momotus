@@ -4,6 +4,7 @@ import type { NextEpisode } from "./NextEpisode";
 import type { PlaybackPhase } from "./PlaybackPhase";
 import type { Segment } from "./Segment";
 import type { SubtitleTrack } from "./SubtitleTrack";
+import type { TraktPlayback } from "./TraktPlayback";
 
 export type PlaybackSnapshot = { phase: PlaybackPhase, 
 /**
@@ -60,4 +61,10 @@ segments: Array<Segment>,
  * When to offer the Up Next card: the credits start from a source that
  * matched the release; null keeps the app's own timing.
  */
-nextAtMs: number | null, };
+nextAtMs: number | null, 
+/**
+ * Trakt's side: `on` scrobbles, `unmapped` (Trakt cannot name it),
+ * `off`, `thisDeviceOff` (the profile uses Trakt, this device is not
+ * signed in).
+ */
+trakt: TraktPlayback, };

@@ -40,6 +40,8 @@ transport.onClose(() => setLink("closed"));
 // network work when the connection returns.
 const lifecycle = (event: string) => void bridge.request("lifecycle", { event }).catch(() => undefined);
 document.addEventListener("visibilitychange", () => lifecycle(document.hidden ? "background" : "foreground"));
+// Leaving the page: the core pauses what it scrobbles (Trakt) before the tab goes.
+window.addEventListener("pagehide", () => lifecycle("background"));
 window.addEventListener("online", () => lifecycle("networkChanged"));
 
 export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
