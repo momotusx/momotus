@@ -218,9 +218,9 @@ enum Request {
         record: Box<SyncConfig>,
         #[serde(default)]
         drop: Vec<Id>,
-        /// The relay's head from `forkPreview`: a roster that moved since is refused.
-        #[serde(default)]
-        head: Option<Digest32>,
+        /// The relay's head from `forkPreview`, required: only the roster the
+        /// user saw is taken, and one that moved since is refused.
+        head: Digest32,
     },
     /// Merges `patch` into the profile preferences (see `Core::set_prefs`).
     SetPrefs {
@@ -718,7 +718,8 @@ impl Session {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     answer(
-                        mq_sync::use_server_roster(library, http, &record, clock, drop, head).await,
+                        mq_sync::use_server_roster(library, http, &record, clock, drop, Some(head))
+                            .await,
                     )
                 });
             }

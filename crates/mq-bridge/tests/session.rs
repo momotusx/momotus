@@ -1,5 +1,8 @@
 use mq_bridge::{Outgoing, Output, Session};
 use mq_runtime::Core;
+use mq_sync::SyncConfig;
+use mq_sync::roster::{Bundle, Hex};
+use mq_sync::wire::RosterHead;
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -612,4 +615,44 @@ async fn an_oversized_snapshot_opens_no_view() {
         .handle_text(&json!({ "id": 2, "op": "unsubscribe", "sub": 1 }).to_string())
         .await;
     assert_eq!(next(&mut rx).await["ok"], false);
+}
+
+/// `useServerRoster` takes back the head `forkPreview` showed: a call without
+/// it is refused before anything is read or written.
+#[tokio::test]
+async fn use_server_roster_without_a_head_is_refused() {
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+    let record = SyncConfig {
+        server: "https://relay.example".into(),
+        device_token: "t".into(),
+        member: Hex([1; 32]),
+        keys: Bundle {
+            v: 1,
+            account: Hex([2; 16]),
+            genesis: Hex([3; 32]),
+            epoch: 0,
+            ak: Hex([4; 32]),
+            id_key: Hex([5; 32]),
+        },
+        checkpoint: RosterHead {
+            seq: 0,
+            hash: Hex([6; 32]),
+        },
+        relay_id: Hex([7; 16]),
+        revision: 0,
+    };
+    session
+        .handle_text(
+            &json!({"id": 1, "op": "useServerRoster", "record": record, "drop": []}).to_string(),
+        )
+        .await;
+    let reply = next(&mut rx).await;
+    assert_eq!(reply["ok"], false, "{reply}");
+    assert!(
+        reply["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("missing field `head`")),
+        "{reply}"
+    );
 }
