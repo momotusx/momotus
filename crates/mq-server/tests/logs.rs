@@ -131,7 +131,8 @@ async fn upstream_logs_never_name_the_origin() {
     let lease = server.register(upstream(dead, Some(local.clone())), "v.mkv");
     let track = format!("http://log-origin.test:{dead}/s.srt");
     let sub = lease.subtitles().add(&track, "eng", Some(&local)).unwrap();
-    assert!(http.get(&sub, &player).await.is_err());
+    let empty = http.get(&sub, &player).await.unwrap();
+    assert_eq!(&empty.body[..], b"WEBVTT\n\n");
     // A plain proxied origin that stops answering after its first reply.
     let whole = "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nabcd";
     let flaky = origin(vec![whole.into(), String::new()], Duration::ZERO).await;

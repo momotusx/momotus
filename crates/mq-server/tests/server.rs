@@ -1,5 +1,5 @@
 use mq_http::{ClientConfig, HttpClient, RequestOptions, Url};
-use mq_server::{Lease, StreamServer, Upstream};
+use mq_server::{Lease, StreamServer, SubtitleTrouble, Upstream};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -706,6 +706,56 @@ async fn subtitles_come_out_as_utf8_webvtt_for_any_page() {
     assert!(http.get(&url, &local()).await.is_err(), "released");
 }
 
+/// Every subtitle failure answers an empty WebVTT, never an error a player
+/// may stop on, and tells the playback which track failed and why.
+#[tokio::test]
+async fn a_failing_subtitle_answers_empty_webvtt_and_says_why() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let (base, _) = hls_origin(|asked| match asked.path.as_str() {
+        "/502.srt" => Reply::status(502),
+        "/429.srt" => Reply::status(429),
+        "/garbage.srt" => Reply::ok("text/plain", b"\x00\x01 no cues in here"),
+        _ => Reply::status(404),
+    })
+    .await;
+    let closed = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let gone = format!("http://{}/a.srt", closed.local_addr().unwrap());
+    drop(closed);
+    let lease = server.register(local_upstream(PLAYBACK.into()), "v.mkv");
+    let slot = lease.subtitles();
+    let add = |url: &str| slot.add(url, "eng", Some(&local_addon())).unwrap();
+
+    // Nobody listens yet: the answer is the same.
+    let quiet = add(&format!("{base}/502.srt"));
+    assert_eq!(
+        text(&http.get(&quiet, &local()).await.unwrap()),
+        "WEBVTT\n\n"
+    );
+
+    let heard: Arc<Mutex<Vec<(String, SubtitleTrouble)>>> = Arc::default();
+    let log = heard.clone();
+    slot.on_trouble(move |url, trouble| log.lock().unwrap().push((url.to_owned(), trouble)));
+    for (file, trouble) in [
+        (format!("{base}/502.srt"), SubtitleTrouble::Unreachable),
+        (format!("{base}/429.srt"), SubtitleTrouble::Unreachable),
+        (gone, SubtitleTrouble::Unreachable),
+        (format!("{base}/garbage.srt"), SubtitleTrouble::Unreadable),
+        (format!("{base}/404.srt"), SubtitleTrouble::Unreadable),
+    ] {
+        let url = add(&file);
+        let resp = http.get(&url, &local()).await.unwrap();
+        assert_eq!(resp.status, 200, "{file}");
+        assert_eq!(resp.header("content-type"), Some("text/vtt; charset=utf-8"));
+        assert_eq!(resp.header("access-control-allow-origin"), Some("*"));
+        assert_eq!(text(&resp), "WEBVTT\n\n", "{file}");
+        let told = std::mem::take(&mut *heard.lock().unwrap());
+        assert_eq!(told, vec![(url, trouble)], "{file}");
+    }
+    drop(lease);
+    assert!(http.get(&quiet, &local()).await.is_err(), "released");
+}
+
 /// Live: time range requests through the loopback server against an origin
 /// that redirects (archive.org). Run with `--ignored --nocapture`.
 #[tokio::test]
@@ -1153,6 +1203,9 @@ async fn subtitles_obey_their_addons_scope() {
     let (redirect, _) = redirector(vec![format!("http://{}/b.srt", canary.addr)]).await;
     let lease = server.register(local_upstream(PLAYBACK.into()), "v.mkv");
     let slot = lease.subtitles();
+    let heard: Arc<Mutex<Vec<(String, SubtitleTrouble)>>> = Arc::default();
+    let log = heard.clone();
+    slot.on_trouble(move |url, trouble| log.lock().unwrap().push((url.to_owned(), trouble)));
     for track in [
         // A local install's track on another private address, by literal
         // and by name.
@@ -1162,11 +1215,10 @@ async fn subtitles_obey_their_addons_scope() {
         redirect,
     ] {
         let url = slot.add(&track, "eng", Some(&local_addon())).unwrap();
-        let err = http.get(&url, &local()).await.unwrap_err();
-        assert!(
-            matches!(err, mq_http::HttpError::Status { status: 502, .. }),
-            "{track}: {err:?}"
-        );
+        let resp = http.get(&url, &local()).await.unwrap();
+        assert_eq!(text(&resp), "WEBVTT\n\n", "{track}");
+        let told = std::mem::take(&mut *heard.lock().unwrap());
+        assert_eq!(told, vec![(url, SubtitleTrouble::Unreadable)], "{track}");
     }
     assert_eq!(canary.accepted(), 0);
 }

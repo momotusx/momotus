@@ -107,7 +107,22 @@ struct Playback {
     released: CancellationToken,
     /// By the id in `/sub/{token}/{id}/...`; deduplicated within the playback.
     subtitles: Mutex<Vec<Subtitle>>,
+    /// Told when a subtitle could not be served (`SubtitleSlot::on_trouble`).
+    trouble: Mutex<Option<Reporter>>,
 }
+
+/// Why a subtitle was answered with an empty WebVTT instead of its cues.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubtitleTrouble {
+    /// The file did not come this time: a timeout, the network, a 5xx, 408
+    /// or 429.
+    Unreachable,
+    /// Asking again gives the same: gone (4xx), refused, too large, or no
+    /// format `to_vtt` reads.
+    Unreadable,
+}
+
+type Reporter = Arc<dyn Fn(&str, SubtitleTrouble) + Send + Sync>;
 
 impl Playback {
     #[allow(irrefutable_let_patterns)] // one variant without `torrent`
@@ -301,6 +316,7 @@ impl StreamServer {
                     body: Content::Hls(hls),
                     released: CancellationToken::new(),
                     subtitles: Mutex::default(),
+                    trouble: Mutex::default(),
                 });
                 let name = manifest_name(filename, kind);
                 Ok(self.lease(token, playback, &name, Some(kind)))
@@ -454,6 +470,7 @@ impl StreamServer {
             body,
             released: CancellationToken::new(),
             subtitles: Mutex::default(),
+            trouble: Mutex::default(),
         })
     }
 
@@ -703,6 +720,16 @@ impl SubtitleSlot {
         };
         Some(format!("{}/{id}/{}.vtt", self.base, sanitize(lang)))
     }
+
+    /// `report` hears of every subtitle of this playback that could not be
+    /// served, with the URL `add` gave for it. The route answers those with
+    /// an empty WebVTT, so no player ever sees a subtitle error: the
+    /// playback says what happened instead.
+    pub fn on_trouble(&self, report: impl Fn(&str, SubtitleTrouble) + Send + Sync + 'static) {
+        if let Some(playback) = self.playback.upgrade() {
+            *lock(&playback.trouble) = Some(Arc::new(report));
+        }
+    }
 }
 
 /// A route id: decimal, no sign, no leading zero.
@@ -872,20 +899,46 @@ async fn serve_subtitle(
     };
     let http = shared.http.scoped(&scope(subtitle.addon_url.as_ref()));
     let fetch = http.get(&subtitle.url, &opts);
+    let track = format!(
+        "http://{}/sub/{token}/{id}/{}.vtt",
+        shared.addr,
+        sanitize(&subtitle.lang)
+    );
     // Release ends the fetch too.
-    let body = match playback.released.run_until_cancelled(fetch).await {
+    let vtt = match playback.released.run_until_cancelled(fetch).await {
         None => return StatusCode::NOT_FOUND.into_response(),
-        Some(Ok(response)) => response.body,
+        Some(Ok(response)) => {
+            to_vtt(&response.body, &subtitle.lang).ok_or(SubtitleTrouble::Unreadable)
+        }
         Some(Err(e)) => {
             tracing::warn!("subtitle upstream failed: {}", e.kind());
-            return StatusCode::BAD_GATEWAY.into_response();
+            Err(match e {
+                HttpError::Timeout(_) | HttpError::Network(_) => SubtitleTrouble::Unreachable,
+                HttpError::Status { status, .. }
+                    if status >= 500 || matches!(status, 408 | 429) =>
+                {
+                    SubtitleTrouble::Unreachable
+                }
+                // Gone, refused, too large, or an address it may not reach:
+                // asking again gives the same.
+                _ => SubtitleTrouble::Unreadable,
+            })
         }
     };
-    let Some(vtt) = to_vtt(&body, &subtitle.lang) else {
-        return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
-    };
+    let vtt = vtt.unwrap_or_else(|trouble| {
+        let report = lock(&playback.trouble).clone();
+        if let Some(report) = report {
+            report(&track, trouble);
+        }
+        // An empty track, never an error: a player that meets an error on a
+        // subtitle may stop or fail over the video.
+        EMPTY_VTT.to_owned()
+    });
     cors(([(header::CONTENT_TYPE, "text/vtt; charset=utf-8")], vtt).into_response())
 }
+
+/// What a subtitle that could not be served answers.
+const EMPTY_VTT: &str = "WEBVTT\n\n";
 
 async fn serve(
     State(shared): State<Arc<Shared>>,
