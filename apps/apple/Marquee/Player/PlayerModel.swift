@@ -198,6 +198,8 @@ final class PlayerModel {
 
     /// The user's choice in Settings: start the next episode on its own.
     var autoplayNext: Bool { prefs.snapshot?.autoplayNext ?? true }
+    /// The profile's subtitle languages, then its audio ones: the Subtitles menu's top groups.
+    var subtitleLanguages: [String] { (prefs.snapshot?.subtitleLanguages ?? []) + (prefs.snapshot?.streams.languages ?? []) }
 
     /// Whole seconds until the next episode starts on its own.
     var countdown: Int { max(0, Int((duration - position).rounded(.up))) }

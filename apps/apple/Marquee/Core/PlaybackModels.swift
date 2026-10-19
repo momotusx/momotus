@@ -364,8 +364,73 @@ struct SubtitleTrack: Decodable, Hashable, Sendable, Identifiable {
     let source: String
     let forced: Bool
     let hearingImpaired: Bool
+    /// One tag for every spelling of the language ("pt-BR", "zh-Hant"); older cores send none.
+    var language: String?
+    /// Its English name, the heading of its group ("Portuguese (Brazil)").
+    var languageName: String?
+    /// What tells it from the other tracks of its language: the release, else
+    /// the source, numbered when two would read the same.
+    var name: String?
 
     var id: String { url }
+}
+
+/// The Subtitles menu (plans/m13-subtitle-languages.md 2): the core's tracks by
+/// language in the core's order, which puts the profile's languages first.
+/// Those stay on top; the rest go under "Other languages".
+enum SubtitleMenu {
+    struct Group: Hashable {
+        let language: String
+        let heading: String
+        let tracks: [SubtitleTrack]
+    }
+
+    static func groups(_ tracks: [SubtitleTrack], preferred: [String]) -> (top: [Group], other: [Group]) {
+        var order: [String] = []
+        var byLanguage: [String: [SubtitleTrack]] = [:]
+        for track in tracks {
+            let key = nonEmpty(track.language) ?? track.lang
+            if byLanguage[key] == nil { order.append(key) }
+            byLanguage[key, default: []].append(track)
+        }
+        let all = order.compactMap { key in
+            byLanguage[key].map { Group(language: key, heading: heading($0[0]), tracks: $0) }
+        }
+        let wanted = Set(preferred.map(base))
+        let top = all.filter { wanted.contains(base($0.language)) }
+        // With none of the profile's languages found, every language is on top.
+        return top.isEmpty ? (all, []) : (top, all.filter { !top.contains($0) })
+    }
+
+    /// The group's heading and the Subtitles button's value.
+    static func heading(_ track: SubtitleTrack) -> String {
+        nonEmpty(track.languageName) ?? Locale(identifier: "en").localizedString(forLanguageCode: track.lang) ?? track.lang
+    }
+
+    /// A track's line in its group.
+    static func title(_ track: SubtitleTrack) -> String {
+        nonEmpty(track.name) ?? nonEmpty(track.label) ?? track.source
+    }
+
+    /// Beneath the line: the source unless the line starts with it, then Forced and SDH.
+    static func detail(_ track: SubtitleTrack) -> String? {
+        let parts = [
+            title(track).hasPrefix(track.source) ? nil : track.source,
+            track.forced ? "Forced" : nil,
+            track.hearingImpaired ? "For the hard of hearing" : nil,
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
+    /// The language without its region or script, any ISO 639 spelling: "ger",
+    /// "deu" and "de-AT" are all "de". A preference counts for its regions.
+    static func base(_ code: String) -> String {
+        Locale(identifier: code).language.languageCode.map { $0.identifier(.alpha2) ?? $0.identifier } ?? code.lowercased()
+    }
+
+    private static func nonEmpty(_ text: String?) -> String? {
+        text.flatMap { $0.isEmpty ? nil : $0 }
+    }
 }
 
 struct NextEpisode: Decodable, Hashable, Sendable {

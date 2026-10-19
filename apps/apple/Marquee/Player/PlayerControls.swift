@@ -279,14 +279,21 @@ struct PlayerControls: View {
                 Button { model.selectSubtitle(nil); hold(false) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil && model.textTrack == nil)
                 }
-                ForEach(Array(model.textTracks.enumerated()), id: \.offset) { index, name in
-                    Button { model.selectText(index); hold(false) } label: {
-                        Choice(text: name, selected: model.textTrack == index)
+                // A submenu per language, the profile's on top (plans/m13-subtitle-languages.md 2).
+                let groups = SubtitleMenu.groups(model.playback?.subtitles ?? [], preferred: model.subtitleLanguages)
+                ForEach(groups.top, id: \.language) { languageMenu($0) }
+                if !groups.other.isEmpty {
+                    Menu("Other languages") {
+                        ForEach(groups.other, id: \.language) { languageMenu($0) }
                     }
                 }
-                ForEach(model.playback?.subtitles ?? []) { track in
-                    Button { model.selectSubtitle(track); hold(false) } label: {
-                        Choice(text: subtitleName(track, source: true), selected: model.subtitle == track)
+                if !model.textTracks.isEmpty {
+                    Section("In the file") {
+                        ForEach(Array(model.textTracks.enumerated()), id: \.offset) { index, name in
+                            Button { model.selectText(index); hold(false) } label: {
+                                Choice(text: name, selected: model.textTrack == index)
+                            }
+                        }
                     }
                 }
                 // Why a source's files did not load, in the core's order, for as long as the core says so.
@@ -317,6 +324,19 @@ struct PlayerControls: View {
         }
         .menuStyle(.button)
         .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
+    }
+
+    /// One language's tracks, each by its name with its source, Forced and SDH beneath.
+    private func languageMenu(_ group: SubtitleMenu.Group) -> some View {
+        Menu {
+            ForEach(group.tracks) { track in
+                Button { model.selectSubtitle(track); hold(false) } label: {
+                    Choice(text: SubtitleMenu.title(track), detail: SubtitleMenu.detail(track), selected: model.subtitle == track)
+                }
+            }
+        } label: {
+            Choice(text: group.heading, selected: model.subtitle.map(group.tracks.contains) ?? false)
+        }
     }
 
     /// An OSD menu that keeps the controls up while it is open, so they never
@@ -353,17 +373,10 @@ struct PlayerControls: View {
 
     private var subtitleValue: String {
         let found = (model.playback?.subtitles.count ?? 0) + model.textTracks.count
-        if let track = model.subtitle { return subtitleName(track) }
+        if let track = model.subtitle { return SubtitleMenu.heading(track) }
         if let index = model.textTrack, model.textTracks.indices.contains(index) { return model.textTracks[index] }
         if model.playback?.subtitlesPending == true && found == 0 { return "Looking" }
         return found == 0 ? "None found" : "Off, \(found) found"
-    }
-
-    /// "English, SDH"; in the list also the addon it is from, so files in one language differ.
-    private func subtitleName(_ track: SubtitleTrack, source: Bool = false) -> String {
-        let language = Locale.current.localizedString(forLanguageCode: track.lang) ?? track.lang
-        let parts = [track.label ?? language, track.hearingImpaired ? "SDH" : nil, track.forced ? "Forced" : nil]
-        return (parts + [source ? track.source : nil]).compactMap { $0 }.joined(separator: ", ")
     }
 
     private func currentQuality(_ snapshot: VersionsSnapshot) -> String {
@@ -400,9 +413,21 @@ private struct SkipGlyph: View {
 /// A menu entry that shows a checkmark when it is the current choice.
 private struct Choice: View {
     let text: String
+    /// A menu shows it as the item's second line.
+    var detail: String?
     let selected: Bool
 
     var body: some View {
-        if selected { Label(text, image: "check") } else { Text(text) }
+        if selected {
+            Label {
+                Text(text)
+                if let detail { Text(detail) }
+            } icon: {
+                Image("check")
+            }
+        } else {
+            Text(text)
+            if let detail { Text(detail) }
+        }
     }
 }

@@ -261,3 +261,47 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(FocusRule.shown(focused: true, keyboardNavigation: true))
     #expect(!FocusRule.shown(focused: false, keyboardNavigation: true))
 }
+
+private func sub(_ n: Int, _ lang: String, _ language: String, _ heading: String, _ name: String, source: String = "OpenSubtitles v3", hi: Bool = false) -> SubtitleTrack {
+    SubtitleTrack(url: "http://127.0.0.1:1/sub/\(n).vtt", lang: lang, label: nil, source: source, forced: false, hearingImpaired: hi,
+                  language: language, languageName: heading, name: name)
+}
+
+@Test func subtitleGroupsFollowTheCoreOrderWithTheProfilesLanguagesOnTop() {
+    // The owner's case, in the core's order: Turkish preferred, English as audio, then the rest by name.
+    let tracks = [
+        sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org", source: "TurkceAltyazi.org"),
+        sub(2, "eng", "en", "English", "OpenSubtitles v3 1"),
+        sub(3, "eng", "en", "English", "Tenzing.2026.1080p.WEB", hi: true),
+        sub(4, "zhc", "yue", "Chinese (Cantonese)", "OpenSubtitles v3"),
+        sub(5, "zht", "zh-Hant", "Chinese (Traditional)", "OpenSubtitles v3"),
+        sub(6, "mne", "cnr", "Montenegrin", "OpenSubtitles v3"),
+        sub(7, "pob", "pt-BR", "Portuguese (Brazil)", "OpenSubtitles v3"),
+        sub(8, "spl", "es-419", "Spanish (Latin America)", "OpenSubtitles v3"),
+    ]
+    let groups = SubtitleMenu.groups(tracks, preferred: ["tur", "en"])
+    #expect(groups.top.map(\.heading) == ["Turkish", "English"])
+    #expect(groups.other.map(\.language) == ["yue", "zh-Hant", "cnr", "pt-BR", "es-419"])
+    #expect(groups.top[1].tracks.map(SubtitleMenu.title) == ["OpenSubtitles v3 1", "Tenzing.2026.1080p.WEB"])
+    // The line already names the source: nothing beneath it. A release line gets its source and SDH.
+    #expect(SubtitleMenu.detail(tracks[1]) == nil)
+    #expect(SubtitleMenu.detail(tracks[2]) == "OpenSubtitles v3, For the hard of hearing")
+    // A preference in any ISO 639 spelling counts for every region of its language.
+    #expect(SubtitleMenu.groups(tracks, preferred: ["por"]).top.map(\.language) == ["pt-BR"])
+    #expect(SubtitleMenu.base("ger") == SubtitleMenu.base("de-AT"))
+    // None of the profile's languages here: every language is on top, nothing under Other languages.
+    let none = SubtitleMenu.groups(tracks, preferred: ["fin"])
+    #expect(none.top.count == 7 && none.other.isEmpty)
+}
+
+@Test func subtitleTracksFromAnOlderCoreStillGroupAndName() throws {
+    let old = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "tur", "label": null, "source": "SubSense", "forced": true, "hearingImpaired": false}"#.utf8))
+    #expect(old.language == nil && old.name == nil)
+    #expect(SubtitleMenu.heading(old) == "Turkish")
+    #expect(SubtitleMenu.title(old) == "SubSense")
+    #expect(SubtitleMenu.detail(old) == "Forced")
+    #expect(SubtitleMenu.groups([old], preferred: ["tr"]).top.map(\.language) == ["tur"])
+    let new = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "pob", "label": null, "source": "OpenSubtitles v3", "forced": false, "hearingImpaired": false, "language": "pt-BR", "languageName": "Portuguese (Brazil)", "name": "OpenSubtitles v3 2"}"#.utf8))
+    #expect(SubtitleMenu.heading(new) == "Portuguese (Brazil)")
+    #expect(SubtitleMenu.title(new) == "OpenSubtitles v3 2")
+}
