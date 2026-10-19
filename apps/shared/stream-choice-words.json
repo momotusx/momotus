@@ -1,5 +1,5 @@
 {
-  "about": "Smart stream choice words (plans/m13-stream-choice.md 3.7, 3.9, 3.11, 4.4, 4.5), shared by the web, Android and Apple apps. A line's details are parts joined with \", \"; a part shows only when every field it names is known, and the joined details start with a capital letter. Counts use the plurals below and group thousands with a comma. Sizes use 1024-based units, as addons print them: one decimal under 100 GB with a trailing .0 dropped, whole numbers from 100 GB, MB under 1 GB. Mbit/s are whole numbers.",
+  "about": "Smart stream choice words (plans/m13-stream-choice.md 3.7, 3.9, 3.11, 4.4, 4.5), shared by the web, Android and Apple apps. A line's details are parts joined with \", \"; a part shows only when every field it names is known, and the joined details start with a capital letter. Counts use the plurals below and group thousands with a comma. Sizes use 1024-based units, as addons print them: one decimal under 100 GB with a trailing .0 dropped, whole numbers from 100 GB, MB under 1 GB. Mbit/s are whole numbers. The device line shows the HTTP speed with a streaming service account or without the engine, else the torrent speed; a speed with 0 samples is not measured yet.",
   "plurals": {
     "seeders": ["{n} seeder", "{n} seeders"],
     "playbacks": ["{n} playback", "{n} playbacks"],
@@ -74,6 +74,10 @@
       "text": "Marquee found {versions}. This version of the app plays them only through a streaming service account (Real-Debrid, TorBox, AllDebrid or Premiumize). Add one in Settings.",
       "action": "Add an account"
     },
+    "noSpace": {
+      "text": "Marquee found {versions}, but none fits in the free space on this device.",
+      "action": "Show them"
+    },
     "nothingPlaysHere": {
       "text": "Found {versions}, but none plays on this device.",
       "action": "Show them"
@@ -96,7 +100,31 @@
       "up": "On {device} you often picked HDR versions, so Marquee now prefers HDR.",
       "down": "On {device} you often picked versions without HDR, so Marquee now leaves HDR off."
     },
-    "undo": "Undo"
+    "undo": "Undo",
+    "settingsLines": {
+      "size": {
+        "up": "On {screens} you often picked bigger files.",
+        "down": "On {screens} you often picked smaller files."
+      },
+      "height": {
+        "up": "On {screens} you often picked sharper versions.",
+        "down": "On {screens} you often picked lower resolutions."
+      },
+      "ready": {
+        "up": "On {screens} you often picked files ready on your streaming service.",
+        "down": "On {screens} you often picked torrents over ready files."
+      },
+      "hdr": {
+        "up": "On {screens} you often picked HDR versions.",
+        "down": "On {screens} you often picked versions without HDR."
+      }
+    },
+    "screens": {
+      "2160": "4K screens",
+      "1080": "1080p screens",
+      "720": "720p screens",
+      "480": "SD screens"
+    }
   },
   "question": {
     "title": "How should Marquee pick what to play?",

@@ -1,16 +1,17 @@
-/** Smart stream choice on the web (plans/m13-stream-choice.md 3.7, 4.4).
- * Settings > Stream choice writes the v2 stream preferences to a fresh core
- * of its own (DEFAULTS_PORT; the suite runs one test at a time). The version
- * rows' lines are shown on the shared core with each row's line made up at
- * the socket from its own seeds and size, as rank.rs words them, until the
- * core sends lines (phase 2); playback is never opened. Shots go to
- * e2e/shots/ at TV, desktop and phone sizes. */
+/** Smart stream choice on the web (plans/m13-stream-choice.md 3.7, 3.9,
+ * 3.11, 4.3, 4.4). Settings > Stream choice writes to a fresh core of its
+ * own (DEFAULTS_PORT; the suite runs one test at a time). Versions reads the
+ * shared core's real lines and conditions. Until the core fills them
+ * (phase 2 stubs), `blocked`, `note` and a measured speed are put into the
+ * core's answers at the socket, and the writes they lead to are checked as
+ * sent; playback is never opened. Shots go to e2e/shots/ at TV, desktop and
+ * phone sizes. */
 
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import type { Prefs } from "../src/core/generated/Prefs";
-import type { VersionRow } from "../src/core/generated/VersionRow";
-import type { ReasonLine, StreamChoicePrefs } from "../src/lib/words";
+import type { StreamConditions } from "../src/core/generated/StreamConditions";
+import type { VersionsSnapshot } from "../src/core/generated/VersionsSnapshot";
 import { Client, cleanup, DEFAULTS_PORT, GOT, PORTS, startBridge } from "./core";
 
 type Form = "tv" | "desktop" | "phone";
@@ -23,14 +24,67 @@ const OUT = process.env.SHOTS_DIR ?? "e2e/shots";
 const GiB = 1024 ** 3;
 const errors: string[] = [];
 
+type Msg = Record<string, unknown> & { id?: number; op?: string; view?: string; sub?: number };
+/** What the page sent, in order. */
+const sent: Msg[] = [];
+
+const NOTE_PREFS: Prefs["streams"] = { quality: "balanced", maxHeight: null, maxSizeBytes: null, languages: [], avoid: [], sizeLimitBytes: 5 * GiB, minSeeders: 50, hdr: true, preferReady: true, learn: true };
+
 const shot = (page: Page, name: string, form: Form, fullPage = false) =>
   page.waitForTimeout(500).then(() => page.screenshot({ path: `${OUT}/${name}-${form}.jpg`, type: "jpeg", quality: 80, fullPage }));
 const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
 
-test.afterEach(() => {
-  expect(errors).toEqual([]);
+test.beforeEach(() => {
+  sent.length = 0;
   errors.length = 0;
 });
+test.afterEach(() => expect(errors).toEqual([]));
+
+/** A page on `port`'s core. `answer` replies to a request itself (return
+ * the result); `versions` rewrites the versions view's snapshots. A
+ * playback view is never opened. */
+async function device(
+  browser: Browser,
+  form: Form,
+  port: number,
+  opts: { answer?: (m: Msg) => unknown; versions?: (s: VersionsSnapshot) => VersionsSnapshot } = {},
+): Promise<Page> {
+  const context: BrowserContext = await browser.newContext({ ...FORMS[form], colorScheme: "dark", reducedMotion: "reduce", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const upstream = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const early: string[] = [];
+    const asked = new Set<number>();
+    const subs = new Set<number>();
+    upstream.addEventListener("open", () => {
+      for (const m of early.splice(0)) upstream.send(m);
+    });
+    upstream.addEventListener("message", (e) => {
+      const msg = JSON.parse(String(e.data)) as Msg & { ok?: boolean; result?: { sub: number; snapshot: VersionsSnapshot }; updates?: VersionsSnapshot[] };
+      const rewrite = opts.versions;
+      if (rewrite && msg.id !== undefined && asked.has(msg.id) && msg.ok && msg.result) {
+        subs.add(msg.result.sub);
+        return ws.send(JSON.stringify({ ...msg, result: { ...msg.result, snapshot: rewrite(msg.result.snapshot) } }));
+      }
+      if (rewrite && msg.sub !== undefined && subs.has(msg.sub) && msg.updates) return ws.send(JSON.stringify({ ...msg, updates: msg.updates.map(rewrite) }));
+      ws.send(String(e.data));
+    });
+    upstream.addEventListener("close", () => ws.close());
+    ws.onMessage((m) => {
+      const msg = JSON.parse(String(m)) as Msg;
+      sent.push(msg);
+      if (msg.op === "subscribe" && msg.view === "playback") return;
+      if (msg.op === "subscribe" && msg.view === "versions" && msg.id !== undefined) asked.add(msg.id);
+      const own = opts.answer?.(msg);
+      if (own !== undefined) return ws.send(JSON.stringify({ id: msg.id, ok: true, result: own }));
+      if (upstream.readyState === WebSocket.OPEN) upstream.send(String(m));
+      else early.push(String(m));
+    });
+    ws.onClose(() => upstream.close());
+  });
+  const page = await context.newPage();
+  page.on("pageerror", (e) => errors.push(`${form}: ${e.message}`));
+  return page;
+}
 
 test.describe("Settings > Stream choice", () => {
   let core: { proc: ChildProcess; data: string } | null = null;
@@ -44,29 +98,11 @@ test.describe("Settings > Stream choice", () => {
     if (core) cleanup(core.proc, core.data);
     core = null;
   });
-
-  /** A page whose socket reaches this test's core. */
-  async function device(browser: Browser, form: Form): Promise<Page> {
-    const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", reducedMotion: "reduce", baseURL: `http://127.0.0.1:${PORTS.vite}` });
-    await context.routeWebSocket(/\/ws$/, (ws) => {
-      const upstream = new WebSocket(`ws://127.0.0.1:${DEFAULTS_PORT}/ws`);
-      const early: string[] = [];
-      upstream.addEventListener("open", () => {
-        for (const m of early.splice(0)) upstream.send(m);
-      });
-      upstream.addEventListener("message", (e) => ws.send(String(e.data)));
-      upstream.addEventListener("close", () => ws.close());
-      ws.onMessage((m) => (upstream.readyState === WebSocket.OPEN ? upstream.send(String(m)) : early.push(String(m))));
-      ws.onClose(() => upstream.close());
-    });
-    const page = await context.newPage();
-    page.on("pageerror", (e) => errors.push(`${form}: ${e.message}`));
-    return page;
-  }
-  const streams = async () => (await client.req<Prefs>("setPrefs", { patch: {} })).streams as Prefs["streams"] & StreamChoicePrefs;
+  const prefs = () => client.req<Prefs>("setPrefs", { patch: {} });
+  const streams = async () => (await prefs()).streams;
 
   test("each row writes its preference to the core, and Settings sums it up", async ({ browser }) => {
-    const page = await device(browser, "desktop");
+    const page = await device(browser, "desktop", DEFAULTS_PORT);
     await page.goto("/settings?form=desktop");
     const row = page.locator('[data-f="settings:stream-choice"]');
     await expect(row).toContainText("Up to 5 GB, shared by at least 50 people");
@@ -82,9 +118,12 @@ test.describe("Settings > Stream choice", () => {
       await expect(page.locator(`[data-f="${f}"]`), f).toHaveAttribute("aria-checked", "true");
     // No streaming service account: its row is not shown.
     await expect(page.locator('[data-fgroup="choice-ready"]')).toHaveCount(0);
+    // The core's conditions: priors only, so nothing measured and no Measure again.
     await expect(page.locator(".device-line .cond")).toHaveText(/^(4K|1080p|720p)( HDR)?, (Wi-Fi|Ethernet|mobile data|this network), speed not measured yet$/);
+    await expect(page.locator('[data-f="choice:measure"]')).toHaveCount(0);
+    expect(sent.some((m) => m.op === "streamConditions")).toBe(true);
 
-    const picks: [string, Partial<StreamChoicePrefs & { maxHeight: number | null }>][] = [
+    const picks: [string, Partial<Prefs["streams"]>][] = [
       ["choice-size:null", { sizeLimitBytes: null }],
       ["choice-seeders:100", { minSeeders: 100 }],
       ["choice-height:720", { maxHeight: 720 }],
@@ -100,9 +139,59 @@ test.describe("Settings > Stream choice", () => {
     await expect(row).toContainText("Any size, shared by at least 100 people");
   });
 
+  test("what was learned shows with Undo each, and Forget clears it everywhere", async ({ browser }) => {
+    // Counters as two devices' picks would leave them: 4K bigger files, 1080p fewer lines.
+    await client.req("setPrefs", { patch: { learned: { uhd: { size: 3, picks: 4 }, fhd: { height: -4, picks: 5 } } } });
+    const page = await device(browser, "desktop", DEFAULTS_PORT);
+    await page.goto("/stream-choice?form=desktop");
+    const rows = page.locator(".learned .lrow");
+    await expect(rows).toHaveText(["On 4K screens you often picked bigger files.Undo", "On 1080p screens you often picked lower resolutions.Undo"]);
+    await page.locator(".learned").scrollIntoViewIfNeeded();
+    await shot(page, "stream-choice-learned", "desktop");
+    await page.locator('[data-f="learned:2160:size"]').focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await prefs()).learned.uhd).toMatchObject({ size: 0, muted: ["size"] });
+    await expect(rows).toHaveCount(1);
+    // By keys, focus stays near (the Learn choice), never on Forget.
+    await expect.poll(() => focused(page)).toBe("choice-learn:true");
+    await page.locator('[data-f="learned:forget"]').click();
+    await expect.poll(async () => (await prefs()).learnedEpoch).toBe(1);
+    await expect(page.locator(".learned")).toHaveCount(0);
+  });
+
+  test("Measure again resets this network's speed through the core", async ({ browser }) => {
+    // The core's speeds are priors until playbacks measure them: the first
+    // answer is made measured here; resetSpeed goes to the real core.
+    let first = true;
+    const page = await device(browser, "tv", DEFAULTS_PORT, {
+      answer: (m) => {
+        if (m.op !== "streamConditions" || !first) return undefined;
+        first = false;
+        const measured: StreamConditions = { network: "wifi", http: { mbps: 42.4, samples: 3 }, p2p: { mbps: 18, samples: 2 }, freeBytes: 61 * GiB, engine: true };
+        return measured;
+      },
+    });
+    await page.goto("/stream-choice?form=tv");
+    const cond = page.locator(".device-line .cond");
+    // No account and the engine: the torrent speed is the one that decides.
+    await expect(cond).toHaveText(/^(4K|1080p|720p)( HDR)?, about 18 Mbit\/s on Wi-Fi, 61 GB free$/);
+    const again = page.locator('[data-f="choice:measure"]');
+    await again.scrollIntoViewIfNeeded();
+    await again.focus();
+    await shot(page, "stream-choice-device", "tv");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".device-line .st")).toHaveText("Measuring at the next playback");
+    await expect(cond).toContainText("speed not measured yet");
+    // Spent, not gone: focus stays on it, and a second press asks nothing.
+    await expect.poll(() => focused(page)).toBe("choice:measure");
+    await expect(again).toHaveAttribute("aria-disabled", "true");
+    await page.keyboard.press("Enter");
+    expect(sent.filter((m) => m.op === "resetSpeed")).toHaveLength(1);
+  });
+
   test("the page at each size; a TV starts on the first choice and picks with select", async ({ browser }) => {
     for (const form of ["tv", "desktop", "phone"] as const) {
-      const page = await device(browser, form);
+      const page = await device(browser, form, DEFAULTS_PORT);
       await page.goto(`/stream-choice?form=${form}`);
       await expect(page.locator('[data-f="choice-size:5368709120"]')).toHaveAttribute("aria-checked", "true");
       if (form === "tv") {
@@ -119,91 +208,56 @@ test.describe("Settings > Stream choice", () => {
   });
 });
 
-test.describe("Versions: each row's line", () => {
-  /** A line from the row's own facts, as rank.rs words them with no account. */
-  function lineFor(r: VersionRow): ReasonLine {
-    const seeds = r.status.kind === "torrent" ? r.status.seeds : null;
-    if (r.status.kind === "ready" || r.status.kind === "direct") return { kind: "ready", service: r.status.kind === "ready" ? r.status.service : null, sizeBytes: r.sizeBytes };
-    if (seeds !== null && seeds < 5) return { kind: "veryFew", seeders: seeds };
-    if (r.sizeBytes !== null && r.sizeBytes > 1.1 * 5 * GiB) return { kind: "large", sizeBytes: r.sizeBytes, limitBytes: 5 * GiB };
-    if (seeds !== null && seeds < 50) return { kind: "few", seeders: seeds };
-    if (seeds === null || seeds >= 200) return { kind: "quick", seeders: seeds, sizeBytes: r.sizeBytes };
-    return { kind: "should", seeders: seeds, sizeBytes: r.sizeBytes, service: null };
-  }
-  type Snap = { recommended: VersionRow | null; rows: (VersionRow & { line?: ReasonLine })[] };
-  const withLines = (s: Snap) => ({ ...s, rows: s.rows.map((r) => ({ ...r, line: lineFor(r) })) });
-
-  /** The shared core, with lines added to the versions view and playback never opened. */
-  async function device(browser: Browser, form: Form): Promise<Page> {
-    const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", reducedMotion: "reduce", baseURL: `http://127.0.0.1:${PORTS.vite}` });
-    await context.routeWebSocket(/\/ws$/, (ws) => {
-      const server = ws.connectToServer();
-      const asked = new Set<number>();
-      const subs = new Set<number>();
-      ws.onMessage((m) => {
-        const msg = JSON.parse(String(m)) as { id?: number; op?: string; view?: string };
-        if (msg.op === "subscribe" && msg.view === "playback") return;
-        if (msg.op === "subscribe" && msg.view === "versions" && msg.id !== undefined) asked.add(msg.id);
-        server.send(m);
-      });
-      server.onMessage((m) => {
-        const msg = JSON.parse(String(m)) as { id?: number; ok?: boolean; result?: { sub: number; snapshot: Snap }; sub?: number; updates?: Snap[] };
-        if (msg.id !== undefined && asked.has(msg.id) && msg.ok && msg.result) {
-          subs.add(msg.result.sub);
-          return ws.send(JSON.stringify({ ...msg, result: { ...msg.result, snapshot: withLines(msg.result.snapshot) } }));
-        }
-        if (msg.sub !== undefined && subs.has(msg.sub) && msg.updates) return ws.send(JSON.stringify({ ...msg, updates: msg.updates.map(withLines) }));
-        ws.send(m);
-      });
-    });
-    const page = await context.newPage();
-    page.on("pageerror", (e) => errors.push(`${form}: ${e.message}`));
-    return page;
-  }
+test.describe("Versions", () => {
   const path = (form: Form) => `/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`;
-  /** The first row with a line, once every addon has answered. */
-  async function firstLine(page: Page) {
+  /** The first row, once every addon has answered. */
+  async function firstRow(page: Page) {
     await expect(page.locator(".vrow .line").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".vstate .live")).toHaveCount(0, { timeout: 60_000 });
-    return { row: page.locator(".vrow").filter({ has: page.locator(".line") }).first() };
+    return page.locator(".vrow").first();
   }
 
-  test("TV: a focused row shows its details under it, with the tone icon", async ({ browser }) => {
-    const page = await device(browser, "tv");
+  test("the view is asked with the title's facts and the network, and says what it read", async ({ browser }) => {
+    const page = await device(browser, "tv", PORTS.bridge);
     await page.goto(path("tv"));
-    const { row } = await firstLine(page);
+    await firstRow(page);
+    const ask = sent.find((m) => m.op === "subscribe" && m.view === "versions")?.params as Record<string, unknown>;
+    expect(ask).toMatchObject({ kind: "series", videoId: GOT.resume, network: "other" });
+    expect(ask.runtime).toMatch(/\d+ min/);
+    expect(ask.releaseInfo).toMatch(/^\d{4}/);
+    // The header is the core's conditions, in words.
+    await expect(page.locator(".vstate .device")).toHaveText(/^This TV: (4K|1080p|720p|SD)( HDR)?, this network, speed not measured yet$/);
+  });
+
+  test("TV: a focused row shows its line's details under it, with the tone icon", async ({ browser }) => {
+    const page = await device(browser, "tv", PORTS.bridge);
+    await page.goto(path("tv"));
+    const row = await firstRow(page);
     await expect(row.locator(".line svg.tone")).toHaveCount(1);
     await row.focus();
-    const detail = row.locator(".more .detail");
-    await expect(detail).toBeVisible();
-    expect((await detail.textContent())?.length).toBeGreaterThan(0);
-    // One place for the details on a TV: no tip.
+    await expect(row.locator(".more .detail")).toBeVisible();
     await expect(row.locator(".line .tip")).toBeHidden();
     await shot(page, "stream-choice-versions", "tv");
-    await page.context().close();
   });
 
   test("desktop: hovering a row shows its details in a tip", async ({ browser }) => {
-    const page = await device(browser, "desktop");
+    const page = await device(browser, "desktop", PORTS.bridge);
     await page.goto(path("desktop"));
-    const { row } = await firstLine(page);
+    const row = await firstRow(page);
     const tip = row.locator(".line .tip");
     await expect(tip).toBeHidden();
     await row.hover();
     await expect(tip).toBeVisible();
     await expect.poll(() => tip.evaluate((t) => getComputedStyle(t).opacity)).toBe("1");
     // The tip says what the TV's focus line says.
-    const key = (await row.getAttribute("data-f")) as string;
-    const said = await page.evaluate((k) => document.querySelector(`[data-f="${k}"] .more .detail`)?.textContent, key);
-    await expect(tip).toHaveText(said as string);
+    await expect(tip).toHaveText((await row.locator(".more .detail").textContent()) as string);
     await shot(page, "stream-choice-versions", "desktop");
-    await page.context().close();
   });
 
   test("phone: a tap opens the row with its details and Play, a second tap closes it", async ({ browser }) => {
-    const page = await device(browser, "phone");
+    const page = await device(browser, "phone", PORTS.bridge);
     await page.goto(path("phone"));
-    const { row } = await firstLine(page);
+    const row = await firstRow(page);
     const url = page.url();
     await row.tap();
     await expect(row).toHaveAttribute("aria-expanded", "true");
@@ -217,6 +271,63 @@ test.describe("Versions: each row's line", () => {
     await row.tap();
     await expect(open).toHaveCount(0);
     expect(page.url()).toBe(url);
-    await page.context().close();
+  });
+
+  /** Every version as blocked for `reason`, as the core words it (3.11). */
+  const blockedAs = (reason: "needsAccount" | "nothingPlaysHere") => (s: VersionsSnapshot): VersionsSnapshot => {
+    const rows = [...(s.recommended ? [s.recommended] : []), ...s.rows];
+    return rows.length && s.done ? { ...s, recommended: null, rows: [], blocked: { reason, count: rows.length, rows } } : s;
+  };
+
+  test("blocked, nothing plays here: the card says why, and Show them lists the versions", async ({ browser }) => {
+    for (const form of ["tv", "phone"] as const) {
+      const page = await device(browser, form, PORTS.bridge, { versions: blockedAs("nothingPlaysHere") });
+      await page.goto(path(form));
+      const card = page.locator(".pick .blocked");
+      await expect(card.locator("p")).toHaveText(/^Found \d+ versions?, but none plays on this device\.$/, { timeout: 60_000 });
+      await expect(page.locator(".vrow")).toHaveCount(0);
+      // The header counts what was found, not the empty list.
+      await expect(page.locator(".vstate .st").first()).not.toHaveText("0 versions");
+      const show = page.locator('[data-f="versions:show"]');
+      if (form === "tv") await expect.poll(() => focused(page)).toBe("versions:show");
+      await shot(page, "stream-choice-blocked", form);
+      await show.click();
+      await expect(show).toHaveAttribute("aria-expanded", "true");
+      await expect(page.locator(".vrow").first()).toBeVisible();
+      await page.context().close();
+    }
+  });
+
+  test("blocked, needs an account: Versions, Title and the player say so, and lead to the account", async ({ browser }) => {
+    const page = await device(browser, "desktop", PORTS.bridge, { versions: blockedAs("needsAccount") });
+    await page.goto(path("desktop"));
+    const card = page.locator(".pick .blocked");
+    await expect(card.locator("p")).toContainText("only through a streaming service account", { timeout: 60_000 });
+    await expect(page.locator('[data-f="versions:account"]')).toHaveText("Add an account");
+    await expect(page.locator('[data-f="versions:account"]')).toHaveAttribute("href", "/debrid");
+    await shot(page, "stream-choice-account", "desktop");
+    // The title page's primary leads to the account, not to another source.
+    await page.goto(`/title/series/${GOT.id}?form=desktop`);
+    await expect(page.locator('[data-f="title:addaccount"]')).toHaveText("Add an account", { timeout: 60_000 });
+    await expect(page.locator(".vline")).toContainText("only through a streaming service account");
+    // The player, opened straight (a deep link), says the same (no playback is opened).
+    await page.goto(`/play/series/${GOT.id}/${GOT.resume}?form=desktop`);
+    await expect(page.locator(".player-scr")).toContainText("only through a streaming service account", { timeout: 60_000 });
+  });
+
+  test("the learning note shows once with Undo, which mutes that choice", async ({ browser }) => {
+    // The note as the core sends it when a counter crosses 3; the Undo write
+    // is answered here, so the shared core's profile keeps no counter.
+    const page = await device(browser, "desktop", PORTS.bridge, {
+      versions: (s) => ({ ...s, note: { screenClass: 1080, choice: "size", up: true, prefs: { ...NOTE_PREFS, sizeLimitBytes: 10 * GiB } } }),
+      answer: (m) => (m.op === "setPrefs" && JSON.stringify(m).includes("learned") ? {} : undefined),
+    });
+    await page.goto(path("desktop"));
+    const note = page.locator(".lnote");
+    await expect(note).toContainText("On this computer you often picked bigger files, so Marquee now picks files up to 10 GB.", { timeout: 60_000 });
+    await shot(page, "stream-choice-note", "desktop");
+    await page.locator('[data-f="versions:undo"]').click();
+    await expect(note).toHaveCount(0);
+    expect(sent.find((m) => m.op === "setPrefs")).toMatchObject({ patch: { learned: { fhd: { size: 0, muted: ["size"] } } } });
   });
 });

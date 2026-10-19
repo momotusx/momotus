@@ -9,6 +9,14 @@ import type { SubtitleNote } from "../core/generated/SubtitleNote";
 import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
 import type { VersionStatus } from "../core/generated/VersionStatus";
+import type { BlockedReason } from "../core/generated/BlockedReason";
+import type { LearnedChoice } from "../core/generated/LearnedChoice";
+import type { Network } from "../core/generated/Network";
+import type { Prefs } from "../core/generated/Prefs";
+import type { ReasonLine } from "../core/generated/ReasonLine";
+import type { Speed } from "../core/generated/Speed";
+import type { StreamPrefs } from "../core/generated/StreamPrefs";
+import type { VersionsConditions } from "../core/generated/VersionsConditions";
 import type { Form } from "../form";
 import { bytes } from "./format";
 import choice from "../../../shared/stream-choice-words.json";
@@ -562,22 +570,6 @@ export function syncSummary(s: { locked: boolean; problem: string | null; joined
 
 export const choiceWords = choice;
 
-/** The core's typed line for a version (`ReasonLine` in
- * crates/mq-streams/src/model.rs), with its numbers. */
-// ponytail: mirrors the Rust enum until phase 2 exports the generated type.
-export type ReasonLine =
-  | { kind: "copy"; quality: string }
-  | { kind: "fetch"; service: string | null }
-  | { kind: "veryFew"; seeders: number }
-  | { kind: "otherYear"; year: number }
-  | { kind: "mayPause"; needMbps: number; haveMbps: number; samples: number }
-  | { kind: "washedOut" }
-  | { kind: "large"; sizeBytes: number; limitBytes: number }
-  | { kind: "few"; seeders: number }
-  | { kind: "ready"; service: string | null; sizeBytes: number | null }
-  | { kind: "quick"; seeders: number | null; sizeBytes: number | null }
-  | { kind: "should"; seeders: number | null; sizeBytes: number | null; service: string | null };
-
 type Fields = Record<string, string | number | null | undefined>;
 
 /** Fills `{name}` fields; null when one is unknown, so the part is left out. */
@@ -613,6 +605,8 @@ const numbers = (l: ReasonLine): Fields => {
 /** A version's line: the tone, the default text, and the details shown on
  * focus (TV), hover (desktop) or tap (phone). `limitChosen`: the user set
  * the size limit, so a large file is "larger than the size you chose". */
+// ponytail: no caller passes limitChosen until the core's `large` line says
+// whether the limit was chosen; "Large file" until then.
 export function lineWords(l: ReasonLine, limitChosen = false): { tone: Exclude<Tone, "idle">; text: string; details: string } {
   const w = choice.lines[l.kind];
   const text = limitChosen && "textChosen" in w ? w.textChosen : w.text;
@@ -622,64 +616,103 @@ export function lineWords(l: ReasonLine, limitChosen = false): { tone: Exclude<T
 }
 
 /** Why no version is visible, with its one action (3.11). */
-export function blockedWords(reason: keyof typeof choice.blocked, count: number) {
+export function blockedWords(reason: BlockedReason, count: number) {
   const w = choice.blocked[reason];
   return { text: w.text.replace("{versions}", counted("versions", count)), action: w.action };
 }
 
-/** What the core knows about this device, as one line (4.2, 4.4). */
+/** What the device line says: the screen, the connection and the disk. */
 export interface DeviceConditions {
   screenClass: number;
   hdr: boolean;
-  network: string;
-  speedMbps: number | null;
-  speedMeasured: boolean;
+  network: Network;
+  speed: Speed;
   freeBytes: number | null;
 }
+
+/** The speed that decides here: HTTP with a streaming service account or
+ * without the engine, else the torrent engine's. */
+export const speedFor = (c: { http: Speed; p2p: Speed; engine: boolean }, account: boolean) => (account || !c.engine ? c.http : c.p2p);
 
 const c = choice.conditions;
 
 export const deviceName = (f: Form) => c.devices[f];
 
+const screenWord = (cls: number) => c.screens[String(cls) as keyof typeof c.screens] ?? `${cls}p`;
+
 /** "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */
 export function conditionsLine(d: DeviceConditions): string {
-  const screen = c.screens[String(d.screenClass) as keyof typeof c.screens] ?? `${d.screenClass}p`;
-  const network = c.networks[d.network as keyof typeof c.networks] ?? c.networks.other;
-  const speed = d.speedMeasured && d.speedMbps !== null ? part(c.speed, { mbps: Math.round(d.speedMbps), network }) : part(c.speedUnknown, { network });
+  const screen = screenWord(d.screenClass);
+  const network = c.networks[d.network];
+  const speed = d.speed.samples > 0 ? part(c.speed, { mbps: Math.round(d.speed.mbps), network }) : part(c.speedUnknown, { network });
   const free = d.freeBytes === null ? null : part(c.free, { free: bytes(d.freeBytes) });
   return [d.hdr ? part(c.hdr, { screen }) : screen, speed, free].filter((x) => x !== null).join(", ");
 }
 
-/** "This TV: 4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */
-export const conditionsHeader = (f: Form, d: DeviceConditions) => capital(c.header.replace("{device}", deviceName(f)).replace("{conditions}", conditionsLine(d)));
+/** The Versions header from the conditions the ranking read. */
+export const conditionsHeader = (f: Form, v: VersionsConditions) =>
+  capital(
+    c.header
+      .replace("{device}", deviceName(f))
+      .replace("{conditions}", conditionsLine({ screenClass: v.screenClass, hdr: v.hdr, network: v.network, speed: speedFor(v, v.account), freeBytes: v.freeBytes })),
+  );
 
-/** The one-time note when a learned counter crosses 3 (3.9). */
-export function learnedNote(counter: keyof Omit<typeof choice.learned, "undo">, up: boolean, f: Form, fields: { limit?: number; height?: number } = {}): string | null {
-  const height = fields.height === undefined ? undefined : (c.screens[String(fields.height) as keyof typeof c.screens] ?? `${fields.height}p`);
-  return part(choice.learned[counter][up ? "up" : "down"], { device: deviceName(f), limit: fields.limit === undefined ? undefined : bytes(fields.limit), height });
+/** The one-time note on Versions (3.9), with the preferences now in effect:
+ * "On this TV you often picked bigger files, so Marquee now picks files up
+ * to 10 GB." Null when the change names no number (no limit, the screen's
+ * resolution). */
+export function learnedNote(choice_: LearnedChoice, up: boolean, f: Form, prefs: Pick<StreamPrefs, "sizeLimitBytes" | "maxHeight">): string | null {
+  const limit = prefs.sizeLimitBytes === null ? null : bytes(prefs.sizeLimitBytes);
+  const height = prefs.maxHeight === null ? null : screenWord(prefs.maxHeight);
+  return part(choice.learned[choice_][up ? "up" : "down"], { device: deviceName(f), limit, height });
 }
 
-/** The v2 stream preferences the Settings page and the question write
- * (`StreamPrefs` in crates/mq-streams/src/model.rs); missing on an older
- * core, so each reads with its default (3.8). */
-// ponytail: local shape until phase 2 regenerates StreamPrefs.ts.
-export interface StreamChoicePrefs {
-  sizeLimitBytes?: number | null;
-  minSeeders?: number;
-  hdr?: boolean;
-  preferReady?: boolean;
-  learn?: boolean;
+// Largest screen first (an object with number keys would list them smallest first).
+const classes = [
+  [2160, "uhd"],
+  [1080, "fhd"],
+  [720, "hd"],
+  [480, "sd"],
+] as const;
+const choices: LearnedChoice[] = ["size", "height", "ready", "hdr"];
+
+/** What the picks taught, for Settings: each choice at 3 or more either
+ * way, by screen class, unless undone or forgotten (a class stamped with an
+ * older epoch reads as zero). */
+export function learnedRows(p: Pick<Prefs, "learned" | "learnedEpoch">): { screenClass: number; choice: LearnedChoice; up: boolean; text: string }[] {
+  return classes.flatMap(([cls, key]) => {
+    const l = p.learned[key];
+    if (l.epoch < p.learnedEpoch) return [];
+    return choices
+      .filter((ch) => Math.abs(l[ch]) >= 3 && !l.muted.includes(ch))
+      .map((ch) => {
+        const up = l[ch] > 0;
+        const screens = choice.learned.screens[String(cls) as keyof typeof choice.learned.screens];
+        return { screenClass: cls, choice: ch, up, text: choice.learned.settingsLines[ch][up ? "up" : "down"].replace("{screens}", screens) };
+      });
+  });
 }
 
-export const choiceDefaults = { sizeLimitBytes: choice.question.fast.patch.sizeLimitBytes as number | null, minSeeders: choice.question.fast.patch.minSeeders, hdr: true, preferReady: true, learn: true };
+/** Undo: the choice's counter goes to zero and stops learning there. */
+export function undoPatch(p: Pick<Prefs, "learned">, screenClass: number, ch: LearnedChoice) {
+  const key = classes.find(([cls]) => cls === screenClass)?.[1] ?? "fhd";
+  const muted = p.learned[key].muted;
+  return { learned: { [key]: { [ch]: 0, muted: muted.includes(ch) ? muted : [...muted, ch] } } };
+}
+
+/** "Forget what was learned": a new epoch, so every counter reads as zero,
+ * on every device, also one offline now. */
+export const forgetPatch = (p: Pick<Prefs, "learnedEpoch">) => ({ learnedEpoch: p.learnedEpoch + 1 });
+
+/** Anything learned that Forget would clear. */
+export const anyLearned = (p: Pick<Prefs, "learned" | "learnedEpoch">) =>
+  classes.some(([, key]) => p.learned[key].epoch >= p.learnedEpoch && choices.some((ch) => p.learned[key][ch] !== 0));
 
 /** "Up to 5 GB, shared by at least 50 people": the Settings row's line. */
-export function choiceSummary(p: StreamChoicePrefs): string {
+export function choiceSummary(p: Pick<StreamPrefs, "sizeLimitBytes" | "minSeeders">): string {
   const s = choice.settings;
-  const size = p.sizeLimitBytes === undefined ? choiceDefaults.sizeLimitBytes : p.sizeLimitBytes;
-  const seeders = p.minSeeders ?? choiceDefaults.minSeeders;
-  const sizeLabel = s.size.choices.find((x) => x.value === size)?.label ?? s.size.custom.replace("{size}", bytes(size ?? 0));
-  const people = s.seeders.choices.find((x) => x.value === seeders)?.label ?? s.seeders.custom.replace("{n}", seeders.toLocaleString("en-US"));
+  const sizeLabel = s.size.choices.find((x) => x.value === p.sizeLimitBytes)?.label ?? s.size.custom.replace("{size}", bytes(p.sizeLimitBytes ?? 0));
+  const people = s.seeders.choices.find((x) => x.value === p.minSeeders)?.label ?? s.seeders.custom.replace("{n}", p.minSeeders.toLocaleString("en-US"));
   return s.summary.replace("{size}", sizeLabel).replace("{people}", people);
 }
 

@@ -18,6 +18,7 @@ import type { TitleHeader } from "./generated/TitleHeader";
 import type { TitleSnapshot } from "./generated/TitleSnapshot";
 import type { TitleUpdate } from "./generated/TitleUpdate";
 import type { VersionsSnapshot } from "./generated/VersionsSnapshot";
+import type { Network } from "./generated/Network";
 
 export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
 
@@ -39,11 +40,22 @@ transport.onClose(() => setLink("closed"));
 
 // The core pauses background work while the app is hidden and retries
 // network work when the connection returns.
-const lifecycle = (event: string) => void bridge.request("lifecycle", { event }).catch(() => undefined);
+const lifecycle = (event: string, fields: Record<string, unknown> = {}) => void bridge.request("lifecycle", { event, ...fields }).catch(() => undefined);
+
+type Connection = EventTarget & { type?: string };
+const connection = (navigator as Navigator & { connection?: Connection }).connection;
+
+/** The network type speed is measured for (plans/m13-stream-choice.md 4.6);
+ * most desktop browsers do not say, so "other". */
+export function networkType(): Network {
+  const type = connection?.type;
+  return type === "wifi" || type === "ethernet" || type === "cellular" ? type : "other";
+}
 document.addEventListener("visibilitychange", () => lifecycle(document.hidden ? "background" : "foreground"));
 // Leaving the page: the core pauses what it scrobbles (Trakt) before the tab goes.
 window.addEventListener("pagehide", () => lifecycle("background"));
-window.addEventListener("online", () => lifecycle("networkChanged"));
+window.addEventListener("online", () => lifecycle("networkChanged", { network: networkType() }));
+connection?.addEventListener("change", () => lifecycle("networkChanged", { network: networkType() }));
 
 export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
 
@@ -304,6 +316,12 @@ export interface VersionsParams {
   season?: number;
   episode?: number;
   bingeGroup?: string;
+  /** The title as the app knows it, for the bitrate and the year check
+   * (plans/m13-stream-choice.md 4.3); the core reads the meta for the rest. */
+  runtime?: string;
+  releaseInfo?: string;
+  released?: string;
+  episodesInSeason?: number;
 }
 
 let versions: { key: string; view: LiveView<VersionsSnapshot> } | null = null;
@@ -315,7 +333,7 @@ export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
   const key = `${p.kind}|${p.videoId}|${p.bingeGroup ?? ""}`;
   if (versions?.key === key && versions.view.state.status.state !== "failed") return versions.view;
   versions?.view.close();
-  const view = liveView<VersionsSnapshot>("versions", { ...p, ...displayCaps() }, true);
+  const view = liveView<VersionsSnapshot>("versions", { ...p, ...displayCaps(), network: networkType() }, true);
   versions = { key, view };
   return view;
 }

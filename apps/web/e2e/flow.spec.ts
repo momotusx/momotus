@@ -531,7 +531,7 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     expect(Math.abs((toggle?.y ?? 0) + (toggle?.height ?? 0) / 2 - ((play?.y ?? 0) + (play?.height ?? 0) / 2))).toBeLessThan(2);
     // The display class comes from the screen, not the window.
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`);
-    await expect(page.locator(".device")).toContainText("This screen: 1080p", { timeout: 30_000 });
+    await expect(page.locator(".device")).toContainText(/^This (TV|computer|phone): 1080p,/, { timeout: 30_000 });
     await context.close();
   });
 }

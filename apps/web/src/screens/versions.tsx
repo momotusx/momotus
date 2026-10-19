@@ -3,36 +3,44 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
+import Eye from "lucide-solid/icons/eye";
 import EyeOff from "lucide-solid/icons/eye-off";
+import KeyRound from "lucide-solid/icons/key-round";
 import MonitorCheck from "lucide-solid/icons/monitor-check";
 import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import Sparkles from "lucide-solid/icons/sparkles";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
+import Undo2 from "lucide-solid/icons/undo-2";
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
-import { displayCaps } from "../core/client";
+import { op, prefsView } from "../core/client";
 import type { Group } from "../core/generated/Group";
+import type { ReasonLine } from "../core/generated/ReasonLine";
 import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
 import { form } from "../form";
 import { bytes, decoded, playPath, releaseParts } from "../lib/format";
 import {
+  blockedWords,
+  choiceWords,
   conditionsHeader,
-  type DeviceConditions,
+  counted,
   groupLabel,
   groupOrder,
   hiddenSummary,
   languageName,
+  learnedNote,
   lineWords,
   qualityCell,
   qualityText,
-  type ReasonLine,
   reasonText,
   statusText,
+  undoPatch,
 } from "../lib/words";
 import "./versions.css";
 
@@ -70,11 +78,6 @@ function StatusWord(props: { row: VersionRow }) {
   );
 }
 
-// ponytail: `line` and `conditions` are optional until phase 2 regenerates
-// VersionRow and VersionsSnapshot; an older core keeps the status word.
-type Row = VersionRow & { line?: ReasonLine | null };
-type Snap = VersionsSnapshot & { rows: Row[]; conditions?: DeviceConditions | null };
-
 const toneIcon = { ok: CircleCheck, warn: TriangleAlert, bad: OctagonAlert };
 
 /** The row's line: a tone icon (its shape, never color alone) and the plain
@@ -100,10 +103,27 @@ const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? 
 function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   const navigate = useNavigate();
   const ctx = videoContext(props.kind, props.id, props.videoId);
-  const snap = (): Snap | null => (ctx.versions()?.state.data as Snap | undefined) ?? null;
-  // Phone: a tap on a row with a line opens it (its details and Play).
+  const snap = (): VersionsSnapshot | null => ctx.versions()?.state.data ?? null;
+  // Phone: a tap opens the row (its details and Play); elsewhere it plays.
   const [opened, setOpened] = createSignal<string | null>(null);
-  const tapRow = (r: Row) => (form() === "phone" && r.line ? setOpened(opened() === r.key ? null : r.key) : play(r.key));
+  const tapRow = (r: VersionRow) => (form() === "phone" ? setOpened(opened() === r.key ? null : r.key) : play(r.key));
+  // Blocked (3.11): "Show them" lists the rows as they would rank once fixed.
+  const [showBlocked, setShowBlocked] = createSignal(false);
+  const blocked = () => snap()?.blocked ?? null;
+  // The one-time learning note (3.9), until Undo.
+  const prefs = prefsView();
+  const [undone, setUndone] = createSignal(false);
+  const note = () => {
+    const n = snap()?.note;
+    return n && !undone() ? { ...n, text: learnedNote(n.choice, n.up, form(), n.prefs) } : null;
+  };
+  const undo = () => {
+    const n = snap()?.note;
+    const p = prefs.state.data;
+    if (!n || !p) return;
+    setUndone(true);
+    void op("setPrefs", { patch: undoPatch(p, n.screenClass, n.choice) }).catch(() => setUndone(false));
+  };
   const pick = () => snap()?.recommended ?? null;
   const [open, setOpen] = createSignal<Set<Group>>(new Set());
   const play = (key: string) => navigate(`${playPath(props.kind, props.id, props.videoId)}?key=${encodeURIComponent(key)}`);
@@ -124,7 +144,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   });
 
   const groups = () => {
-    const rows = snap()?.rows ?? [];
+    const rows = (showBlocked() ? blocked()?.rows : snap()?.rows) ?? [];
     return groupOrder.map((g) => ({ group: g, rows: rows.filter((r) => r.group === g) })).filter((g) => g.rows.length > 0);
   };
   const toggle = (g: Group) => {
@@ -133,15 +153,14 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
     else next.add(g);
     setOpen(next);
   };
-  const caps = displayCaps();
-  const codecNames: Record<string, string> = { h264: "H.264", h265: "HEVC", av1: "AV1", vp9: "VP9" };
-  const device = `This screen: ${caps.displayHeight >= 2160 ? "4K" : `${caps.displayHeight}p`}${caps.hdr.length ? ", HDR" : ""}, plays ${caps.decoders.map((d) => codecNames[d] ?? d).join(", ")} in ${caps.containers.map((c) => (c === "webm" ? "WebM" : c.toUpperCase())).join(", ")}`;
   const progress = () => {
     const s = snap();
     if (!s) return { tone: "idle", text: "Opening" };
     if (s.pendingAddons.length) return { tone: "warn live", text: `Asking ${s.pendingAddons.join(", ")}` };
     if (s.slowAddons.length) return { tone: "warn", text: `${s.slowAddons.join(", ")} is slow, still waiting` };
     if (s.failedAddons.length) return { tone: "bad", text: `${s.failedAddons.join(", ")} did not answer` };
+    // Blocked: what was found, none of it listed (the card says why).
+    if (s.blocked) return { tone: "warn", text: counted("versions", s.blocked.count) };
     return { tone: "ok", text: `${s.rows.length + (s.recommended ? 1 : 0)} versions` };
   };
 
@@ -166,10 +185,14 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
               <i class="dot" />
               {progress().text}
             </span>
-            <span class="device">
-              <MonitorCheck aria-hidden />
-              {snap()?.conditions ? conditionsHeader(form(), snap()?.conditions as DeviceConditions) : device}
-            </span>
+            <Show when={snap()?.conditions}>
+              {(c) => (
+                <span class="device">
+                  <MonitorCheck aria-hidden />
+                  {conditionsHeader(form(), c())}
+                </span>
+              )}
+            </Show>
           </p>
         </div>
       </header>
@@ -181,7 +204,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
             <p>{(ctx.versions()?.state.status as { reason?: string }).reason}</p>
           </section>
         </Match>
-        <Match when={snap()?.done && !pick() && (snap()?.rows.length ?? 0) === 0}>
+        <Match when={snap()?.done && !pick() && (snap()?.rows.length ?? 0) === 0 && !blocked()}>
           <section class="vempty problem">
             <h2>No playable version found</h2>
             <p>
@@ -200,12 +223,41 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
             <Show
               when={pick()}
               fallback={
-                <div class="pick-wait" aria-busy="true">
-                  <p class="kicker">Recommended for this screen</p>
-                  <div class="skel" />
-                  <div class="skel" />
-                  <div class="skel" />
-                </div>
+                <Show
+                  when={blocked()}
+                  fallback={
+                    <div class="pick-wait" aria-busy="true">
+                      <p class="kicker">Recommended for this screen</p>
+                      <div class="skel" />
+                      <div class="skel" />
+                      <div class="skel" />
+                    </div>
+                  }
+                >
+                  {(b) => {
+                    const w = () => blockedWords(b().reason, b().count);
+                    return (
+                      <div class="blocked">
+                        <h2>No playable version found</h2>
+                        <p>{w().text}</p>
+                        <Show
+                          when={b().reason === "needsAccount"}
+                          fallback={
+                            <button class="btn primary" data-f="versions:show" data-autofocus aria-expanded={showBlocked()} onClick={() => setShowBlocked(!showBlocked())}>
+                              <Eye aria-hidden />
+                              {w().action}
+                            </button>
+                          }
+                        >
+                          <A class="btn primary" href="/debrid" data-f="versions:account" data-autofocus>
+                            <KeyRound aria-hidden />
+                            {w().action}
+                          </A>
+                        </Show>
+                      </div>
+                    );
+                  }}
+                </Show>
               }
             >
               {(p) => (
@@ -262,6 +314,18 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
           </section>
 
           <section class="alts" aria-label="All versions">
+            <Show when={note()?.text}>
+              {(text) => (
+                <p class="lnote" role="status">
+                  <Sparkles aria-hidden />
+                  <span>{text()}</span>
+                  <button class="btn" data-f="versions:undo" onClick={undo}>
+                    <Undo2 aria-hidden />
+                    {choiceWords.learned.undo}
+                  </button>
+                </p>
+              )}
+            </Show>
             <div class="thead" aria-hidden="true">
               <span>Quality</span>
               <span>Features</span>
@@ -281,13 +345,13 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                         <span class="num">{g.rows.length}</span>
                       </h3>
                       <For each={shown()}>
-                        {(r: Row) => (
+                        {(r) => (
                           <>
                             <button
                               class="vrow"
                               classList={{ open: opened() === r.key }}
                               data-f={`v:${r.key}`}
-                              aria-expanded={form() === "phone" && r.line ? opened() === r.key : undefined}
+                              aria-expanded={form() === "phone" ? opened() === r.key : undefined}
                               onClick={() => tapRow(r)}
                             >
                               <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
@@ -297,12 +361,10 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                                 <For each={r.features}>{(f) => <span>{f}</span>}</For>
                               </span>
                               <span class="size num">{r.sizeBytes ? bytes(r.sizeBytes) : ""}</span>
-                              <Show when={r.line} fallback={<StatusWord row={r} />}>
-                                {(l) => <LineWord line={l()} />}
-                              </Show>
+                              <LineWord line={r.line} />
                               <span class="via">{r.via}</span>
                               <span class="more">
-                                <Show when={r.line && lineWords(r.line).details}>
+                                <Show when={lineWords(r.line).details}>
                                   {(d) => <span class="detail">{d()}</span>}
                                 </Show>
                                 <span class="rel">
@@ -313,7 +375,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                             </button>
                             <Show when={form() === "phone" && opened() === r.key}>
                               <div class="vrow-open">
-                                <Show when={r.line && lineWords(r.line).details}>
+                                <Show when={lineWords(r.line).details}>
                                   {(d) => <p class="detail">{d()}</p>}
                                 </Show>
                                 <p class="rel">

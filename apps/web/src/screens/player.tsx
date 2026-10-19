@@ -26,7 +26,7 @@ import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, sourceStart } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
-import { languageName, qualityCell, qualityText, subtitleNote } from "../lib/words";
+import { blockedWords, languageName, qualityCell, qualityText, subtitleNote } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -370,6 +370,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       return { tone: "warn", text: r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting", busy: true };
     }
     const vs = versions();
+    if (vs?.blocked) return { tone: "bad", text: blockedWords(vs.blocked.reason, vs.blocked.count).text, busy: false };
     if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: "No playable version found", busy: false };
     if (vs?.pendingAddons.length) return { tone: "warn", text: `Asking ${vs.pendingAddons.join(", ")} for versions`, busy: true };
     return { tone: "warn", text: ctx.details() ? "Choosing the best version" : "Opening", busy: true };

@@ -4,6 +4,7 @@ import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
 import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
+import KeyRound from "lucide-solid/icons/key-round";
 import Plus from "lucide-solid/icons/plus";
 import Star from "lucide-solid/icons/star";
 import Film from "lucide-solid/icons/film";
@@ -18,7 +19,7 @@ import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
 import { bytes, clock, decoded, episodeLabel, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { kindLabel, qualityText, statusText } from "../lib/words";
+import { blockedWords, choiceWords, kindLabel, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
 export default function Title() {
@@ -145,10 +146,20 @@ function TitlePage(props: { kind: string; id: string }) {
                     <Show
                       when={!noVersion(versions()?.state.data ?? null)}
                       fallback={
-                        <A class="btn primary big" href="/addons" data-f="title:addsource" data-autofocus>
-                          <Plus aria-hidden />
-                          Add a source
-                        </A>
+                        <Show
+                          when={versions()?.state.data?.blocked?.reason === "needsAccount"}
+                          fallback={
+                            <A class="btn primary big" href="/addons" data-f="title:addsource" data-autofocus>
+                              <Plus aria-hidden />
+                              Add a source
+                            </A>
+                          }
+                        >
+                          <A class="btn primary big" href="/debrid" data-f="title:addaccount" data-autofocus>
+                            <KeyRound aria-hidden />
+                            {choiceWords.blocked.needsAccount.action}
+                          </A>
+                        </Show>
                       }
                     >
                       <Show when={target()}>
@@ -317,7 +328,9 @@ function VersionLine(props: { snap: VersionsSnapshot | null }) {
         <p class="vline muted wrap">
           <span class="st warn">
             <i class="dot" />
-            No playable version found. A source is an addon that finds a playable stream for a title.
+            {props.snap?.blocked
+              ? blockedWords(props.snap.blocked.reason, props.snap.blocked.count).text
+              : "No playable version found. A source is an addon that finds a playable stream for a title."}
           </span>
         </p>
       </Match>

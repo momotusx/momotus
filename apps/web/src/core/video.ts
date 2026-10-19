@@ -16,12 +16,26 @@ export function videoContext(kind: string, id: string, videoId: string, bingeGro
     }
   });
   const details = () => title.state.header?.details ?? null;
-  const versions = createMemo(() => {
-    const name = details()?.name;
-    if (!name) return null;
-    return versionsView({ kind, videoId, title: name, season: ref?.season, episode: ref?.episode, bingeGroup });
-  });
   const episode = () => title.state.episodes.find((e) => e.videoId === videoId) ?? null;
+  const versions = createMemo(() => {
+    const d = details();
+    if (!d?.name) return null;
+    // What the title and episode say now; the view opens once per video, so
+    // facts that arrive later are the core's to read from the meta.
+    const season = ref ? title.state.episodes.filter((e) => e.season === ref.season).length : 0;
+    return versionsView({
+      kind,
+      videoId,
+      title: d.name,
+      season: ref?.season,
+      episode: ref?.episode,
+      bingeGroup,
+      runtime: d.runtime ?? undefined,
+      releaseInfo: d.releaseInfo ?? undefined,
+      released: episode()?.released ?? undefined,
+      episodesInSeason: season || undefined,
+    });
+  });
   const label = () => (ref ? `${episodeLabel(ref.season, ref.episode)}${episode()?.title ? ` ${episode()?.title}` : ""}` : null);
   return { title, details, versions, episode, ref, label };
 }

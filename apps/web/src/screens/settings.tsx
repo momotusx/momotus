@@ -17,7 +17,7 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { Prefs } from "../core/generated/Prefs";
 import { chooseForm, type Form, form } from "../form";
 import { defaultsWords } from "../lib/defaults";
-import { choiceSummary, choiceWords, findAddons, languageName, type StreamChoicePrefs, syncSummary, syncWords } from "../lib/words";
+import { choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
 import { rowLine, traktWords } from "../lib/trakt";
@@ -218,7 +218,7 @@ export default function SettingsScreen() {
                 fkey="settings:stream-choice"
                 icon={<SlidersHorizontal aria-hidden />}
                 title={choiceWords.settings.title}
-                text={choiceSummary(x().streams as StreamChoicePrefs)}
+                text={choiceSummary(x().streams)}
               />
             </div>
             <div class="filters">

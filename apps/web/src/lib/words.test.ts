@@ -1,5 +1,25 @@
 import { expect, test } from "bun:test";
 import { hiddenSummary, languageName, pairingProblem, plainAddress, reasonText, serverHost, statusText, subtitleNote } from "./words";
+import shared from "../../../shared/stream-choice-words.json";
+import type { Learned } from "../core/generated/Learned";
+import type { ReasonLine } from "../core/generated/ReasonLine";
+import type { VersionsConditions } from "../core/generated/VersionsConditions";
+import {
+  anyLearned,
+  blockedWords,
+  choiceSummary,
+  choiceWords,
+  conditionsHeader,
+  conditionsLine,
+  counted,
+  forgetPatch,
+  learnedNote,
+  learnedRows,
+  lineWords,
+  screenClass,
+  speedFor,
+  undoPatch,
+} from "./words";
 
 test("reasons read as plain sentences", () => {
   expect(reasonText("readyNow", { kind: "ready", service: "Real-Debrid" })).toBe("Ready now, cached on Real-Debrid");
@@ -45,9 +65,6 @@ test("a subtitle note names its source and what to do", () => {
   expect(say("changed")).toBe("OpenSubtitles v3 changed its pages, so Marquee cannot read them. An update will fix this.");
   expect(say("trackFailed")).toBe("A subtitle file from OpenSubtitles v3 could not be read. Pick another one.");
 });
-
-import shared from "../../../shared/stream-choice-words.json";
-import { blockedWords, choiceDefaults, choiceSummary, choiceWords, screenClass, conditionsHeader, conditionsLine, counted, learnedNote, lineWords, type ReasonLine } from "./words";
 
 const GiB = 1024 ** 3;
 
@@ -98,35 +115,67 @@ test("may pause says where its speed comes from", () => {
 test("the blocked state counts the versions it found", () => {
   expect(blockedWords("needsAccount", 1).text).toStartWith("Marquee found 1 version. This version of the app");
   expect(blockedWords("nothingPlaysHere", 42)).toEqual({ text: "Found 42 versions, but none plays on this device.", action: "Show them" });
+  expect(blockedWords("noSpace", 3).text).toBe("Marquee found 3 versions, but none fits in the free space on this device.");
   expect(counted("versions", 2000)).toBe("2,000 versions");
 });
 
 test("the device line reads as one sentence, leaving out what is not known", () => {
-  const tv = { screenClass: 2160, hdr: true, network: "wifi", speedMbps: 42.2, speedMeasured: true, freeBytes: 61 * GiB };
-  expect(conditionsLine(tv)).toBe("4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free");
-  expect(conditionsHeader("tv", tv)).toBe("This TV: 4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free");
-  expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speedMbps: 15, speedMeasured: false, freeBytes: null })).toBe("1080p, mobile data, speed not measured yet");
-  expect(conditionsHeader("desktop", { screenClass: 480, hdr: false, network: "weird", speedMbps: null, speedMeasured: false, freeBytes: null })).toBe(
-    "This computer: SD, this network, speed not measured yet",
-  );
+  const measured = { mbps: 42.2, samples: 3 };
+  const prior = { mbps: 15, samples: 0 };
+  expect(conditionsLine({ screenClass: 2160, hdr: true, network: "wifi", speed: measured, freeBytes: 61 * GiB })).toBe("4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free");
+  expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speed: prior, freeBytes: null })).toBe("1080p, mobile data, speed not measured yet");
+  const v: VersionsConditions = {
+    screenClass: 480, hdr: false, network: "other", http: prior, p2p: measured, freeBytes: null,
+    runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false,
+  };
+  // No account and the engine: the torrent speed decides.
+  expect(conditionsHeader("tv", v)).toBe("This TV: SD, about 42 Mbit/s on this network");
+  // With an account, or without the engine, the HTTP one does.
+  expect(conditionsHeader("desktop", { ...v, account: true })).toBe("This computer: SD, this network, speed not measured yet");
+  expect(speedFor({ ...v, engine: false }, false)).toBe(prior);
 });
 
-test("a learned note names the device and the new limit", () => {
-  expect(learnedNote("size", true, "tv", { limit: 10 * GiB })).toBe("On this TV you often picked bigger files, so Marquee now picks files up to 10 GB.");
-  expect(learnedNote("height", false, "phone", { height: 720 })).toBe("On this phone you often picked lower resolutions, so Marquee now picks up to 720p.");
-  expect(learnedNote("hdr", true, "desktop")).toBe("On this computer you often picked HDR versions, so Marquee now prefers HDR.");
-  expect(learnedNote("size", true, "tv")).toBeNull();
+test("a learned note names the device and the preferences now in effect", () => {
+  expect(learnedNote("size", true, "tv", { sizeLimitBytes: 10 * GiB, maxHeight: null })).toBe("On this TV you often picked bigger files, so Marquee now picks files up to 10 GB.");
+  expect(learnedNote("height", false, "phone", { sizeLimitBytes: null, maxHeight: 720 })).toBe("On this phone you often picked lower resolutions, so Marquee now picks up to 720p.");
+  expect(learnedNote("hdr", true, "desktop", { sizeLimitBytes: null, maxHeight: null })).toBe("On this computer you often picked HDR versions, so Marquee now prefers HDR.");
+  // No number to name: no note rather than a gap.
+  expect(learnedNote("size", true, "tv", { sizeLimitBytes: null, maxHeight: null })).toBeNull();
+});
+
+const zero: Learned = { ready: 0, height: 0, hdr: 0, size: 0, picks: 0, epoch: 0, atMs: 0, muted: [] };
+const learned = (uhd: Partial<Learned>, fhd: Partial<Learned> = {}) => ({ uhd: { ...zero, ...uhd }, fhd: { ...zero, ...fhd }, hd: zero, sd: zero });
+
+test("Settings lists what was learned at 3 or more, unless undone or forgotten", () => {
+  const p = { learned: learned({ size: 3, height: -4, hdr: 2, picks: 9 }, { ready: 5, hdr: 3, muted: ["ready"] }), learnedEpoch: 0 };
+  // Largest screens first, then size, height, ready, HDR.
+  expect(learnedRows(p)).toEqual([
+    { screenClass: 2160, choice: "size", up: true, text: "On 4K screens you often picked bigger files." },
+    { screenClass: 2160, choice: "height", up: false, text: "On 4K screens you often picked lower resolutions." },
+    { screenClass: 1080, choice: "hdr", up: true, text: "On 1080p screens you often picked HDR versions." },
+  ]);
+  // A class stamped before the last Forget reads as zero.
+  expect(learnedRows({ ...p, learnedEpoch: 1 })).toEqual([]);
+  expect(anyLearned(p)).toBe(true);
+  expect(anyLearned({ ...p, learnedEpoch: 1 })).toBe(false);
+});
+
+test("Undo zeroes the choice and mutes it; Forget raises the epoch", () => {
+  const p = { learned: learned({ size: 3, muted: ["hdr"] }), learnedEpoch: 2 };
+  expect(undoPatch(p, 2160, "size")).toEqual({ learned: { uhd: { size: 0, muted: ["hdr", "size"] } } });
+  expect(undoPatch(p, 2160, "hdr")).toEqual({ learned: { uhd: { hdr: 0, muted: ["hdr"] } } });
+  expect(undoPatch(p, 720, "height")).toEqual({ learned: { hd: { height: 0, muted: ["height"] } } });
+  expect(forgetPatch(p)).toEqual({ learnedEpoch: 3 });
 });
 
 test("the onboarding patches are the plan's, and Skip is Start fast", () => {
   expect(shared.question.fast.patch).toEqual({ sizeLimitBytes: 5 * GiB, minSeeders: 50 });
   expect(shared.question.best.patch).toEqual({ sizeLimitBytes: null, minSeeders: 20 });
   expect(shared.question.skip).toEqual({ label: "Skip", means: "fast" });
-  expect(choiceDefaults).toEqual({ ...shared.question.fast.patch, hdr: true, preferReady: true, learn: true });
 });
 
 test("the Settings row sums up the size and the seeders as the chips say them", () => {
-  expect(choiceSummary({})).toBe("Up to 5 GB, shared by at least 50 people");
+  expect(choiceSummary({ sizeLimitBytes: 5 * GiB, minSeeders: 50 })).toBe("Up to 5 GB, shared by at least 50 people");
   expect(choiceSummary({ sizeLimitBytes: null, minSeeders: 20 })).toBe("Any size, shared by at least 20 people");
   expect(choiceSummary({ sizeLimitBytes: 2.5 * GiB, minSeeders: 35 })).toBe("Up to 2.5 GB, shared by at least 35 people");
 });
