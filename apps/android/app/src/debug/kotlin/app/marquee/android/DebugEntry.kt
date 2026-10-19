@@ -96,12 +96,19 @@ object DebugEntry {
 
     /**
      * Local fakes for emulator walks: Trakt's base URL in `files/dev-trakt`, Find addons' source manifest
-     * in `files/dev-cinemeta` (written with `adb shell run-as`), each an http URL on this device, read only
-     * by a core library built with debug assertions (`build-core.sh dev`), which only debug builds package.
-     * No file, no change.
+     * in `files/dev-cinemeta`, Stremio's account and link services in `files/dev-stremio` (scripts/fake-stremio.ts,
+     * Import from Stremio without an account), written with `adb shell run-as`, each an http URL on this
+     * device, read only by a core library built with debug assertions (`build-core.sh dev`), which only debug
+     * builds package. No file, no change.
      */
     fun devFakes(context: android.content.Context) {
-        for ((file, name) in listOf("dev-trakt" to "MQ_DEV_TRAKT", "dev-cinemeta" to "MQ_DEV_CINEMETA")) {
+        val fakes =
+            listOf(
+                "dev-trakt" to "MQ_DEV_TRAKT",
+                "dev-cinemeta" to "MQ_DEV_CINEMETA",
+                "dev-stremio" to "MQ_DEV_STREMIO",
+            )
+        for ((file, name) in fakes) {
             val url =
                 java.io
                     .File(context.filesDir, file)

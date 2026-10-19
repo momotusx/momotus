@@ -27,8 +27,8 @@ use mq_runtime::{
     AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
     DebridTombstone, DebridView, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
     ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView,
-    SearchView, SessionState, SettingsView, StoreId, StremioEndpoints, TitleFacts, TitleView,
-    TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
+    SearchView, SessionState, SettingsView, StoreId, TitleFacts, TitleView, TraktLoginView,
+    TraktRecord, TraktView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -1203,7 +1203,7 @@ impl Session {
                 (View::AddonCatalog(catalog), to_value(&snapshot)?, forward)
             }
             "import" => {
-                let import = ImportView::open(&core, StremioEndpoints::default());
+                let import = ImportView::open(&core, dev::stremio_endpoints());
                 let (snapshot, updates) = import.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (

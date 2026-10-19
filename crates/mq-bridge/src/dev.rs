@@ -1,6 +1,6 @@
-//! Development builds only: Trakt from a local fake.
+//! Development builds only: Trakt, Find addons' lists and Import from Stremio from local fakes.
 
-use mq_runtime::Core;
+use mq_runtime::{Core, StremioEndpoints};
 use std::net::IpAddr;
 
 /// Development builds only (`debug_assertions`; a release build has no hook):
@@ -50,6 +50,33 @@ pub(crate) fn catalog_source() -> Option<String> {
     None
 }
 
+/// Development builds only, on the same rule: `MQ_DEV_STREMIO=<loopback base
+/// url>` points Import from Stremio at a local fake of its account API and
+/// link service (apps/android/scripts/fake-stremio.ts), so the import path
+/// into the recommended addons can be walked without an account.
+#[cfg(debug_assertions)]
+pub(crate) fn stremio_endpoints() -> StremioEndpoints {
+    match std::env::var("MQ_DEV_STREMIO") {
+        Ok(url) if loopback_url(&url) => {
+            let base = url.trim_end_matches('/').to_owned();
+            StremioEndpoints {
+                api: base.clone(),
+                link: base,
+            }
+        }
+        Ok(_) => {
+            tracing::warn!("MQ_DEV_STREMIO ignored: only an http URL on this machine is taken");
+            StremioEndpoints::default()
+        }
+        Err(_) => StremioEndpoints::default(),
+    }
+}
+
+#[cfg(not(debug_assertions))]
+pub(crate) fn stremio_endpoints() -> StremioEndpoints {
+    StremioEndpoints::default()
+}
+
 /// `http://` to `localhost` or a loopback address, with no user part.
 #[cfg_attr(not(any(debug_assertions, test)), allow(dead_code))]
 fn loopback_url(url: &str) -> bool {
@@ -70,7 +97,32 @@ fn loopback_url(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::loopback_url;
+    use super::{StremioEndpoints, loopback_url, stremio_endpoints};
+
+    /// The one test that sets `MQ_DEV_STREMIO`. A release build (`cargo test
+    /// --release`, no debug assertions) never takes it.
+    #[test]
+    fn the_import_fake_is_taken_in_debug_builds_only_and_on_this_machine() {
+        let real = StremioEndpoints::default();
+        // SAFETY: no other test in this crate reads or writes MQ_DEV_STREMIO.
+        unsafe { std::env::set_var("MQ_DEV_STREMIO", "http://127.0.0.1:7783/") };
+        let fake = stremio_endpoints();
+        if cfg!(debug_assertions) {
+            assert_eq!(fake.api, "http://127.0.0.1:7783");
+            assert_eq!(fake.link, "http://127.0.0.1:7783");
+        } else {
+            assert_eq!((fake.api, fake.link), (real.api.clone(), real.link.clone()));
+        }
+        unsafe { std::env::set_var("MQ_DEV_STREMIO", "http://stremio.example") };
+        let refused = stremio_endpoints();
+        assert_eq!(
+            (refused.api, refused.link),
+            (real.api.clone(), real.link.clone())
+        );
+        unsafe { std::env::remove_var("MQ_DEV_STREMIO") };
+        let unset = stremio_endpoints();
+        assert_eq!((unset.api, unset.link), (real.api, real.link));
+    }
 
     #[test]
     fn the_dev_trakt_url_stays_on_this_machine() {
