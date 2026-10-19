@@ -45,6 +45,8 @@ const hideText: Record<HideReason, [one: string, many: string]> = {
   // Kids profiles only.
   leavesApp: ["would open outside Marquee", "would open outside Marquee"],
   notForKids: ["is not for kids", "are not for kids"],
+  needsDebrid: ["needs a paid streaming service account", "need a paid streaming service account"],
+  noSpace: ["is larger than the free space", "are larger than the free space"],
 };
 
 /** "19 are for other titles, 1 is another episode". */

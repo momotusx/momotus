@@ -427,6 +427,8 @@ enum class HideReason(
     UnsupportedSource("unsupportedSource"),
     LeavesApp("leavesApp"),
     NotForKids("notForKids"),
+    NeedsDebrid("needsDebrid"),
+    NoSpace("noSpace"),
 
     /** A value from a newer core that this app does not know yet. */
     Unknown(""),
