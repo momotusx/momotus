@@ -315,11 +315,11 @@ tt0877057:1:1 "Torrentio\n1080p"
 tt0877057:1:1 "Torrentio\n1080p"
     seeders=Some(4) size=Some(1138166333) site=Some("NyaaSi") cached=None service=None | title="Death Note" res=R1080p q=BluRay codec=H265 audio=[Flac] lang=en,fr,es,pt eps=[1] group="224" container=mkv
 tt0388629:1:1 "Torrentio\n1080p"
-    seeders=Some(7) size=Some(266285875) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece English" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[516] container=mp4 dubbed=1
+    seeders=Some(7) size=Some(266285875) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[516] container=mp4 dubbed=1
 tt0388629:1:1 "Torrentio\n1080p"
-    seeders=Some(7) size=Some(316607037) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece English" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[713] container=mp4 dubbed=1
+    seeders=Some(7) size=Some(316607037) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[713] container=mp4 dubbed=1
 tt0388629:1:1 "Torrentio\nTeleSync"
-    seeders=Some(7) size=Some(391580221) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece English" res=R1080p q=Telesync codec=H264 audio=[Aac] lang=en eps=[1038] dubbed=1
+    seeders=Some(7) size=Some(391580221) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[1038] container=ts dubbed=1
 tt0944947:3:9 "Torrentio\n4k HDR"
     seeders=Some(13) size=Some(15644418375) site=Some("1337x") cached=None service=None | title="The Rains of Castamere" year=2011 res=R2160p q=Unknown codec=H265 bits=10 hdr=[Hdr10] audio=[Atmos] seasons=[3] eps=[9] container=mkv
 tt0944947:3:9 "Torrentio\n1080p"
@@ -407,11 +407,11 @@ kitsu:1:1 "Torrentio\n1080p"
 kitsu:12:1 "Torrentio\n4k"
     seeders=Some(12) size=Some(1599875317) site=Some("NyaaSi") cached=None service=None | title="One Piece" res=R2160p q=WebRip codec=H265 audio=[Opus] lang=en,es,zh eps=[1] group="Feibanyama" container=mkv dubbed=1
 kitsu:12:1 "Torrentio\n1080p"
-    seeders=Some(7) size=Some(313786368) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece English" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[920] container=mp4 dubbed=1
+    seeders=Some(7) size=Some(313786368) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[920] container=mp4 dubbed=1
 kitsu:12:1 "Torrentio\n1080p"
-    seeders=Some(7) size=Some(240857907) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece English" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[155] container=mp4 dubbed=1
+    seeders=Some(7) size=Some(240857907) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[155] container=mp4 dubbed=1
 kitsu:12:1 "Torrentio\nTeleSync"
-    seeders=Some(7) size=Some(285999104) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece English" res=R1080p q=Telesync codec=H264 audio=[Aac] lang=en eps=[213] dubbed=1
+    seeders=Some(7) size=Some(285999104) site=Some("TorrentGalaxy") cached=None service=None | title="One Piece" res=R1080p q=Unknown codec=H264 audio=[Aac] lang=en eps=[213] container=ts dubbed=1
 kitsu:11469:1 "Torrentio\n1080p"
     seeders=Some(38) size=Some(367190343) site=Some("NyaaSi") cached=None service=None | title="Boku no Hero Academia" res=R1080p q=WebDl codec=Av1 seasons=[1] eps=[1] group="Sokudo" container=mkv dubbed=1
 kitsu:11469:1 "Torrentio\n1080p"

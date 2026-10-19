@@ -55,7 +55,7 @@ tt0110912 "TorrentsDB\n2160p"
 tt0110912 "TorrentsDB\n1080p"
     seeders=Some(55) size=Some(10533407293) site=Some("rargb") cached=None service=None | title="Pulp Fiction" year=1994 res=R1080p q=BluRay codec=H265 bits=10 audio=[Aac] ch=5.1 container=mkv
 tt0110912 "TorrentsDB\n1080p"
-    seeders=Some(17) size=Some(4305704714) site=Some("knaben") cached=None service=None | title="Pulp Fiction" year=1994 res=R1080p q=BluRay codec=H265 bits=10 container=mkv
+    seeders=Some(17) size=Some(4305704714) site=Some("knaben") cached=None service=None | title="Pulp Fiction" year=1994 res=R1080p q=BluRay codec=H265 bits=10 group="MkvCage" container=mkv
 tt0816692 "TorrentsDB\n2160p"
     seeders=Some(50) size=Some(5551245230) site=Some("knaben") cached=None service=None | title="Interstellar" year=2014 res=R2160p q=Unknown codec=H265 hdr=[Hdr10] audio=[Ac3] ch=5.1 lang=en,it group="MIRCrew" container=mkv
 tt0816692 "TorrentsDB\n1080p"

@@ -240,6 +240,10 @@ pub struct ParsedStream {
 pub enum Playability {
     NeedsTranscode,
     NeedsFallbackEngine,
+    /// It plays natively if its unstated container is one of the few this
+    /// device opens (an mp4-only player): a stated mp4 goes first (code
+    /// review r1 P3-4).
+    Unstated,
     Native,
 }
 
@@ -310,14 +314,16 @@ pub struct RankKey {
     pub language: bool,
     /// Not a cam, telesync, telecine or screener copy.
     pub legit: bool,
+    /// It can start at all: not a swarm under 5 seeders, not a fetch. A
+    /// row that may never start loses to every row that can, however it
+    /// plays (code review r2 P2-3).
+    pub viable: bool,
     /// No year in the name, or one within 3 years of the title's or the
     /// episode's.
     pub year_ok: bool,
     /// The bitrate is unknown or within the safe speed of its kind.
     pub sustains: bool,
     pub playability: Playability,
-    /// It can start at all: not a swarm under 5 seeders, not a fetch.
-    pub viable: bool,
     /// A torrent within 1.1 x the size limit; a ready file always is.
     pub size_ok: bool,
     /// Ready 4 (3 when not preferred); a torrent 3 at 4 x the wanted

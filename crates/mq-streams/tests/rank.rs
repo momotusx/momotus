@@ -204,14 +204,14 @@ fn each_key_field_outranks_every_later_one() {
     let compose = |best: &dyn Fn(usize) -> bool| RankKey {
         language: best(0),
         legit: best(1),
-        year_ok: best(2),
-        sustains: best(3),
-        playability: if best(4) {
+        viable: best(2),
+        year_ok: best(3),
+        sustains: best(4),
+        playability: if best(5) {
             Playability::Native
         } else {
             Playability::NeedsTranscode
         },
-        viable: best(5),
         size_ok: best(6),
         start: if best(7) { 4 } else { 0 },
         binge: best(8),
@@ -1117,4 +1117,230 @@ fn a_display_counts_as_its_screen_class() {
     ] {
         assert_eq!(screen_class(height), class, "{height}");
     }
+}
+
+/// Code review r2 P1-1: a trailer, an embedded player and a link out are
+/// hidden, since playback opens none of them; before, they ranked as ready
+/// and topped every torrent.
+#[test]
+fn a_trailer_or_a_link_out_is_hidden() {
+    let ranked = Case::stick().rank(vec![
+        json!({ "name": "Trailer", "ytId": "dQw4w9WgXcQ" }),
+        json!({ "name": "Site", "externalUrl": "https://example.com/watch" }),
+        json!({ "name": "Embed", "playerFrameUrl": "https://example.com/embed" }),
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-GRP", 60, 2.0),
+    ]);
+    assert_eq!(hidden(&ranked, HideReason::UnsupportedSource), 3);
+    assert_eq!(ranked.rows.len(), 1);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-GRP"
+    );
+}
+
+/// Code review r2 P2-3: a row that may never start loses to every row that
+/// can, however it plays: 2 seeders playing natively against 500 that need
+/// the second engine (DTS-HD MA on a stick that decodes no DTS).
+#[test]
+fn a_dead_row_never_wins_on_how_it_plays() {
+    let ranked = Case::stick().rank(vec![
+        seeded(1, "Movie.2025.1080p.WEB-DL.DDP5.1.H.264-FEW", 2, 2.0),
+        seeded(
+            2,
+            "Movie.2025.1080p.BluRay.x265.10bit.DTS-HD.MA-MANY",
+            500,
+            4.0,
+        ),
+    ]);
+    let best = ranked.best().unwrap();
+    assert_eq!(
+        first_line(best),
+        "Movie.2025.1080p.BluRay.x265.10bit.DTS-HD.MA-MANY"
+    );
+    assert_eq!(best.key.playability, Playability::NeedsFallbackEngine);
+    let few = row(&ranked, "Movie.2025.1080p.WEB-DL");
+    assert_eq!(few.key.playability, Playability::Native);
+    assert!(!few.key.viable);
+}
+
+/// Code review r1 P2-2: under 5 seeders a torrent may not start whatever
+/// the user asked for, so a dead 4K never beats a live 1080p on a 4K TV;
+/// exactly 5, or none stated, may start.
+#[test]
+fn under_five_seeders_never_starts_whatever_the_wanted_count() {
+    for min_seeders in [0, 3] {
+        let case = Case {
+            caps: caps_4k_dv(),
+            prefs: StreamPrefs {
+                min_seeders,
+                ..StreamPrefs::default()
+            },
+            ..Case::stick()
+        };
+        let ranked = case.rank(vec![
+            seeded(1, "Movie.2020.2160p.WEB-DL.DDP5.1.H.265-DEAD", 0, 4.0),
+            seeded(2, "Movie.2020.2160p.WEB-DL.DDP5.1.H.265-FOUR", 4, 4.0),
+            seeded(3, "Movie.2020.1080p.WEB-DL.DDP5.1.H.264-LIVE", 100, 2.0),
+        ]);
+        assert_eq!(
+            first_line(ranked.best().unwrap()),
+            "Movie.2020.1080p.WEB-DL.DDP5.1.H.264-LIVE",
+            "min {min_seeders}"
+        );
+        for dead in [
+            "Movie.2020.2160p.WEB-DL.DDP5.1.H.265-DEAD",
+            "Movie.2020.2160p.WEB-DL.DDP5.1.H.265-FOUR",
+        ] {
+            let r = row(&ranked, dead);
+            assert!(
+                !r.key.viable && r.key.start == 0,
+                "{dead} at min {min_seeders}"
+            );
+        }
+    }
+    let ranked = Case::stick().rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-FIVE", 5, 2.0),
+        json!({ "name": "Torrentio", "title": "Movie.2020.1080p.WEB-DL.x264-NONE\n💾 2 GB",
+                "infoHash": format!("{:040x}", 0x200), "fileIdx": 0 }),
+    ]);
+    for name in [
+        "Movie.2020.1080p.WEB-DL.x264-FIVE",
+        "Movie.2020.1080p.WEB-DL.x264-NONE",
+    ] {
+        let r = row(&ranked, name);
+        assert!(r.key.viable && r.key.start == 1, "{name}");
+    }
+}
+
+/// Code review r2 P2-4: free space is judged on what the engine fetches,
+/// one episode of a pack: a 40 GB season (4 GB an episode) fits 20 GB.
+#[test]
+fn a_season_pack_needs_room_for_one_episode() {
+    let case = Case {
+        target: Target {
+            title: "Show".into(),
+            year: None,
+            season: Some(1),
+            episode: Some(5),
+        },
+        conditions: Conditions {
+            runtime_s: Some(45 * 60),
+            episodes_in_season: Some(10),
+            free_bytes: Some(20 << 30),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![seeded(1, "Show.S01.1080p.BluRay.x264-GRP", 500, 40.0)]);
+    assert_eq!(
+        hidden(&ranked, HideReason::NoSpace),
+        0,
+        "{:?}",
+        ranked.hidden
+    );
+    assert_eq!(ranked.rows.len(), 1);
+}
+
+/// Code review r2 P3: a number in the title's own name is no year, so
+/// Blade Runner 2049 (2017) and Wonder Woman 1984 (2020) are not demoted.
+#[test]
+fn a_number_in_the_title_is_no_year() {
+    for (title, year, release) in [
+        (
+            "Blade Runner 2049",
+            2017,
+            "Blade.Runner.2049.1080p.BluRay.x264-GRP",
+        ),
+        (
+            "Wonder Woman 1984",
+            2020,
+            "Wonder.Woman.1984.1080p.WEB-DL.DDP5.1.H.264-GRP",
+        ),
+    ] {
+        let case = Case {
+            target: Target {
+                title: title.into(),
+                ..film()
+            },
+            conditions: Conditions {
+                title_year: Some(year),
+                ..engine().clone()
+            },
+            ..Case::stick()
+        };
+        let ranked = case.rank(vec![seeded(1, release, 300, 2.0)]);
+        let best = ranked
+            .best()
+            .unwrap_or_else(|| panic!("{title}: {:?}", ranked.hidden));
+        assert!(best.key.year_ok, "{title}");
+    }
+}
+
+/// Code review r2 P3: a release named only in the original language that
+/// names the title's year is kept ("Kis Uykusu 2014" for Winter Sleep); one
+/// naming another year still hides.
+#[test]
+fn a_release_named_in_its_own_language_with_the_year_is_kept() {
+    let case = Case {
+        target: Target {
+            title: "Winter Sleep".into(),
+            ..film()
+        },
+        conditions: Conditions {
+            title_year: Some(2014),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Kis Uykusu 2014 BluRay 720p DTS x264-CHD", 31, 4.0),
+        seeded(2, "Cidade De Deus (2002) 1080p BluRay x264", 80, 2.0),
+    ]);
+    assert_eq!(ranked.rows.len(), 1, "{:?}", ranked.hidden);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Kis Uykusu 2014 BluRay 720p DTS x264-CHD"
+    );
+    assert_eq!(hidden(&ranked, HideReason::WrongTitle), 1);
+}
+
+/// Code review r1 P3-4: on an mp4-only player a stated mp4 goes before a
+/// file whose container is not stated; a player that opens mkv plays both.
+#[test]
+fn a_stated_mp4_goes_before_an_unstated_container_on_an_mp4_player() {
+    let mut unstated = seeded(1, "Show.S02E03.1080p.WEB-DL.H.264-CZ", 300, 1.7);
+    unstated["behaviorHints"] = json!({ "filename": "Show.S02E03.1080p.WEB-DL.H.264-CZ" });
+    let mut mp4 = seeded(2, "Show.S02E03.1080p.WEB.h264-GRP", 60, 1.6);
+    mp4["behaviorHints"] = json!({ "filename": "Show.S02E03.1080p.WEB.h264-GRP.mp4" });
+    // The unstated one starts quickly (300), the mp4 should (60).
+    let mut case = Case {
+        target: Target {
+            title: "Show".into(),
+            year: None,
+            season: Some(2),
+            episode: Some(3),
+        },
+        caps: DeviceCaps {
+            containers: ["mp4", "m4v", "mov", "m3u8"].map(str::to_owned).to_vec(),
+            has_fallback_engine: false,
+            ..DeviceCaps::basic_1080p()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![unstated.clone(), mp4.clone()]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Show.S02E03.1080p.WEB.h264-GRP"
+    );
+    assert_eq!(
+        row(&ranked, "Show.S02E03.1080p.WEB-DL").key.playability,
+        Playability::Unstated
+    );
+
+    case.caps = DeviceCaps::basic_1080p();
+    let ranked = case.rank(vec![unstated, mp4]);
+    assert_eq!(
+        row(&ranked, "Show.S02E03.1080p.WEB-DL").key.playability,
+        Playability::Native
+    );
 }

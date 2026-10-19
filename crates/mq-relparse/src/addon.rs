@@ -119,6 +119,39 @@ const FLAG_LANGUAGES: &[(&str, &str)] = &[
     ("EE", "et"),
 ];
 
+/// Cinema and pre-release copy tags, worst first (r2 P2-1). They are looked
+/// for apart from the release parser, whose first source tag wins. A bare
+/// `CAM`, `TS`, `TC` or `R5` counts in capitals only, so a word of an
+/// episode's title ("The.Cam.Girl") is no copy.
+const COPIES: &[(&str, Quality)] = &[
+    (
+        r"\b(?:(?i:H[DQ][ .-]*CAM(?:H[DQ])?(?:[ .-]*Rip|Rp)?)|(?i:CAM(?:H[DQ])?(?:[ .-]*Rip|Rp))|CAM(?:H[DQ])?)\b",
+        Quality::Cam,
+    ),
+    (r"\b(?i:(?:H[DQ][ .-]*)?S[ .-]print)\b", Quality::Cam),
+    (
+        r"\b(?:(?i:HD[ .-]*T(?:ELE)?(?:S(?:YNC)?|C(?:INE)?)(?:Rip)?)|(?i:TELE(?:SYNC|CINE)(?:Rip)?)|(?i:T[SC]Rip)|T[SC])\b",
+        Quality::Telesync,
+    ),
+    (
+        r"\b(?i:(?:DVD?|BD|BR|HD|WEB)?[ .-]*SCR(?:EENER)?)\b",
+        Quality::Screener,
+    ),
+    (r"\b(?i:P(?:RE)?-?(?:HD|DVD)(?:Rip)?)\b", Quality::Screener),
+    (r"\bR[56]\b", Quality::Screener),
+];
+
+/// Where a release's own name ends: its year or its episode code. A copy
+/// tag before it is a title word ("Body Cam").
+const TITLE_END: &str = r"(?i)\b(?:19|20)\d{2}\b|\bS\d{1,2}E\d{1,4}\b";
+
+/// Video file extensions, cut before parsing so `.ts` never reads as a
+/// telesync tag (r2 P2-2).
+const EXTENSIONS: &[&str] = &[
+    "mkv", "mp4", "m4v", "avi", "ts", "m2ts", "mov", "webm", "wmv", "mpg", "mpeg", "flv", "vob",
+    "iso", "divx", "ogv", "3gp",
+];
+
 fn compile(pats: &[&str]) -> Vec<Re> {
     pats.iter().map(|p| Re::new(p, false)).collect()
 }
@@ -127,6 +160,61 @@ static SEEDERS_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SEEDERS));
 static SIZE_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SIZE));
 static SOURCE_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SOURCE));
 static SERVICE_RE: LazyLock<Vec<Re>> = LazyLock::new(|| compile(SERVICE));
+static COPIES_RE: LazyLock<Vec<(Re, Quality)>> = LazyLock::new(|| {
+    COPIES
+        .iter()
+        .map(|(p, q)| (Re::new(p, false), *q))
+        .collect()
+});
+static TITLE_END_RE: LazyLock<Re> = LazyLock::new(|| Re::new(TITLE_END, false));
+
+/// `name.ts` as (`name`, `ts`); a name with no video extension as it is.
+fn split_extension(name: &str) -> (&str, Option<String>) {
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()) => {
+            (stem, Some(ext.to_ascii_lowercase()))
+        }
+        _ => (name, None),
+    }
+}
+
+/// Parses a file name or a title line without its video extension, which
+/// becomes the container.
+fn parse_text(text: &str) -> ParsedRelease {
+    let (stem, ext) = split_extension(text.trim());
+    let mut release = parse(&normalize_labels(stem));
+    if ext.is_some() {
+        release.container = ext;
+    }
+    release
+}
+
+/// The worst copy tag in `text`, past the release's own name and before
+/// its trailing group ("x264-HDCAM" is a group, not a copy).
+fn copy_in(text: &str) -> Option<Quality> {
+    let (stem, _) = split_extension(text.trim());
+    let from = TITLE_END_RE
+        .captures_at(stem, 0)
+        .and_then(|g| g.span(0))
+        .map_or(0, |(_, end)| end);
+    let rest = &stem[from..];
+    let rest = match rest.rsplit_once('-') {
+        Some((head, group))
+            if !group.is_empty() && group.chars().all(|c| c.is_ascii_alphanumeric()) =>
+        {
+            head
+        }
+        _ => rest,
+    };
+    COPIES_RE
+        .iter()
+        .find(|(re, _)| re.is_match(rest))
+        .map(|(_, q)| *q)
+}
+
+fn is_copy(q: Quality) -> bool {
+    matches!(q, Quality::Cam | Quality::Telesync | Quality::Screener)
+}
 
 fn clip(s: &str) -> &str {
     crate::custom::slice(s, 0, MAX_TEXT_BYTES)
@@ -345,7 +433,7 @@ fn release_from(name: &str, description: &str, hint: Option<&str>) -> ParsedRele
     let primary = hint_name
         .or(first_text.map(|l| strip_marker(l)))
         .unwrap_or("");
-    let mut release = parse(primary);
+    let mut release = parse_text(primary);
     // The addon labels this file (Torrentio names a pack file 480p when
     // the pack says 1080p): its name fills gaps before the description.
     fill_gaps(&mut release, &name_hints(name));
@@ -357,10 +445,23 @@ fn release_from(name: &str, description: &str, hint: Option<&str>) -> ParsedRele
             .filter(|l| !is_metric_line(l))
             .map(|l| strip_marker(l)),
     );
-    for extra in extras {
-        if extra != primary && !extra.trim().is_empty() {
-            fill_gaps(&mut release, &parse(&normalize_labels(extra)));
+    for extra in &extras {
+        if *extra != primary && !extra.trim().is_empty() {
+            fill_gaps(&mut release, &parse_text(extra));
         }
+    }
+    // A copy tag in the file name or any title line makes the release a
+    // copy, the worst one found; none found, it is no copy, whatever tag
+    // the parser took first or the addon's label says (Torrentio calls a
+    // `.ts` file TeleSync; r2 P2-1, P2-2).
+    let worst = std::iter::once(primary)
+        .chain(extras)
+        .filter_map(copy_in)
+        .min_by_key(|q| COPIES.iter().position(|(_, c)| c == q));
+    match worst {
+        Some(q) => release.quality = q,
+        None if is_copy(release.quality) => release.quality = Quality::Unknown,
+        None => {}
     }
     merge_languages(&mut release.languages, &flag_languages(description));
     release
@@ -423,6 +524,87 @@ mod tests {
         ] {
             assert_eq!(parse(name).quality, quality, "{name}");
         }
+    }
+
+    /// Code review r2 P2-1 and P2-2: a copy tag in the file name or any
+    /// title line makes a copy, the worst one; an extension, a title word,
+    /// a release group or the addon's own label never does.
+    #[test]
+    fn copies_are_found_in_every_line_and_nowhere_else() {
+        let quality = |label: &str, title: &str, file: Option<&str>| {
+            parse_addon_stream(&format!("Torrentio\n{label}"), title, file)
+                .release
+                .quality
+        };
+        for (title, file, want) in [
+            (
+                "Dune.Part.Two.2024.HDCAM.c1nem4.x264-SUNSCREEN",
+                None,
+                Quality::Cam,
+            ),
+            ("Movie.2025.1080p.HDRip.HQ-CAM.x264.AAC", None, Quality::Cam),
+            ("Movie.2025.720p.hdtc.x264-GRP", None, Quality::Telesync),
+            (
+                "Avatar Fire and Ash (2025) Telesync TS HD 1080p - x264 - [Tam.Tel.Hindi.Kan.Eng]",
+                Some("Avatar.Fire.and.Ash.(2025).HDRip.1080p.x264.mkv"),
+                Quality::Telesync,
+            ),
+            (
+                "Оппенгеймер / Oppenheimer (2023) BDRip-AVC от DoMiNo | D | TS | IMAX",
+                Some("Oppenheimer.2023.DUB.BDRip.x264.mkv"),
+                Quality::Telesync,
+            ),
+            (
+                "Movie.2009.R5.DVDRip.XviD-GRP",
+                Some("Movie.2009.R5.DVDRip.XviD-GRP.avi"),
+                Quality::Screener,
+            ),
+            (
+                "Interstellar.2014.ENG.1080p.HD.WEBRip.2.64GiB.AAC.x264-PortalGoods",
+                Some("Interstellar.2014.ENG.1080p.HD.WEBRip.2.64GiB.AAC.x264-PortalGoods.ts"),
+                Quality::WebRip,
+            ),
+            (
+                "Show.S01E05.SATRip",
+                Some("Show.S01E05.SATRip.ts"),
+                Quality::Hdtv,
+            ),
+            ("Body.Cam.2025.1080p.x265-GRP", None, Quality::Unknown),
+            // Capitals in the title: before its year, a word, not a copy.
+            (
+                "CAM.2018.1080p.NF.WEB-DL.DDP5.1.x264-GRP",
+                None,
+                Quality::WebDl,
+            ),
+            (
+                "Show.S01E05.The.Cam.Girl.1080p.WEB-DL.x264-GRP",
+                None,
+                Quality::WebDl,
+            ),
+            (
+                "Movie.2025.1080p.BluRay.x264-SUNSCREEN",
+                None,
+                Quality::BluRay,
+            ),
+            (
+                "Movie.2025.1080p.WEB-DL.DDP5.1.H.264-HDCAM",
+                None,
+                Quality::WebDl,
+            ),
+            (
+                "Дюна: Часть вторая / Dune: Part Two [2024 WEB-DLRip]",
+                None,
+                Quality::WebRip,
+            ),
+        ] {
+            assert_eq!(quality("TeleSync", title, file), want, "{title}");
+        }
+        let ts = parse_addon_stream(
+            "Torrentio\nTeleSync",
+            "x",
+            Some("Interstellar.2014.1080p.WEBRip.x264.ts"),
+        );
+        assert_eq!(ts.release.container.as_deref(), Some("ts"));
     }
 
     /// One Piece E1 in a batch pack (the M13 corpus): the pack names 1080p,

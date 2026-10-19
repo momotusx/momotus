@@ -66,8 +66,10 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
         return Err(reason);
     }
     let class = class(s, input.conditions).ok_or(HideReason::NeedsDebrid)?;
+    // The engine fetches one episode of a pack, so the pack guard's size
+    // is what must fit (code review r2 P2-4).
     if class == SourceClass::Swarm
-        && let (Some(free), Some(size)) = (input.conditions.free_bytes, s.size_bytes)
+        && let (Some(free), Some(size)) = (input.conditions.free_bytes, weight(s, input).size)
         && size > free.saturating_sub(SPARE_BYTES)
     {
         return Err(HideReason::NoSpace);
@@ -110,6 +112,14 @@ fn gate_reason(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
     {
         return Some(reason);
     }
+    // Playback opens none of these (`open_source`): a trailer or a link
+    // out never tops the list (code review r2 P1-1).
+    if matches!(
+        s.source,
+        Source::YouTube { .. } | Source::PlayerFrame { .. } | Source::External { .. }
+    ) {
+        return Some(HideReason::UnsupportedSource);
+    }
     let text = format!("{} {}", s.raw_name, s.raw_description).to_lowercase();
     if input
         .prefs
@@ -127,7 +137,7 @@ fn gate_reason(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
     if wrong_episode(s, input.target) {
         return Some(HideReason::WrongEpisode);
     }
-    if input.kids.is_none() && wrong_title(s, input.target) {
+    if input.kids.is_none() && wrong_title(s, input.target, input.conditions) {
         return Some(HideReason::WrongTitle);
     }
     if playability(s, input.caps).is_none() {
@@ -161,7 +171,19 @@ fn wrong_episode(s: &ParsedStream, target: &Target) -> bool {
 /// several languages, split by " / " in its title line ("Игра престолов /
 /// Game of Thrones / Сезон: 1") while its file name carries one: any name
 /// matching is enough.
-fn wrong_title(s: &ParsedStream, target: &Target) -> bool {
+fn wrong_title(s: &ParsedStream, target: &Target, c: &Conditions) -> bool {
+    // A release named only in the original language ("Kis Uykusu (2014)"
+    // for Winter Sleep) that names the title's own year is kept (code
+    // review r2 P3).
+    // ponytail: the year alone vouches for the name; another work of the
+    // same year an addon lists for this id stays visible. Alternative
+    // titles from the meta would close that, if a recording shows one.
+    if s.release
+        .year
+        .is_some_and(|y| [c.title_year, c.episode_year].contains(&Some(y)))
+    {
+        return false;
+    }
     let parsed = normalize_title(&s.release.title);
     let wanted = normalize_title(&target.title);
     if parsed.len() < 3 || wanted.len() < 3 {
@@ -313,12 +335,17 @@ fn playability(s: &ParsedStream, caps: &DeviceCaps) -> Option<Playability> {
     let mut audio = r.audio.iter().filter(|a| **a != Audio::Atmos).peekable();
     let audio_ok = audio.peek().is_none()
         || audio.any(|a| caps.audio_decoders.contains(a) || caps.passthrough.contains(a));
-    let container_ok = r.container.as_deref().is_none_or(|c| {
+    let opens = |c: &str| {
         caps.containers
             .iter()
             .any(|known| known.eq_ignore_ascii_case(c))
-    });
+    };
+    let container_ok = r.container.as_deref().is_none_or(opens);
+    // A device that opens mkv opens what releases come in; one that does
+    // not may not open an unstated container.
+    let unstated = r.container.is_none() && !opens("mkv");
     match (codec_ok && audio_ok && container_ok, hdr_ok) {
+        (true, true) if unstated => Some(Playability::Unstated),
         (true, true) => Some(Playability::Native),
         _ if caps.has_fallback_engine => Some(Playability::NeedsFallbackEngine),
         (false, _) => None,
@@ -438,10 +465,20 @@ fn legit(s: &ParsedStream) -> bool {
 
 /// No year in the name, or one within 3 years of the title's or the
 /// episode's (3.5): another film or show is demoted, never hidden.
-fn year_ok(s: &ParsedStream, c: &Conditions) -> bool {
+fn year_ok(s: &ParsedStream, c: &Conditions, target: &Target) -> bool {
     let Some(year) = s.release.year else {
         return true;
     };
+    // A number in the title's own name is no year: Blade Runner 2049,
+    // Wonder Woman 1984 (code review r2 P3).
+    let year_word = year.to_string();
+    if target
+        .title
+        .split(|ch: char| !ch.is_ascii_digit())
+        .any(|w| w == year_word)
+    {
+        return true;
+    }
     let near = |t: Option<u16>| t.is_some_and(|t| (year as i32 - t as i32).abs() <= 3);
     (c.title_year.is_none() && c.episode_year.is_none())
         || near(c.title_year)
@@ -460,10 +497,12 @@ fn start(class: SourceClass, seeders: Option<u32>, prefs: &StreamPrefs) -> u8 {
         }
         (SourceClass::Fetch, _) => 0,
         (_, None) => 1,
+        // Under 5 a torrent may not start, whatever the user asked for
+        // (code review r1 P2-2).
+        (_, Some(n)) if n < FEW_SEEDERS => 0,
         (_, Some(n)) if n >= min.saturating_mul(4) => 3,
         (_, Some(n)) if n >= min => 2,
-        (_, Some(n)) if n >= FEW_SEEDERS => 1,
-        _ => 0,
+        _ => 1,
     }
 }
 
@@ -510,7 +549,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
             || langs.is_empty()
             || input.prefs.languages.iter().any(|l| langs.contains(l)),
         legit: legit(s),
-        year_ok: year_ok(s, input.conditions),
+        year_ok: year_ok(s, input.conditions, input.target),
         sustains,
         playability: playability(s, input.caps).unwrap_or(Playability::NeedsTranscode),
         viable: start > 0,

@@ -23,7 +23,7 @@ tt0468569 "[TORRENT🧲] Comet 1080p"
 tt0468569 "[TORRENT🧲] Comet 720p"
     seeders=Some(0) size=Some(3113851289) site=Some("TorBox|commie") cached=None service=None | title="The Dark Knight Rises" res=R720p q=BluRay codec=Unknown audio=[Aac] group="Commie" container=mkv
 tt0133093 "[TORRENT🧲] Comet 2160p"
-    seeders=Some(0) size=Some(59055800320) site=Some("DebridAccount|torbox") cached=None service=None | title="The Matrix" year=1999 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa, Atmos, TrueHd] ch=7.1 lang=es container=mkv remux=1 proper=1 dubbed=1
+    seeders=Some(0) size=Some(59055800320) site=Some("DebridAccount|torbox") cached=None service=None | title="The Matrix" year=1999 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[DtsHdMa, Atmos, TrueHd] ch=7.1 lang=es group="Rick" container=mkv remux=1 proper=1 dubbed=1
 tt0133093 "[TORRENT🧲] Comet 1080p"
     seeders=None size=Some(9126805504) site=Some("StremThru") cached=None service=None | title="The Matrix" year=1999 res=R1080p q=WebDl codec=H264 audio=[Atmos, Eac3] ch=5.1 group="SM737" container=mkv
 tt0133093 "[TORRENT🧲] Comet 1080p"
@@ -401,7 +401,7 @@ tt1844624:1:1 "[TORRENT🧲] Comet 1080p"
 tt1844624:1:1 "[TORRENT🧲] Comet unknown"
     seeders=Some(1) size=Some(919601152) site=Some("TorBox|limetorrents") cached=None service=None | title="American Horror Story Murder House" res=Unknown q=Unknown codec=H264 audio=[Ac3] lang=en,it,de,es seasons=[1] eps=[1] container=mkv
 tt1844624:1:1 "[TORRENT🧲] Comet unknown"
-    seeders=None size=Some(9234179686) site=Some("StremThru|Knaben") cached=None service=None | title="S" year=2011 res=Unknown q=WebRip codec=Unknown lang=ru seasons=[1] eps=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    seeders=None size=Some(9234179686) site=Some("StremThru|Knaben") cached=None service=None | title="S1E1-12 of 12" year=2011 res=Unknown q=WebRip codec=Unknown lang=ru seasons=[1] eps=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 kitsu:1:1 "[TORRENT🧲] Comet 1080p"
     seeders=None size=Some(2040109465) site=Some("AnimeTosho") cached=None service=None | title="Cowboy Bebop 16" res=R1080p q=Unknown codec=Unknown bits=10 lang=es group="EG" container=mkv dubbed=1
 kitsu:1:1 "[TORRENT🧲] Comet unknown"
