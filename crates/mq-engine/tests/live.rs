@@ -299,3 +299,104 @@ async fn udp_trackers_answer_from_the_address_asked() {
     }
     println!("{{\"answered_only_without_the_policy\":{only_without:?}}}");
 }
+
+/// JSON for a value that may be missing.
+fn js<T: std::fmt::Display>(v: Option<T>) -> String {
+    v.map_or_else(|| "null".into(), |v| v.to_string())
+}
+
+/// A start watched for a minute (`MQ_PEERS_HASH`, `MQ_PEERS_UPLOAD=1` for
+/// upload on): every 5 s a line of counts, then one line per peer librqbit
+/// knew, with its state and what it did for us. Counts only: no address
+/// leaves the process.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "real swarm"]
+async fn a_start_peer_by_peer() {
+    let hash = std::env::var("MQ_PEERS_HASH").expect("MQ_PEERS_HASH");
+    let upload = std::env::var("MQ_PEERS_UPLOAD").is_ok_and(|v| v == "1");
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let config = EngineConfig {
+        upload,
+        ..EngineConfig::new(dir.path(), http.torrent_scope(&[]))
+    };
+    let engine = Engine::start(config).await.unwrap();
+    let started = std::time::Instant::now();
+    let ms = || started.elapsed().as_millis();
+    let added =
+        tokio::time::timeout(Duration::from_secs(30), engine.add_magnet(&hash, &[], &[])).await;
+    let Ok(Ok(t)) = added else {
+        println!("{{\"upload\":{upload},\"metadata\":false,\"ms\":{}}}", ms());
+        return;
+    };
+    let metadata_ms = ms();
+    let file = engine
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
+    let chosen_ms = ms();
+    let reader = engine.open_reader(t, "default", file).await.unwrap();
+    let mut head = reader.range(0, None).await.unwrap();
+    let ready = async {
+        let _ = head.ready().await;
+    };
+    tokio::pin!(ready);
+    let mut ready_ms = None;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    let mut tick = tokio::time::interval(Duration::from_secs(5));
+    loop {
+        tokio::select! {
+            () = &mut ready, if ready_ms.is_none() => ready_ms = Some(ms()),
+            _ = tokio::time::sleep_until(deadline) => break,
+            _ = tick.tick() => {
+                let s = engine.stats(t).await.unwrap();
+                let report = engine.peer_report(t).await.unwrap();
+                let state = |name: &str| report.iter().filter(|p| p.state == name).count();
+                let unchoked = report.iter().filter_map(|p| p.tally.as_ref()).filter(|t| t.unchokes > t.chokes).count();
+                println!(
+                    "{{\"ms\":{},\"known\":{},\"live\":{},\"connecting\":{},\"queued\":{},\"dead\":{},\"handshaken\":{},\"unchoked_now\":{unchoked},\"received_bytes\":{},\"verified_bytes\":{},\"requests\":{},\"ready_ms\":{}}}",
+                    ms(), report.len(), state("live"), state("connecting"), state("queued"), state("dead"),
+                    report.iter().filter(|p| p.tally.is_some()).count(),
+                    s.received_bytes, s.downloaded_bytes, s.requests, js(ready_ms),
+                );
+            }
+        }
+    }
+    let stats = engine.stats(t).await.unwrap();
+    let report = engine.peer_report(t).await.unwrap();
+    for (i, p) in report.iter().enumerate() {
+        let t = p.tally.clone().unwrap_or_default();
+        println!(
+            "{{\"peer\":{i},\"ipv6\":{},\"state\":\"{}\",\"attempts\":{},\"connections\":{},\"errors\":{},\"fetched_bytes\":{},\"client\":{:?},\"handshaken\":{},\"pieces\":{},\"unchokes\":{},\"chokes\":{},\"first_unchoke_ms\":{},\"requests\":{},\"blocks\":{},\"connected_ms\":{},\"gone_ms\":{}}}",
+            p.ipv6,
+            p.state,
+            p.attempts,
+            p.connections,
+            p.errors,
+            p.fetched_bytes,
+            p.client.as_deref().unwrap_or(""),
+            p.tally.is_some(),
+            t.pieces,
+            t.unchokes,
+            t.chokes,
+            js(t.first_unchoke_ms),
+            t.requests,
+            t.blocks,
+            t.connected_ms,
+            js(t.gone_ms),
+        );
+    }
+    println!(
+        "{{\"upload\":{upload},\"metadata_ms\":{metadata_ms},\"chosen_ms\":{chosen_ms},\"ready_ms\":{},\"pieces_total\":{},\"received_bytes\":{},\"verified_bytes\":{},\"unchoked_ms\":{},\"up_bytes_per_s\":{},\"refused\":{{\"trackers\":{},\"peers\":{},\"dht\":{}}}}}",
+        js(ready_ms),
+        stats.pieces_total,
+        stats.received_bytes,
+        stats.downloaded_bytes,
+        js(stats.unchoked_ms),
+        stats.up_bytes_per_s,
+        engine.refused().trackers,
+        engine.refused().peers,
+        engine.refused().dht,
+    );
+    engine.remove(t, false).await.ok();
+}

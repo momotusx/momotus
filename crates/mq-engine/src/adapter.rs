@@ -37,7 +37,30 @@ pub(crate) enum Msg {
     },
     /// librqbit stopped the torrent (keep-alive expiry): every peer is gone.
     Stopped,
+    /// Every peer's tally, connected or gone (`Engine::peer_report`).
+    Report(tokio::sync::oneshot::Sender<Vec<(SocketAddr, PeerTally)>>),
 }
+
+/// What one peer did for us since the file was chosen: counts only.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PeerTally {
+    /// Pieces it has, by its bitfield and HAVE messages.
+    pub pieces: u32,
+    pub unchokes: u32,
+    pub chokes: u32,
+    pub first_unchoke_ms: Option<u64>,
+    /// REQUESTs the scheduler sent it.
+    pub requests: u64,
+    pub blocks: u64,
+    pub bytes: u64,
+    /// When its handshake finished, from the file choice.
+    pub connected_ms: u64,
+    /// When it left, if it did.
+    pub gone_ms: Option<u64>,
+}
+
+/// Gone peers kept for the report.
+const GONE_KEPT: usize = 512;
 
 /// A REQUEST or CANCEL for the executor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,6 +81,7 @@ struct Slot {
     bytes: u64,
     /// Smallest request-to-arrival time seen (RTT plus one block), 0 if none.
     rtt_us: u64,
+    tally: PeerTally,
 }
 
 struct Demand {
@@ -113,6 +137,7 @@ pub(crate) struct Translator {
     sample_busy_us: u64,
     received_bytes: u64,
     unchoked_us: Option<u64>,
+    gone: Vec<(SocketAddr, PeerTally)>,
 }
 
 impl Translator {
@@ -155,7 +180,18 @@ impl Translator {
             sample_busy_us: 0,
             received_bytes: 0,
             unchoked_us: None,
+            gone: Vec::new(),
         }
+    }
+
+    /// Every peer's tally: the connected ones, then those that left.
+    pub fn report(&self) -> Vec<(SocketAddr, PeerTally)> {
+        let live = self.peers.iter().map(|(addr, s)| {
+            let mut t = s.tally.clone();
+            t.pieces = s.have.count_ones();
+            (*addr, t)
+        });
+        live.chain(self.gone.iter().cloned()).collect()
     }
 
     pub fn drives(&self) -> bool {
@@ -209,6 +245,13 @@ impl Translator {
                 };
                 let reqq = self.reqq.get(&peer).copied().unwrap_or(DEFAULT_REQQ);
                 self.addrs.insert(id, peer);
+                let tally = self.peers.get(&peer).map_or_else(
+                    || PeerTally {
+                        connected_ms: self.now_us / 1000,
+                        ..Default::default()
+                    },
+                    |s| s.tally.clone(),
+                );
                 self.peers.insert(
                     peer,
                     Slot {
@@ -218,6 +261,7 @@ impl Translator {
                         reqq,
                         bytes: 0,
                         rtt_us: 0,
+                        tally,
                     },
                 );
                 self.feed(Event::PeerConnected {
@@ -264,9 +308,12 @@ impl Translator {
                         s.choked = choked;
                         let id = s.id;
                         if choked {
+                            s.tally.chokes += 1;
                             self.sent.retain(|k, _| k.0 != id);
                             self.feed(Event::PeerChoked { peer: id })
                         } else {
+                            s.tally.unchokes += 1;
+                            s.tally.first_unchoke_ms.get_or_insert(self.now_us / 1000);
                             self.unchoked_us.get_or_insert(self.now_us);
                             self.feed(Event::PeerUnchoked { peer: id })
                         }
@@ -282,6 +329,8 @@ impl Translator {
                 let block = geo.block_at(piece, begin);
                 let payload = u64::from(geo.block_len(block));
                 s.bytes += payload;
+                s.tally.blocks += 1;
+                s.tally.bytes += payload;
                 self.received_bytes += payload;
                 // Capacity counts only while a request is out: a block that
                 // comes after its cancel, with nothing in flight, is not the
@@ -351,6 +400,10 @@ impl Translator {
                 let peers: Vec<SocketAddr> = self.peers.keys().copied().collect();
                 peers.into_iter().flat_map(|p| self.drop_peer(p)).collect()
             }
+            Msg::Report(tx) => {
+                let _ = tx.send(self.report());
+                Vec::new()
+            }
         }
     }
 
@@ -392,6 +445,12 @@ impl Translator {
         };
         self.addrs.remove(&s.id);
         self.sent.retain(|k, _| k.0 != s.id);
+        if self.gone.len() < GONE_KEPT {
+            let mut t = s.tally;
+            t.pieces = s.have.count_ones();
+            t.gone_ms = Some(self.now_us / 1000);
+            self.gone.push((peer, t));
+        }
         self.feed(Event::PeerDisconnected { peer: s.id })
     }
 
@@ -414,6 +473,9 @@ impl Translator {
                         self.sent.remove(&(peer, block));
                     } else {
                         self.sent.insert((peer, block), self.now_us);
+                        if let Some(s) = self.peers.get_mut(&addr) {
+                            s.tally.requests += 1;
+                        }
                     }
                     let (piece, begin, len) = geo.wire(block);
                     out.push(Wire {

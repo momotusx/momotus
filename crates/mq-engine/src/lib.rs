@@ -19,6 +19,7 @@ mod reader;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks;
 
+pub use adapter::PeerTally;
 /// The fork itself, for tools and tests (creating a torrent to seed).
 pub use librqbit;
 pub use pick::FileHint;
@@ -241,6 +242,22 @@ pub struct FileInfo {
     /// Path inside the torrent, `/` separated.
     pub path: String,
     pub len: u64,
+}
+
+/// One peer of a torrent for [`Engine::peer_report`]: librqbit's view and
+/// the scheduler's tally, no address.
+#[derive(Clone, Debug)]
+pub struct PeerReport {
+    pub ipv6: bool,
+    /// librqbit's state: live, connecting, queued, dead or not_needed.
+    pub state: String,
+    pub attempts: u32,
+    pub connections: u32,
+    pub errors: u32,
+    pub fetched_bytes: u64,
+    pub client: Option<String>,
+    /// `None` when its handshake never reached the scheduler.
+    pub tally: Option<PeerTally>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -693,6 +710,48 @@ impl Engine {
             torrent,
             profile: profile.to_owned(),
         })))
+    }
+
+    /// Every peer librqbit knows for `h` and what each did for us, for start
+    /// diagnostics: counts only, in no particular order, no address. Empty
+    /// before the file is chosen.
+    pub async fn peer_report(&self, h: TorrentHandle) -> Result<Vec<PeerReport>> {
+        let t = self.torrent(h)?;
+        let (managed, msgs) = {
+            let live = t.live.lock().await;
+            let Some(l) = live.as_ref() else {
+                return Ok(Vec::new());
+            };
+            (l.managed.clone(), l.msgs.clone())
+        };
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let _ = msgs.send(adapter::Msg::Report(tx));
+        let tallies: HashMap<String, adapter::PeerTally> = rx
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(addr, t)| (addr.to_string(), t))
+            .collect();
+        let filter = librqbit::PeerStatsFilter {
+            state: librqbit::PeerStatsFilterState::All,
+        };
+        let known = managed
+            .live()
+            .map(|l| l.per_peer_stats_snapshot(filter).peers)
+            .unwrap_or_default();
+        Ok(known
+            .into_iter()
+            .map(|(addr, p)| PeerReport {
+                ipv6: addr.starts_with('['),
+                state: p.state.to_owned(),
+                attempts: p.counters.connection_attempts,
+                connections: p.counters.connections,
+                errors: p.counters.errors,
+                fetched_bytes: p.counters.fetched_bytes,
+                client: p.client_name,
+                tally: tallies.get(&addr).cloned(),
+            })
+            .collect())
     }
 
     pub async fn stats(&self, h: TorrentHandle) -> Result<TorrentStats> {

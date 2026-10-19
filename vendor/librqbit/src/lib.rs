@@ -102,6 +102,10 @@ pub use torrent_state::{
 };
 // Marquee fork: external block scheduler hook.
 pub use torrent_state::ext::{ExtEvent, ExtSched};
+// Marquee fork: per-peer counters for the engine's start diagnostics.
+pub use torrent_state::peer::stats::snapshot::{
+    PeerStatsFilter, PeerStatsFilterState, PeerStatsSnapshot,
+};
 pub use type_aliases::FileInfos;
 
 pub use buffers::*;
