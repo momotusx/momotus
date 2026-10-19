@@ -17,7 +17,7 @@ import Undo2 from "lucide-solid/icons/undo-2";
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
-import { op, prefsView } from "../core/client";
+import { op } from "../core/client";
 import type { Group } from "../core/generated/Group";
 import type { ReasonLine } from "../core/generated/ReasonLine";
 import type { VersionRow } from "../core/generated/VersionRow";
@@ -40,7 +40,6 @@ import {
   qualityText,
   reasonText,
   statusText,
-  undoPatch,
 } from "../lib/words";
 import "./versions.css";
 
@@ -111,7 +110,6 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   const [showBlocked, setShowBlocked] = createSignal(false);
   const blocked = () => snap()?.blocked ?? null;
   // The one-time learning note (3.9), until Undo.
-  const prefs = prefsView();
   const [undone, setUndone] = createSignal(false);
   const note = () => {
     const n = snap()?.note;
@@ -119,10 +117,9 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   };
   const undo = () => {
     const n = snap()?.note;
-    const p = prefs.state.data;
-    if (!n || !p) return;
+    if (!n) return;
     setUndone(true);
-    void op("setPrefs", { patch: undoPatch(p, n.screenClass, n.choice) }).catch(() => setUndone(false));
+    void op("undoLearned", { screenClass: n.screenClass, choice: n.choice }).catch(() => setUndone(false));
   };
   const pick = () => snap()?.recommended ?? null;
   const [open, setOpen] = createSignal<Set<Group>>(new Set());

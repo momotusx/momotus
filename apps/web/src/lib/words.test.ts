@@ -12,13 +12,11 @@ import {
   conditionsHeader,
   conditionsLine,
   counted,
-  forgetPatch,
   learnedNote,
   learnedRows,
   lineWords,
   screenClass,
   speedFor,
-  undoPatch,
 } from "./words";
 
 test("reasons read as plain sentences", () => {
@@ -71,7 +69,7 @@ const GiB = 1024 ** 3;
 test("the web renders the shared stream choice words as they are", () => {
   expect(choiceWords).toEqual(shared);
   for (const [kind, w] of Object.entries(shared.lines)) {
-    const line = { kind, seeders: 3, year: 1999, service: "TorBox", sizeBytes: GiB, limitBytes: 5 * GiB, needMbps: 30, haveMbps: 12, samples: 0, quality: "cam" } as unknown as ReasonLine;
+    const line = { kind, seeders: 3, year: 1999, service: "TorBox", sizeBytes: GiB, limitBytes: 5 * GiB, chosen: false, needMbps: 30, haveMbps: 12, samples: 0, quality: "cam" } as unknown as ReasonLine;
     expect(lineWords(line)).toMatchObject({ tone: w.tone, text: w.text });
   }
 });
@@ -102,9 +100,9 @@ test("a detail with an unknown number is left out, never shown with a gap", () =
 });
 
 test("a large file says whether the size was the user's choice", () => {
-  const large: ReasonLine = { kind: "large", sizeBytes: 7.4 * GiB, limitBytes: 5 * GiB };
+  const large: ReasonLine = { kind: "large", sizeBytes: 7.4 * GiB, limitBytes: 5 * GiB, chosen: false };
   expect(lineWords(large)).toEqual({ tone: "warn", text: "Large file", details: "7.4 GB; Marquee prefers files up to 5 GB" });
-  expect(lineWords(large, true).text).toBe("Larger than the size you chose");
+  expect(lineWords({ ...large, chosen: true }).text).toBe("Larger than the size you chose");
 });
 
 test("may pause says where its speed comes from", () => {
@@ -159,14 +157,6 @@ test("Settings lists what was learned at 3 or more, unless undone or forgotten",
   expect(learnedRows({ ...p, learnedEpoch: 1 })).toEqual([]);
   expect(anyLearned(p)).toBe(true);
   expect(anyLearned({ ...p, learnedEpoch: 1 })).toBe(false);
-});
-
-test("Undo zeroes the choice and mutes it; Forget raises the epoch", () => {
-  const p = { learned: learned({ size: 3, muted: ["hdr"] }), learnedEpoch: 2 };
-  expect(undoPatch(p, 2160, "size")).toEqual({ learned: { uhd: { size: 0, muted: ["hdr", "size"] } } });
-  expect(undoPatch(p, 2160, "hdr")).toEqual({ learned: { uhd: { hdr: 0, muted: ["hdr"] } } });
-  expect(undoPatch(p, 720, "height")).toEqual({ learned: { hd: { height: 0, muted: ["height"] } } });
-  expect(forgetPatch(p)).toEqual({ learnedEpoch: 3 });
 });
 
 test("the onboarding patches are the plan's, and Skip is Start fast", () => {

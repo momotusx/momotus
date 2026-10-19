@@ -570,7 +570,7 @@ export function syncSummary(s: { locked: boolean; problem: string | null; joined
 
 export const choiceWords = choice;
 
-type Fields = Record<string, string | number | null | undefined>;
+type Fields = Record<string, string | number | boolean | null | undefined>;
 
 /** Fills `{name}` fields; null when one is unknown, so the part is left out. */
 function part(line: string, fields: Fields): string | null {
@@ -603,13 +603,11 @@ const numbers = (l: ReasonLine): Fields => {
 };
 
 /** A version's line: the tone, the default text, and the details shown on
- * focus (TV), hover (desktop) or tap (phone). `limitChosen`: the user set
- * the size limit, so a large file is "larger than the size you chose". */
-// ponytail: no caller passes limitChosen until the core's `large` line says
-// whether the limit was chosen; "Large file" until then.
-export function lineWords(l: ReasonLine, limitChosen = false): { tone: Exclude<Tone, "idle">; text: string; details: string } {
+ * focus (TV), hover (desktop) or tap (phone). A large file says "Larger
+ * than the size you chose" when the user set the limit. */
+export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: string; details: string } {
   const w = choice.lines[l.kind];
-  const text = limitChosen && "textChosen" in w ? w.textChosen : w.text;
+  const text = l.kind === "large" && l.chosen && "textChosen" in w ? w.textChosen : w.text;
   const f = numbers(l);
   const details = w.details.map((d) => part(d, f)).filter((d) => d !== null);
   return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(details.join(", ")) };
@@ -692,17 +690,6 @@ export function learnedRows(p: Pick<Prefs, "learned" | "learnedEpoch">): { scree
       });
   });
 }
-
-/** Undo: the choice's counter goes to zero and stops learning there. */
-export function undoPatch(p: Pick<Prefs, "learned">, screenClass: number, ch: LearnedChoice) {
-  const key = classes.find(([cls]) => cls === screenClass)?.[1] ?? "fhd";
-  const muted = p.learned[key].muted;
-  return { learned: { [key]: { [ch]: 0, muted: muted.includes(ch) ? muted : [...muted, ch] } } };
-}
-
-/** "Forget what was learned": a new epoch, so every counter reads as zero,
- * on every device, also one offline now. */
-export const forgetPatch = (p: Pick<Prefs, "learnedEpoch">) => ({ learnedEpoch: p.learnedEpoch + 1 });
 
 /** Anything learned that Forget would clear. */
 export const anyLearned = (p: Pick<Prefs, "learned" | "learnedEpoch">) =>

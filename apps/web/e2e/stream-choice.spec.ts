@@ -153,12 +153,16 @@ test.describe("Settings > Stream choice", () => {
     await shot(page, "stream-choice-learned", "desktop");
     await page.locator('[data-f="learned:2160:size"]').focus();
     await page.keyboard.press("Enter");
+    // The core's undoLearned: that counter back to zero, and it learns no more.
+    expect(sent.find((m) => m.op === "undoLearned")).toMatchObject({ screenClass: 2160, choice: "size" });
     await expect.poll(async () => (await prefs()).learned.uhd).toMatchObject({ size: 0, muted: ["size"] });
     await expect(rows).toHaveCount(1);
     // By keys, focus stays near (the Learn choice), never on Forget.
     await expect.poll(() => focused(page)).toBe("choice-learn:true");
     await page.locator('[data-f="learned:forget"]').click();
-    await expect.poll(async () => (await prefs()).learnedEpoch).toBe(1);
+    // forgetLearned: an epoch above every stamp, so every counter reads as zero.
+    expect(sent.filter((m) => m.op === "forgetLearned")).toHaveLength(1);
+    await expect.poll(async () => (await prefs()).learnedEpoch).toBeGreaterThan(0);
     await expect(page.locator(".learned")).toHaveCount(0);
   });
 
@@ -333,11 +337,11 @@ test.describe("Versions", () => {
   });
 
   test("the learning note shows once with Undo, which mutes that choice", async ({ browser }) => {
-    // The note as the core sends it when a counter crosses 3; the Undo write
-    // is answered here, so the shared core's profile keeps no counter.
+    // The note as the core sends it when a counter crosses 3; Undo
+    // (undoLearned) is answered here, so the shared core's profile is untouched.
     const page = await device(browser, "desktop", PORTS.bridge, {
       versions: (s) => ({ ...s, note: { screenClass: 1080, choice: "size", up: true, prefs: { ...NOTE_PREFS, sizeLimitBytes: 10 * GiB } } }),
-      answer: (m) => (m.op === "setPrefs" && JSON.stringify(m).includes("learned") ? {} : undefined),
+      answer: (m) => (m.op === "undoLearned" ? {} : undefined),
     });
     await page.goto(path("desktop"));
     const note = page.locator(".lnote");
@@ -345,6 +349,6 @@ test.describe("Versions", () => {
     await shot(page, "stream-choice-note", "desktop");
     await page.locator('[data-f="versions:undo"]').click();
     await expect(note).toHaveCount(0);
-    expect(sent.find((m) => m.op === "setPrefs")).toMatchObject({ patch: { learned: { fhd: { size: 0, muted: ["size"] } } } });
+    expect(sent.find((m) => m.op === "undoLearned")).toMatchObject({ screenClass: 1080, choice: "size" });
   });
 });

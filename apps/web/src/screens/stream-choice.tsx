@@ -14,7 +14,7 @@ import { debridAccounts } from "../core/debrid";
 import type { Prefs } from "../core/generated/Prefs";
 import type { StreamConditions } from "../core/generated/StreamConditions";
 import { form } from "../form";
-import { anyLearned, choiceWords, conditionsLine, forgetPatch, languageName, learnedRows, screenClass, speedFor, undoPatch } from "../lib/words";
+import { anyLearned, choiceWords, conditionsLine, languageName, learnedRows, screenClass, speedFor } from "../lib/words";
 import { Choice, LANGS } from "./settings";
 import "./browse.css";
 import "./settings.css";
@@ -36,9 +36,10 @@ export default function StreamChoice() {
   // Undo and Forget take their row away: focus stays near, on the Learn
   // choice, never on Forget (a second press there would clear the rest).
   const keepFocus = () => document.querySelector<HTMLElement>('[data-fgroup="choice-learn"] [aria-checked="true"]')?.focus();
-  const learnWrite = (x: Record<string, unknown>) => {
+  const learnOp = (name: "undoLearned" | "forgetLearned", fields: Record<string, unknown> = {}) => {
     if (document.activeElement?.closest(".learned")) keepFocus();
-    write(x);
+    setError(null);
+    op<Prefs>(name, fields).catch((e) => setError(reasonOf(e)));
   };
 
   const [conditions, { mutate }] = createResource(() => op<StreamConditions>("streamConditions").catch(() => null));
@@ -133,14 +134,14 @@ export default function StreamChoice() {
                     {(r) => (
                       <p class="lrow">
                         <span>{r.text}</span>
-                        <button class="btn" data-f={`learned:${r.screenClass}:${r.choice}`} onClick={() => learnWrite(undoPatch(x(), r.screenClass, r.choice))}>
+                        <button class="btn" data-f={`learned:${r.screenClass}:${r.choice}`} onClick={() => learnOp("undoLearned", { screenClass: r.screenClass, choice: r.choice })}>
                           <Undo2 aria-hidden />
                           {choiceWords.learned.undo}
                         </button>
                       </p>
                     )}
                   </For>
-                  <button class="btn" data-f="learned:forget" onClick={() => learnWrite(forgetPatch(x()))}>
+                  <button class="btn" data-f="learned:forget" onClick={() => learnOp("forgetLearned")}>
                     <RotateCcw aria-hidden />
                     {w.learn.forget}
                   </button>
