@@ -7,8 +7,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use mq_engine_sched::{
-    Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, Geometry, PeerId, PieceIdx,
-    Scheduler,
+    Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry, PeerId,
+    PieceIdx, Scheduler,
 };
 use proptest::prelude::*;
 
@@ -29,6 +29,8 @@ struct Harness {
     payload: VecDeque<(u64, u64)>,
     hedges: VecDeque<(u64, u64)>,
     log: Vec<Action>,
+    /// Container index per file, as sent.
+    index: BTreeMap<usize, FileIndex>,
 }
 
 impl Harness {
@@ -47,6 +49,7 @@ impl Harness {
             payload: VecDeque::new(),
             hedges: VecDeque::new(),
             log: Vec::new(),
+            index: BTreeMap::new(),
         }
     }
 
@@ -76,7 +79,12 @@ impl Harness {
             .geo
             .pieces_in(f.offset + start, f.offset + b_end)
             .collect();
-        if self.cfg.tail_bytes > 0 {
+        if let Some(&FileIndex::At { start, end }) = self.index.get(&file) {
+            v.extend(
+                self.geo
+                    .pieces_in(f.offset + start, f.offset + end.min(f.len)),
+            );
+        } else if self.cfg.tail_bytes > 0 {
             let t = f.offset + f.len.saturating_sub(self.cfg.tail_bytes);
             v.extend(self.geo.pieces_in(t, f.offset + f.len));
         }
@@ -145,6 +153,9 @@ impl Harness {
             }
             Event::RangeClosed { demand } => {
                 self.open.remove(demand);
+            }
+            Event::FileIndex { file, index } => {
+                self.index.insert(*file, *index);
             }
             Event::RangeAdvanced { .. } | Event::PlayPosition { .. } | Event::PeerRate { .. } => {}
         }
@@ -620,6 +631,97 @@ fn ready_needs_blocking_and_tail_verified() {
         ready |= h.deliver(1, b).contains(&Action::Ready { demand: 7 });
     }
     assert!(ready, "ready once the tail piece verified");
+}
+
+/// Serves every outstanding request, the lowest block first, until
+/// `demand` is ready; the blocks asked for on the way.
+fn serve_until_ready(h: &mut Harness, demand: DemandId) -> Option<Vec<BlockIdx>> {
+    let mut asked: Vec<BlockIdx> = Vec::new();
+    for _ in 0..10_000 {
+        asked.extend(h.out.iter().map(|&(b, _)| b));
+        let &(block, peer) = h.out.iter().next()?;
+        h.tick(1);
+        if h.deliver(peer, block).contains(&Action::Ready { demand }) {
+            return Some(asked);
+        }
+    }
+    None
+}
+
+/// An MP4 whose 5 MiB `moov` comes first (Tenzing's shape): while its
+/// index is pending only the head is asked for and nothing is ready; then
+/// Ready waits for the whole `moov`, and the file's tail is never asked for.
+#[test]
+fn moov_first_ready_waits_for_the_moov_and_never_the_tail() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.peer(1, MIB);
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::Pending,
+    });
+    h.send(Event::RangeOpened {
+        demand: 1,
+        file: 0,
+        start: 0,
+        end_hint: None,
+    });
+    let head: Vec<BlockIdx> = h.geo.piece_blocks(0).collect();
+    let mut asked: Vec<BlockIdx> = h.out.iter().map(|&(b, _)| b).collect();
+    for b in head {
+        let acts = h.deliver(1, b);
+        assert!(
+            !acts.contains(&Action::Ready { demand: 1 }),
+            "ready while pending"
+        );
+    }
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::At {
+            start: 0,
+            end: 5 * MIB,
+        },
+    });
+    asked.extend(serve_until_ready(&mut h, 1).expect("ready"));
+    let moov = h.geo.pieces_in(0, 5 * MIB);
+    assert!(
+        moov.clone().all(|p| h.verified.get(p)),
+        "Ready before the moov"
+    );
+    let tail = h.geo.piece_at(8 * MIB - small_cfg().tail_bytes);
+    let late: Vec<_> = asked
+        .iter()
+        .filter(|&&b| h.geo.piece_of(b) >= tail)
+        .collect();
+    assert!(late.is_empty(), "tail asked before Ready: {late:?}");
+}
+
+/// An MP4 whose 5 MiB `moov` comes after `mdat`: Ready waits for all of it,
+/// not a fixed 64 KiB tail.
+#[test]
+fn moov_last_ready_waits_for_the_whole_moov() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.peer(1, MIB);
+    h.send(Event::RangeOpened {
+        demand: 1,
+        file: 0,
+        start: 0,
+        end_hint: None,
+    });
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::At {
+            start: 3 * MIB,
+            end: 8 * MIB,
+        },
+    });
+    serve_until_ready(&mut h, 1).expect("ready");
+    let moov = h.geo.pieces_in(3 * MIB, 8 * MIB);
+    assert!(
+        moov.clone().all(|p| h.verified.get(p)),
+        "Ready before the moov"
+    );
 }
 
 #[test]

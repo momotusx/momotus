@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 
 use librqbit::{ExtEvent, ManagedTorrent};
 use mq_engine_sched::{
-    Action, Bitfield, BlockIdx, Config, DemandId, Event, Geometry, PeerId, Scheduler, Stats,
+    Action, Bitfield, BlockIdx, Config, DemandId, Event, FileIndex, Geometry, PeerId, Scheduler,
+    Stats,
 };
 use tokio::sync::{mpsc, watch};
 
@@ -138,6 +139,47 @@ pub(crate) struct Translator {
     received_bytes: u64,
     unchoked_us: Option<u64>,
     gone: Vec<(SocketAddr, PeerTally)>,
+    /// Per file: its container index (README 12 of mq-engine-sched), and
+    /// whether its head was read for it.
+    index: Vec<(FileIndex, bool)>,
+    /// Per file: named as an MP4 or MOV, so its index waits for the head.
+    iso_bmff: Vec<bool>,
+}
+
+/// Bytes at a file's head read for its container index: every top-level
+/// box before `moov` or `mdat` sits here.
+const INDEX_HEAD: u64 = 4096;
+
+/// Where an MP4 or MOV file keeps the index a player reads before its first
+/// frame, from the file's first bytes: `[0, moov end)` when `moov` comes
+/// first, `[mdat end, file end)` when it follows `mdat`. `None` for any other
+/// container, or when the head does not say.
+pub(crate) fn container_index(head: &[u8], len: u64) -> Option<(u64, u64)> {
+    let mut pos = 0u64;
+    for first in [true, false, false, false, false, false, false, false] {
+        let at = usize::try_from(pos).ok()?;
+        let kind = head.get(at + 4..at + 8)?;
+        if first
+            && !matches!(
+                kind,
+                b"ftyp" | b"moov" | b"mdat" | b"free" | b"skip" | b"wide"
+            )
+        {
+            return None;
+        }
+        let size = match u32::from_be_bytes(head.get(at..at + 4)?.try_into().ok()?) {
+            0 => len.checked_sub(pos)?,
+            1 => u64::from_be_bytes(head.get(at + 8..at + 16)?.try_into().ok()?),
+            n => u64::from(n),
+        };
+        let end = pos.checked_add(size).filter(|_| size >= 8)?;
+        match kind {
+            b"moov" => return Some((0, end.min(len))),
+            b"mdat" => return (end < len).then_some((end, len)),
+            _ => pos = end,
+        }
+    }
+    None
 }
 
 impl Translator {
@@ -181,7 +223,53 @@ impl Translator {
             received_bytes: 0,
             unchoked_us: None,
             gone: Vec::new(),
+            index: vec![(FileIndex::Tail, false); file_lens.len()],
+            iso_bmff: vec![false; file_lens.len()],
         }
+    }
+
+    /// Which files are named MP4 or MOV: their tail is not fetched before
+    /// their head says where the `moov` is.
+    pub fn with_iso_bmff(mut self, files: Vec<bool>) -> Self {
+        self.iso_bmff = files;
+        self
+    }
+
+    /// A file an open range reads whose head is verified but not yet read
+    /// for its container index, and how many head bytes to read.
+    pub fn index_wanted(&self) -> Option<(usize, u64)> {
+        self.demands.values().find_map(|d| {
+            let &(off, len) = self.files.get(d.file)?;
+            if self.index.get(d.file).is_none_or(|i| i.1) || len == 0 {
+                return None;
+            }
+            let n = len.min(INDEX_HEAD);
+            let pieces = off / self.piece_len..=(off + n - 1) / self.piece_len;
+            pieces
+                .clone()
+                .all(|p| self.have.get(p as usize).copied().unwrap_or(false))
+                .then_some((d.file, n))
+        })
+    }
+
+    /// `head`, the file's first bytes, read: its container index (if it has
+    /// one) replaces the fixed tail.
+    pub fn index_found(&mut self, file: usize, head: &[u8]) -> Vec<Wire> {
+        let (Some(&(_, len)), Some(&(was, _))) = (self.files.get(file), self.index.get(file))
+        else {
+            return Vec::new();
+        };
+        let index = match container_index(head, len) {
+            Some((start, end)) => FileIndex::At { start, end },
+            None => FileIndex::Tail,
+        };
+        self.index[file] = (index, true);
+        if index == was {
+            return Vec::new();
+        }
+        let out = self.feed(Event::FileIndex { file, index });
+        self.check_ready_stock();
+        out
     }
 
     /// Every peer's tally: the connected ones, then those that left.
@@ -382,12 +470,22 @@ impl Translator {
                         ready,
                     },
                 );
-                let out = self.feed(Event::RangeOpened {
+                // An MP4's tail may hold nothing it needs: wait for its head.
+                let mut out = Vec::new();
+                let unread = self.index.get(file) == Some(&(FileIndex::Tail, false));
+                if unread && self.iso_bmff.get(file) == Some(&true) {
+                    self.index[file].0 = FileIndex::Pending;
+                    out = self.feed(Event::FileIndex {
+                        file,
+                        index: FileIndex::Pending,
+                    });
+                }
+                out.extend(self.feed(Event::RangeOpened {
                     demand,
                     file,
                     start,
                     end_hint: end,
-                });
+                }));
                 self.check_ready_stock();
                 out
             }
@@ -529,11 +627,17 @@ impl Translator {
             .min(d.end.unwrap_or(len))
             .max(start + 1)
             .min(len);
-        let tail = len.saturating_sub(self.tail_bytes);
         let all = |a: u64, b: u64| {
             a >= b || (a / self.piece_len..=(b - 1) / self.piece_len).all(|p| self.have[p as usize])
         };
-        all(off + start, off + end) && (self.tail_bytes == 0 || all(off + tail, off + len))
+        let index = match self.index.get(d.file).map_or(FileIndex::Tail, |i| i.0) {
+            FileIndex::At { start, end } => all(off + start, off + end.min(len)),
+            FileIndex::Pending => false,
+            FileIndex::Tail => {
+                self.tail_bytes == 0 || all(off + len.saturating_sub(self.tail_bytes), off + len)
+            }
+        };
+        all(off + start, off + end) && index
     }
 }
 
@@ -565,6 +669,12 @@ pub(crate) async fn run(
     let mut last_rate = Instant::now();
     loop {
         execute(&torrent, &mut tr, pending);
+        // A read file's verified head says where its container index is.
+        if let Some((file, n)) = tr.index_wanted() {
+            let head = read_head(&torrent, file, n).await;
+            let more = tr.index_found(file, &head);
+            execute(&torrent, &mut tr, more);
+        }
         *snapshot.lock().unwrap_or_else(|p| p.into_inner()) = tr.snapshot();
         pending = tokio::select! {
             Some(ev) = ext.recv() => {
@@ -594,6 +704,23 @@ pub(crate) async fn run(
             }
         };
     }
+}
+
+/// The first `n` bytes of `file`, already verified (empty when they cannot
+/// be read, which leaves the fixed tail in place).
+async fn read_head(torrent: &Arc<ManagedTorrent>, file: usize, n: u64) -> Vec<u8> {
+    use tokio::io::AsyncReadExt;
+    let read = async {
+        let mut stream = torrent.clone().stream(file).await.ok()?;
+        let mut head = vec![0u8; usize::try_from(n).ok()?];
+        stream.read_exact(&mut head).await.ok()?;
+        Some(head)
+    };
+    tokio::time::timeout(Duration::from_secs(2), read)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default()
 }
 
 /// Puts wire actions on the peers' connections. A failed send drops the peer
@@ -855,6 +982,76 @@ mod tests {
             tr.on_ext(ExtEvent::PieceChecked { piece, ok: true });
         }
         assert!(*ready.borrow());
+    }
+
+    /// A 24-byte `ftyp`, then `rest`.
+    fn ftyp(rest: &[u8]) -> Vec<u8> {
+        let mut head = vec![0, 0, 0, 24];
+        head.extend(b"ftypisom");
+        head.extend([0; 12]);
+        head.extend(rest);
+        head
+    }
+
+    fn header(size: u32, kind: &[u8; 4]) -> Vec<u8> {
+        let mut b = size.to_be_bytes().to_vec();
+        b.extend(kind);
+        b
+    }
+
+    #[test]
+    fn the_container_index_is_read_from_the_head() {
+        let len = 8 << 20;
+        let moov = header(5 << 20, b"moov");
+        assert_eq!(
+            container_index(&ftyp(&moov), len),
+            Some((0, 24 + (5 << 20)))
+        );
+        let mdat = [header(8, b"free"), header(3 << 20, b"mdat")].concat();
+        assert_eq!(
+            container_index(&ftyp(&mdat), len),
+            Some((24 + 8 + (3 << 20), len))
+        );
+        let mut large = header(1, b"mdat");
+        large.extend((6u64 << 20).to_be_bytes());
+        assert_eq!(
+            container_index(&ftyp(&large), len),
+            Some((24 + (6 << 20), len))
+        );
+        assert_eq!(container_index(&ftyp(&header(0, b"mdat")), len), None);
+        let mkv = [
+            0x1a, 0x45, 0xdf, 0xa3, 0x01, 0, 0, 0, 0, 0, 0, 0x23, 0x42, 0x86,
+        ];
+        assert_eq!(container_index(&mkv, len), None);
+        assert_eq!(container_index(&ftyp(&[]), len), None);
+    }
+
+    /// An MP4-named file: nothing is ready while its head is out, the head
+    /// is read once, and then the `moov` (here first, 1.5 MiB) is all the
+    /// index Ready waits for: no tail.
+    #[test]
+    fn an_mp4_waits_for_its_head_then_its_moov() {
+        fn bits(pieces: impl IntoIterator<Item = usize>) -> [u8; 2] {
+            let mut b = [0u8; 2];
+            for p in pieces {
+                b[p / 8] |= 0x80 >> (p % 8);
+            }
+            b
+        }
+        let mut tr = translator(true).with_iso_bmff(vec![true]);
+        tr.tick(1_000);
+        let (_, ready) = open(&mut tr, 1, 0);
+        assert_eq!(tr.index_wanted(), None, "the head is not in");
+        // The old rule's pieces (1 MiB head, 2 MiB tail) are not enough.
+        tr.verified_bitfield(&bits((0..4).chain(8..16)));
+        assert!(!*ready.borrow(), "ready before the head was read");
+        assert_eq!(tr.index_wanted(), Some((0, 4096)));
+        tr.index_found(0, &ftyp(&header(3 << 19, b"moov")));
+        assert_eq!(tr.index_wanted(), None, "read once");
+        assert!(!*ready.borrow(), "ready before the moov");
+        // The moov ends in piece 6.
+        tr.verified_bitfield(&bits(0..7));
+        assert!(*ready.borrow(), "ready on the moov, with no tail");
     }
 
     /// A piece length that is not a multiple of 16 KiB (YTS uses 136 KiB)

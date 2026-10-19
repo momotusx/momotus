@@ -392,6 +392,27 @@ pub enum Event {
     PieceFailed {
         piece: PieceIdx,
     },
+    /// Where `file` keeps the container index a player reads before its
+    /// first frame (README 12); it replaces the fixed tail as urgent work
+    /// and in readiness.
+    FileIndex {
+        file: usize,
+        index: FileIndex,
+    },
+}
+
+/// A file's container index, as the adapter knows it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FileIndex {
+    /// No index of its own: the last `tail_bytes` (Matroska `Cues`).
+    #[default]
+    Tail,
+    /// Not known yet (an MP4 whose head is still on its way): only the
+    /// blocking window is urgent, and readiness waits.
+    Pending,
+    /// File bytes `[start, end)`: an MP4 `moov`, with what precedes it when
+    /// it comes first.
+    At { start: u64, end: u64 },
 }
 
 /// Decisions for the adapter.
@@ -405,8 +426,9 @@ pub enum Action {
         peer: PeerId,
         block: BlockIdx,
     },
-    /// The demand's blocking window and the file tail are verified: the
-    /// stream can answer without stalling on its first bytes.
+    /// The demand's blocking window and the file's index (its tail until a
+    /// `FileIndex`) are verified: the stream can answer without stalling on
+    /// its first bytes.
     Ready {
         demand: DemandId,
     },

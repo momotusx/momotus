@@ -42,7 +42,14 @@ for a in out.drain(..) {
 8. **Stall release**: once the hedge budget is spent, a peer that sent nothing for over 1 s plus its RTT while we wait on it gives its urgent blocks back to the fan-out (cancel and reassign), if another eligible peer has the piece.
 9. **Seek**: when the focused reader lands outside the previous urgent span, every queued request that is now readahead-only or unwanted is cancelled, so the per-peer FIFOs carry the new urgent blocks first.
 10. **Snub**: no payload for 10 s while we wait: depth 1, all but the oldest request cancelled, no urgent blocks. The first payload lifts it. Peers are never disconnected for being slow.
-11. **Readiness**: `Ready { demand }` once the demand's blocking window and its file's tail are verified (served bytes are always verified bytes).
+11. **Readiness**: `Ready { demand }` once the demand's blocking window and its file's index are verified (served bytes are always verified bytes). The index is the fixed tail (`tail_bytes`) until the adapter sends `FileIndex`, see below.
+12. **Container index** (`Event::FileIndex { file, index }`): the bytes a player must read before it can show a frame, where the container puts them. It replaces the fixed tail for that file, both as urgent work (class Tail) and in readiness:
+    - **MP4 or MOV with `moov` first:** `[0, moov end)`. Ready waits for the whole `moov` and the file's tail is never asked for before Ready. On Tenzing (YTS) the `moov` is 5.07 MiB at the head: the fixed 1 MiB head plus 2 MiB tail made Ready 25 s before AVPlayer could show a frame.
+    - **MP4 or MOV with `moov` after `mdat`:** `[mdat end, file end)`, the whole `moov` rather than a fixed 2 MiB.
+    - **Matroska and anything else:** no `FileIndex`; the fixed tail stands (MKV `Cues` sit at the tail).
+    - **An MP4 or MOV whose head is not read yet:** `Pending`. Only the blocking window is urgent and Ready waits.
+
+    The adapter finds the index from the file's first verified bytes (the top-level boxes before `moov` or `mdat` all sit in the head), so it costs no extra fetch. The loopback server's `hev1` scan then reads a `moov` that is already verified.
 
 ## Deviations from research/10 6.2 (and why)
 

@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 
 use crate::{
-    Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, Geometry, PeerId, PieceIdx,
-    Stats,
+    Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry, PeerId,
+    PieceIdx, Stats,
 };
 
 const US: u64 = 1_000_000;
@@ -64,6 +64,8 @@ pub struct Scheduler {
     last_periodic: Option<u64>,
     bitrate: Vec<u64>,
     play_pos: Vec<Option<u64>>,
+    /// Each file's container index as the adapter knows it (file offsets).
+    index: Vec<FileIndex>,
     peers: BTreeMap<PeerId, Peer>,
     avg_rate: u64,
     avail: Vec<u16>,
@@ -104,6 +106,7 @@ impl Scheduler {
             avg_rate: cfg.initial_peer_rate,
             bitrate: vec![cfg.default_bitrate.max(1); files],
             play_pos: vec![None; files],
+            index: vec![FileIndex::Tail; files],
             avail: vec![0; pieces as usize],
             verified: Bitfield::new(pieces),
             received: Bitfield::new(geo.num_blocks()),
@@ -231,6 +234,13 @@ impl Scheduler {
                         self.anchor = Some((d.file, d.pos));
                     }
                     self.dirty = true;
+                }
+            }
+            Event::FileIndex { file, index } => {
+                if let Some(slot) = self.index.get_mut(file) {
+                    *slot = index;
+                    self.dirty = true;
+                    self.check_ready(out);
                 }
             }
             Event::PlayPosition { file, pos } => {
@@ -491,6 +501,23 @@ impl Scheduler {
         }
     }
 
+    /// The pieces of `file`'s container index; none while it is pending.
+    fn index_pieces(&self, file: usize) -> Range<PieceIdx> {
+        let f = self.geo.files()[file];
+        match self.index[file] {
+            FileIndex::At { start, end } => {
+                let end = end.min(f.len);
+                self.geo
+                    .pieces_in(f.offset + start.min(end), f.offset + end)
+            }
+            FileIndex::Tail if self.cfg.tail_bytes > 0 => {
+                let tail = f.offset + f.len.saturating_sub(self.cfg.tail_bytes);
+                self.geo.pieces_in(tail, f.offset + f.len)
+            }
+            FileIndex::Tail | FileIndex::Pending => 0..0,
+        }
+    }
+
     fn focus(&self) -> Option<&Demand> {
         self.demands.iter().max_by_key(|d| d.seq)
     }
@@ -521,10 +548,7 @@ impl Scheduler {
             let w = self.windows(d.file, d.pos, d.end, play);
             let blocking = self.geo.pieces_in(w.blocking.0, w.blocking.1);
             spans.push((blocking.clone(), Class::Blocking));
-            if self.cfg.tail_bytes > 0 {
-                let tail = f.offset + f.len.saturating_sub(self.cfg.tail_bytes);
-                spans.push((self.geo.pieces_in(tail, f.offset + f.len), Class::Tail));
-            }
+            spans.push((self.index_pieces(d.file), Class::Tail));
             if Some(d.seq) != focus_seq {
                 continue; // older readers keep only their blocking window
             }
@@ -675,19 +699,13 @@ impl Scheduler {
             if d.ready {
                 continue;
             }
-            let f = self.geo.files()[d.file];
             let w = self.windows(d.file, d.start, d.end, None);
-            let tail = if self.cfg.tail_bytes > 0 {
-                let start = f.offset + f.len.saturating_sub(self.cfg.tail_bytes);
-                self.geo.pieces_in(start, f.offset + f.len)
-            } else {
-                0..0
-            };
-            let ready = self
-                .geo
-                .pieces_in(w.blocking.0, w.blocking.1)
-                .chain(tail)
-                .all(|p| self.verified.get(p));
+            let ready = self.index[d.file] != FileIndex::Pending
+                && self
+                    .geo
+                    .pieces_in(w.blocking.0, w.blocking.1)
+                    .chain(self.index_pieces(d.file))
+                    .all(|p| self.verified.get(p));
             if ready {
                 self.demands[i].ready = true;
                 out.push(Action::Ready {

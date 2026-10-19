@@ -677,7 +677,9 @@ impl Engine {
         sched.readahead_bytes = sched
             .readahead_bytes
             .min(self.inner.cfg.cache_budget_bytes / 4);
-        let tr = adapter::Translator::new(t.piece_len, &lens, sched, self.inner.cfg.dwh);
+        let iso_bmff = t.files.iter().map(|f| iso_bmff(&f.path)).collect();
+        let tr = adapter::Translator::new(t.piece_len, &lens, sched, self.inner.cfg.dwh)
+            .with_iso_bmff(iso_bmff);
         let dwh = tr.drives();
         let opts = AddTorrentOptions {
             only_files: Some(vec![idx]),
@@ -1029,6 +1031,12 @@ fn allocated(dir: &Path) -> u64 {
             Err(_) => 0,
         })
         .sum()
+}
+
+/// An MP4 or MOV file by its name in the torrent.
+fn iso_bmff(path: &str) -> bool {
+    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    matches!(ext.as_deref(), Some("mp4" | "m4v" | "mov"))
 }
 
 /// The stream's own trackers first, then the defaults when `defaults`, each

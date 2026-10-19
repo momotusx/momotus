@@ -1056,10 +1056,12 @@ async fn serve(
     }
 }
 
-/// Reads for a file's `hev1` entries: a torrent's wait for their pieces, so
-/// the time is the swarm's; the bytes stay small (sample tables are skipped).
+/// Reads for a file's `hev1` entries. A torrent's MP4 is Ready only once its
+/// whole `moov` is verified (mq-engine-sched README 12), so the scan reads it
+/// in one go from disk: the budget fits a large `moov` (Tenzing's is
+/// 5.07 MiB; a long 4K remux's tens of MiB).
 const RELABEL_BUDGET: mq_media::ProbeBudget = mq_media::ProbeBudget {
-    max_bytes: 4 << 20,
+    max_bytes: 64 << 20,
     max_time: Duration::from_secs(30),
 };
 
