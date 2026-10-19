@@ -14,8 +14,8 @@ use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_library::{Policy, Table};
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_streams::{
-    DeviceCaps, Group, HideReason, ParsedStream, RankInput, Ranked, RankedRow, Reason, StreamPrefs,
-    Target, normalize, rank,
+    Conditions, DeviceCaps, Group, HideReason, ParsedStream, RankInput, Ranked, RankedRow, Reason,
+    StreamPrefs, Target, normalize, rank,
 };
 use serde::Serialize;
 use std::pin::Pin;
@@ -269,6 +269,15 @@ impl VersionsView {
         let ranking = Arc::new(Ranking {
             kids: verified.as_ref().map(|v| v.names.clone()),
             params,
+            // ponytail: phase 2 of plans/m13-stream-choice.md reads the
+            // engine, runtime, years, speed and free space. Until the
+            // blocked state exists the engine is assumed, so torrents stay
+            // listed as before.
+            conditions: Conditions {
+                engine: true,
+                debrid: core.debrid().is_some(),
+                ..Conditions::default()
+            },
         });
         tasks.spawn(supervise(
             core.clone(),
@@ -597,11 +606,12 @@ fn plays(caps: &DeviceCaps) -> Vec<mq_server::Format> {
     .collect()
 }
 
-/// What the ranking reads: the view's params, and for a kids profile the
-/// allowed title's names (plans/m11-kids.md 4.4).
+/// What the ranking reads: the view's params, for a kids profile the
+/// allowed title's names (plans/m11-kids.md 4.4), and the conditions.
 struct Ranking {
     params: VersionsParams,
     kids: Option<Vec<String>>,
+    conditions: Conditions,
 }
 
 fn rerank(s: &mut State, ranking: &Ranking) {
@@ -612,6 +622,7 @@ fn rerank(s: &mut State, ranking: &Ranking) {
         target: &params.target,
         last_binge_group: params.last_binge_group.as_deref(),
         kids: ranking.kids.as_deref(),
+        conditions: &ranking.conditions,
     };
     s.ranked = rank(s.streams.clone(), &input);
     if !s.frozen {

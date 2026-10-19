@@ -71,6 +71,9 @@ fn params() -> VersionsParams {
 async fn ranks_union_progressively_and_freezes_the_pick() {
     mq_relparse::warm_up();
     let core = Core::temporary("p").unwrap();
+    // A row a service resolves opens only with an account
+    // (plans/m13-stream-choice.md 3.4).
+    core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
     let torrents = stream_addon("torrents", Duration::ZERO, TORRENTS).await;
     let debrid = stream_addon("debrid", Duration::from_millis(800), DEBRID).await;
     let installs = [debrid.transport_url.clone(), torrents.transport_url.clone()];
@@ -216,6 +219,8 @@ async fn installs_sharing_a_manifest_id_keep_their_own_name_rank_and_progress() 
 async fn frozen_pick_survives_late_results() {
     mq_relparse::warm_up();
     let core = Core::temporary("p").unwrap();
+    // With an account the late cached row would win: freezing must hold.
+    core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
     let torrents = stream_addon("torrents", Duration::ZERO, TORRENTS).await;
     let debrid = stream_addon("debrid", Duration::from_millis(800), DEBRID).await;
     core.library()
@@ -291,9 +296,11 @@ async fn real_torrentio_versions() {
     assert!(snap.rows.len() > 5);
 }
 
+// Both start quickly (200 or more seeders): the release line decides among
+// rows that start as well (plans/m13-stream-choice.md 3.5, question 2).
 const TWO_GROUPS: &str = r#"{"streams":[
  {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-FLUX\n👤 900 💾 3.0 GB","infoHash":"cccccccccccccccccccccccccccccccccccccccc","fileIdx":0,"behaviorHints":{"bingeGroup":"torrentio|1080p|FLUX"}},
- {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-NTb\n👤 40 💾 3.1 GB","infoHash":"dddddddddddddddddddddddddddddddddddddddd","fileIdx":0,"behaviorHints":{"bingeGroup":"torrentio|1080p|NTb"}}
+ {"name":"Torrentio\n1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-NTb\n👤 240 💾 3.1 GB","infoHash":"dddddddddddddddddddddddddddddddddddddddd","fileIdx":0,"behaviorHints":{"bingeGroup":"torrentio|1080p|NTb"}}
 ]}"#;
 
 #[tokio::test]

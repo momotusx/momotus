@@ -39,16 +39,19 @@ struct Expected {
     profile: String,
     plan: String,
     pick: Option<String>,
+    line: Option<String>,
     blocked: Option<String>,
     pending: bool,
 }
 
-/// A device and its user (6.1). The engine, account, speed and free space
-/// reach the ranking with the M13 model.
+/// A device and its user (6.1): what the device plays, what the user
+/// prefers, and the conditions the core reads (engine, account, speed, free
+/// space). The title's runtime and years join them per title.
 struct Profile {
     name: &'static str,
     caps: DeviceCaps,
     prefs: StreamPrefs,
+    conditions: Conditions,
 }
 
 fn android(height: u32, hdr: Vec<Hdr>, av1: bool) -> DeviceCaps {
@@ -71,10 +74,29 @@ fn android(height: u32, hdr: Vec<Hdr>, av1: bool) -> DeviceCaps {
     }
 }
 
+const GB: u64 = 1 << 30;
+
+/// The engine, an account, a measured torrent speed and the free space.
+fn conditions(engine: bool, debrid: bool, p2p: Option<f32>, free_gb: u64) -> Conditions {
+    let defaults = Conditions::default();
+    Conditions {
+        engine,
+        debrid,
+        p2p: p2p.map_or(defaults.p2p, |mbps| Speed { mbps, samples: 3 }),
+        free_bytes: Some(free_gb * GB),
+        ..defaults
+    }
+}
+
 fn profiles() -> Vec<Profile> {
     let prefs = StreamPrefs {
         languages: vec!["en".into()],
         ..StreamPrefs::default()
+    };
+    let best = StreamPrefs {
+        size_limit_bytes: None,
+        min_seeders: 20,
+        ..prefs.clone()
     };
     let stick = android(1080, vec![], false);
     let tv = android(2160, vec![Hdr::Hdr10], true);
@@ -86,20 +108,25 @@ fn profiles() -> Vec<Profile> {
         has_fallback_engine: false,
         ..DeviceCaps::basic_1080p()
     };
-    let p = |name, caps: &DeviceCaps| Profile {
+    let p = |name, caps: &DeviceCaps, prefs: &StreamPrefs, conditions| Profile {
         name,
         caps: caps.clone(),
         prefs: prefs.clone(),
+        conditions,
     };
     vec![
-        p("A", &stick),
-        p("B", &tv),
-        // Best quality: no size limit, 20 seeders (with the M13 preferences).
-        p("C", &tv),
-        p("D", &android(1440, vec![Hdr::Hdr10], false)),
-        p("E", &apple),
-        p("F", &stick),
-        p("G", &tv),
+        p("A", &stick, &prefs, conditions(true, false, Some(25.0), 20)),
+        p("B", &tv, &prefs, conditions(true, false, None, 50)),
+        p("C", &tv, &best, conditions(true, false, Some(100.0), 200)),
+        p(
+            "D",
+            &android(1440, vec![Hdr::Hdr10], false),
+            &prefs,
+            conditions(true, false, Some(15.0), 8),
+        ),
+        p("E", &apple, &prefs, conditions(false, true, None, 50)),
+        p("F", &stick, &prefs, Conditions::default()),
+        p("G", &tv, &prefs, conditions(false, true, None, 50)),
     ]
 }
 
@@ -183,10 +210,111 @@ fn hidden_counts(r: &Ranked) -> String {
     format!("hidden {}", parts.join(", "))
 }
 
+/// The Cinemeta facts of a title (`tests/corpus/meta.json`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Meta {
+    id: String,
+    year: Option<String>,
+    runtime: Option<String>,
+    episode_released: Option<String>,
+    episodes_in_season: Option<u32>,
+}
+
+/// "2005–2013" is 2005; "2013-09-16T05:00:00.000Z" is 2013.
+fn first_year(text: &str) -> Option<u16> {
+    text.get(..4)?.parse().ok()
+}
+
+/// A profile's conditions with the title's runtime, years and season size,
+/// as the app sends them with `versions` (4.3).
+fn for_title(base: &Conditions, m: &Meta) -> Conditions {
+    let minutes = m
+        .runtime
+        .as_deref()
+        .and_then(|r| r.split_whitespace().next()?.parse::<u32>().ok());
+    Conditions {
+        runtime_s: minutes.map(|m| m * 60),
+        title_year: m.year.as_deref().and_then(first_year),
+        episode_year: m.episode_released.as_deref().and_then(first_year),
+        episodes_in_season: m.episodes_in_season,
+        ..base.clone()
+    }
+}
+
+fn kind_of<T: serde::Serialize>(value: &T) -> String {
+    let v = serde_json::to_value(value).unwrap();
+    v.get("kind")
+        .unwrap_or(&v)
+        .as_str()
+        .unwrap_or("?")
+        .to_owned()
+}
+
+/// `CORPUS_EXPLAIN="shipped 2 A"` prints that title's top rows on that
+/// profile with their key and score, to read why a pick won.
+fn explain(corpus: &str, n: usize, profile: &str, ranked: &Ranked, plan: Option<&str>) {
+    let Ok(want) = std::env::var("CORPUS_EXPLAIN") else {
+        return;
+    };
+    let this = format!("{corpus} {n} {profile}");
+    if !want.split(',').any(|w| w.trim() == this) {
+        return;
+    }
+    println!("== {this}");
+    if let Some(h) = ranked
+        .hidden
+        .iter()
+        .find(|h| Some(h.stream.key.as_str()) == plan)
+    {
+        println!(
+            "plan row hidden: {:?} | {}",
+            h.reason,
+            h.stream.raw_description.lines().next().unwrap_or_default()
+        );
+    }
+    let shown = ranked
+        .rows
+        .iter()
+        .enumerate()
+        .filter(|(i, r)| *i < 3 || Some(r.stream.key.as_str()) == plan);
+    for (i, r) in shown {
+        let k = &r.key;
+        let mark = if Some(r.stream.key.as_str()) == plan {
+            "plan"
+        } else {
+            ""
+        };
+        println!(
+            "#{i} {mark} {} | {:?} | lang {} legit {} year {} sustains {} {:?} viable {} size {} start {} binge {} height {} within {} | {} {:?} {:?} | {:.1} Mbit/s | {}",
+            describe(&r.stream),
+            r.class,
+            k.language as u8,
+            k.legit as u8,
+            k.year_ok as u8,
+            k.sustains as u8,
+            k.playability,
+            k.viable as u8,
+            k.size_ok as u8,
+            k.start,
+            k.binge as u8,
+            k.effective_height,
+            k.within,
+            kind_of(&r.line),
+            r.stream.release.quality,
+            r.stream.release.hdr,
+            r.bitrate_mbps.unwrap_or(f32::NAN),
+            r.stream.raw_description.lines().next().unwrap_or_default()
+        );
+    }
+}
+
 /// One line per corpus, title and profile, and the expectations that fail.
 fn table() -> (String, Vec<String>, (u32, u32)) {
     let expected: serde_json::Value = read("expected.json");
     let expected: Vec<Expected> = serde_json::from_value(expected["expected"].clone()).unwrap();
+    let metas: serde_json::Value = read("meta.json");
+    let metas: Vec<Meta> = serde_json::from_value(metas["titles"].clone()).unwrap();
     let profiles = profiles();
     let mut out = String::new();
     let mut failures = Vec::new();
@@ -196,29 +324,51 @@ fn table() -> (String, Vec<String>, (u32, u32)) {
         for (n, t) in data.titles.iter().enumerate() {
             let streams = parsed(t);
             let target = target(t);
+            let meta = metas.iter().find(|m| m.id == t.id).expect("a meta");
             for p in profiles
                 .iter()
                 .filter(|p| profiles_of(corpus).contains(&p.name))
             {
+                let conditions = for_title(&p.conditions, meta);
                 let input = RankInput {
                     caps: &p.caps,
                     prefs: &p.prefs,
                     target: &target,
                     last_binge_group: None,
                     kids: None,
+                    conditions: &conditions,
                 };
                 let ranked = rank(streams.clone(), &input);
-                let pick = ranked.best().map(|r| &r.stream);
-                let got = pick.map_or("no pick".into(), describe);
+                let best = ranked.best();
+                let line = best.map(|r| kind_of(&r.line));
+                let got = best.map_or("no pick".into(), |r| {
+                    format!(
+                        "{} {} {}",
+                        describe(&r.stream),
+                        kind_of(&r.class),
+                        line.as_deref().unwrap_or("?")
+                    )
+                });
                 let want = expected
                     .iter()
                     .find(|e| e.corpus == corpus && e.id == t.id && e.profile == p.name);
+                let plan_key = want.and_then(|e| e.pick.as_deref());
+                explain(corpus, n + 1, p.name, &ranked, plan_key);
                 let verdict = match want {
                     None => String::new(),
                     Some(e) => {
+                        // A named line must be the row's; none named is
+                        // `quick` or `should`.
+                        let line_ok = match (&e.line, line.as_deref()) {
+                            (Some(want), Some(got)) => want == got,
+                            (None, Some(got)) => matches!(got, "quick" | "should"),
+                            _ => false,
+                        };
                         let meets = match (&e.blocked, &e.pick) {
-                            (Some(_), _) => pick.is_none(),
-                            (None, Some(key)) => pick.is_some_and(|s| &s.key == key),
+                            (Some(_), _) => best.is_none(),
+                            (None, Some(key)) => {
+                                best.is_some_and(|r| &r.stream.key == key) && line_ok
+                            }
                             (None, None) => false,
                         };
                         if e.pending {

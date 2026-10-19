@@ -1,5 +1,6 @@
-//! Ranking: hard gates, a lexicographic key, a bounded within-tier score,
-//! dedupe with failover chains, intent groups and plain-language reasons.
+//! Ranking (plans/m13-stream-choice.md 3): hard gates, a lexicographic key
+//! of plain questions, a bounded score, a line for the user, dedupe with
+//! failover chains, intent groups and reasons.
 
 use crate::model::*;
 use mq_protocol::Source;
@@ -16,32 +17,85 @@ pub struct RankInput<'a> {
     /// allowed title, one of which a release's title must equal; hand-offs
     /// and adult terms hide. `None` for an open profile.
     pub kids: Option<&'a [String]>,
+    pub conditions: &'a Conditions,
 }
 
 const MAX_REASONS: usize = 3;
+/// Bytes kept free on the torrent disk.
+const SPARE_BYTES: u64 = 1 << 30;
+/// Torrents under this many seeders may not start at all.
+const FEW_SEEDERS: u32 = 5;
+/// Share of the measured speed a file may need (Jellyfin's factor).
+const SAFE_SHARE: f32 = 0.7;
+
+/// What the ranking derives for one stream that passed the gates.
+struct Scored {
+    stream: ParsedStream,
+    key: RankKey,
+    class: SourceClass,
+    line: ReasonLine,
+    bitrate: Option<f32>,
+}
 
 pub fn rank(streams: Vec<ParsedStream>, input: &RankInput<'_>) -> Ranked {
-    let mut kept = Vec::new();
+    let mut scored = Vec::new();
     let mut hidden = Vec::new();
     for stream in streams {
         match gate(&stream, input) {
-            Some(reason) => hidden.push(HiddenRow { stream, reason }),
-            None => kept.push(stream),
+            Err(reason) => hidden.push(HiddenRow { stream, reason }),
+            Ok(class) => scored.push(score(stream, class, input)),
         }
     }
-    let mut scored: Vec<(RankKey, ParsedStream)> =
-        kept.into_iter().map(|s| (key(&s, input), s)).collect();
     // Higher key first; ties keep addon order then response order.
-    scored.sort_by(|(ka, a), (kb, b)| {
-        kb.cmp(ka)
-            .then(a.addon_rank.cmp(&b.addon_rank))
-            .then(a.index.cmp(&b.index))
+    scored.sort_by(|a, b| {
+        b.key
+            .cmp(&a.key)
+            .then(a.stream.addon_rank.cmp(&b.stream.addon_rank))
+            .then(a.stream.index.cmp(&b.stream.index))
     });
     let rows = dedupe(scored, input);
     Ranked { rows, hidden }
 }
 
-fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
+/// The class a stream would play as, or why it is hidden.
+fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReason> {
+    if let Some(reason) = gate_reason(s, input) {
+        return Err(reason);
+    }
+    let class = class(s, input.conditions).ok_or(HideReason::NeedsDebrid)?;
+    if class == SourceClass::Swarm
+        && let (Some(free), Some(size)) = (input.conditions.free_bytes, s.size_bytes)
+        && size > free.saturating_sub(SPARE_BYTES)
+    {
+        return Err(HideReason::NoSpace);
+    }
+    Ok(class)
+}
+
+/// How a stream starts (3.2), or `None` when nothing here can open it.
+fn class(s: &ParsedStream, c: &Conditions) -> Option<SourceClass> {
+    let hash = match &s.source {
+        Source::Torrent { .. } => true,
+        Source::ClientResolve(r) => r.info_hash.is_some(),
+        // A link a service has not prepared yet starts a download first.
+        Source::Http { .. } if s.cached == Some(false) => return Some(SourceClass::Fetch),
+        _ => return Some(SourceClass::Ready),
+    };
+    let resolve = matches!(s.source, Source::ClientResolve(_));
+    if c.debrid {
+        return Some(match s.cached {
+            Some(true) => SourceClass::Ready,
+            None => SourceClass::Unknown,
+            Some(false) if c.engine && hash => SourceClass::Swarm,
+            Some(false) => SourceClass::Fetch,
+        });
+    }
+    // Without an account only the engine opens a torrent; a row only a
+    // service resolves cannot open.
+    (c.engine && hash && !resolve).then_some(SourceClass::Swarm)
+}
+
+fn gate_reason(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
     if matches!(
         s.source,
         Source::Usenet { .. } | Source::Archive { .. } | Source::Invalid { .. }
@@ -97,6 +151,8 @@ fn wrong_episode(s: &ParsedStream, target: &Target) -> bool {
     false
 }
 
+/// Only rejects when the parsed title is clearly another work; short or
+/// missing titles never hide a stream.
 /// Only rejects when the parsed title is clearly another work; short or
 /// missing titles never hide a stream.
 fn wrong_title(s: &ParsedStream, target: &Target) -> bool {
@@ -241,13 +297,7 @@ fn playability(s: &ParsedStream, caps: &DeviceCaps) -> Option<Playability> {
         }
         codec => caps.decoders.contains(&codec),
     };
-    let hdr_ok = r.hdr.iter().all(|h| match h {
-        Hdr::Sdr => true,
-        h => {
-            caps.display_hdr.contains(h)
-                || (*h == Hdr::DolbyVision && caps.display_hdr.contains(&Hdr::Hdr10))
-        }
-    });
+    let hdr_ok = r.hdr.iter().all(|h| shows(*h, caps));
     // Atmos rides on TrueHD or E-AC-3, so it says nothing about decoding.
     let mut audio = r.audio.iter().filter(|a| **a != Audio::Atmos).peekable();
     let audio_ok = audio.peek().is_none()
@@ -265,68 +315,331 @@ fn playability(s: &ParsedStream, caps: &DeviceCaps) -> Option<Playability> {
     }
 }
 
-fn tier(s: &ParsedStream) -> u8 {
-    match (&s.source, s.cached) {
-        (Source::ClientResolve(_), Some(true)) => 4,
-        (Source::Http { .. }, Some(true)) => 4,
-        (Source::Http { .. }, _) => 3,
-        (Source::Torrent { .. }, _) if s.seeders.unwrap_or(1) > 0 => 2,
-        (Source::ClientResolve(_), _) => 1,
+/// The screen class a display height counts as (3.3): a 1179-line iPhone
+/// and a 1440-line phone are 1080.
+pub fn screen_class(display_height: u32) -> u32 {
+    match display_height {
+        h if h >= 2000 => 2160,
+        h if h >= 1000 => 1080,
+        h if h >= 700 => 720,
+        _ => 480,
+    }
+}
+
+/// The resolution steps a release moves down: 4320, 2160, 1080, 720, 480,
+/// 360.
+const LADDER: [u32; 6] = [4320, 2160, 1080, 720, 480, 360];
+
+fn step_down(height: u32) -> u32 {
+    LADDER.iter().copied().find(|&h| h < height).unwrap_or(0)
+}
+
+/// Lowest bitrate a real release of that height has (3.3): under it the
+/// file is upscaled or starved. TRaSH's WEB-DL 2160p minimum; VortX's
+/// 1080p junk floor.
+fn floor_mbps(height: u32) -> Option<f32> {
+    match height {
+        h if h >= 2160 => Some(4.6),
+        1080 => Some(0.7),
+        _ => None,
+    }
+}
+
+/// A disc's maximum for that height (3.3): above it a size is a pack's.
+fn ceiling_mbps(height: u32) -> f32 {
+    if height > 1080 { 144.0 } else { 48.0 }
+}
+
+/// What one episode or film of a row weighs: its size, and size over
+/// runtime in Mbit/s.
+#[derive(Clone, Copy)]
+struct Weight {
+    size: Option<u64>,
+    mbps: Option<f32>,
+}
+
+/// The pack guard (3.3): for an episode above the disc ceiling the size is
+/// a pack's, divided by the episodes the release names, else by the
+/// season's episode count, else the bitrate is unknown. A movie's bitrate
+/// is its own, however high (a 3D remux is 51 Mbit/s).
+fn weight(s: &ParsedStream, input: &RankInput<'_>) -> Weight {
+    let c = input.conditions;
+    let size = s.size_bytes;
+    let (Some(bytes), Some(runtime)) = (size, c.runtime_s.filter(|r| *r > 0)) else {
+        return Weight { size, mbps: None };
+    };
+    let mbps = bytes as f32 * 8.0 / runtime as f32 / 1e6;
+    let episode = input.target.season.is_some() || input.target.episode.is_some();
+    if !episode || mbps <= ceiling_mbps(s.release.resolution.height()) {
+        return Weight {
+            size,
+            mbps: Some(mbps),
+        };
+    }
+    let named = s.release.episodes.len() as u32;
+    let episodes = if named >= 2 {
+        Some(named)
+    } else {
+        c.episodes_in_season.filter(|n| *n >= 2)
+    };
+    match episodes {
+        Some(n) => Weight {
+            size: Some(bytes / n as u64),
+            mbps: Some(mbps / n as f32),
+        },
+        None => Weight { size, mbps: None },
+    }
+}
+
+/// The measured speed a class streams at (3.2); a fetch has none.
+fn speed(class: SourceClass, c: &Conditions) -> Option<Speed> {
+    match class {
+        SourceClass::Ready => Some(c.http),
+        SourceClass::Unknown if c.engine => Some(c.p2p),
+        SourceClass::Unknown => Some(c.http),
+        SourceClass::Swarm => Some(c.p2p),
+        SourceClass::Fetch => None,
+    }
+}
+
+/// Lines the user gets for this row (3.3): one step lower when upscaled or
+/// under the floor, then capped by the screen class and the user's maximum.
+/// An unstated resolution ranks below every stated one.
+fn effective_height(s: &ParsedStream, bitrate: Option<f32>, input: &RankInput<'_>) -> u32 {
+    let mut height = s.release.resolution.height();
+    let starved = matches!((floor_mbps(height), bitrate), (Some(f), Some(b)) if b < f);
+    if s.release.upscaled || starved {
+        height = step_down(height);
+    }
+    let mut cap = screen_class(input.caps.display_height);
+    if let Some(max) = input.prefs.max_height {
+        cap = cap.min(max);
+    }
+    height.min(cap)
+}
+
+fn legit(s: &ParsedStream) -> bool {
+    !matches!(
+        s.release.quality,
+        Quality::Cam | Quality::Telesync | Quality::Screener
+    )
+}
+
+/// No year in the name, or one within 3 years of the title's or the
+/// episode's (3.5): another film or show is demoted, never hidden.
+fn year_ok(s: &ParsedStream, c: &Conditions) -> bool {
+    let Some(year) = s.release.year else {
+        return true;
+    };
+    let near = |t: Option<u16>| t.is_some_and(|t| (year as i32 - t as i32).abs() <= 3);
+    (c.title_year.is_none() && c.episode_year.is_none())
+        || near(c.title_year)
+        || near(c.episode_year)
+}
+
+fn start(class: SourceClass, seeders: Option<u32>, prefs: &StreamPrefs) -> u8 {
+    let min = prefs.min_seeders;
+    match (class, seeders) {
+        (SourceClass::Ready, _) => {
+            if prefs.prefer_ready {
+                4
+            } else {
+                3
+            }
+        }
+        (SourceClass::Fetch, _) => 0,
+        (_, None) => 1,
+        (_, Some(n)) if n >= min.saturating_mul(4) => 3,
+        (_, Some(n)) if n >= min => 2,
+        (_, Some(n)) if n >= FEW_SEEDERS => 1,
         _ => 0,
     }
 }
 
-fn effective_height(s: &ParsedStream, input: &RankInput<'_>) -> u32 {
-    let mut cap = input.caps.display_height;
-    if let Some(max) = input.prefs.max_height {
-        cap = cap.min(max);
+/// The size limit guards a torrent's start and the disk: a ready file
+/// streams, so it never fails it (r4 N3).
+fn size_ok(size: Option<u64>, class: SourceClass, prefs: &StreamPrefs) -> bool {
+    if !matches!(class, SourceClass::Swarm | SourceClass::Unknown) {
+        return true;
     }
-    // An unstated resolution ranks below every stated one: a guess must
-    // not tie with a real 720p.
-    s.release.resolution.height().min(cap)
+    match (prefs.size_limit_bytes, size) {
+        (Some(limit), Some(size)) => size as f64 <= limit as f64 * 1.1,
+        _ => true,
+    }
 }
 
-fn key(s: &ParsedStream, input: &RankInput<'_>) -> RankKey {
+/// Whether the screen shows this dynamic range. Dolby Vision carries an
+/// HDR10 base, so an HDR10 screen shows it as HDR10.
+fn shows(h: Hdr, caps: &DeviceCaps) -> bool {
+    h == Hdr::Sdr
+        || caps.display_hdr.contains(&h)
+        || (h == Hdr::DolbyVision && caps.display_hdr.contains(&Hdr::Hdr10))
+}
+
+/// An HDR file on a screen that cannot show it: colors look washed out.
+fn washed_out(s: &ParsedStream, caps: &DeviceCaps) -> bool {
+    s.release.hdr.iter().any(|h| !shows(*h, caps))
+}
+
+fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Scored {
+    let s = &stream;
     let langs = &s.release.languages;
-    RankKey {
-        tier: tier(s),
+    let weight = weight(s, input);
+    let bitrate = weight.mbps;
+    let speed = speed(class, input.conditions);
+    let safe = speed.map(|sp| sp.mbps * SAFE_SHARE);
+    let sustains = match (bitrate, safe) {
+        (Some(b), Some(safe)) => b <= safe,
+        _ => true,
+    };
+    let start = start(class, s.seeders, input.prefs);
+    let key = RankKey {
         language: input.prefs.languages.is_empty()
             || langs.is_empty()
             || input.prefs.languages.iter().any(|l| langs.contains(l)),
-        binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
+        legit: legit(s),
+        year_ok: year_ok(s, input.conditions),
+        sustains,
         playability: playability(s, input.caps).unwrap_or(Playability::NeedsTranscode),
-        effective_height: effective_height(s, input),
-        within: within(s, input),
+        viable: start > 0,
+        size_ok: size_ok(weight.size, class, input.prefs),
+        start,
+        binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
+        effective_height: effective_height(s, bitrate, input),
+        within: within(s, class, bitrate, safe, input),
+    };
+    let line = line(s, class, &key, weight, speed, input);
+    Scored {
+        stream,
+        key,
+        class,
+        line,
+        bitrate,
     }
 }
 
-/// Bounded 0..=1000 score inside a tier.
-fn within(s: &ParsedStream, input: &RankInput<'_>) -> u16 {
-    let r = &s.release;
-    let mut score: i32 = match r.quality {
-        Quality::Remux => 300,
-        Quality::BluRay => 260,
-        Quality::WebDl => 220,
-        Quality::WebRip => 180,
-        Quality::Unknown => 150,
-        Quality::Hdtv => 120,
-        Quality::Dvd => 80,
-        Quality::Screener => 20,
-        Quality::Telesync | Quality::Cam => 0,
-    };
-    if r.remux && r.quality != Quality::Remux {
-        score += 40;
+/// The first line that applies, bad before warn before ok (3.7).
+fn line(
+    s: &ParsedStream,
+    class: SourceClass,
+    key: &RankKey,
+    weight: Weight,
+    speed: Option<Speed>,
+    input: &RankInput<'_>,
+) -> ReasonLine {
+    let (size, bitrate) = (weight.size, weight.mbps);
+    let torrent = matches!(class, SourceClass::Swarm | SourceClass::Unknown);
+    if !key.legit {
+        let quality = match s.release.quality {
+            Quality::Cam => "cam",
+            Quality::Telesync => "telesync",
+            _ => "screener",
+        };
+        return ReasonLine::Copy {
+            quality: quality.into(),
+        };
     }
-    let caps = input.caps;
-    if r.hdr.contains(&Hdr::DolbyVision) && caps.display_hdr.contains(&Hdr::DolbyVision) {
-        score += 120;
-    } else if r
-        .hdr
-        .iter()
-        .any(|h| matches!(h, Hdr::Hdr10 | Hdr::Hdr10Plus | Hdr::DolbyVision))
-        && caps.display_hdr.contains(&Hdr::Hdr10)
+    if class == SourceClass::Fetch {
+        return ReasonLine::Fetch {
+            service: s.service.clone(),
+        };
+    }
+    if let (true, Some(n)) = (torrent, s.seeders)
+        && n < FEW_SEEDERS
     {
-        score += 100;
+        return ReasonLine::VeryFew { seeders: n };
+    }
+    if !key.year_ok
+        && let Some(year) = s.release.year
+    {
+        return ReasonLine::OtherYear { year };
+    }
+    if !key.sustains
+        && let (Some(need), Some(have)) = (bitrate, speed)
+    {
+        return ReasonLine::MayPause {
+            need_mbps: need,
+            have_mbps: have.mbps,
+            samples: have.samples,
+        };
+    }
+    if washed_out(s, input.caps) {
+        return ReasonLine::WashedOut;
+    }
+    if !key.size_ok
+        && let (Some(size), Some(limit)) = (size, input.prefs.size_limit_bytes)
+    {
+        return ReasonLine::Large {
+            size_bytes: size,
+            limit_bytes: limit,
+        };
+    }
+    if let (true, Some(n), 1) = (torrent, s.seeders, key.start) {
+        return ReasonLine::Few { seeders: n };
+    }
+    if class == SourceClass::Ready {
+        return ReasonLine::Ready {
+            service: s.service.clone(),
+            size_bytes: size,
+        };
+    }
+    if key.start == 3 {
+        return ReasonLine::Quick {
+            seeders: s.seeders,
+            size_bytes: size,
+        };
+    }
+    ReasonLine::Should {
+        seeders: s.seeders,
+        size_bytes: size,
+        service: (class == SourceClass::Unknown)
+            .then(|| s.service.clone())
+            .flatten(),
+    }
+}
+
+/// Bounded 0..=1000 score among rows whose key fields tie (3.6).
+fn within(
+    s: &ParsedStream,
+    class: SourceClass,
+    bitrate: Option<f32>,
+    safe: Option<f32>,
+    input: &RankInput<'_>,
+) -> u16 {
+    let r = &s.release;
+    // Start: seeders saturate at 200; the engine talks to at most 80 peers.
+    let mut score = match (class, s.seeders) {
+        (SourceClass::Ready, _) => 250.0,
+        (_, None) => 125.0,
+        (_, Some(n)) => 250.0 * ((1.0 + n as f32).log2() / 201f32.log2()).min(1.0),
+    };
+    // Headroom: how far the safe speed is above the file's need.
+    score += match (bitrate, safe) {
+        (Some(b), Some(safe)) if b > 0.0 => 150.0 * ((safe / b - 1.0) / 2.0).clamp(0.0, 1.0),
+        _ => 75.0,
+    };
+    score += match r.quality {
+        Quality::Remux => 200.0,
+        Quality::BluRay => 170.0,
+        Quality::WebDl => 150.0,
+        Quality::WebRip => 120.0,
+        Quality::Unknown => 100.0,
+        Quality::Hdtv => 80.0,
+        Quality::Dvd => 50.0,
+        Quality::Screener | Quality::Telesync | Quality::Cam => 0.0,
+    };
+    let caps = input.caps;
+    if input.prefs.hdr {
+        if r.hdr.contains(&Hdr::DolbyVision) && caps.display_hdr.contains(&Hdr::DolbyVision) {
+            score += 100.0;
+        } else if r
+            .hdr
+            .iter()
+            .any(|h| matches!(h, Hdr::Hdr10 | Hdr::Hdr10Plus | Hdr::DolbyVision))
+            && caps.display_hdr.contains(&Hdr::Hdr10)
+        {
+            score += 80.0;
+        }
     }
     let atmos = r.audio.contains(&Audio::Atmos);
     let passthrough = r.audio.iter().any(|a| caps.passthrough.contains(a));
@@ -335,32 +648,25 @@ fn within(s: &ParsedStream, input: &RankInput<'_>) -> u16 {
         passthrough,
         surround(r.channels.as_deref()),
     ) {
-        (true, _, _) => 80,
-        (false, true, _) => 60,
-        (false, false, true) => 40,
-        _ => 20,
+        (true, _, _) => 80.0,
+        (false, true, _) => 60.0,
+        (false, false, true) => 40.0,
+        _ => 20.0,
     };
-    score += match s.seeders {
-        Some(n) if matches!(s.source, Source::Torrent { .. }) => {
-            ((n as f32 + 1.0).log10() * 40.0).min(120.0) as i32
-        }
-        _ if s.cached == Some(true) => 120,
-        _ => 30,
-    };
-    score += language_score(s, input.prefs);
-    score += size_score(s, input.prefs);
-    score -= over_resolution_penalty(s, input.caps);
-    score.clamp(0, 1000) as u16
+    score += language_score(s, input.prefs) as f32;
+    score -= over_resolution_penalty(s, input) as f32;
+    score.clamp(0.0, 1000.0) as u16
 }
 
 /// Resolution the screen cannot show costs bandwidth and start time for
 /// nothing: a 4K remux on a 1080p stick must not beat a 1080p release.
-fn over_resolution_penalty(s: &ParsedStream, caps: &DeviceCaps) -> i32 {
+fn over_resolution_penalty(s: &ParsedStream, input: &RankInput<'_>) -> i32 {
+    let class = screen_class(input.caps.display_height);
     let height = s.release.resolution.height();
-    if height == 0 || height <= caps.display_height {
+    if height == 0 || height <= class {
         return 0;
     }
-    let steps = (height / caps.display_height.max(1)).max(1) as i32;
+    let steps = (height / class).max(1) as i32;
     350 * steps
 }
 
@@ -380,21 +686,18 @@ fn language_score(s: &ParsedStream, prefs: &StreamPrefs) -> i32 {
     }
 }
 
-fn size_score(s: &ParsedStream, prefs: &StreamPrefs) -> i32 {
-    let Some(size) = s.size_bytes else { return 40 };
-    let gb = size as f64 / 1e9;
-    match prefs.quality {
-        QualityPref::Best => 40,
-        QualityPref::Balanced => (80.0 - (gb - 8.0).abs() * 4.0).clamp(0.0, 80.0) as i32,
-        QualityPref::DataSaver => (100.0 - gb * 8.0).clamp(0.0, 100.0) as i32,
-    }
-}
-
 /// Collapses duplicates into one row each; the rest become its failover.
-fn dedupe(scored: Vec<(RankKey, ParsedStream)>, input: &RankInput<'_>) -> Vec<RankedRow> {
+fn dedupe(scored: Vec<Scored>, input: &RankInput<'_>) -> Vec<RankedRow> {
     let mut rows: Vec<RankedRow> = Vec::new();
     let mut by_key: HashMap<String, usize> = HashMap::new();
-    for (key, stream) in scored {
+    for Scored {
+        stream,
+        key,
+        class,
+        line,
+        bitrate,
+    } in scored
+    {
         let identity = release_identity(&stream);
         if let Some(&at) = by_key.get(&stream.key).or_else(|| by_key.get(&identity)) {
             rows[at].failover.push(stream);
@@ -407,6 +710,9 @@ fn dedupe(scored: Vec<(RankKey, ParsedStream)>, input: &RankInput<'_>) -> Vec<Ra
             reasons: Vec::new(),
             failover: Vec::new(),
             key,
+            class,
+            line,
+            bitrate_mbps: bitrate,
             stream,
         });
     }
@@ -430,9 +736,7 @@ fn release_identity(s: &ParsedStream) -> String {
 fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
     let best_size = rows.first().and_then(|r| r.stream.size_bytes);
     // "Needs download" only means something next to a ready alternative.
-    let any_ready = rows
-        .iter()
-        .any(|r| r.stream.cached == Some(true) || matches!(r.stream.source, Source::Http { .. }));
+    let any_ready = rows.iter().any(|r| r.class == SourceClass::Ready);
     for row in rows.iter_mut() {
         let s = &row.stream;
         let wants_lang = !input.prefs.languages.is_empty() && !s.release.languages.is_empty();
@@ -441,11 +745,7 @@ fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
             .languages
             .iter()
             .any(|l| s.release.languages.contains(l));
-        row.group = if any_ready
-            && row.key.tier <= 2
-            && s.cached != Some(true)
-            && !matches!(s.source, Source::Http { .. })
-        {
+        row.group = if any_ready && row.class != SourceClass::Ready {
             Group::NeedsDownload
         } else if wants_lang && !lang_match {
             Group::OtherLanguages
@@ -455,7 +755,7 @@ fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
             Group::Best
         };
         let mut reasons = Vec::new();
-        if row.key.tier == 4 {
+        if row.class == SourceClass::Ready {
             reasons.push(Reason::ReadyNow);
         }
         if row.key.binge {
@@ -464,7 +764,7 @@ fn assign_groups_and_reasons(rows: &mut [RankedRow], input: &RankInput<'_>) {
         if row.key.playability == Playability::Native {
             reasons.push(Reason::PlaysDirectly);
         }
-        if s.release.resolution.height() == input.caps.display_height {
+        if s.release.resolution.height() == screen_class(input.caps.display_height) {
             reasons.push(Reason::MatchesScreen);
         }
         if wants_lang && lang_match {

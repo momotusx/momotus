@@ -12,6 +12,26 @@ fn streams(addon: &str, rank: u16, body: serde_json::Value) -> Vec<ParsedStream>
         .collect()
 }
 
+/// A device with the torrent engine and no debrid account; nothing else
+/// known (the speed priors, no runtime).
+fn engine() -> &'static Conditions {
+    static C: std::sync::LazyLock<Conditions> = std::sync::LazyLock::new(|| Conditions {
+        engine: true,
+        ..Conditions::default()
+    });
+    &C
+}
+
+/// The same device with a debrid account.
+fn with_account() -> &'static Conditions {
+    static C: std::sync::LazyLock<Conditions> = std::sync::LazyLock::new(|| Conditions {
+        engine: true,
+        debrid: true,
+        ..Conditions::default()
+    });
+    &C
+}
+
 fn target() -> Target {
     Target {
         title: "The Last of Us".into(),
@@ -66,11 +86,13 @@ fn cached_debrid_wins_and_duplicates_become_failover() {
         target: &target(),
         last_binge_group: None,
         kids: None,
+        conditions: with_account(),
     };
     let ranked = rank(sample(), &input);
     let best = ranked.best().unwrap();
     assert_eq!(best.stream.addon_id, "debrid-addon");
-    assert_eq!(best.key.tier, 4);
+    assert_eq!(best.class, SourceClass::Ready);
+    assert_eq!(best.key.start, 4);
     assert!(best.reasons.contains(&Reason::ReadyNow));
     assert!(best.reasons.len() <= 3);
     // The Torrentio copy of the same hash collapses into the debrid row.
@@ -100,6 +122,7 @@ fn effective_resolution_follows_the_screen() {
         target: &target(),
         last_binge_group: None,
         kids: None,
+        conditions: engine(),
     };
     // Only torrents: 4K DV and 1080p compete on a 1080p SDR stick.
     let only_torrents: Vec<_> = sample()
@@ -131,6 +154,7 @@ fn binge_group_and_preferences_apply() {
         target: &target(),
         last_binge_group: None,
         kids: None,
+        conditions: engine(),
     };
     let ranked = rank(sample(), &input);
     assert!(
@@ -146,7 +170,14 @@ fn binge_group_and_preferences_apply() {
             .any(|h| h.reason == HideReason::Excluded)
     );
 
-    let prefs = StreamPrefs::default();
+    // Binge decides among rows that tie on size and start (plans/m13 3.5,
+    // question 2): with no size limit and 20 seeders wanted, the 8.4 GB
+    // FLUX (120 seeders) and the 1080p (900) both start quickly.
+    let prefs = StreamPrefs {
+        size_limit_bytes: None,
+        min_seeders: 20,
+        ..StreamPrefs::default()
+    };
     let only_torrents: Vec<_> = sample()
         .into_iter()
         .filter(|s| s.addon_id == "torrentio")
@@ -157,6 +188,7 @@ fn binge_group_and_preferences_apply() {
         target: &target(),
         last_binge_group: Some("torrentio|4k|FLUX"),
         kids: None,
+        conditions: engine(),
     };
     let ranked = rank(only_torrents, &input);
     let best = ranked.best().unwrap();
@@ -165,24 +197,33 @@ fn binge_group_and_preferences_apply() {
 }
 
 #[test]
-fn rank_key_orders_tiers_before_scores() {
-    let low_tier_high_score = RankKey {
-        tier: 2,
-        language: true,
-        binge: true,
-        playability: Playability::Native,
-        effective_height: 2160,
-        within: 1000,
+/// Each key field outranks every field after it, in the order of
+/// plans/m13-stream-choice.md 3.5 (as built): field `i` best and the rest
+/// worst beats field `i` worst and every later field best.
+fn each_key_field_outranks_every_later_one() {
+    let compose = |best: &dyn Fn(usize) -> bool| RankKey {
+        language: best(0),
+        legit: best(1),
+        year_ok: best(2),
+        sustains: best(3),
+        playability: if best(4) {
+            Playability::Native
+        } else {
+            Playability::NeedsTranscode
+        },
+        viable: best(5),
+        size_ok: best(6),
+        start: if best(7) { 4 } else { 0 },
+        binge: best(8),
+        effective_height: if best(9) { 2160 } else { 0 },
+        within: if best(10) { 1000 } else { 0 },
     };
-    let high_tier_low_score = RankKey {
-        tier: 3,
-        language: false,
-        binge: false,
-        playability: Playability::NeedsTranscode,
-        effective_height: 480,
-        within: 0,
-    };
-    assert!(high_tier_low_score > low_tier_high_score);
+    for i in 0..11 {
+        assert!(
+            compose(&|k| k == i) > compose(&|k| k > i),
+            "field {i} must outrank every later field"
+        );
+    }
 }
 
 #[test]
@@ -213,6 +254,7 @@ fn a_4k_remux_does_not_win_on_a_1080p_screen() {
             target: &target(),
             last_binge_group: None,
             kids: None,
+            conditions: engine(),
         },
     );
     let best = ranked.best().unwrap();
@@ -252,6 +294,7 @@ fn a_browser_is_not_offered_what_it_cannot_decode() {
         target: &target(),
         last_binge_group: None,
         kids: None,
+        conditions: engine(),
     };
     let all = streams(
         "torrentio",
@@ -296,6 +339,7 @@ fn a_foreign_language_release_never_wins_on_seeds() {
         target: &target(),
         last_binge_group: None,
         kids: None,
+        conditions: engine(),
     };
     let all = streams(
         "torrentio",
@@ -316,7 +360,9 @@ fn a_foreign_language_release_never_wins_on_seeds() {
     );
 }
 
-/// A release that states no resolution ranks below one that does.
+/// A release that states no resolution ranks below one that does, among
+/// rows that start as well: both have 200 or more seeders (seeder bands rank
+/// above resolution, plans/m13-stream-choice.md 3.5).
 #[test]
 fn an_unstated_resolution_ranks_below_a_stated_one() {
     let caps = DeviceCaps::basic_1080p();
@@ -327,6 +373,7 @@ fn an_unstated_resolution_ranks_below_a_stated_one() {
         target: &target(),
         last_binge_group: None,
         kids: None,
+        conditions: engine(),
     };
     let all = streams(
         "torrentio",
@@ -334,7 +381,7 @@ fn an_unstated_resolution_ranks_below_a_stated_one() {
         json!({ "streams": [
             { "name": "Torrentio", "title": "The.Last.of.Us.S02E03.WEB.h264-GROUP.mkv\n👤 900 💾 1.4 GB",
               "infoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fileIdx": 0 },
-            { "name": "Torrentio\n480p", "title": "The.Last.of.Us.S02E03.480p.WEB.h264-GROUP.mkv\n👤 12 💾 400 MB",
+            { "name": "Torrentio\n480p", "title": "The.Last.of.Us.S02E03.480p.WEB.h264-GROUP.mkv\n👤 250 💾 400 MB",
               "infoHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "fileIdx": 0 }
         ]}),
     );
@@ -415,6 +462,7 @@ fn a_kid_sees_only_releases_named_as_the_allowed_title() {
         target: &up_target(),
         last_binge_group: None,
         kids: Some(&names),
+        conditions: engine(),
     };
     let ranked = rank(up_releases(), &input);
     assert_eq!(
@@ -444,6 +492,7 @@ fn an_open_profile_ranks_as_before() {
         target: &up_target(),
         last_binge_group: None,
         kids: None,
+        conditions: engine(),
     };
     let ranked = rank(up_releases(), &input);
     assert_eq!(hidden(&ranked, HideReason::LeavesApp), 0);
@@ -478,6 +527,7 @@ fn a_kid_matches_any_allowed_name_with_numbers_either_way() {
         target: &target,
         last_binge_group: None,
         kids: Some(&names),
+        conditions: engine(),
     };
     assert_eq!(
         kept(&rank(all, &input)),
@@ -504,4 +554,474 @@ fn a_kid_matches_any_allowed_name_with_numbers_either_way() {
         ..input
     };
     assert_eq!(rank(all, &input).rows.len(), 2);
+}
+
+// Stream choice (plans/m13-stream-choice.md 3, as built). Each test is the
+// one its mutation in 6.3 must fail.
+
+const GIB: f64 = (1u64 << 30) as f64;
+
+fn film() -> Target {
+    Target {
+        title: "Movie".into(),
+        year: None,
+        season: None,
+        episode: None,
+    }
+}
+
+/// A Torrentio row: a release name, seeders and a size in GB.
+fn seeded(i: u8, release: &str, seeds: u32, gb: f64) -> serde_json::Value {
+    json!({ "name": "Torrentio", "title": format!("{release}\n👤 {seeds} 💾 {gb} GB"),
+            "infoHash": format!("{:040x}", 0x100 + i as u32), "fileIdx": 0 })
+}
+
+/// A link a streaming service has ready (`cached`).
+fn ready(i: u8, release: &str, gb: f64) -> serde_json::Value {
+    json!({ "name": "Debrid", "title": release, "url": format!("https://cdn.example/{i}.mkv"),
+            "behaviorHints": { "cached": true, "videoSize": (gb * GIB) as u64,
+                               "filename": format!("{release}.mkv") } })
+}
+
+struct Case {
+    caps: DeviceCaps,
+    prefs: StreamPrefs,
+    target: Target,
+    conditions: Conditions,
+}
+
+impl Case {
+    /// A 1080p stick with the engine, no account, nothing measured.
+    fn stick() -> Self {
+        Self {
+            caps: DeviceCaps::basic_1080p(),
+            prefs: StreamPrefs::default(),
+            target: film(),
+            conditions: engine().clone(),
+        }
+    }
+
+    fn rank(&self, rows: Vec<serde_json::Value>) -> Ranked {
+        let all = streams("t", 0, json!({ "streams": rows }));
+        rank(
+            all,
+            &RankInput {
+                caps: &self.caps,
+                prefs: &self.prefs,
+                target: &self.target,
+                last_binge_group: None,
+                kids: None,
+                conditions: &self.conditions,
+            },
+        )
+    }
+}
+
+fn first_line(r: &RankedRow) -> &str {
+    r.stream.raw_description.lines().next().unwrap_or_default()
+}
+
+fn row<'a>(ranked: &'a Ranked, name: &str) -> &'a RankedRow {
+    ranked
+        .rows
+        .iter()
+        .find(|r| first_line(r).starts_with(name))
+        .unwrap_or_else(|| panic!("no row {name}"))
+}
+
+fn kind(line: &ReasonLine) -> String {
+    serde_json::to_value(line).unwrap()["kind"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// Mutation 1: with no runtime (bitrate unknown) only the limit keeps a
+/// 9 GB Blu-ray with 900 seeders below a 3 GB WEBRip with 300.
+#[test]
+fn the_size_limit_keeps_a_large_torrent_below_one_that_fits() {
+    let ranked = Case::stick().rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-GRP", 900, 9.0),
+        seeded(2, "Movie.2020.1080p.WEBRip.x264-GRP", 300, 3.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEBRip.x264-GRP"
+    );
+    let large = row(&ranked, "Movie.2020.1080p.BluRay");
+    assert_eq!(kind(&large.line), "large");
+}
+
+/// Mutations 2 and 4: a ready 4K remux at 65 Mbit/s cannot keep up with a
+/// measured 25 Mbit/s (safe 17.5), so a ready 1080p wins, with no size
+/// limit and with prefer ready on or off.
+#[test]
+fn a_ready_remux_that_cannot_keep_up_loses_to_a_1080p_that_can() {
+    for (limit, prefer_ready) in [(None, true), (None, false), (Some(5u64 << 30), true)] {
+        let case = Case {
+            caps: caps_4k_dv(),
+            prefs: StreamPrefs {
+                size_limit_bytes: limit,
+                prefer_ready,
+                ..StreamPrefs::default()
+            },
+            target: film(),
+            conditions: Conditions {
+                runtime_s: Some(120 * 60),
+                http: Speed {
+                    mbps: 25.0,
+                    samples: 3,
+                },
+                ..with_account().clone()
+            },
+        };
+        let ranked = case.rank(vec![
+            ready(
+                1,
+                "Movie.2020.2160p.UHD.BluRay.REMUX.HEVC.TrueHD.7.1-GRP",
+                54.5,
+            ),
+            ready(2, "Movie.2020.1080p.BluRay.x264-GRP", 7.0),
+        ]);
+        let best = ranked.best().unwrap();
+        assert_eq!(
+            first_line(best),
+            "Movie.2020.1080p.BluRay.x264-GRP",
+            "{limit:?} {prefer_ready}"
+        );
+        let remux = row(&ranked, "Movie.2020.2160p");
+        assert!(!remux.key.sustains);
+        assert_eq!(kind(&remux.line), "mayPause");
+    }
+}
+
+/// Mutation 5: a release in the user's language wins even when it may
+/// pause; one in another language that keeps up does not.
+#[test]
+fn your_language_wins_even_when_it_may_pause() {
+    let case = Case {
+        prefs: StreamPrefs {
+            languages: vec!["en".into()],
+            ..StreamPrefs::default()
+        },
+        conditions: Conditions {
+            runtime_s: Some(100 * 60),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-GRP", 300, 9.0),
+        json!({ "name": "Torrentio", "title": "Movie.2020.1080p.BluRay.x264-RUS\n👤 900 💾 2.0 GB\n🇷🇺",
+                "infoHash": format!("{:040x}", 0x200), "fileIdx": 0 }),
+    ]);
+    let best = ranked.best().unwrap();
+    assert_eq!(first_line(best), "Movie.2020.1080p.BluRay.x264-GRP");
+    assert!(!best.key.sustains, "it may pause, and still wins");
+}
+
+/// Mutation 11: a 900-seed HDTS copy loses to a real release with 60.
+#[test]
+fn a_cinema_copy_never_wins_on_seeds() {
+    let ranked = Case::stick().rank(vec![
+        seeded(1, "Movie.2020.1080p.HDTS.x264-CAM", 900, 2.0),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-WEB", 60, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-WEB"
+    );
+    assert_eq!(kind(&row(&ranked, "Movie.2020.1080p.HDTS").line), "copy");
+}
+
+/// Mutation 12: past 200 seeders the file decides: a Blu-ray with 300
+/// beats a WEBRip with 2,000.
+#[test]
+fn seeders_count_up_to_200_then_the_file_decides() {
+    let ranked = Case::stick().rank(vec![
+        seeded(1, "Movie.2020.1080p.WEBRip.x264-GRP", 2000, 2.0),
+        seeded(2, "Movie.2020.1080p.BluRay.x264-GRP", 300, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-GRP"
+    );
+}
+
+/// Mutation 6: a torrent larger than the free space less 1 GiB is hidden.
+#[test]
+fn no_room_hides_a_torrent_larger_than_the_free_space() {
+    let case = Case {
+        conditions: Conditions {
+            free_bytes: Some(10 << 30),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-BIG", 300, 12.0),
+        seeded(2, "Movie.2020.1080p.BluRay.x264-FIT", 300, 8.5),
+    ]);
+    assert_eq!(hidden(&ranked, HideReason::NoSpace), 1);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-FIT"
+    );
+}
+
+/// Mutation 7 and 3.2: with no engine and no account a torrent and a
+/// service-resolved row cannot open; a link still plays. An account makes
+/// both `Unknown`, the engine alone makes the torrent a swarm.
+#[test]
+fn without_engine_or_account_a_torrent_needs_debrid() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2020.1080p.BluRay.x264-GRP", 300, 2.0),
+            json!({ "name": "RD", "title": "Movie.2020.1080p.WEB-DL.x264-GRP",
+                    "clientResolve": { "type": "debrid", "service": "realdebrid",
+                                       "infoHash": format!("{:040x}", 0x300), "fileIdx": 0 } }),
+            json!({ "name": "Link", "title": "Movie.2020.720p.WEB-DL.x264-GRP",
+                    "url": "https://cdn.example/link.mp4" }),
+        ]
+    };
+    let classes = |conditions: Conditions| {
+        let case = Case {
+            conditions,
+            ..Case::stick()
+        };
+        let ranked = case.rank(rows());
+        let mut classes: Vec<_> = ranked.rows.iter().map(|r| r.class).collect();
+        classes.sort_by_key(|c| format!("{c:?}"));
+        (classes, hidden(&ranked, HideReason::NeedsDebrid))
+    };
+    assert_eq!(
+        classes(Conditions::default()),
+        (vec![SourceClass::Ready], 2)
+    );
+    let account = Conditions {
+        debrid: true,
+        ..Conditions::default()
+    };
+    assert_eq!(
+        classes(account),
+        (
+            vec![
+                SourceClass::Ready,
+                SourceClass::Unknown,
+                SourceClass::Unknown
+            ],
+            0
+        )
+    );
+    assert_eq!(
+        classes(engine().clone()),
+        (vec![SourceClass::Ready, SourceClass::Swarm], 1)
+    );
+}
+
+/// 3.2: a service that says not cached makes a torrent a swarm with the
+/// engine, else a fetch, which says it downloads first and ranks last.
+#[test]
+fn a_torrent_the_service_has_not_cached_is_a_swarm_or_a_fetch() {
+    let rows = || {
+        vec![
+            json!({ "name": "TB", "title": "Movie.2020.1080p.BluRay.x264-GRP\n👤 300 💾 2 GB",
+                     "infoHash": format!("{:040x}", 0x400), "fileIdx": 0,
+                     "behaviorHints": { "cached": false } }),
+        ]
+    };
+    for (engine, class, line) in [
+        (true, SourceClass::Swarm, "quick"),
+        (false, SourceClass::Fetch, "fetch"),
+    ] {
+        let case = Case {
+            conditions: Conditions {
+                engine,
+                ..with_account().clone()
+            },
+            ..Case::stick()
+        };
+        let ranked = case.rank(rows());
+        let best = ranked.best().unwrap();
+        assert_eq!((best.class, kind(&best.line).as_str()), (class, line));
+    }
+}
+
+/// Mutation 8 and UX r3 7: an episode in a 40 GB season pack is judged per
+/// episode (127 Mbit/s over the 48 Mbit/s ceiling is a pack: 12.7 for each
+/// of 10), and a movie above the ceiling keeps its own bitrate.
+#[test]
+fn a_season_pack_is_judged_per_episode_and_a_movie_is_not() {
+    let measured = Conditions {
+        runtime_s: Some(45 * 60),
+        episodes_in_season: Some(10),
+        p2p: Speed {
+            mbps: 25.0,
+            samples: 3,
+        },
+        ..engine().clone()
+    };
+    let show = Case {
+        target: Target {
+            title: "Show".into(),
+            year: None,
+            season: Some(1),
+            episode: Some(3),
+        },
+        conditions: measured.clone(),
+        ..Case::stick()
+    };
+    let ranked = show.rank(vec![
+        seeded(1, "Show.S01.1080p.BluRay.x264-GRP", 500, 40.0),
+        seeded(2, "Show.S01E03.1080p.WEB.h264-GRP", 60, 1.5),
+    ]);
+    let best = ranked.best().unwrap();
+    assert_eq!(first_line(best), "Show.S01.1080p.BluRay.x264-GRP");
+    let mbps = best.bitrate_mbps.unwrap();
+    assert!((12.0..13.5).contains(&mbps), "{mbps}");
+    assert!(best.key.sustains && best.key.size_ok);
+
+    // A 3D remux film at 51 Mbit/s is no pack: it may pause.
+    let film = Case {
+        conditions: Conditions {
+            runtime_s: Some(120 * 60),
+            ..measured
+        },
+        ..Case::stick()
+    };
+    let ranked = film.rank(vec![
+        seeded(1, "Movie.2020.1080p.3D.BluRay.REMUX.AVC-GRP", 500, 42.8),
+        seeded(2, "Movie.2020.1080p.BluRay.x264-GRP", 300, 3.0),
+    ]);
+    let remux = row(&ranked, "Movie.2020.1080p.3D");
+    assert!(remux.bitrate_mbps.unwrap() > 48.0);
+    assert!(!remux.key.sustains);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-GRP"
+    );
+}
+
+/// Mutation 9: an upscaled 2160p counts as 1080p on a 4K TV, so a native
+/// 1080p Blu-ray beats it.
+#[test]
+fn an_upscaled_4k_counts_as_1080p() {
+    let case = Case {
+        caps: caps_4k_dv(),
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.2160p.AI.Upscaled.WEB-DL.x265-GRP", 300, 4.0),
+        seeded(2, "Movie.2020.1080p.BluRay.x264-GRP", 300, 3.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-GRP"
+    );
+    assert_eq!(row(&ranked, "Movie.2020.2160p").key.effective_height, 1080);
+}
+
+/// Mutations 13 and 14: a release naming another year ranks below the
+/// right one, and stays listed with the year said.
+#[test]
+fn another_year_is_demoted_never_hidden() {
+    let case = Case {
+        conditions: Conditions {
+            title_year: Some(1999),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2023.1080p.BluRay.x264-NEW", 900, 2.0),
+        seeded(2, "Movie.1999.1080p.WEBRip.x264-OLD", 300, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.1999.1080p.WEBRip.x264-OLD"
+    );
+    let other = row(&ranked, "Movie.2023");
+    assert_eq!(other.line, ReasonLine::OtherYear { year: 2023 });
+}
+
+/// r4 N3: the size limit never demotes a ready file below a weak torrent.
+#[test]
+fn a_ready_file_never_loses_to_a_weak_torrent_on_size() {
+    let case = Case {
+        conditions: with_account().clone(),
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-GRP", 5, 2.0),
+        ready(2, "Movie.2020.1080p.BluRay.x264-GRP", 7.0),
+    ]);
+    let best = ranked.best().unwrap();
+    assert_eq!(best.class, SourceClass::Ready);
+    assert!(best.key.size_ok);
+}
+
+/// UX r3 6: a torrent that may not start (3 seeders) ranks below a large
+/// one with 900; each says why.
+#[test]
+fn a_torrent_that_may_not_start_ranks_below_a_large_one() {
+    let ranked = Case::stick().rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-FEW", 3, 2.0),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-BIG", 900, 6.0),
+    ]);
+    let best = ranked.best().unwrap();
+    assert_eq!(first_line(best), "Movie.2020.1080p.WEB-DL.x264-BIG");
+    assert_eq!(kind(&best.line), "large");
+    assert_eq!(
+        kind(&row(&ranked, "Movie.2020.1080p.WEB-DL.x264-FEW").line),
+        "veryFew"
+    );
+}
+
+/// r4 P3: a real release named with another year outranks a clean cam.
+#[test]
+fn a_real_release_outranks_a_cam_of_the_right_year() {
+    let case = Case {
+        conditions: Conditions {
+            title_year: Some(2020),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.HDCAM.x264-GRP", 900, 1.5),
+        seeded(2, "Movie.2014.1080p.BluRay.x264-GRP", 300, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2014.1080p.BluRay.x264-GRP"
+    );
+}
+
+/// UX r3 5: the worst news comes first: a 3-seed 4K over the limit says it
+/// may not start, not that it is large.
+#[test]
+fn the_worst_news_comes_first() {
+    let case = Case {
+        caps: caps_4k_dv(),
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![seeded(1, "Movie.2020.2160p.WEB-DL.x265-GRP", 3, 8.0)]);
+    assert_eq!(
+        ranked.best().unwrap().line,
+        ReasonLine::VeryFew { seeders: 3 }
+    );
+}
+
+/// 3.3: phones count as their class.
+#[test]
+fn a_display_counts_as_its_screen_class() {
+    for (height, class) in [
+        (2160, 2160),
+        (1440, 1080),
+        (1179, 1080),
+        (720, 720),
+        (576, 480),
+    ] {
+        assert_eq!(screen_class(height), class, "{height}");
+    }
 }
