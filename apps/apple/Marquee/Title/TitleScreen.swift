@@ -84,9 +84,22 @@ struct TitleScreen: View {
 
     private var playTarget: PlayTargetInfo? {
         guard let details, let target = model.header?.playTarget else { return nil }
-        return PlayTargetInfo(
+        return withFacts(PlayTargetInfo(
             kind: details.kind, itemId: details.id, videoId: target.videoId, title: details.name,
-            poster: details.poster, resumeMs: target.resumeMs)
+            poster: details.poster, resumeMs: target.resumeMs), details)
+    }
+
+    /// The runtime and years the title page has, and the episode's date and
+    /// season size, for the ranking (plans/m13-stream-choice.md 4.3).
+    private func withFacts(_ target: PlayTargetInfo, _ details: TitleDetails) -> PlayTargetInfo {
+        var target = target
+        target.runtime = details.runtime
+        target.releaseInfo = details.releaseInfo
+        if let episode = model.episodes.first(where: { $0.videoId == target.videoId }) {
+            target.released = episode.released
+            target.episodesInSeason = model.episodes.filter { $0.season == episode.season }.count
+        }
+        return target
     }
 
     /// One Versions view per play target. Replacing the model closes the old
@@ -113,9 +126,9 @@ struct TitleScreen: View {
         if let versions, versions.target.videoId == episode.videoId { return versions }
         if let episodeVersions, episodeVersions.target.videoId == episode.videoId { return episodeVersions }
         let model = VersionsModel(
-            target: PlayTargetInfo(
+            target: withFacts(PlayTargetInfo(
                 kind: details.kind, itemId: details.id, videoId: episode.videoId, title: details.name,
-                poster: details.poster, resumeMs: nil),
+                poster: details.poster, resumeMs: nil), details),
             core: core)
         model.start()
         episodeVersions = model

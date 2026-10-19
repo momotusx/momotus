@@ -13,11 +13,15 @@ final class SystemEvents {
             MainActor.assumeIsolated { core.lifecycle("memoryPressure") }
         }
         memory.resume()
-        network.pathUpdateHandler = { [weak self] _ in
+        network.pathUpdateHandler = { [weak self] path in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                let kind = StreamChoice.network(
+                    wifi: path.usesInterfaceType(.wifi), ethernet: path.usesInterfaceType(.wiredEthernet),
+                    cellular: path.usesInterfaceType(.cellular))
+                DeviceCaps.network = kind
                 // The first update is the current path, not a change.
-                if self.sawFirstPath { core.lifecycle("networkChanged") }
+                if self.sawFirstPath { core.lifecycle("networkChanged", ["network": kind]) }
                 self.sawFirstPath = true
             }
         }

@@ -389,6 +389,24 @@ enum StreamChoice {
         return "other"
     }
 
+    /// The HDR formats the core ranks for: none on a screen without HDR;
+    /// Dolby Vision only where the player offers it.
+    static func hdrNames(eligible: Bool, hdr10: Bool, hlg: Bool, dolbyVision: Bool) -> [String] {
+        guard eligible else { return [] }
+        return [hdr10 ? "hdr10" : nil, hlg ? "hlg" : nil, dolbyVision ? "dolby_vision" : nil].compactMap { $0 }
+    }
+
+    /// What the title and the episode say, for the ranking's bitrate, year and
+    /// pack checks (4.3); the core reads the meta for whatever is left out.
+    static func versionsFacts(runtime: String?, releaseInfo: String?, released: String?, episodesInSeason: Int?) -> [String: any Sendable] {
+        var facts: [String: any Sendable] = [:]
+        if let runtime { facts["runtime"] = runtime }
+        if let releaseInfo { facts["releaseInfo"] = releaseInfo }
+        if let released { facts["released"] = released }
+        if let episodesInSeason, episodesInSeason > 0 { facts["episodesInSeason"] = episodesInSeason }
+        return facts
+    }
+
     /// The question's answer as a `setPrefs` patch of the stream preferences.
     static func patch(_ answer: StreamChoiceWords.Question.Answer) -> [String: any Sendable] {
         let size: any Sendable = answer.patch.sizeLimitBytes.map { $0 as any Sendable } ?? NSNull()

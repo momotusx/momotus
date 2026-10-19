@@ -14,6 +14,11 @@ struct PlayTargetInfo: Hashable, Sendable {
     let season: Int?
     let episode: Int?
     let resumeMs: Int64?
+    /// What the title page knows, sent so the ranking need not wait for the meta.
+    var runtime: String?
+    var releaseInfo: String?
+    var released: String?
+    var episodesInSeason: Int?
 
     /// `season` and `episode` when the caller knows them (the core's next
     /// episode); else read from an id shaped "<series>:<season>:<episode>".
@@ -48,6 +53,9 @@ final class VersionsModel {
         params["title"] = target.title
         if let season = target.season { params["season"] = season }
         if let episode = target.episode { params["episode"] = episode }
+        params.merge(StreamChoice.versionsFacts(
+            runtime: target.runtime, releaseInfo: target.releaseInfo, released: target.released,
+            episodesInSeason: target.episodesInSeason)) { _, fact in fact }
         record = LiveRecord("versions", params: params, core: core)
     }
 

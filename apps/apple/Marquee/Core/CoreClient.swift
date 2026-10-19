@@ -219,8 +219,8 @@ final class CoreClient {
 
     /// Tells the core about app and system events (`foreground`, `background`,
     /// `memoryPressure`, `networkChanged`).
-    func lifecycle(_ event: String) {
-        send("lifecycle", ["event": event])
+    func lifecycle(_ event: String, _ fields: [String: any Sendable] = [:]) {
+        send("lifecycle", fields.merging(["event": event]) { _, event in event })
     }
 
     /// Sends one request; `decode` runs on the core thread with the reply.

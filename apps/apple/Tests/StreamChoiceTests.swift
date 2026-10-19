@@ -96,6 +96,17 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.network(wifi: false, ethernet: false, cellular: false) == "other")
 }
 
+@Test func versionsGetTheScreensHDRAndTheTitlesFacts() {
+    #expect(StreamChoice.hdrNames(eligible: false, hdr10: true, hlg: true, dolbyVision: true).isEmpty)
+    #expect(StreamChoice.hdrNames(eligible: true, hdr10: true, hlg: true, dolbyVision: false) == ["hdr10", "hlg"])
+    #expect(StreamChoice.hdrNames(eligible: true, hdr10: true, hlg: true, dolbyVision: true) == ["hdr10", "hlg", "dolby_vision"])
+    let facts = StreamChoice.versionsFacts(runtime: "142 min", releaseInfo: "2010", released: "2010-09-30", episodesInSeason: 10)
+    #expect(facts["runtime"] as? String == "142 min" && facts["releaseInfo"] as? String == "2010")
+    #expect(facts["released"] as? String == "2010-09-30" && facts["episodesInSeason"] as? Int == 10)
+    // Left out when unknown: the core reads the meta instead.
+    #expect(StreamChoice.versionsFacts(runtime: nil, releaseInfo: nil, released: nil, episodesInSeason: 0).isEmpty)
+}
+
 @Test func learnedNotesNameTheirNumbersAndSettingsListsWhatIsLearned() throws {
     let note = try JSONDecoder().decode(LearnedNote.self, from: Data(#"{"screenClass": 2160, "choice": "size", "up": true, "prefs": \#(streams.replacingOccurrences(of: "5368709120", with: "10737418240"))}"#.utf8))
     #expect(StreamChoice.learnedNote(note, device: "tv") == "On this TV you often picked bigger files, so Marquee now picks files up to 10 GB.")

@@ -6,13 +6,25 @@ import VideoToolbox
 /// core ranks and hides sources for it. AVPlayer is the engine for now: it
 /// opens MP4 and MOV, not MKV, and there is no fallback engine yet.
 enum DeviceCaps {
+    /// The connection speed is measured for: "wifi", "ethernet", "cellular"
+    /// or "other", kept by `SystemEvents` from the network path.
+    @MainActor static var network = "other"
+
     @MainActor static func params() -> [String: any Sendable] {
         let decoders = Self.decoders
-        var hdr: [String] = []
-        if AVPlayer.eligibleForHDRPlayback { hdr += ["hdr10", "hlg"] }
+        #if os(macOS)
+        // The Mac has no list of HDR modes: an HDR screen plays HDR10 and HLG; Dolby Vision is not claimed.
+        let hdr = StreamChoice.hdrNames(eligible: AVPlayer.eligibleForHDRPlayback, hdr10: true, hlg: true, dolbyVision: false)
+        #else
+        let modes = AVPlayer.availableHDRModes
+        let hdr = StreamChoice.hdrNames(
+            eligible: AVPlayer.eligibleForHDRPlayback, hdr10: modes.contains(.hdr10), hlg: modes.contains(.hlg),
+            dolbyVision: modes.contains(.dolbyVision))
+        #endif
         return [
             "displayHeight": displayHeight(),
             "hdr": hdr,
+            "network": network,
             "decoders": decoders,
             "tenBitHevc": decoders.contains("h265"),
             "audioDecoders": ["aac", "ac3", "eac3", "atmos", "flac", "mp3", "pcm"],
