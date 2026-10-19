@@ -79,3 +79,38 @@ async fn streams_unaligned_pieces_with_dwh() {
     let s = support::swarm_with(ip, &[ip], &[ip], 136 * 1024, true).await;
     leech_and_compare(s, true).await;
 }
+
+/// Two playbacks of one pack: the second one's file choice adds its file,
+/// so the first file stays wanted and its verified pieces count as the
+/// torrent's progress.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_second_file_choice_keeps_the_first_file_wanted() {
+    let s = support::swarm(true).await;
+    let run = async {
+        let engine = &s.leecher;
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let movie = engine
+            .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+            .await
+            .unwrap();
+        let nfo = engine
+            .select_file(t, "default", &FileHint::Name("a.nfo".into()))
+            .await
+            .unwrap();
+        assert_ne!(nfo, movie);
+        let (a, b) = (3 << 20, 4 << 20);
+        let read = read_range(engine, t, movie, a as u64, b as u64).await;
+        assert!(read == s.movie[a..b], "range differs");
+        let stats = engine.stats(t).await.unwrap();
+        assert!(
+            stats.downloaded_bytes >= 1 << 20,
+            "the movie's pieces are not wanted: {stats:?}"
+        );
+    };
+    tokio::time::timeout(Duration::from_secs(90), run)
+        .await
+        .expect("finished in time");
+}

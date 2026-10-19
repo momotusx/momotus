@@ -430,7 +430,9 @@ pub(crate) struct Live {
     msgs: mpsc::UnboundedSender<adapter::Msg>,
     snapshot: Arc<Mutex<adapter::Snapshot>>,
     dwh: bool,
-    selected: usize,
+    /// Files chosen while live: added to, never swapped, so a second
+    /// playback of a pack never takes the first one's file away.
+    selected: HashSet<usize>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -581,9 +583,9 @@ impl Engine {
     }
 
     /// Picks the file to play for `profile` and starts the torrent on it (or
-    /// switches the running torrent to it). Only that file is wanted; with
-    /// DWH nothing beyond the readahead budget downloads unless a reader
-    /// asks. `Held` when `profile` holds it.
+    /// adds it to the running torrent's wanted files). With DWH nothing
+    /// beyond the readahead budget downloads unless a reader asks. `Held`
+    /// when `profile` holds it.
     pub async fn select_file(
         &self,
         h: TorrentHandle,
@@ -597,13 +599,19 @@ impl Engine {
             return Err(EngineError::Held);
         }
         if let Some(l) = live.as_mut() {
-            if l.selected != idx {
-                let only = HashSet::from([idx]);
+            // ponytail: a file stays wanted until the torrent goes; with
+            // DWH that costs nothing (only readers' ranges download).
+            if !l.selected.contains(&idx) {
+                // librqbit refuses a change while it checks the files: a
+                // second playback that starts at once waits for that.
+                l.managed.wait_until_initialized().await?;
+                let mut wanted = l.selected.clone();
+                wanted.insert(idx);
                 self.inner
                     .session
-                    .update_only_files(&l.managed, &only)
+                    .update_only_files(&l.managed, &wanted)
                     .await?;
-                l.selected = idx;
+                l.selected = wanted;
             }
             return Ok(idx);
         }
@@ -649,7 +657,7 @@ impl Engine {
             msgs,
             snapshot,
             dwh,
-            selected: idx,
+            selected: HashSet::from([idx]),
         });
         Ok(idx)
     }
