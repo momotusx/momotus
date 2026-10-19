@@ -509,28 +509,32 @@ impl Engine {
     /// addon's number. Each hash's own trackers, plus the default ones when
     /// the DHT is on (as for a bare hash), are scraped at once (BEP 15 UDP,
     /// BEP 48 HTTP) under the trackers' address policy; answers after about
-    /// a second are dropped. A count is the tracker with the most seeders;
-    /// `None` when none answered. Counts stand for five minutes per hash.
+    /// a second are dropped, and it returns sooner once every hash has an
+    /// answer from one of its own trackers or seeders from a default one.
+    /// A count is the tracker with the most seeders; `None` when none
+    /// answered. Counts stand for five minutes per hash.
     pub async fn scrape(&self, torrents: &[(&str, &[String])]) -> Vec<Option<SwarmCount>> {
-        let defaults = self.inner.cfg.discovery;
         let asked: Vec<(String, Vec<String>)> = torrents
             .iter()
             .map(|(hash, sources)| {
-                let given = sources
+                let mut own: Vec<String> = Vec::new();
+                for t in sources
                     .iter()
                     .map(|t| t.strip_prefix("tracker:").unwrap_or(t))
-                    .filter(|t| t.contains("://"));
-                let extra = DEFAULT_TRACKERS.into_iter().filter(|_| defaults);
-                let mut trackers: Vec<String> = Vec::new();
-                for t in given.chain(extra) {
-                    if !trackers.iter().any(|x| x == t) {
-                        trackers.push(t.to_owned());
+                {
+                    if t.contains("://") && !own.iter().any(|x| x == t) {
+                        own.push(t.to_owned());
                     }
                 }
-                (hash.to_ascii_lowercase(), trackers)
+                (hash.to_ascii_lowercase(), own)
             })
             .collect();
-        self.inner.scraper.scrape(&asked).await
+        let defaults: &[&str] = if self.inner.cfg.discovery {
+            &DEFAULT_TRACKERS
+        } else {
+            &[]
+        };
+        self.inner.scraper.scrape(&asked, defaults).await
     }
 
     /// Addresses the policy refused so far, per kind.

@@ -57,38 +57,66 @@ impl Scraper {
         }
     }
 
-    /// One count per `(info hash, trackers)`, `None` when no tracker
-    /// answered for it in time.
-    pub async fn scrape(&self, torrents: &[(String, Vec<String>)]) -> Vec<Option<SwarmCount>> {
+    /// One count per `(info hash, its own trackers)`, `None` when no tracker
+    /// answered for it in time. `defaults` are asked for every hash too.
+    /// It ends early once each hash has an answer from one of its own
+    /// trackers, or seeders from a default one: a default tracker that does
+    /// not know a hash answers zero, which settles nothing.
+    pub async fn scrape(
+        &self,
+        torrents: &[(String, Vec<String>)],
+        defaults: &[&str],
+    ) -> Vec<Option<SwarmCount>> {
         let now = Instant::now();
         let mut found: HashMap<String, SwarmCount> = HashMap::new();
         let mut by_tracker: HashMap<String, Vec<String>> = HashMap::new();
+        let mut waiting: HashMap<&str, &[String]> = HashMap::new();
         {
             let kept = lock(&self.kept);
-            for (hash, trackers) in torrents {
+            for (hash, own) in torrents {
                 if let Some((at, count)) = kept.get(hash)
                     && now.duration_since(*at) < KEEP
                 {
                     found.insert(hash.clone(), *count);
                     continue;
                 }
-                for t in trackers {
-                    let hashes = by_tracker.entry(t.clone()).or_default();
+                for t in own
+                    .iter()
+                    .map(String::as_str)
+                    .chain(defaults.iter().copied())
+                {
+                    let hashes = by_tracker.entry(t.to_owned()).or_default();
                     if !hashes.contains(hash) {
                         hashes.push(hash.clone());
                     }
+                    waiting.insert(hash.as_str(), own.as_slice());
                 }
             }
         }
         let mut asks = JoinSet::new();
         for (tracker, hashes) in by_tracker {
             let (scope, http) = (self.scope.clone(), self.http.clone());
-            asks.spawn(async move { ask(&scope, &http, &tracker, &hashes).await });
+            asks.spawn(async move {
+                let counts = ask(&scope, &http, &tracker, &hashes).await;
+                (tracker, counts)
+            });
         }
         let deadline = tokio::time::Instant::now() + BUDGET;
         let mut fresh: HashMap<String, SwarmCount> = HashMap::new();
-        while let Ok(Some(answer)) = tokio::time::timeout_at(deadline, asks.join_next()).await {
-            for (hash, count) in answer.unwrap_or_default() {
+        while !waiting.is_empty()
+            && let Ok(Some(answer)) = tokio::time::timeout_at(deadline, asks.join_next()).await
+        {
+            let Ok((tracker, counts)) = answer else {
+                continue;
+            };
+            for (hash, count) in counts {
+                let settles = count.seeders > 0
+                    || waiting
+                        .get(hash.as_str())
+                        .is_some_and(|own| own.contains(&tracker));
+                if settles {
+                    waiting.remove(hash.as_str());
+                }
                 let best = fresh.entry(hash).or_insert(count);
                 if count.seeders > best.seeders {
                     *best = count;
@@ -360,5 +388,67 @@ mod tests {
             }
         );
         assert_eq!(files(b"not bencode", &[h]), None);
+    }
+
+    /// A BEP 15 tracker on 127.0.0.1 counting `seeders` for every hash, or
+    /// (with `None`) one that keeps its socket and never answers.
+    fn tracker(seeders: Option<u32>) -> String {
+        let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let url = format!("udp://{}/announce", socket.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 2048];
+            while let Ok((n, from)) = socket.recv_from(&mut buf) {
+                let Some(seeders) = seeders.filter(|_| n >= 16) else {
+                    continue;
+                };
+                let mut answer = buf[8..16].to_vec();
+                if buf[8..12] == 0u32.to_be_bytes() {
+                    answer.extend(7u64.to_be_bytes());
+                }
+                for _ in 0..(n - 16) / 20 {
+                    answer.extend(seeders.to_be_bytes());
+                    answer.extend([0u8; 8]);
+                }
+                let _ = socket.send_to(&answer, from);
+            }
+        });
+        url
+    }
+
+    /// The count for one hash with `own` trackers and `defaults`, and how
+    /// long the scrape took.
+    async fn timed(own: &str, defaults: &str) -> (Option<SwarmCount>, Duration) {
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let scraper = Scraper::new(http.torrent_scope(&[std::net::Ipv4Addr::LOCALHOST.into()]));
+        let hash = "0123456789abcdef0123456789abcdef01234567".to_owned();
+        let started = Instant::now();
+        let counts = scraper
+            .scrape(&[(hash, vec![own.to_owned()])], &[defaults])
+            .await;
+        (counts[0], started.elapsed())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_scrape_ends_once_each_hash_has_its_own_answer() {
+        let seeders = |n| {
+            Some(SwarmCount {
+                seeders: n,
+                leechers: 0,
+            })
+        };
+        let early = BUDGET / 2;
+        // Its own tracker's zero (a dead swarm) is an answer.
+        let (count, took) = timed(&tracker(Some(0)), &tracker(None)).await;
+        assert_eq!(count, seeders(0));
+        assert!(
+            took < early,
+            "own answer in, a silent default waited for: {took:?}"
+        );
+        let (count, took) = timed(&tracker(None), &tracker(Some(5))).await;
+        assert_eq!(count, seeders(5));
+        assert!(took < early, "seeders from a default settle it: {took:?}");
+        let (count, took) = timed(&tracker(None), &tracker(Some(0))).await;
+        assert_eq!(count, seeders(0));
+        assert!(took >= BUDGET, "a default's zero settled it: {took:?}");
     }
 }
