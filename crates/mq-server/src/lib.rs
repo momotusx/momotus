@@ -138,9 +138,9 @@ struct Playback {
     subtitles: Mutex<Vec<Subtitle>>,
     /// Told when a subtitle could not be served (`SubtitleSlot::on_trouble`).
     trouble: Mutex<Option<Reporter>>,
-    /// File offsets of `hev1` types served as `hvc1`, found by the first
-    /// request of a file (`relabels`).
-    relabel: tokio::sync::OnceCell<Arc<[u64]>>,
+    /// File offsets of `hev1` and `dvhe` types and the types they are
+    /// served as, found by the first body of a file (`relabels`).
+    relabel: tokio::sync::OnceCell<Arc<[Relabelled]>>,
 }
 
 /// Why a subtitle was answered with an empty WebVTT instead of its cues.
@@ -1055,9 +1055,12 @@ const RELABEL_BUDGET: mq_media::ProbeBudget = mq_media::ProbeBudget {
     max_time: Duration::from_secs(30),
 };
 
-/// A body's relabel offsets, awaited before its first bytes: the headers
-/// never wait for the scan, and a HEAD request never starts it.
-type Relabel = futures_util::future::BoxFuture<'static, Arc<[u64]>>;
+/// A four-byte sample entry type at a file offset, and the type served.
+type Relabelled = (u64, [u8; 4]);
+
+/// A body's relabels, awaited before its first bytes: the headers never
+/// wait for the scan, and a HEAD request never starts it.
+type Relabel = futures_util::future::BoxFuture<'static, Arc<[Relabelled]>>;
 
 /// The offsets of the file's `hev1` types to serve as `hvc1`: Apple's
 /// AVFoundation decodes HEVC only from an `hvc1` sample entry and plays an
@@ -1068,7 +1071,7 @@ fn relabels(playback: Arc<Playback>) -> Relabel {
     Box::pin(async move { scan(&playback).await })
 }
 
-async fn scan(playback: &Playback) -> Arc<[u64]> {
+async fn scan(playback: &Playback) -> Arc<[Relabelled]> {
     let found = playback.relabel.get_or_init(|| async {
         let reader: Box<dyn mq_media::RangeReader> = match &playback.body {
             Content::Http(source) if !source.passthrough() => {
@@ -1093,17 +1096,18 @@ async fn scan(playback: &Playback) -> Arc<[u64]> {
         entries
             .iter()
             .filter(|e| e.parameter_sets)
-            .map(|e| e.fourcc_at)
+            .map(|e| (e.fourcc_at, e.serve_as))
             .collect()
     });
     found.await.clone()
 }
 
-/// Writes `hvc1` over each `hev1` type at `relabel` that falls in `chunk`,
-/// which starts at file offset `pos`: a range may hold part of one.
-fn relabel_chunk(chunk: &mut [u8], pos: u64, relabel: &[u64]) {
-    for &at in relabel {
-        for (i, &byte) in b"hvc1".iter().enumerate() {
+/// Writes each relabel's type over the one at its offset, for the part
+/// that falls in `chunk`, which starts at file offset `pos`: a range may
+/// hold part of one.
+fn relabel_chunk(chunk: &mut [u8], pos: u64, relabel: &[Relabelled]) {
+    for &(at, kind) in relabel {
+        for (i, &byte) in kind.iter().enumerate() {
             let slot = (at + i as u64)
                 .checked_sub(pos)
                 .and_then(|r| usize::try_from(r).ok())
@@ -1117,9 +1121,9 @@ fn relabel_chunk(chunk: &mut [u8], pos: u64, relabel: &[u64]) {
 
 /// `bytes` from file offset `pos` as served: the same buffer when no
 /// relabelled type falls in it.
-fn relabelled(bytes: Bytes, pos: u64, relabel: &[u64]) -> Bytes {
+fn relabelled(bytes: Bytes, pos: u64, relabel: &[Relabelled]) -> Bytes {
     let end = pos + bytes.len() as u64;
-    if !relabel.iter().any(|&at| at < end && at + 4 > pos) {
+    if !relabel.iter().any(|&(at, _)| at < end && at + 4 > pos) {
         return bytes;
     }
     let mut owned = bytes.to_vec();
@@ -1660,7 +1664,7 @@ mod torrent {
     pub(crate) fn chunks<R>(
         body: R,
         start: u64,
-        relabel: Arc<[u64]>,
+        relabel: Arc<[Relabelled]>,
     ) -> impl Stream<Item = std::io::Result<bytes::Bytes>> + Send + 'static
     where
         R: AsyncRead + Unpin + Send + 'static,
@@ -1937,7 +1941,7 @@ mod tests {
         let file: Vec<u8> = [&[7u8; 10][..], b"hev1", &[9u8; 10]].concat();
         let mut want = file.clone();
         want[10..14].copy_from_slice(b"hvc1");
-        let relabel = [10u64];
+        let relabel = [(10u64, *b"hvc1")];
         for cut in 0..=file.len() {
             for second in cut..=file.len() {
                 let mut served = Vec::new();
@@ -1978,7 +1982,7 @@ mod tests {
             .chain(std::io::Cursor::new(parts[1].to_vec()))
             .chain(std::io::Cursor::new(parts[2].to_vec()));
         let start = 100;
-        let relabel: Arc<[u64]> = Arc::from([start + 20]);
+        let relabel: Arc<[Relabelled]> = Arc::from([(start + 20, *b"hvc1")]);
         let chunks: Vec<_> = torrent::chunks(body, start, relabel).collect().await;
         assert_eq!(chunks.len(), 3, "one chunk per read");
         let served: Vec<u8> = chunks

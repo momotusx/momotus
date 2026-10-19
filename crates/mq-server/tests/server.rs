@@ -3078,6 +3078,23 @@ async fn an_hev1_file_is_served_as_hvc1() {
     }
 }
 
+/// Dolby Vision's `dvhe` goes out as `dvh1` (ffmpeg writes no `dvhe`, so
+/// the hev1 fixture's type is set to it), in a range that cuts it too.
+#[tokio::test]
+async fn a_dvhe_file_is_served_as_dvh1() {
+    let mut dvhe = fixture("hev1-moov-head.mp4").to_vec();
+    let fourcc = type_at(&dvhe, b"hev1");
+    dvhe[fourcc..fourcc + 4].copy_from_slice(b"dvhe");
+    let mut want = dvhe.clone();
+    want[fourcc..fourcc + 4].copy_from_slice(b"dvh1");
+    let data = Arc::new(dvhe);
+    let (_server, lease, _seen, http) = serve(&data, Behaviour::default()).await;
+    let cut = range(&http, &lease.url, fourcc as u64 + 1, 2).await;
+    assert_eq!(cut, b"vh");
+    let whole = http.get(&lease.url, &local()).await.unwrap();
+    assert!(whole.body[..] == want[..]);
+}
+
 /// Served as they are: an hev1 whose `hvcC` has no parameter sets (as hvc1
 /// it would not play either), an hvc1 file and an H.264 file.
 #[tokio::test]

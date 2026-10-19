@@ -1062,6 +1062,7 @@ async fn hev1_entries_are_found_with_moov_at_the_head_or_the_tail() {
         let data = fixture(name);
         let want = vec![Hev1Entry {
             fourcc_at: at(&data, b"hev1"),
+            serve_as: *b"hvc1",
             parameter_sets: true,
         }];
         assert_eq!(hev1(&data).await, want, "{name}");
@@ -1077,9 +1078,27 @@ async fn an_hev1_entry_without_parameter_sets_says_so() {
     data[record + 22] = 0; // numOfArrays
     let want = vec![Hev1Entry {
         fourcc_at: at(&data, b"hev1"),
+        serve_as: *b"hvc1",
         parameter_sets: false,
     }];
     assert_eq!(hev1(&data).await, want);
+}
+
+/// Dolby Vision's `dvhe` is listed to serve as `dvh1`, and `dvh1` is left
+/// alone. ffmpeg writes no `dvhe`, so the hev1 fixture's type is set to it.
+#[tokio::test]
+async fn a_dvhe_entry_serves_as_dvh1_and_dvh1_is_left_alone() {
+    let mut data = fixture("hev1-moov-head.mp4");
+    let fourcc = at(&data, b"hev1") as usize;
+    data[fourcc..fourcc + 4].copy_from_slice(b"dvhe");
+    let want = vec![Hev1Entry {
+        fourcc_at: fourcc as u64,
+        serve_as: *b"dvh1",
+        parameter_sets: true,
+    }];
+    assert_eq!(hev1(&data).await, want);
+    data[fourcc..fourcc + 4].copy_from_slice(b"dvh1");
+    assert!(hev1(&data).await.is_empty());
 }
 
 /// `hvc1` and H.264 files have none, and any other container costs one

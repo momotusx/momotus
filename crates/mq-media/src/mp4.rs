@@ -359,8 +359,9 @@ fn subtitle_codec(k: &Kind) -> SubtitleCodec {
     }
 }
 
-/// The `hev1` entries of a video `stsd` whose body starts at file offset
-/// `at`: after its version, flags and entry count, each entry is a box.
+/// The `hev1` and `dvhe` entries of a video `stsd` whose body starts at
+/// file offset `at`: after its version, flags and entry count, each entry
+/// is a box.
 fn hev1_entries(stsd: &[u8], at: u64) -> Vec<Hev1Entry> {
     let mut out = Vec::new();
     let mut pos = 8;
@@ -368,12 +369,18 @@ fn hev1_entries(stsd: &[u8], at: u64) -> Vec<Hev1Entry> {
         let Some(body) = stsd.get(pos + 8..pos + size) else {
             break;
         };
-        if stsd.get(pos + 4..pos + 8) == Some(b"hev1") {
+        let serve_as = match stsd.get(pos + 4..pos + 8) {
+            Some(b"hev1") => Some(*b"hvc1"),
+            Some(b"dvhe") => Some(*b"dvh1"),
+            _ => None,
+        };
+        if let Some(serve_as) = serve_as {
             let parameter_sets = Boxes(body.get(78..).unwrap_or_default())
                 .find(|(k, _)| k == b"hvcC")
                 .is_some_and(|(_, c)| hvcc_parameter_sets(c).unwrap_or(false));
             out.push(Hev1Entry {
                 fourcc_at: at + pos as u64 + 4,
+                serve_as,
                 parameter_sets,
             });
         }

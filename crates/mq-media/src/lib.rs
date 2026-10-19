@@ -204,15 +204,18 @@ pub struct Attachment {
     pub mime: Field<String>,
 }
 
-/// An MP4 or MOV video sample entry of type `hev1`. Apple's AVFoundation
-/// decodes HEVC only from `hvc1` entries: an `hev1` file plays its sound
-/// with no picture. The same entry served as `hvc1` decodes when its `hvcC`
-/// carries the parameter sets.
+/// An MP4 or MOV video sample entry of type `hev1` (HEVC) or `dvhe` (Dolby
+/// Vision): parameter sets that may come in band. Apple's AVFoundation
+/// decodes these only as `hvc1` and `dvh1` entries: an `hev1` file plays
+/// its sound with no picture. The same entry served under the other type
+/// decodes when its `hvcC` carries the parameter sets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Hev1Entry {
     /// File offset of the entry's four-byte type.
     pub fourcc_at: u64,
-    /// The `hvcC` holds VPS, SPS and PPS: served as `hvc1` it plays on
+    /// The type Apple decodes: `hvc1` for `hev1`, `dvh1` for `dvhe`.
+    pub serve_as: [u8; 4],
+    /// The `hvcC` holds VPS, SPS and PPS: served as `serve_as` it plays on
     /// Apple. Without them it plays there in no form.
     pub parameter_sets: bool,
 }
@@ -233,7 +236,8 @@ pub struct StreamProbe {
     pub attachments: Vec<Attachment>,
     /// MKV `Cues` or MP4 `moov`: the region a player reads to seek.
     pub seek_index: Field<ByteSpan>,
-    /// Every video track's `hev1` sample entries (MP4 and MOV only).
+    /// Every video track's `hev1` and `dvhe` sample entries (MP4 and MOV
+    /// only).
     pub hev1: Vec<Hev1Entry>,
     pub budget_exhausted: bool,
     pub cancelled: bool,
@@ -269,8 +273,9 @@ pub async fn probe(
     out
 }
 
-/// The `hev1` sample entries of an MP4 or MOV file; none for any other
-/// container. Only the MP4 path runs, so a Matroska file costs one read.
+/// The `hev1` and `dvhe` sample entries of an MP4 or MOV file; none for any
+/// other container. Only the MP4 path runs, so a Matroska file costs one
+/// read.
 pub async fn hev1_entries(
     reader: &dyn RangeReader,
     budget: ProbeBudget,
