@@ -630,8 +630,11 @@ fn misbehaving_tracker(answer: bool) -> (String, Arc<std::sync::Mutex<Option<Ins
             }
         }
         if answer {
-            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000000\r\n\r\n");
-            let chunk = vec![b'x'; 64 * 1024];
+            // Chunked with no end: no length the client could stop at.
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+            let mut chunk = b"10000\r\n".to_vec();
+            chunk.extend(vec![b'x'; 0x10000]);
+            chunk.extend(b"\r\n");
             while stream.write_all(&chunk).is_ok() {}
         } else {
             while matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
