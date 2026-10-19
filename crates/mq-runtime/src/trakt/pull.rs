@@ -118,7 +118,7 @@ struct Plays {
     left_at: Option<i64>,
 }
 
-impl Round<'_> {
+impl<'a> Round<'a> {
     async fn run(&mut self) -> Result<(), CallError> {
         self.prune_sent();
         let pulled = self.pull().await;
@@ -154,7 +154,7 @@ impl Round<'_> {
         if moved("movies", "paused_at") || moved("episodes", "paused_at") {
             self.playback().await?;
         }
-        self.fence()?;
+        let _fence = self.fence()?;
         if let Some(reason) = self.left.take() {
             // Everything else is in; what waits is read again next round.
             self.conn.failed(&reason);
@@ -301,7 +301,7 @@ impl Round<'_> {
                 paused_ms,
             });
         }
-        self.fence()?;
+        let _fence = self.fence()?;
         let taken = self
             .core
             .library()
@@ -380,6 +380,10 @@ impl Round<'_> {
             left_at: None,
         };
         for row in rows {
+            // Signed out meanwhile: nothing more is looked up.
+            if self.fence().is_err() {
+                break;
+            }
             // Unknown dates sort before any real edit.
             let when = at(row).unwrap_or(1);
             match self.mapper.place(row).await {
@@ -401,7 +405,7 @@ impl Round<'_> {
     }
 
     fn import(&mut self, plays: &[ImportedPlay], state: &[(&str, &str)]) -> Result<(), CallError> {
-        self.fence()?;
+        let _fence = self.fence()?;
         let state: Vec<_> = state.iter().map(|(k, v)| (self.key, *k, *v)).collect();
         let report = self
             .core
@@ -432,6 +436,9 @@ impl Round<'_> {
             let mut adds = Vec::new();
             let mut removes = Vec::new();
             for intent in intents {
+                if self.fence().is_err() {
+                    break 'batches;
+                }
                 let kind = if intent.video_id == intent.item_id {
                     "movie"
                 } else {
@@ -596,11 +603,13 @@ impl Round<'_> {
         self.core.trakt_refresh(self.conn);
     }
 
-    /// The connection this round started under is still the one in use.
-    fn fence(&self) -> Result<(), CallError> {
+    /// The connection this round started under is still the one in use,
+    /// and stays so while the guard is held (a sign-out waits for it).
+    fn fence(&self) -> Result<std::sync::MutexGuard<'a, ()>, CallError> {
+        let fence = super::lock(&self.conn.fence);
         let now = futures_util::FutureExt::now_or_never(self.conn.auth.bound()).flatten();
         if now.as_ref() == Some(self.bound) {
-            Ok(())
+            Ok(fence)
         } else {
             Err(CallError::Auth(AuthError::Off))
         }

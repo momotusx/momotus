@@ -356,6 +356,15 @@ impl Auth {
         lock(&self.state).record.as_ref().map(|r| r.user.clone())
     }
 
+    /// The access token held now, as it is: a sign-out revokes it without
+    /// waiting for a refresh.
+    pub async fn held_token(&self) -> Option<String> {
+        lock(&self.state)
+            .record
+            .as_ref()
+            .map(|r| r.access_token.clone())
+    }
+
     /// Raised by every sign-in, sign-out and new record: work started under
     /// an older one drops its results.
     pub async fn generation(&self) -> u64 {

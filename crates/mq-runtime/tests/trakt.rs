@@ -1336,7 +1336,8 @@ async fn signing_out_drops_the_accounts_work_and_keeps_the_library() {
         .set_setting("p", "trakt.device.42", "\"a-out\"", core.clock())
         .unwrap();
     core.trakt_sign_out().await.unwrap();
-    assert_eq!(fake.seen("POST", "/oauth/revoke").len(), 1);
+    fake.wait_for("the revoke", |f| f.seen("POST", "/oauth/revoke").len() == 1)
+        .await;
     assert_eq!(pending(&core, "a-out"), 0);
     assert_eq!(state(&core, "a-out", "history_day"), None);
     assert!(watched(&core, "tt100:1:1"), "the library keeps its marks");
@@ -2613,6 +2614,46 @@ async fn a_sign_in_whose_user_cannot_be_read_revokes_its_tokens() {
         f.seen("POST", "/oauth/revoke")
             .iter()
             .any(|r| r.body["token"] == "at")
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn signing_out_never_waits_for_the_network() {
+    let (core, fake) = signed_in("a-out-slow").await;
+    // Trakt answers the next round's first read, and the revoke, late.
+    let late = |body: Value| Reply {
+        status: 200,
+        body: body.to_string(),
+        delay: Duration::from_secs(3),
+        headers: String::new(),
+    };
+    fake.queue(
+        "GET /sync/last_activities",
+        vec![late(activities(&iso(now())))],
+    );
+    fake.queue("POST /oauth/revoke", vec![late(json!({}))]);
+    let before = fake.seen("GET", "/sync/last_activities").len();
+    let round = tokio::spawn({
+        let core = core.clone();
+        async move { core.trakt_sync().await }
+    });
+    fake.wait_for("the round's read", |f| {
+        f.seen("GET", "/sync/last_activities").len() > before
+    })
+    .await;
+    let started = std::time::Instant::now();
+    core.trakt_sign_out().await.unwrap();
+    let took = started.elapsed();
+    assert!(took < Duration::from_secs(1), "sign-out took {took:?}");
+    assert_eq!(status(&core).state, TraktState::Off);
+    // The round's answer comes after the sign-out: nothing of it lands.
+    let _ = round.await.unwrap();
+    assert_eq!(state(&core, "a-out-slow", "activities"), None);
+    fake.wait_for("the revoke", |f| {
+        f.seen("POST", "/oauth/revoke")
+            .iter()
+            .any(|r| r.body["token"] == "access")
     })
     .await;
 }

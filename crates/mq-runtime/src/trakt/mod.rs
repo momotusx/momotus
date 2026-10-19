@@ -169,6 +169,10 @@ pub(crate) struct Conn {
     health: Mutex<Health>,
     /// One round at a time.
     round: tokio::sync::Mutex<()>,
+    /// Held across a round's connection check and the write it guards, and
+    /// across a sign-out's generation move: a round's write either lands
+    /// before the sign-out drops the account's rows, or not at all.
+    fence: Mutex<()>,
     /// Held by the scrobble worker while it sends: the outbox waits for it.
     lane: tokio::sync::Mutex<()>,
     /// Wakes the scheduler.
@@ -267,6 +271,7 @@ impl Trakt {
                     }),
                     health: Mutex::default(),
                     round: tokio::sync::Mutex::new(()),
+                    fence: Mutex::default(),
                     lane: tokio::sync::Mutex::new(()),
                     wake: Notify::new(),
                     record_in: Notify::new(),
@@ -426,26 +431,28 @@ impl Core {
     }
 
     /// Signs this device out of Trakt for the profile: the token is revoked
-    /// (best effort), this account's pending writes and cursors are
-    /// dropped, the library keeps what it has. The profile stops using
-    /// Trakt when no other device is signed in. The app deletes its record.
+    /// (best effort, in the background), this account's pending writes and
+    /// cursors are dropped, the library keeps what it has. The profile
+    /// stops using Trakt when no other device is signed in. The app deletes
+    /// its record. Nothing here waits for the network.
     pub async fn trakt_sign_out(&self) -> Result<(), CoreError> {
         let trakt = self.trakt();
         let conn = self.trakt_conn();
-        let held = conn.auth.bound().await;
-        if let (Some(bound), Some((api, _))) = (&held, trakt.api())
-            && let Ok(token) = conn.auth.token(&api, bound).await
-        {
-            mq_tracking::trakt::auth::revoke(&api, &token).await;
-        }
+        let token = conn.auth.held_token().await;
         // A sign-in still running loses its claim.
         if let Some(login) = lock(&conn.login).take() {
             login.cancel();
         }
-        // The generation moves first: a round in flight drops its results;
-        // then its turn is waited for, so nothing it writes comes after.
-        conn.auth.set(None).await;
-        let _round = conn.round.lock().await;
+        // The generation moves under the round's fence. A round in flight
+        // is not waited for: its calls answer `Off`, and a write of it
+        // lands before the rows below are dropped, or not at all.
+        {
+            let _fence = lock(&conn.fence);
+            let _ = futures_util::FutureExt::now_or_never(conn.auth.set(None));
+        }
+        if let (Some(token), Some((api, _))) = (token, trakt.api()) {
+            tokio::spawn(async move { mq_tracking::trakt::auth::revoke(&api, &token).await });
+        }
         let (library, profile) = (self.library(), self.profile());
         library.set_tracker_account(profile, TRACKER, None, 0, now_ms() as i64)?;
         library.set_setting(profile, &self.trakt_device_setting(), "null", self.clock())?;
