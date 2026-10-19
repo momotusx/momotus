@@ -112,11 +112,23 @@ async fn a_canary_peer_is_never_dialed() {
         let s = support::swarm_scoped(V6, &[V6], &leecher, true).await;
         let (literal, mapped_canary) = (Canary::tcp(V4, 0), Canary::tcp(V4, 0));
         let peers = [s.seeder_addr, literal.addr(), mapped(mapped_canary.addr())];
+        let before = s.leecher.refused();
         timeout(Duration::from_secs(60), first_mib(&s, &peers, &[]))
             .await
             .expect("played from the seeder");
         settle().await;
         assert_canaries(control, &[&literal, &mapped_canary]);
+        assert_refused(control, s.leecher.refused().since(before).peers);
+    }
+}
+
+/// Protected runs count each canary they refused (at least the two forms);
+/// controls refuse nothing.
+fn assert_refused(control: bool, peers: u64) {
+    if control {
+        assert_eq!(peers, 0, "control: nothing refused");
+    } else {
+        assert!(peers >= 2, "each canary refused and counted: {peers}");
     }
 }
 
@@ -179,13 +191,39 @@ async fn peers_a_tracker_returns_stay_inside_the_policy() {
         let (url, announces) =
             tracker(&[literal.addr(), s.seeder_addr, mapped(mapped_canary.addr())]);
         // No peers given: the tracker is the only way to the seeder.
+        let before = s.leecher.refused();
         timeout(Duration::from_secs(60), first_mib(&s, &[], &[url]))
             .await
             .expect("played through the tracker");
         assert!(announces.load(Ordering::SeqCst) >= 1);
         settle().await;
         assert_canaries(control, &[&literal, &mapped_canary]);
+        assert_refused(control, s.leecher.refused().since(before).peers);
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_silent_peer_outside_the_policy_is_refused_before_any_read() {
+    // A peer that connects and says nothing: refused at once, never waited
+    // on for a handshake.
+    let (refusing, _http, _dir) = engine(&[]).await;
+    let port = refusing.listen_addr().unwrap().port();
+    let before = refusing.refused();
+    let mut silent = tokio::net::TcpStream::connect((V6, port)).await.unwrap();
+    let mut byte = [0u8; 1];
+    let read = timeout(Duration::from_secs(2), silent.read(&mut byte))
+        .await
+        .expect("closed without waiting for a handshake");
+    assert!(matches!(read, Ok(0) | Err(_)), "{read:?}");
+    let refused = refusing.refused().since(before);
+    assert!(refused.peers >= 1, "{refused:?}");
+    // Control: a silent peer the policy allows is waited on (the handshake
+    // read times out after 10 s), so the close above is the policy's.
+    let (open, _http, _dir) = engine(&[V6]).await;
+    let port = open.listen_addr().unwrap().port();
+    let mut kept = tokio::net::TcpStream::connect((V6, port)).await.unwrap();
+    let read = timeout(Duration::from_secs(2), kept.read(&mut byte)).await;
+    assert!(read.is_err(), "control: still waiting for its handshake");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
