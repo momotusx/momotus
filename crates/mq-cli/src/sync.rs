@@ -234,10 +234,16 @@ pub async fn sign_out(core: &Core, data: &Path, force: bool) -> Result<(), Strin
 pub async fn use_server_roster(core: &Core, data: &Path, drop: &[String]) -> Result<(), String> {
     let record = read(data)?;
     let drop = drop.iter().map(|d| id(d)).collect::<Result<Vec<_>, _>>()?;
-    let record =
-        mq_sync::use_server_roster(core.library(), core.http(), &record, core.clock(), drop)
-            .await
-            .map_err(failed(data))?;
+    let record = mq_sync::use_server_roster(
+        core.library(),
+        core.http(),
+        &record,
+        core.clock(),
+        drop,
+        None,
+    )
+    .await
+    .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "adopted", "epoch": record.keys.epoch }));
     Ok(())

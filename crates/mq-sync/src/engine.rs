@@ -10,7 +10,8 @@
 //! that changes it returns it and publishes nothing until the app stored it.
 
 use crate::roster::{
-    Bundle, Entry, Hex, Id, MemberSecret, Role, Roster, RosterError, TokenRequest, open_name,
+    Bundle, Digest32, Entry, Hex, Id, MemberSecret, Role, Roster, RosterError, TokenRequest,
+    open_name,
 };
 use crate::seal::{AccountKey, SealError};
 use crate::wire::{
@@ -24,7 +25,7 @@ use mq_http::{HttpClient, HttpError, Priority, RequestOptions};
 use mq_library::hlc::{Hlc, HlcClock, MAX_WALL_MS};
 use mq_library::{Library, LibraryError, SignedEntry, SyncRecord};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
 const PULL_SEQ: &str = "pull_seq";
@@ -38,7 +39,7 @@ const EPOCH_PARK: &str = "epoch_park";
 /// approved times out, by the relay's clock and by this device's.
 pub(crate) const APPROVAL: &str = "approval:";
 /// `cancel:<member id>`: an approval that timed out; resolved by a rotation.
-const CANCEL: &str = "cancel:";
+pub(crate) const CANCEL: &str = "cancel:";
 /// `relay:<relay id>` → the host that relay id was first seen at.
 const RELAY_PIN: &str = "relay:";
 /// Set when the relay showed a roster that conflicts with this device's;
@@ -193,6 +194,8 @@ pub enum SyncError {
     RelayBehind,
     #[error("some changes are not sent yet; sync again or sign out anyway")]
     Unsent,
+    #[error("the relay's roster changed since it was shown; compare again")]
+    RosterChanged,
 }
 
 impl SyncError {
@@ -206,6 +209,7 @@ impl SyncError {
             SyncError::WrongRelay => "wrongRelay",
             SyncError::RelayBehind => "relayBehind",
             SyncError::Unsent => "unsent",
+            SyncError::RosterChanged => "rosterChanged",
             _ => return None,
         })
     }
@@ -874,8 +878,21 @@ impl<'a> Session<'a> {
         &mut self,
         dropped: impl Fn(&Roster) -> Vec<Id>,
     ) -> Result<(), SyncError> {
+        self.rotate_on(None, dropped).await
+    }
+
+    /// As `rotate`, built only on the head hash `reviewed` when given: a roster that moved
+    /// past what the user saw refuses with `RosterChanged` instead.
+    pub(crate) async fn rotate_on(
+        &mut self,
+        reviewed: Option<Digest32>,
+        dropped: impl Fn(&Roster) -> Vec<Id>,
+    ) -> Result<(), SyncError> {
         let at_ms = self.clock.tick(self.clock.wall_now()).wall_ms;
         self.propose(|s| {
+            if reviewed.is_some_and(|h| h != s.head().hash) {
+                return Err(SyncError::RosterChanged);
+            }
             let drop = with_kits(&s.roster, dropped(&s.roster));
             let (entry, _) = s
                 .roster
@@ -1556,6 +1573,31 @@ pub struct ForkPreview {
     /// Members of the relay's branch that go whatever the user ticks.
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub drops: Vec<Id>,
+    /// For each device of the relay's side that made kits, those kits: they
+    /// go with it when the user ticks it.
+    pub kits: Vec<DeviceKits>,
+    /// This device is a member of the relay's side. When not, it cannot take
+    /// that side (`useServerRoster` refuses): pair it again.
+    pub on_server: bool,
+    /// The hash of the relay's last entry as shown (it commits to the whole
+    /// chain). `useServerRoster` takes it back and refuses with
+    /// `rosterChanged` when the roster moved since.
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub head: Digest32,
+}
+
+/// A device and the recovery kits it made.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+pub struct DeviceKits {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub device: Id,
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
+    pub kits: Vec<Id>,
 }
 
 /// Reads both sides of a fork and writes nothing: this device's branch from
@@ -1580,10 +1622,22 @@ pub async fn fork_preview(
         ))
     })?;
     let me = config.secret().id();
+    let mut kits: BTreeMap<Id, Vec<Id>> = BTreeMap::new();
+    for (id, m) in server.members() {
+        if let Some(maker) = m.sponsor.filter(|_| m.role == Role::Kit) {
+            kits.entry(maker).or_default().push(*id);
+        }
+    }
     Ok(ForkPreview {
         mine: member_infos(&local, &config.keys, &me),
         server: member_infos(&server, &config.keys, &me),
         drops: with_kits(&server, fork_drops(&local, &server, &me, &[])),
+        kits: kits
+            .into_iter()
+            .map(|(device, kits)| DeviceKits { device, kits })
+            .collect(),
+        on_server: server.members().contains_key(&me),
+        head: server.head().unwrap_or_default().1,
     })
 }
 
@@ -1601,6 +1655,7 @@ pub async fn use_server_roster(
     config: &SyncConfig,
     clock: &HlcClock,
     also_drop: Vec<Id>,
+    reviewed: Option<Digest32>,
 ) -> Result<SyncConfig, SyncError> {
     require_secure(&config.server)?;
     let genesis = genesis_key(&config.keys);
@@ -1651,7 +1706,9 @@ pub async fn use_server_roster(
     session.record.keys = session.roster.adopt(&member, &base).map_err(roster_error)?;
     session.record.checkpoint = session.head();
     session
-        .rotate(|server| fork_drops(&local, server, &me, &also_drop))
+        .rotate_on(reviewed, |server| {
+            fork_drops(&local, server, &me, &also_drop)
+        })
         .await?;
     // Landed: the store takes the relay's branch, then everything is sent
     // and read again under the new key. The fork flag goes last.

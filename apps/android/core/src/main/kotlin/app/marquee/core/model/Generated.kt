@@ -225,6 +225,13 @@ data class DebridTombstone(
     val generation: String,
 )
 
+/** A device and the recovery kits it made. */
+@Serializable
+data class DeviceKits(
+    val device: String,
+    val kits: List<String> = emptyList(),
+)
+
 /** The account's members, after catching up. */
 @Serializable
 data class Devices(
@@ -299,6 +306,12 @@ data class ForkPreview(
     val server: List<MemberInfo> = emptyList(),
     /** Members of the relay's branch that go whatever the user ticks. */
     val drops: List<String> = emptyList(),
+    /** For each device of the relay's side that made kits, those kits: they go with it when the user ticks it. */
+    val kits: List<DeviceKits> = emptyList(),
+    /** This device is a member of the relay's side. When not, it cannot take that side (`useServerRoster` refuses): pair it again. */
+    val onServer: Boolean,
+    /** The hash of the relay's last entry as shown (it commits to the whole chain). `useServerRoster` takes it back and refuses with `rosterChanged` when the roster moved since. */
+    val head: String,
 )
 
 @Serializable

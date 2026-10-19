@@ -314,6 +314,14 @@ async fn sync_account_then_two_devices_share_preferences() {
         "{preview}"
     );
     assert_eq!(preview["result"]["drops"], json!([]), "{preview}");
+    assert_eq!(preview["result"]["onServer"], true, "{preview}");
+    assert_eq!(preview["result"]["kits"], json!([]), "{preview}");
+    assert!(
+        preview["result"]["head"]
+            .as_str()
+            .is_some_and(|h| h.len() == 64),
+        "{preview}"
+    );
 
     a.handle_text(
         &json!({"id": 2, "op": "setPrefs", "patch": {"subtitleLanguages": ["tur"]}}).to_string(),
@@ -350,6 +358,27 @@ async fn sync_account_then_two_devices_share_preferences() {
     b.handle_text(&far.to_string()).await;
     let failed = next(&mut rx_b).await;
     assert_eq!(failed["code"], "insecure", "{failed}");
+
+    // An approval ended with cancelPairing rotates the key at once.
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let tv = mq_sync::pair::start_pairing(&http, &server).await.unwrap();
+    a.handle_text(
+        &json!({"id": 11, "op": "approvePairing", "record": record, "qr": tv.qr}).to_string(),
+    )
+    .await;
+    let approved = next(&mut rx_a).await;
+    assert_eq!(
+        approved["result"]["code"].as_str().map(str::len),
+        Some(6),
+        "{approved}"
+    );
+    let after = approved["result"]["record"].clone();
+    a.handle_text(
+        &json!({"id": 12, "op": "cancelPairing", "record": after, "qr": tv.qr}).to_string(),
+    )
+    .await;
+    let cancelled = next(&mut rx_a).await;
+    assert_eq!(cancelled["result"]["keys"]["epoch"], 1, "{cancelled}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

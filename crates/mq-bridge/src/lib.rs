@@ -6,7 +6,7 @@
 //! "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
-//! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" |
+//! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "cancelPairing" |
 //! "forkPreview" | "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession",
 //! ...}`.
@@ -31,6 +31,7 @@ use mq_runtime::{
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
+use mq_sync::roster::Digest32;
 use mq_sync::roster::Id;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -190,6 +191,14 @@ enum Request {
         #[serde(default)]
         force: bool,
     },
+    /// The digits on the new device differ: ends the approval of `qr` now
+    /// with a key rotation (dropping the device if it joined). Replies the
+    /// record to store.
+    CancelPairing {
+        id: u64,
+        record: Box<SyncConfig>,
+        qr: String,
+    },
     /// Both sides of a fork, read only: this device's members, the relay's,
     /// and what taking the relay's drops on its own.
     ForkPreview {
@@ -203,6 +212,9 @@ enum Request {
         record: Box<SyncConfig>,
         #[serde(default)]
         drop: Vec<Id>,
+        /// The relay's head from `forkPreview`: a roster that moved since is refused.
+        #[serde(default)]
+        head: Option<Digest32>,
     },
     /// Merges `patch` into the profile preferences (see `Core::set_prefs`).
     SetPrefs {
@@ -668,17 +680,31 @@ impl Session {
                         .map(|()| json!({}))
                 });
             }
+            Request::CancelPairing { id, record, qr } => {
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    answer(mq_sync::pair::cancel_pairing(library, http, &record, clock, &qr).await)
+                });
+            }
             Request::ForkPreview { id, record } => {
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     answer(mq_sync::fork_preview(core.library(), core.http(), &record).await)
                 });
             }
-            Request::UseServerRoster { id, record, drop } => {
+            Request::UseServerRoster {
+                id,
+                record,
+                drop,
+                head,
+            } => {
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
-                    answer(mq_sync::use_server_roster(library, http, &record, clock, drop).await)
+                    answer(
+                        mq_sync::use_server_roster(library, http, &record, clock, drop, head).await,
+                    )
                 });
             }
             Request::Ping { id } => self.reply(json!(id), Ok(json!({}))),

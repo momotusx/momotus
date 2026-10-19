@@ -17,7 +17,7 @@
 //! for by the kit.
 
 use crate::engine::{
-    APPROVAL, PAIRING_MS, Session, SyncConfig, SyncError, fetch_roster, options, rebuild,
+    APPROVAL, CANCEL, PAIRING_MS, Session, SyncConfig, SyncError, fetch_roster, options, rebuild,
     relay_info, require_secure,
 };
 use crate::roster::{Bundle, Hex, Id, MemberKeys, MemberSecret, NewKit, Sponsor, seal_name};
@@ -303,18 +303,9 @@ async fn join(
     })
 }
 
-/// On a device that already syncs: vouches for the device whose QR was
-/// scanned and hands it the account. Returns the code to show (the new
-/// device must show the same) and this device's record to store. If the
-/// new device does not join in time, the next sync cancels the approval
-/// with a key rotation.
-pub async fn approve_pairing(
-    library: &Library,
-    http: &HttpClient,
-    config: &SyncConfig,
-    clock: &HlcClock,
-    qr: &str,
-) -> Result<(String, SyncConfig), SyncError> {
+/// A pairing code shown by a new device: its slot and its keys. Refuses a
+/// code for another sync server.
+fn read_code(config: &SyncConfig, qr: &str) -> Result<(String, MemberKeys), SyncError> {
     let url = url::Url::parse(qr).map_err(|_| bad("not a pairing code"))?;
     let field = |name: &str| {
         url.query_pairs()
@@ -337,9 +328,24 @@ pub async fn approve_pairing(
     let (Some(boxk), Some(sign)) = (key("k"), key("g")) else {
         return Err(bad("pairing code has no valid keys"));
     };
-    let keys = MemberKeys { sign, boxk };
+    Ok((pairing, MemberKeys { sign, boxk }))
+}
+
+/// On a device that already syncs: vouches for the device whose QR was
+/// scanned and hands it the account. Returns the code to show (the new
+/// device must show the same) and this device's record to store. If the
+/// new device does not join in time, the next sync cancels the approval
+/// with a key rotation.
+pub async fn approve_pairing(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    clock: &HlcClock,
+    qr: &str,
+) -> Result<(String, SyncConfig), SyncError> {
+    let (pairing, keys) = read_code(config, qr)?;
     let public =
-        PublicKey::from_bytes(&boxk.0).map_err(|_| bad("pairing code has no valid keys"))?;
+        PublicKey::from_bytes(&keys.boxk.0).map_err(|_| bad("pairing code has no valid keys"))?;
     let session = Session::open(library, http, config, clock).await?;
     let code = six_digits();
     let (seq, hash) = session.roster.head().unwrap_or_default();
@@ -452,6 +458,30 @@ fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
         tag,
         member: MemberSecret::from_seed(seed),
     })
+}
+
+/// The approver saw other digits on the new device: the approval for `qr`
+/// ends now instead of when it times out. The key rotates at once, dropping
+/// the device if it joined meanwhile, so the sealed payload it was handed
+/// (the current key and a sponsor statement bound to this roster head) is
+/// worth nothing: a join built on it no longer fits the roster. Returns
+/// this device's record to store.
+pub async fn cancel_pairing(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    clock: &HlcClock,
+    qr: &str,
+) -> Result<SyncConfig, SyncError> {
+    let (_, keys) = read_code(config, qr)?;
+    let id = keys.id();
+    let mut session = Session::open(library, http, config, clock).await?;
+    // A user's own action: no grace period after a relay restore delays it.
+    session.rotate(|_| vec![id]).await?;
+    for state in [APPROVAL, CANCEL] {
+        library.delete_sync_state(&format!("{state}{}", hex::encode(id.0)))?;
+    }
+    Ok(session.changed().unwrap_or_else(|| session.record.clone()))
 }
 
 /// Makes a recovery kit and adds it to the account's roster with a box of

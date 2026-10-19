@@ -3,7 +3,7 @@
 use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::Library;
 use mq_library::hlc::HlcClock;
-use mq_sync::pair::{approve_pairing, make_kit, recover, start_pairing};
+use mq_sync::pair::{approve_pairing, cancel_pairing, make_kit, recover, start_pairing};
 use mq_sync::{SyncConfig, SyncError, devices, report_lost, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::PathBuf;
@@ -349,4 +349,53 @@ async fn one_flooding_client_does_not_block_anyone_else() {
         status_from(&redeem, body.clone(), "198.51.100.7").await;
     }
     assert_eq!(status_from(&redeem, body, "203.0.113.9").await, 404);
+}
+
+/// The approver sees other digits and ends the approval before the device
+/// confirms: the key rotates at once and the device's join no longer fits.
+#[tokio::test]
+async fn an_approval_ended_before_the_device_confirms_lets_nothing_in() {
+    let (server, db) = relay().await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let tv = start_pairing(&http(), &server).await.unwrap();
+    phone.approve(&tv.qr).await.unwrap();
+    let epoch = phone.record.keys.epoch;
+    phone.record = cancel_pairing(&phone.library, &http(), &phone.record, &phone.clock, &tv.qr)
+        .await
+        .unwrap();
+    assert_eq!(phone.record.keys.epoch, epoch + 1, "the key rotated");
+    assert!(
+        phone.library.sync_states("approval:").unwrap().is_empty(),
+        "no approval waits any more"
+    );
+    let offer = tv.poll(&http()).await.unwrap().expect("offer");
+    let err = tv.claim(&http(), offer, "TV").await.unwrap_err();
+    assert!(err.to_string().contains("changed while pairing"), "{err}");
+    assert_eq!(active(&db), 1, "no token for the TV");
+    assert_eq!(phone.names().await, vec!["Phone".to_owned()]);
+}
+
+/// Ended after the device joined: it is dropped with the rotation.
+#[tokio::test]
+async fn an_approval_ended_after_the_join_drops_the_device() {
+    let (server, _db) = relay().await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let tv = start_pairing(&http(), &server).await.unwrap();
+    phone.approve(&tv.qr).await.unwrap();
+    let offer = tv.poll(&http()).await.unwrap().expect("offer");
+    let mut tv_device = Device::with(tv.claim(&http(), offer, "TV").await.unwrap());
+    tv_device.sync().await;
+    phone.record = cancel_pairing(&phone.library, &http(), &phone.record, &phone.clock, &tv.qr)
+        .await
+        .unwrap();
+    assert_eq!(phone.names().await, vec!["Phone".to_owned()]);
+    let err = sync_once(
+        &tv_device.library,
+        &http(),
+        &tv_device.record,
+        &tv_device.clock,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, SyncError::Dropped), "{err:?}");
 }
