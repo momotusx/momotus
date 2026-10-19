@@ -76,6 +76,26 @@ enum DefaultsRules {
     }
 }
 
+/// How a switch draws (design/audit-web-2026-10-19.md, fourth pass): on is a
+/// white track with a dark knob, unmistakable as on; off an empty track with
+/// the control edge. Never the accent: a list of accent tracks would be a
+/// large fill, and the white stays small beside the one white action.
+struct SwitchLook: Equatable {
+    enum Token: Equatable { case primary, onPrimary, control, muted }
+    /// The track's fill; nil leaves it empty.
+    let track: Token?
+    let edge: Token?
+    let knob: Token
+
+    static func of(on: Bool) -> SwitchLook {
+        on ? SwitchLook(track: .primary, edge: nil, knob: .onPrimary) : SwitchLook(track: nil, edge: .control, knob: .muted)
+    }
+
+    /// The word On or Off beside the switch: TV and wide windows. A phone
+    /// reads the state from the track (VoiceOver from the value).
+    static func showsWord(wide: Bool) -> Bool { wide }
+}
+
 /// One switch sent with `installDefaults`.
 struct DefaultChoice: Equatable, Sendable {
     let key: String

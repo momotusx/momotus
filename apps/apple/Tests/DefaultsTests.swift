@@ -71,6 +71,14 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     #expect(DefaultsRules.fixWords(mixed[1]) == "Add Torrentio")
 }
 
+@Test func aSwitchIsWhiteWhenOnAndEmptyWhenOffNeverTheAccent() {
+    #expect(SwitchLook.of(on: true) == SwitchLook(track: .primary, edge: nil, knob: .onPrimary))
+    #expect(SwitchLook.of(on: false) == SwitchLook(track: nil, edge: .control, knob: .muted))
+    // TV and the Mac say On or Off beside it; a phone does not.
+    #expect(SwitchLook.showsWord(wide: true))
+    #expect(!SwitchLook.showsWord(wide: false))
+}
+
 @Test func newFieldsDecode() throws {
     let snapshot = try JSONDecoder().decode(AddonsSnapshot.self, from: Data(#"{"addons": [], "fresh": true}"#.utf8))
     #expect(snapshot.fresh)

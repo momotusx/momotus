@@ -278,24 +278,49 @@ private struct AddonCard: View {
     }
 }
 
-/// On or off as a labelled switch: the state only; a button around it acts.
+/// On or off as a switch, the state only; a button around it acts. Drawn
+/// by `SwitchLook`: a white track with a dark knob when on, an empty track
+/// with the control edge when off. TV and wide windows say On or Off beside it.
 struct SwitchMark: View {
     let on: Bool
+    @Environment(\.metrics) private var metrics
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(on ? "On" : "Off")
+        let look = SwitchLook.of(on: on)
+        HStack(spacing: 10) {
+            Capsule()
+                .fill(look.track.map(color) ?? .clear)
+                .overlay { if let edge = look.edge { Capsule().strokeBorder(color(edge), lineWidth: 1.5) } }
+                .frame(width: Self.track.width, height: Self.track.height)
+                .overlay(alignment: on ? .trailing : .leading) {
+                    Circle().fill(color(look.knob)).padding(Self.track.height * 0.18)
+                }
+            if SwitchLook.showsWord(wide: metrics.wide) {
+                // Sized by the longer word, so the tracks of a list line up.
+                ZStack(alignment: .leading) {
+                    Text("Off").hidden()
+                    Text(on ? "On" : "Off")
+                }
                 .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
                 .foregroundStyle(on ? Theme.Palette.text : Theme.Palette.muted)
-            Capsule()
-                .fill(on ? Theme.Palette.ok : Theme.Palette.raised)
-                .overlay(Capsule().strokeBorder(Theme.Palette.control))
-                .frame(width: 36, height: 22)
-                .overlay(alignment: on ? .trailing : .leading) {
-                    Circle().fill(.white).padding(3)
-                }
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(on ? "On" : "Off")
+    }
+
+    #if os(tvOS)
+    private static let track = CGSize(width: 60, height: 34)
+    #else
+    private static let track = CGSize(width: 38, height: 22)
+    #endif
+
+    private func color(_ token: SwitchLook.Token) -> Color {
+        switch token {
+        case .primary: Theme.Palette.primary
+        case .onPrimary: Theme.Palette.onPrimary
+        case .control: Theme.Palette.control
+        case .muted: Theme.Palette.muted
+        }
     }
 }
