@@ -102,6 +102,13 @@ pub struct Bound {
     pub generation: u64,
 }
 
+/// A sign-in in progress (`Auth::ticket`), for `Auth::adopt`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ticket {
+    generation: u64,
+    login: u64,
+}
+
 /// Why a call has no usable token.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
@@ -225,6 +232,8 @@ struct State {
     acked: bool,
     dead: Option<String>,
     generation: u64,
+    /// Sign-ins begun; only the newest may adopt.
+    logins: u64,
     /// After a refresh that got no answer, no new refresh before this.
     retry_at: Option<Instant>,
 }
@@ -284,18 +293,29 @@ impl Auth {
         }
     }
 
+    /// A sign-in begins: its ticket, which a later sign-in, a sign-out or a
+    /// record from the app makes stale.
+    pub async fn ticket(&self) -> Ticket {
+        let mut s = lock(&self.state);
+        s.logins += 1;
+        Ticket {
+            generation: s.generation,
+            login: s.logins,
+        }
+    }
+
     /// A new sign-in: a new connection generation, held until acknowledged.
-    /// `since` is the generation when the sign-in started: after a sign-out,
-    /// another sign-in or a record from the app meanwhile, it is not taken.
+    /// Taken only while `ticket` is the newest sign-in's and nothing else
+    /// happened since it began; checked and written under one lock.
     pub async fn adopt(
         &self,
         tokens: Tokens,
         account: &str,
         user: &str,
-        since: u64,
+        ticket: Ticket,
     ) -> Option<TraktRecord> {
         let mut s = lock(&self.state);
-        if s.generation != since {
+        if s.generation != ticket.generation || s.logins != ticket.login {
             return None;
         }
         s.generation += 1;
@@ -426,8 +446,11 @@ impl Auth {
             let _guard = guard;
             let result = refresh(&api, &redirect, &old.refresh_token).await;
             let mut s = lock(&state);
-            if s.generation != generation {
-                // Signed out or signed in again meanwhile: the result is moot.
+            // Under the same lock as the write: signed out, signed in again
+            // or handed another account's record (even at this generation)
+            // meanwhile, the result is moot.
+            let same = s.record.as_ref().is_some_and(|r| r.account == old.account);
+            if s.generation != generation || !same {
                 return Err(AuthError::Off);
             }
             match result {

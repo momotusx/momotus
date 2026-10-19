@@ -379,6 +379,74 @@ async fn signing_out_during_a_refresh_stays_signed_out() {
 }
 
 #[tokio::test]
+async fn only_the_newest_sign_in_adopts() {
+    let auth = Auth::new("https://example.org/trakt");
+    let tokens = |access: &str| auth::Tokens {
+        access_token: access.into(),
+        refresh_token: "r".into(),
+        created_at_ms: 1,
+        expires_at_ms: 2,
+        scope: "public".into(),
+    };
+    let older = auth.ticket().await;
+    let newer = auth.ticket().await;
+    // The older sign-in's code was approved after the newer one began.
+    assert!(
+        auth.adopt(tokens("older"), "someone", "someone", older)
+            .await
+            .is_none(),
+        "overtaken"
+    );
+    let record = auth
+        .adopt(tokens("newer"), "someone", "someone", newer)
+        .await
+        .expect("the newest takes it");
+    assert_eq!(record.access_token, "newer");
+    // A ticket is good once: the adoption itself made it stale.
+    assert!(
+        auth.adopt(tokens("again"), "someone", "someone", newer)
+            .await
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn a_refresh_never_brings_back_a_replaced_account() {
+    let mock = Mock::default();
+    mock.on(
+        "/oauth/token",
+        vec![Reply(
+            200,
+            "application/json",
+            tokens_body("a-new-access", "a-new-refresh"),
+            Duration::from_millis(300),
+        )],
+    );
+    let api = Arc::new(api(mock.start().await));
+    let auth = Arc::new(Auth::new("https://example.org/trakt"));
+    auth.set(Some(aging_record())).await;
+    let refreshing = {
+        let (api, auth) = (api.clone(), auth.clone());
+        tokio::spawn(async move { auth.token(&api, &bound()).await })
+    };
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    // The app hands over B's record at A's generation while A refreshes.
+    let b = TraktRecord {
+        access_token: "b-access".into(),
+        account: "other".into(),
+        ..fresh_record()
+    };
+    assert!(auth.set(Some(b)).await);
+    assert_eq!(refreshing.await.unwrap(), Err(AuthError::Off));
+    assert_eq!(auth.account().await.as_deref(), Some("other"), "B stays");
+    let b_bound = Bound {
+        account: "other".into(),
+        generation: 1,
+    };
+    assert_eq!(auth.token(&api, &b_bound).await, Ok("b-access".to_owned()));
+}
+
+#[tokio::test]
 async fn a_fresh_sign_in_is_held_until_stored() {
     let auth = Auth::new("https://example.org/trakt");
     let tokens = auth::Tokens {
@@ -388,9 +456,9 @@ async fn a_fresh_sign_in_is_held_until_stored() {
         expires_at_ms: 2,
         scope: "public".into(),
     };
-    let since = auth.generation().await;
+    let ticket = auth.ticket().await;
     let record = auth
-        .adopt(tokens, "someone", "someone", since)
+        .adopt(tokens, "someone", "someone", ticket)
         .await
         .expect("taken");
     assert_eq!(record.generation, 1);
@@ -613,6 +681,22 @@ async fn a_call_never_goes_out_with_another_connections_token() {
     let gate = mq_tracking::trakt::Gate::default();
     let again = call::get(&api, &gate, &auth, &started, "/sync/x").await;
     assert_eq!(again, Err(AuthError::Off));
+}
+
+#[tokio::test]
+async fn a_page_with_nothing_new_ends_the_list() {
+    let mock = Mock::default();
+    // The same rows turned around: nothing new on the second page.
+    mock.on("/sync/turned", vec![json(200, "[1,2]"), json(200, "[2,1]")]);
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(fresh_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let items = call::get_all(&api, &gate, &auth, &bound(), "/sync/turned", 250)
+        .await
+        .unwrap();
+    assert_eq!(items, [1, 2], "no duplicates, no error");
+    assert_eq!(mock.seen("/sync/turned").len(), 2);
 }
 
 #[tokio::test]

@@ -11,7 +11,7 @@ use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_library::hlc::now_ms;
 use mq_tracking::trakt::auth::{self, Poll};
-use mq_tracking::trakt::{Gate, call};
+use mq_tracking::trakt::{Gate, Ticket, call};
 use serde::Serialize;
 use std::pin::Pin;
 use std::time::Duration;
@@ -71,13 +71,14 @@ impl TraktLoginView {
             if let Some(older) = super::lock(&conn.login).replace(owner.clone()) {
                 older.cancel();
             }
-            let since = futures_util::FutureExt::now_or_never(conn.auth.generation()).unwrap_or(0);
+            let ticket = futures_util::FutureExt::now_or_never(conn.auth.ticket())
+                .expect("the auth lock never waits");
             let login = Login {
                 core: core.downgrade(),
                 snapshot: snapshot.clone(),
                 polls: polls.clone(),
                 owner,
-                since,
+                ticket,
             };
             tokio::spawn(login.run());
         }
@@ -114,10 +115,11 @@ struct Login {
     snapshot: SharedObservable<TraktLoginSnapshot>,
     /// The view's: polling stops when it closes.
     polls: CancellationToken,
-    /// The sign-in's claim on the connection.
+    /// Cancelled by a newer sign-in, a sign-out or the profile's end: the
+    /// polls stop.
     owner: CancellationToken,
-    /// The connection's generation when it started.
-    since: u64,
+    /// Taken when it started; only the newest sign-in's adopts.
+    ticket: Ticket,
 }
 
 impl Login {
@@ -193,15 +195,13 @@ impl Login {
                 });
             }
         };
-        if self.owner.is_cancelled() {
-            return self.overtaken();
-        }
         let Some(core) = self.core.upgrade() else {
             return;
         };
         let conn = core.trakt_conn();
-        let Some(record) = conn.auth.adopt(tokens, &account, &user, self.since).await else {
-            // Signed out, signed in elsewhere or handed a record meanwhile.
+        // The ticket is checked and the record written under one lock: a
+        // newer sign-in, a sign-out or a record from the app meanwhile wins.
+        let Some(record) = conn.auth.adopt(tokens, &account, &user, self.ticket).await else {
             return self.overtaken();
         };
         if let Err(e) = core.trakt_connected(&conn, &record.account, record.generation) {

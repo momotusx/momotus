@@ -96,7 +96,7 @@ pub fn body(answer: Result<Answer, AuthError>) -> Result<Value, CallError> {
 
 /// Every item of a paged list, page by page until an empty one (Trakt
 /// clamps `limit` and may shrink pages, so a short page is not the end).
-/// A page that repeats the one before ends it too (a list that ignores
+/// A page with no row not seen before ends it too (a list that ignores
 /// `page`); more than `MAX_PAGES` pages is an error, never a cut list.
 pub async fn get_all(
     api: &Api,
@@ -120,17 +120,22 @@ async fn pages(
 ) -> Result<Vec<Value>, CallError> {
     let sep = if path.contains('?') { '&' } else { '?' };
     let mut items = Vec::new();
-    let mut previous: Option<Vec<Value>> = None;
+    // Rows carry their own ids, so an equal row is the same row again.
+    let mut seen = std::collections::HashSet::new();
     for page in 1..=max_pages {
         let url = format!("{path}{sep}page={page}&limit={limit}");
-        match body(get(api, gate, auth, bound, &url).await)? {
-            Value::Array(list) if list.is_empty() => return Ok(items),
-            Value::Array(list) if previous.as_ref() == Some(&list) => return Ok(items),
-            Value::Array(list) => {
-                items.extend(list.iter().cloned());
-                previous = Some(list);
-            }
-            _ => return Err(CallError::Transient("a list that is not a list".into())),
+        let Value::Array(list) = body(get(api, gate, auth, bound, &url).await)? else {
+            return Err(CallError::Transient("a list that is not a list".into()));
+        };
+        let before = items.len();
+        items.extend(
+            list.into_iter()
+                .filter(|item| seen.insert(item.to_string())),
+        );
+        // An empty page, or one with nothing new (a server that ignores
+        // `page`, or turns the same rows around), ends the list.
+        if items.len() == before {
+            return Ok(items);
         }
     }
     Err(CallError::Transient(format!(
