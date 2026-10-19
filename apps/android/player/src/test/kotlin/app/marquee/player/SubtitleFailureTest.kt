@@ -16,6 +16,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.CoreLog
 import app.marquee.core.views.PlaybackView
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -34,6 +35,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
@@ -275,6 +277,40 @@ class SubtitleFailureTest {
         controller.release()
     }
 
+    @Test
+    fun `a buffer that runs dry during play is logged as a stall, a subtitle reload is not`() {
+        val lines = CopyOnWriteArrayList<String>()
+        CoreLog.sink = { _, message, _ -> lines += message }
+        try {
+            val (player, controller) = open()
+            player.state(Player.STATE_READY)
+            until("it plays") { player.playWhenReady }
+            // Before the first frame the wait is the start, not a stall.
+            player.state(Player.STATE_BUFFERING)
+            player.state(Player.STATE_READY)
+            player.renderFirstFrame()
+            until("the first frame is heard") { true }
+            // The connection falls behind for 1.2 s.
+            player.state(Player.STATE_BUFFERING)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_200))
+            player.state(Player.STATE_READY)
+            until("the stall is logged") { lines.any { it.startsWith("stall ") } }
+            assertEquals(listOf("stall 1200 ms"), lines.filter { it.startsWith("stall ") })
+            // A side-loaded file that does not load sets the item again: that wait is no stall.
+            controller.selectText("late:$subtitle")
+            until("the subtitle is side-loaded") { player.items.size == 2 }
+            player.state(Player.STATE_READY)
+            player.fail(httpError(subtitle, 502))
+            until("the item is set again without the file") { player.items.size == 3 }
+            player.state(Player.STATE_READY)
+            until("the reload is logged") { lines.any { it.startsWith("subtitle reload") } }
+            assertEquals(1, lines.count { it.startsWith("stall ") })
+            controller.release()
+        } finally {
+            CoreLog.sink = { _, _, _ -> }
+        }
+    }
+
     /** A player that records the items it is given and raises the errors a test hands it. */
     private class FakePlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         class Item(
@@ -302,6 +338,12 @@ class SubtitleFailureTest {
             current = current.buildUpon().setNewlyRenderedFirstFrame(true).build()
             invalidateState()
             current = current.buildUpon().setNewlyRenderedFirstFrame(false).build()
+        }
+
+        /** The playback state as Media3 reports it ([Player.STATE_BUFFERING], [Player.STATE_READY]). */
+        fun state(playbackState: Int) {
+            current = current.buildUpon().setPlaybackState(playbackState).build()
+            invalidateState()
         }
 
         fun fail(error: PlaybackException) {

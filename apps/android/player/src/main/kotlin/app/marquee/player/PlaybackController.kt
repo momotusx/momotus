@@ -163,6 +163,9 @@ class PlaybackController(
     private var firstFrame = false
     private var raised = false
     private var seekPending = false
+
+    /** When the buffer ran dry during play, 0 when it did not: the race counts stalls (plans/m13-stream-choice.md 6.4). */
+    private var stalledAt = 0L
     private var handlingFailure = false
     private var lastPositionMs = 0L
     private var pick: TextPick? = null
@@ -378,10 +381,18 @@ class PlaybackController(
         when (state) {
             Player.STATE_BUFFERING -> {
                 if (loadedUrl != null) stage = Stage.Buffering
+                // Not a seek, a subtitle reload or a new source: the connection fell behind the file.
+                if (firstFrame && player.playWhenReady && !seekPending && reloadedAt == 0L) {
+                    stalledAt = SystemClock.elapsedRealtime()
+                }
             }
 
             Player.STATE_READY -> {
                 mark("buffer ready")
+                if (stalledAt != 0L) {
+                    CoreLog.d("stall ${SystemClock.elapsedRealtime() - stalledAt} ms")
+                    stalledAt = 0L
+                }
                 if (!raised) {
                     raised = true
                     if (wantPlay) player.playWhenReady = true
@@ -471,6 +482,7 @@ class PlaybackController(
         }
         val url = loadedUrl ?: return
         val at = player.currentPosition.coerceAtLeast(0L)
+        reloadedAt = SystemClock.elapsedRealtime()
         loadedSubs = loadedSubs.filter { it.url !in urls }
         player.setMediaItem(item(url, loadedSubs), at)
         player.prepare()
