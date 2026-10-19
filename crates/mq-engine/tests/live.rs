@@ -457,17 +457,34 @@ async fn a_slow_seeder_start() {
         .add_torrent_bytes(created.as_bytes().unwrap().to_vec(), &[])
         .await
         .unwrap();
-    seeder
+    let file = seeder
         .select_file(t, "default", &FileHint::Largest)
         .await
         .unwrap();
-    for _ in 0..400 {
+    // A torrent with no open range pauses after its keep-warm minute, and a
+    // paused seeder turns every later CLI away.
+    let _open = seeder
+        .open_reader(t, "default", file)
+        .await
+        .unwrap()
+        .range(0, Some(1))
+        .await
+        .unwrap();
+    let checked = std::time::Instant::now();
+    loop {
         let s = seeder.stats(t).await.unwrap();
         if s.pieces_total > 0 && s.pieces_have == s.pieces_total {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            checked.elapsed() < Duration::from_secs(300),
+            "the seeder verified {} of {} pieces",
+            s.pieces_have,
+            s.pieces_total
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
+    eprintln!("seeder verified in {} ms", checked.elapsed().as_millis());
     let port = seeder.listen_addr().unwrap().port();
     for round in 1..=rounds {
         for (label, cli) in &clis {
@@ -485,6 +502,7 @@ async fn a_slow_seeder_start() {
                 .find(|l| l.starts_with('{'))
                 .unwrap_or("{}");
             println!("{{\"round\":{round},\"build\":\"{label}\",\"bps\":{bps},\"run\":{last}}}");
+            assert!(!seeder.stats(t).await.unwrap().paused, "the seeder paused");
         }
     }
 }
