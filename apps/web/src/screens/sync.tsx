@@ -199,6 +199,14 @@ function Locked() {
   // The storage could not be read: it may hold an account, so the page waits for a check or a forget,
   // and after a second failed check it may go on in memory only.
   const unreadable = () => sync.unreadable() > 0;
+  // A check waits up to 10 s for the storage: the button says it is checking meanwhile.
+  const [checking, setChecking] = createSignal(false);
+  const recheck = async () => {
+    if (checking()) return;
+    setChecking(true);
+    await sync.recheckVault();
+    setChecking(false);
+  };
   return (
     <section class="set">
       <Show when={!unreadable()}>
@@ -210,9 +218,9 @@ function Locked() {
         <Show
           when={!unreadable()}
           fallback={
-            <button class="btn primary" data-f="sync:recheck" data-autofocus onClick={() => void sync.recheckVault()}>
+            <button class="btn primary" data-f="sync:recheck" data-autofocus aria-busy={checking() || undefined} onClick={() => void recheck()}>
               <RefreshCw aria-hidden />
-              {w.checkAgain}
+              {checking() ? w.checkingNow : w.checkAgain}
             </button>
           }
         >
@@ -221,9 +229,12 @@ function Locked() {
             {busy() ? w.unlocking : w.unlock}
           </button>
         </Show>
-        <button class="btn" data-f="sync:forget-browser" onClick={() => void sync.forgetBrowser().catch(() => undefined)}>
-          {w.forgetBrowser}
-        </button>
+        {/* A storage that cannot be read cannot delete either. */}
+        <Show when={!unreadable()}>
+          <button class="btn" data-f="sync:forget-browser" onClick={() => void sync.forgetBrowser().catch(() => undefined)}>
+            {w.forgetBrowser}
+          </button>
+        </Show>
       </div>
       <Show when={sync.unreadable() > 1}>
         <p class="note small sync-lead">{w.continueText}</p>
@@ -242,7 +253,8 @@ function NotJoined() {
     <>
       <StorageNote />
       <Show when={sync.problem()}>{(p) => <Said tone="bad">{p().words}</Said>}</Show>
-      <Show when={!sync.problem() && sync.notice()}>{(n) => <Said tone="ok">{n()}</Said>}</Show>
+      {/* A leave whose cleanup failed tells one story, in the storage note. */}
+      <Show when={!sync.problem() && sync.memoryProblem() !== w.leftKept && sync.notice()}>{(n) => <Said tone="ok">{n()}</Said>}</Show>
       <section class="set">
         <div class="links">
           <LinkRow href="/pair" fkey="sync:pair" icon={<QrCode aria-hidden />} title={w.pairTitle} text={w.pairText} />
@@ -524,6 +536,8 @@ const stuck = (code: string | undefined) => code === "fork" || code === "wrongRe
 function LeaveHere(props: { fkey: string }) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  // This device does not hold the account: the same button would only be refused again.
+  const [notHere, setNotHere] = createSignal(false);
   const go = async () => {
     if (busy()) return;
     setBusy(true);
@@ -532,6 +546,7 @@ function LeaveHere(props: { fkey: string }) {
       await sync.signOut(true, true);
     } catch (e) {
       setError(say(e, "leave"));
+      setNotHere(codeOf(e) === "wrongRecord");
     } finally {
       setBusy(false);
     }
@@ -540,10 +555,12 @@ function LeaveHere(props: { fkey: string }) {
     <div class="sync-leave-here">
       <p class="note small sync-lead">{w.leaveHereText}</p>
       <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
-      <button class="btn danger" data-f={props.fkey} aria-busy={busy() || undefined} onClick={() => void go()}>
-        <LogOut aria-hidden />
-        {w.leaveHere}
-      </button>
+      <Show when={!notHere()}>
+        <button class="btn danger" data-f={props.fkey} aria-busy={busy() || undefined} onClick={() => void go()}>
+          <LogOut aria-hidden />
+          {w.leaveHere}
+        </button>
+      </Show>
     </div>
   );
 }
@@ -714,9 +731,9 @@ function StorageNote() {
               {w.saveAgain}
             </button>
           </Show>
-          <Show when={p() === w.forgetFailed}>
+          <Show when={p() === w.forgetFailed || p() === w.leftKept}>
             <button class="btn" data-f="sync:forget-again" onClick={() => void sync.forgetBrowser().catch(() => undefined)}>
-              {w.retry}
+              {w.forgetBrowser}
             </button>
           </Show>
         </div>

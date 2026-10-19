@@ -327,10 +327,13 @@ export const syncWords = {
   forgetBrowser: "Forget in this browser",
   noPasskey: "This browser cannot lock the sync key with a passkey, so it stays in this tab only and a reload forgets it.",
   noPrf: "This passkey cannot lock the sync key, so this browser keeps it in this tab only. A passkey from another manager may work.",
-  forgetFailed: "This browser could not forget the sync account: its sealed copy is still here. Try again.",
-  vaultUnreadable: "This browser could not check whether it remembers a sync account, so nothing new starts here. Check again, or forget what it may remember.",
+  forgetFailed: "This browser could not forget the sync account: it still holds it, locked with your passkey.",
+  leftKept: "This device no longer syncs, but this browser could not forget the account: it still holds it, locked with your passkey, and reloading this page would offer to open it again. Forget it here to finish.",
+  vaultUnreadable: "This browser could not check whether it remembers a sync account, so nothing new starts here. Check again.",
   checkAgain: "Check again",
-  continueText: "It failed again. You can sync in this tab without it: nothing is read from or stored in this browser, and a reload asks again.",
+  checkingNow: "Checking",
+  continueText: "It failed again. You can sync in this tab without this browser's storage: nothing is read from it or stored in it, and a reload checks again.",
+  wrongRecord: "This device does not hold this sync account any more, so there is nothing to stop syncing here. Reload the page; if it then offers to unlock the account, forget it in this browser.",
   continueWithout: "Continue without remembering",
   memoryOnly: "This browser's storage could not be read, so nothing is remembered here: the sync key lasts until this tab closes or reloads.",
   saveFailed: "This browser could not store the newest sync key. The copy it keeps still opens this account, and it tries again with the next change.",
@@ -413,6 +416,8 @@ export function syncProblem(code: string | undefined, message: string): string {
       return syncWords.alreadyJoined;
     case "rosterChanged":
       return syncWords.forkChanged;
+    case "wrongRecord":
+      return syncWords.wrongRecord;
   }
   if (message.startsWith("roster: ")) return pairingProblem(`pairing: ${message.slice("roster: ".length)}`);
   if (message.startsWith("pairing: ") || message.startsWith("invalid url") || message.startsWith("blocked private address") || message.startsWith("the relay must use https"))

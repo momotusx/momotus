@@ -205,6 +205,7 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(stepProblem(undefined, "AbortError", "remember")).toBe(syncWords.storageFailed);
   expect(stepProblem("passkey", "x", "remember")).toBe("The passkey did not confirm it, so nothing changed.");
   expect(syncProblem("forget", "x")).toBe(syncWords.forgetFailed);
+  expect(syncProblem("wrongRecord", "this record is not this device's sync account")).toBe(syncWords.wrongRecord);
   expect(stepProblem(undefined, "http status 502", "differ")).toStartWith("The approval is still open.");
   // A relay that lost this device's token cannot be read: it says so, never "try again".
   expect(stepProblem(undefined, "http status 401", "compare")).toBe(syncWords.forkTokenLost);
@@ -248,7 +249,7 @@ test("sync copy uses no protocol words, dashes or emoji", () => {
   const lines = [
     ...Object.values(syncWords),
     ...reportNotes({ clockGapMs: 9e6, waiting: 2, parked: 2, oldEpochWrites: 1, rotationWaitMs: 1, blocked: "relayDisagrees", refused: 1, unreadable: 1, newer: 1, again: true }),
-    ...["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "passkey"].map((c) => syncProblem(c, "")),
+    ...["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "passkey", "wrongRecord"].map((c) => syncProblem(c, "")),
     removeDeviceAsk("TV"),
     lostKits(2),
     failedSince(2, 2) ?? "",

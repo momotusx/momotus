@@ -125,18 +125,23 @@ function reset() {
   setFailed({ refused: 0, unreadable: 0, newer: 0 });
 }
 
-/** The account is gone here (left, or this device was removed): the sealed copy goes too, before
- * the caller says so. A copy that stays is said where the user is, with Try again. */
+/** The account is gone here (left, or this device was removed): its sealed copy goes too, before
+ * the caller says so. A copy that stays is said where the user is, with Forget. Only this
+ * account's own copy, the one this page holds the key to: a page that never remembered it
+ * (memory only, or another account's copy here) touches no storage. */
 async function forget() {
+  const sealedHere = vault.active();
   reset();
   vaultGen++;
   setLocked(false);
   setRemembered(false);
+  if (!sealedHere) return;
   try {
     await vault.clear();
+    setMemoryProblem(null);
   } catch {
     vault.drop();
-    setMemoryProblem(syncWords.forgetFailed);
+    setMemoryProblem(syncWords.leftKept);
   }
 }
 

@@ -43,30 +43,43 @@ function db(): Promise<IDBDatabase> {
 
 /** One request in its own transaction. It settles when the transaction
  * commits, not when the request succeeds: a write the browser then aborts
- * (quota, eviction, a closing tab) is a failed write. */
-async function commit<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest): Promise<T> {
-  const d = await db();
-  try {
-    return await new Promise<T>((ok, fail) => {
-      const t = d.transaction(STORE, mode);
-      const r = work(t.objectStore(STORE));
-      t.oncomplete = () => ok(r.result as T);
-      t.onabort = () => fail(t.error ?? new DOMException("the write did not commit", "AbortError"));
-      t.onerror = () => fail(t.error);
-    });
-  } finally {
-    d.close();
-  }
-}
-
-/** `commit`, failed after 10 s: a storage that hangs must not stall the sync ops waiting on it. */
+ * (quota, eviction, a closing tab) is a failed write. After 10 s it fails, so
+ * a storage that hangs cannot stall the sync ops waiting on it, and what it
+ * was asked never lands later: the transaction is aborted, or never started
+ * when the storage opens late. */
 async function tx<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest): Promise<T> {
+  let late = false;
+  let t: IDBTransaction | undefined;
   let timer = 0;
-  const late = new Promise<never>((_, fail) => {
-    timer = window.setTimeout(() => fail(new DOMException("the storage did not answer", "TimeoutError")), 10_000);
+  const timeout = new Promise<never>((_, fail) => {
+    timer = window.setTimeout(() => {
+      late = true;
+      try {
+        t?.abort();
+      } catch {
+        // Already committing: the browser no longer lets it be stopped, so it may still land.
+      }
+      fail(new DOMException("the storage did not answer", "TimeoutError"));
+    }, 10_000);
   });
+  const run = (async () => {
+    const d = await db();
+    try {
+      if (late) throw new DOMException("the storage did not answer", "TimeoutError");
+      return await new Promise<T>((ok, fail) => {
+        t = d.transaction(STORE, mode);
+        const r = work(t.objectStore(STORE));
+        const done = t;
+        done.oncomplete = () => ok(r.result as T);
+        done.onabort = () => fail(done.error ?? new DOMException("the write did not commit", "AbortError"));
+        done.onerror = () => fail(done.error);
+      });
+    } finally {
+      d.close();
+    }
+  })();
   try {
-    return await Promise.race([commit<T>(mode, work), late]);
+    return await Promise.race([run, timeout]);
   } finally {
     clearTimeout(timer);
   }
