@@ -180,12 +180,13 @@ export function DefaultRow(props: {
         </div>
       }
     >
-      <button class="drow" aria-pressed={props.on ?? false} data-f={props.fkey} data-autofocus={props.autofocus ? "" : undefined} onClick={() => props.onToggle?.()}>
+      <button class="drow" role="switch" aria-checked={props.on ?? false} data-f={props.fkey} data-autofocus={props.autofocus ? "" : undefined} onClick={() => props.onToggle?.()}>
         {text()}
         <span class="switch" aria-hidden="true">
           <i />
         </span>
-        <span class="dword">{props.on ? "On" : "Off"}</span>
+        {/* The role speaks the state; the word is for eyes (TV and desktop). */}
+        <span class="dword" aria-hidden="true">{props.on ? "On" : "Off"}</span>
       </button>
     </Show>
   );

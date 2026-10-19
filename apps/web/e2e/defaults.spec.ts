@@ -103,10 +103,10 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   await page.locator('[data-f="welcome:fresh"]').click();
   await expect(page.locator("h1")).toHaveText("Recommended addons");
   await expect(page.locator("button.drow")).toHaveCount(9);
-  await expect(page.locator('button.drow[aria-pressed="true"]')).toHaveCount(9);
+  await expect(page.locator('button.drow[aria-checked="true"]')).toHaveCount(9);
   await shot(page, "defaults-step", "desktop");
   for (const key of ["torrentio", "trakt"]) await page.locator(`[data-f="welcome:default:${key}"]`).click();
-  await expect(page.locator('[data-f="welcome:default:torrentio"]')).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator('[data-f="welcome:default:torrentio"]')).toHaveAttribute("aria-checked", "false");
   await expect(page.locator('[data-f="welcome:default:torrentio"] .dword')).toHaveText("Off");
   expect(await allAbsent()).toBe(true);
   expect(sent.some((m) => m.op === "installDefaults")).toBe(false);
@@ -122,9 +122,9 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
 
   // Settings shows the same switches, the two still off.
   await page.goto("/recommended-addons?form=desktop");
-  await expect(page.locator('[data-f="defaults:torrentio"]')).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator('[data-f="defaults:trakt"]')).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator('[data-f="defaults:cinemeta"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-f="defaults:torrentio"]')).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator('[data-f="defaults:trakt"]')).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator('[data-f="defaults:cinemeta"]')).toHaveAttribute("aria-checked", "true");
   await shot(page, "defaults-settings-fresh", "desktop");
 
   // Answered here: Home opens and offers no card.
@@ -170,7 +170,7 @@ test("a TV does it with keys only: Continue first, a row toggles with select", a
   await expect.poll(() => focused(page)).toMatch(/^welcome:default:/);
   const row = (await focused(page)) as string;
   await page.keyboard.press("Enter");
-  await expect(page.locator(`[data-f="${row}"]`)).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(`[data-f="${row}"]`)).toHaveAttribute("aria-checked", "false");
   for (let i = 0; i < 8 && (await focused(page)) !== "welcome:next"; i++) await page.keyboard.press("ArrowDown");
   await expect.poll(() => focused(page)).toBe("welcome:next");
   await page.keyboard.press("Enter");
@@ -264,7 +264,7 @@ test("Settings by keys: a switch keeps focus on its own row while the list reloa
     await row.evaluate((el) => (el.dataset.kept = "yes"));
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await states())[key], { timeout: 30_000 }).toBe("on");
-    await expect(row).toHaveAttribute("aria-pressed", "true");
+    await expect(row).toHaveAttribute("aria-checked", "true");
     const active = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;
       return { f: el?.dataset.f, kept: el?.dataset.kept };

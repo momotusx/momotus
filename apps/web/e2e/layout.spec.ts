@@ -114,12 +114,14 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await go();
     const rows = page.locator("button.drow");
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    // A screen reader meets a switch with its name and its state.
+    await expect(page.getByRole("switch", { name: /^Trakt/ })).toHaveAttribute("aria-checked", "true");
     // One switch turned off, so both states are on screen.
     if (form === "phone") await rows.first().tap();
     else await rows.first().click();
-    await expect(rows.first()).toHaveAttribute("aria-pressed", "false");
+    await expect(rows.first()).toHaveAttribute("aria-checked", "false");
     const tracks = await rows.evaluateAll((els) =>
-      els.map((r) => ({ on: r.getAttribute("aria-pressed") === "true", track: getComputedStyle(r.querySelector(".switch") as Element).backgroundColor })),
+      els.map((r) => ({ on: r.getAttribute("aria-checked") === "true", track: getComputedStyle(r.querySelector(".switch") as Element).backgroundColor })),
     );
     expect(tracks.some((t) => t.on)).toBe(true);
     // On is a white track, off an empty one: the state reads without the word.
