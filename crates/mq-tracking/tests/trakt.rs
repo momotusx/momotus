@@ -1,5 +1,7 @@
 use mq_http::{ClientConfig, HttpClient};
-use mq_tracking::trakt::{Answer, Api, Auth, AuthError, Hosts, Poll, TraktRecord, auth, call};
+use mq_tracking::trakt::{
+    Answer, Api, Auth, AuthError, Bound, Hosts, Poll, TraktRecord, auth, call,
+};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -137,6 +139,14 @@ fn tokens_body(access: &str, refresh: &str) -> String {
     )
 }
 
+/// The connection of `aging_record` and `fresh_record`.
+fn bound() -> Bound {
+    Bound {
+        account: "someone".into(),
+        generation: 1,
+    }
+}
+
 /// A record whose token is past three quarters of its life.
 fn aging_record() -> TraktRecord {
     let now = auth::now_ms();
@@ -272,7 +282,7 @@ async fn refresh_runs_once_under_concurrency_and_waits_for_the_ack() {
     let calls: Vec<_> = (0..5)
         .map(|_| {
             let (api, auth) = (api.clone(), auth.clone());
-            tokio::spawn(async move { auth.token(&api).await })
+            tokio::spawn(async move { auth.token(&api, &bound()).await })
         })
         .collect();
     for call in calls {
@@ -306,10 +316,10 @@ async fn a_401_for_an_older_token_does_not_refresh_again() {
     let api = api(mock.start().await);
     let auth = Auth::new("https://example.org/trakt");
     auth.set(Some(aging_record())).await;
-    assert_eq!(auth.token(&api).await.unwrap(), "new-access");
+    assert_eq!(auth.token(&api, &bound()).await.unwrap(), "new-access");
     // A call made with the old token comes back 401 after the rotation.
     assert_eq!(
-        auth.after_401(&api, "old-access").await.unwrap(),
+        auth.after_401(&api, "old-access", &bound()).await.unwrap(),
         "new-access"
     );
     assert_eq!(mock.seen("/oauth/token").len(), 1);
@@ -328,14 +338,14 @@ async fn invalid_grant_needs_a_new_sign_in() {
     let api = api(mock.start().await);
     let auth = Auth::new("https://example.org/trakt");
     auth.set(Some(aging_record())).await;
-    let err = auth.token(&api).await.unwrap_err();
+    let err = auth.token(&api, &bound()).await.unwrap_err();
     assert!(
         matches!(&err, AuthError::Reconnect(r) if r.contains("invalid_grant")),
         "{err:?}"
     );
     // No more refreshes, and the reason carries no response body.
     assert!(matches!(
-        auth.token(&api).await,
+        auth.token(&api, &bound()).await,
         Err(AuthError::Reconnect(_))
     ));
     assert_eq!(mock.seen("/oauth/token").len(), 1);
@@ -359,7 +369,7 @@ async fn signing_out_during_a_refresh_stays_signed_out() {
     auth.set(Some(aging_record())).await;
     let refreshing = {
         let (api, auth) = (api.clone(), auth.clone());
-        tokio::spawn(async move { auth.token(&api).await })
+        tokio::spawn(async move { auth.token(&api, &bound()).await })
     };
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(auth.set(None).await);
@@ -378,7 +388,11 @@ async fn a_fresh_sign_in_is_held_until_stored() {
         expires_at_ms: 2,
         scope: "public".into(),
     };
-    let record = auth.adopt(tokens, "someone", "someone").await;
+    let since = auth.generation().await;
+    let record = auth
+        .adopt(tokens, "someone", "someone", since)
+        .await
+        .expect("taken");
     assert_eq!(record.generation, 1);
     assert_eq!(auth.unacked().await.as_ref(), Some(&record));
     assert!(auth.set(Some(record)).await);
@@ -453,7 +467,7 @@ async fn a_dropped_caller_keeps_the_rotated_token() {
     let api = api(mock.start().await);
     let auth = Auth::new("https://example.org/trakt");
     auth.set(Some(aging_record())).await;
-    let dropped = tokio::time::timeout(Duration::from_millis(50), auth.token(&api)).await;
+    let dropped = tokio::time::timeout(Duration::from_millis(50), auth.token(&api, &bound())).await;
     assert!(dropped.is_err(), "the caller gave up");
     tokio::time::sleep(Duration::from_millis(600)).await;
     let rotated = auth
@@ -474,12 +488,12 @@ async fn an_unanswered_refresh_backs_off_and_never_blocks_sign_out() {
     let auth = Auth::new("https://example.org/trakt");
     auth.set(Some(aging_record())).await;
     assert!(matches!(
-        auth.token(&api).await,
+        auth.token(&api, &bound()).await,
         Err(AuthError::Transient(_))
     ));
     let started = std::time::Instant::now();
     assert!(matches!(
-        auth.token(&api).await,
+        auth.token(&api, &bound()).await,
         Err(AuthError::Transient(_))
     ));
     assert!(
@@ -516,7 +530,7 @@ async fn a_401_refreshes_once_and_the_call_goes_on() {
     let auth = Auth::new("https://example.org/trakt");
     assert!(auth.set(Some(fresh_record())).await);
     let gate = mq_tracking::trakt::Gate::default();
-    let body = call::body(call::get(&api, &gate, &auth, "/sync/x").await).unwrap();
+    let body = call::body(call::get(&api, &gate, &auth, &bound(), "/sync/x").await).unwrap();
     assert_eq!(body["ok"], true);
     assert_eq!(mock.seen("/oauth/token").len(), 1);
     let calls = mock.seen("/sync/x");
@@ -540,7 +554,7 @@ async fn lists_are_read_until_an_empty_page() {
     let auth = Auth::new("https://example.org/trakt");
     assert!(auth.set(Some(fresh_record())).await);
     let gate = mq_tracking::trakt::Gate::default();
-    let items = call::get_all(&api, &gate, &auth, "/sync/list?type=x", 250)
+    let items = call::get_all(&api, &gate, &auth, &bound(), "/sync/list?type=x", 250)
         .await
         .unwrap();
     assert_eq!(items, [1, 2, 3]);
@@ -552,6 +566,84 @@ async fn lists_are_read_until_an_empty_page() {
     assert_eq!(pages.len(), 3);
     assert!(pages[2].contains("?type=x&page=3&limit=250"), "{pages:?}");
     // A failed page fails the list: never a short list.
-    let broken = call::get_all(&api, &gate, &auth, "/sync/broken", 250).await;
+    let broken = call::get_all(&api, &gate, &auth, &bound(), "/sync/broken", 250).await;
     assert!(broken.unwrap_err().transient());
+}
+
+#[tokio::test]
+async fn a_call_never_goes_out_with_another_connections_token() {
+    let mock = Mock::default();
+    // The first answer is a 401 that comes after another account signed in.
+    mock.on(
+        "/sync/history/remove",
+        vec![Reply(
+            401,
+            "application/json",
+            "{}".into(),
+            Duration::from_millis(300),
+        )],
+    );
+    let api = Arc::new(api(mock.start().await));
+    let auth = Arc::new(Auth::new("https://example.org/trakt"));
+    assert!(auth.set(Some(fresh_record())).await);
+    let started = auth.bound().await.unwrap();
+    let call = {
+        let (api, auth, bound) = (api.clone(), auth.clone(), started.clone());
+        tokio::spawn(async move {
+            let gate = mq_tracking::trakt::Gate::default();
+            let body = serde_json::json!({"episodes": []});
+            call::post(&api, &gate, &auth, &bound, "/sync/history/remove", &body).await
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let other = TraktRecord {
+        account: "other".into(),
+        access_token: "other-access".into(),
+        generation: 2,
+        ..fresh_record()
+    };
+    assert!(auth.set(Some(other)).await);
+    assert_eq!(call.await.unwrap(), Err(AuthError::Off));
+    // No refresh and no second request: the other account's token stayed home.
+    assert!(mock.seen("/oauth/token").is_empty());
+    let sent = mock.seen("/sync/history/remove");
+    assert_eq!(sent.len(), 1);
+    assert!(!sent[0].head.contains("other-access"));
+    // And work bound to the old connection cannot start again.
+    let gate = mq_tracking::trakt::Gate::default();
+    let again = call::get(&api, &gate, &auth, &started, "/sync/x").await;
+    assert_eq!(again, Err(AuthError::Off));
+}
+
+#[tokio::test]
+async fn a_second_401_after_a_refresh_needs_a_new_sign_in() {
+    let mock = Mock::default();
+    mock.on("/sync/x", vec![json(401, "{}"), json(401, "{}")]);
+    mock.on(
+        "/oauth/token",
+        vec![json(200, &tokens_body("new-access", "new-refresh"))],
+    );
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(fresh_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let answer = call::get(&api, &gate, &auth, &bound(), "/sync/x").await;
+    assert!(matches!(answer, Err(AuthError::Reconnect(_))), "{answer:?}");
+    assert!(matches!(auth.status().await, Err(AuthError::Reconnect(_))));
+    assert_eq!(mock.seen("/oauth/token").len(), 1, "one refresh, no more");
+}
+
+#[tokio::test]
+async fn a_list_that_ignores_its_page_is_read_once() {
+    let mock = Mock::default();
+    mock.on("/sync/same", vec![json(200, "[1,2]"), json(200, "[1,2]")]);
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(fresh_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let items = call::get_all(&api, &gate, &auth, &bound(), "/sync/same", 250)
+        .await
+        .unwrap();
+    assert_eq!(items, [1, 2], "no duplicates");
+    assert_eq!(mock.seen("/sync/same").len(), 2);
 }

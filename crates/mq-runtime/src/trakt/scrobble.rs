@@ -1,15 +1,18 @@
 //! Scrobbles (plans/m7-trakt.md 4.4 and 4.5): one worker per profile turns
 //! the playback views' reports into start, pause and stop. Only the newest
 //! state of each session is sent, one request at a time; a view's close
-//! sends its stop from the worker, after the view is gone.
+//! sends its stop from the worker, after the view is gone. A session keeps
+//! the connection it started under: its calls never go out with another
+//! account's tokens.
 
-use super::map::{self, TraktIds};
+use super::map::{self, Miss, TraktIds};
 use super::{ACCOUNT_SETTING, Conn, TRACKER};
 use crate::Core;
+use crate::core::WeakCore;
 use mq_library::hlc::now_ms;
 use mq_library::{IntentOp, NewIntent, TrackerKey};
 use mq_tracking::trakt::call;
-use mq_tracking::trakt::{Answer, AuthError};
+use mq_tracking::trakt::{Answer, AuthError, Bound};
 use serde::Serialize;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -19,6 +22,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 
 /// Scrobbles wait this long for a record when the profile uses Trakt and
 /// the app has not handed one over yet (it does right after `open`).
@@ -65,6 +69,11 @@ pub(crate) enum Event {
         id: u64,
         target: Target,
         session: String,
+        /// The clock when the view opened: an unmark after it is the
+        /// user's word.
+        since: String,
+        /// The connection held when the view opened, if any.
+        bound: Option<Bound>,
         held: Arc<AtomicBool>,
         report: Report,
     },
@@ -85,7 +94,6 @@ pub(crate) enum Event {
 pub(crate) struct Scrobble {
     id: u64,
     session: String,
-    target: Target,
     held: Arc<AtomicBool>,
     events: UnboundedSender<Event>,
 }
@@ -104,32 +112,34 @@ impl Scrobble {
         });
     }
 
-    /// The playback reached its end: one write per session waits in the
-    /// outbox until the session's stop says whether Trakt took the play
-    /// (then it goes), so a play survives a stop that never gets out.
-    pub(crate) fn finished(&self, core: &Core) {
-        if self.held.swap(true, Ordering::SeqCst) {
-            return;
+    /// The playback reached its end: the account its session holds one
+    /// write for, when it holds none yet and Trakt is connected. The caller
+    /// writes it with the mark, in one transaction (`set_watched_holding`),
+    /// then calls `held`.
+    pub(crate) fn to_hold(&self, core: &Core) -> Option<String> {
+        if self.held.load(Ordering::SeqCst) {
+            return None;
         }
-        let library = core.library();
-        let Ok(Some((account, _))) = library.tracker_account(core.profile(), TRACKER) else {
-            return;
-        };
-        let intent = NewIntent {
+        let account = core.library().tracker_account(core.profile(), TRACKER);
+        account.ok().flatten().map(|(account, _)| account)
+    }
+
+    /// The write `to_hold` named, for `set_watched_holding`.
+    pub(crate) fn intent<'a>(&'a self, profile: &'a str, account: &'a str) -> NewIntent<'a> {
+        NewIntent {
             key: TrackerKey {
-                profile: core.profile(),
+                profile,
                 tracker: TRACKER,
-                account: &account,
+                account,
             },
             op: IntentOp::Add,
             watched_ms: now_ms() as i64,
             session: Some(&self.session),
-        };
-        if let Err(e) =
-            library.put_tracker_intent(&self.target.item_id, &self.target.video_id, intent)
-        {
-            tracing::warn!("trakt: held write not queued: {e}");
         }
+    }
+
+    pub(crate) fn held(&self) {
+        self.held.store(true, Ordering::SeqCst);
     }
 }
 
@@ -146,20 +156,18 @@ impl Core {
         let trakt = self.trakt();
         trakt.config()?;
         let conn = self.trakt_conn();
-        report(
-            match futures_util::FutureExt::now_or_never(conn.auth.account()).flatten() {
-                Some(_) => TraktPlayback::On,
-                None if super::setting(self, ACCOUNT_SETTING).is_some() => {
-                    TraktPlayback::ThisDeviceOff
-                }
-                None => TraktPlayback::Off,
-            },
-        );
+        let bound = futures_util::FutureExt::now_or_never(conn.auth.bound()).flatten();
+        report(match bound {
+            Some(_) => TraktPlayback::On,
+            None if super::setting(self, ACCOUNT_SETTING).is_some() => TraktPlayback::ThisDeviceOff,
+            None => TraktPlayback::Off,
+        });
         let events = conn
             .events
             .get_or_init(|| {
                 let (tx, rx) = unbounded_channel();
-                tokio::spawn(run(self.clone(), conn.clone(), rx));
+                let stop = conn.stop.clone();
+                tokio::spawn(run(self.downgrade(), conn.clone(), rx, stop));
                 tx
             })
             .clone();
@@ -168,15 +176,16 @@ impl Core {
         let held = Arc::new(AtomicBool::new(false));
         let _ = events.send(Event::Open {
             id,
-            target: target.clone(),
+            target,
             session: session.clone(),
+            since: self.hlc(),
+            bound,
             held: held.clone(),
             report,
         });
         Some(Scrobble {
             id,
             session,
-            target,
             held,
             events,
         })
@@ -203,42 +212,55 @@ struct Sess {
     report: Report,
     session: String,
     held: Arc<AtomicBool>,
-    /// The clock when it opened: an unmark after it is the user's word.
     since: String,
+    /// The connection its calls use: the one at open, else the first one
+    /// seen. Never another.
+    bound: Option<Bound>,
     percent: f64,
     want: Want,
     sent: Sent,
     closed: bool,
+    /// Kept once known for good; a miss that may pass is looked up again.
     ids: Option<Result<TraktIds, String>>,
     tries: u32,
+    /// After a failed send, nothing goes before this (backoff, or Trakt's
+    /// `Retry-After`).
+    not_before: Option<Instant>,
 }
 
 /// The profile's worker: folds every queued event, then sends what the
-/// sessions want now.
-async fn run(core: Core, conn: Arc<Conn>, mut events: UnboundedReceiver<Event>) {
+/// sessions want now. It holds the core weakly and ends with it.
+async fn run(
+    core: WeakCore,
+    conn: Arc<Conn>,
+    mut events: UnboundedReceiver<Event>,
+    stop: CancellationToken,
+) {
     let mut sessions: BTreeMap<u64, Sess> = BTreeMap::new();
     let mut retry: Option<Instant> = None;
     loop {
-        let first = match retry {
-            Some(at) => tokio::select! {
-                event = events.recv() => match event {
-                    Some(event) => Some(event),
-                    None => return,
-                },
-                () = tokio::time::sleep_until(at) => None,
-            },
-            None => match events.recv().await {
+        let sleep = async {
+            match retry {
+                Some(at) => tokio::time::sleep_until(at).await,
+                None => std::future::pending().await,
+            }
+        };
+        let first = tokio::select! {
+            () = stop.cancelled() => return,
+            event = events.recv() => match event {
                 Some(event) => Some(event),
                 None => return,
             },
+            () = sleep => None,
         };
+        let Some(core) = core.upgrade() else { return };
         let mut waiting = Vec::new();
         let mut batch: Vec<Event> = first.into_iter().collect();
         while let Ok(event) = events.try_recv() {
             batch.push(event);
         }
         for event in batch {
-            fold(&core, &mut sessions, &mut waiting, event);
+            fold(&mut sessions, &mut waiting, event);
         }
         retry = act(&core, &conn, &mut sessions).await;
         for done in waiting {
@@ -247,17 +269,14 @@ async fn run(core: Core, conn: Arc<Conn>, mut events: UnboundedReceiver<Event>) 
     }
 }
 
-fn fold(
-    core: &Core,
-    sessions: &mut BTreeMap<u64, Sess>,
-    waiting: &mut Vec<oneshot::Sender<()>>,
-    event: Event,
-) {
+fn fold(sessions: &mut BTreeMap<u64, Sess>, waiting: &mut Vec<oneshot::Sender<()>>, event: Event) {
     match event {
         Event::Open {
             id,
             target,
             session,
+            since,
+            bound,
             held,
             report,
         } => {
@@ -268,13 +287,15 @@ fn fold(
                     report,
                     session,
                     held,
-                    since: core.hlc(),
+                    since,
+                    bound,
                     percent: 0.0,
                     want: Want::Nothing,
                     sent: Sent::Nothing,
                     closed: false,
                     ids: None,
                     tries: 0,
+                    not_before: None,
                 },
             );
         }
@@ -314,8 +335,10 @@ enum Reply {
     Unmapped(String),
     /// 420, 423 or another refusal: retrying does not help.
     Refused(String),
+    /// No connection, or not this session's any more.
     Off,
-    Transient(String),
+    /// Try again, not before Trakt's `Retry-After` when it sent one.
+    Transient(String, Option<Duration>),
 }
 
 fn read(answer: Result<Answer, AuthError>) -> Reply {
@@ -335,53 +358,87 @@ fn read(answer: Result<Answer, AuthError>) -> Reply {
             (status, Some(error)) => format!("status {status} ({error})"),
             (status, None) => format!("status {status}"),
         }),
-        Ok(Answer::Transient { reason, .. }) => Reply::Transient(reason),
-        Err(AuthError::Transient(reason)) => Reply::Transient(reason),
+        Ok(Answer::Transient {
+            reason,
+            retry_after,
+        }) => Reply::Transient(reason, retry_after),
+        Err(AuthError::Transient(reason)) => Reply::Transient(reason, None),
         Err(_) => Reply::Off,
     }
 }
 
 /// Sends what the sessions want, oldest session first, so an episode's
-/// stop goes before the next one's start.
+/// stop goes before the next one's start: while an older stop waits for a
+/// retry, newer sessions send nothing.
 async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) -> Option<Instant> {
     let trakt = core.trakt();
     wait_for_record(core, conn).await;
-    let account = conn.auth.account().await;
-    let (Some((api, _)), Some(account)) = (trakt.api(), account) else {
-        // Nothing can be sent: closed sessions end, their writes released.
-        let closed: Vec<u64> = sessions
-            .iter()
-            .filter(|(_, s)| s.closed)
-            .map(|(id, _)| *id)
-            .collect();
-        for id in closed {
-            if let Some(s) = sessions.remove(&id) {
-                end(core, &s, false);
-            }
-        }
-        return None;
-    };
+    let current = conn.auth.bound().await;
+    let (api, _) = trakt.api()?;
     let _lane = conn.lane.lock().await;
-    let gate = trakt.gate(&account);
-    let key = conn.key(&account);
     let newest_playing = sessions
         .iter()
         .filter(|(_, s)| !s.closed && s.want == Want::Playing)
         .map(|(id, _)| *id)
         .max();
     let mut retry: Option<Instant> = None;
+    let mut blocked = false;
+    let mut changed = false;
     let ids: Vec<u64> = sessions.keys().copied().collect();
     let mut stopped_any = false;
     for id in ids {
         let s = sessions.get_mut(&id).expect("listed");
+        if s.bound.is_none() {
+            s.bound = current.clone();
+        }
+        let Some(bound) = s.bound.clone() else {
+            // Never connected: nothing to send; a close ends it.
+            if s.closed {
+                let s = sessions.remove(&id).expect("listed");
+                end(core, &s, false);
+            }
+            continue;
+        };
+        if blocked {
+            continue;
+        }
+        if let Some(at) = s.not_before.filter(|at| *at > Instant::now()) {
+            retry = Some(retry.map_or(at, |r| r.min(at)));
+            if s.closed || matches!(s.sent, Sent::Playing | Sent::Paused) {
+                // An older session still owes its stop or state: newer
+                // sessions wait for it.
+                blocked = true;
+            }
+            continue;
+        }
+        let key = conn.key(&bound.account);
         if s.ids.is_none() {
-            let resolved = resolve(core, key, &s.target).await;
-            (s.report)(if resolved.is_ok() {
-                TraktPlayback::On
-            } else {
-                TraktPlayback::Unmapped
-            });
-            s.ids = Some(resolved);
+            match resolve(core, key, &s.target).await {
+                Ok(ids) => {
+                    (s.report)(TraktPlayback::On);
+                    s.ids = Some(Ok(ids));
+                }
+                Err(Miss::Permanent(reason)) => {
+                    (s.report)(TraktPlayback::Unmapped);
+                    s.ids = Some(Err(reason));
+                    changed = true;
+                }
+                Err(Miss::Transient(reason)) => {
+                    // Looked up again after a while; never remembered.
+                    conn.failed(&reason);
+                    s.tries += 1;
+                    s.not_before = Some(Instant::now() + backoff(s.tries));
+                    retry = earliest(retry, backoff(s.tries));
+                    changed = true;
+                    if s.closed {
+                        // A close with no ids: the stop cannot go; its held
+                        // write is released for the outbox to try.
+                        let s = sessions.remove(&id).expect("listed");
+                        end(core, &s, false);
+                    }
+                    continue;
+                }
+            }
         }
         let Some(Ok(ids)) = s.ids.clone() else {
             if s.closed {
@@ -390,19 +447,25 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
             }
             continue;
         };
+        let gate = trakt.gate(&bound.account);
         let superseded = newest_playing.is_some_and(|n| n > id);
         if s.closed || (superseded && matches!(s.sent, Sent::Playing | Sent::Paused)) {
             let sends = s.sent != Sent::Stopped && s.percent >= MIN_PERCENT;
             let done = if sends {
                 let body = ids.scrobble(s.percent);
-                let answer =
-                    read(call::post(&api, &gate, &conn.auth, "/scrobble/stop", &body).await);
-                stopped(core, conn, key, s, &ids, answer)
+                let answer = call::post(&api, &gate, &conn.auth, &bound, "/scrobble/stop", &body);
+                changed = true;
+                stopped(core, conn, key, s, &ids, read(answer.await))
             } else {
                 true
             };
             if !done {
-                retry = earliest(retry, backoff(s.tries));
+                retry = earliest(
+                    retry,
+                    s.not_before
+                        .map_or(Duration::ZERO, |at| at - Instant::now()),
+                );
+                blocked = true;
                 continue;
             }
             stopped_any |= sends;
@@ -422,10 +485,12 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
         };
         let body = ids.scrobble(s.percent);
         let path = format!("/scrobble/{action}");
-        match read(call::post(&api, &gate, &conn.auth, &path, &body).await) {
+        changed = true;
+        match read(call::post(&api, &gate, &conn.auth, &bound, &path, &body).await) {
             Reply::Ok(answer) => {
                 conn.ok();
                 s.tries = 0;
+                s.not_before = None;
                 s.sent = next;
                 if action == "pause" {
                     remember(core, key, &s.target.video_id, s.percent);
@@ -448,10 +513,12 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
                 s.sent = next;
             }
             Reply::Off => {}
-            Reply::Transient(reason) => {
+            Reply::Transient(reason, after) => {
                 conn.failed(&reason);
                 s.tries += 1;
-                retry = earliest(retry, backoff(s.tries));
+                let wait = backoff(s.tries).max(after.unwrap_or_default());
+                s.not_before = Some(Instant::now() + wait);
+                retry = earliest(retry, wait);
             }
         }
     }
@@ -459,12 +526,14 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
         // A finished playback is a good moment for a round.
         core.trakt_schedule(conn);
     }
-    core.trakt_refresh(conn);
+    if changed {
+        core.trakt_refresh(conn);
+    }
     retry
 }
 
 /// Reads a stop's answer. Returns whether the stop is over (`false`: try
-/// again later).
+/// again at `not_before`).
 fn stopped(
     core: &Core,
     conn: &Conn,
@@ -522,10 +591,12 @@ fn stopped(
             end(core, s, false);
             true
         }
-        Reply::Transient(reason) => {
+        Reply::Transient(reason, after) => {
             conn.failed(&reason);
             s.tries += 1;
             if s.tries < STOP_TRIES {
+                let wait = backoff(s.tries).max(after.unwrap_or_default());
+                s.not_before = Some(Instant::now() + wait);
                 return false;
             }
             // Unanswered: Trakt may have the play or not. The held write
@@ -558,12 +629,10 @@ fn remember(core: &Core, key: TrackerKey<'_>, video_id: &str, percent: f64) {
         .set_tracker_state(key, &format!("sent:{video_id}"), &value);
 }
 
-async fn resolve(core: &Core, key: TrackerKey<'_>, target: &Target) -> Result<TraktIds, String> {
-    if let Some(reason) = map::known(core, key, &target.item_id) {
-        return Err(reason);
-    }
-    let resolved = map::ids(core, &target.kind, &target.item_id, &target.video_id).await;
-    if let Err(reason) = &resolved {
+/// The session's ids; a permanent miss is listed as unmapped.
+async fn resolve(core: &Core, key: TrackerKey<'_>, target: &Target) -> Result<TraktIds, Miss> {
+    let resolved = map::ids(core, key, &target.kind, &target.item_id, &target.video_id).await;
+    if let Err(Miss::Permanent(reason)) = &resolved {
         map::record(core, key, &target.item_id, &target.name, reason);
     }
     resolved
@@ -585,7 +654,8 @@ async fn wait_for_record(core: &Core, conn: &Conn) {
     }
 }
 
-/// The wait before trying a failed send again: 1 s, doubling, at most a minute.
+/// The wait before trying a failed send again: 1 s, doubling, about a
+/// minute at most.
 fn backoff(tries: u32) -> Duration {
     Duration::from_millis(500u64 << tries.clamp(1, 7))
 }

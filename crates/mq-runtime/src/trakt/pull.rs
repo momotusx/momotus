@@ -1,16 +1,17 @@
 //! One round (plans/m7-trakt.md 4.7): what moved on Trakt comes into the
 //! library through `import_plays` and `import_resume_points`, then the
 //! outbox goes out. Cursors move in the transaction that applies their rows,
-//! and only once every fetch they depend on worked.
+//! and only once every fetch they depend on worked. Every call of a round
+//! is bound to the connection the round started under.
 
-use super::map::{self, Mapper, TraktIds};
+use super::map::{self, Mapper, Miss, PlaceMiss, TraktIds};
 use super::{Conn, Trakt};
 use crate::Core;
 use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
 use mq_library::hlc::now_ms;
 use mq_library::{ImportedPlay, ImportedResume, Intent, IntentOp, TrackerKey};
 use mq_tracking::trakt::call::{self, CallError};
-use mq_tracking::trakt::{Api, AuthError, Gate};
+use mq_tracking::trakt::{Api, AuthError, Bound, Gate};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -25,6 +26,8 @@ const CHECK_WINDOW_MS: i64 = 3 * 60 * 1000;
 /// Own sends this close to a pulled resume point make it an echo.
 const ECHO_MS: i64 = 2 * 60 * 1000;
 const ECHO_POINTS: f64 = 1.0;
+/// Own sends are kept this long.
+const SENT_KEPT_MS: i64 = 24 * 60 * 60 * 1000;
 /// A pulled resume point under this percent is skipped.
 const MIN_PERCENT: f64 = 2.0;
 /// Rows dated further ahead are left for a later round.
@@ -51,7 +54,8 @@ pub struct TraktReport {
 }
 
 /// Runs one round for the profile. One at a time; a sign-out or a new
-/// sign-in meanwhile drops what it would write.
+/// sign-in meanwhile drops what it would write, and none of its calls goes
+/// out with the new connection's tokens.
 pub(super) async fn round(
     core: &Core,
     trakt: &Trakt,
@@ -63,20 +67,19 @@ pub(super) async fn round(
             "Trakt is not set up in this build".into(),
         ));
     };
-    let generation = conn.auth.generation().await;
-    let account = conn
+    let bound = conn
         .auth
-        .account()
+        .bound()
         .await
         .ok_or(CallError::Auth(AuthError::Off))?;
-    let gate = trakt.gate(&account);
+    let gate = trakt.gate(&bound.account);
     let mut round = Round {
         core,
         conn,
         api: &api,
         gate: &gate,
-        key: conn.key(&account),
-        generation,
+        key: conn.key(&bound.account),
+        bound: &bound,
         mapper: Mapper::new(core),
         report: TraktReport::default(),
         now: now_ms() as i64,
@@ -98,7 +101,7 @@ struct Round<'a> {
     api: &'a Api,
     gate: &'a Gate,
     key: TrackerKey<'a>,
-    generation: u64,
+    bound: &'a Bound,
     mapper: Mapper<'a>,
     report: TraktReport,
     now: i64,
@@ -106,6 +109,15 @@ struct Round<'a> {
 
 impl Round<'_> {
     async fn run(&mut self) -> Result<(), CallError> {
+        self.prune_sent();
+        let pulled = self.pull().await;
+        // Writes go out whatever the reads did: a show that fails, or a
+        // list Trakt refuses, never holds them back.
+        self.drain().await;
+        pulled
+    }
+
+    async fn pull(&mut self) -> Result<(), CallError> {
         let acts = self.get("/sync/last_activities").await?;
         let stored = self.state_json("activities");
         let first = stored.is_null();
@@ -120,8 +132,8 @@ impl Round<'_> {
                 .filter_map(|k| ms(&stored[k]["watched_at"]))
                 .max();
             if !self.history(previous).await? {
-                // Moved with no row at or after the previous mark: a play
-                // dated in the past, or a removal.
+                // Moved with no row after the previous mark: a play dated in
+                // the past, or a removal.
                 reconcile = true;
             }
         }
@@ -138,20 +150,20 @@ impl Round<'_> {
             .map_err(store)?;
         // The reads worked; a write that fails next says so itself.
         self.conn.ok();
-        self.drain().await;
         Ok(())
     }
 
     /// History from the cursor's day, every page. Returns whether a row lies
-    /// at or after `previous`.
+    /// after `previous` (the day is read again, so the row that set it does
+    /// not count).
     async fn history(&mut self, previous: Option<i64>) -> Result<bool, CallError> {
         let cursor = self.state("history_day").unwrap_or_else(|| day(self.now));
         let path = format!("/sync/history?start_at={cursor}T00:00:00.000Z");
         let rows = self.get_all(&path).await?;
         let reached = rows
             .iter()
-            .any(|r| ms(&r["watched_at"]).is_some_and(|at| Some(at) >= previous));
-        let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await;
+            .any(|r| ms(&r["watched_at"]).is_some_and(|at| Some(at) > previous));
+        let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await?;
         // The cursor moves to the newest day taken, never back, and never
         // past a row left for later.
         let taken = plays
@@ -173,7 +185,7 @@ impl Round<'_> {
     /// interrupted first import goes on where it stopped.
     async fn reconcile(&mut self) -> Result<(), CallError> {
         let movies = self.get_all("/sync/watched/movies").await?;
-        let plays = self.plays(&movies, |r| ms(&r["last_watched_at"])).await;
+        let plays = self.plays(&movies, |r| ms(&r["last_watched_at"])).await?;
         self.import(&plays, &[])?;
         let shows = self
             .get_all("/sync/watched/shows?extended=noseasons")
@@ -191,7 +203,7 @@ impl Round<'_> {
         for (done, (id, updated)) in todo.into_iter().enumerate() {
             self.importing(done as u32, total);
             let rows = self.get_all(&format!("/sync/history/shows/{id}")).await?;
-            let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await;
+            let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await?;
             let later = plays
                 .iter()
                 .any(|p| p.watched_ms > self.now + FUTURE_SLACK_MS);
@@ -228,10 +240,11 @@ impl Round<'_> {
             }
             let placed = match self.mapper.place(item).await {
                 Ok(placed) => placed,
-                Err(u) => {
+                Err(PlaceMiss::Permanent(u)) => {
                     self.unplaced(&u);
                     continue;
                 }
+                Err(PlaceMiss::Transient(reason)) => return Err(CallError::Transient(reason)),
             };
             if self.echo(&placed.video_id, percent, paused_ms) {
                 continue;
@@ -271,6 +284,23 @@ impl Round<'_> {
         (p - percent).abs() <= ECHO_POINTS && (t - at).abs() <= ECHO_MS
     }
 
+    /// Own sends older than a day are forgotten.
+    fn prune_sent(&self) {
+        let library = self.core.library();
+        for (name, value) in library
+            .tracker_states(self.key, "sent:")
+            .unwrap_or_default()
+        {
+            let at = serde_json::from_str::<Value>(&value)
+                .ok()
+                .and_then(|v| v["at"].as_i64())
+                .unwrap_or(0);
+            if self.now - at > SENT_KEPT_MS {
+                let _ = library.delete_tracker_state(self.key, &name);
+            }
+        }
+    }
+
     /// Where a percent lands: on the local duration, else 97 percent of the
     /// meta's runtime (players count credits differently).
     async fn position(&self, placed: &map::Mapped, percent: f64) -> Option<(i64, i64)> {
@@ -296,13 +326,14 @@ impl Round<'_> {
         ))
     }
 
-    /// Places rows and turns them into plays; rows that cannot be placed
-    /// are listed as unmapped.
+    /// Places rows and turns them into plays; rows Trakt cannot name are
+    /// listed as unmapped. A show's details that cannot be read now stop
+    /// the round, before anything that depends on the rows is written.
     async fn plays(
         &mut self,
         rows: &[Value],
         at: impl Fn(&Value) -> Option<i64>,
-    ) -> Vec<ImportedPlay> {
+    ) -> Result<Vec<ImportedPlay>, CallError> {
         self.report.pulled += rows.len() as u32;
         let mut plays = Vec::new();
         for row in rows {
@@ -315,10 +346,11 @@ impl Round<'_> {
                     // Unknown dates sort before any real edit.
                     watched_ms: at(row).unwrap_or(1),
                 }),
-                Err(u) => self.unplaced(&u),
+                Err(PlaceMiss::Permanent(u)) => self.unplaced(&u),
+                Err(PlaceMiss::Transient(reason)) => return Err(CallError::Transient(reason)),
             }
         }
-        plays
+        Ok(plays)
     }
 
     fn import(&mut self, plays: &[ImportedPlay], state: &[(&str, &str)]) -> Result<(), CallError> {
@@ -333,10 +365,11 @@ impl Round<'_> {
         Ok(())
     }
 
-    /// Sends the writes that may go now, scrobbles first, in batches.
+    /// Sends the writes that may go now, in batches. Writes a show's
+    /// details cannot place now wait for a later try; writes Trakt cannot
+    /// name are dropped.
     async fn drain(&mut self) {
         for _ in 0..50 {
-            let lane = self.conn.lane.lock().await;
             let intents = self
                 .core
                 .library()
@@ -353,7 +386,9 @@ impl Round<'_> {
                 } else {
                     "series"
                 };
-                match map::ids(self.core, kind, &intent.item_id, &intent.video_id).await {
+                let ids =
+                    map::ids(self.core, self.key, kind, &intent.item_id, &intent.video_id).await;
+                match ids {
                     Ok(ids) if intent.op == IntentOp::Add => {
                         if self.already_there(&intent, &ids).await {
                             self.ack(&intent);
@@ -362,7 +397,7 @@ impl Round<'_> {
                         }
                     }
                     Ok(ids) => removes.push((intent, ids)),
-                    Err(reason) => {
+                    Err(Miss::Permanent(reason)) => {
                         self.unplaced(&map::Unplaced {
                             id: intent.item_id.clone(),
                             name: intent.item_id.clone(),
@@ -370,18 +405,16 @@ impl Round<'_> {
                         });
                         self.ack(&intent);
                     }
+                    Err(Miss::Transient(reason)) => {
+                        self.conn.failed(&reason);
+                        self.retry(&intent);
+                    }
                 }
             }
-            let mut sent = false;
             for (path, batch) in [("/sync/history", adds), ("/sync/history/remove", removes)] {
                 if !batch.is_empty() {
-                    sent = true;
                     self.send(path, batch).await;
                 }
-            }
-            drop(lane);
-            if !sent {
-                continue;
             }
         }
         self.plan_retry();
@@ -414,8 +447,23 @@ impl Round<'_> {
             let (list, entry) = ids.history(at);
             body[list].as_array_mut().expect("a list").push(entry);
         }
-        let answer =
-            call::body(call::post(self.api, self.gate, &self.conn.auth, path, &body).await);
+        // Scrobbles first: a running pause or stop finishes before this
+        // write, and the worker never waits for the outbox.
+        drop(self.conn.lane.lock().await);
+        let answer = call::post(
+            self.api,
+            self.gate,
+            &self.conn.auth,
+            self.bound,
+            path,
+            &body,
+        );
+        let answer = call::body(answer.await).and_then(|answer| {
+            let removes = path.ends_with("/remove");
+            acknowledged(&answer, &body, removes)
+                .map(|()| answer)
+                .map_err(CallError::Transient)
+        });
         match answer {
             Ok(answer) => {
                 self.conn.ok();
@@ -442,12 +490,7 @@ impl Round<'_> {
                     self.conn.failed(&super::reason(&e));
                 }
                 for (intent, _) in &batch {
-                    let _ = self.core.library().fail_tracker_intent(
-                        self.key,
-                        &intent.video_id,
-                        intent.rev,
-                        now_ms() as i64,
-                    );
+                    self.retry(intent);
                 }
             }
         }
@@ -458,6 +501,16 @@ impl Round<'_> {
             .core
             .library()
             .ack_tracker_intent(self.key, &intent.video_id, intent.rev);
+    }
+
+    /// Not sent now: tried again after its backoff.
+    fn retry(&self, intent: &Intent) {
+        let _ = self.core.library().fail_tracker_intent(
+            self.key,
+            &intent.video_id,
+            intent.rev,
+            now_ms() as i64,
+        );
     }
 
     /// When the scheduler should come back for writes waiting on a retry.
@@ -484,8 +537,8 @@ impl Round<'_> {
 
     /// The connection this round started under is still the one in use.
     fn fence(&self) -> Result<(), CallError> {
-        let now = futures_util::FutureExt::now_or_never(self.conn.auth.generation()).unwrap_or(0);
-        if now == self.generation {
+        let now = futures_util::FutureExt::now_or_never(self.conn.auth.bound()).flatten();
+        if now.as_ref() == Some(self.bound) {
             Ok(())
         } else {
             Err(CallError::Auth(AuthError::Off))
@@ -493,11 +546,11 @@ impl Round<'_> {
     }
 
     async fn get(&self, path: &str) -> Result<Value, CallError> {
-        call::body(call::get(self.api, self.gate, &self.conn.auth, path).await)
+        call::body(call::get(self.api, self.gate, &self.conn.auth, self.bound, path).await)
     }
 
     async fn get_all(&self, path: &str) -> Result<Vec<Value>, CallError> {
-        call::get_all(self.api, self.gate, &self.conn.auth, path, PAGE).await
+        call::get_all(self.api, self.gate, &self.conn.auth, self.bound, path, PAGE).await
     }
 
     fn state(&self, name: &str) -> Option<String> {
@@ -513,6 +566,24 @@ impl Round<'_> {
             .and_then(|v| serde_json::from_str(&v).ok())
             .unwrap_or(Value::Null)
     }
+}
+
+/// Whether a history answer acknowledges `sent`: its counts and its
+/// `not_found` lists are there, and for adds every item sent is either
+/// counted as added or listed as not found. Anything else keeps the batch.
+fn acknowledged(answer: &Value, sent: &Value, removes: bool) -> Result<(), String> {
+    let counts = &answer[if removes { "deleted" } else { "added" }];
+    let missing = &answer["not_found"];
+    for list in ["movies", "episodes"] {
+        let (Some(counted), Some(lost)) = (counts[list].as_u64(), missing[list].as_array()) else {
+            return Err("Trakt's answer did not acknowledge the writes".into());
+        };
+        let sent = sent[list].as_array().map_or(0, Vec::len) as u64;
+        if !removes && counted + lost.len() as u64 != sent {
+            return Err("Trakt's answer did not count the writes".into());
+        }
+    }
+    Ok(())
 }
 
 fn store(e: mq_library::LibraryError) -> CallError {
@@ -569,5 +640,26 @@ mod tests {
         let at = ms(&json!("2026-10-19T10:20:30.000Z")).unwrap();
         assert_eq!(iso(at), "2026-10-19T10:20:30.000Z");
         assert_eq!(day(at), "2026-10-19");
+    }
+
+    #[test]
+    fn history_answers_are_acknowledgements_only_when_they_count() {
+        let sent = json!({"movies": [], "episodes": [{"ids": {"tvdb": 1}}, {"ids": {"tvdb": 2}}]});
+        let full = json!({"added": {"movies": 0, "episodes": 1},
+                          "not_found": {"movies": [], "episodes": [{"ids": {"tvdb": 2}}]}});
+        assert_eq!(acknowledged(&full, &sent, false), Ok(()));
+        assert!(acknowledged(&json!({}), &sent, false).is_err());
+        assert!(acknowledged(&json!(null), &sent, false).is_err());
+        let short = json!({"added": {"movies": 0, "episodes": 0},
+                           "not_found": {"movies": [], "episodes": []}});
+        assert!(acknowledged(&short, &sent, false).is_err());
+        // A removal deletes however many plays there were.
+        let removed = json!({"deleted": {"movies": 0, "episodes": 5},
+                             "not_found": {"movies": [], "episodes": []}});
+        assert_eq!(acknowledged(&removed, &sent, true), Ok(()));
+        assert!(
+            acknowledged(&full, &sent, true).is_err(),
+            "no deleted counts"
+        );
     }
 }

@@ -63,6 +63,23 @@ pub struct Core {
     profile: Arc<str>,
 }
 
+/// A `Core` that does not keep the runtime alive: background work holds
+/// one and ends once every handle is gone.
+#[derive(Clone)]
+pub(crate) struct WeakCore {
+    inner: Weak<Inner>,
+    profile: Arc<str>,
+}
+
+impl WeakCore {
+    pub(crate) fn upgrade(&self) -> Option<Core> {
+        Some(Core {
+            inner: self.inner.upgrade()?,
+            profile: self.profile.clone(),
+        })
+    }
+}
+
 /// Everything device-wide: the device's state, one stream server, torrent
 /// engine, addon cache, skip cache and debrid resolver, whichever profile is
 /// in use.
@@ -188,6 +205,13 @@ impl Core {
             }),
             profile: profile.into(),
         })
+    }
+
+    pub(crate) fn downgrade(&self) -> WeakCore {
+        WeakCore {
+            inner: Arc::downgrade(&self.inner),
+            profile: self.profile.clone(),
+        }
     }
 
     /// A handle for another profile over the same runtime.

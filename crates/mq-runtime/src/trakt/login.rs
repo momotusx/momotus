@@ -1,9 +1,11 @@
 //! Sign-in with the device code (`traktLogin` view): a code to type or
 //! scan, polled until Trakt answers; on approval the core adopts the record
-//! and the `trakt` view offers it to the app to store.
+//! and the `trakt` view offers it to the app to store. A sign-in adopts only
+//! while it still owns the connection: a newer sign-in, a sign-out or a
+//! record from the app meanwhile wins.
 
-use super::Trakt;
 use crate::Core;
+use crate::core::WeakCore;
 use crate::live::{FRAME, coalesce};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
@@ -12,7 +14,6 @@ use mq_tracking::trakt::auth::{self, Poll};
 use mq_tracking::trakt::{Gate, call};
 use serde::Serialize;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
@@ -49,32 +50,38 @@ pub enum TraktLoginSnapshot {
     },
 }
 
-/// One sign-in. A second open stops the first; dropping it stops polling.
+/// One sign-in. A second open overtakes the first; dropping it stops the
+/// polls (an approval already given still completes).
 pub struct TraktLoginView {
     snapshot: SharedObservable<TraktLoginSnapshot>,
-    cancel: CancellationToken,
+    polls: CancellationToken,
 }
 
 impl TraktLoginView {
     pub fn open(core: &Core) -> Self {
         let snapshot = SharedObservable::new(TraktLoginSnapshot::Starting);
-        let cancel = CancellationToken::new();
+        let polls = CancellationToken::new();
         let trakt = core.trakt();
         if trakt.config().is_none() {
             snapshot.set(TraktLoginSnapshot::NotConfigured);
         } else {
             let conn = core.trakt_conn();
-            if let Some(older) = super::lock(&conn.login).replace(cancel.clone()) {
+            // Owned until overtaken, and never past the profile's end.
+            let owner = conn.stop.child_token();
+            if let Some(older) = super::lock(&conn.login).replace(owner.clone()) {
                 older.cancel();
             }
-            tokio::spawn(sign_in(
-                core.clone(),
-                trakt,
-                snapshot.clone(),
-                cancel.clone(),
-            ));
+            let since = futures_util::FutureExt::now_or_never(conn.auth.generation()).unwrap_or(0);
+            let login = Login {
+                core: core.downgrade(),
+                snapshot: snapshot.clone(),
+                polls: polls.clone(),
+                owner,
+                since,
+            };
+            tokio::spawn(login.run());
         }
-        Self { snapshot, cancel }
+        Self { snapshot, polls }
     }
 
     pub fn snapshot(&self) -> TraktLoginSnapshot {
@@ -97,79 +104,110 @@ impl TraktLoginView {
 
 impl Drop for TraktLoginView {
     fn drop(&mut self) {
-        self.cancel.cancel();
+        self.polls.cancel();
     }
 }
 
-async fn sign_in(
-    core: Core,
-    trakt: Arc<Trakt>,
+struct Login {
+    /// Weak: a sign-in never keeps the runtime alive.
+    core: WeakCore,
     snapshot: SharedObservable<TraktLoginSnapshot>,
-    cancel: CancellationToken,
-) {
-    let set = |s: TraktLoginSnapshot| {
-        if !cancel.is_cancelled() {
-            snapshot.set(s);
+    /// The view's: polling stops when it closes.
+    polls: CancellationToken,
+    /// The sign-in's claim on the connection.
+    owner: CancellationToken,
+    /// The connection's generation when it started.
+    since: u64,
+}
+
+impl Login {
+    fn set(&self, s: TraktLoginSnapshot) {
+        if !self.polls.is_cancelled() {
+            self.snapshot.set(s);
         }
-    };
-    let Some((api, _)) = trakt.api() else {
-        return set(TraktLoginSnapshot::NotConfigured);
-    };
-    let code = tokio::select! {
-        () = cancel.cancelled() => return,
-        code = auth::start(&api) => match code {
-            Ok(code) => code,
-            Err(reason) => return set(TraktLoginSnapshot::Failed { reason }),
-        },
-    };
-    let deadline = tokio::time::Instant::now() + code.expires_in;
-    set(TraktLoginSnapshot::Code {
-        user_code: code.user_code.clone(),
-        url: code.verification_url.clone(),
-        // ponytail: the bare activation page; whether a code in its path
-        // pre-fills is for the P0 live check.
-        qr: code.verification_url.clone(),
-        expires_ms: now_ms() + code.expires_in.as_millis() as u64,
-    });
-    let mut interval = code.interval;
-    let tokens = loop {
-        tokio::select! {
-            () = cancel.cancelled() => return,
-            () = tokio::time::sleep(interval) => {}
-        }
-        if tokio::time::Instant::now() >= deadline {
-            return set(TraktLoginSnapshot::Expired);
-        }
-        match auth::poll(&api, &code).await {
-            Poll::Approved(tokens) => break tokens,
-            Poll::Pending => {}
-            Poll::SlowDown => interval += SLOW_DOWN,
-            // Network trouble: polling goes on until the code expires.
-            Poll::Transient(reason) => tracing::debug!("trakt poll: {reason}"),
-            Poll::Expired => return set(TraktLoginSnapshot::Expired),
-            Poll::Denied => return set(TraktLoginSnapshot::Denied),
-            Poll::Invalid => {
-                return set(TraktLoginSnapshot::Failed {
-                    reason: "the code was already used".into(),
+    }
+
+    /// A newer sign-in, a sign-out or the profile's end took the
+    /// connection: this one ends without adopting anything.
+    fn overtaken(&self) {
+        self.set(TraktLoginSnapshot::Failed {
+            reason: "Trakt was signed out or signed in again meanwhile".into(),
+        });
+    }
+
+    async fn run(self) {
+        let api = self.core.upgrade().and_then(|core| core.trakt().api());
+        let Some((api, _)) = api else {
+            return self.set(TraktLoginSnapshot::NotConfigured);
+        };
+        let code = tokio::select! {
+            () = self.polls.cancelled() => return,
+            () = self.owner.cancelled() => return self.overtaken(),
+            code = auth::start(&api) => match code {
+                Ok(code) => code,
+                Err(reason) => return self.set(TraktLoginSnapshot::Failed { reason }),
+            },
+        };
+        let deadline = tokio::time::Instant::now() + code.expires_in;
+        self.set(TraktLoginSnapshot::Code {
+            user_code: code.user_code.clone(),
+            url: code.verification_url.clone(),
+            // ponytail: the bare activation page; whether a code in its path
+            // pre-fills is for the P0 live check.
+            qr: code.verification_url.clone(),
+            expires_ms: now_ms() + code.expires_in.as_millis() as u64,
+        });
+        let mut interval = code.interval;
+        let tokens = loop {
+            tokio::select! {
+                () = self.polls.cancelled() => return,
+                () = self.owner.cancelled() => return self.overtaken(),
+                () = tokio::time::sleep(interval) => {}
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return self.set(TraktLoginSnapshot::Expired);
+            }
+            match auth::poll(&api, &code).await {
+                Poll::Approved(tokens) => break tokens,
+                Poll::Pending => {}
+                Poll::SlowDown => interval += SLOW_DOWN,
+                // Network trouble: polling goes on until the code expires.
+                Poll::Transient(reason) => tracing::debug!("trakt poll: {reason}"),
+                Poll::Expired => return self.set(TraktLoginSnapshot::Expired),
+                Poll::Denied => return self.set(TraktLoginSnapshot::Denied),
+                Poll::Invalid => {
+                    return self.set(TraktLoginSnapshot::Failed {
+                        reason: "the code was already used".into(),
+                    });
+                }
+            }
+        };
+        // Once approved the sign-in completes even if the view closed (the
+        // tokens are single use), but never once overtaken.
+        let found = call::user(&api, &Gate::default(), &tokens.access_token).await;
+        let (account, user) = match found {
+            Ok(found) => found,
+            Err(e) => {
+                return self.set(TraktLoginSnapshot::Failed {
+                    reason: super::reason(&e),
                 });
             }
+        };
+        if self.owner.is_cancelled() {
+            return self.overtaken();
         }
-    };
-    // Once approved the sign-in completes even if the view closed: the
-    // tokens are single use.
-    let (account, user) = match call::user(&api, &Gate::default(), &tokens.access_token).await {
-        Ok(found) => found,
-        Err(e) => {
-            return set(TraktLoginSnapshot::Failed {
-                reason: super::reason(&e),
-            });
+        let Some(core) = self.core.upgrade() else {
+            return;
+        };
+        let conn = core.trakt_conn();
+        let Some(record) = conn.auth.adopt(tokens, &account, &user, self.since).await else {
+            // Signed out, signed in elsewhere or handed a record meanwhile.
+            return self.overtaken();
+        };
+        if let Err(e) = core.trakt_connected(&conn, &record.account, record.generation) {
+            tracing::warn!("trakt: sign-in not recorded: {e}");
         }
-    };
-    let conn = core.trakt_conn();
-    let record = conn.auth.adopt(tokens, &account, &user).await;
-    if let Err(e) = core.trakt_connected(&conn, &record.account, record.generation) {
-        tracing::warn!("trakt: sign-in not recorded: {e}");
+        core.trakt_refresh(&conn);
+        self.snapshot.set(TraktLoginSnapshot::Done { user });
     }
-    core.trakt_refresh(&conn);
-    set(TraktLoginSnapshot::Done { user });
 }

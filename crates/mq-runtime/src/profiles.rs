@@ -183,6 +183,8 @@ impl Core {
         }
         self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
         self.library().delete_profile(id, self.clock())?;
+        // Its Trakt rounds stop and its tokens leave memory.
+        self.trakt().forget(id);
         Ok(())
     }
 

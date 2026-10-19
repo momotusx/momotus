@@ -150,6 +150,15 @@ pub(crate) struct Trakt {
     /// of another name is from a process that is gone.
     boot: String,
     sessions: AtomicU64,
+    /// Cancelled when the device's runtime goes: every worker, scheduler
+    /// and sign-in ends, and the tokens leave memory with them.
+    shutdown: CancellationToken,
+}
+
+impl Drop for Trakt {
+    fn drop(&mut self) {
+        self.shutdown.cancel();
+    }
 }
 
 /// One profile's connection.
@@ -168,7 +177,12 @@ pub(crate) struct Conn {
     record_in: Notify,
     events: OnceLock<tokio::sync::mpsc::UnboundedSender<scrobble::Event>>,
     scheduler: AtomicBool,
+    /// The running sign-in's ownership: cancelled when a newer sign-in, a
+    /// sign-out or the end of the profile overtakes it.
     login: Mutex<Option<CancellationToken>>,
+    /// Ends this profile's worker, scheduler and sign-in (a child of the
+    /// runtime's `shutdown`).
+    stop: CancellationToken,
     /// When the outbox next has a retry due (ms).
     retry_at: Mutex<Option<u64>>,
     created: tokio::time::Instant,
@@ -201,6 +215,7 @@ impl Trakt {
             conns: Mutex::default(),
             gates: Mutex::default(),
             foreground: AtomicBool::new(true),
+            shutdown: CancellationToken::new(),
             boot: bytes.iter().map(|b| format!("{b:02x}")).collect(),
             sessions: AtomicU64::new(0),
         })
@@ -259,10 +274,22 @@ impl Trakt {
                     scheduler: AtomicBool::new(false),
                     login: Mutex::new(None),
                     retry_at: Mutex::new(None),
+                    stop: self.shutdown.child_token(),
                     created: tokio::time::Instant::now(),
                 })
             })
             .clone()
+    }
+
+    /// The profile is gone: its work stops and its tokens are dropped.
+    pub(crate) fn forget(&self, profile: &str) {
+        if let Some(conn) = lock(&self.conns).remove(profile) {
+            conn.stop.cancel();
+            if let Some(login) = lock(&conn.login).take() {
+                login.cancel();
+            }
+            let _ = futures_util::FutureExt::now_or_never(conn.auth.set(None));
+        }
     }
 
     fn conns(&self) -> Vec<Arc<Conn>> {
@@ -405,11 +432,15 @@ impl Core {
     pub async fn trakt_sign_out(&self) -> Result<(), CoreError> {
         let trakt = self.trakt();
         let conn = self.trakt_conn();
-        let held = conn.auth.account().await;
-        if let (Some(_), Some((api, _))) = (&held, trakt.api())
-            && let Ok(token) = conn.auth.token(&api).await
+        let held = conn.auth.bound().await;
+        if let (Some(bound), Some((api, _))) = (&held, trakt.api())
+            && let Ok(token) = conn.auth.token(&api, bound).await
         {
             mq_tracking::trakt::auth::revoke(&api, &token).await;
+        }
+        // A sign-in still running loses its claim.
+        if let Some(login) = lock(&conn.login).take() {
+            login.cancel();
         }
         // The generation moves first: a round in flight drops its results;
         // then its turn is waited for, so nothing it writes comes after.
@@ -460,7 +491,7 @@ impl Core {
     /// Starts the profile's round scheduler, or wakes it.
     fn trakt_schedule(&self, conn: &Arc<Conn>) {
         if !conn.scheduler.swap(true, Ordering::SeqCst) {
-            tokio::spawn(schedule(self.clone(), conn.clone()));
+            tokio::spawn(schedule(self.downgrade(), conn.clone()));
         }
         conn.wake.notify_one();
     }
@@ -569,10 +600,13 @@ fn unmapped(core: &Core, key: TrackerKey<'_>) -> Vec<TraktUnmapped> {
 
 /// Rounds for one profile: when woken (a record, the foreground, a closed
 /// playback, a sign-in), every 5 minutes in the foreground, and when an
-/// outbox retry is due.
-async fn schedule(core: Core, conn: Arc<Conn>) {
-    let trakt = core.trakt();
+/// outbox retry is due. It holds the core weakly: once every handle is
+/// gone, or the profile is, it ends.
+async fn schedule(core: crate::core::WeakCore, conn: Arc<Conn>) {
     loop {
+        let Some(trakt) = core.upgrade().map(|c| c.trakt()) else {
+            return;
+        };
         let retry =
             lock(&conn.retry_at).map(|at| Duration::from_millis(at.saturating_sub(now_ms())));
         let every = trakt
@@ -584,9 +618,21 @@ async fn schedule(core: Core, conn: Arc<Conn>) {
             (Some(a), None) | (None, Some(a)) => a,
             (None, None) => Duration::from_secs(24 * 60 * 60),
         };
+        drop(trakt);
         tokio::select! {
+            () = conn.stop.cancelled() => return,
             () = conn.wake.notified() => {}
             () = tokio::time::sleep(wait) => {}
+        }
+        let Some(core) = core.upgrade() else { return };
+        let trakt = core.trakt();
+        let gone = !core
+            .library()
+            .profile(core.profile())
+            .is_ok_and(|p| p.is_some());
+        if gone {
+            trakt.forget(core.profile());
+            return;
         }
         if conn.auth.account().await.is_none() || trakt.config().is_none() {
             continue;

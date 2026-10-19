@@ -94,6 +94,14 @@ impl fmt::Debug for Tokens {
     }
 }
 
+/// The connection a call belongs to: work started under it never goes out
+/// with another account's tokens or a later sign-in's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bound {
+    pub account: String,
+    pub generation: u64,
+}
+
 /// Why a call has no usable token.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
@@ -277,8 +285,19 @@ impl Auth {
     }
 
     /// A new sign-in: a new connection generation, held until acknowledged.
-    pub async fn adopt(&self, tokens: Tokens, account: &str, user: &str) -> TraktRecord {
+    /// `since` is the generation when the sign-in started: after a sign-out,
+    /// another sign-in or a record from the app meanwhile, it is not taken.
+    pub async fn adopt(
+        &self,
+        tokens: Tokens,
+        account: &str,
+        user: &str,
+        since: u64,
+    ) -> Option<TraktRecord> {
         let mut s = lock(&self.state);
+        if s.generation != since {
+            return None;
+        }
         s.generation += 1;
         let record = TraktRecord {
             access_token: tokens.access_token,
@@ -295,7 +314,7 @@ impl Auth {
         s.acked = false;
         s.dead = None;
         s.retry_at = None;
-        record
+        Some(record)
     }
 
     /// The record the app has not stored yet.
@@ -319,26 +338,41 @@ impl Auth {
         lock(&self.state).generation
     }
 
-    /// A token to call with, refreshed first when under a quarter of its
-    /// lifetime is left.
-    pub async fn token(&self, api: &Api) -> Result<String, AuthError> {
+    /// The connection held now, to bind work to.
+    pub async fn bound(&self) -> Option<Bound> {
+        let s = lock(&self.state);
+        s.record.as_ref().map(|r| Bound {
+            account: r.account.clone(),
+            generation: s.generation,
+        })
+    }
+
+    /// A token of `bound`'s connection to call with, refreshed first when
+    /// under a quarter of its lifetime is left. Another connection's token is
+    /// never given: the answer is `Off`.
+    pub async fn token(&self, api: &Api, bound: &Bound) -> Result<String, AuthError> {
         {
             let s = lock(&self.state);
-            let record = usable(&s)?;
+            let record = usable_for(&s, bound)?;
             if fresh(record) {
                 return Ok(record.access_token.clone());
             }
         }
-        self.rotate(api, None).await
+        self.rotate(api, None, bound).await
     }
 
     /// After a 401 with `used`: refresh once, unless another caller already
     /// did (then the newer token is the answer). A second 401 for a token
     /// that came from a refresh is terminal.
-    pub async fn after_401(&self, api: &Api, used: &str) -> Result<String, AuthError> {
+    pub async fn after_401(
+        &self,
+        api: &Api,
+        used: &str,
+        bound: &Bound,
+    ) -> Result<String, AuthError> {
         {
             let mut s = lock(&self.state);
-            let record = usable(&s)?;
+            let record = usable_for(&s, bound)?;
             if record.access_token != used {
                 return Ok(record.access_token.clone());
             }
@@ -347,16 +381,31 @@ impl Auth {
                 return Err(AuthError::Reconnect("Trakt refused a fresh token".into()));
             }
         }
-        self.rotate(api, Some(used)).await
+        self.rotate(api, Some(used), bound).await
     }
 
-    async fn rotate(&self, api: &Api, used: Option<&str>) -> Result<String, AuthError> {
+    /// Trakt refused `used` right after it was given: the chain is dead and
+    /// the user signs in again.
+    pub async fn reject(&self, used: &str, bound: &Bound) {
+        let mut s = lock(&self.state);
+        let current = usable_for(&s, bound).is_ok_and(|r| r.access_token == used);
+        if current {
+            s.dead = Some("Trakt refused a fresh token".into());
+        }
+    }
+
+    async fn rotate(
+        &self,
+        api: &Api,
+        used: Option<&str>,
+        bound: &Bound,
+    ) -> Result<String, AuthError> {
         // One refresh at a time; the guard moves into the refresh task, so
         // it is held until the refresh finishes even if this caller goes.
         let guard = self.refreshing.clone().lock_owned().await;
         let (old, generation) = {
             let s = lock(&self.state);
-            let record = usable(&s)?;
+            let record = usable_for(&s, bound)?;
             // Another caller may have rotated while this one waited.
             let rotated = match used {
                 Some(used) => record.access_token != used,
@@ -434,4 +483,14 @@ fn usable(s: &State) -> Result<&TraktRecord, AuthError> {
         return Err(AuthError::Reconnect(reason.clone()));
     }
     s.record.as_ref().ok_or(AuthError::Off)
+}
+
+/// The record, when it is still `bound`'s connection.
+fn usable_for<'a>(s: &'a State, bound: &Bound) -> Result<&'a TraktRecord, AuthError> {
+    let record = usable(s)?;
+    if record.account == bound.account && s.generation == bound.generation {
+        Ok(record)
+    } else {
+        Err(AuthError::Off)
+    }
 }

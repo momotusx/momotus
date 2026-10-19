@@ -7,7 +7,7 @@ pub mod auth;
 pub mod call;
 
 pub use api::{Answer, Api, Gate, Hosts};
-pub use auth::{Auth, AuthError, DeviceCode, Poll, Tokens, TraktRecord};
+pub use auth::{Auth, AuthError, Bound, DeviceCode, Poll, Tokens, TraktRecord};
 pub use call::CallError;
 
 /// The project's Trakt app, given at build time

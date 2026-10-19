@@ -57,15 +57,31 @@ impl TraktIds {
     }
 }
 
-/// The Trakt ids of one of the library's videos.
+/// Why an item has no Trakt ids.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Miss {
+    /// Trakt cannot name it: no IMDb id, a special, no TVDB id in the
+    /// show's details, or a show Trakt matched to another title. Listed as
+    /// unmapped; its writes are dropped.
+    Permanent(String),
+    /// The show's details could not be read now: tried again later, never
+    /// listed and never remembered.
+    Transient(String),
+}
+
+/// The Trakt ids of one of the library's videos, for this account.
 pub(super) async fn ids(
     core: &Core,
+    key: TrackerKey<'_>,
     kind: &str,
     item_id: &str,
     video_id: &str,
-) -> Result<TraktIds, String> {
+) -> Result<TraktIds, Miss> {
+    if let Some(reason) = known(core, key, item_id) {
+        return Err(Miss::Permanent(reason));
+    }
     if !item_id.starts_with("tt") {
-        return Err("no IMDb id".into());
+        return Err(Miss::Permanent("no IMDb id".into()));
     }
     if kind == "movie" || video_id == item_id {
         return Ok(TraktIds::Movie {
@@ -73,18 +89,18 @@ pub(super) async fn ids(
         });
     }
     if video_id.split(':').nth(1) == Some("0") {
-        return Err("a special (season 0)".into());
+        return Err(Miss::Permanent("a special (season 0)".into()));
     }
     let tvdb = core
         .episode_tvdb_ids(item_id)
         .await
-        .map_err(|_| "the show's details are not available".to_owned())?;
+        .map_err(|_| Miss::Transient("the show's details are not available".into()))?;
     match tvdb.get(video_id) {
         Some(&tvdb) => Ok(TraktIds::Episode {
             tvdb,
             show_imdb: item_id.to_owned(),
         }),
-        None => Err("no TVDB id in the show's details".into()),
+        None => Err(Miss::Permanent("no TVDB id in the show's details".into())),
     }
 }
 
@@ -105,10 +121,21 @@ pub(super) struct Unplaced {
     pub reason: String,
 }
 
-/// Places pulled rows, reading each show's details once per round.
+/// Why a pulled row has no place now.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) enum PlaceMiss {
+    /// Listed as unmapped.
+    Permanent(Unplaced),
+    /// The show's details could not be read: the round stops before any
+    /// cursor or checkpoint moves.
+    Transient(String),
+}
+
+/// Places pulled rows, reading each show's details once per round (only
+/// details that were read are kept).
 pub(super) struct Mapper<'a> {
     core: &'a Core,
-    shows: HashMap<String, Option<HashMap<u64, String>>>,
+    shows: HashMap<String, HashMap<u64, String>>,
 }
 
 impl<'a> Mapper<'a> {
@@ -120,7 +147,7 @@ impl<'a> Mapper<'a> {
     }
 
     /// A movie row (`movie`), or an episode row (`episode` and `show`).
-    pub(super) async fn place(&mut self, row: &Value) -> Result<Mapped, Unplaced> {
+    pub(super) async fn place(&mut self, row: &Value) -> Result<Mapped, PlaceMiss> {
         if row["movie"].is_object() {
             let movie = &row["movie"];
             let name = movie["title"].as_str().unwrap_or_default().to_owned();
@@ -131,46 +158,45 @@ impl<'a> Mapper<'a> {
                     kind: "movie".into(),
                     name,
                 }),
-                _ => Err(unplaced(movie, &name, "no IMDb id")),
+                _ => Err(PlaceMiss::Permanent(unplaced(movie, &name, "no IMDb id"))),
             };
         }
         let (show, episode) = (&row["show"], &row["episode"]);
         let name = show["title"].as_str().unwrap_or_default().to_owned();
+        let permanent = |reason| Err(PlaceMiss::Permanent(unplaced(show, &name, reason)));
         let Some(imdb) = show["ids"]["imdb"].as_str().filter(|i| i.starts_with("tt")) else {
-            return Err(unplaced(show, &name, "no IMDb id"));
+            return permanent("no IMDb id");
         };
         if episode["season"].as_u64() == Some(0) {
-            return Err(unplaced(show, &name, "a special (season 0)"));
+            return permanent("a special (season 0)");
         }
         let Some(tvdb) = episode["ids"]["tvdb"].as_u64() else {
-            return Err(unplaced(show, &name, "no TVDB episode id"));
+            return permanent("no TVDB episode id");
         };
         if !self.shows.contains_key(imdb) {
-            // Paced: one show's details at a time, then from the cache.
-            let ids = self.core.episode_tvdb_ids(imdb).await.ok();
-            let by_tvdb =
-                ids.map(|ids| ids.into_iter().map(|(video, tvdb)| (tvdb, video)).collect());
+            // Paced: one show's details at a time, then from the cache. A
+            // failed read is not kept: the round stops, and tries again.
+            let Ok(ids) = self.core.episode_tvdb_ids(imdb).await else {
+                return Err(PlaceMiss::Transient(
+                    "the show's details are not available".into(),
+                ));
+            };
+            let by_tvdb = ids.into_iter().map(|(video, tvdb)| (tvdb, video)).collect();
             self.shows.insert(imdb.to_owned(), by_tvdb);
         }
-        let reason = match &self.shows[imdb] {
-            Some(by_tvdb) => match by_tvdb.get(&tvdb) {
-                Some(video) => {
-                    return Ok(Mapped {
-                        item_id: imdb.to_owned(),
-                        video_id: video.clone(),
-                        kind: "series".into(),
-                        name,
-                    });
-                }
-                None => "the episode is not in the show's details",
-            },
-            None => "the show's details are not available",
-        };
-        Err(Unplaced {
-            id: imdb.to_owned(),
-            name,
-            reason: reason.into(),
-        })
+        match self.shows[imdb].get(&tvdb) {
+            Some(video) => Ok(Mapped {
+                item_id: imdb.to_owned(),
+                video_id: video.clone(),
+                kind: "series".into(),
+                name,
+            }),
+            None => Err(PlaceMiss::Permanent(Unplaced {
+                id: imdb.to_owned(),
+                name,
+                reason: "the episode is not in the show's details".into(),
+            })),
+        }
     }
 }
 
@@ -188,7 +214,11 @@ fn unplaced(item: &Value, name: &str, reason: &str) -> Unplaced {
 }
 
 /// Lists an item in the status as unmapped.
+/// Never over a show listed for good (`wrong_show`).
 pub(super) fn record(core: &Core, key: TrackerKey<'_>, id: &str, name: &str, reason: &str) {
+    if known(core, key, id).is_some() {
+        return;
+    }
     let value = json!({"name": name, "reason": reason, "at": now_ms()}).to_string();
     if let Err(e) = core
         .library()

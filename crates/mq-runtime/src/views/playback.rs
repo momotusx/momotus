@@ -425,10 +425,14 @@ impl PlaybackView {
             s.saved_at = Some(Instant::now());
             (pos, dur, first)
         };
-        let saved = save_progress(&self.core, &self.target, position_ms, duration_ms, first);
-        if let (Ok(true), Some(trakt)) = (&saved, &self.trakt) {
-            trakt.finished(&self.core);
-        }
+        let saved = save_progress(
+            &self.core,
+            &self.target,
+            position_ms,
+            duration_ms,
+            first,
+            self.trakt.as_ref(),
+        );
         if let Err(e) = saved {
             tracing::warn!("progress save failed: {e}");
         }
@@ -599,14 +603,16 @@ fn attempt(stream: &ParsedStream, error: &str) -> Attempt {
     }
 }
 
-/// Saves a position; returns whether it marked the video watched.
+/// Saves a position. At the end it marks the video watched, with the write
+/// a Trakt session holds for it in the same transaction.
 fn save_progress(
     core: &Core,
     target: &PlayTarget,
     position_ms: u64,
     duration_ms: u64,
     first: bool,
-) -> Result<bool, crate::CoreError> {
+    trakt: Option<&crate::trakt::Scrobble>,
+) -> Result<(), crate::CoreError> {
     let (library, profile) = (core.library(), core.profile());
     // Continue Watching needs a name and poster for titles outside the library.
     if first
@@ -635,17 +641,24 @@ fn save_progress(
         },
         core.clock(),
     )?;
-    let finished = duration_ms > 0 && position_ms as f64 >= duration_ms as f64 * FINISHED_RATIO;
-    if finished {
-        library.set_watched(
+    if duration_ms > 0 && position_ms as f64 >= duration_ms as f64 * FINISHED_RATIO {
+        let account = trakt.and_then(|t| t.to_hold(core));
+        let hold = trakt
+            .zip(account.as_deref())
+            .map(|(t, a)| t.intent(profile, a));
+        let holds = hold.is_some();
+        library.set_watched_holding(
             profile,
             &target.item_id,
             &target.video_id,
-            true,
             core.clock(),
+            hold,
         )?;
+        if let Some(trakt) = trakt.filter(|_| holds) {
+            trakt.held();
+        }
     }
-    Ok(finished)
+    Ok(())
 }
 
 /// Tries candidates from `state.next` until one answers, then publishes its
