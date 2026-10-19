@@ -190,9 +190,11 @@ impl Login {
         let (account, user) = match found {
             Ok(found) => found,
             Err(e) => {
-                return self.set(TraktLoginSnapshot::Failed {
+                self.set(TraktLoginSnapshot::Failed {
                     reason: super::reason(&e),
                 });
+                // Approved but never taken: Trakt drops them too.
+                return auth::revoke(&api, &tokens.access_token).await;
             }
         };
         let Some(core) = self.core.upgrade() else {

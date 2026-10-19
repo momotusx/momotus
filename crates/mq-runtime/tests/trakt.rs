@@ -2583,3 +2583,36 @@ async fn an_addon_that_never_answers_is_not_a_look() {
     assert_eq!(unmapped_ids(&core), [SHOW]);
     assert_eq!(pending(&core, "a-offline"), 0);
 }
+
+#[tokio::test]
+async fn a_sign_in_whose_user_cannot_be_read_revokes_its_tokens() {
+    let (core, fake) = setup("a-login-nouser").await;
+    fake.queue(
+        "POST /oauth/device/code",
+        vec![reply(
+            200,
+            json!({"device_code": "dev", "user_code": "ABCD1234",
+                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+        )],
+    );
+    let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
+                        "created_at": now() / 1000, "scope": "public"});
+    fake.queue("POST /oauth/device/token", vec![reply(200, tokens)]);
+    // The user lookup answers with no id.
+    fake.queue(
+        "GET /users/settings",
+        vec![reply(200, json!({"user": {"username": "tester"}}))],
+    );
+    let login = TraktLoginView::open(&core);
+    until("the sign-in's end", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Failed { .. })
+    })
+    .await;
+    assert_eq!(status(&core).record, None, "nothing adopted");
+    fake.wait_for("the revoke", |f| {
+        f.seen("POST", "/oauth/revoke")
+            .iter()
+            .any(|r| r.body["token"] == "at")
+    })
+    .await;
+}
