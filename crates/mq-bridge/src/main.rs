@@ -29,6 +29,7 @@ async fn main() {
     })
     .expect("open core");
     core.set_debrid_keys(&StoreId::keys_from_env());
+    dev_trakt(&core);
     let mut app = Router::new().route("/ws", get(ws)).with_state(core);
     if let Ok(dir) = std::env::var("MQ_STATIC") {
         app = app.fallback_service(tower_http::services::ServeDir::new(dir));
@@ -38,6 +39,28 @@ async fn main() {
     println!("{{\"event\":\"bridge_ready\",\"url\":\"ws://{addr}/ws\"}}");
     axum::serve(listener, app).await.expect("serve");
 }
+
+/// Development builds only: `MQ_DEV_TRAKT=<loopback url>` points Trakt at a
+/// local fake (the web e2e) with a test app id. A release build never reads
+/// it, so a shipped bridge talks to Trakt only as its build was configured.
+#[cfg(debug_assertions)]
+fn dev_trakt(core: &Core) {
+    let Ok(url) = std::env::var("MQ_DEV_TRAKT") else {
+        return;
+    };
+    core.set_trakt_config(Some(mq_runtime::TraktConfig {
+        client_id: "marquee-dev".into(),
+        redirect_uri: "urn:ietf:wg:oauth:2.0:oob".into(),
+        hosts: mq_runtime::TraktHosts {
+            api: url.clone(),
+            auth: url,
+            local: true,
+        },
+    }));
+}
+
+#[cfg(not(debug_assertions))]
+fn dev_trakt(_: &Core) {}
 
 async fn ws(
     upgrade: WebSocketUpgrade,
