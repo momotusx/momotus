@@ -5,6 +5,7 @@ import app.marquee.core.model.ApprovedPairing
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridTombstone
 import app.marquee.core.model.Devices
+import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.InstalledAddon
 import app.marquee.core.model.LostPreview
@@ -302,12 +303,36 @@ class CoreOps(
         client.request("signOut", mapOf("record" to record, "force" to JsonPrimitive(force)))
     }
 
-    /** After a roster conflict: takes the server's roster, dropping what the user ticked. Returns the record to store. */
+    /**
+     * After a roster conflict: both sides, read only. Fails with `http status 401` when the sync
+     * server no longer knows this device's token (a restore without it).
+     */
+    suspend fun forkPreview(record: SyncRecord): ForkPreview =
+        call("forkPreview", mapOf("record" to record), ForkPreview.serializer())
+
+    /**
+     * After a roster conflict: takes the server's roster as [forkPreview] showed it ([head]), dropping
+     * what the user ticked. Refused with `rosterChanged` when it moved since. Returns the record to
+     * store. Put behind the OS re-authentication prompt.
+     */
     suspend fun useServerRoster(
         record: SyncRecord,
-        drop: List<String> = emptyList(),
+        drop: List<String>,
+        head: String,
     ): SyncRecord =
         client
-            .request("useServerRoster", mapOf("record" to record, "drop" to JsonArray(drop.map(::text))))
-            .jsonObject
+            .request(
+                "useServerRoster",
+                mapOf("record" to record, "drop" to JsonArray(drop.map(::text)), "head" to text(head)),
+            ).jsonObject
+
+    /**
+     * The digits on the new device differ: ends the approval of [qr] now, with a key rotation that drops
+     * the device if it joined meanwhile. Returns the record to store. Put behind the OS re-authentication
+     * prompt.
+     */
+    suspend fun cancelPairing(
+        record: SyncRecord,
+        qr: String,
+    ): SyncRecord = client.request("cancelPairing", mapOf("record" to record, "qr" to text(qr))).jsonObject
 }

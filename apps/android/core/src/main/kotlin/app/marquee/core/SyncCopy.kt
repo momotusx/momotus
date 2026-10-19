@@ -2,7 +2,7 @@ package app.marquee.core
 
 import app.marquee.core.model.Blocked
 import app.marquee.core.model.SyncReport
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -84,8 +84,12 @@ object SyncCopy {
     const val LEAVE_ANYWAY = "Stop anyway"
     const val SYNC_AGAIN = "Sync again"
     const val LEFT = "This device no longer syncs. Your library stays here."
-    const val USE_SERVER = "Use the server's device list"
+    const val USE_SERVER = "Compare device lists"
     const val FORGET_HERE = "Forget it on this device"
+    const val FORGET_IT = "Forget it"
+    const val FORGET_ASK =
+        "Forget the sync account on this device? Its key is deleted here. If no other device and no recovery kit " +
+            "holds this account, its synced data cannot be read again."
     const val FORGET_HERE_TEXT =
         "Forgetting needs no sync server and keeps your library. Your other devices still list this one until " +
             "you remove it there."
@@ -101,13 +105,55 @@ object SyncCopy {
     const val PASTE_LABEL = "Or paste the code"
     const val PASTE_ONLY = "Paste the code"
     const val PASTE_HINT = "marquee:pair?..."
-    const val NOT_A_CODE = "That is not a pairing code. It starts with marquee:pair."
+    const val NOT_A_CODE = "This code is not a Marquee pairing code."
+    const val NEXT = "Next"
+    const val CAMERA_DENIED = "Marquee may not use the camera. Allow it in the system settings, or paste the code."
+
+    /** The step before approving: the code's server is always this account's own, so it asks about the device. */
+    const val REVIEW_ASK = "Approve a new device?"
+    const val REVIEW_TEXT =
+        "Approve it only if the new device is in front of you and shows the code you scanned or pasted. Whoever " +
+            "confirms the six digits next joins your account."
     const val APPROVE = "Approve"
     const val APPROVING = "Approving"
     const val APPROVED_STEP = "The new device now shows six digits. They must be these:"
     const val APPROVED_HELP =
-        "If they match, confirm on the new device. If they differ, say so there, and nothing is added."
+        "If they match, confirm on the new device. If they differ, say so there, and press They differ here."
     const val DONE = "Done"
+    const val DIFFER = "They differ"
+    const val DIFFER_ENDED =
+        "The approval ended and your sync key changed: whoever answered cannot join with it, and a device that " +
+            "already did is removed."
+
+    // Compare device lists, after the sync server showed a different one
+    const val FORK_TITLE = "Compare device lists"
+    const val FORK_LEDE =
+        "The sync server lists different devices than this device knows. That happens when the server was " +
+            "restored from a backup, or when someone changed it. Check its list, tick anything you do not " +
+            "recognise, then keep syncing with it."
+    const val FORK_LOADING = "Asking the sync server for its list"
+    const val FORK_SERVER = "On the sync server's list"
+    const val FORK_SERVER_HELP =
+        "Ticked devices are removed when you continue. Those marked as going are removed anyway: this device had " +
+            "removed them, or they are recovery kits only the server knows."
+    const val FORK_GOES = "Goes"
+    const val FORK_SERVER_ONLY = "Only on the server's list"
+    const val FORK_MINE = "Only this device knew these"
+    const val FORK_MINE_HELP =
+        "They are not on the server's list, so they are gone once you continue. Make a new recovery kit " +
+            "afterwards if one of them was yours."
+    const val FORK_SAME = "Both lists name the same devices."
+    const val FORK_GO = "Continue with the server's list"
+    const val FORK_GOING = "Continuing"
+    const val FORK_OFF_LIST =
+        "The sync server's list no longer includes this device: it was removed there. Pair this device again " +
+            "from one that still syncs."
+    const val FORK_CHANGED =
+        "The sync server's list changed while you looked. Here it is again; check it before you continue."
+    const val FORK_TOKEN_LOST =
+        "This device cannot read the sync server's list: the server no longer knows it. Sync from another of " +
+            "your devices, or pair this one again."
+    const val FORK_NONE = "This device and the sync server list the same devices. There is nothing to compare."
 
     // The joining device's side
     const val COPY_CODE = "Copy the code"
@@ -127,12 +173,18 @@ object SyncCopy {
 
     /** Android: the clipboard has no expiry, so the app clears it, and marks the kit private for previews. */
     const val COPY_KIT_HELP =
-        "Copying puts it on this device's clipboard, marked private, and Marquee empties the clipboard when you " +
-            "leave this page."
+        "Copying puts it on this device's clipboard, marked private. Marquee empties the clipboard after a " +
+            "minute, or when you leave this page."
     const val KIT_COPIED =
-        "The kit is on your clipboard. Paste it into your password manager now: Marquee empties the clipboard " +
-            "when you leave this page."
+        "The kit is on your clipboard for a minute. Paste it into your password manager now: Marquee empties " +
+            "the clipboard after that, or when you leave this page."
     const val SAVED_KIT = "I saved it"
+    const val KIT_WAITING = "Your new recovery kit is not saved yet. Show it again and save it."
+    const val SHOW_KIT = "Show the kit"
+    const val KIT_UNSEEN =
+        "A recovery kit was made here, but the app closed before you said you saved it, and it cannot be shown " +
+            "again. Make a new one: Marquee removes the unseen one."
+    const val MAKE_NEW_KIT = "Make a new kit"
 
     // Remove and report lost
     const val REMOVE_KIT_ASK = "Remove this recovery kit? It stops working."
@@ -151,6 +203,16 @@ object SyncCopy {
     const val AUTH_REMOVE = "Remove a device from your sync account"
     const val AUTH_LOST = "Report a device lost"
     const val AUTH_KIT = "Make a recovery kit"
+    const val AUTH_APPROVE = "Approve a new device"
+    const val AUTH_DIFFER = "End the approval of a device"
+    const val AUTH_SERVER_LIST = "Keep syncing with the sync server's device list"
+    const val AUTH_LEAVE = "Stop syncing on this device"
+    const val DISMISS = "Dismiss"
+
+    /** The last read of the device list failed: what shows may be from before. */
+    const val LIST_STALE =
+        "This list and the 12 characters may be out of date: the sync server did not answer when this device " +
+            "asked again."
 
     /** The keystore kept a new record in memory only: nothing is sent until it is stored. */
     const val STORAGE =
@@ -181,12 +243,29 @@ object SyncCopy {
         many: String,
     ) = count(n.toLong(), one, many)
 
-    /** The confirm line for removing another device. */
-    fun removeDeviceAsk(name: String) =
-        "Remove $name? It stops syncing and cannot read anything you change from now on. Devices it added stay."
+    /** The confirm line for removing another device, with the recovery kits it made, which go with it. */
+    fun removeDeviceAsk(
+        name: String,
+        kits: Int = 0,
+    ) = "Remove $name? It stops syncing and cannot read anything you change from now on. Devices it added stay." +
+        when (kits) {
+            0 -> ""
+            1 -> " The recovery kit made on it stops working too."
+            else -> " The $kits recovery kits made on it stop working too."
+        }
 
-    /** The step before approving a code: which sync server it joins through. */
-    fun approveAsk(host: String) = "Approve a device from $host?"
+    /** The button that continues with the server's list, naming what the user ticked. */
+    fun forkButton(
+        devices: Int,
+        kits: Int = 0,
+    ): String {
+        if (devices == 0) return FORK_GO
+        val also = if (kits == 0) "" else " and ${count(kits, "recovery kit", "recovery kits")}"
+        return "Continue and remove ${count(devices, "device", "devices")}$also"
+    }
+
+    /** On a ticked row of the server's list: the kits that go with it. */
+    fun goesWith(kits: Int) = if (kits == 1) "Its recovery kit goes with it." else "Its $kits recovery kits go with it."
 
     /** The button that confirms a lost report: it names how many devices go. */
     fun lostButton(devices: Int) = "Remove ${count(devices, "device", "devices")}"
@@ -210,8 +289,13 @@ object SyncCopy {
         addedMs: Long,
         by: String?,
         zone: TimeZone = TimeZone.getDefault(),
+        locale: Locale = Locale.getDefault(),
     ): String {
-        val day = SimpleDateFormat("MMM d, yyyy", Locale.US).apply { timeZone = zone }.format(Date(addedMs))
+        val day =
+            DateFormat
+                .getDateInstance(DateFormat.MEDIUM, locale)
+                .apply { timeZone = zone }
+                .format(Date(addedMs))
         if (kit) return if (by != null) "Made $day on $by" else "Made $day"
         return if (by != null) "Added $day through $by" else "Added $day, the first device"
     }
@@ -227,7 +311,7 @@ object SyncCopy {
      * Where a sync failure happened: some answers mean something only there (a 403 when starting is an
      * invite, a 404 on a kit an unknown kit, a 404 on a code a used one).
      */
-    enum class Action { Round, Start, Recover, Approve, Devices, Kit, Remove, Lost, Leave }
+    enum class Action { Round, Start, Recover, Approve, Devices, Kit, Remove, Lost, Leave, Compare, ServerList }
 
     /**
      * A sync failure in plain words; [code] names the ones with a fix. The core's own sentences are
@@ -244,8 +328,8 @@ object SyncCopy {
             }
 
             "fork" -> {
-                return "The sync server lists different devices than this device knows. Use the server's list to " +
-                    "keep syncing."
+                return "The sync server lists different devices than this device knows. Compare the lists to keep " +
+                    "syncing."
             }
 
             "wrongRelay" -> {
@@ -279,6 +363,10 @@ object SyncCopy {
                 return "Nothing changed: this device did not confirm it is you."
             }
 
+            "rosterChanged" -> {
+                return FORK_CHANGED
+            }
+
             "noLock" -> {
                 return "Set a screen lock first: Marquee asks for it before changing your devices or making a kit."
             }
@@ -287,6 +375,8 @@ object SyncCopy {
             return "This sync server needs an invite code, or the one entered is wrong."
         }
         if (action == Action.Recover && message == "http status 404") return WRONG_KIT
+        // The sync server no longer knows this device's token (a restore without it): retrying cannot help.
+        if (action == Action.Compare && message == "http status 401") return FORK_TOKEN_LOST
         if (action == Action.Approve && (message == "http status 404" || message == "http status 410")) {
             return "This code expired or was used already. Ask the new device for a new one."
         }
@@ -295,9 +385,21 @@ object SyncCopy {
             if (message.startsWith(kept)) return pairingProblem(message)
         }
         return when (action) {
-            Action.Round -> "The sync server did not answer. Your changes wait here and go out on the next sync."
-            Action.Devices -> "The sync server did not answer, so this list may be out of date. Try again in a moment."
-            else -> "The sync server did not answer. Try again in a moment."
+            Action.Round -> {
+                "The sync server did not answer. Your changes wait here and go out on the next sync."
+            }
+
+            Action.Devices -> {
+                "The sync server did not answer, so this list may be out of date. Try again in a moment."
+            }
+
+            Action.Compare -> {
+                "The sync server did not answer, so the lists could not be compared. Try again in a moment."
+            }
+
+            else -> {
+                "The sync server did not answer. Try again in a moment."
+            }
         }
     }
 
@@ -331,6 +433,27 @@ object SyncCopy {
     /** What a round's facts mean for the user (plans/core-protocol.md, `syncNow`), one line each. */
     fun notes(report: SyncReport): List<String> =
         buildList {
+            if (report.refused > 0) {
+                val n = report.refused
+                add(
+                    "${if (n == 1) "1 edit" else "$n edits"} from this device could not be sent: the sync " +
+                        "server does not take ${if (n == 1) "it" else "them"}, so " +
+                        "${if (n == 1) "it stays" else "they stay"} on this device only.",
+                )
+            }
+            if (report.unreadable > 0) {
+                val n = report.unreadable
+                add(
+                    "${if (n == 1) "1 change from another device" else "$n changes from other devices"} could not be " +
+                        "read and ${if (n == 1) "was" else "were"} skipped.",
+                )
+            }
+            if (report.newer > 0) {
+                val n = report.newer
+                val changes = if (n == 1) "1 change comes" else "$n changes come"
+                val them = if (n == 1) "it" else "them"
+                add("$changes from a newer version of Marquee. Update Marquee here to see $them.")
+            }
             val gap = abs(report.clockGapMs)
             if (gap > 600_000) {
                 val minutes = (gap / 60_000.0).roundToLong()
@@ -362,25 +485,6 @@ object SyncCopy {
                         "devices get a chance to catch up first.",
                 )
             }
-            if (report.refused > 0) {
-                val n = report.refused
-                add(
-                    "${if (n == 1) "1 edit was" else "$n edits were"} too large or malformed for the sync server, so " +
-                        "${if (n == 1) "it stays" else "they stay"} only on this device.",
-                )
-            }
-            if (report.unreadable > 0) {
-                val n = report.unreadable
-                add(
-                    "${if (n == 1) "1 change" else "$n changes"} from another device did not open with this " +
-                        "account's key and ${if (n == 1) "was" else "were"} skipped.",
-                )
-            }
-            if (report.newer > 0) {
-                val n = report.newer
-                val changes = if (n == 1) "1 change comes" else "$n changes come"
-                add("$changes from a newer version of Marquee. Update the app to see ${if (n == 1) "it" else "them"}.")
-            }
             when (report.blocked) {
                 Blocked.RotationPending -> {
                     add("Edits wait until the account finishes a device change.")
@@ -401,5 +505,72 @@ object SyncCopy {
                     Unit
                 }
             }
+            if (report.again) add("The last sync stopped before it finished. It goes on with the next one.")
         }
+
+    /** How a round ended: everything went, some changes still wait, or some failed (the web's `outcomeOf`). */
+    enum class Outcome { Complete, Pending, Failed }
+
+    fun outcome(r: SyncReport): Outcome =
+        when {
+            r.refused > 0 || r.unreadable > 0 -> {
+                Outcome.Failed
+            }
+
+            r.waiting > 0 || r.parked > 0 || r.newer > 0 || r.blocked != null || r.rotationWaitMs > 0 || r.again -> {
+                Outcome.Pending
+            }
+
+            else -> {
+                Outcome.Complete
+            }
+        }
+
+    /** The state line after a round: its counts when everything went, else what is wrong first. */
+    fun stateLine(
+        at: String,
+        report: SyncReport,
+    ) = when (outcome(report)) {
+        Outcome.Failed -> "Synced at $at. Some changes did not sync."
+        Outcome.Pending -> "Synced at $at. Some changes still wait."
+        Outcome.Complete -> syncedLine(at, report)
+    }
+
+    /** Failures since this device joined, kept until the user dismisses them. */
+    fun failedSince(
+        refused: Int,
+        unreadable: Int,
+        newer: Int,
+    ): String? {
+        val parts =
+            listOfNotNull(
+                (
+                    "${count(refused, "edit", "edits")} from this device could not be sent and " +
+                        "stay${if (refused == 1) "s" else ""} here only"
+                ).takeIf { refused > 0 },
+                "${count(unreadable, "change", "changes")} from other devices could not be read"
+                    .takeIf { unreadable > 0 },
+                (
+                    "${count(newer, "change", "changes")} from a newer version of Marquee " +
+                        "wait${if (newer == 1) "s" else ""} for an update here"
+                ).takeIf { newer > 0 },
+            )
+        return if (parts.isEmpty()) null else "Since this device joined, ${parts.joinToString(", and ")}."
+    }
+
+    /** The Settings row under Devices and sync: what is wrong or waits first, then the time. */
+    fun summary(
+        joined: Boolean,
+        problem: String?,
+        failed: String?,
+        report: SyncReport?,
+        time: String?,
+    ): String {
+        if (problem != null) return problem
+        if (!joined) return OFF_LINE
+        if (failed != null) return failed
+        val note = report?.takeIf { outcome(it) != Outcome.Complete }?.let { notes(it).firstOrNull() }
+        if (note != null) return note
+        return if (time != null) "On. Synced at $time." else "On."
+    }
 }

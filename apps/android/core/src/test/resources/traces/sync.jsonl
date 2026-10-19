@@ -1,27 +1,38 @@
-{"t":8,"device":"a","dir":"out","msg":{"id":1,"op":"createSyncAccount","server":"http://127.0.0.1:PORT","name":"Trace A"}}
-{"t":23,"device":"a","dir":"in","msg":{"id":1,"ok":true,"result":{"revision":1}}}
-{"t":23,"device":"b","dir":"out","msg":{"id":1001,"op":"subscribe","view":"pairing","params":{"server":"http://127.0.0.1:PORT","name":"Trace B"}}}
-{"t":24,"device":"b","dir":"in","msg":{"id":1001,"ok":true,"result":{"snapshot":{"phase":"starting"},"sub":1}}}
-{"t":46,"device":"b","dir":"in","msg":{"sub":1,"updates":[{"expiresMs":1792374443764,"phase":"waiting","qr":"marquee:pair?v=2&s=SERVER&p=PAIRING&k=KEY&g=SIG"}]}}
-{"t":132,"device":"a","dir":"out","msg":{"id":2,"op":"approvePairing","record":{"revision":1},"qr":"marquee:pair?v=2&s=SERVER&p=PAIRING&k=KEY&g=SIG"}}
-{"t":142,"device":"a","dir":"in","msg":{"id":2,"ok":true,"result":{"code":"581518","record":{"revision":1}}}}
-{"t":2051,"device":"b","dir":"in","msg":{"sub":1,"updates":[{"code":"581518","phase":"confirm"}]}}
-{"t":2105,"device":"b","dir":"out","msg":{"id":1002,"op":"command","sub":1,"command":{"type":"confirm"}}}
-{"t":2106,"device":"b","dir":"in","msg":{"id":1002,"ok":true,"result":{}}}
-{"t":2135,"device":"b","dir":"in","msg":{"sub":1,"updates":[{"phase":"joined","record":{"revision":1}}]}}
-{"t":2209,"device":"b","dir":"out","msg":{"id":1003,"op":"unsubscribe","sub":1}}
-{"t":2210,"device":"b","dir":"in","msg":{"id":1003,"ok":true,"result":{}}}
-{"t":2210,"device":"a","dir":"out","msg":{"id":3,"op":"syncNow","record":{"revision":1}}}
-{"t":2216,"device":"a","dir":"in","msg":{"id":3,"ok":true,"result":{"again":true,"applied":0,"blocked":null,"clockGapMs":0,"fingerprint":"NC28S19DMFY9","newer":0,"oldEpochWrites":0,"parked":0,"pulled":0,"pushed":0,"record":{"revision":2},"refused":0,"rotationWaitMs":0,"stale":0,"unreadable":0,"waiting":0}}}
-{"t":2216,"device":"b","dir":"out","msg":{"id":1004,"op":"syncNow","record":{"revision":1}}}
-{"t":2230,"device":"b","dir":"in","msg":{"id":1004,"ok":true,"result":{"again":false,"applied":0,"blocked":null,"clockGapMs":1,"fingerprint":"NC28S19DMFY9","newer":0,"oldEpochWrites":0,"parked":0,"pulled":2,"pushed":2,"record":null,"refused":0,"rotationWaitMs":0,"stale":0,"unreadable":0,"waiting":0}}}
-{"t":2230,"device":"a","dir":"out","msg":{"id":4,"op":"syncDevices","record":{"revision":2}}}
-{"t":2236,"device":"a","dir":"in","msg":{"id":4,"ok":true,"result":{"epoch":0,"fingerprint":"NC28S19DMFY9","members":[{"addedMs":1792373845847,"id":"0c335c8b90e4d055630acfb919afad18","kit":false,"name":"Trace B","sponsor":"a099e25ba2212bbe8ce32a98f153c5a0","thisDevice":false},{"addedMs":1792373843747,"id":"a099e25ba2212bbe8ce32a98f153c5a0","kit":false,"name":"Trace A","sponsor":null,"thisDevice":true}],"record":null,"rotationPending":false}}}
-{"t":2236,"device":"a","dir":"out","msg":{"id":5,"op":"lostPreview","record":{"revision":2},"lost":"0c335c8b90e4d055630acfb919afad18"}}
-{"t":2241,"device":"a","dir":"in","msg":{"id":5,"ok":true,"result":{"devices":[],"kits":[]}}}
-{"t":2241,"device":"a","dir":"out","msg":{"id":6,"op":"createRecoveryKit","record":{"revision":2}}}
-{"t":2250,"device":"a","dir":"in","msg":{"id":6,"ok":true,"result":{"kit":"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH","record":{"revision":3}}}}
-{"t":2250,"device":"a","dir":"out","msg":{"id":7,"op":"removeDevice","record":{"revision":3},"device":"0c335c8b90e4d055630acfb919afad18"}}
-{"t":2271,"device":"a","dir":"in","msg":{"id":7,"ok":true,"result":{"revision":4}}}
-{"t":2271,"device":"a","dir":"out","msg":{"id":8,"op":"syncDevices","record":{"revision":4}}}
-{"t":2274,"device":"a","dir":"in","msg":{"id":8,"ok":true,"result":{"epoch":1,"fingerprint":"QHWS3CFB897W","members":[{"addedMs":1792373845982,"id":"8e2bdede5593401fd936d43f80c3098b","kit":true,"name":null,"sponsor":"a099e25ba2212bbe8ce32a98f153c5a0","thisDevice":false},{"addedMs":1792373843747,"id":"a099e25ba2212bbe8ce32a98f153c5a0","kit":false,"name":"Trace A","sponsor":null,"thisDevice":true}],"record":null,"rotationPending":false}}}
+{"t":9,"device":"a","dir":"out","msg":{"id":1,"op":"createSyncAccount","server":"http://127.0.0.1:PORT","name":"Trace A"}}
+{"t":21,"device":"a","dir":"in","msg":{"id":1,"ok":true,"result":{"revision":1}}}
+{"t":21,"device":"b","dir":"out","msg":{"id":1001,"op":"subscribe","view":"pairing","params":{"server":"http://127.0.0.1:PORT","name":"Trace B"}}}
+{"t":21,"device":"b","dir":"in","msg":{"id":1001,"ok":true,"result":{"snapshot":{"phase":"starting"},"sub":1}}}
+{"t":41,"device":"b","dir":"in","msg":{"sub":1,"updates":[{"expiresMs":1792388336767,"phase":"waiting","qr":"marquee:pair?v=2&s=SERVER&p=PAIRING&k=KEY&g=SIG"}]}}
+{"t":128,"device":"a","dir":"out","msg":{"id":2,"op":"approvePairing","record":{"revision":1},"qr":"marquee:pair?v=2&s=SERVER&p=PAIRING&k=KEY&g=SIG"}}
+{"t":137,"device":"a","dir":"in","msg":{"id":2,"ok":true,"result":{"code":"697179","record":{"revision":1}}}}
+{"t":2048,"device":"b","dir":"in","msg":{"sub":1,"updates":[{"code":"697179","phase":"confirm"}]}}
+{"t":2077,"device":"b","dir":"out","msg":{"id":1002,"op":"command","sub":1,"command":{"type":"confirm"}}}
+{"t":2078,"device":"b","dir":"in","msg":{"id":1002,"ok":true,"result":{}}}
+{"t":2117,"device":"b","dir":"in","msg":{"sub":1,"updates":[{"phase":"joined","record":{"revision":1}}]}}
+{"t":2181,"device":"b","dir":"out","msg":{"id":1003,"op":"unsubscribe","sub":1}}
+{"t":2182,"device":"b","dir":"in","msg":{"id":1003,"ok":true,"result":{}}}
+{"t":2182,"device":"a","dir":"out","msg":{"id":3,"op":"syncNow","record":{"revision":1}}}
+{"t":2190,"device":"a","dir":"in","msg":{"id":3,"ok":true,"result":{"again":true,"applied":0,"blocked":null,"clockGapMs":0,"fingerprint":"B7CAPAPF4JGR","newer":0,"oldEpochWrites":0,"parked":0,"pulled":0,"pushed":0,"record":{"revision":2},"refused":0,"rotationWaitMs":0,"stale":0,"unreadable":0,"waiting":0}}}
+{"t":2190,"device":"b","dir":"out","msg":{"id":1004,"op":"syncNow","record":{"revision":1}}}
+{"t":2201,"device":"b","dir":"in","msg":{"id":1004,"ok":true,"result":{"again":false,"applied":0,"blocked":null,"clockGapMs":1,"fingerprint":"B7CAPAPF4JGR","newer":0,"oldEpochWrites":0,"parked":0,"pulled":2,"pushed":2,"record":null,"refused":0,"rotationWaitMs":0,"stale":0,"unreadable":0,"waiting":0}}}
+{"t":2201,"device":"a","dir":"out","msg":{"id":4,"op":"syncDevices","record":{"revision":2}}}
+{"t":2206,"device":"a","dir":"in","msg":{"id":4,"ok":true,"result":{"epoch":0,"fingerprint":"B7CAPAPF4JGR","members":[{"addedMs":1792387738832,"id":"6b3e582af9845585363c3e23ac6494b4","kit":false,"name":"Trace B","sponsor":"8025d72185f707ffa2d9dcdb1b3af854","thisDevice":false},{"addedMs":1792387736755,"id":"8025d72185f707ffa2d9dcdb1b3af854","kit":false,"name":"Trace A","sponsor":null,"thisDevice":true}],"record":null,"rotationPending":false}}}
+{"t":2206,"device":"a","dir":"out","msg":{"id":5,"op":"lostPreview","record":{"revision":2},"lost":"6b3e582af9845585363c3e23ac6494b4"}}
+{"t":2211,"device":"a","dir":"in","msg":{"id":5,"ok":true,"result":{"devices":[],"kits":[]}}}
+{"t":2211,"device":"a","dir":"out","msg":{"id":6,"op":"createRecoveryKit","record":{"revision":2}}}
+{"t":2228,"device":"a","dir":"in","msg":{"id":6,"ok":true,"result":{"kit":"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH","record":{"revision":3}}}}
+{"t":2228,"device":"a","dir":"out","msg":{"id":7,"op":"removeDevice","record":{"revision":3},"device":"6b3e582af9845585363c3e23ac6494b4"}}
+{"t":2249,"device":"a","dir":"in","msg":{"id":7,"ok":true,"result":{"revision":4}}}
+{"t":2249,"device":"a","dir":"out","msg":{"id":8,"op":"syncDevices","record":{"revision":4}}}
+{"t":2255,"device":"a","dir":"in","msg":{"id":8,"ok":true,"result":{"epoch":1,"fingerprint":"MTXPMC7D1Z4N","members":[{"addedMs":1792387736755,"id":"8025d72185f707ffa2d9dcdb1b3af854","kit":false,"name":"Trace A","sponsor":null,"thisDevice":true},{"addedMs":1792387738962,"id":"dc217b870767086721898b58dc733866","kit":true,"name":null,"sponsor":"8025d72185f707ffa2d9dcdb1b3af854","thisDevice":false}],"record":null,"rotationPending":false}}}
+{"t":2255,"device":"a","dir":"out","msg":{"id":9,"op":"forkPreview","record":{"revision":4}}}
+{"t":2265,"device":"a","dir":"in","msg":{"id":9,"ok":true,"result":{"drops":[],"head":"a6bb6a30ed0fc95f70d00c77b64bb22d7826dbe6dee77b21a1cf4153977419db","kits":[{"device":"8025d72185f707ffa2d9dcdb1b3af854","kits":["dc217b870767086721898b58dc733866"]}],"mine":[{"addedMs":1792387736755,"id":"8025d72185f707ffa2d9dcdb1b3af854","kit":false,"name":"Trace A","sponsor":null,"thisDevice":true},{"addedMs":1792387738962,"id":"dc217b870767086721898b58dc733866","kit":true,"name":null,"sponsor":"8025d72185f707ffa2d9dcdb1b3af854","thisDevice":false}],"onServer":true,"server":[{"addedMs":1792387736755,"id":"8025d72185f707ffa2d9dcdb1b3af854","kit":false,"name":"Trace A","sponsor":null,"thisDevice":true},{"addedMs":1792387738962,"id":"dc217b870767086721898b58dc733866","kit":true,"name":null,"sponsor":"8025d72185f707ffa2d9dcdb1b3af854","thisDevice":false}]}}}
+{"t":2265,"device":"b","dir":"out","msg":{"id":1005,"op":"subscribe","view":"pairing","params":{"server":"http://127.0.0.1:PORT","name":"Trace B"}}}
+{"t":2265,"device":"b","dir":"in","msg":{"id":1005,"ok":true,"result":{"snapshot":{"phase":"starting"},"sub":2}}}
+{"t":2286,"device":"b","dir":"in","msg":{"sub":2,"updates":[{"expiresMs":1792388339011,"phase":"waiting","qr":"marquee:pair?v=2&s=SERVER&p=PAIRING&k=KEY&g=SIG"}]}}
+{"t":2367,"device":"a","dir":"out","msg":{"id":10,"op":"approvePairing","record":{"revision":4},"qr":"marquee:pair?v=2&s=SERVER&p=PAIRING&k=KEY&g=SIG"}}
+{"t":2376,"device":"a","dir":"in","msg":{"id":10,"ok":true,"result":{"code":"622547","record":{"revision":4}}}}
+{"t":2376,"device":"a","dir":"out","msg":{"id":11,"op":"cancelPairing","record":{"revision":4},"qr":"marquee:pair?v=2&s=SERVER&p=PAIRING&k=KEY&g=SIG"}}
+{"t":2395,"device":"a","dir":"in","msg":{"id":11,"ok":true,"result":{"revision":5}}}
+{"t":2395,"device":"b","dir":"out","msg":{"id":1006,"op":"unsubscribe","sub":2}}
+{"t":2395,"device":"b","dir":"in","msg":{"id":1006,"ok":true,"result":{}}}

@@ -13,12 +13,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -95,9 +97,24 @@ class SyncAccountTest {
 
     private val devices = """{"members":[],"fingerprint":"FP","epoch":1,"rotationPending":false}"""
 
-    private fun report(record: SyncRecord? = null) =
-        """{"pushed":0,"stale":0,"refused":0,"waiting":0,"pulled":0,"applied":0,"unreadable":0,"newer":0,"parked":0,
-           "oldEpochWrites":0,"clockGapMs":0,"rotationWaitMs":0,"fingerprint":"FP","record":${record ?: "null"},"again":false}"""
+    private fun report(
+        record: SyncRecord? = null,
+        refused: Int = 0,
+        fingerprint: String = "FP",
+    ) = """{"pushed":0,"stale":0,"refused":$refused,"waiting":0,"pulled":0,"applied":0,"unreadable":0,"newer":0,
+           "parked":0,"oldEpochWrites":0,"clockGapMs":0,"rotationWaitMs":0,"fingerprint":"$fingerprint",
+           "record":${record ?: "null"},"again":false}"""
+
+    private fun member(
+        id: String,
+        kit: Boolean = false,
+        me: Boolean = false,
+    ) = """{"id":"$id","kit":$kit,"name":"$id","sponsor":null,"addedMs":1,"thisDevice":$me}"""
+
+    private fun list(
+        vararg members: String,
+        fingerprint: String = "FP",
+    ) = """{"members":[${members.joinToString(",")}],"fingerprint":"$fingerprint","epoch":1,"rotationPending":false}"""
 
     private fun account(store: Store) = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO)
 
@@ -243,5 +260,161 @@ class SyncAccountTest {
             assertEquals("unsent", e.code)
             assertTrue(sync.joined)
             assertEquals(1, store.held.revision())
+        }
+
+    @Test
+    fun `the server's list is taken only as shown, and a list that moved since is refused`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            var sent: JsonObject? = null
+            answers["useServerRoster"] = { msg ->
+                sent = msg
+                ok(record(2).toString())
+            }
+            sync.useServerRoster(listOf("tv"), "HEAD1")
+            assertEquals("HEAD1", sent!!.getValue("head").jsonPrimitive.content)
+            assertEquals(listOf("tv"), sent!!.getValue("drop").jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(2, store.held.revision())
+            answers["useServerRoster"] = { fail("rosterChanged") }
+            val e = assertFailsWith<CoreError> { sync.useServerRoster(emptyList(), "HEAD1") }
+            assertEquals("rosterChanged", e.code)
+            assertEquals(2, store.held.revision())
+        }
+
+    @Test
+    fun `They differ ends the approval through the core and keeps the new key`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            var qr: String? = null
+            answers["cancelPairing"] = { msg ->
+                qr = msg.getValue("qr").jsonPrimitive.content
+                ok(record(3).toString())
+            }
+            sync.cancelPairing("marquee:pair?v=2&s=x&p=1")
+            assertEquals("marquee:pair?v=2&s=x&p=1", qr)
+            assertEquals(3, store.held.revision())
+        }
+
+    @Test
+    fun `an account started on a page that closed before the answer is still stored`() =
+        runBlocking {
+            val store = Store(null)
+            val sync = account(store)
+            val answer = CompletableDeferred<Unit>()
+            answers["createSyncAccount"] = {
+                answer.await()
+                ok(record(1).toString())
+            }
+            val page = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            page.launch { sync.createAccount("https://sync.example.org", "", "Phone") }
+            until("the core was asked") { asked.contains("createSyncAccount") }
+            // Back: the page's work ends before the sync server answered.
+            page.cancel()
+            answer.complete(Unit)
+            until("stored") { store.held != null }
+            until("joined") { sync.joined }
+            assertEquals(1, store.held.revision())
+        }
+
+    @Test
+    fun `a kit stays in memory until saved, and one never saved goes with the next kit`() =
+        runBlocking {
+            val store = Store(record(1))
+            val unseen = CopyOnWriteArrayList<String?>()
+            val sync = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, saveUnseenKit = { unseen += it })
+            var reads = 0
+            answers["syncDevices"] = {
+                // Before the kit: this device; after it: the kit too.
+                reads++
+                ok(
+                    if (reads ==
+                        1
+                    ) {
+                        list(member("me", me = true))
+                    } else {
+                        list(member("me", me = true), member("k1", kit = true))
+                    },
+                )
+            }
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
+            assertEquals("ABCD", sync.createRecoveryKit())
+            assertEquals("ABCD", sync.unsavedKit)
+            // Its id is kept (never the kit), so a run that ends before "I saved it" knows it went unseen.
+            assertEquals("k1", unseen.last())
+            sync.kitSaved()
+            assertNull(sync.unsavedKit)
+            assertNull(unseen.last())
+            // The next run: the app ended before "I saved it".
+            val later = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, unseenKitAtStart = "k1")
+            assertEquals("k1", later.unseenKit)
+            asked.clear()
+            reads = 1
+            answers["removeDevice"] = { msg ->
+                assertEquals("k1", msg.getValue("device").jsonPrimitive.content)
+                ok(record(3).toString())
+            }
+            answers["syncDevices"] = { ok(list(member("me", me = true), member("k1", kit = true))) }
+            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","record":${record(4)}}""") }
+            assertEquals("EFGH", later.createRecoveryKit())
+            assertTrue(asked.indexOf("removeDevice") in 0 until asked.indexOf("createRecoveryKit"))
+            assertNull(later.unseenKit)
+        }
+
+    @Test
+    fun `a failed read of the list marks it stale, and the 12 characters follow the newest answer`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            sync.startRounds()
+            answers["syncDevices"] = { ok(list(member("me", me = true), fingerprint = "OLD")) }
+            sync.loadDevices()
+            assertEquals("OLD", sync.fingerprint)
+            assertFalse(sync.listFailed)
+            // A round sees a change; reading the list after it fails.
+            answers["syncDevices"] = { fail(null, "http status 502") }
+            answers["syncNow"] = { ok(report(fingerprint = "NEW")) }
+            sync.request()
+            until("the round's 12 characters") { sync.fingerprint == "NEW" }
+            until("the list marked stale") { sync.listFailed }
+            assertEquals("OLD", sync.devices?.fingerprint)
+            answers["syncDevices"] = { ok(list(member("me", me = true), fingerprint = "NEW")) }
+            sync.loadDevices()
+            assertFalse(sync.listFailed)
+        }
+
+    @Test
+    fun `a refused change stays listed after a clean round, until dismissed`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            sync.startRounds()
+            answers["syncDevices"] = { ok(devices) }
+            answers["syncNow"] = { ok(report(refused = 1)) }
+            sync.request()
+            until("counted") { sync.failed.refused == 1 }
+            answers["syncNow"] = { ok(report()) }
+            val before = asked.count { it == "syncNow" }
+            sync.request()
+            until("a clean round ran") { asked.count { it == "syncNow" } > before && !sync.syncing }
+            assertEquals(1, sync.failed.refused)
+            sync.dismissFailed()
+            assertEquals(0, sync.failed.refused)
+        }
+
+    @Test
+    fun `an op asked right after a join runs on the new account`() =
+        runBlocking {
+            val store = Store(record(9, account = "old"))
+            val sync = account(store)
+            var sentAccount: String? = null
+            answers["lostPreview"] = { msg ->
+                sentAccount = (msg.getValue("record") as JsonObject).account()
+                ok("""{"devices":[],"kits":[]}""")
+            }
+            sync.join(record(1, account = "new"))
+            sync.lostPreview("x")
+            assertEquals("new", sentAccount)
         }
 }

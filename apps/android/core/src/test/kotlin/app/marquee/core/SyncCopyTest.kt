@@ -3,6 +3,7 @@ package app.marquee.core
 import app.marquee.core.SyncCopy.Action
 import app.marquee.core.model.Blocked
 import app.marquee.core.model.SyncReport
+import java.util.Locale
 import java.util.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -88,6 +89,7 @@ class SyncCopyTest {
         oldEpochWrites: Int = 0,
         pushed: Int = 1,
         applied: Int = 0,
+        again: Boolean = false,
     ) = SyncReport(
         pushed = pushed,
         stale = 0,
@@ -103,18 +105,19 @@ class SyncCopyTest {
         rotationWaitMs = rotationWaitMs,
         blocked = blocked,
         fingerprint = "f",
-        again = false,
+        again = again,
     )
 
     @Test
     fun `one of each reads in the singular`() {
         assertEquals(
             listOf(
+                "1 edit from this device could not be sent: the sync server does not take it, so it stays on this " +
+                    "device only.",
+                "1 change from another device could not be read and was skipped.",
+                "1 change comes from a newer version of Marquee. Update Marquee here to see it.",
                 "1 edit waits for the sync server's clock to catch up. Nothing is lost.",
                 "1 change from another device waits until this device catches up with a device change.",
-                "1 edit was too large or malformed for the sync server, so it stays only on this device.",
-                "1 change from another device did not open with this account's key and was skipped.",
-                "1 change comes from a newer version of Marquee. Update the app to see it.",
             ),
             SyncCopy.notes(report(waiting = 1, parked = 1, refused = 1, unreadable = 1, newer = 1)),
         )
@@ -125,15 +128,17 @@ class SyncCopyTest {
         assertEquals(emptyList(), SyncCopy.notes(report()))
         assertEquals(
             listOf(
+                "2 edits from this device could not be sent: the sync server does not take them, so they stay on " +
+                    "this device only.",
+                "2 changes from other devices could not be read and were skipped.",
+                "4 changes come from a newer version of Marquee. Update Marquee here to see them.",
                 "The sync server's clock and this device's disagree by 15 minutes, so edits sync in the order they are sent.",
                 "2 edits wait for the sync server's clock to catch up. Nothing is lost.",
                 "3 changes from other devices wait until this device catches up with a device change.",
                 "The sync server may be hiding a device change. Compare the 12 characters below on each device.",
                 "Edits wait 1 minute more: the sync server was restored, and other devices get a chance to catch up first.",
-                "2 edits were too large or malformed for the sync server, so they stay only on this device.",
-                "2 changes from another device did not open with this account's key and were skipped.",
-                "4 changes come from a newer version of Marquee. Update the app to see them.",
                 "Edits wait until the account finishes a device change.",
+                "The last sync stopped before it finished. It goes on with the next one.",
             ),
             SyncCopy.notes(
                 report(
@@ -146,6 +151,7 @@ class SyncCopyTest {
                     unreadable = 2,
                     newer = 4,
                     blocked = Blocked.RotationPending,
+                    again = true,
                 ),
             ),
         )
@@ -174,9 +180,11 @@ class SyncCopyTest {
         val utc = TimeZone.getTimeZone("UTC")
         // 2026-10-19 12:00 UTC
         val day = 1_792_411_200_000L
-        assertEquals("Added Oct 19, 2026, the first device", SyncCopy.addedLine(false, day, null, utc))
-        assertEquals("Added Oct 19, 2026 through Phone", SyncCopy.addedLine(false, day, "Phone", utc))
-        assertEquals("Made Oct 19, 2026 on Phone", SyncCopy.addedLine(true, day, "Phone", utc))
+        assertEquals("Added Oct 19, 2026, the first device", SyncCopy.addedLine(false, day, null, utc, Locale.US))
+        assertEquals("Added Oct 19, 2026 through Phone", SyncCopy.addedLine(false, day, "Phone", utc, Locale.US))
+        assertEquals("Made Oct 19, 2026 on Phone", SyncCopy.addedLine(true, day, "Phone", utc, Locale.US))
+        // The device's own date format.
+        assertEquals("Added 19 okt 2026 through Phone", SyncCopy.addedLine(false, day, "Phone", utc, Locale("nl")))
         assertEquals("Remove 1 device", SyncCopy.lostButton(1))
         assertEquals("Remove 3 devices", SyncCopy.lostButton(3))
         assertEquals(
@@ -187,7 +195,9 @@ class SyncCopyTest {
             "2 recovery kits made on these devices stop working. Make a new one afterwards.",
             SyncCopy.lostKits(2),
         )
-        assertEquals("Approve a device from sync.example.org?", SyncCopy.approveAsk("sync.example.org"))
+        assertTrue(SyncCopy.removeDeviceAsk("Tablet").endsWith("Devices it added stay."))
+        assertTrue(SyncCopy.removeDeviceAsk("Tablet", 1).endsWith(" The recovery kit made on it stops working too."))
+        assertTrue(SyncCopy.removeDeviceAsk("Tablet", 2).endsWith(" The 2 recovery kits made on it stop working too."))
         assertEquals(
             "TV is removed from your account and cannot read anything you change from now on.",
             SyncCopy.named(SyncCopy.LOST_LEDE, "TV"),
@@ -195,6 +205,63 @@ class SyncCopyTest {
         assertEquals(
             "Synced at 3:15 PM: 1 change sent, 2 changes received.",
             SyncCopy.syncedLine("3:15 PM", report(pushed = 1, applied = 2)),
+        )
+    }
+
+    @Test
+    fun `the compare page names what continuing removes, and why it cannot go on`() {
+        assertEquals("Continue with the server's list", SyncCopy.forkButton(0))
+        assertEquals("Continue and remove 1 device", SyncCopy.forkButton(1))
+        assertEquals("Continue and remove 2 devices and 1 recovery kit", SyncCopy.forkButton(2, 1))
+        assertEquals("Continue and remove 1 device and 3 recovery kits", SyncCopy.forkButton(1, 3))
+        assertEquals("Its recovery kit goes with it.", SyncCopy.goesWith(1))
+        assertEquals("Its 2 recovery kits go with it.", SyncCopy.goesWith(2))
+        assertEquals(SyncCopy.FORK_CHANGED, SyncCopy.problem("rosterChanged", "", Action.ServerList))
+        // A server that lost this device's token: retrying cannot help, so it says so.
+        assertEquals(SyncCopy.FORK_TOKEN_LOST, SyncCopy.problem(null, "http status 401", Action.Compare))
+        assertEquals(
+            "The sync server did not answer, so the lists could not be compared. Try again in a moment.",
+            SyncCopy.problem(null, "http status 502", Action.Compare),
+        )
+        assertTrue(SyncCopy.problem("fork", "").endsWith("Compare the lists to keep syncing."))
+    }
+
+    @Test
+    fun `a round that failed or waits never reads as synced`() {
+        assertEquals(SyncCopy.Outcome.Complete, SyncCopy.outcome(report()))
+        assertEquals(SyncCopy.Outcome.Failed, SyncCopy.outcome(report(refused = 1)))
+        assertEquals(SyncCopy.Outcome.Failed, SyncCopy.outcome(report(unreadable = 1)))
+        assertEquals(SyncCopy.Outcome.Pending, SyncCopy.outcome(report(blocked = Blocked.NotActive)))
+        assertEquals(SyncCopy.Outcome.Pending, SyncCopy.outcome(report(again = true)))
+        assertEquals(SyncCopy.Outcome.Pending, SyncCopy.outcome(report(newer = 1)))
+        assertEquals(
+            "Synced at 3:15 PM. Some changes did not sync.",
+            SyncCopy.stateLine("3:15 PM", report(refused = 1)),
+        )
+        assertEquals("Synced at 3:15 PM. Some changes still wait.", SyncCopy.stateLine("3:15 PM", report(waiting = 1)))
+        assertEquals(
+            "Synced at 3:15 PM: 1 change sent, 0 changes received.",
+            SyncCopy.stateLine("3:15 PM", report()),
+        )
+        // Settings: a problem, then failures kept since joining, then what waits, then the time.
+        assertEquals(SyncCopy.OFF_LINE, SyncCopy.summary(false, null, null, null, null))
+        assertEquals("Nope.", SyncCopy.summary(true, "Nope.", "Since...", report(), "3:15 PM"))
+        val failed = SyncCopy.failedSince(2, 1, 0)
+        assertEquals(
+            "Since this device joined, 2 edits from this device could not be sent and stay here only, and 1 change " +
+                "from other devices could not be read.",
+            failed,
+        )
+        assertEquals(failed, SyncCopy.summary(true, null, failed, report(), "3:15 PM"))
+        assertEquals(
+            "The sync server does not take edits from this device yet, so they were not sent.",
+            SyncCopy.summary(true, null, null, report(blocked = Blocked.NotActive), "3:15 PM"),
+        )
+        assertEquals("On. Synced at 3:15 PM.", SyncCopy.summary(true, null, null, report(), "3:15 PM"))
+        assertEquals(null, SyncCopy.failedSince(0, 0, 0))
+        assertEquals(
+            "Since this device joined, 1 change from a newer version of Marquee waits for an update here.",
+            SyncCopy.failedSince(0, 0, 1),
         )
     }
 }

@@ -57,6 +57,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object RecoveryKit : Route
 
+    /** Compare this device's list with the sync server's, after a fork. */
+    @Serializable
+    data object SyncFork : Route
+
     /** Report the account's device [id] lost. */
     @Serializable
     data class ReportLost(

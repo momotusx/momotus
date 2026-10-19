@@ -8,6 +8,7 @@ import app.marquee.core.SyncRules
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Devices
+import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
@@ -64,6 +65,10 @@ open class SyncAccount(
     recoveredAtStart: Boolean = false,
     /** Keeps [recovered] across launches. */
     private val saveRecovered: (Boolean) -> Unit = {},
+    /** A kit made in an earlier run whose "I saved it" never came (its id, or "" when the list did not show it). */
+    unseenKitAtStart: String? = null,
+    /** Keeps the made-but-not-saved kit's id across launches (never the kit itself). */
+    private val saveUnseenKit: (String?) -> Unit = {},
 ) {
     /** A failure in words, with the core's code when it has one (the page offers a fix for some). */
     data class Problem(
@@ -83,9 +88,30 @@ open class SyncAccount(
     var lastSynced: Long? by mutableStateOf(null)
         private set
 
-    /** The device list as last fetched; its 12 characters are the ones to compare. */
+    /** The device list as last fetched. */
     var devices: Devices? by mutableStateOf(null)
         private set
+
+    /** The 12 characters to compare, from whichever answer came last: a round or the device list. */
+    var fingerprint: String? by mutableStateOf(null)
+        private set
+
+    /**
+     * The last read of the device list failed: the list, and the 12 characters when they came with it,
+     * may be out of date until a read works again.
+     */
+    var listFailed by mutableStateOf(false)
+        private set
+
+    /** Changes that failed since this device joined, kept until the user dismisses them. */
+    var failed by mutableStateOf(Failed())
+        private set
+
+    data class Failed(
+        val refused: Int = 0,
+        val unreadable: Int = 0,
+        val newer: Int = 0,
+    )
 
     /** What went wrong in the last round, in words. */
     var problem: Problem? by mutableStateOf(null)
@@ -97,6 +123,20 @@ open class SyncAccount(
 
     /** Joined with a recovery kit and no new kit made since: the page asks for one. */
     var recovered by mutableStateOf(recoveredAtStart)
+        private set
+
+    /**
+     * A kit made and not yet confirmed saved, in memory only (never on disk): the kit page shows it again
+     * after Back or a new activity, until the user says it is saved.
+     */
+    var unsavedKit: String? by mutableStateOf(null)
+        private set
+
+    /**
+     * A kit made earlier whose letters are gone before the user said it was saved (the app ended): its id
+     * when the list showed it, else "". Nobody holds it, so the next kit removes it.
+     */
+    var unseenKit: String? by mutableStateOf(unseenKitAtStart)
         private set
 
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -154,8 +194,17 @@ open class SyncAccount(
                 )
                 lastReport = report
                 lastSynced = System.currentTimeMillis()
+                fingerprint = report.fingerprint
                 problem = null
-                // The 12 characters to compare come from the device list: keep it as fresh as the round.
+                if (report.refused > 0 || report.unreadable > 0 || report.newer > 0) {
+                    failed =
+                        Failed(
+                            failed.refused + report.refused,
+                            failed.unreadable + report.unreadable,
+                            failed.newer + report.newer,
+                        )
+                }
+                // The list follows the round; when it cannot be read, the page says it may be out of date.
                 if (report.fingerprint != devices?.fingerprint) runCatching { loadDevices() }
                 if (!report.again) return
             }
@@ -174,10 +223,18 @@ open class SyncAccount(
         recoveredWithKit: Boolean = false,
     ): Job {
         joining = true
-        synchronized(storeLock) { account++ }
+        // The bump and the write together, before join returns: an op from before stores nothing, and one
+        // asked after runs on this account, never on the old record. A new account's record is stored as it
+        // is (revisions compare only within one account). ponytail: one small write on the caller's thread.
+        val durable =
+            synchronized(storeLock) {
+                account++
+                store.save(record)
+            }
+        unsavedKit = null
+        unseenKit = null
+        saveUnseenKit(null)
         return scope.launch {
-            // A new account's record is stored as it is: revisions compare only within one account.
-            val durable = withContext(io) { synchronized(storeLock) { store.save(record) } }
             heldOnly = !durable
             joined = true
             recovered = recoveredWithKit
@@ -185,6 +242,9 @@ open class SyncAccount(
             lastReport = null
             lastSynced = null
             devices = null
+            fingerprint = null
+            listFailed = false
+            failed = Failed()
             problem = if (durable) null else Problem("storage", SyncCopy.JOINED_SESSION_ONLY)
             joining = false
             request()
@@ -196,31 +256,51 @@ open class SyncAccount(
         join(record)
     }
 
-    /** The first device of a new account. Returns once the record is stored. */
+    /** Forgets the failures listed since joining. */
+    fun dismissFailed() {
+        failed = Failed()
+    }
+
+    /**
+     * The first device of a new account. Runs in the app's scope: a page left once the sync server has
+     * answered still stores the record. Returns once it is stored.
+     */
     suspend fun createAccount(
         server: String,
         invite: String,
         name: String,
-    ) {
-        val record = ops.createSyncAccount(server, name, invite.ifEmpty { null })
-        join(record).join()
-    }
+    ) = scope
+        .async {
+            val record = ops.createSyncAccount(server, name, invite.ifEmpty { null })
+            join(record).join()
+        }.await()
 
-    /** A new device joining with a recovery kit; the page then asks for a new kit. */
+    /** A new device joining with a recovery kit, in the app's scope like [createAccount]; the page then asks for a kit. */
     suspend fun recover(
         server: String,
         kit: String,
         name: String,
-    ) {
-        val record = ops.recover(server, kit, name)
-        join(record, recoveredWithKit = true).join()
-    }
+    ) = scope
+        .async {
+            val record = ops.recover(server, kit, name)
+            join(record, recoveredWithKit = true).join()
+        }.await()
 
     /** The device list, fresh from the sync server. */
     suspend fun loadDevices(): Devices {
         val mine = account
-        val list = withRecord("syncDevices", { ops.syncDevices(it) }) { it.record }
-        if (account == mine) devices = list
+        val list =
+            try {
+                withRecord("syncDevices", { ops.syncDevices(it) }) { it.record }
+            } catch (e: Exception) {
+                if (e !is CancellationException && account == mine) listFailed = true
+                throw e
+            }
+        if (account == mine) {
+            devices = list
+            fingerprint = list.fingerprint
+            listFailed = false
+        }
         return list
     }
 
@@ -234,11 +314,39 @@ open class SyncAccount(
 
     /** A recovery kit, to show once: nothing here keeps it. The page asks who is there first. */
     suspend fun createRecoveryKit(): String {
+        val before =
+            runCatching { loadDevices() }
+                .getOrNull()
+                ?.members
+                ?.filter { it.kit }
+                ?.map { it.id }
+                ?.toSet()
+        // A kit lost unseen goes first: nobody holds it.
+        unseenKit?.takeIf { it.isNotEmpty() && before?.contains(it) == true }?.let { id ->
+            withRecord("removeDevice", { ops.removeDevice(it, id) }) { it }
+        }
         val made = withRecord("createRecoveryKit", { ops.createRecoveryKit(it) }) { it.record }
+        unsavedKit = made.kit
+        unseenKit = null
         recovered = false
         saveRecovered(false)
-        runCatching { loadDevices() }
+        // Its id, kept until "I saved it": should the app end first, the next kit removes this one.
+        val after = runCatching { loadDevices() }.getOrNull()
+        saveUnseenKit(
+            after
+                ?.members
+                ?.firstOrNull { it.kit && before != null && it.id !in before }
+                ?.id
+                .orEmpty(),
+        )
         return made.kit
+    }
+
+    /** The user saved the kit: it leaves memory, and nothing marks it unseen. */
+    fun kitSaved() {
+        unsavedKit = null
+        unseenKit = null
+        saveUnseenKit(null)
     }
 
     /** What reporting [lost] would drop: its devices (ticked) and its kits (always). */
@@ -270,11 +378,26 @@ open class SyncAccount(
         problem = null
     }
 
-    /** After `fork`: the sync server's device list wins over this device's. */
-    suspend fun useServerRoster() {
-        withRecord("useServerRoster", { ops.useServerRoster(it) }) { it }
+    /** After `fork`: both device lists, read only, for the user to compare. */
+    suspend fun forkPreview(): ForkPreview = withRecord("forkPreview", { ops.forkPreview(it) }) { null }
+
+    /**
+     * After `fork`: the sync server's device list as [forkPreview] showed it ([head]), without [drop]. A
+     * list that moved since is refused (`rosterChanged`): compare again.
+     */
+    suspend fun useServerRoster(
+        drop: List<String>,
+        head: String,
+    ) {
+        withRecord("useServerRoster", { ops.useServerRoster(it, drop, head) }) { it }
         problem = null
         request()
+    }
+
+    /** "They differ": ends the approval of [qr] now; a device that joined with it is dropped. */
+    suspend fun cancelPairing(qr: String) {
+        withRecord("cancelPairing", { ops.cancelPairing(it, qr) }) { it }
+        runCatching { loadDevices() }
     }
 
     /**
@@ -363,10 +486,16 @@ open class SyncAccount(
         heldOnly = false
         joined = false
         devices = null
+        fingerprint = null
+        listFailed = false
+        failed = Failed()
         lastReport = null
         lastSynced = null
         recovered = false
         saveRecovered(false)
+        unsavedKit = null
+        unseenKit = null
+        saveUnseenKit(null)
     }
 
     companion object {

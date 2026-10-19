@@ -2,17 +2,26 @@ package app.marquee.android
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.KeyguardManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.biometrics.BiometricManager.Authenticators
 import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
 import android.os.PersistableBundle
+import android.os.SystemClock
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -162,19 +171,85 @@ object SyncClipboard {
                 putBoolean(key, true)
             }
         context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(clip)
+        later(context.applicationContext)
     }
 
-    /** Clears the clipboard when it still holds the kit (it can be read only while the app is in front). */
-    fun clearKit(context: Context) {
+    /**
+     * About a minute after a copy the kit leaves the clipboard: a timer while the app runs, and an alarm
+     * that runs even when the system ended the app meanwhile.
+     */
+    private fun later(app: Context) {
+        main.removeCallbacks(timer)
+        timer = Runnable { clearKit(app, onTimer = true) }
+        main.postDelayed(timer, CLEAR_MS)
+        app.getSystemService(AlarmManager::class.java)?.setAndAllowWhileIdle(
+            AlarmManager.ELAPSED_REALTIME,
+            SystemClock.elapsedRealtime() + CLEAR_MS,
+            alarm(app),
+        )
+    }
+
+    private val main = Handler(Looper.getMainLooper())
+    private var timer = Runnable {}
+
+    private fun alarm(app: Context) =
+        PendingIntent.getBroadcast(
+            app,
+            0,
+            Intent(app, KitClipReceiver::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /**
+     * Clears the clipboard when it still holds the kit. Only the app in front can read the clipboard: the
+     * timer, which may run behind another app, clears what it cannot read (ponytail: it may then clear
+     * something copied within that minute, as password managers do).
+     */
+    fun clearKit(
+        context: Context,
+        onTimer: Boolean = false,
+    ) {
         val board = context.getSystemService(ClipboardManager::class.java) ?: return
-        if (board.primaryClipDescription?.label != KIT_LABEL) return
+        val label = board.primaryClipDescription?.label
+        if (label != KIT_LABEL && !(onTimer && label == null)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             board.clearPrimaryClip()
         } else {
             board.setPrimaryClip(ClipData.newPlainText("", ""))
         }
+        // Cleared: neither timer may clear what the user copies next.
+        main.removeCallbacks(timer)
+        context.applicationContext.getSystemService(AlarmManager::class.java)?.cancel(alarm(context.applicationContext))
+    }
+
+    private const val CLEAR_MS = 60_000L
+}
+
+/** The alarm half of [SyncClipboard]'s minute: the app may no longer run when it fires. */
+class KitClipReceiver : BroadcastReceiver() {
+    override fun onReceive(
+        context: Context,
+        intent: Intent,
+    ) = SyncClipboard.clearKit(context, onTimer = true)
+}
+
+/** Keeps the page out of screenshots, screen recordings and the recents thumbnail while it shows. */
+@Composable
+fun SecureWindow() {
+    val context = LocalContext.current
+    DisposableEffect(context) {
+        val window = context.findActivity()?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
 }
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
 
 fun Context.hasCamera() = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
 

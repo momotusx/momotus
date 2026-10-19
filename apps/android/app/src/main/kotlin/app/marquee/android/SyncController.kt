@@ -36,6 +36,14 @@ class SyncController(
                 .putBoolean(RECOVERED, it)
                 .apply()
         },
+        unseenKitAtStart = context.prefs().getString(UNSEEN_KIT, null),
+        saveUnseenKit = {
+            context
+                .prefs()
+                .edit()
+                .putString(UNSEEN_KIT, it)
+                .apply()
+        },
     ) {
     private var timer: Job? = null
 
@@ -69,6 +77,7 @@ class SyncController(
     private companion object {
         const val EVERY_MS = 5 * 60_000L
         const val RECOVERED = "syncRecovered"
+        const val UNSEEN_KIT = "syncUnseenKit"
 
         fun Context.prefs() = getSharedPreferences("marquee", Context.MODE_PRIVATE)
     }

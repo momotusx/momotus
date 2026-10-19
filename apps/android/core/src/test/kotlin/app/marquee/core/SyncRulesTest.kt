@@ -1,5 +1,7 @@
 package app.marquee.core
 
+import app.marquee.core.model.DeviceKits
+import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.MemberInfo
 import kotlinx.serialization.json.JsonObject
@@ -33,6 +35,8 @@ class SyncRulesTest {
         assertEquals("127.0.0.1", SyncRules.pairingHost("marquee:pair?v=2&s=http%3A%2F%2F127.0.0.1%3A17803&p=a"))
         assertNull(SyncRules.pairingHost("marquee:pair?v=2&p=abc"))
         assertNull(SyncRules.pairingHost("marquee:pair?v=2&s=not%20an%20address&p=abc"))
+        // A bad percent escape is not a code, and never ends the app.
+        assertNull(SyncRules.pairingHost("marquee:pair?s=%zz"))
     }
 
     @Test
@@ -63,7 +67,7 @@ class SyncRulesTest {
         assertEquals("Recovery kit", SyncRules.memberName(member("k", "ignored", kit = true)))
         assertEquals("Unnamed device", SyncRules.memberName(member("n", "")))
         assertEquals("Phone", SyncRules.sponsorName(list[1], list))
-        assertEquals("a removed device", SyncRules.sponsorName(list[2], list))
+        assertEquals("a device or kit since removed", SyncRules.sponsorName(list[2], list))
         assertNull(SyncRules.sponsorName(list[0], list))
     }
 
@@ -128,5 +132,46 @@ class SyncRulesTest {
         assertFalse(SyncRules.plainAddress("https://user:secret@sync.example.org"))
         assertFalse(SyncRules.plainAddress("sync.example.org"))
         assertEquals("sync.example.org", SyncRules.hostOf("https://sync.example.org/x?y"))
+    }
+
+    private fun preview(
+        mine: List<MemberInfo>,
+        server: List<MemberInfo>,
+        drops: List<String> = emptyList(),
+        kits: List<DeviceKits> = emptyList(),
+    ) = ForkPreview(mine = mine, server = server, drops = drops, kits = kits, onServer = true, head = "h")
+
+    @Test
+    fun `the compare page splits the lists and removes only what the user ticked`() {
+        val me = member("me", thisDevice = true)
+        val tv = member("tv")
+        val tablet = member("tablet")
+        val gone = member("gone")
+        val desk = member("desk")
+        val sides = SyncRules.forkSides(mine = listOf(me, tv, desk), server = listOf(me, tv, tablet, gone))
+        assertEquals(listOf("me", "tv"), sides.both.map { it.id })
+        assertEquals(listOf("tablet", "gone"), sides.serverOnly.map { it.id })
+        assertEquals(listOf("desk"), sides.mineOnly.map { it.id })
+        val server = listOf(me, tv, tablet, gone)
+        // Never this device, never one that goes anyway, only what is ticked.
+        assertEquals(
+            listOf("tv"),
+            SyncRules.forkDrop(server, drops = listOf("gone"), ticked = setOf("me", "tv", "gone")),
+        )
+        assertEquals(emptyList(), SyncRules.forkDrop(server, drops = emptyList(), ticked = emptySet()))
+    }
+
+    @Test
+    fun `a ticked device takes the kits it made, except those that go anyway`() {
+        val p =
+            preview(
+                mine = emptyList(),
+                server = listOf(member("tv"), member("tablet")),
+                drops = listOf("k2"),
+                kits = listOf(DeviceKits("tv", listOf("k1", "k2")), DeviceKits("tablet", listOf("k3"))),
+            )
+        assertEquals(listOf("k1"), SyncRules.kitsOf(p, "tv"))
+        assertEquals(listOf("k1", "k3"), SyncRules.forkKits(p, drop = listOf("tv", "tablet")))
+        assertEquals(emptyList(), SyncRules.forkKits(p, drop = emptyList()))
     }
 }

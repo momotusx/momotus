@@ -366,8 +366,10 @@ private fun AppNav(
                             onAdd = { backStack.add(Route.AddDevice) },
                             onKit = { backStack.add(Route.RecoveryKit) },
                             onLost = { backStack.add(Route.ReportLost(it)) },
+                            onCompare = { backStack.add(Route.SyncFork) },
                         )
                     }
+                    entry<Route.SyncFork> { ForkScreen(sync, onDone = ::pop) }
                     entry<Route.SyncJoin> { route -> SyncJoinScreen(sync, route.kit, onDone = ::pop) }
                     entry<Route.AddDevice> { AddDeviceScreen(sync, onDone = ::pop) }
                     entry<Route.RecoveryKit> { RecoveryKitScreen(sync, onDone = ::pop) }

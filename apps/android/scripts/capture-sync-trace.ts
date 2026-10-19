@@ -1,6 +1,7 @@
 /** Records the sync golden trace from two real cores and a real sync server: device A starts an
  * account, B shows a pairing code, A approves it, both sync, A lists the devices, previews B lost,
- * makes a recovery kit, removes B. Writes core/src/test/resources/traces/sync.jsonl for the strict
+ * makes a recovery kit, removes B, reads both device lists (forkPreview), then approves B's next code
+ * and ends that approval at once (cancelPairing). Writes core/src/test/resources/traces/sync.jsonl for the strict
  * decode test. Records, kits and pairing keys are replaced by placeholders before writing, so the
  * file holds no secret of the (throwaway) account.
  *
@@ -86,6 +87,14 @@ await a.request("lostPreview", { record: recordA, lost: idB });
 recordA = (await a.request("createRecoveryKit", { record: recordA })).record;
 recordA = await a.request("removeDevice", { record: recordA, device: idB });
 await a.request("syncDevices", { record: recordA });
+await a.request("forkPreview", { record: recordA });
+// B shows a new code; A approves it, then the digits differ: A ends the approval.
+b.pushes.length = 0;
+const again = await b.request("subscribe", { view: "pairing", params: { server, name: "Trace B" } });
+const qr2 = await until("B's new code", () => b.pushes.find((p) => p.phase === "waiting")?.qr as string | undefined);
+recordA = (await a.request("approvePairing", { record: recordA, qr: qr2 })).record;
+recordA = await a.request("cancelPairing", { record: recordA, qr: qr2 });
+await b.request("unsubscribe", { sub: again.sub });
 a.close();
 b.close();
 
@@ -101,7 +110,7 @@ const opOf = new Map(lines.filter((l) => l.dir === "out").map((l) => [`${l.devic
 const body = lines.map((l) => {
   const op = opOf.get(`${l.device}:${l.msg.id}`);
   // Ops whose whole result or argument is the record itself.
-  const whole = op === "createSyncAccount" || op === "removeDevice" || op === "reportLost";
+  const whole = ["createSyncAccount", "removeDevice", "reportLost", "cancelPairing"].includes(op ?? "");
   const msg = JSON.parse(JSON.stringify(l.msg), secret);
   if (whole && l.dir === "in" && msg.result) msg.result = { revision: msg.result.revision ?? 0 };
   return JSON.stringify({ ...l, msg });

@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.MemberInfo
 import app.marquee.core.model.SyncRecord
@@ -23,7 +24,8 @@ object SyncRules {
                 .split('&')
                 .firstOrNull { it.startsWith("s=") }
                 ?.removePrefix("s=")
-                ?.let { java.net.URLDecoder.decode(it, Charsets.UTF_8.name()) }
+                // A bad escape (%zz) throws: such a code is not one, and must not end the app.
+                ?.let { runCatching { java.net.URLDecoder.decode(it, Charsets.UTF_8.name()) }.getOrNull() }
                 ?: return null
         return runCatching { URI(server).host }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
@@ -52,7 +54,8 @@ object SyncRules {
         members: List<MemberInfo>,
     ): String? {
         val sponsor = member.sponsor ?: return null
-        return members.firstOrNull { it.id == sponsor }?.let(::memberName) ?: "a removed device"
+        // A device that joined with a kit names the kit, which the join used up.
+        return members.firstOrNull { it.id == sponsor }?.let(::memberName) ?: "a device or kit since removed"
     }
 
     /** What a lost report drops: the lost device and what it added that the user did not untick. */
@@ -104,6 +107,52 @@ object SyncRules {
                 .map { LostRow(it, SyncCopy.UNKNOWN, SyncCopy.UNKNOWN_DETAIL) }
         return known + unknown
     }
+
+    /** The two sides of a different device list, by id: on both, only on the server's, only on this device's. */
+    data class ForkSides(
+        val both: List<MemberInfo>,
+        val serverOnly: List<MemberInfo>,
+        val mineOnly: List<MemberInfo>,
+    )
+
+    fun forkSides(
+        mine: List<MemberInfo>,
+        server: List<MemberInfo>,
+    ): ForkSides {
+        val here = mine.map { it.id }.toSet()
+        val there = server.map { it.id }.toSet()
+        return ForkSides(
+            both = server.filter { it.id in here },
+            serverOnly = server.filter { it.id !in here },
+            mineOnly = mine.filter { it.id !in there },
+        )
+    }
+
+    /**
+     * What continuing with the server's list removes on the user's word: the ticked members of that list,
+     * never this device and never one that goes anyway ([drops]).
+     */
+    fun forkDrop(
+        server: List<MemberInfo>,
+        drops: List<String>,
+        ticked: Set<String>,
+    ) = server.filter { !it.thisDevice && it.id !in drops && it.id in ticked }.map { it.id }
+
+    /** The kits [device] made that would go with it: none of those that go anyway. */
+    fun kitsOf(
+        preview: ForkPreview,
+        device: String,
+    ) = preview.kits
+        .firstOrNull { it.device == device }
+        ?.kits
+        .orEmpty()
+        .filter { it !in preview.drops }
+
+    /** The kits that go with the devices the user ticked ([drop]), besides what goes anyway. */
+    fun forkKits(
+        preview: ForkPreview,
+        drop: List<String>,
+    ) = drop.flatMap { kitsOf(preview, it) }
 
     /** The record's revision (`SyncConfig.revision`); 0 when it has none. */
     fun revision(record: SyncRecord?): Long = (record?.get("revision") as? JsonPrimitive)?.longOrNull ?: 0

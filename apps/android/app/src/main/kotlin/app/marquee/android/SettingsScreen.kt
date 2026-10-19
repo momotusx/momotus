@@ -358,20 +358,25 @@ fun SettingsScreen(
         item(key = "devices-head") { Kicker("Devices and sync") }
         item(key = "devices") {
             // One page for the account: its state when joined, else the ways to join one (the web's line).
+            // What is wrong or still waits first, never "Synced" over a round that failed or waits (the web's words).
             val last = sync.lastSynced
             val words =
-                when {
-                    !sync.joined -> SyncCopy.OFF_LINE
-
-                    sync.problem != null -> sync.problem?.words.orEmpty()
-
-                    sync.syncing -> SyncCopy.SYNCING
-
-                    last != null -> "On. Synced at ${java.text.DateFormat.getTimeInstance(
-                        java.text.DateFormat.SHORT,
-                    ).format(java.util.Date(last))}."
-
-                    else -> "On."
+                if (sync.syncing && sync.joined && sync.problem == null) {
+                    SyncCopy.SYNCING
+                } else {
+                    SyncCopy.summary(
+                        joined = sync.joined,
+                        problem = sync.problem?.words,
+                        failed = SyncCopy.failedSince(sync.failed.refused, sync.failed.unreadable, sync.failed.newer),
+                        report = sync.lastReport,
+                        time =
+                            last?.let {
+                                java.text.DateFormat
+                                    .getTimeInstance(
+                                        java.text.DateFormat.SHORT,
+                                    ).format(java.util.Date(it))
+                            },
+                    )
                 }
             LinkRow(Icons.MonitorSmartphone, SyncCopy.TITLE, words, onSync)
         }

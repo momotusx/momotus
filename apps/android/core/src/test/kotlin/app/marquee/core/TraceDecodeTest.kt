@@ -6,6 +6,7 @@ import app.marquee.core.model.AddonsSnapshot
 import app.marquee.core.model.ApprovedPairing
 import app.marquee.core.model.Devices
 import app.marquee.core.model.DiscoverSnapshot
+import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeSnapshot
 import app.marquee.core.model.HomeUpdate
 import app.marquee.core.model.LibrarySnapshot
@@ -127,6 +128,7 @@ class TraceDecodeTest {
                 "lostPreview" to LostPreview.serializer(),
                 "approvePairing" to ApprovedPairing.serializer(),
                 "createRecoveryKit" to RecoveryKitResult.serializer(),
+                "forkPreview" to ForkPreview.serializer(),
             )
         val trace =
             javaClass
@@ -168,13 +170,14 @@ class TraceDecodeTest {
         }
         assertEquals(
             mapOf(
-                "subscribe" to 1,
-                "pairing" to 3,
-                "approvePairing" to 1,
+                "subscribe" to 2,
+                "pairing" to 4,
+                "approvePairing" to 2,
                 "syncNow" to 2,
                 "syncDevices" to 2,
                 "lostPreview" to 1,
                 "createRecoveryKit" to 1,
+                "forkPreview" to 1,
             ),
             decoded,
         )
