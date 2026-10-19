@@ -1082,15 +1082,17 @@ async fn an_hev1_entry_without_parameter_sets_says_so() {
     assert_eq!(hev1(&data).await, want);
 }
 
-/// `hvc1` and H.264 files have none, and a Matroska file costs one read.
+/// `hvc1` and H.264 files have none, and any other container costs one
+/// read: its first bytes, read as a box of 1 MiB, would send an MP4 walk on.
 #[tokio::test]
-async fn hvc1_h264_and_matroska_have_no_hev1_entries() {
+async fn hvc1_h264_and_other_containers_have_no_hev1_entries() {
     for name in ["hvc1.mp4", "h264.mp4"] {
         assert!(hev1(&fixture(name)).await.is_empty(), "{name}");
     }
-    let mut mkv = vec![0x1a, 0x45, 0xdf, 0xa3];
-    mkv.resize(4096, 0);
-    let reader = mem(&mkv);
+    let mut other = vec![0, 0x10, 0, 0];
+    other.extend_from_slice(b"RIFF");
+    other.resize(2 << 20, 0);
+    let reader = mem(&other);
     let found = hev1_entries(&reader, ProbeBudget::default(), &CancellationToken::new()).await;
     assert!(found.is_empty());
     assert_eq!(*reader.log.lock().unwrap(), vec![0]);
