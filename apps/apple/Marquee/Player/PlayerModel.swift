@@ -93,6 +93,11 @@ final class PlayerModel {
         prefs = LiveRecord("settings", core: core)
         // A video pauses in the background by default; the sound goes on with the screen locked.
         player.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
+        #if DEBUG
+        // Walks never make a sound (`-MQMute YES`), and the log says so before anything plays.
+        player.isMuted = DebugHooks.mute
+        coreLog.notice("debug: player muted \(self.player.isMuted, privacy: .public)")
+        #endif
         observePlayer()
     }
 

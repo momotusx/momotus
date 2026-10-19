@@ -15,6 +15,9 @@ enum DebugHooks {
     /// `-MQTab discover` starts on that tab.
     static var tab: AppTab? { UserDefaults.standard.string(forKey: "MQTab").flatMap(AppTab.init(rawValue:)) }
 
+    /// `-MQMute YES`: every player starts muted, so a walk never makes a sound.
+    static var mute: Bool { UserDefaults.standard.bool(forKey: "MQMute") }
+
     /// `-MQAutoPlay YES` presses Play on the title page once a version is picked.
     static var autoPlay: Bool { UserDefaults.standard.bool(forKey: "MQAutoPlay") }
 

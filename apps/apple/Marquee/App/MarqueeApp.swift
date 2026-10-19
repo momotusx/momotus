@@ -37,6 +37,10 @@ struct MarqueeApp: App {
         #if DEBUG && os(macOS)
         DebugHooks.listenForSnapshots()
         #endif
+        #if DEBUG
+        // Said at launch, before anything can play: a walk checks it first.
+        coreLog.notice("debug: players start \(DebugHooks.mute ? "muted" : "with sound", privacy: .public)")
+        #endif
     }
 
     /// Which profile's Trakt runs: none while the picker shows, a new one for every core.
