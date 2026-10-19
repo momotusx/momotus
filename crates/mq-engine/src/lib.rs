@@ -16,6 +16,7 @@
 mod adapter;
 mod pick;
 mod reader;
+mod scrape;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks;
 
@@ -24,6 +25,7 @@ pub use adapter::PeerTally;
 pub use librqbit;
 pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
+pub use scrape::SwarmCount;
 
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
@@ -335,6 +337,7 @@ struct Inner {
     session: Arc<Session>,
     cfg: EngineConfig,
     scopes: Scopes,
+    scraper: scrape::Scraper,
     torrents: Mutex<HashMap<TorrentHandle, Arc<Torrent>>>,
     next: AtomicU64,
     next_demand: AtomicU64,
@@ -464,11 +467,13 @@ impl Engine {
         let scopes = Scopes::new(&cfg.policy);
         let opts = session_options(&cfg, &scopes);
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
+        let scraper = scrape::Scraper::new(scopes.trackers.clone());
         let engine = Self {
             inner: Arc::new(Inner {
                 session,
                 cfg,
                 scopes,
+                scraper,
                 torrents: Mutex::default(),
                 next: AtomicU64::new(1),
                 next_demand: AtomicU64::new(1),
@@ -483,6 +488,35 @@ impl Engine {
     /// Where other peers reach us (tests point a leecher at a seeder with it).
     pub fn listen_addr(&self) -> Option<SocketAddr> {
         self.inner.session.listen_addr()
+    }
+
+    /// The swarms of `torrents` (info hash, the stream's `sources`) as their
+    /// trackers count them now, for ranking on live seeders rather than an
+    /// addon's number. Each hash's own trackers, plus the default ones when
+    /// the DHT is on (as for a bare hash), are scraped at once (BEP 15 UDP,
+    /// BEP 48 HTTP) under the trackers' address policy; answers after about
+    /// a second are dropped. A count is the tracker with the most seeders;
+    /// `None` when none answered. Counts stand for five minutes per hash.
+    pub async fn scrape(&self, torrents: &[(&str, &[String])]) -> Vec<Option<SwarmCount>> {
+        let defaults = self.inner.cfg.discovery;
+        let asked: Vec<(String, Vec<String>)> = torrents
+            .iter()
+            .map(|(hash, sources)| {
+                let given = sources
+                    .iter()
+                    .map(|t| t.strip_prefix("tracker:").unwrap_or(t))
+                    .filter(|t| t.contains("://"));
+                let extra = DEFAULT_TRACKERS.into_iter().filter(|_| defaults);
+                let mut trackers: Vec<String> = Vec::new();
+                for t in given.chain(extra) {
+                    if !trackers.iter().any(|x| x == t) {
+                        trackers.push(t.to_owned());
+                    }
+                }
+                (hash.to_ascii_lowercase(), trackers)
+            })
+            .collect();
+        self.inner.scraper.scrape(&asked).await
     }
 
     /// Addresses the policy refused so far, per kind.

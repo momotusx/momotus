@@ -2571,9 +2571,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "librqbit",
+ "librqbit-bencode",
  "mq-engine-sched",
  "mq-http",
  "mq-relparse",
+ "reqwest",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

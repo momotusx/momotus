@@ -18,7 +18,10 @@ mq-relparse = { path = "../mq-relparse" }
 # The address policy every peer must pass (plans/c27-torrent-policy.md).
 mq-http = { path = "../mq-http" }
 anyhow = "1"
-tokio = { workspace = true, features = ["fs", "io-util"] }
+# Tracker scrape (scrape.rs): both already built for librqbit.
+librqbit-bencode = "9.0.1"
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+tokio = { workspace = true, features = ["fs", "io-util", "net"] }
 thiserror.workspace = true
 tracing.workspace = true
 
