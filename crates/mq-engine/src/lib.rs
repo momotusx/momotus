@@ -939,9 +939,20 @@ mod tests {
         assert_eq!(trs(&bare), DEFAULT_TRACKERS.len(), "{bare}");
         let own = "udp://tracker.opentrackr.org:1337/announce".to_string();
         let mixed = magnet_uri(hash, &["tracker:udp://own.example:80".into(), own], true);
-        assert_eq!(trs(&mixed), DEFAULT_TRACKERS.len() + 1, "a default listed once");
-        assert!(mixed.find("own.example") < mixed.find("stealth"), "the stream's first");
-        assert_eq!(trs(&magnet_uri(hash, &[], false)), 0, "loopback tests keep theirs");
+        assert_eq!(
+            trs(&mixed),
+            DEFAULT_TRACKERS.len() + 1,
+            "a default listed once"
+        );
+        assert!(
+            mixed.find("own.example") < mixed.find("stealth"),
+            "the stream's first"
+        );
+        assert_eq!(
+            trs(&magnet_uri(hash, &[], false)),
+            0,
+            "loopback tests keep theirs"
+        );
     }
 
     #[test]
