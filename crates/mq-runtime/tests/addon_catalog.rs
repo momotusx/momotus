@@ -1067,9 +1067,14 @@ async fn hold_slots(core: &Core, host: &str) -> Vec<mq_http::StreamingResponse> 
 async fn a_list_waiting_for_a_slot_fails_at_its_deadline() {
     let source = Source::start(OFFICIAL, COMMUNITY).await;
     let core = Core::temporary("p").unwrap();
-    let _held = hold_slots(&core, "127.0.0.1").await;
+    // A name, as Cinemeta's address is, so the list takes the public client
+    // (a loopback literal would take its own scoped one).
+    let name = "list-slots.m12.test";
+    let _held = hold_slots(&core, name).await;
+    mq_http::test_dns::set_public(name, &[IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    let url = format!("http://{name}:{}/manifest.json", source.addr.port());
     let started = tokio::time::Instant::now();
-    let view = AddonCatalogView::open_from(&core, &source.url(), false);
+    let view = AddonCatalogView::open_from(&core, &url, false);
     let snapshot = tokio::time::timeout(Duration::from_secs(60), async {
         loop {
             let snapshot = view.snapshot();
