@@ -5,8 +5,21 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class DesignTest {
+    @Test
+    fun `a switch is a white track with a dark knob when on, an empty track with the control edge when off`() {
+        for (palette in listOf(Tokens.dark, Tokens.light)) {
+            val on = switchColors(true, palette)
+            assertEquals(SwitchColors(palette.primary, Color.Transparent, palette.onPrimary), on)
+            val off = switchColors(false, palette)
+            assertEquals(SwitchColors(Color.Transparent, palette.control, palette.muted), off)
+            // Never the accent.
+            assertTrue(listOf(on, off).none { palette.accent in listOf(it.track, it.edge, it.knob) })
+        }
+    }
+
     @Test
     fun `a 1080p buffer is one pixel per point and 720p and 4K scale with it`() {
         assertEquals(1f, tvScale(1920, 1080))

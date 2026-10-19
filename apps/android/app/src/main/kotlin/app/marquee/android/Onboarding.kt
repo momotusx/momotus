@@ -39,7 +39,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,18 +55,21 @@ import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
 import app.marquee.core.route.DefaultsMode
 import app.marquee.core.session.CoreSession
-import app.marquee.design.Chip
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.MarkTile
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
+import app.marquee.design.MqSwitch
 import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
+import app.marquee.design.SecondaryButton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
+import app.marquee.design.focusToggleable
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
@@ -203,23 +205,26 @@ fun DefaultsScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val width = Modifier.widthIn(max = 900.dp).fillMaxWidth()
+        // More air between groups than between the rows of a group.
         Column(
             width.weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
         ) {
-            MqText(
-                if (mode == DefaultsMode.Review) DefaultsCopy.REVIEW_TITLE else DefaultsCopy.TITLE,
-                role = if (tv) TextRole.Title1 else TextRole.Title2,
-            )
-            MqText(
-                when (mode) {
-                    DefaultsMode.Review -> DefaultsCopy.REVIEW_LEAD
-                    DefaultsMode.Settings -> DefaultsCopy.SETTINGS_LEAD
-                    else -> DefaultsCopy.LEAD
-                },
-                role = TextRole.Body,
-                color = Marquee.colors.muted,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                MqText(
+                    if (mode == DefaultsMode.Review) DefaultsCopy.REVIEW_TITLE else DefaultsCopy.TITLE,
+                    role = if (tv) TextRole.Title1 else TextRole.Title2,
+                )
+                MqText(
+                    when (mode) {
+                        DefaultsMode.Review -> DefaultsCopy.REVIEW_LEAD
+                        DefaultsMode.Settings -> DefaultsCopy.SETTINGS_LEAD
+                        else -> DefaultsCopy.LEAD
+                    },
+                    role = TextRole.Body,
+                    color = Marquee.colors.muted,
+                )
+            }
             step.problem?.let {
                 StateMessage(
                     DefaultsCopy.NOT_LOADED,
@@ -231,18 +236,23 @@ fun DefaultsScreen(
             }
             if (answer == null && step.problem == null) StatusWord("Loading", Status.Warn)
             for ((group, addons) in rows.groupBy { it.group }) {
-                Kicker(DefaultsCopy.group(group), side = 0.dp)
-                for (addon in addons) {
-                    // After an import, the ones it brought keep how they are and say where they came from.
-                    val on = DefaultsCopy.on(addon, mode, step.switches)
-                    DefaultRow(addon, on.takeIf { DefaultsCopy.hasSwitch(addon, mode) }) {
-                        if (!step.busy) step.switches[addon.key] = !on
+                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                    // The group's label sits over the marks.
+                    Kicker(DefaultsCopy.group(group), side = 0.dp)
+                    for (addon in addons) {
+                        // After an import, the ones it brought keep how they are and say where they came from.
+                        val on = DefaultsCopy.on(addon, mode, step.switches)
+                        DefaultRow(addon, on.takeIf { DefaultsCopy.hasSwitch(addon, mode) }) {
+                            if (!step.busy) step.switches[addon.key] = !on
+                        }
                     }
-                }
-                if (group == DefaultsCopy.CATALOGS &&
-                    DefaultsCopy.catalogMissing(answer?.addons.orEmpty(), mode, step.switches)
-                ) {
-                    LiveSpoken(DefaultsCopy.NO_CATALOG) { Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp) }
+                    if (group == DefaultsCopy.CATALOGS &&
+                        DefaultsCopy.catalogMissing(answer?.addons.orEmpty(), mode, step.switches)
+                    ) {
+                        LiveSpoken(
+                            DefaultsCopy.NO_CATALOG,
+                        ) { Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp) }
+                    }
                 }
             }
             step.failed?.let {
@@ -268,7 +278,11 @@ fun DefaultsScreen(
     }
 }
 
-/** One default: its name and line from the core, and its switch ([on] null: no switch, it came from Stremio). */
+/**
+ * One default: its mark, its name and line from the core, and its switch ([on] null: no switch, it
+ * came from Stremio). The whole row is the switch, one focus stop on TV; TalkBack reads the name, the
+ * line and the state.
+ */
 @Composable
 private fun DefaultRow(
     addon: DefaultAddonInfo,
@@ -276,26 +290,43 @@ private fun DefaultRow(
     onToggle: () -> Unit,
 ) {
     val colors = Marquee.colors
-    Section(side = 0.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-                    MqText(addon.line, role = TextRole.Caption, color = colors.muted)
-                }
-                if (on == null) {
-                    MqText(DefaultsCopy.FROM_STREMIO, role = TextRole.Caption, color = colors.muted)
+    val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(Marquee.radius.l)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (on != null) Modifier.marqueeFocus(Marquee.radius.l, scale = 1.01f) else Modifier)
+            .clip(shape)
+            .background(colors.surface)
+            .border(1.dp, colors.edge, shape)
+            .then(
+                if (on !=
+                    null
+                ) {
+                    Modifier.focusToggleable(on, onToggle)
                 } else {
-                    // Named for its addon, so TalkBack moving between switches says which one it is.
-                    Chip(
+                    Modifier.semantics(mergeDescendants = true) {}
+                },
+            ).padding(if (tv) 16.dp else 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MarkTile(addon.logo, addon.name)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+            MqText(addon.line, role = TextRole.Caption, color = colors.muted)
+        }
+        if (on == null) {
+            MqText(DefaultsCopy.FROM_STREMIO, role = TextRole.Caption, color = colors.muted)
+        } else {
+            MqSwitch(on)
+            // TV says the state in a word too, in a box as wide as the longer word so the tracks line up.
+            if (tv) {
+                Box(Modifier.widthIn(min = 40.dp)) {
+                    MqText(
                         if (on) "On" else "Off",
-                        selected = on,
-                        onClick = onToggle,
-                        modifier = Modifier.semantics { contentDescription = addon.name },
-                        switch = true,
+                        role = TextRole.Callout,
+                        color = if (on) colors.text else colors.muted,
                     )
                 }
             }
@@ -331,15 +362,16 @@ internal fun RecommendedCard(
             .bringIntoViewRequester(whole)
             .onFocusChanged { if (it.hasFocus) scope.launch { whole.bringIntoView() } },
     ) {
+        // Glass buttons: Home's one white pill is the hero's Play.
         Section {
-            StateMessage(
-                DefaultsCopy.REVIEW_TITLE,
-                DefaultsCopy.cardLine(missing),
-                actionLabel = DefaultsCopy.REVIEW,
-                onAction = onReview,
-                secondaryLabel = DefaultsCopy.NOT_NOW,
-                onSecondary = onNotNow,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                MqText(DefaultsCopy.REVIEW_TITLE, role = TextRole.Title3)
+                MqText(DefaultsCopy.cardLine(missing), role = TextRole.Callout, color = Marquee.colors.muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+                    SecondaryButton(DefaultsCopy.REVIEW, onReview, icon = Icons.ListChecks)
+                    SecondaryButton(DefaultsCopy.NOT_NOW, onNotNow)
+                }
+            }
         }
     }
 }
