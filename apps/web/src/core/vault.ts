@@ -46,7 +46,8 @@ function db(): Promise<IDBDatabase> {
  * (quota, eviction, a closing tab) is a failed write. After 10 s it fails, so
  * a storage that hangs cannot stall the sync ops waiting on it, and what it
  * was asked never lands later: the transaction is aborted, or never started
- * when the storage opens late. */
+ * when the storage opens late. One already committing cannot be stopped: it
+ * settles by its own complete or error event instead. */
 async function tx<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   let late = false;
   let t: IDBTransaction | undefined;
@@ -57,7 +58,9 @@ async function tx<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBR
       try {
         t?.abort();
       } catch {
-        // Already committing: the browser no longer lets it be stopped, so it may still land.
+        // Already committing: the browser no longer lets it be stopped, and only its own event
+        // says whether it landed. That one answers, however late.
+        return;
       }
       fail(new DOMException("the storage did not answer", "TimeoutError"));
     }, 10_000);

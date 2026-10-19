@@ -230,6 +230,9 @@ async function hold(page: Page, method: "put" | "delete", ms?: number, commit = 
     ({ method, ms, commit }) => {
       const real = IDBObjectStore.prototype[method] as (this: IDBObjectStore, ...a: unknown[]) => IDBRequest;
       let released = false;
+      // Calls that ran their course (aborted or let commit), for a test to wait on.
+      const w = window as unknown as { held: number };
+      w.held = 0;
       (window as unknown as { release: () => void }).release = () => {
         released = true;
         IDBObjectStore.prototype[method] = real as never;
@@ -240,7 +243,10 @@ async function hold(page: Page, method: "put" | "delete", ms?: number, commit = 
         const until = ms === undefined ? Infinity : Date.now() + ms;
         const spin = () => {
           if (!released && Date.now() < until) store.count().onsuccess = spin;
-          else if (!commit) store.transaction.abort();
+          else {
+            if (!commit) store.transaction.abort();
+            w.held++;
+          }
         };
         request.addEventListener("success", spin);
         return request;
@@ -743,8 +749,32 @@ test.describe.serial("sync across three devices", () => {
     await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
   });
 
-  test("Phone pairs again; a code it rejects adds nothing", async () => {
+  test("Phone pairs again; a Yes refused before the join and a code it rejects add nothing", async () => {
     await go(phone, "/sync");
+    await phone.locator('[data-f="sync:pair"]').click();
+    await phone.locator('[data-f="pair:copy"]').click();
+    await go(desk, "/sync/add");
+    await desk.locator('[data-f="sync-add:code"]').fill(await phone.evaluate(() => navigator.clipboard.readText()));
+    await desk.locator('[data-f="sync-add:approve"]').click();
+    await expect(phone.locator(".confirm .code")).toHaveText((await desk.locator(".confirm .code").textContent()) ?? "");
+    // An account appears in Phone's tab meanwhile (started from code: no screen does that while
+    // /pair is open). Yes is refused before the join, so the sync server never lists Phone.
+    await phone.evaluate(async (server) => {
+      const url = "/src/core/sync.ts";
+      const m = (await import(/* @vite-ignore */ url)) as { createAccount: (s: string, n: string, i: string) => Promise<void> };
+      await m.createAccount(server, "Stray", "");
+    }, SERVER);
+    await phone.locator('[data-f="pair:yes"]').click();
+    await expect(phone.locator(".problem")).toContainText("This device already syncs.");
+    await desk.locator('[data-f="sync-add:done"]').click();
+    await syncNow(desk);
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
+    // Phone leaves that account, then pairs again.
+    await go(phone, "/sync");
+    await synced(phone);
+    await phone.locator('[data-f="sync:leave"]').click();
+    await expect(phone.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
+
     await phone.locator('[data-f="sync:pair"]').click();
     await phone.locator('[data-f="pair:copy"]').click();
     let code = await phone.evaluate(() => navigator.clipboard.readText());
@@ -940,6 +970,12 @@ test.describe.serial("sync across three devices", () => {
     expect(await desk.evaluate(() => (window as unknown as { asked: number }).asked)).toBeGreaterThan(0);
     expect((await kept(desk)).text).toContain("credential");
     await shot(desk, "sync-left-forget-failed-desktop");
+    // Forget fails once more: the same one explanation stays, still without the green line.
+    await desk.locator('[data-f="sync:forget-again"]').click();
+    await expect.poll(() => desk.evaluate(() => (window as unknown as { held: number }).held)).toBe(2);
+    await desk.evaluate(() => new Promise((done) => setTimeout(done, 100)));
+    await expect(desk.locator(".sync-storage")).toContainText("This device no longer syncs, but this browser could not forget the account");
+    await expect(left).toHaveCount(0);
     await release(desk);
     await desk.locator('[data-f="sync:forget-again"]').click();
     await expect(desk.locator(".sync-storage")).toHaveCount(0);
@@ -952,6 +988,7 @@ test.describe.serial("sync across three devices", () => {
   });
 
   test("Phone reloads without remembering: the page no longer holds the account", async () => {
+    const from = asked.length;
     await go(phone, "/sync");
     await expect(phone.getByText("This browser cannot lock the sync key with a passkey")).toBeVisible();
     // The sync server cannot take the leave (here: it answers 502): this device stops syncing here only.
@@ -973,7 +1010,7 @@ test.describe.serial("sync across three devices", () => {
     await phone.locator('[data-f="sync:leave"]').click();
     await phone.locator('[data-f="sync:leave-here"]').click();
     await expect(phone.getByText("This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again.")).toBeVisible();
-    expect(asked.filter((a) => a.port === SYNC_PORTS.b && a.op === "signOut")).toHaveLength(4);
+    expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.b && a.op === "signOut")).toHaveLength(4);
     await phone.reload();
     await expect(phone.locator('[data-f="sync:pair"]')).toBeVisible();
     await expect(phone.locator(".sync-card")).toHaveCount(0);

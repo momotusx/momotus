@@ -5,7 +5,7 @@ import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Settings2 from "lucide-solid/icons/settings-2";
 import X from "lucide-solid/icons/x";
-import { createEffect, createResource, createSignal, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createResource, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
 import { A } from "@solidjs/router";
 import { liveView, privateLink } from "../core/client";
@@ -24,19 +24,25 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
   const [copied, setCopied] = createSignal(false);
   // The join is stored the moment it arrives, once, as a copy: the view's store may change it.
   let took = false;
-  // An account that appeared meanwhile (another tab of this page, an unlock) is never replaced.
+  // An account that appeared here meanwhile is never replaced: Yes is refused before the sync
+  // server lists this device, and once confirmed nothing else may start one until the record comes.
   const [refused, setRefused] = createSignal(false);
+  const confirm = () => {
+    if (!sync.claimPairing()) {
+      setRefused(true);
+      return void view.command({ type: "reject" });
+    }
+    void view.command({ type: "confirm" });
+  };
   createEffect(() => {
     const s = p();
+    if (s?.phase === "failed" || s?.phase === "expired") sync.endPairing();
     if (s?.phase !== "joined" || took) return;
     took = true;
-    try {
-      sync.joinPaired(JSON.parse(JSON.stringify(s.record)));
-      props.onJoined();
-    } catch {
-      setRefused(true);
-    }
+    sync.joinPaired(JSON.parse(JSON.stringify(s.record)));
+    props.onJoined();
   });
+  onCleanup(() => took || sync.endPairing());
   const until = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   // Each step that asks something takes focus to its answer: on a TV the remote is never left
   // on the form below while "Yes, they match" waits.
@@ -100,6 +106,11 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
           </div>
         )}
       </Match>
+      <Match when={refused()}>
+        <section class="problem">
+          <p>{syncWords.alreadyJoined}</p>
+        </section>
+      </Match>
       <Match when={p()?.phase === "confirm" && (p() as Extract<Pairing, { phase: "confirm" }>)}>
         {(c) => (
           <section class="confirm">
@@ -109,7 +120,7 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
             </p>
             <p class="sr">{`Code ${c().code.split("").join(" ")}`}</p>
             <div class="acts">
-              <button class="btn primary" data-f="pair:yes" data-autofocus onClick={() => void view.command({ type: "confirm" })}>
+              <button class="btn primary" data-f="pair:yes" data-autofocus onClick={confirm}>
                 <Check aria-hidden />
                 Yes, they match
               </button>
@@ -120,11 +131,6 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
             </div>
           </section>
         )}
-      </Match>
-      <Match when={refused()}>
-        <section class="problem">
-          <p>{syncWords.alreadyJoined}</p>
-        </section>
       </Match>
       <Match when={p()?.phase === "joined"}>
         <section class="summary">

@@ -145,10 +145,14 @@ async function forget() {
   }
 }
 
+/** A pairing this page confirmed and whose record has not arrived yet. */
+let pairingClaimed = false;
+
 /** A new account record replaces none: a device that syncs (or remembers an
- * account) leaves first, so an account never keeps a ghost of this browser. */
+ * account, or waits for a confirmed pairing) leaves first, so an account never
+ * keeps a ghost of this browser. */
 function refuseSecond() {
-  if (record || locked()) throw new BridgeError(syncWords.alreadyJoined, "alreadyJoined");
+  if (record || locked() || pairingClaimed) throw new BridgeError(syncWords.alreadyJoined, "alreadyJoined");
 }
 
 /** A new account record (created, paired or recovered); its first round runs at once. */
@@ -240,9 +244,21 @@ export async function recover(server: string, kit: string, name: string) {
 /** Pairing may start here: no account syncs or waits to be unlocked, and the link is private. Ask after `vaultReady`. */
 export const mayPair = () => !record && !locked() && privateLink;
 
-/** A pairing that finished on this page: refused when an account appeared meanwhile. */
+/** Before confirming a pairing, so a refusal comes before the sync server lists this device:
+ * false when an account appeared meanwhile. Until `endPairing` or `joinPaired`, nothing else
+ * may start an account here, so the record the pairing brings is never refused. */
+export function claimPairing(): boolean {
+  if (!mayPair() || pairingClaimed) return false;
+  pairingClaimed = true;
+  return true;
+}
+
+/** The confirmed pairing ended without a record (rejected, failed, expired or left). */
+export const endPairing = () => void (pairingClaimed = false);
+
+/** The record a confirmed pairing brought: the claim kept every other account out meanwhile. */
 export function joinPaired(next: SyncRecord) {
-  refuseSecond();
+  pairingClaimed = false;
   join(next);
 }
 
@@ -340,8 +356,8 @@ export async function forgetBrowser() {
   try {
     await vault.clear();
   } catch (e) {
-    // Still sealed here: the page keeps saying so.
-    setMemoryProblem(syncWords.forgetFailed);
+    // Still sealed here: the page keeps saying so, and after a leave keeps that one explanation.
+    setMemoryProblem((p) => (p === syncWords.leftKept ? p : syncWords.forgetFailed));
     throw e;
   }
   setRemembered(false);

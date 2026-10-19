@@ -1,25 +1,54 @@
 /** The vault against a storage that answers late: what a call reported as
- * failed must never land afterwards. The browser parts are small fakes: an
- * IndexedDB whose open answers when the test says, a passkey with PRF, and
- * the 10 s timer fired by hand. */
+ * failed must never land afterwards, and a write the browser can no longer
+ * stop is judged by how it ends. The browser parts are small fakes: an
+ * IndexedDB whose open and commit answer when the test says, a passkey with
+ * PRF, and the 10 s timer fired by hand. */
 
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import type { SyncRecord } from "../lib/sync";
 import * as vault from "./vault";
 
 const g = globalThis as unknown as Record<string, unknown>;
+/** How the fake storage behaves in the next call. */
+const storage = { openLate: false, committing: false };
 const writes: string[] = [];
 const signalled: string[] = [];
-let openLate: (() => void) | null = null;
+let openNow: (() => void) | null = null;
+let settle: ((committed: boolean) => void) | null = null;
 let timeUp: (() => void) | null = null;
+
+beforeEach(() => {
+  Object.assign(storage, { openLate: false, committing: false });
+  writes.length = 0;
+  signalled.length = 0;
+  [openNow, settle, timeUp] = [null, null, null];
+});
 
 function fakeDb() {
   return {
     close: () => undefined,
     transaction: () => {
-      const t = { oncomplete: null as (() => void) | null, onabort: null, onerror: null, error: null, abort: () => undefined, objectStore: () => store };
+      const t = {
+        oncomplete: null as (() => void) | null,
+        onabort: null,
+        onerror: null as (() => void) | null,
+        error: null as DOMException | null,
+        objectStore: () => store,
+        abort: () => {
+          // A committing transaction can no longer be stopped.
+          if (storage.committing) throw new DOMException("committing", "InvalidStateError");
+        },
+      };
       const done = <T>(result: T) => {
-        queueMicrotask(() => t.oncomplete?.());
+        if (storage.committing)
+          settle = (committed) => {
+            if (committed) t.oncomplete?.();
+            else {
+              t.error = new DOMException("the disk failed", "UnknownError");
+              t.onerror?.();
+            }
+          };
+        else queueMicrotask(() => t.oncomplete?.());
         return { result };
       };
       const store = {
@@ -35,10 +64,12 @@ function fakeDb() {
 g.indexedDB = {
   open: () => {
     const request: Record<string, unknown> = {};
-    openLate = () => {
+    const answer = () => {
       request.result = fakeDb();
       (request.onsuccess as () => void)();
     };
+    if (storage.openLate) openNow = answer;
+    else queueMicrotask(answer);
     return request;
   },
 };
@@ -60,19 +91,57 @@ async function until(ready: () => boolean) {
   expect(ready()).toBe(true);
 }
 
-test("a Remember whose storage opens after the timeout writes nothing there, and its passkey is dropped", async () => {
-  const outcome = vault.enable({} as SyncRecord).then(
+/** Remember, as the page calls it: "sealed", or the error's name. */
+const remember = () =>
+  vault.enable({} as SyncRecord).then(
     () => "sealed",
     (e: Error) => e.name,
   );
+
+test("a Remember whose storage opens after the timeout writes nothing there, and its passkey is dropped", async () => {
+  storage.openLate = true;
+  const outcome = remember();
   // The sealed write waits on a storage that has not opened; then the 10 s are up.
-  await until(() => openLate !== null && timeUp !== null);
+  await until(() => openNow !== null && timeUp !== null);
   timeUp?.();
   expect(await outcome).toBe("TimeoutError");
   expect(signalled).toEqual(["AQID"]);
   // The storage opens late: the write it was asked for never starts.
-  openLate?.();
+  openNow?.();
   await Bun.sleep(5);
   expect(writes).toEqual([]);
   expect(vault.active()).toBe(false);
+});
+
+test("a write still committing when the 10 s run out is judged by its own end: failed", async () => {
+  storage.committing = true;
+  let ended = "";
+  void remember().then((o) => (ended = o));
+  await until(() => settle !== null && timeUp !== null);
+  timeUp?.();
+  // Its outcome is unknown: nothing is reported and no passkey is dropped yet.
+  await Bun.sleep(5);
+  expect(ended).toBe("");
+  expect(signalled).toEqual([]);
+  settle?.(false);
+  await until(() => ended !== "");
+  expect(ended).toBe("UnknownError");
+  expect(signalled).toEqual(["AQID"]);
+  expect(vault.active()).toBe(false);
+});
+
+test("a write still committing when the 10 s run out is judged by its own end: remembered", async () => {
+  storage.committing = true;
+  let ended = "";
+  void remember().then((o) => (ended = o));
+  await until(() => settle !== null && timeUp !== null);
+  timeUp?.();
+  await Bun.sleep(5);
+  expect(ended).toBe("");
+  settle?.(true);
+  await until(() => ended !== "");
+  expect(ended).toBe("sealed");
+  expect(writes).toEqual(["put sync"]);
+  expect(signalled).toEqual([]);
+  expect(vault.active()).toBe(true);
 });
