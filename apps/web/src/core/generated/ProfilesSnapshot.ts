@@ -13,4 +13,10 @@ locked: boolean,
 /**
  * How many profiles `createProfile` allows.
  */
-max: number, };
+max: number, 
+/**
+ * The session runs a kids profile: adult screens hide and leaving asks
+ * the owner's PIN (plans/m11-kids.md 9.1). The bridge keeps it set
+ * until the session's next switch.
+ */
+kids: boolean, };

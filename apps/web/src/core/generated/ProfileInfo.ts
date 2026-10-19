@@ -10,7 +10,11 @@ avatar: string,
  */
 position: number, hasPin: boolean, isOwner: boolean, 
 /**
- * Its PIN record has not arrived from another device yet: show it,
- * but it cannot be opened.
+ * Its PIN or access record has not arrived from another device yet:
+ * show it, but it cannot be opened.
  */
-syncing: boolean, };
+syncing: boolean, 
+/**
+ * A kids profile (plans/m11-kids.md 9.1).
+ */
+kids: boolean, };

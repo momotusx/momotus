@@ -51,7 +51,7 @@ data class AddonList(
 data class AddonsSnapshot(
     val addons: List<AddonInfo> = emptyList(),
     /** The profile starts at the default addons step: it never had a list, this device is in no sync account, and it is not a kids profile. */
-    val fresh: Boolean,
+    val fresh: Boolean = false,
 )
 
 @Serializable
@@ -381,6 +381,8 @@ enum class HideReason {
     @SerialName("tooLarge") TooLarge,
     @SerialName("unplayable") Unplayable,
     @SerialName("unsupportedSource") UnsupportedSource,
+    @SerialName("leavesApp") LeavesApp,
+    @SerialName("notForKids") NotForKids,
 }
 
 /** One catalog as the "Customize Home" screen lists it. */
@@ -494,6 +496,40 @@ enum class Installed {
     @SerialName("copyOn") CopyOn,
     @SerialName("copyOff") CopyOff,
 }
+
+@Serializable
+data class KidsKeys(
+    val profile: String,
+    val name: String,
+    /** `kind:id` of each counted title. */
+    val keys: List<String> = emptyList(),
+)
+
+@Serializable
+data class KidsKeysSnapshot(
+    val profiles: List<KidsKeys> = emptyList(),
+)
+
+@Serializable
+data class KidsTitle(
+    val id: String,
+    val kind: String,
+    val name: String,
+    val poster: String? = null,
+    val addedMs: Long,
+    /** Past the cap (synced from two devices): the kid does not see it. */
+    val over: Boolean,
+)
+
+@Serializable
+data class KidsTitlesSnapshot(
+    val profile: String,
+    /** Newest first: the extras past the cap (at most 50), then the counted. */
+    val titles: List<KidsTitle> = emptyList(),
+    /** How many are past the cap. */
+    val overCount: Int,
+    val max: Int,
+)
 
 @Serializable
 data class KindCount(
@@ -690,7 +726,7 @@ data class Prefs(
     /** Which addon catalogs Home shows, and in what order. */
     val homeRows: HomeRows,
     /** The default addons list version this profile was last offered (`defaultAddons`): below the current one, Home offers the new ones once. */
-    val defaultsSeen: Int,
+    val defaultsSeen: Int = 0,
 )
 
 @Serializable
@@ -703,8 +739,10 @@ data class ProfileInfo(
     val position: Int,
     val hasPin: Boolean,
     val isOwner: Boolean,
-    /** Its PIN record has not arrived from another device yet: show it, but it cannot be opened. */
+    /** Its PIN or access record has not arrived from another device yet: show it, but it cannot be opened. */
     val syncing: Boolean,
+    /** A kids profile (plans/m11-kids.md 9.1). */
+    val kids: Boolean,
 )
 
 @Serializable
@@ -716,6 +754,8 @@ data class ProfilesSnapshot(
     val locked: Boolean,
     /** How many profiles `createProfile` allows. */
     val max: Int,
+    /** The session runs a kids profile: adult screens hide and leaving asks the owner's PIN (plans/m11-kids.md 9.1). The bridge keeps it set until the session's next switch. */
+    val kids: Boolean,
 )
 
 @Serializable

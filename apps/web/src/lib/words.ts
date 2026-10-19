@@ -42,6 +42,9 @@ const hideText: Record<HideReason, [one: string, many: string]> = {
   tooLarge: ["is over your size limit", "are over your size limit"],
   unplayable: ["cannot play on this device", "cannot play on this device"],
   unsupportedSource: ["uses a source this app cannot open yet", "use a source this app cannot open yet"],
+  // Kids profiles only.
+  leavesApp: ["would open outside Marquee", "would open outside Marquee"],
+  notForKids: ["is not for kids", "are not for kids"],
 };
 
 /** "19 are for other titles, 1 is another episode". */

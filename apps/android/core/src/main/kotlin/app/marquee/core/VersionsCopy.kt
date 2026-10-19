@@ -185,6 +185,9 @@ object VersionsCopy {
             HideReason.TooLarge -> if (one) "is over your size limit" else "are over your size limit"
             HideReason.Unplayable -> "cannot play on this device"
             HideReason.UnsupportedSource -> "${if (one) "uses a source" else "use a source"} this app cannot open yet"
+            // Kids profiles only.
+            HideReason.LeavesApp -> "would open outside Marquee"
+            HideReason.NotForKids -> if (one) "is not for kids" else "are not for kids"
         }
 
     /** "Hidden (5)": the bold half of the hidden row. */

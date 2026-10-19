@@ -31,10 +31,11 @@ class ProfileCopyTest {
         locked: Boolean,
         count: Int,
     ) = ProfilesSnapshot(
-        profiles = (1..count).map { ProfileInfo("p$it", "P$it", "", it, false, it == 1, false) },
+        profiles = (1..count).map { ProfileInfo("p$it", "P$it", "", it, false, it == 1, false, false) },
         active = "p1",
         locked = locked,
         max = 6,
+        kids = false,
     )
 
     @Test

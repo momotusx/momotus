@@ -42,3 +42,9 @@ test("a status flattened with its tagged state is one class, its tag as text, it
   expect(kotlin).toContain("val record: KeystoreRecord? = null,");
   expect(kotlin).toContain('record=${record?.let { "hidden" }})"');
 });
+
+test("a field newer than the golden traces takes the core's serde default", () => {
+  const kotlin = generate(sourceDir);
+  expect(kotlin).toContain("val fresh: Boolean = false,");
+  expect(kotlin).toContain("val defaultsSeen: Int = 0,");
+});
