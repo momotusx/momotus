@@ -1227,14 +1227,13 @@ async fn open_torrent(
             return Ok((file, info, Started::Wrong(why)));
         }
         let mut head = reader.range(0, None).await?;
-        // ponytail: verified bytes and connected peers stand in for the
-        // received payload and the first unchoke (code review r1 P1) until
-        // the engine's TorrentStats.received_bytes and unchoked_ms land.
+        // Received payload and the first unchoke (code review r1 P1): a
+        // piece verifies only whole, long after its first blocks.
         let progress = || async {
             let s = engine.stats(torrent).await.ok()?;
             Some(Progress {
-                received: s.downloaded_bytes,
-                unchoked: s.peers > 0,
+                received: s.received_bytes,
+                unchoked: s.unchoked_ms.is_some(),
             })
         };
         // Cut early only when another candidate can play instead, and never
