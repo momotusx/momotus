@@ -127,6 +127,21 @@ pub struct SocketOpts {
     /// MTU probing can handle a bit of packet loss. If it's 0, we would mark RTO'ed probes as failed
     /// sooner and thus perf would be better.
     pub mtu_probe_max_retransmissions: Option<usize>,
+
+    /// Marquee fork (C27 11): the sources this socket listens to. A datagram
+    /// from any other is dropped unanswered.
+    pub permits: Option<Permits>,
+}
+
+/// Marquee fork (C27 11): a check on source addresses; its `Debug` leaves
+/// the closure out.
+#[derive(Clone)]
+pub struct Permits(pub Arc<dyn Fn(std::net::IpAddr) -> bool + Send + Sync>);
+
+impl std::fmt::Debug for Permits {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Permits")
+    }
 }
 
 impl SocketOpts {
@@ -169,6 +184,7 @@ impl SocketOpts {
                 .unwrap_or(DEFAULT_MAX_ACTIVE_STREAMS_PER_SOCKET),
             wait_for_last_ack: !self.dont_wait_for_lastack,
             mtu_probe_max_retransmissions: self.mtu_probe_max_retransmissions.unwrap_or(1),
+            permits: self.permits.clone(),
         })
     }
 }
@@ -189,6 +205,8 @@ pub(crate) struct ValidatedSocketOpts {
     pub wait_for_last_ack: bool,
 
     pub mtu_probe_max_retransmissions: usize,
+
+    pub permits: Option<Permits>,
 }
 
 pub(crate) struct RequestWithSpan<V> {
@@ -644,6 +662,15 @@ impl<T: Transport, E: UtpEnvironment> Dispatcher<T, E> {
         payload=message.payload().len()
     ))]
     async fn on_recv(&mut self, addr: SocketAddr, message: UtpMessage) -> crate::Result<()> {
+        // Marquee fork (C27 11): a refused source reaches no stream and gets
+        // no SYN-ACK, RESET or connect ACK.
+        if let Some(p) = &self.socket.opts.permits
+            && !(p.0)(addr.ip())
+        {
+            trace!(?addr, "dropping a datagram from a refused source");
+            return Ok(());
+        }
+
         let key = (addr, message.header.connection_id);
 
         if let Some(tx) = self.streams.get(&key) {

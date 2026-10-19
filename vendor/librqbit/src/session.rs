@@ -615,7 +615,13 @@ impl Session {
                 None => None,
             };
 
-            let listen_result = if let Some(listen_opts) = opts.listen.take() {
+            let listen_result = if let Some(mut listen_opts) = opts.listen.take() {
+                // Marquee fork (C27 11): with a policy, the uTP listener
+                // drops every datagram the peer check refuses.
+                if let Some(p) = &peer_permits {
+                    listen_opts.utp_opts.get_or_insert_default().permits =
+                        Some(librqbit_utp::Permits(p.0.clone()));
+                }
                 Some(
                     listen_opts
                         .start(

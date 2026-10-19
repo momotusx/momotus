@@ -1,0 +1,21 @@
+librqbit-utp, vendored for Marquee
+
+Upstream: https://github.com/ikatson/librqbit-utp, commit
+c26f57b2debbe35ed0ace1ad419de529f7a5bf95 (from the package's
+.cargo_vcs_info.json), published to crates.io as librqbit-utp 0.7.0.
+Copyright 2021 Igor Katson. Licensed under the Apache License, Version 2.0:
+LICENSE is upstream's header as the registry package ships it,
+LICENSE-APACHE-2.0 the full text (copied from vendor/librqbit). Upstream ships
+no NOTICE file of its own.
+
+What was taken: src/, examples/, README.md, LICENSE, Cargo.toml.orig and the
+Cargo.toml published to crates.io for 0.7.0.
+
+Marquee changes (each changed spot carries a "Marquee fork" comment), for the
+address policy of plans/c27-torrent-policy.md section 11:
+
+- src/socket.rs: `Permits`, a check on source addresses, and
+  `SocketOpts::permits`, copied into the validated options. The first lines of
+  `Dispatcher::on_recv` drop a datagram whose source the check refuses, so a
+  refused source reaches no stream and gets no SYN-ACK, RESET or connect ACK.
+- src/lib.rs: exports `Permits`.

@@ -167,9 +167,10 @@ pub fn destinations(
     }
 }
 
-/// The session the engine runs: LSD, UPnP and uTP off (each talks to
-/// addresses before any check could run), trackers on, the DHT only with
-/// `discovery`.
+/// The session the engine runs: LSD and UPnP off (each talks to addresses
+/// before any check could run), TCP and uTP under the peer policy (the
+/// vendored uTP drops refused sources before answering, C27 11), trackers
+/// on, the DHT only with `discovery`.
 fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
     let version = env!("CARGO_PKG_VERSION");
     let v: Vec<u8> = version.split('.').filter_map(|p| p.parse().ok()).collect();
@@ -198,7 +199,7 @@ fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
             librqbit::version()
         )),
         listen: Some(ListenerOptions {
-            mode: ListenerMode::TcpOnly,
+            mode: ListenerMode::TcpAndUtp,
             listen_addr: (
                 std::net::Ipv6Addr::UNSPECIFIED,
                 cfg.listen_port.unwrap_or(0),
@@ -492,6 +493,15 @@ impl Engine {
     /// Where other peers reach us (tests point a leecher at a seeder with it).
     pub fn listen_addr(&self) -> Option<SocketAddr> {
         self.inner.session.listen_addr()
+    }
+
+    /// Peer connections this engine dialed and opened so far: (TCP, uTP).
+    pub fn connections(&self) -> (u64, u64) {
+        let c = self.inner.session.stats_snapshot().connections;
+        (
+            c.tcp.v4.successes + c.tcp.v6.successes,
+            c.utp.v4.successes + c.utp.v6.successes,
+        )
     }
 
     /// The swarms of `torrents` (info hash, the stream's `sources`) as their
@@ -1098,7 +1108,7 @@ mod tests {
     }
 
     #[test]
-    fn the_session_turns_off_upnp_lsd_and_utp() {
+    fn the_session_turns_off_upnp_and_lsd() {
         let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
         for discovery in [true, false] {
             let cfg = EngineConfig {
@@ -1109,7 +1119,8 @@ mod tests {
             let listen = opts.listen.as_ref().expect("a listener");
             assert!(!listen.enable_upnp_port_forwarding, "UPnP off");
             assert!(opts.disable_local_service_discovery, "LSD off");
-            assert!(matches!(listen.mode, ListenerMode::TcpOnly), "uTP off");
+            // uTP listens only behind the policy's check (C27 11).
+            assert!(matches!(listen.mode, ListenerMode::TcpAndUtp), "uTP on");
             assert!(opts.destinations.is_some(), "the policy is set");
             assert!(!opts.disable_trackers, "trackers run either way");
             assert_eq!(opts.dht.is_some(), discovery);

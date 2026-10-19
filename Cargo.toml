@@ -63,5 +63,7 @@ librqbit-sha1-wrapper = { path = "vendor/librqbit-sha1-wrapper" }
 # Marquee forks for C27 (plans/c27-torrent-policy.md): tracker and DHT address checks.
 librqbit-tracker-comms = { path = "vendor/librqbit-tracker-comms" }
 librqbit-dht = { path = "vendor/librqbit-dht" }
+# Marquee fork for C27 section 11: incoming uTP under the peer policy.
+librqbit-utp = { path = "vendor/librqbit-utp" }
 # Marquee fork: iOS and tvOS bind sockets by interface index, as macOS does.
 librqbit-dualstack-sockets = { path = "vendor/librqbit-dualstack-sockets" }

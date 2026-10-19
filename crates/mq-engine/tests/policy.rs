@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use mq_engine::librqbit::{ListenerMode, ListenerOptions, Session, SessionOptions};
+use mq_engine::librqbit::{Session, SessionOptions};
 use mq_engine::{Engine, EngineConfig, FileHint};
 use mq_http::test_dns::{self, Canary, Interface};
 use tokio::io::AsyncReadExt;
@@ -261,40 +261,41 @@ fn utp_syn() -> [u8; 20] {
     syn
 }
 
-/// Whether anything comes back within a second of a SYN to `port`.
-async fn answers_a_syn(port: u16) -> bool {
+/// What comes back within a second of a SYN from `127.0.0.1` to `port`.
+async fn answer_to_a_syn(port: u16) -> Option<Vec<u8>> {
     let socket = tokio::net::UdpSocket::bind((V4, 0)).await.unwrap();
     socket.send_to(&utp_syn(), (V4, port)).await.unwrap();
     let mut buf = [0u8; 1500];
-    matches!(
-        timeout(Duration::from_secs(1), socket.recv_from(&mut buf)).await,
-        Ok(Ok(_))
-    )
+    match timeout(Duration::from_secs(1), socket.recv_from(&mut buf)).await {
+        Ok(Ok((n, _))) => Some(buf[..n].to_vec()),
+        _ => None,
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn incoming_utp_gets_no_answer() {
-    // The policy would allow the source: only the listener can stay quiet.
+async fn incoming_utp_from_a_refused_source_gets_no_answer() {
+    // The production rule refuses loopback: no SYN-ACK, no RESET.
+    let (engine, _http, _dir) = engine(&[]).await;
+    let port = engine.listen_addr().unwrap().port();
+    let before = engine.refused().peers;
+    assert_eq!(
+        answer_to_a_syn(port).await,
+        None,
+        "answered a refused source"
+    );
+    assert!(engine.refused().peers > before, "the refusal is counted");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn incoming_utp_from_an_allowed_source_connects() {
+    // Control: with loopback allowed, the same SYN gets its SYN-ACK.
     let (engine, _http, _dir) = engine(&[V4]).await;
     let port = engine.listen_addr().unwrap().port();
-    assert!(!answers_a_syn(port).await, "no uTP answer from the engine");
-    // Control: a session listening for uTP answers the same SYN.
-    let dir = tempfile::tempdir().unwrap();
-    let opts = SessionOptions {
-        dht: None,
-        disable_local_service_discovery: true,
-        listen: Some(ListenerOptions {
-            mode: ListenerMode::TcpAndUtp,
-            listen_addr: (Ipv6Addr::UNSPECIFIED, 0).into(),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
-    let session = Session::new_with_opts(dir.path().into(), opts)
+    let answer = answer_to_a_syn(port)
         .await
-        .unwrap();
-    let port = session.listen_addr().unwrap().port();
-    assert!(answers_a_syn(port).await, "control: uTP answers the SYN");
+        .expect("no answer to an allowed source");
+    assert_eq!(answer[0], 0x21, "an ST_STATE, version 1");
+    assert_eq!(answer[18..20], 1u16.to_be_bytes(), "acknowledges seq 1");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
