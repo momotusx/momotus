@@ -88,7 +88,7 @@ const closeWhenOpen = (opening: Promise<Subscription | null>) =>
 export function liveView<S>(view: string, params: Record<string, unknown> = {}, keep = false, key = "id"): LiveView<S> {
   const [state, setState] = createStore<Live<S>>({ status: { state: "opening" }, data: null });
   const [sub, setSub] = createSignal<number | null>(null);
-  let command: (c: object) => Promise<void> = async () => undefined;
+  let ready: Subscription | null = null;
   let closing: Promise<void> | undefined;
   const apply = (s: S) => setState("data", reconcile(s as never, { merge: true, key }));
   const opening = bridge
@@ -107,7 +107,7 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
       setLink("open");
       if (!closing) {
         setSub(s.sub);
-        command = s.command;
+        ready = s;
       }
       return s;
     })
@@ -117,7 +117,12 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
     });
   const close = () => (closing ??= closeWhenOpen(opening));
   if (!keep) onCleanup(() => void close());
-  return { state, sub, command: (c) => command(c), close };
+  // Once open, a command goes at once (a last report as the view closes still
+  // leaves before the close). One sent while the view is still opening (a
+  // query typed the moment the search palette shows) waits for it, in order,
+  // instead of being lost.
+  const command = (c: object): Promise<void> => (ready ? ready.command(c) : opening.then((s) => (s && !closing ? s.command(c) : undefined)));
+  return { state, sub, command, close };
 }
 
 export interface HomeState {
