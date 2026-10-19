@@ -1641,6 +1641,16 @@ pub async fn fork_preview(
     })
 }
 
+/// Leaves the account on this device only: forgets its keys, roster and
+/// cursors without a round and without telling the relay. The way out for a
+/// device the relay will not let leave (off its list, a lost token, a fork
+/// it cannot settle); the relay lists it until another device removes it.
+/// The library stays, and pairing again merges it.
+pub fn leave_here(library: &Library) -> Result<(), SyncError> {
+    library.forget_sync()?;
+    Ok(())
+}
+
 /// After a fork: takes the relay's roster instead of this device's, drops
 /// again what this device's branch had dropped (plus `also_drop`, ticked by
 /// the user, and every kit only the relay's branch has), and starts a new

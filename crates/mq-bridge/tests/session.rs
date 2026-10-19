@@ -379,6 +379,14 @@ async fn sync_account_then_two_devices_share_preferences() {
     .await;
     let cancelled = next(&mut rx_a).await;
     assert_eq!(cancelled["result"]["keys"]["epoch"], 1, "{cancelled}");
+
+    // Leaving here only answers without any relay: this record names a dead one.
+    let mut dead = record.clone();
+    dead["server"] = json!("http://127.0.0.1:9");
+    a.handle_text(&json!({"id": 13, "op": "signOut", "record": dead, "local": true}).to_string())
+        .await;
+    let left = next(&mut rx_a).await;
+    assert_eq!(left["ok"], true, "{left}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

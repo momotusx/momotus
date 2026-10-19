@@ -5,7 +5,7 @@
 use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::hlc::{HlcClock, now_ms};
 use mq_library::{Library, ProgressRow};
-use mq_sync::pair::{approve_pairing, make_kit, start_pairing};
+use mq_sync::pair::{approve_pairing, cancel_pairing, make_kit, start_pairing};
 use mq_sync::roster::{Entry, Hex, MemberSecret, Roster, Sponsor, TokenRequest};
 use mq_sync::wire::{AppendRequest, PushRequest, ReplayRequest, TokenGrant};
 use mq_sync::{SyncConfig, SyncError, SyncReport, sync_once};
@@ -1577,4 +1577,191 @@ async fn a_token_request_is_good_once_across_a_restart() {
         matches!(again, Err(HttpError::Status { status: 403, .. })),
         "{again:?}"
     );
+}
+
+/// The relay's roster moves while the adoption's own append is on its way:
+/// the append is refused, and the retry finds a head the user never saw.
+#[tokio::test]
+async fn a_roster_moving_during_the_adoption_append_is_refused() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    for device in [&mut tv, &mut phone] {
+        device.sync().await;
+    }
+    let before = relay.snapshot();
+    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    phone.record = record;
+    let restored = relay.restored(&before, false).await;
+    for device in [&mut phone, &mut tv] {
+        device.record.server = restored.url.clone();
+    }
+    tv.remove(vec![]).await;
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+    let preview = mq_sync::fork_preview(&phone.library, &http(), &phone.record)
+        .await
+        .unwrap();
+
+    let (reached, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let held = proxy(
+        &restored,
+        "POST",
+        "/v1/roster",
+        Fault::Hold(reached.clone(), release.clone()),
+    )
+    .await;
+    let adopting = SyncConfig {
+        server: held,
+        ..phone.record.clone()
+    };
+    let client = http();
+    let (adopted, ()) = tokio::join!(
+        mq_sync::use_server_roster(
+            &phone.library,
+            &client,
+            &adopting,
+            &phone.clock,
+            vec![],
+            Some(preview.head),
+        ),
+        async {
+            tokio::time::timeout(std::time::Duration::from_secs(10), reached.notified())
+                .await
+                .expect("the append reaches the relay");
+            // The TV adds a kit while the phone's append is held.
+            let (_, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+                .await
+                .unwrap();
+            tv.record = record;
+            release.notify_one();
+        }
+    );
+    let err = adopted.unwrap_err();
+    assert!(matches!(err, SyncError::RosterChanged), "{err:?}");
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "nothing was taken: {err:?}");
+}
+
+/// The approver ends an approval while the approved device joins and
+/// vouches for one more: the held revoke is refused, and the retry, built
+/// on the roster that now holds both, drops them.
+#[tokio::test]
+async fn an_approval_ended_while_the_device_joins_drops_it_and_what_it_added() {
+    let relay = Relay::new().await;
+    let (reached, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    // Everything goes through a proxy that holds the first roster append (a
+    // pairing code names its server, so all devices use the same URL).
+    let url = proxy(
+        &relay,
+        "POST",
+        "/v1/roster",
+        Fault::Hold(reached.clone(), release.clone()),
+    )
+    .await;
+    let mut phone = Device::with(
+        mq_sync::create_account(&http(), &url, None, "Phone")
+            .await
+            .unwrap(),
+    );
+    let joining = start_pairing(&http(), &url).await.unwrap();
+    let (_, record) = approve_pairing(
+        &phone.library,
+        &http(),
+        &phone.record,
+        &phone.clock,
+        &joining.qr,
+    )
+    .await
+    .unwrap();
+    phone.record = record;
+    let client = http();
+    let (ended, (mut stranger, mut friend)) = tokio::join!(
+        cancel_pairing(
+            &phone.library,
+            &client,
+            &phone.record,
+            &phone.clock,
+            &joining.qr
+        ),
+        async {
+            tokio::time::timeout(std::time::Duration::from_secs(10), reached.notified())
+                .await
+                .expect("the revoke reaches the relay");
+            // While the revoke is held, the device joins and vouches for another.
+            let offer = joining.poll(&http()).await.unwrap().expect("offer");
+            let mut joined = Device::with(joining.claim(&http(), offer, "Stranger").await.unwrap());
+            joined.sync().await;
+            let next = start_pairing(&http(), &url).await.unwrap();
+            let (_, record) = approve_pairing(
+                &joined.library,
+                &http(),
+                &joined.record,
+                &joined.clock,
+                &next.qr,
+            )
+            .await
+            .unwrap();
+            joined.record = record;
+            let offer = next.poll(&http()).await.unwrap().expect("offer");
+            let friend = Device::with(next.claim(&http(), offer, "Friend").await.unwrap());
+            release.notify_one();
+            (joined, friend)
+        }
+    );
+    phone.record = ended.unwrap();
+    for device in [&mut stranger, &mut friend] {
+        let err = device.round().await.unwrap_err();
+        assert!(matches!(err, SyncError::Dropped), "{err:?}");
+    }
+    let members = mq_sync::devices(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap()
+        .members;
+    assert_eq!(members.len(), 1, "{members:?}");
+}
+
+/// A device in a fork it cannot settle leaves on its own (nothing sent),
+/// then pairs again from a device that still syncs and syncs as before.
+#[tokio::test]
+async fn a_forked_device_leaves_here_and_pairs_again() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    for device in [&mut tv, &mut phone] {
+        device.sync().await;
+    }
+    let before = relay.snapshot();
+    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    phone.record = record;
+    let restored = relay.restored(&before, false).await;
+    for device in [&mut phone, &mut tv] {
+        device.record.server = restored.url.clone();
+    }
+    tv.remove(vec![]).await;
+    tv.remove(vec![phone.id()]).await;
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+    // A normal sign-out runs a round first, which the fork stops.
+    let err = mq_sync::sign_out(&phone.library, &http(), &phone.record, &phone.clock, true)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
+
+    mq_sync::leave_here(&phone.library).unwrap();
+    // The same library pairs again through the TV and syncs.
+    let joining = start_pairing(&http(), &restored.url).await.unwrap();
+    let (_, record) = approve_pairing(&tv.library, &http(), &tv.record, &tv.clock, &joining.qr)
+        .await
+        .unwrap();
+    tv.record = record;
+    let offer = joining.poll(&http()).await.unwrap().expect("offer");
+    phone.record = joining.claim(&http(), offer, "Phone").await.unwrap();
+    phone.sync().await;
+    tv.sync().await;
+    assert_eq!(tv.record.keys, phone.record.keys);
 }

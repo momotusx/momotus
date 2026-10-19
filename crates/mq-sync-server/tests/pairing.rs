@@ -150,10 +150,14 @@ async fn a_tv_joins_by_qr_once_after_matching_codes() {
         vec!["Living room TV".to_owned(), "Phone".to_owned()]
     );
 
-    // The slot is single use.
+    // The slot is single use, and a code naming a device the account holds
+    // is refused before anything is sent.
     assert!(tv.poll(&http()).await.is_err());
     let again = phone.approve(&tv.qr).await.unwrap_err();
-    assert!(again.to_string().contains("expired"), "{again}");
+    assert!(
+        again.to_string().contains("already in the account"),
+        "{again}"
+    );
 }
 
 #[tokio::test]

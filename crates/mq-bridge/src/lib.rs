@@ -190,6 +190,10 @@ enum Request {
         record: Box<SyncConfig>,
         #[serde(default)]
         force: bool,
+        /// On this device only: no round, nothing sent; for a device the relay
+        /// will not let leave.
+        #[serde(default)]
+        local: bool,
     },
     /// The digits on the new device differ: ends the approval of `qr` now
     /// with a key rotation (dropping the device if it joined). Replies the
@@ -671,9 +675,17 @@ impl Session {
                     answer(mq_sync::report_lost(library, http, &record, clock, lost, keep).await)
                 });
             }
-            Request::SignOut { id, record, force } => {
+            Request::SignOut {
+                id,
+                record,
+                force,
+                local,
+            } => {
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
+                    if local {
+                        return mq_sync::leave_here(core.library()).map(|()| json!({}));
+                    }
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     mq_sync::sign_out(library, http, &record, clock, force)
                         .await

@@ -347,6 +347,11 @@ pub async fn approve_pairing(
     let public =
         PublicKey::from_bytes(&keys.boxk.0).map_err(|_| bad("pairing code has no valid keys"))?;
     let session = Session::open(library, http, config, clock).await?;
+    // A code naming a device the account ever admitted cannot join again; approving it would
+    // only hand its key out, and They differ would then drop that device.
+    if session.roster.admitted(&keys.id()) {
+        return Err(bad("this code belongs to a device already in the account"));
+    }
     let code = six_digits();
     let (seq, hash) = session.roster.head().unwrap_or_default();
     let payload = PairPayload {
