@@ -41,7 +41,11 @@ fn pages_never_skip_rows_that_share_an_hlc() {
         cursor = last.cursor();
         seen.extend(page);
     }
-    assert_eq!(seen.len(), 27, "25 items, the profile and its lock");
+    assert_eq!(
+        seen.len(),
+        28,
+        "25 items, the profile, its lock and its access"
+    );
     assert_eq!(seen, all(&lib), "paged export equals one big export");
 }
 
@@ -129,7 +133,11 @@ fn a_write_landing_during_a_push_stays_queued() {
     lib.upsert_item("p", &item("tt1"), true, &hlc(2, 1))
         .unwrap();
     let page = lib.outbox(500).unwrap();
-    assert_eq!(page.records.len(), 3, "the profile, its lock and the item");
+    assert_eq!(
+        page.records.len(),
+        4,
+        "the profile, its lock, its access and the item"
+    );
     // Written after the page was read, with an older clock than the item.
     lib.set_progress(
         "p",

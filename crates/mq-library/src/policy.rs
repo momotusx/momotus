@@ -1,0 +1,407 @@
+//! Kids mode's data (plans/m11-kids.md 3 and 4.1): the one gate, the
+//! allowlist entries, and the reads that pair a decision with the access
+//! generation it was made under.
+
+use crate::store::{Library, LibraryError};
+use crate::sync::{OWNER, coll, queue, refuse_gone, sql};
+use rusqlite::{Connection, OptionalExtension, params};
+use std::collections::HashMap;
+
+/// Allowed titles a kids profile sees: the first this many by allow time.
+pub const MAX_ALLOWED: usize = 1000;
+/// Titles past the cap listed for the owner, newest first.
+const OVER_LISTED: usize = 50;
+/// Characters kept of each name.
+const NAME_CHARS: usize = 200;
+/// Other names kept per entry.
+const MAX_NAMES: usize = 4;
+/// `name` and `names` together, as serialized JSON bytes.
+const NAMES_BYTES: usize = 1024;
+/// Device state key of the access generation (raised by triggers, V10).
+const GENERATION: &str = "access_generation";
+
+/// What a profile may see and play.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Policy {
+    Open,
+    /// Allowed titles by id, with their kind: the first 1,000 by allow time.
+    Kids(HashMap<String, String>),
+}
+
+impl Policy {
+    /// The one gate. `kind` and `id` come from an addon answer the core
+    /// checked, a library row, the allowlist, or a play target the core
+    /// verified. An empty or unknown pair never passes a kids policy.
+    pub fn allows(&self, kind: &str, id: &str) -> bool {
+        match self {
+            Policy::Open => true,
+            Policy::Kids(titles) => {
+                !kind.is_empty() && !id.is_empty() && titles.get(id).is_some_and(|k| k == kind)
+            }
+        }
+    }
+
+    pub fn kids(&self) -> bool {
+        matches!(self, Policy::Kids(_))
+    }
+
+    /// Whether `video_id` is `id` or `id` followed by ':' (3.4): `tt1:1:2`
+    /// is of `tt1`, `tt10:1:1` is not.
+    pub fn belongs(id: &str, video_id: &str) -> bool {
+        !id.is_empty()
+            && video_id
+                .strip_prefix(id)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with(':'))
+    }
+}
+
+/// A decision with the access generation of the snapshot it was read from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Authorization {
+    Authorized { generation: u64 },
+    Denied { generation: u64 },
+}
+
+/// One allowlist entry (coll 10).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AllowedRow {
+    pub item_id: String,
+    pub kind: String,
+    pub name: String,
+    /// Other names of the title, in the owner's addon order.
+    pub names: Vec<String>,
+    pub poster: Option<String>,
+    /// `false` is a removal.
+    pub allowed: bool,
+    pub added_ms: i64,
+}
+
+impl AllowedRow {
+    /// Held to the bounds of 3.1, the same for a local write and a record
+    /// from another device: ids 1 to 256 and 1 to 32 bytes; names cleaned
+    /// (control and format characters out, whitespace folded) before any
+    /// bound, each up to 200 characters, at most 4 others without `name`
+    /// or repeats, all together at most 1 KiB of JSON; a poster only as an
+    /// `https` URL up to 512 bytes.
+    pub(crate) fn bounded(mut self) -> Result<Self, &'static str> {
+        if self.item_id.is_empty() || self.item_id.len() > 256 {
+            return Err("the id must be 1 to 256 bytes");
+        }
+        if self.kind.is_empty() || self.kind.len() > 32 {
+            return Err("the kind must be 1 to 32 bytes");
+        }
+        self.name = cut(&clean(&self.name));
+        let mut names: Vec<String> = Vec::new();
+        for name in std::mem::take(&mut self.names) {
+            let name = cut(&clean(&name));
+            if names.len() < MAX_NAMES
+                && !name.is_empty()
+                && name != self.name
+                && !names.contains(&name)
+            {
+                names.push(name);
+            }
+        }
+        while json_len(&self.name) + json_len(&names) > NAMES_BYTES && names.pop().is_some() {}
+        while json_len(&self.name) + json_len(&names) > NAMES_BYTES {
+            self.name.pop();
+        }
+        self.names = names;
+        self.poster = self.poster.filter(|p| {
+            p.starts_with("https://") && p.len() <= 512 && !p.chars().any(char::is_control)
+        });
+        Ok(self)
+    }
+}
+
+/// A kids profile's list as its views and the owner's page read it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AllowedList {
+    /// The first 1,000 allowed by allow time: what the kid sees.
+    pub counted: Vec<AllowedRow>,
+    /// Up to 50 allowed past the cap, newest first.
+    pub over: Vec<AllowedRow>,
+    /// How many are past the cap.
+    pub over_count: usize,
+}
+
+impl Library {
+    /// The profile's policy. Fails closed: a read error, an unreadable row
+    /// or a missing access register gives `Kids` with no titles.
+    pub fn policy(&self, profile: &str) -> Policy {
+        self.policy_checked(profile)
+            .map(|(policy, _)| policy)
+            .unwrap_or_else(|_| Policy::Kids(HashMap::new()))
+    }
+
+    /// The policy and the access generation, from one read transaction, so
+    /// a read error is told apart from an exclusion.
+    pub fn policy_checked(&self, profile: &str) -> Result<(Policy, u64), LibraryError> {
+        self.read(|c| {
+            let tx = c.unchecked_transaction()?;
+            let policy = read_policy(&tx, profile)?;
+            Ok((policy, access_generation(&tx)?))
+        })
+    }
+
+    /// Whether the profile may play `kind` `id` (and `video`, which must
+    /// belong to it under a kids policy), with the generation that decision
+    /// was read under: both from one read transaction.
+    pub fn authorize(
+        &self,
+        profile: &str,
+        kind: &str,
+        id: &str,
+        video: Option<&str>,
+    ) -> Result<Authorization, LibraryError> {
+        self.authorize_with(profile, kind, id, video, || {})
+    }
+
+    /// `authorize`, with `between` run after the decision is read and
+    /// before the generation is (tests force a commit there).
+    pub(crate) fn authorize_with(
+        &self,
+        profile: &str,
+        kind: &str,
+        id: &str,
+        video: Option<&str>,
+        between: impl FnOnce(),
+    ) -> Result<Authorization, LibraryError> {
+        self.read(|c| {
+            let tx = c.unchecked_transaction()?;
+            let policy = read_policy(&tx, profile)?;
+            let ok = policy.allows(kind, id)
+                && (!policy.kids() || video.is_none_or(|v| Policy::belongs(id, v)));
+            between();
+            let generation = access_generation(&tx)?;
+            Ok(if ok {
+                Authorization::Authorized { generation }
+            } else {
+                Authorization::Denied { generation }
+            })
+        })
+    }
+
+    /// Writes an allowlist entry stamped `hlc` (taken when the owner's
+    /// request arrived) only when that is newer than the stored one;
+    /// otherwise nothing happens and the newer edit stands. Never stamped
+    /// again above the stored one, so a slow Allow can never overtake a
+    /// later Remove (3.1). Returns whether it was written. Refused for the
+    /// owner, and for an entry outside its bounds.
+    pub fn write_allowed(
+        &self,
+        profile: &str,
+        row: &AllowedRow,
+        hlc: &str,
+    ) -> Result<bool, LibraryError> {
+        if profile == OWNER {
+            return Err(LibraryError::OwnerKids);
+        }
+        let row = row.clone().bounded().map_err(LibraryError::BadEntry)?;
+        self.write(|c| {
+            refuse_gone(c, profile)?;
+            let changed = sql::set_allowed(c, profile, &row, hlc)?;
+            queue(c, changed, coll::ALLOWED, &[profile, &row.item_id])?;
+            Ok(changed > 0)
+        })
+    }
+
+    /// The profile's allowlist: the counted titles and the extras past the
+    /// cap, from one read transaction.
+    pub fn allowed_list(&self, profile: &str) -> Result<AllowedList, LibraryError> {
+        self.read(|c| {
+            let tx = c.unchecked_transaction()?;
+            let counted = counted(&tx, profile)?;
+            let total: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM allowed WHERE profile_id = ?1 AND allowed = 1",
+                params![profile],
+                |r| r.get(0),
+            )?;
+            let over_count = (total as usize).saturating_sub(counted.len());
+            let mut stmt = tx.prepare(&format!(
+                "{SELECT_ALLOWED} WHERE profile_id = ?1 AND allowed = 1
+                 ORDER BY added_ms DESC, item_id DESC LIMIT ?2"
+            ))?;
+            let over = stmt
+                .query_map(params![profile, over_count.min(OVER_LISTED) as i64], row)?
+                .collect::<rusqlite::Result<_>>()?;
+            Ok(AllowedList {
+                counted,
+                over,
+                over_count,
+            })
+        })
+    }
+}
+
+const SELECT_ALLOWED: &str =
+    "SELECT item_id, kind, name, names, poster, allowed, added_ms FROM allowed";
+
+fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AllowedRow> {
+    let names: String = r.get(3)?;
+    Ok(AllowedRow {
+        item_id: r.get(0)?,
+        kind: r.get(1)?,
+        name: r.get(2)?,
+        names: serde_json::from_str(&names).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(e))
+        })?,
+        poster: r.get(4)?,
+        allowed: r.get(5)?,
+        added_ms: r.get(6)?,
+    })
+}
+
+/// The first 1,000 allowed by allow time, ties by id: every device holding
+/// the same rows counts the same ones (3.4).
+fn counted(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AllowedRow>> {
+    let mut stmt = c.prepare(&format!(
+        "{SELECT_ALLOWED} WHERE profile_id = ?1 AND allowed = 1
+         ORDER BY added_ms, item_id LIMIT ?2"
+    ))?;
+    stmt.query_map(params![profile, MAX_ALLOWED as i64], row)?
+        .collect()
+}
+
+fn read_policy(c: &Connection, profile: &str) -> rusqlite::Result<Policy> {
+    let kids: Option<bool> = c
+        .query_row(
+            "SELECT kids FROM profile_access WHERE profile_id = ?1",
+            params![profile],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(match kids {
+        Some(false) => Policy::Open,
+        // Kids, or not known yet: only what is allowed.
+        Some(true) => Policy::Kids(
+            counted(c, profile)?
+                .into_iter()
+                .map(|r| (r.item_id, r.kind))
+                .collect(),
+        ),
+        None => Policy::Kids(HashMap::new()),
+    })
+}
+
+fn access_generation(c: &Connection) -> rusqlite::Result<u64> {
+    c.query_row(
+        "SELECT CAST(value AS INTEGER) FROM device_state WHERE key = ?1",
+        params![GENERATION],
+        |r| r.get::<_, i64>(0),
+    )
+    .optional()
+    .map(|g| g.unwrap_or(0) as u64)
+}
+
+/// Whitespace runs (tabs and line breaks too) folded to one space, none at
+/// the ends, and every other control (Cc) and format (Cf) character out:
+/// JSON escaping can then only grow a name by its quotes and backslashes.
+fn clean(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut space = false;
+    for ch in s.chars() {
+        if ch.is_whitespace() {
+            space = !out.is_empty();
+            continue;
+        }
+        if ch.is_control() || is_format(ch) {
+            continue;
+        }
+        if space {
+            out.push(' ');
+            space = false;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn cut(s: &str) -> String {
+    s.chars().take(NAME_CHARS).collect()
+}
+
+fn json_len<T: serde::Serialize + ?Sized>(value: &T) -> usize {
+    serde_json::to_string(value).map_or(usize::MAX, |s| s.len())
+}
+
+/// Unicode general category Cf (format characters), Unicode 15.
+fn is_format(ch: char) -> bool {
+    const CF: [(u32, u32); 20] = [
+        (0x00AD, 0x00AD),
+        (0x0600, 0x0605),
+        (0x061C, 0x061C),
+        (0x06DD, 0x06DD),
+        (0x070F, 0x070F),
+        (0x0890, 0x0891),
+        (0x08E2, 0x08E2),
+        (0x180E, 0x180E),
+        (0x200B, 0x200F),
+        (0x202A, 0x202E),
+        (0x2060, 0x2064),
+        (0x2066, 0x206F),
+        (0xFEFF, 0xFEFF),
+        (0xFFF9, 0xFFFB),
+        (0x110BD, 0x110BD),
+        (0x110CD, 0x110CD),
+        (0x13430, 0x1343F),
+        (0x1BCA0, 0x1BCA3),
+        (0x1D173, 0x1D17A),
+        (0xE0001, 0xE007F),
+    ];
+    let c = ch as u32;
+    CF.iter().any(|&(lo, hi)| (lo..=hi).contains(&c))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hlc::Hlc;
+
+    fn hlc(wall: u64) -> String {
+        Hlc {
+            wall_ms: wall,
+            counter: 0,
+            device: 1,
+        }
+        .encode()
+    }
+
+    fn entry(id: &str, allowed: bool) -> AllowedRow {
+        AllowedRow {
+            item_id: id.into(),
+            kind: "movie".into(),
+            name: "Up".into(),
+            names: vec![],
+            poster: None,
+            allowed,
+            added_ms: 1,
+        }
+    }
+
+    /// The decision and its generation come from one snapshot: a removal
+    /// committed between the two reads changes neither, so the
+    /// authorization names the generation before the removal.
+    #[test]
+    fn a_decision_and_its_generation_are_one_snapshot() {
+        let lib = Library::temporary().unwrap();
+        lib.create_kids_profile("kid", "Kid", "", &hlc(1)).unwrap();
+        lib.write_allowed("kid", &entry("tt1", true), &hlc(2))
+            .unwrap();
+        let (_, before) = lib.policy_checked("kid").unwrap();
+        let auth = lib
+            .authorize_with("kid", "movie", "tt1", None, || {
+                lib.write_allowed("kid", &entry("tt1", false), &hlc(3))
+                    .unwrap();
+            })
+            .unwrap();
+        assert_eq!(auth, Authorization::Authorized { generation: before });
+        let (policy, after) = lib.policy_checked("kid").unwrap();
+        assert!(after > before, "the removal raised it");
+        assert!(!policy.allows("movie", "tt1"));
+        assert_eq!(
+            lib.authorize("kid", "movie", "tt1", None).unwrap(),
+            Authorization::Denied { generation: after }
+        );
+    }
+}

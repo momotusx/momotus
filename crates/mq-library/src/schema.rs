@@ -11,6 +11,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V7),
         M::up(V8),
         M::up(V9),
+        M::up(V10),
     ])
 }
 
@@ -253,10 +254,122 @@ UPDATE profiles SET name = 'Main'
     WHERE id = 'default' AND name = 'default' AND substr(hlc, 1, 16) = '0000000000000000';
 "#;
 
+/// Kids mode (plans/m11-kids.md 3.1): the kids flag is its own register
+/// (coll 9) and the allowlist one register per title (coll 10). Every
+/// profile here gets a standard access register at the all-zero hlc, queued,
+/// so another device never shows it as still syncing; any real record wins.
+/// `access_generation` (device-wide) rises with every change to either
+/// table, inside the transaction that makes it, so a policy decision and the
+/// generation read with it name the same snapshot.
+const V10: &str = r#"
+CREATE TABLE profile_access (
+    profile_id  TEXT PRIMARY KEY,
+    kids        INTEGER NOT NULL,
+    hlc         TEXT NOT NULL
+);
+
+CREATE TABLE allowed (
+    profile_id  TEXT NOT NULL,
+    item_id     TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    names       TEXT NOT NULL DEFAULT '[]',
+    poster      TEXT,
+    allowed     INTEGER NOT NULL,
+    added_ms    INTEGER NOT NULL,
+    hlc         TEXT NOT NULL,
+    PRIMARY KEY (profile_id, item_id)
+);
+CREATE INDEX allowed_counted ON allowed (profile_id, allowed, added_ms, item_id);
+
+INSERT INTO profile_access (profile_id, kids, hlc)
+    SELECT id, 0, '00000000000000000000000000000000' FROM profiles
+    WHERE id NOT IN (SELECT profile_id FROM profile_gone);
+INSERT INTO sync_outbox (coll, key) SELECT 9, profile_id FROM profile_access;
+
+INSERT INTO device_state (key, value) VALUES ('access_generation', '0')
+    ON CONFLICT(key) DO NOTHING;
+CREATE TRIGGER access_gen_access_insert AFTER INSERT ON profile_access BEGIN
+    UPDATE device_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'access_generation';
+END;
+CREATE TRIGGER access_gen_access_update AFTER UPDATE ON profile_access BEGIN
+    UPDATE device_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'access_generation';
+END;
+CREATE TRIGGER access_gen_access_delete AFTER DELETE ON profile_access BEGIN
+    UPDATE device_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'access_generation';
+END;
+CREATE TRIGGER access_gen_allowed_insert AFTER INSERT ON allowed BEGIN
+    UPDATE device_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'access_generation';
+END;
+CREATE TRIGGER access_gen_allowed_update AFTER UPDATE ON allowed BEGIN
+    UPDATE device_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'access_generation';
+END;
+CREATE TRIGGER access_gen_allowed_delete AFTER DELETE ON allowed BEGIN
+    UPDATE device_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'access_generation';
+END;
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::migrations;
     use rusqlite::Connection;
+
+    /// V10 on a V9 database: every profile still here is standard at the
+    /// all-zero hlc and queued; a gone one gets nothing; the generation
+    /// starts and rises with access changes.
+    #[test]
+    fn v10_makes_every_profile_standard_and_queues_it() {
+        let mut c = Connection::open_in_memory().unwrap();
+        migrations().to_version(&mut c, 9).unwrap();
+        c.execute_batch(
+            "INSERT INTO profiles (id, name, hlc) VALUES
+               ('default', 'Main', '0000000000000000000000000000000a'),
+               ('kid', 'Kid', '01a14b5de9630000000000000000000a'),
+               ('x', 'X', '01a14b5de9630000000000000000000a');
+             INSERT INTO profile_gone (profile_id, hlc) VALUES ('x', '01a14b5de9640000000000000000000a');",
+        )
+        .unwrap();
+        migrations().to_latest(&mut c).unwrap();
+        let rows: Vec<(String, bool, String)> = c
+            .prepare("SELECT profile_id, kids, hlc FROM profile_access ORDER BY profile_id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let zero = "0".repeat(32);
+        assert_eq!(
+            rows,
+            [
+                ("default".to_owned(), false, zero.clone()),
+                ("kid".to_owned(), false, zero)
+            ]
+        );
+        let queued: Vec<String> = c
+            .prepare("SELECT key FROM sync_outbox WHERE coll = 9 ORDER BY key")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(queued, ["default", "kid"]);
+        let generation = |c: &Connection| -> i64 {
+            c.query_row(
+                "SELECT CAST(value AS INTEGER) FROM device_state WHERE key = 'access_generation'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        let before = generation(&c);
+        c.execute(
+            "INSERT INTO allowed (profile_id, item_id, kind, name, allowed, added_ms, hlc)
+             VALUES ('kid', 'tt1', 'movie', 'One', 1, 1, '1')",
+            [],
+        )
+        .unwrap();
+        assert!(generation(&c) > before);
+    }
 
     /// V9 names a never-renamed owner and leaves a deliberate name alone.
     #[test]

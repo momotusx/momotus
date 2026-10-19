@@ -17,12 +17,20 @@ pub struct ProfileRow {
     /// The lock register: `None` until it arrives (the profile is still
     /// syncing and cannot be used), `Some(None)` for no PIN.
     pub lock: Option<Option<String>>,
+    /// The access register: `None` until it arrives, `Some(true)` for a
+    /// kids profile (plans/m11-kids.md 3.1).
+    pub access: Option<bool>,
 }
 
 impl ProfileRow {
-    /// Usable: its lock register is here, so "no PIN" is known, not guessed.
+    /// Usable: its lock and access registers are here, so "no PIN" and
+    /// "not kids" are known, not guessed.
     pub fn ready(&self) -> bool {
-        self.lock.is_some()
+        self.lock.is_some() && self.access.is_some()
+    }
+
+    pub fn kids(&self) -> bool {
+        self.access == Some(true)
     }
 
     pub fn pin_hash(&self) -> Option<&str> {
@@ -37,8 +45,10 @@ impl Library {
     pub fn profiles(&self) -> Result<Vec<ProfileRow>, LibraryError> {
         self.read(|c| {
             let mut stmt = c.prepare(
-                "SELECT p.id, p.name, p.avatar, p.position, l.profile_id IS NOT NULL, l.pin_hash
+                "SELECT p.id, p.name, p.avatar, p.position, l.profile_id IS NOT NULL, l.pin_hash,
+                        a.kids
                  FROM profiles p LEFT JOIN profile_lock l ON l.profile_id = p.id
+                 LEFT JOIN profile_access a ON a.profile_id = p.id
                  WHERE p.id NOT IN (SELECT profile_id FROM profile_gone)
                  ORDER BY p.position, p.id",
             )?;
@@ -49,6 +59,7 @@ impl Library {
                     avatar: r.get(2)?,
                     position: r.get(3)?,
                     lock: r.get::<_, bool>(4)?.then(|| r.get(5)).transpose()?,
+                    access: r.get(6)?,
                 })
             })?
             .collect()
@@ -71,8 +82,9 @@ impl Library {
         })
     }
 
-    /// Creates the profile with its lock register (no PIN) and a copy of
-    /// the owner's addon list, in one transaction, after the last position.
+    /// Creates the profile with its lock register (no PIN), its access
+    /// register (standard) and a copy of the owner's addon list, in one
+    /// transaction, after the last position.
     pub fn create_profile<'a>(
         &self,
         id: &str,
@@ -80,7 +92,34 @@ impl Library {
         avatar: &str,
         stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
-        let stamp = stamp.into();
+        self.create(id, name, avatar, false, stamp.into())
+    }
+
+    /// Creates a kids profile (plans/m11-kids.md 6.1): its lock register
+    /// (no PIN; a kids profile never has one) and its access register, in
+    /// one transaction. No addon copy: it reads the owner's list. Refused
+    /// for the owner.
+    pub fn create_kids_profile<'a>(
+        &self,
+        id: &str,
+        name: &str,
+        avatar: &str,
+        stamp: impl Into<Stamp<'a>>,
+    ) -> Result<(), LibraryError> {
+        if id == OWNER {
+            return Err(LibraryError::OwnerKids);
+        }
+        self.create(id, name, avatar, true, stamp.into())
+    }
+
+    fn create(
+        &self,
+        id: &str,
+        name: &str,
+        avatar: &str,
+        kids: bool,
+        stamp: Stamp<'_>,
+    ) -> Result<(), LibraryError> {
         self.write(|c| {
             let position: i64 = c.query_row(
                 "SELECT COALESCE(MAX(position) + 1, 0) FROM profiles",
@@ -93,24 +132,30 @@ impl Library {
             local(c, coll::PROFILE_LOCK, &[id], &stamp, |h| {
                 sql::set_lock(c, id, None, h)
             })?;
-            let mut stmt = c.prepare(
-                "SELECT transport_url, manifest_json, position, enabled, allow_private
-                 FROM addons WHERE profile_id = ?1 ORDER BY position",
-            )?;
-            let addons = stmt
-                .query_map(params![OWNER], |r| {
-                    Ok(AddonRow {
-                        transport_url: r.get(0)?,
-                        manifest_json: r.get(1)?,
-                        position: r.get(2)?,
-                        enabled: r.get(3)?,
-                        allow_private: r.get(4)?,
-                    })
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            local(c, coll::ADDONS, &[id], &stamp, |h| {
-                sql::set_addons(c, id, &addons, h)
-            })
+            local(c, coll::PROFILE_ACCESS, &[id], &stamp, |h| {
+                sql::set_access(c, id, kids, h)
+            })?;
+            if kids {
+                return Ok(());
+            }
+            copy_owner_addons(c, id, &stamp)
+        })
+    }
+
+    /// Turns a kids profile into a standard one (plans/m11-kids.md 6.1),
+    /// with a copy of the owner's addon list, in one transaction. There is
+    /// no way back: a standard profile never becomes kids.
+    pub fn make_standard<'a>(
+        &self,
+        id: &str,
+        stamp: impl Into<Stamp<'a>>,
+    ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
+        self.write(|c| {
+            local(c, coll::PROFILE_ACCESS, &[id], &stamp, |h| {
+                sql::set_access(c, id, false, h)
+            })?;
+            copy_owner_addons(c, id, &stamp)
         })
     }
 
@@ -240,6 +285,32 @@ impl Library {
             .map(drop)
         })
     }
+}
+
+/// Writes a copy of the owner's addon list as `id`'s list.
+fn copy_owner_addons(
+    c: &rusqlite::Connection,
+    id: &str,
+    stamp: &Stamp<'_>,
+) -> rusqlite::Result<()> {
+    let mut stmt = c.prepare(
+        "SELECT transport_url, manifest_json, position, enabled, allow_private
+         FROM addons WHERE profile_id = ?1 ORDER BY position",
+    )?;
+    let addons = stmt
+        .query_map(params![OWNER], |r| {
+            Ok(AddonRow {
+                transport_url: r.get(0)?,
+                manifest_json: r.get(1)?,
+                position: r.get(2)?,
+                enabled: r.get(3)?,
+                allow_private: r.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    local(c, coll::ADDONS, &[id], stamp, |h| {
+        sql::set_addons(c, id, &addons, h)
+    })
 }
 
 #[cfg(test)]

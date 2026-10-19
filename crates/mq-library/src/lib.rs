@@ -6,6 +6,7 @@
 //! row carries an `hlc` string that sorts in causal order.
 
 pub mod hlc;
+mod policy;
 mod profiles;
 mod schema;
 mod store;
@@ -14,6 +15,7 @@ mod tracker;
 
 pub use hlc::{Hlc, HlcClock};
 
+pub use policy::{AllowedList, AllowedRow, Authorization, MAX_ALLOWED, Policy};
 pub use profiles::ProfileRow;
 pub use store::{
     AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryEntry, LibraryError,

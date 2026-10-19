@@ -20,6 +20,12 @@ pub enum LibraryError {
     ProfileGone(String),
     #[error("the owner profile cannot be removed")]
     OwnerProfile,
+    /// The owner is never a kids profile and has no allowlist.
+    #[error("the owner profile cannot be a kids profile")]
+    OwnerKids,
+    /// An allowlist entry outside its bounds (plans/m11-kids.md 3.1).
+    #[error("allowlist entry: {0}")]
+    BadEntry(&'static str),
 }
 
 impl From<rusqlite::Error> for LibraryError {
@@ -45,11 +51,13 @@ pub enum Table {
     StreamMemory,
     Settings,
     SearchHistory,
+    /// Kids flags and allowlists (plans/m11-kids.md).
+    Access,
 }
 
 impl Table {
     /// Every table, for listeners that missed changes and must refresh all.
-    pub const ALL: [Table; 8] = [
+    pub const ALL: [Table; 9] = [
         Table::Profiles,
         Table::Addons,
         Table::LibraryItems,
@@ -58,6 +66,7 @@ impl Table {
         Table::StreamMemory,
         Table::Settings,
         Table::SearchHistory,
+        Table::Access,
     ];
 
     fn from_name(name: &str) -> Option<Self> {
@@ -71,6 +80,7 @@ impl Table {
             "stream_memory" => Table::StreamMemory,
             "settings" => Table::Settings,
             "search_history" => Table::SearchHistory,
+            "profile_access" | "allowed" => Table::Access,
             _ => return None,
         })
     }
@@ -285,22 +295,34 @@ impl Library {
     }
 
     /// Creates the profile and its lock register (no PIN), each only when
-    /// missing. Called with the zero hlc, so versions synced from another
-    /// device win.
+    /// missing, and its access register (standard) for the owner or a
+    /// profile this call creates. Called with the zero hlc, so versions
+    /// synced from another device win. A profile already here waits for
+    /// its creator's access record: guessed, a kids profile whose record is
+    /// still on its way would open as standard.
     pub fn ensure_profile(&self, id: &str, name: &str, hlc: &str) -> Result<(), LibraryError> {
         self.write(|c| {
             refuse_gone(c, id)?;
-            let added = c.execute(
+            let created = c.execute(
                 "INSERT INTO profiles (id, name, hlc) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO NOTHING",
                 params![id, name, hlc],
             )?;
-            queue(c, added, coll::PROFILES, &[id])?;
+            queue(c, created, coll::PROFILES, &[id])?;
             let added = c.execute(
                 "INSERT INTO profile_lock (profile_id, pin_hash, hlc) VALUES (?1, NULL, ?2)
                  ON CONFLICT(profile_id) DO NOTHING",
                 params![id, hlc],
             )?;
-            queue(c, added, coll::PROFILE_LOCK, &[id])
+            queue(c, added, coll::PROFILE_LOCK, &[id])?;
+            if id != crate::sync::OWNER && created == 0 {
+                return Ok(());
+            }
+            let added = c.execute(
+                "INSERT INTO profile_access (profile_id, kids, hlc) VALUES (?1, 0, ?2)
+                 ON CONFLICT(profile_id) DO NOTHING",
+                params![id, hlc],
+            )?;
+            queue(c, added, coll::PROFILE_ACCESS, &[id])
         })
     }
 

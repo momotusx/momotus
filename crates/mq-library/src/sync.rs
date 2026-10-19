@@ -4,6 +4,7 @@
 //! and apply runs the same upsert-if-newer SQL as local writes.
 
 use crate::hlc::{Hlc, HlcClock};
+use crate::policy::AllowedRow;
 use crate::store::{AddonRow, Library, LibraryError, LibraryItemRow, ProgressRow};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -20,10 +21,14 @@ pub mod coll {
     pub const STREAM_MEMORY: u8 = 6;
     pub const PROFILE_LOCK: u8 = 7;
     pub const PROFILE_GONE: u8 = 8;
+    /// Whether a profile is a kids profile (plans/m11-kids.md 3.1).
+    pub const PROFILE_ACCESS: u8 = 9;
+    /// One title of a kids profile's allowlist.
+    pub const ALLOWED: u8 = 10;
 }
 
 /// Every collection this build reads and writes, in export order.
-const ALL: [u8; 9] = [
+const ALL: [u8; 11] = [
     coll::PROFILES,
     coll::ADDONS,
     coll::ITEMS,
@@ -33,6 +38,8 @@ const ALL: [u8; 9] = [
     coll::STREAM_MEMORY,
     coll::PROFILE_LOCK,
     coll::PROFILE_GONE,
+    coll::PROFILE_ACCESS,
+    coll::ALLOWED,
 ];
 
 /// Separates the parts of a register key; ids never contain it.
@@ -85,8 +92,10 @@ pub(crate) fn refuse_gone(c: &Connection, profile: &str) -> rusqlite::Result<()>
 }
 
 /// Every row a profile has on this device, except its gone register.
-pub(crate) const PROFILE_TABLES: [&str; 14] = [
+pub(crate) const PROFILE_TABLES: [&str; 16] = [
     "profile_lock",
+    "profile_access",
+    "allowed",
     "addons",
     "addon_list",
     "library_items",
@@ -189,6 +198,35 @@ struct LockValue {
 #[serde(rename_all = "camelCase")]
 struct GoneValue {
     profile: String,
+}
+
+/// Kids or not. `kids` is required: a record without it is skipped, never
+/// read as a standard profile.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AccessValue {
+    profile: String,
+    kids: bool,
+}
+
+/// One allowlist entry. A missing optional field reads as none; a missing
+/// `allowed` as a removal.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AllowedValue {
+    profile: String,
+    item_id: String,
+    kind: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    names: Vec<String>,
+    #[serde(default)]
+    poster: Option<String>,
+    #[serde(default)]
+    allowed: bool,
+    #[serde(default)]
+    added_ms: i64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -326,7 +364,8 @@ impl Library {
                    UNION ALL SELECT MAX(hlc) FROM library_items UNION ALL SELECT MAX(hlc) FROM progress
                    UNION ALL SELECT MAX(hlc) FROM watched UNION ALL SELECT MAX(hlc) FROM settings
                    UNION ALL SELECT MAX(hlc) FROM stream_memory UNION ALL SELECT MAX(hlc) FROM profile_lock
-                   UNION ALL SELECT MAX(hlc) FROM profile_gone)",
+                   UNION ALL SELECT MAX(hlc) FROM profile_gone UNION ALL SELECT MAX(hlc) FROM profile_access
+                   UNION ALL SELECT MAX(hlc) FROM allowed)",
                 [],
                 |r| r.get(0),
             )
@@ -380,6 +419,8 @@ impl Library {
                    UNION ALL SELECT 6, profile_id || char(31) || item_id FROM stream_memory
                    UNION ALL SELECT 7, profile_id FROM profile_lock
                    UNION ALL SELECT 8, profile_id FROM profile_gone
+                   UNION ALL SELECT 9, profile_id FROM profile_access
+                   UNION ALL SELECT 10, profile_id || char(31) || item_id FROM allowed
                  ) AS r
                  WHERE NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.coll = r.coll AND o.key = r.key)",
             )
@@ -581,6 +622,14 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
             "profile_id",
         ),
         coll::PROFILE_GONE => ("SELECT profile_id, hlc FROM profile_gone", "profile_id"),
+        coll::PROFILE_ACCESS => (
+            "SELECT profile_id, kids, hlc FROM profile_access",
+            "profile_id",
+        ),
+        coll::ALLOWED => (
+            "SELECT profile_id, item_id, kind, name, names, poster, allowed, added_ms, hlc FROM allowed",
+            "profile_id || char(31) || item_id",
+        ),
         coll::ADDONS => ("SELECT profile_id, hlc FROM addon_list", "profile_id"),
         coll::ITEMS => (
             "SELECT profile_id, item_id, kind, name, poster, poster_shape, in_library, added_ms, hlc FROM library_items",
@@ -649,6 +698,32 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
             .query_map(args, |r| {
                 let value = GoneValue { profile: r.get(0)? };
                 Ok(record(coll, key(&[&value.profile]), &value, r.get(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        coll::PROFILE_ACCESS => stmt
+            .query_map(args, |r| {
+                let value = AccessValue {
+                    profile: r.get(0)?,
+                    kids: r.get(1)?,
+                };
+                Ok(record(coll, key(&[&value.profile]), &value, r.get(2)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        coll::ALLOWED => stmt
+            .query_map(args, |r| {
+                let names: String = r.get(4)?;
+                let value = AllowedValue {
+                    profile: r.get(0)?,
+                    item_id: r.get(1)?,
+                    kind: r.get(2)?,
+                    name: r.get(3)?,
+                    names: serde_json::from_str(&names).unwrap_or_default(),
+                    poster: r.get(5)?,
+                    allowed: r.get(6)?,
+                    added_ms: r.get(7)?,
+                };
+                let k = key(&[&value.profile, &value.item_id]);
+                Ok(record(coll, k, &value, r.get(8)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         coll::ADDONS => {
@@ -813,6 +888,35 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
             }
             sql::set_gone(c, &v.profile, hlc)?
         }
+        coll::PROFILE_ACCESS => {
+            let v: AccessValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile])?;
+            if v.profile == OWNER && v.kids {
+                return Err(ApplyError::Shape(
+                    "the owner is never a kids profile".into(),
+                ));
+            }
+            sql::set_access(c, &v.profile, v.kids, hlc)?
+        }
+        coll::ALLOWED => {
+            let v: AllowedValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.item_id])?;
+            if v.profile == OWNER {
+                return Err(ApplyError::Shape("the owner has no allowlist".into()));
+            }
+            let row = AllowedRow {
+                item_id: v.item_id,
+                kind: v.kind,
+                name: v.name,
+                names: v.names,
+                poster: v.poster,
+                allowed: v.allowed,
+                added_ms: v.added_ms,
+            }
+            .bounded()
+            .map_err(|e| ApplyError::Shape(e.into()))?;
+            sql::set_allowed(c, &v.profile, &row, hlc)?
+        }
         coll::ADDONS => {
             let v: AddonsValue = serde_json::from_value(value)?;
             same_key(r, &[&v.profile])?;
@@ -895,6 +999,8 @@ fn tables(coll: u8) -> &'static [(&'static str, &'static str)] {
         coll::STREAM_MEMORY => &[("stream_memory", "profile_id || char(31) || item_id")],
         coll::PROFILE_LOCK => &[("profile_lock", "profile_id")],
         coll::PROFILE_GONE => &[("profile_gone", "profile_id")],
+        coll::PROFILE_ACCESS => &[("profile_access", "profile_id")],
+        coll::ALLOWED => &[("allowed", "profile_id || char(31) || item_id")],
         _ => &[],
     }
 }
@@ -1038,6 +1144,50 @@ pub(crate) mod sql {
              ON CONFLICT(profile_id) DO UPDATE SET pin_hash = excluded.pin_hash, hlc = excluded.hlc
              WHERE excluded.hlc > profile_lock.hlc",
             params![profile, pin_hash, hlc],
+        )
+    }
+
+    pub fn set_access(
+        c: &Connection,
+        profile: &str,
+        kids: bool,
+        hlc: &str,
+    ) -> rusqlite::Result<usize> {
+        c.execute(
+            "INSERT INTO profile_access (profile_id, kids, hlc) VALUES (?1, ?2, ?3)
+             ON CONFLICT(profile_id) DO UPDATE SET kids = excluded.kids, hlc = excluded.hlc
+             WHERE excluded.hlc > profile_access.hlc",
+            params![profile, kids, hlc],
+        )
+    }
+
+    /// One allowlist entry, already held to its bounds (`AllowedRow::bounded`).
+    pub fn set_allowed(
+        c: &Connection,
+        profile: &str,
+        row: &AllowedRow,
+        hlc: &str,
+    ) -> rusqlite::Result<usize> {
+        let names = serde_json::to_string(&row.names).expect("strings serialize");
+        c.execute(
+            "INSERT INTO allowed (profile_id, item_id, kind, name, names, poster, allowed, added_ms, hlc)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(profile_id, item_id) DO UPDATE SET
+               kind = excluded.kind, name = excluded.name, names = excluded.names,
+               poster = excluded.poster, allowed = excluded.allowed,
+               added_ms = excluded.added_ms, hlc = excluded.hlc
+             WHERE excluded.hlc > allowed.hlc",
+            params![
+                profile,
+                row.item_id,
+                row.kind,
+                row.name,
+                names,
+                row.poster,
+                row.allowed,
+                row.added_ms,
+                hlc
+            ],
         )
     }
 
