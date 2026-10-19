@@ -488,3 +488,51 @@ async fn a_cached_udp_tracker_address_meets_the_current_snapshot() {
     assert!(error.contains("address policy"), "{error}");
     assert_eq!(scope.refused(), refused + 1);
 }
+
+// Phase 4: the DHT.
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn dht_never_sends_to_the_canary() {
+    use mq_engine::librqbit::DhtSessionConfig;
+    use mq_engine::librqbit::dht::DhtPersistenceConfig;
+    for control in [false, true] {
+        let allowed = if control { vec![V4, V6] } else { vec![] };
+        // Bootstrap nodes by IPv4 literal, mapped literal and `[::1]`.
+        let canaries = [V4, V4, V6].map(|ip| Canary::udp(ip, 0));
+        let bootstrap = vec![
+            canaries[0].addr().to_string(),
+            mapped(canaries[1].addr()).to_string(),
+            canaries[2].addr().to_string(),
+        ];
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let scope = http.torrent_scope(&allowed);
+        let dht = scope.with_own_count();
+        // The DHT as Marquee runs it: persisted, through the session.
+        let dir = tempfile::tempdir().unwrap();
+        let opts = SessionOptions {
+            dht: Some(DhtSessionConfig {
+                bootstrap_addrs: Some(bootstrap),
+                port: None,
+                persistence: Some(DhtPersistenceConfig {
+                    config_filename: Some(dir.path().join("dht.json")),
+                    ..Default::default()
+                }),
+            }),
+            disable_local_service_discovery: true,
+            listen: None,
+            destinations: Some(mq_engine::destinations(&scope, &scope, &dht)),
+            ..Default::default()
+        };
+        let session = Session::new_with_opts(dir.path().into(), opts)
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        assert_canaries(control, &canaries.each_ref());
+        if control {
+            assert_eq!(dht.refused(), 0, "control: nothing refused");
+        } else {
+            assert!(dht.refused() >= 3, "each node refused: {}", dht.refused());
+        }
+        session.stop().await;
+    }
+}
