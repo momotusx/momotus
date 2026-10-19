@@ -970,12 +970,27 @@ async fn open_torrent(
         Ok(Authorization::Denied { .. }) => return Err("This title is not on the list".into()),
         Err(e) => return Err(e.to_string()),
     };
+    // Addresses the policy refused while this torrent tried to start, as
+    // counts only (plans/c27-torrent-policy.md 3.8). The window is this
+    // open's; another torrent opening at the same time adds its own.
+    let refused_before = engine.refused();
+    let did_not_start = || {
+        let d = engine.refused().since(refused_before);
+        tracing::info!(
+            trackers = d.trackers,
+            peers = d.peers,
+            "torrent did not start"
+        );
+    };
     let torrent = tokio::time::timeout(
         METADATA_TIMEOUT,
         engine.add_magnet(info_hash, trackers, &[]),
     )
     .await
-    .map_err(|_| "No peer sent the torrent's details in time".to_owned())?
+    .map_err(|_| {
+        did_not_start();
+        "No peer sent the torrent's details in time".to_owned()
+    })?
     .map_err(|e| e.to_string())?;
     // This profile's use of it, for as long as the playback lives: a hold
     // for another profile leaves the torrent running for it.
@@ -1023,7 +1038,10 @@ async fn open_torrent(
         // torrent, its hold and its files stay, since another profile may
         // be playing it, and the next candidate plays instead.
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
-        Ok((_, _, Err(_))) => "the swarm did not send the start of the video in time".to_owned(),
+        Ok((_, _, Err(_))) => {
+            did_not_start();
+            "the swarm did not send the start of the video in time".to_owned()
+        }
         Ok((_, _, Ok(Err(e)))) | Err(e) => e.to_string(),
     };
     // The next candidate plays instead: stop downloading this one.
