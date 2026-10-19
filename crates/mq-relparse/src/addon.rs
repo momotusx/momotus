@@ -403,6 +403,26 @@ mod tests {
         assert_eq!(f.cached, None);
     }
 
+    /// Avatar: Fire and Ash, row 42 of the default Torrentio recording
+    /// (plans/m13-stream-choice.md 1.1): a screener copy Torrentio labels 4k.
+    #[test]
+    fn a_web_screener_is_a_screener_copy() {
+        let f = parse_addon_stream(
+            "Torrentio\n4k",
+            "Avatar.Fire.and.Ash.2025.2160p.WEBSCREENER.H.265.Dual.YG⭐\n👤 3 💾 6.1 GB ⚙️ ThePirateBay",
+            Some("Avatar.Fire.and.Ash.2025.2160p.WEBSCREENER.H.265.Dual YG.mkv"),
+        );
+        assert_eq!(f.release.quality, Quality::Screener);
+        for (name, quality) in [
+            ("Movie.2025.1080p.WEB SCREENER.x264", Quality::Screener),
+            ("Movie.2025.DVDSCR.x264", Quality::Screener),
+            ("Movie.2025.1080p.WEB-DL.x264", Quality::WebDl),
+            ("Movie.2025.1080p.WEBRip.x264", Quality::WebRip),
+        ] {
+            assert_eq!(parse(name).quality, quality, "{name}");
+        }
+    }
+
     #[test]
     fn debrid_tags() {
         let rd = parse_addon_stream(
