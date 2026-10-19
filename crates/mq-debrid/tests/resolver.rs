@@ -555,3 +555,30 @@ async fn an_abandoned_flight_keeps_no_other_account_alive() {
     drop(resolver);
     assert_eq!(Arc::strong_count(&other), 1);
 }
+
+#[tokio::test]
+async fn the_cache_check_answers_each_hash_in_batches_of_100() {
+    let mut state = State::new();
+    state.instant_check = true;
+    state.check_result = CacheStatus::Cached;
+    let state = Arc::new(state);
+    let mut hashes = vec![HASH.to_uppercase(); 250];
+    hashes[1] = "not a hash".into();
+    let answers = resolver(&state).check(None, &hashes).await.unwrap();
+    assert_eq!(answers.len(), 250);
+    assert_eq!(answers[0], CacheStatus::Cached);
+    assert_eq!(
+        answers[1],
+        CacheStatus::Unknown,
+        "an invalid hash is not asked"
+    );
+    assert_eq!(answers[249], CacheStatus::Cached);
+    assert_eq!(state.checks.load(Ordering::SeqCst), 3, "249 valid hashes");
+    assert_eq!(state.adds(), 0, "a check never adds");
+
+    // A store without a reliable check is never asked.
+    let state = Arc::new(State::new());
+    let answers = resolver(&state).check(None, &[HASH.into()]).await.unwrap();
+    assert_eq!(answers, [CacheStatus::Unknown]);
+    assert_eq!(state.checks.load(Ordering::SeqCst), 0);
+}

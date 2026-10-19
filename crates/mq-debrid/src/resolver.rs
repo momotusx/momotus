@@ -221,6 +221,38 @@ impl Resolver {
         self.run(req, Priority::Prefetch).await.map(|_| ())
     }
 
+    /// Whether `store` (the default when `None`) has each of `hashes` ready,
+    /// one answer per hash in order, at prefetch priority, in batches of
+    /// 100. A store without a reliable check answers `Unknown` and is not
+    /// asked; an invalid hash is `Unknown` too.
+    pub async fn check(
+        &self,
+        store: Option<StoreId>,
+        hashes: &[String],
+    ) -> Result<Vec<CacheStatus>, DebridError> {
+        let slot = self.slot(store)?;
+        if slot.gone.is_cancelled() {
+            return Err(disconnected());
+        }
+        let mut out = vec![CacheStatus::Unknown; hashes.len()];
+        if !slot.prefetch.capabilities().instant_check {
+            return Ok(out);
+        }
+        let valid: Vec<(usize, String)> = hashes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, h)| normalize_hash(h).ok().map(|h| (i, h)))
+            .collect();
+        for batch in valid.chunks(100) {
+            let asked: Vec<String> = batch.iter().map(|(_, h)| h.clone()).collect();
+            let answers = slot.prefetch.check(&asked).await?;
+            for ((i, _), answer) in batch.iter().zip(answers) {
+                out[*i] = answer;
+            }
+        }
+        Ok(out)
+    }
+
     fn slot(&self, wanted: Option<StoreId>) -> Result<&Slot, DebridError> {
         let slot = match wanted {
             Some(id) => self.slots.iter().find(|s| s.id == id),
