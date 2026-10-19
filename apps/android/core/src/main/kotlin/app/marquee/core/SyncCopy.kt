@@ -522,6 +522,11 @@ object SyncCopy {
                     )
                 }
 
+                // A reason from a newer core.
+                Blocked.Unknown -> {
+                    add("The sync server did not take edits from this device this time, so they were not sent.")
+                }
+
                 null -> {
                     Unit
                 }

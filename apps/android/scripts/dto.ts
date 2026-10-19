@@ -292,8 +292,11 @@ function emit(d: Decl): string {
       return `${kdoc(d.doc, "")}@Serializable\ndata class ${d.name}(\n${params(d.name, d.fields, "    ")}\n)${body ? ` {\n${body}\n}` : ""}\n`;
     }
     case "enum": {
-      const entries = d.values.map((v) => `    @SerialName("${v}") ${pascal(v)},`).join("\n");
-      return `${kdoc(d.doc, "")}@Serializable\nenum class ${d.name} {\n${entries}\n}\n`;
+      // A value from a newer core reads as Unknown instead of failing the message (FallbackEnumSerializer.kt).
+      const entries = d.values.map((v) => `    ${pascal(v)}("${v}"),`).join("\n");
+      const unknown = "    /** A value from a newer core that this app does not know yet. */\n    Unknown(\"\"),\n    ;";
+      const serializer = `    object Serializer : FallbackEnumSerializer<${d.name}>("${d.name}", ${d.name}.entries, ${d.name}::wire, Unknown)`;
+      return `${kdoc(d.doc, "")}@Serializable(with = ${d.name}.Serializer::class)\nenum class ${d.name}(\n    val wire: String,\n) {\n${entries}\n\n${unknown}\n\n${serializer}\n}\n`;
     }
     case "tagged": {
       const body = d.variants

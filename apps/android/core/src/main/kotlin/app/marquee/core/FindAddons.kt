@@ -76,7 +76,8 @@ object FindAddons {
                     ?: Action.None(FindAddonsCopy.SET_UP_OFF)
             }
 
-            Installed.Absent -> {
+            // A state from a newer core: the core decides what an install does.
+            Installed.Absent, Installed.Unknown -> {
                 if (entry.configuration == Configuration.Required) {
                     Action.Configure
                 } else {

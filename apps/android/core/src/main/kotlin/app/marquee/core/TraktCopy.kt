@@ -164,6 +164,6 @@ object TraktCopy {
             TraktPlayback.On -> PLAYER_ON
             TraktPlayback.Unmapped -> PLAYER_UNMAPPED
             TraktPlayback.ThisDeviceOff -> PLAYER_THIS_DEVICE_OFF
-            TraktPlayback.Off, null -> null
+            TraktPlayback.Off, TraktPlayback.Unknown, null -> null
         }
 }

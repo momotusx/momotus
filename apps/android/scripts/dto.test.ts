@@ -11,7 +11,8 @@ test("tagged unions, enums and tuples come out as expected", () => {
   expect(kotlin).toContain('@JsonClassDiscriminator("state")\nsealed interface RowState {');
   expect(kotlin).toContain('@SerialName("failed")\n    data class Failed(');
   expect(kotlin).toContain('@SerialName("loading")\n    data object Loading : RowState');
-  expect(kotlin).toContain("enum class Reason {");
+  expect(kotlin).toContain("enum class Reason(");
+  expect(kotlin).toContain("object Serializer : FallbackEnumSerializer<Reason>(\"Reason\", Reason.entries, Reason::wire, Unknown)");
   expect(kotlin).toContain("val byReason: List<Tuple2<HideReason, Int>> = emptyList(),");
   expect(kotlin).toContain("val sizeBytes: Long? = null,");
   expect(kotlin).toContain("val progress: Float? = null,");

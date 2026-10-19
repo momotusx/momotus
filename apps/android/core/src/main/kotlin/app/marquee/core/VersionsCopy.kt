@@ -70,6 +70,11 @@ object VersionsCopy {
             Reason.SmallerFaster -> {
                 "Smaller and faster to start"
             }
+
+            // A reason from a newer core.
+            Reason.Unknown -> {
+                "Recommended"
+            }
         }
 
     /**
@@ -85,6 +90,7 @@ object VersionsCopy {
             Group.SmallerFaster -> "Smaller and faster"
             Group.OtherLanguages -> "Other languages"
             Group.NeedsDownload -> "Needs download"
+            Group.Unknown -> "Other versions"
         }
 
     fun status(status: VersionStatus): String =
@@ -195,6 +201,9 @@ object VersionsCopy {
             HideReason.LeavesApp -> "would open outside Marquee"
 
             HideReason.NotForKids -> if (one) "is not for kids" else "are not for kids"
+
+            // A reason from a newer core: still counted, in general words.
+            HideReason.Unknown -> if (one) "is hidden for another reason" else "are hidden for another reason"
         }
 
     /** "Hidden (5)": the bold half of the hidden row. */

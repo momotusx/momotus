@@ -7,11 +7,19 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonClassDiscriminator
 
-@Serializable
-enum class AccountState {
-    @SerialName("ok") Ok,
-    @SerialName("failing") Failing,
-    @SerialName("reconnect") Reconnect,
+@Serializable(with = AccountState.Serializer::class)
+enum class AccountState(
+    val wire: String,
+) {
+    Ok("ok"),
+    Failing("failing"),
+    Reconnect("reconnect"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<AccountState>("AccountState", AccountState.entries, AccountState::wire, Unknown)
 }
 
 @Serializable
@@ -61,11 +69,19 @@ data class Attempt(
     val error: String,
 )
 
-@Serializable
-enum class Blocked {
-    @SerialName("rotationPending") RotationPending,
-    @SerialName("notActive") NotActive,
-    @SerialName("relayDisagrees") RelayDisagrees,
+@Serializable(with = Blocked.Serializer::class)
+enum class Blocked(
+    val wire: String,
+) {
+    RotationPending("rotationPending"),
+    NotActive("notActive"),
+    RelayDisagrees("relayDisagrees"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Blocked>("Blocked", Blocked.entries, Blocked::wire, Unknown)
 }
 
 @Serializable
@@ -118,11 +134,19 @@ data class CatalogChoice(
     val source: String,
 )
 
-@Serializable
-enum class Configuration {
-    @SerialName("none") None,
-    @SerialName("optional") Optional,
-    @SerialName("required") Required,
+@Serializable(with = Configuration.Serializer::class)
+enum class Configuration(
+    val wire: String,
+) {
+    None("none"),
+    Optional("optional"),
+    Required("required"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Configuration>("Configuration", Configuration.entries, Configuration::wire, Unknown)
 }
 
 @Serializable
@@ -254,11 +278,19 @@ data class DefaultChoice(
 )
 
 /** Whether a default is in the profile's list, by manifest id or its own link: a copy installed another way (another config, a Stremio import) counts. */
-@Serializable
-enum class DefaultInstalled {
-    @SerialName("absent") Absent,
-    @SerialName("on") On,
-    @SerialName("off") Off,
+@Serializable(with = DefaultInstalled.Serializer::class)
+enum class DefaultInstalled(
+    val wire: String,
+) {
+    Absent("absent"),
+    On("on"),
+    Off("off"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<DefaultInstalled>("DefaultInstalled", DefaultInstalled.entries, DefaultInstalled::wire, Unknown)
 }
 
 /** A device and the recovery kits it made. */
@@ -350,12 +382,20 @@ data class ForkPreview(
     val head: String,
 )
 
-@Serializable
-enum class Group {
-    @SerialName("best") Best,
-    @SerialName("smallerFaster") SmallerFaster,
-    @SerialName("otherLanguages") OtherLanguages,
-    @SerialName("needsDownload") NeedsDownload,
+@Serializable(with = Group.Serializer::class)
+enum class Group(
+    val wire: String,
+) {
+    Best("best"),
+    SmallerFaster("smallerFaster"),
+    OtherLanguages("otherLanguages"),
+    NeedsDownload("needsDownload"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Group>("Group", Group.entries, Group::wire, Unknown)
 }
 
 @Serializable
@@ -375,16 +415,24 @@ data class HiddenSummary(
     val byReason: List<Tuple2<HideReason, Int>> = emptyList(),
 )
 
-@Serializable
-enum class HideReason {
-    @SerialName("wrongTitle") WrongTitle,
-    @SerialName("wrongEpisode") WrongEpisode,
-    @SerialName("excluded") Excluded,
-    @SerialName("tooLarge") TooLarge,
-    @SerialName("unplayable") Unplayable,
-    @SerialName("unsupportedSource") UnsupportedSource,
-    @SerialName("leavesApp") LeavesApp,
-    @SerialName("notForKids") NotForKids,
+@Serializable(with = HideReason.Serializer::class)
+enum class HideReason(
+    val wire: String,
+) {
+    WrongTitle("wrongTitle"),
+    WrongEpisode("wrongEpisode"),
+    Excluded("excluded"),
+    TooLarge("tooLarge"),
+    Unplayable("unplayable"),
+    UnsupportedSource("unsupportedSource"),
+    LeavesApp("leavesApp"),
+    NotForKids("notForKids"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<HideReason>("HideReason", HideReason.entries, HideReason::wire, Unknown)
 }
 
 /** One catalog as the "Customize Home" screen lists it. */
@@ -490,13 +538,21 @@ data class ImportSummary(
 )
 
 /** This link installed (`on`, `off`), or a configured copy of the addon under another link (same manifest id and host: `copyOn` when any such copy is on, else `copyOff`), or neither. */
-@Serializable
-enum class Installed {
-    @SerialName("absent") Absent,
-    @SerialName("on") On,
-    @SerialName("off") Off,
-    @SerialName("copyOn") CopyOn,
-    @SerialName("copyOff") CopyOff,
+@Serializable(with = Installed.Serializer::class)
+enum class Installed(
+    val wire: String,
+) {
+    Absent("absent"),
+    On("on"),
+    Off("off"),
+    CopyOn("copyOn"),
+    CopyOff("copyOff"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Installed>("Installed", Installed.entries, Installed::wire, Unknown)
 }
 
 @Serializable
@@ -551,11 +607,19 @@ data class LibrarySnapshot(
     val items: List<Tile> = emptyList(),
 )
 
-@Serializable
-enum class LibrarySort {
-    @SerialName("recent") Recent,
-    @SerialName("added") Added,
-    @SerialName("name") Name,
+@Serializable(with = LibrarySort.Serializer::class)
+enum class LibrarySort(
+    val wire: String,
+) {
+    Recent("recent"),
+    Added("added"),
+    Name("name"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<LibrarySort>("LibrarySort", LibrarySort.entries, LibrarySort::wire, Unknown)
 }
 
 @Serializable
@@ -669,11 +733,19 @@ sealed interface PairingSnapshot {
     ) : PairingSnapshot
 }
 
-@Serializable
-enum class PlaybackPhase {
-    @SerialName("resolving") Resolving,
-    @SerialName("ready") Ready,
-    @SerialName("failed") Failed,
+@Serializable(with = PlaybackPhase.Serializer::class)
+enum class PlaybackPhase(
+    val wire: String,
+) {
+    Resolving("resolving"),
+    Ready("ready"),
+    Failed("failed"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<PlaybackPhase>("PlaybackPhase", PlaybackPhase.entries, PlaybackPhase::wire, Unknown)
 }
 
 @Serializable
@@ -760,21 +832,37 @@ data class ProfilesSnapshot(
     val kids: Boolean,
 )
 
-@Serializable
-enum class QualityPref {
-    @SerialName("best") Best,
-    @SerialName("balanced") Balanced,
-    @SerialName("dataSaver") DataSaver,
+@Serializable(with = QualityPref.Serializer::class)
+enum class QualityPref(
+    val wire: String,
+) {
+    Best("best"),
+    Balanced("balanced"),
+    DataSaver("dataSaver"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<QualityPref>("QualityPref", QualityPref.entries, QualityPref::wire, Unknown)
 }
 
-@Serializable
-enum class Reason {
-    @SerialName("readyNow") ReadyNow,
-    @SerialName("playsDirectly") PlaysDirectly,
-    @SerialName("matchesScreen") MatchesScreen,
-    @SerialName("sameReleaseAsLast") SameReleaseAsLast,
-    @SerialName("yourLanguage") YourLanguage,
-    @SerialName("smallerFaster") SmallerFaster,
+@Serializable(with = Reason.Serializer::class)
+enum class Reason(
+    val wire: String,
+) {
+    ReadyNow("readyNow"),
+    PlaysDirectly("playsDirectly"),
+    MatchesScreen("matchesScreen"),
+    SameReleaseAsLast("sameReleaseAsLast"),
+    YourLanguage("yourLanguage"),
+    SmallerFaster("smallerFaster"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Reason>("Reason", Reason.entries, Reason::wire, Unknown)
 }
 
 @Serializable
@@ -830,12 +918,20 @@ data class Segment(
     val source: String,
 )
 
-@Serializable
-enum class SegmentKind {
-    @SerialName("intro") Intro,
-    @SerialName("recap") Recap,
-    @SerialName("credits") Credits,
-    @SerialName("preview") Preview,
+@Serializable(with = SegmentKind.Serializer::class)
+enum class SegmentKind(
+    val wire: String,
+) {
+    Intro("intro"),
+    Recap("recap"),
+    Credits("credits"),
+    Preview("preview"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SegmentKind>("SegmentKind", SegmentKind.entries, SegmentKind::wire, Unknown)
 }
 
 /** The user's profile preferences for picking streams. */
@@ -1047,12 +1143,20 @@ sealed interface TraktLoginSnapshot {
 }
 
 /** Trakt's side of a playback (`PlaybackSnapshot.trakt`). */
-@Serializable
-enum class TraktPlayback {
-    @SerialName("on") On,
-    @SerialName("unmapped") Unmapped,
-    @SerialName("off") Off,
-    @SerialName("thisDeviceOff") ThisDeviceOff,
+@Serializable(with = TraktPlayback.Serializer::class)
+enum class TraktPlayback(
+    val wire: String,
+) {
+    On("on"),
+    Unmapped("unmapped"),
+    Off("off"),
+    ThisDeviceOff("thisDeviceOff"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<TraktPlayback>("TraktPlayback", TraktPlayback.entries, TraktPlayback::wire, Unknown)
 }
 
 /** What one round did (`traktSync`). */

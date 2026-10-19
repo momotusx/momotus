@@ -119,7 +119,8 @@ class VersionsCopyTest {
         )
         assertEquals("Ready now", VersionsCopy.reason(Reason.ReadyNow))
         assertEquals(
-            listOf("Best quality", "Smaller and faster", "Other languages", "Needs download"),
+            // The four the web names, and the words for a group from a newer core.
+            listOf("Best quality", "Smaller and faster", "Other languages", "Needs download", "Other versions"),
             Group.entries.map(VersionsCopy::group),
         )
         assertEquals("Needs download on Real-Debrid", VersionsCopy.status(VersionStatus.NeedsDownload("Real-Debrid")))

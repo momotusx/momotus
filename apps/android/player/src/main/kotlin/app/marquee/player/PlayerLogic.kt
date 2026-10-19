@@ -75,9 +75,15 @@ fun activeSegment(
 fun skipLabel(kind: SegmentKind): String =
     when (kind) {
         SegmentKind.Intro -> "Skip intro"
+
         SegmentKind.Recap -> "Skip recap"
+
         SegmentKind.Credits -> "Skip credits"
+
         SegmentKind.Preview -> "Skip preview"
+
+        // A segment kind from a newer core.
+        SegmentKind.Unknown -> "Skip"
     }
 
 /** Credits that run to the end of the file lead into Up Next (or the end) instead of a seek. */

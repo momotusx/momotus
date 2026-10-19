@@ -277,6 +277,11 @@ class PlaybackController(
                 problem = "None of the sources could be played"
                 status = null
             }
+
+            // A phase from a newer core: keep what plays until a known phase comes.
+            PlaybackPhase.Unknown -> {
+                Unit
+            }
         }
         refreshTracks()
     }
