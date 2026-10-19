@@ -2822,6 +2822,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-turkcealtyazi"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
