@@ -54,6 +54,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.AddonsCopy
 import app.marquee.core.DebridCopy
 import app.marquee.core.DefaultsCopy
 import app.marquee.core.FindAddonsCopy
@@ -549,9 +550,9 @@ private fun AddonRow(
             ) {
                 Column(Modifier.weight(1f)) {
                     MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-                    // The URL may hold keys: the host stands in for it.
+                    // The URL may hold keys: the host stands in for it, or where a built-in row runs.
                     MqText(
-                        "${addon.host} · ${addon.version}",
+                        AddonsCopy.caption(addon),
                         role = TextRole.Caption,
                         color = colors.dim,
                         maxLines = 1,
@@ -815,6 +816,7 @@ private fun About() {
                 role = TextRole.Caption,
                 color = Marquee.colors.muted,
             )
+            MqText(AddonsCopy.TURKCEALTYAZI_CREDIT, role = TextRole.Caption, color = Marquee.colors.muted)
         }
     }
 }
