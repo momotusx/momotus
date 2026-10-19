@@ -44,6 +44,21 @@ function candidates(): HTMLElement[] {
 
 const byKey = (key: string) => candidates().find((el) => el.dataset.f === key) ?? null;
 
+/** The card a strip of controls is laid over (`data-fowner` names its key). */
+const ownerOf = (el: Element) => {
+  const key = el.closest<HTMLElement>("[data-fowner]")?.dataset.fowner;
+  return key ? byKey(key) : null;
+};
+
+/** Right from a card to the first control laid over it; Left back to the card. */
+function byOwner(current: HTMLElement, dir: Direction): HTMLElement | null {
+  if (dir === "left") return ownerOf(current);
+  if (dir !== "right" || current.closest("[data-fowner]")) return null;
+  const strip = [...document.querySelectorAll<HTMLElement>("[data-fowner]")].find((s) => s.dataset.fowner === current.dataset.f);
+  const first = strip?.querySelector<HTMLElement>("[data-f]");
+  return first && first.offsetWidth > 0 ? first : null;
+}
+
 /** Scrolls the focused element into view inside the scrollers we own:
  * rows scroll sideways with a peek, pages bring the focused row to the top. */
 export function reveal(el: HTMLElement) {
@@ -114,6 +129,14 @@ export function move(dir: Direction): boolean {
     const first = initial();
     if (first) focusEl(first);
     return !!first;
+  }
+  // Controls laid over their card (an episode's actions) sit inside the
+  // card's own box, where spatial search cannot see them: Right from the card
+  // enters them, Left leaves them for the card.
+  const over = byOwner(current, dir);
+  if (over) {
+    focusEl(over);
+    return true;
   }
   const list: Candidate<string>[] = els.map((el) => ({
     key: el.dataset.f as string,
@@ -245,7 +268,10 @@ export function installFocus(onBack: () => void) {
     if (isBackKey(e)) {
       e.preventDefault();
       cancelRestore();
-      onBack();
+      // Back from controls laid over a card returns to the card first.
+      const card = e.target instanceof Element ? ownerOf(e.target) : null;
+      if (card) focusEl(card);
+      else onBack();
       return;
     }
     // Buttons and links activate on Enter natively; other focusables click.

@@ -105,3 +105,32 @@ test(`TV: a chip row fades only toward chips left to scroll to (${rtl ? "right t
   await context.close();
 });
 }
+
+test("TV: an episode's actions lay over its card: no width change, Right in, Left and Back out", async ({ browser }) => {
+  const { context, page } = await open(browser, `/title/series/${GOT.id}?season=1&form=tv`, { width: 1920, height: 1080 });
+  const card = page.locator('[data-f="ep:tt0944947:1:2"]');
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  // Layout widths (offsetWidth ignores the focus lift's scale).
+  const widths = () => page.locator(".ep-main").evaluateAll((els) => [...new Set(els.map((e) => (e as HTMLElement).offsetWidth))]);
+  const before = await widths();
+  expect(before).toHaveLength(1);
+  await card.focus();
+  await expect(page.locator('[data-f="epv:tt0944947:1:2"]')).toBeVisible();
+  // The strip shows over the card: every card keeps its width, the focused one too.
+  expect(await widths()).toEqual(before);
+  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
+  const address = page.url();
+  for (const [key, want] of [
+    ["ArrowRight", "epv:tt0944947:1:2"],
+    ["ArrowDown", "mark:tt0944947:1:2"],
+    ["ArrowLeft", "ep:tt0944947:1:2"],
+    ["ArrowRight", "epv:tt0944947:1:2"],
+    ["Escape", "ep:tt0944947:1:2"],
+  ] as const) {
+    await page.keyboard.press(key);
+    await expect.poll(focused, { message: `${key} lands on ${want}` }).toBe(want);
+  }
+  // Back from the strip went to the card, not off the page.
+  expect(page.url()).toBe(address);
+  await context.close();
+});

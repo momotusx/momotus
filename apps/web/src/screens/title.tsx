@@ -429,7 +429,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
               </A>
               {/* The row plays this episode; choosing its version or marking
                   it watched are the secondary actions beside it. */}
-              <div class="ep-acts" data-fentry>
+              <div class="ep-acts" data-fentry data-fowner={`ep:${e.videoId}`}>
                 <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`}>
                   <Layers aria-hidden />
                   {/* A phone shows the icon in a circle; the word stays for screen readers. */}

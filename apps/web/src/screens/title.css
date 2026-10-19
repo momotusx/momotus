@@ -120,8 +120,16 @@
 .ep.later .ep-t { color: var(--muted); }
 .ep-main:focus-visible, [data-form="tv"] .ep-main:focus { background: var(--glass-strong); transform: scale(var(--focus-scale-tile)); }
 .ep-main:focus-visible .ep-t, [data-form="tv"] .ep-main:focus .ep-t { color: var(--accent); }
-/* Secondary actions: on screen while the row has focus (or the pointer). */
+/* Secondary actions: on screen while the row has focus (or the pointer). On
+ * TV and desktop they are a strip laid over the card's right end, so the card
+ * never changes width; the words under it fade out. Right from the card
+ * enters the strip, Left or Back returns to the card (`data-fowner`). */
 .ep-acts { flex: none; display: none; flex-direction: column; justify-content: center; align-items: stretch; gap: 6px; }
+:is([data-form="tv"], [data-form="desktop"]) .ep-acts { position: absolute; z-index: 4; right: 24px; top: 50%; transform: translateY(-50%); }
+:is([data-form="tv"], [data-form="desktop"]) .ep-act { background: var(--glass-strong); }
+:is([data-form="tv"], [data-form="desktop"]) .ep:focus-within .ep-text {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 300px), transparent calc(100% - 250px));
+  mask-image: linear-gradient(90deg, #000 calc(100% - 300px), transparent calc(100% - 250px)); }
 .ep-act { display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 18px; border-radius: var(--radius-pill);
   font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); white-space: nowrap; box-shadow: inset 0 0 0 2px var(--control); }
 .ep-act svg { width: 22px; height: 22px; }
@@ -130,6 +138,9 @@
 .ep-act[aria-pressed="true"] { color: var(--text); background: var(--selected-fill); }
 @media (hover: hover) {
   [data-form="desktop"] .ep:hover .ep-acts { display: flex; }
+  [data-form="desktop"] .ep:hover .ep-text {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 300px), transparent calc(100% - 250px));
+    mask-image: linear-gradient(90deg, #000 calc(100% - 300px), transparent calc(100% - 250px)); }
   [data-form="desktop"] .ep-main:hover { background: var(--glass-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }
 }
 
