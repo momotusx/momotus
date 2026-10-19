@@ -1,0 +1,30 @@
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.opentrackr.org:1337/announce", "status": 200, "seconds": 0.18}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.qu.ax:6969/announce", "status": 200, "seconds": 0.17}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker2.dler.org:80/announce", "status": 200, "seconds": 0.7}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.dler.org:6969/announce", "status": 200, "seconds": 2.32}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.dler.com:6969/announce", "status": 200, "seconds": 0.71}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.renfei.net:8080/announce", "status": 200, "seconds": 0.45}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://bittorrent-tracker.e-n-c-r-y-p-t.net:1337/announce", "status": 200, "seconds": 0.41}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://t.overflow.biz:6969/announce", "status": 200, "seconds": 0.67}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://004430.xyz:80/announce", "status": 200, "seconds": 0.59}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://ipv4announce.sktorrent.eu:6969/announce", "status": 200, "seconds": 0.27}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.mywaifu.best:6969/announce", "status": 200, "seconds": 0.19}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.waaa.moe:6969/announce", "status": 200, "seconds": 1.55}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.dhitechnical.com:6969/announce", "status": 200, "seconds": 0.78}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.bittor.pw:1337/announce", "error": "TimeoutError", "seconds": 11.3}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tr.nyacat.pw:80/announce", "status": 200, "seconds": 0.23}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://open.tracker.cl:1337/announce", "status": 200, "seconds": 0.67}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tracker.zhuqiy.dgj055.icu:80/announce", "status": 200, "seconds": 0.32}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://tr.highstar.shop:80/announce", "status": 200, "seconds": 0.78}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "http://1337.abcvg.info:80/announce", "status": 403, "seconds": 0.11}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://tracker.pmman.tech:443/announce", "status": 200, "seconds": 3.3}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://ht.therarbg.to:443/announce", "status": 302, "location_kind": "name", "same_host": false, "seconds": 0.35}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://tracker.nekomi.cn:443/announce", "status": 200, "seconds": 0.78}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://004430.xyz:443/announce", "status": 200, "seconds": 0.54}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://tracker.7471.top:443/announce", "status": 403, "seconds": 0.26}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://tr.nyacat.pw:443/announce", "status": 200, "seconds": 0.22}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://open.ftorrent.com:443/announce", "status": 200, "seconds": 0.63}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://tracker.zhuqiy.com:443/announce", "status": 403, "seconds": 0.37}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://tracker.foreverpirates.co:443/announce", "status": 200, "seconds": 0.36}
+{"date": "2026-10-19", "kind": "tracker", "tracker": "https://t.213891.xyz:443/announce", "status": 403, "seconds": 0.14}
+{"date": "2026-10-19", "kind": "summary", "list": "ngosang/trackerslist master: trackers_all_http.txt and trackers_all_https.txt", "trackers": 29, "answered": 28, "ok_2xx": 23, "redirect_3xx": 1, "redirect_to_name": 1, "redirect_to_literal": 0, "errors": 1}
