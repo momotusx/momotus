@@ -424,20 +424,28 @@ impl Core {
             .inner
             .engine
             .get_or_try_init(|| async {
-                // No exception for a LAN or an addon's host: one engine
-                // serves every addon (plans/c27-torrent-policy.md 3.2).
-                let policy = self.http().torrent_scope(&[]);
-                let mut config = mq_engine::EngineConfig::new(&self.inner.torrent_dir, policy);
-                // One file at the 5 GB default plus read-ahead, at most half
-                // the free space (plans/m13-stream-choice.md 5).
-                let budget: u64 = 6 << 30;
-                config.cache_budget_bytes = self.free_bytes().map_or(budget, |f| budget.min(f / 2));
-                mq_engine::Engine::start(config)
+                mq_engine::Engine::start(self.engine_config())
                     .await
                     .map_err(|e| CoreError::Torrent(e.to_string()))
             })
             .await?;
         Ok(engine.clone())
+    }
+
+    /// How the app's engine runs. No exception for a LAN or an addon's host:
+    /// one engine serves every addon (plans/c27-torrent-policy.md 3.2). It
+    /// uploads nothing: seeding the torrents viewers stream is what draws
+    /// legal notices, and every live run played as well without it. The
+    /// cache holds one file at the 5 GB default plus read-ahead, at most half
+    /// the free space (plans/m13-stream-choice.md 5).
+    #[cfg(feature = "torrent")]
+    fn engine_config(&self) -> mq_engine::EngineConfig {
+        let budget: u64 = 6 << 30;
+        mq_engine::EngineConfig {
+            upload: false,
+            cache_budget_bytes: self.free_bytes().map_or(budget, |f| budget.min(f / 2)),
+            ..mq_engine::EngineConfig::new(&self.inner.torrent_dir, self.http().torrent_scope(&[]))
+        }
     }
 
     /// Uses `engine` as the device's torrent engine, when none started yet
@@ -1128,6 +1136,15 @@ fn free_space(dir: &Path) -> Option<u64> {
 mod tests {
     use super::*;
     use mq_http::HttpError;
+
+    #[cfg(feature = "torrent")]
+    #[test]
+    fn the_app_engine_uploads_nothing() {
+        let core = Core::temporary("default").unwrap();
+        let config = core.engine_config();
+        assert!(!config.upload, "the app's engine seeds");
+        assert!(config.discovery, "the DHT stays on");
+    }
 
     #[test]
     fn meta_failures_read_as_sentences() {
