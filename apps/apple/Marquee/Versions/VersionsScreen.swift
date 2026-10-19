@@ -373,7 +373,8 @@ private struct VersionRowView: View {
     @State private var tapped = false
 
     #if os(tvOS)
-    static let qualityWidth: CGFloat = 120, sizeWidth: CGFloat = 150, statusWidth: CGFloat = 330, viaWidth: CGFloat = 220
+    // Beside the 600 pt pick the table has 960 pt: these leave Features about 150.
+    static let qualityWidth: CGFloat = 150, sizeWidth: CGFloat = 150, statusWidth: CGFloat = 250, viaWidth: CGFloat = 170
     #else
     static let qualityWidth: CGFloat = 80, sizeWidth: CGFloat = 90, statusWidth: CGFloat = 200, viaWidth: CGFloat = 120
     #endif
@@ -387,6 +388,9 @@ private struct VersionRowView: View {
                     HStack(spacing: 16) {
                         Text(VersionWords.cell(row.quality))
                             .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                            // One word: smaller before it would break inside it.
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .frame(width: Self.qualityWidth, alignment: .leading)
                         Text(row.features.joined(separator: "  "))
                             .frame(maxWidth: .infinity, alignment: .leading)
