@@ -271,6 +271,23 @@ pub struct TorrentStats {
 const KEEP_WARM: Duration = Duration::from_secs(60);
 const MAINTENANCE_EVERY: Duration = Duration::from_secs(5);
 
+/// Public trackers added to every magnet while discovery is on. Addons such
+/// as Torrentio often send a bare info hash; with no tracker the engine finds
+/// peers through the DHT alone, and on the Mac that missed the 60 s start
+/// window on Sintel and Big Buck Bunny (2026-10-19). Long-lived entries of
+/// ngosang/trackerslist "best", plus HTTP for networks that drop UDP. Each
+/// one still passes the address policy like any tracker.
+const DEFAULT_TRACKERS: [&str; 8] = [
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://explodie.org:6969/announce",
+    "http://tracker.opentrackr.org:1337/announce",
+    "http://tracker2.dler.org:80/announce",
+];
+
 #[derive(Clone)]
 pub struct Engine {
     inner: Arc<Inner>,
@@ -465,14 +482,7 @@ impl Engine {
         {
             return Ok(h);
         }
-        let mut magnet = format!("magnet:?xt=urn:btih:{hash}");
-        for t in trackers {
-            let t = t.strip_prefix("tracker:").unwrap_or(t);
-            if t.contains("://") {
-                magnet.push_str("&tr=");
-                magnet.push_str(&percent_encode(t));
-            }
-        }
+        let magnet = magnet_uri(hash, trackers, self.inner.cfg.discovery);
         self.add(AddTorrent::from_url(magnet), peers).await
     }
 
@@ -882,6 +892,25 @@ fn allocated(dir: &Path) -> u64 {
         .sum()
 }
 
+/// The stream's own trackers first, then the defaults when `defaults`, each
+/// once. Discovery is off only in loopback tests, which keep exactly theirs.
+fn magnet_uri(hash: &str, trackers: &[String], defaults: bool) -> String {
+    let given = trackers
+        .iter()
+        .map(|t| t.strip_prefix("tracker:").unwrap_or(t))
+        .filter(|t| t.contains("://"));
+    let extra = DEFAULT_TRACKERS.into_iter().filter(|_| defaults);
+    let mut seen = std::collections::HashSet::new();
+    let mut magnet = format!("magnet:?xt=urn:btih:{hash}");
+    for t in given.chain(extra) {
+        if seen.insert(t) {
+            magnet.push_str("&tr=");
+            magnet.push_str(&percent_encode(t));
+        }
+    }
+    magnet
+}
+
 fn percent_encode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
@@ -896,6 +925,19 @@ fn percent_encode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bare_info_hash_gets_the_default_trackers_once() {
+        let hash = "a779fa75c15ab1d2e8fb12e7b7ee4ab3d5e0a7a3";
+        let trs = |m: &str| m.matches("&tr=").count();
+        let bare = magnet_uri(hash, &[], true);
+        assert_eq!(trs(&bare), DEFAULT_TRACKERS.len(), "{bare}");
+        let own = "udp://tracker.opentrackr.org:1337/announce".to_string();
+        let mixed = magnet_uri(hash, &["tracker:udp://own.example:80".into(), own], true);
+        assert_eq!(trs(&mixed), DEFAULT_TRACKERS.len() + 1, "a default listed once");
+        assert!(mixed.find("own.example") < mixed.find("stealth"), "the stream's first");
+        assert_eq!(trs(&magnet_uri(hash, &[], false)), 0, "loopback tests keep theirs");
+    }
 
     #[test]
     fn the_session_turns_off_upnp_lsd_and_utp() {
