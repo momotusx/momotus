@@ -10,7 +10,7 @@
 //! that changes it returns it and publishes nothing until the app stored it.
 
 use crate::roster::{
-    Bundle, Digest32, Entry, Hex, Id, MemberSecret, Role, Roster, RosterError, TokenRequest,
+    Bundle, Digest32, Entry, Hex, Id, Kind, MemberSecret, Role, Roster, RosterError, TokenRequest,
     open_name,
 };
 use crate::seal::{AccountKey, SealError};
@@ -1650,14 +1650,23 @@ pub async fn fork_preview(
 /// it cannot settle); the relay lists it until another device removes it.
 /// The library stays, and pairing again merges it.
 ///
-/// Only with this device's own record: its member must be one the roster
-/// this device stores ever admitted, which a caller without the record's
-/// member secret cannot fake. Anything else is `WrongRecord` and wipes
-/// nothing (any page that can reach the core could otherwise send one).
+/// Only with this device's own record: its member must be one this device
+/// stored the admission of, which a caller without the record's member
+/// secret cannot fake. Anything else is `WrongRecord` and wipes nothing (any
+/// page that can reach the core could otherwise send one). Each admission
+/// is read on its own, not through a rebuilt roster: a store whose history
+/// no longer verifies is the case this way out exists for.
 pub fn leave_here(library: &Library, config: &SyncConfig) -> Result<(), SyncError> {
-    let stored = stored_entries(library, &genesis_key(&config.keys))?;
-    let mine = rebuild(&stored).map_err(roster_error)?;
-    if stored.is_empty() || !mine.admitted(&config.secret().id()) {
+    let me = config.secret().id();
+    let admits_me = |entry: &Entry| match entry.parse().map(|b| b.kind) {
+        Ok(Kind::Genesis(g)) => g.keys.id() == me,
+        Ok(Kind::AddDevice(a)) => a.keys.id() == me,
+        _ => false,
+    };
+    if !stored_entries(library, &genesis_key(&config.keys))?
+        .iter()
+        .any(admits_me)
+    {
         return Err(SyncError::WrongRecord);
     }
     library.forget_sync()?;

@@ -1800,3 +1800,31 @@ async fn a_local_leave_refuses_a_record_that_is_not_this_devices() {
     mq_sync::leave_here(&phone.library, &phone.record).unwrap();
     assert!(phone.library.roster_entries(&genesis).unwrap().is_empty());
 }
+
+/// A store whose history no longer verifies (here: the first entry's
+/// signature damaged) is the case leaving here exists for: this device's own
+/// record still leaves, and a made-up one is still refused.
+#[tokio::test]
+async fn a_damaged_roster_still_lets_its_own_device_leave_here() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    phone.sync().await;
+    let stranger = Device::first(&relay).await;
+    let genesis = hex::encode(phone.record.keys.genesis.0);
+    let mut damaged = phone.library.roster_entries(&genesis).unwrap();
+    damaged[0].1[0] ^= 1;
+    phone.library.replace_roster(&genesis, &damaged).unwrap();
+    let made_up = SyncConfig {
+        member: stranger.record.member,
+        ..phone.record.clone()
+    };
+    let err = mq_sync::leave_here(&phone.library, &made_up).unwrap_err();
+    assert!(matches!(err, SyncError::WrongRecord), "{err:?}");
+    assert_eq!(
+        phone.library.roster_entries(&genesis).unwrap(),
+        damaged,
+        "nothing wiped"
+    );
+    mq_sync::leave_here(&phone.library, &phone.record).unwrap();
+    assert!(phone.library.roster_entries(&genesis).unwrap().is_empty());
+}
