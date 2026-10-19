@@ -167,6 +167,9 @@ impl Core {
     pub(crate) fn trakt_scrobble(&self, target: Target, report: Report) -> Option<Scrobble> {
         let trakt = self.trakt();
         trakt.config()?;
+        if super::kids(self) {
+            return None;
+        }
         let conn = self.trakt_conn();
         let bound = futures_util::FutureExt::now_or_never(conn.auth.bound()).flatten();
         report(match bound {

@@ -4,6 +4,7 @@ pub mod calendar;
 pub mod discover;
 pub mod home;
 pub mod import;
+pub mod kids;
 pub mod library;
 pub mod pairing;
 pub mod playback;

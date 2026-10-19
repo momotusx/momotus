@@ -29,9 +29,11 @@ pub struct ProfileInfo {
     pub position: i64,
     pub has_pin: bool,
     pub is_owner: bool,
-    /// Its PIN record has not arrived from another device yet: show it,
-    /// but it cannot be opened.
+    /// Its PIN or access record has not arrived from another device yet:
+    /// show it, but it cannot be opened.
     pub syncing: bool,
+    /// A kids profile (plans/m11-kids.md 9.1).
+    pub kids: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -49,6 +51,10 @@ pub struct ProfilesSnapshot {
     pub locked: bool,
     /// How many profiles `createProfile` allows.
     pub max: u32,
+    /// The session runs a kids profile: adult screens hide and leaving asks
+    /// the owner's PIN (plans/m11-kids.md 9.1). The bridge keeps it set
+    /// until the session's next switch.
+    pub kids: bool,
 }
 
 /// A session's (active profile, locked), sent on every switch and lock.

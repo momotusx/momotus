@@ -7,7 +7,10 @@ use crate::views::profiles::{ProfileInfo, ProfilesSnapshot};
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::{Algorithm, Argon2, Params, Version};
-use mq_library::{Library, LibraryError, OWNER};
+use futures_util::StreamExt;
+use futures_util::stream::FuturesUnordered;
+use mq_library::{AllowedRow, Library, LibraryError, MAX_ALLOWED, OWNER};
+use mq_protocol::{ResourcePath, ResourceResponse};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -49,6 +52,17 @@ pub enum ProfileError {
     Syncing,
     #[error("the stored PIN cannot be read: clear it, then set a new one")]
     Unreadable,
+    /// A kids profile needs the owner's PIN (plans/m11-kids.md 9.3).
+    #[error("kids profiles need the owner's PIN")]
+    KidsNeedPin,
+    #[error("that profile is not a kids profile")]
+    NotKids,
+    #[error("the title's details came under another id")]
+    Mismatch,
+    #[error("the title's details could not be read")]
+    NoDetails,
+    #[error("the list already has {MAX_ALLOWED} titles")]
+    ListFull,
     #[error(transparent)]
     Library(#[from] LibraryError),
     #[error("internal error: {0}")]
@@ -71,6 +85,11 @@ impl ProfileError {
             // Removed while the request ran.
             Self::Library(LibraryError::ProfileGone(_)) => "unknownProfile",
             Self::Unreadable => "pinUnreadable",
+            Self::KidsNeedPin => "kidsNeedPin",
+            Self::NotKids => "notKids",
+            Self::Mismatch => "mismatch",
+            Self::NoDetails => "noDetails",
+            Self::ListFull => "listFull",
             Self::Library(_) | Self::Internal(_) => return None,
         })
     }
@@ -115,37 +134,80 @@ impl Core {
                 has_pin: p.pin_hash().is_some(),
                 is_owner: p.id == OWNER,
                 syncing: !p.ready(),
+                kids: p.kids(),
                 id: p.id,
                 name: p.name,
                 avatar: p.avatar,
                 position: p.position,
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let kids = profiles.iter().any(|p| p.id == self.profile() && p.kids);
         ProfilesSnapshot {
             profiles,
             active: self.profile().to_owned(),
             locked,
             max: MAX_PROFILES as u32,
+            kids,
         }
     }
 
     /// The owner adds a profile (no PIN, the owner's addons copied once).
     /// Returns its id.
     pub fn create_profile(&self, name: &str, avatar: &str) -> Result<String, ProfileError> {
+        self.create(name, avatar, false)
+    }
+
+    /// The owner adds a kids profile (plans/m11-kids.md 6.1): no PIN of its
+    /// own, no addon copy (it reads the owner's list), an empty list. Only
+    /// while the owner has a PIN this build can check: leaving it needs that
+    /// PIN. Returns its id.
+    pub fn create_kids_profile(&self, name: &str, avatar: &str) -> Result<String, ProfileError> {
+        self.create(name, avatar, true)
+    }
+
+    fn create(&self, name: &str, avatar: &str, kids: bool) -> Result<String, ProfileError> {
         if self.profile() != OWNER {
             return Err(ProfileError::NotOwner);
         }
         let name = valid_name(name)?;
         valid_avatar(avatar)?;
+        if kids {
+            self.owner_pin_checkable()?;
+        }
         if self.library().profiles()?.len() >= MAX_PROFILES {
             return Err(ProfileError::TooMany);
         }
         let mut bytes = [0u8; 16];
         getrandom::fill(&mut bytes).expect("os randomness");
         let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-        self.library()
-            .create_profile(&id, name, avatar, self.clock())?;
+        if kids {
+            self.library()
+                .create_kids_profile(&id, name, avatar, self.clock())?;
+        } else {
+            self.library()
+                .create_profile(&id, name, avatar, self.clock())?;
+        }
         Ok(id)
+    }
+
+    /// The owner has a PIN, and one this build can check.
+    fn owner_pin_checkable(&self) -> Result<(), ProfileError> {
+        let owner = self
+            .library()
+            .profile(OWNER)?
+            .ok_or(ProfileError::Unknown)?;
+        match owner.lock {
+            None => Err(ProfileError::Syncing),
+            Some(None) => Err(ProfileError::KidsNeedPin),
+            Some(Some(stored)) => parse(&stored)
+                .map(drop)
+                .map_err(|_| ProfileError::Unreadable),
+        }
+    }
+
+    /// Whether any kids profile is here.
+    fn kids_exist(&self) -> Result<bool, ProfileError> {
+        Ok(self.library().profiles()?.iter().any(|p| p.kids()))
     }
 
     /// A profile edits its own name, avatar and position; the owner edits
@@ -206,6 +268,11 @@ impl Core {
             self.library().set_pin_hash(id, None, self.clock())?;
             return self.forgive(id);
         }
+        // Leaving a kids profile needs the owner's PIN: it stays while one
+        // exists (plans/m11-kids.md 6.1).
+        if id == OWNER && pin.is_none() && self.kids_exist()? {
+            return Err(ProfileError::KidsNeedPin);
+        }
         if pin.is_some_and(weak) {
             return Err(ProfileError::WeakPin);
         }
@@ -264,6 +331,285 @@ impl Core {
         })
         .await?
     }
+}
+
+/// The longest `allowTitle` waits for the owner's meta addons, all of them.
+const ALLOW_WAIT: Duration = Duration::from_secs(5);
+/// The kids exit count and the owner lock register it was counted against.
+const KIDS_EXIT: &str = "kids_exit";
+/// The exit's wait in the throttle: no profile id has a NUL in it, so the
+/// purge of removed profiles' waits never takes it.
+const KIDS_EXIT_WAIT: &str = "\u{0}kids_exit";
+/// The exit count drops by one for every full hour without a try.
+const DECAY: Duration = Duration::from_secs(60 * 60);
+
+/// The kids exit count as stored (plans/m11-kids.md 3.6), never synced.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExitState {
+    failures: u32,
+    owner_lock_hlc: String,
+}
+
+impl Core {
+    /// The owner allows `kind` `id` for kids profile `profile` (plans/m11-
+    /// kids.md 6.1, 9.2). Stamped as the request arrives, so a Remove sent
+    /// during a slow fetch wins. Every owner meta addon that serves the kind
+    /// is asked at once; the verified answers that arrive within 5 s give
+    /// the names, in addon order. `noDetails` when none answered, `mismatch`
+    /// when answers came for another kind or id.
+    pub async fn allow_title(
+        &self,
+        profile: &str,
+        kind: &str,
+        id: &str,
+    ) -> Result<(), ProfileError> {
+        let hlc = self.hlc();
+        self.kids_target(profile)?;
+        let library = self.library();
+        let allowed_now =
+            allowed_entry(library, profile, id)?.is_some_and(|v| v["allowed"] == true);
+        let list = library.allowed_list(profile)?;
+        if !allowed_now && list.counted.len() + list.over_count >= MAX_ALLOWED {
+            return Err(ProfileError::ListFull);
+        }
+        let (name, names, poster) = self.title_details(kind, id).await?;
+        let row = AllowedRow {
+            item_id: id.to_owned(),
+            kind: kind.to_owned(),
+            name,
+            names,
+            poster,
+            allowed: true,
+            added_ms: mq_library::hlc::now_ms() as i64,
+        };
+        library.write_allowed(profile, &row, &hlc)?;
+        Ok(())
+    }
+
+    /// The owner takes `id` off the list of kids profile `profile`.
+    pub fn remove_title(&self, profile: &str, id: &str) -> Result<(), ProfileError> {
+        let hlc = self.hlc();
+        self.kids_target(profile)?;
+        let library = self.library();
+        // Written even when nothing is stored yet: an Allow still fetching
+        // (stamped earlier) then lands below it and changes nothing.
+        let stored = allowed_entry(library, profile, id)?.unwrap_or_default();
+        let text = |field: &str| stored[field].as_str().unwrap_or_default().to_owned();
+        let kind = Some(text("kind"))
+            .filter(|k| !k.is_empty())
+            .unwrap_or_else(|| "unknown".into());
+        let row = AllowedRow {
+            item_id: id.to_owned(),
+            kind,
+            name: text("name"),
+            names: serde_json::from_value(stored["names"].clone()).unwrap_or_default(),
+            poster: stored["poster"].as_str().map(str::to_owned),
+            allowed: false,
+            added_ms: stored["addedMs"].as_i64().unwrap_or_default(),
+        };
+        library.write_allowed(profile, &row, &hlc)?;
+        Ok(())
+    }
+
+    /// The owner makes kids profile `profile` a standard one, with a copy of
+    /// the owner's addons. There is no way back. The write reads the state
+    /// again: made standard meanwhile (by sync) is `notKids`.
+    pub fn make_standard(&self, profile: &str) -> Result<(), ProfileError> {
+        self.kids_target(profile)?;
+        self.library()
+            .make_standard(profile, self.clock())?
+            .then_some(())
+            .ok_or(ProfileError::NotKids)
+    }
+
+    /// A kids profile the owner may edit or view.
+    pub(crate) fn kids_target(&self, profile: &str) -> Result<(), ProfileError> {
+        if self.profile() != OWNER {
+            return Err(ProfileError::NotOwner);
+        }
+        let row = self
+            .library()
+            .profile(profile)?
+            .ok_or(ProfileError::Unknown)?;
+        if !row.ready() {
+            return Err(ProfileError::Syncing);
+        }
+        if !row.kids() {
+            return Err(ProfileError::NotKids);
+        }
+        Ok(())
+    }
+
+    /// Name, other names and poster of `kind` `id` from the owner's meta
+    /// addons, asked at once.
+    async fn title_details(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<(String, Vec<String>, Option<String>), ProfileError> {
+        let path = ResourcePath {
+            resource: "meta".into(),
+            r#type: kind.to_owned(),
+            id: id.to_owned(),
+            extra: vec![],
+        };
+        let addons: Vec<_> = self
+            .installed_addons()
+            .map_err(|e| ProfileError::Internal(e.to_string()))?
+            .into_iter()
+            .filter(|a| a.supports(&path))
+            .collect();
+        let deadline = tokio::time::Instant::now() + ALLOW_WAIT;
+        let mut asked: FuturesUnordered<_> = addons
+            .iter()
+            .enumerate()
+            .map(|(i, addon)| {
+                let path = &path;
+                async move { (i, self.addons().fetch(addon, path, ALLOW_WAIT).await) }
+            })
+            .collect();
+        let mut verified: Vec<Option<(String, Option<String>)>> = vec![None; addons.len()];
+        let mut answered = false;
+        while let Ok(Some((i, fetched))) = tokio::time::timeout_at(deadline, asked.next()).await {
+            let meta = fetched.ok().and_then(|f| {
+                match serde_json::from_slice::<ResourceResponse>(&f.body) {
+                    Ok(ResourceResponse::Meta { meta }) => Some(meta),
+                    _ => None,
+                }
+            });
+            let Some(meta) = meta else { continue };
+            answered = true;
+            let p = meta.preview;
+            if p.id == id && p.r#type == kind {
+                verified[i] = Some((p.name, p.poster.map(|u| u.to_string())));
+            }
+        }
+        let mut verified = verified.into_iter().flatten();
+        let Some((name, poster)) = verified.next() else {
+            return Err(if answered {
+                ProfileError::Mismatch
+            } else {
+                ProfileError::NoDetails
+            });
+        };
+        let mut poster = poster;
+        let mut names = Vec::new();
+        for (other, other_poster) in verified {
+            names.push(other);
+            poster = poster.or(other_poster);
+        }
+        Ok((name, names, poster))
+    }
+
+    /// One try to leave a kids session with the owner's PIN (plans/m11-
+    /// kids.md 7), under the exit's own throttle. With no owner PIN only the
+    /// device's own lock (`device_auth`) lets it pass.
+    pub async fn kids_exit_attempt(
+        &self,
+        pin: Option<&str>,
+        device_auth: bool,
+    ) -> Result<(), ProfileError> {
+        let core = self.clone();
+        let pin = pin.map(str::to_owned);
+        blocking(move || {
+            exit_attempt(
+                core.library(),
+                core.pins(),
+                pin.as_deref(),
+                device_auth,
+                Instant::now,
+                verify,
+            )
+        })
+        .await?
+    }
+}
+
+/// The stored allowlist register of `id`, as its sync value.
+fn allowed_entry(
+    library: &Library,
+    profile: &str,
+    id: &str,
+) -> Result<Option<serde_json::Value>, ProfileError> {
+    let key = format!("{profile}\u{1f}{id}");
+    Ok(library
+        .register(mq_library::coll::ALLOWED, &key)?
+        .map(|r| r.value))
+}
+
+/// One exit try against the owner's PIN. Its count lives in `kids_exit`
+/// (never the owner's own row) and its wait under its own throttle entry:
+/// four free tries, then 1, 5 and 15 minutes, then an hour each, as P1. The
+/// count clears when the owner's lock register changes (a new PIN, here or
+/// synced), and drops by one for each full hour without a try, on the
+/// monotonic clock: a restart starts that hour again.
+fn exit_attempt(
+    library: &Library,
+    throttle: &Mutex<Throttle>,
+    pin: Option<&str>,
+    device_auth: bool,
+    now: impl FnOnce() -> Instant,
+    verify: impl FnOnce(&str, &str) -> Result<bool, Unreadable>,
+) -> Result<(), ProfileError> {
+    let mut throttle = throttle.lock().unwrap_or_else(|p| p.into_inner());
+    let now = now();
+    let owner = library.profile(OWNER)?.ok_or(ProfileError::Unknown)?;
+    let stored = match owner.lock {
+        None => return Err(ProfileError::Syncing),
+        Some(None) if device_auth => return Ok(()),
+        Some(None) => return Err(ProfileError::KidsNeedPin),
+        Some(Some(stored)) => stored,
+    };
+    parse(&stored).map_err(|_| ProfileError::Unreadable)?;
+    let lock_hlc = library
+        .register(mq_library::coll::PROFILE_LOCK, OWNER)?
+        .map(|r| r.hlc)
+        .unwrap_or_default();
+    let mut state: ExitState = library
+        .device_value(KIDS_EXIT)?
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default();
+    let save = |state: &ExitState| {
+        let value = serde_json::to_string(state).expect("plain struct");
+        library.set_device_value(KIDS_EXIT, &value)
+    };
+    if state.owner_lock_hlc != lock_hlc {
+        // A new owner PIN: earlier tries were against another one.
+        state = ExitState {
+            failures: 0,
+            owner_lock_hlc: lock_hlc,
+        };
+        throttle.until.remove(KIDS_EXIT_WAIT);
+        save(&state)?;
+    }
+    let base = throttle.kids_since.unwrap_or(throttle.started);
+    let hours = now.saturating_duration_since(base).as_secs() / DECAY.as_secs();
+    if hours > 0 {
+        state.failures = state.failures.saturating_sub(hours as u32);
+        throttle.kids_since = Some(base + DECAY * hours as u32);
+        throttle.until.remove(KIDS_EXIT_WAIT);
+        save(&state)?;
+    }
+    if let Some(wait) = throttle.wait(KIDS_EXIT_WAIT, state.failures, now) {
+        return Err(ProfileError::Throttled {
+            retry_after_ms: wait.as_nanos().div_ceil(1_000_000) as u64,
+        });
+    }
+    let pin = pin.ok_or(ProfileError::WrongPin)?;
+    state.failures += 1;
+    save(&state)?;
+    throttle.kids_since = Some(now);
+    if verify(&stored, pin) == Ok(true) {
+        state.failures = 0;
+        save(&state)?;
+        throttle.until.remove(KIDS_EXIT_WAIT);
+        return Ok(());
+    }
+    throttle
+        .until
+        .insert(KIDS_EXIT_WAIT.to_owned(), now + penalty(state.failures));
+    Err(ProfileError::WrongPin)
 }
 
 /// Runs CPU-bound work (a hash takes tens of milliseconds) off the async
@@ -366,6 +712,9 @@ fn penalty(failures: u32) -> Duration {
 pub(crate) struct Throttle {
     started: Instant,
     until: HashMap<String, Instant>,
+    /// Where the kids exit's current decay hour began: its last try, or
+    /// this process's start.
+    kids_since: Option<Instant>,
 }
 
 impl Throttle {
@@ -373,6 +722,7 @@ impl Throttle {
         Self {
             started,
             until: HashMap::new(),
+            kids_since: None,
         }
     }
 
@@ -400,10 +750,11 @@ fn attempt(
     let mut throttle = throttle.lock().unwrap_or_else(|p| p.into_inner());
     let now = now();
     let live = library.profiles()?;
-    // Waits of profiles removed since (here or by sync) go with them.
+    // Waits of profiles removed since (here or by sync) go with them; the
+    // kids exit's is no profile's.
     throttle
         .until
-        .retain(|id, _| live.iter().any(|p| p.id == *id));
+        .retain(|id, _| id == KIDS_EXIT_WAIT || live.iter().any(|p| p.id == *id));
     let row = live
         .into_iter()
         .find(|p| p.id == profile)
@@ -689,5 +1040,153 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.code(), Some("unknownProfile"), "{err:?}");
         assert_eq!(lib.pin_failures("x").unwrap(), 0, "no row came back");
+    }
+
+    // The kids exit (plans/m11-kids.md 7).
+
+    fn at(wall: u64) -> String {
+        Hlc {
+            wall_ms: wall,
+            counter: 0,
+            device: 1,
+        }
+        .encode()
+    }
+
+    /// The owner with PIN `PIN`, and a kids profile to leave.
+    fn kids_device() -> Library {
+        let lib = Library::temporary().unwrap();
+        lib.ensure_profile(OWNER, "Main", &Hlc::zero(1).encode())
+            .unwrap();
+        lib.set_pin_hash(OWNER, Some(&hash(PIN)), &at(2)).unwrap();
+        lib.create_kids_profile("kid", "Kid", "", &at(3)).unwrap();
+        lib
+    }
+
+    fn exit_at(
+        lib: &Library,
+        throttle: &Mutex<Throttle>,
+        now: Instant,
+        pin: &str,
+    ) -> Result<(), ProfileError> {
+        exit_attempt(
+            lib,
+            throttle,
+            Some(pin),
+            false,
+            || now,
+            |_, pin| Ok(pin == PIN),
+        )
+    }
+
+    fn exit_failures(lib: &Library) -> u32 {
+        let value = lib.device_value(KIDS_EXIT).unwrap().unwrap_or_default();
+        serde_json::from_str::<ExitState>(&value)
+            .unwrap_or_default()
+            .failures
+    }
+
+    #[test]
+    fn the_kids_exit_waits_as_p1_on_its_own_count() {
+        let lib = kids_device();
+        let t0 = Instant::now();
+        let throttle = Mutex::new(Throttle::new(t0));
+        let s = Duration::from_secs;
+        for _ in 0..4 {
+            wrong(exit_at(&lib, &throttle, t0, "0000"));
+        }
+        assert_eq!(wait_ms(exit_at(&lib, &throttle, t0, PIN)), 60_000);
+        let mut at = t0 + s(60);
+        for penalty in [5 * 60, 15 * 60, 60 * 60] {
+            wrong(exit_at(&lib, &throttle, at, "0000"));
+            assert_eq!(wait_ms(exit_at(&lib, &throttle, at, PIN)), penalty * 1000);
+            at += s(penalty);
+        }
+        assert_eq!(exit_failures(&lib), 7);
+        // Never on the owner's own row: the parent still unlocks Main here.
+        assert_eq!(lib.pin_failures(OWNER).unwrap(), 0);
+        // A P1 attempt purges waits of removed profiles, never the exit's.
+        let _ = attempt(&lib, &throttle, OWNER, None, || at, |_, _| Ok(false));
+        assert!(throttle.lock().unwrap().until.contains_key(KIDS_EXIT_WAIT));
+        // The right PIN clears it.
+        exit_at(&lib, &throttle, at, PIN).unwrap();
+        assert_eq!(exit_failures(&lib), 0);
+    }
+
+    #[test]
+    fn a_new_owner_pin_clears_the_kids_exit() {
+        let lib = kids_device();
+        let t0 = Instant::now();
+        let throttle = Mutex::new(Throttle::new(t0));
+        for _ in 0..4 {
+            wrong(exit_at(&lib, &throttle, t0, "0000"));
+        }
+        wait_ms(exit_at(&lib, &throttle, t0, PIN));
+        // The owner sets a new PIN on another device; it syncs here.
+        let lock = mq_library::SyncRecord {
+            coll: mq_library::coll::PROFILE_LOCK,
+            key: OWNER.into(),
+            value: serde_json::json!({"profile": OWNER, "pinHash": hash(PIN)}),
+            hlc: at(50),
+        };
+        lib.apply(&[lock]).unwrap();
+        exit_at(&lib, &throttle, t0, PIN).unwrap();
+        assert_eq!(exit_failures(&lib), 0);
+    }
+
+    #[test]
+    fn the_kids_exit_count_drops_one_for_each_hour_without_a_try() {
+        let lib = kids_device();
+        let t0 = Instant::now();
+        let throttle = Mutex::new(Throttle::new(t0));
+        let s = Duration::from_secs;
+        let mut last = t0;
+        for (i, wait) in [0, 0, 0, 0, 60, 5 * 60, 15 * 60].into_iter().enumerate() {
+            last += s(wait);
+            wrong(exit_at(&lib, &throttle, last, "0000"));
+            assert_eq!(exit_failures(&lib), i as u32 + 1);
+        }
+        // Three hours on the monotonic clock without a try: three fewer, so
+        // the next wrong one is the fifth (5 minutes), not the eighth.
+        let later = last + s(3 * 60 * 60);
+        wrong(exit_at(&lib, &throttle, later, "0000"));
+        assert_eq!(exit_failures(&lib), 5);
+        assert_eq!(wait_ms(exit_at(&lib, &throttle, later, PIN)), 5 * 60_000);
+    }
+
+    #[test]
+    fn a_restart_starts_the_decay_hour_again() {
+        let lib = kids_device();
+        let t0 = Instant::now();
+        let throttle = Mutex::new(Throttle::new(t0));
+        let s = Duration::from_secs;
+        let mut last = t0;
+        for wait in [0, 0, 0, 0, 60, 5 * 60, 15 * 60] {
+            last += s(wait);
+            wrong(exit_at(&lib, &throttle, last, "0000"));
+        }
+        // The app restarts at t1, whatever the date says: the hour starts
+        // there, so 59 minutes later nothing has dropped yet.
+        let t1 = last + s(30);
+        let restarted = Mutex::new(Throttle::new(t1));
+        assert_eq!(
+            wait_ms(exit_at(&lib, &restarted, t1 + s(59 * 60), PIN)),
+            60_000,
+            "still seven: the hour's wait from the restart"
+        );
+        assert_eq!(exit_failures(&lib), 7);
+        exit_at(&lib, &restarted, t1 + s(61 * 60), PIN).unwrap();
+    }
+
+    #[test]
+    fn without_an_owner_pin_only_the_device_lock_lets_a_kid_out() {
+        let lib = Library::temporary().unwrap();
+        lib.ensure_profile(OWNER, "Main", &Hlc::zero(1).encode())
+            .unwrap();
+        let throttle = Mutex::new(Throttle::new(Instant::now()));
+        let never = |_: &str, _: &str| -> Result<bool, Unreadable> { panic!("no compare") };
+        let refused = exit_attempt(&lib, &throttle, Some(PIN), false, Instant::now, never);
+        assert_eq!(refused.unwrap_err().code(), Some("kidsNeedPin"));
+        exit_attempt(&lib, &throttle, None, true, Instant::now, never).unwrap();
     }
 }

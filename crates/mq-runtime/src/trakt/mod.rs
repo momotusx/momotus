@@ -406,6 +406,9 @@ impl Core {
         if record.is_some() && trakt.config().is_none() {
             return Err(CoreError::TraktNotConfigured);
         }
+        if record.is_some() && kids(self) {
+            return Err(CoreError::Trakt(KIDS.into()));
+        }
         let conn = self.trakt_conn();
         let account = record.as_ref().map(|r| (r.account.clone(), r.generation));
         if conn.auth.set(record).await
@@ -461,6 +464,9 @@ impl Core {
         let trakt = self.trakt();
         if trakt.config().is_none() {
             return Err(CoreError::TraktNotConfigured);
+        }
+        if kids(self) {
+            return Err(CoreError::Trakt(KIDS.into()));
         }
         let conn = self.trakt_conn();
         let report = pull::round(self, &trakt, &conn).await;
@@ -535,6 +541,9 @@ impl Core {
 
     /// Starts the profile's round scheduler, or wakes it.
     fn trakt_schedule(&self, conn: &Arc<Conn>) {
+        if kids(self) {
+            return;
+        }
         if !conn.scheduler.swap(true, Ordering::SeqCst) {
             tokio::spawn(schedule(self.downgrade(), conn.clone()));
         }
@@ -643,6 +652,15 @@ fn unmapped(core: &Core, key: TrackerKey<'_>) -> Vec<TraktUnmapped> {
         .collect()
 }
 
+/// Kids profiles have no Trakt (plans/m11-kids.md 4.5): no record, no
+/// round, no scheduler, no scrobble. A profile whose access is not known
+/// counts as kids (the policy fails closed).
+pub(super) fn kids(core: &Core) -> bool {
+    core.library().policy(core.profile()).kids()
+}
+
+const KIDS: &str = "Trakt is off for kids profiles";
+
 /// Whether the library says the profile was deleted, here or by sync. A
 /// read that fails is not a deletion: the next look asks again.
 fn gone(core: &Core) -> bool {
@@ -686,6 +704,12 @@ async fn schedule(core: crate::core::WeakCore, conn: Arc<Conn>) {
         let Some(core) = core.upgrade() else { return };
         let trakt = core.trakt();
         if gone(&core) {
+            trakt.forget(core.profile());
+            return;
+        }
+        if kids(&core) {
+            // A record held from before (never taken for kids): its rounds
+            // stop and its tokens leave memory.
             trakt.forget(core.profile());
             return;
         }
