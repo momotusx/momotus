@@ -456,14 +456,11 @@ impl<'a> Round<'a> {
                 } else {
                     "series"
                 };
-                let ids = map::ids(
-                    self.core,
-                    self.at(),
-                    kind,
-                    &intent.item_id,
-                    &intent.video_id,
-                )
-                .await;
+                // From the round's memory after a show's first look.
+                let ids = self
+                    .mapper
+                    .ids(kind, &intent.item_id, &intent.video_id)
+                    .await;
                 match ids {
                     Ok(ids) if intent.op == IntentOp::Add => {
                         if self.already_there(&intent, &ids).await {

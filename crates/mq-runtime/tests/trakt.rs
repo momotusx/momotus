@@ -2725,3 +2725,22 @@ async fn a_lookup_answered_after_sign_out_writes_nothing() {
     let rows = core.library().tracker_states(key("a-out-map"), "").unwrap();
     assert!(rows.is_empty(), "written after the sign-out: {rows:?}");
 }
+
+#[tokio::test]
+async fn a_round_looks_a_shows_details_up_once_for_its_writes() {
+    let (core, fake) = signed_in("a-memo").await;
+    fake.meta_down.store(true, Ordering::SeqCst);
+    let title = TitleView::open(&core, "series", SHOW);
+    fake.wait_for("the title page's look", |f| {
+        !f.seen("GET", "/meta/series/tt100.json").is_empty()
+    })
+    .await;
+    for e in 1..=3 {
+        title.set_watched(&format!("tt100:1:{e}"), true).unwrap();
+    }
+    let before = fake.seen("GET", "/meta/series/tt100.json").len();
+    core.trakt_sync().await.unwrap();
+    let looks = fake.seen("GET", "/meta/series/tt100.json").len() - before;
+    assert_eq!(looks, 1, "three writes, one look");
+    assert_eq!(pending(&core, "a-memo"), 3, "they wait");
+}
