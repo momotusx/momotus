@@ -44,8 +44,8 @@ async fn ws(
     headers: HeaderMap,
     State(core): State<Core>,
 ) -> axum::response::Response {
-    let header = |name| headers.get(name).and_then(|v| v.to_str().ok());
-    if !origin_allowed(header(header::ORIGIN), header(header::HOST)) {
+    let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
+    if !origin_allowed(origin) {
         // Another site's page in the user's browser: no session for it.
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -54,10 +54,11 @@ async fn ws(
         .into_response()
 }
 
-/// A browser page may open the socket only from this server (same origin)
-/// or from a loopback origin (the web UI's dev server). A request with no
-/// `Origin` does not come from a page.
-fn origin_allowed(origin: Option<&str>, host: Option<&str>) -> bool {
+/// A browser page may open the socket only from a loopback origin (this
+/// server, or the web UI's dev server). A name is taken only as
+/// `localhost`: another name that resolves to loopback is a rebound page
+/// from elsewhere. A request with no `Origin` does not come from a page.
+fn origin_allowed(origin: Option<&str>) -> bool {
     let Some(origin) = origin else {
         return true;
     };
@@ -68,9 +69,6 @@ fn origin_allowed(origin: Option<&str>, host: Option<&str>) -> bool {
         // `null` (a file or a sandboxed frame) and anything else.
         return false;
     };
-    if host.is_some_and(|host| host.eq_ignore_ascii_case(authority)) {
-        return true;
-    }
     let name = match authority.strip_prefix('[') {
         Some(rest) => rest.split(']').next().unwrap_or_default(),
         None => authority.split(':').next().unwrap_or_default(),
@@ -117,7 +115,6 @@ mod tests {
 
     #[test]
     fn only_this_server_and_loopback_pages_open_the_socket() {
-        let host = Some("127.0.0.1:7777");
         for ok in [
             None,
             Some("http://127.0.0.1:7777"),
@@ -125,13 +122,8 @@ mod tests {
             Some("http://[::1]:5173"),
             Some("http://127.0.0.2"),
         ] {
-            assert!(origin_allowed(ok, host), "{ok:?}");
+            assert!(origin_allowed(ok), "{ok:?}");
         }
-        // Same origin by name when the page was served from it.
-        assert!(origin_allowed(
-            Some("http://mq.test:7777"),
-            Some("mq.test:7777")
-        ));
         for refused in [
             "https://evil.example",
             "http://192.168.1.5:7777",
@@ -140,7 +132,14 @@ mod tests {
             "null",
             "file://",
         ] {
-            assert!(!origin_allowed(Some(refused), host), "{refused}");
+            assert!(!origin_allowed(Some(refused)), "{refused}");
         }
+    }
+
+    #[test]
+    fn a_name_rebound_to_loopback_is_not_this_server() {
+        // evil.example now resolves to 127.0.0.1: its page sends its own
+        // name as Origin and as Host.
+        assert!(!origin_allowed(Some("http://evil.example:7777")));
     }
 }
