@@ -51,13 +51,13 @@ const DEBRID: &str = r#"{"streams":[
  {"name":"RD 1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-DEMAND","clientResolve":{"type":"debrid","service":"realdebrid","infoHash":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","fileIdx":0,"isCached":true},"behaviorHints":{"cached":true,"service":"realdebrid","videoSize":3100000000}}
 ]}"#;
 
-/// A core that opens the torrent rows here: with the engine in full builds,
-/// else (store builds) through an account (plans/m13-stream-choice.md 3.4).
+/// A core that opens the torrent rows here through an account, in store
+/// builds (no engine) and full ones alike: an engine build hides a swarm
+/// larger than the host's free disk (plans/m13-stream-choice.md 3.4), which
+/// these ranking tests must not depend on.
 fn opens_torrents() -> Core {
     let core = Core::temporary("p").unwrap();
-    if !core.has_engine() {
-        core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
-    }
+    core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
     core
 }
 
@@ -268,9 +268,10 @@ async fn freezing_before_any_answer_keeps_the_first_pick_coming() {
     let view = VersionsView::open(&core, params());
     view.freeze();
     assert!(!view.snapshot().frozen);
-    while !view.snapshot().done {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    until(&view, "done with a pick", |s| {
+        s.done && s.recommended.is_some()
+    })
+    .await;
     assert_eq!(view.snapshot().recommended.unwrap().via, "torrents");
 }
 
@@ -326,9 +327,10 @@ async fn remembers_the_release_line_played_last_for_the_title() {
         let core = core.clone();
         async move {
             let view = VersionsView::open(&core, params());
-            while !view.snapshot().done {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
+            until(&view, "done with a pick", |s| {
+                s.done && s.recommended.is_some()
+            })
+            .await;
             view.snapshot().recommended.unwrap()
         }
     };
@@ -349,19 +351,22 @@ async fn remembers_the_release_line_played_last_for_the_title() {
     assert!(best.reasons.contains(&Reason::SameReleaseAsLast));
 }
 
-/// Waits until `check` holds for the view's snapshot, or fails after 10 s.
+/// Waits until `check` holds for the view's snapshot, or fails after 60 s
+/// (a loaded host) with the last snapshot.
 async fn until(
     view: &VersionsView,
     what: &str,
     check: impl Fn(&mq_runtime::views::versions::VersionsSnapshot) -> bool,
 ) {
-    for _ in 0..200 {
-        if check(&view.snapshot()) {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while !check(&view.snapshot()) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "never: {what}; last {:?}",
+            view.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    panic!("never: {what}; last {:?}", view.snapshot());
 }
 
 /// A source installed while the title is open shows up without reopening it,

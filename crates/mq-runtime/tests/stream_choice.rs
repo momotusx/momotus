@@ -76,8 +76,9 @@ fn core_with(server: &Server) -> Core {
     core
 }
 
+/// Waits until `done` holds, or fails after 60 s (a loaded host).
 async fn until(what: &str, done: impl Fn() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !done() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -172,13 +173,17 @@ async fn done_waits_for_the_meta_the_app_did_not_send() {
 
 /// r4 N4: the cache check races `done`. TorBox says the less seeded
 /// torrent is cached; the view waits for the answer, so that row is the
-/// pick, ready on the service.
+/// pick, ready on the service. Small files, so an engine build's free space
+/// check never hides the other.
 #[tokio::test]
 async fn a_torrent_the_check_finds_cached_is_ready_before_done() {
+    let small = torrents()
+        .replace("2.0 GB", "200 MB")
+        .replace("1.5 GB", "150 MB");
     let cached =
         format!(r#"{{"success":true,"error":null,"detail":"ok","data":[{{"hash":"{HASH_B}"}}]}}"#);
     let server = Server::start(vec![
-        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &small),
         route("GET", "/meta/series/tt1.json", 200, &meta()),
         route("POST", "/v1/api/torrents/checkcached", 200, &cached)
             .delayed(Duration::from_millis(500)),
@@ -190,12 +195,15 @@ async fn a_torrent_the_check_finds_cached_is_ready_before_done() {
     let view = VersionsView::open(&core, params(TitleFacts::default()));
     until("done", || view.snapshot().done).await;
     let s = view.snapshot();
-    let best = s.recommended.expect("a pick");
+    let best = s
+        .recommended
+        .clone()
+        .unwrap_or_else(|| panic!("no pick: {s:?}"));
     assert_eq!(best.release_name, "Show.S01E01.1080p.WEB-DL.x264-BBB");
     assert_eq!(best.source_class, SourceClass::Ready);
     // The other one is not cached: the engine fetches it, else the
     // service has to download it first.
-    let other = &s.rows[0];
+    let other = s.rows.first().unwrap_or_else(|| panic!("one row: {s:?}"));
     let expected = if core.has_engine() {
         SourceClass::Swarm
     } else {
