@@ -145,14 +145,30 @@ async function forget() {
   }
 }
 
-/** A pairing this page confirmed and whose record has not arrived yet. */
-let pairingClaimed = false;
+/** The one start of a new account under way here (create, recover or a confirmed pairing): it
+ * owns the slot from before its request goes until it joins or fails. */
+let slot: symbol | null = null;
 
-/** A new account record replaces none: a device that syncs (or remembers an
- * account, or waits for a confirmed pairing) leaves first, so an account never
- * keeps a ghost of this browser. */
-function refuseSecond() {
-  if (record || locked() || pairingClaimed) throw new BridgeError(syncWords.alreadyJoined, "alreadyJoined");
+/** Reserves the slot before a start's request goes. A new account record replaces none: a
+ * device that syncs (or remembers an account) leaves first, and a second start waits for the
+ * first, so an account never keeps a ghost of this browser. */
+function takeSlot(): symbol {
+  if (record || locked()) throw new BridgeError(syncWords.alreadyJoined, "alreadyJoined");
+  if (slot) throw new BridgeError(syncWords.joining, "joining");
+  slot = Symbol("start");
+  return slot;
+}
+
+const freeSlot = (mine: symbol) => {
+  if (slot === mine) slot = null;
+};
+
+/** Joins with what a start brought, only while it still owns the slot: a late answer is dropped. */
+function joinOwned(mine: symbol, next: SyncRecord, recoveredWithKit = false): boolean {
+  if (slot !== mine) return false;
+  slot = null;
+  join(next, recoveredWithKit);
+  return true;
 }
 
 /** A new account record (created, paired or recovered); its first round runs at once. */
@@ -227,40 +243,43 @@ export async function loadDevices(): Promise<Devices> {
   return list;
 }
 
-export async function createAccount(server: string, name: string, invite: string) {
+/** Creates or recovers an account: the slot is this start's from before its request goes. */
+async function start(request: () => Promise<SyncRecord>, recoveredWithKit: boolean) {
   await vaultReady;
-  refuseSecond();
   guardLink();
-  join(await op<SyncRecord>("createSyncAccount", { server, name, ...(invite ? { invite } : {}) }));
+  const mine = takeSlot();
+  try {
+    joinOwned(mine, await request(), recoveredWithKit);
+  } finally {
+    freeSlot(mine);
+  }
 }
 
-export async function recover(server: string, kit: string, name: string) {
-  await vaultReady;
-  refuseSecond();
-  guardLink();
-  join(await op<SyncRecord>("recover", { server, kit, name }), true);
-}
+export const createAccount = (server: string, name: string, invite: string) =>
+  start(() => op<SyncRecord>("createSyncAccount", { server, name, ...(invite ? { invite } : {}) }), false);
 
-/** Pairing may start here: no account syncs or waits to be unlocked, and the link is private. Ask after `vaultReady`. */
-export const mayPair = () => !record && !locked() && privateLink;
+export const recover = (server: string, kit: string, name: string) => start(() => op<SyncRecord>("recover", { server, kit, name }), true);
+
+/** Pairing may start here: no account syncs, waits to be unlocked or is being started, and the link is private. Ask after `vaultReady`. */
+export const mayPair = () => !record && !locked() && !slot && privateLink;
 
 /** Before confirming a pairing, so a refusal comes before the sync server lists this device:
- * false when an account appeared meanwhile. Until `endPairing` or `joinPaired`, nothing else
- * may start an account here, so the record the pairing brings is never refused. */
-export function claimPairing(): boolean {
-  if (!mayPair() || pairingClaimed) return false;
-  pairingClaimed = true;
-  return true;
+ * null when an account appeared or another start is under way. The claim owns the slot until
+ * `endPairing` or `joinPaired`. */
+export function claimPairing(): symbol | null {
+  if (!privateLink) return null;
+  try {
+    return takeSlot();
+  } catch {
+    return null;
+  }
 }
 
 /** The confirmed pairing ended without a record (rejected, failed, expired or left). */
-export const endPairing = () => void (pairingClaimed = false);
+export const endPairing = (claim: symbol) => freeSlot(claim);
 
-/** The record a confirmed pairing brought: the claim kept every other account out meanwhile. */
-export function joinPaired(next: SyncRecord) {
-  pairingClaimed = false;
-  join(next);
-}
+/** The record a confirmed pairing brought, joined only while its claim owns the slot. */
+export const joinPaired = (next: SyncRecord, claim: symbol) => joinOwned(claim, next);
 
 /** Before a change that cannot be undone: the passkey when this browser remembers the account. */
 async function gate() {

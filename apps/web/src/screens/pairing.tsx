@@ -27,8 +27,14 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
   // An account that appeared here meanwhile is never replaced: Yes is refused before the sync
   // server lists this device, and once confirmed nothing else may start one until the record comes.
   const [refused, setRefused] = createSignal(false);
+  let claim: symbol | null = null;
+  const release = () => {
+    if (claim) sync.endPairing(claim);
+    claim = null;
+  };
   const confirm = () => {
-    if (!sync.claimPairing()) {
+    claim ??= sync.claimPairing();
+    if (!claim) {
       setRefused(true);
       return void view.command({ type: "reject" });
     }
@@ -36,13 +42,14 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
   };
   createEffect(() => {
     const s = p();
-    if (s?.phase === "failed" || s?.phase === "expired") sync.endPairing();
+    if (s?.phase === "failed" || s?.phase === "expired") release();
     if (s?.phase !== "joined" || took) return;
     took = true;
-    sync.joinPaired(JSON.parse(JSON.stringify(s.record)));
-    props.onJoined();
+    if (claim && sync.joinPaired(JSON.parse(JSON.stringify(s.record)), claim)) props.onJoined();
+    else setRefused(true);
+    claim = null;
   });
-  onCleanup(() => took || sync.endPairing());
+  onCleanup(release);
   const until = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   // Each step that asks something takes focus to its answer: on a TV the remote is never left
   // on the form below while "Yes, they match" waits.

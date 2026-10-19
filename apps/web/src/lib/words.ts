@@ -333,6 +333,7 @@ export const syncWords = {
   checkAgain: "Check again",
   checkingNow: "Checking",
   continueText: "It failed again. You can sync in this tab without this browser's storage: nothing is read from it or stored in it, and a reload checks again.",
+  joining: "This device is already joining a sync account. Wait for that to finish, then try again.",
   wrongRecord: "This device does not hold this sync account any more, so there is nothing to stop syncing here. Reload the page; if it then offers to unlock the account, forget it in this browser.",
   continueWithout: "Continue without remembering",
   memoryOnly: "This browser's storage could not be read, so nothing is remembered here: the sync key lasts until this tab closes or reloads.",
@@ -418,6 +419,8 @@ export function syncProblem(code: string | undefined, message: string): string {
       return syncWords.forkChanged;
     case "wrongRecord":
       return syncWords.wrongRecord;
+    case "joining":
+      return syncWords.joining;
   }
   if (message.startsWith("roster: ")) return pairingProblem(`pairing: ${message.slice("roster: ".length)}`);
   if (message.startsWith("pairing: ") || message.startsWith("invalid url") || message.startsWith("blocked private address") || message.startsWith("the relay must use https"))
