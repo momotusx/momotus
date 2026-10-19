@@ -610,13 +610,26 @@ async fn a_foreign_host_gets_403_on_every_path() {
             }
         }
     }
+    // A tunnel or a server-wide request for another host, and a second Host
+    // whichever comes first.
+    let path = &paths[0];
+    for request in [
+        "CONNECT canary.example:443 HTTP/1.1\r\nHost: canary.example:443\r\nConnection: close\r\n\r\n".to_owned(),
+        format!("CONNECT canary.example:443 HTTP/1.1\r\nHost: {core}\r\nConnection: close\r\n\r\n"),
+        "OPTIONS * HTTP/1.1\r\nHost: evil.example\r\nConnection: close\r\n\r\n".to_owned(),
+        format!("GET {path} HTTP/1.1\r\nHost: {core}\r\nHost: evil.example\r\nConnection: close\r\n\r\n"),
+        format!("GET {path} HTTP/1.1\r\nHost: evil.example\r\nHost: {core}\r\nConnection: close\r\n\r\n"),
+        format!("GET {path} HTTP/1.1\r\nHost: {core}\r\nHost: {core}\r\nConnection: close\r\n\r\n"),
+    ] {
+        let status = status_line(&server, &request).await;
+        assert_eq!(status.split(' ').nth(1), Some("403"), "{status}: {request}");
+    }
     assert_eq!(
         seen.ranges().len() + seen.heads().len(),
         before,
         "the origin was asked"
     );
     // The core's own URLs, in origin form and in absolute form, are served.
-    let path = &paths[0];
     for request in [
         format!("GET {path} HTTP/1.1\r\nHost: {core}\r\nConnection: close\r\n\r\n"),
         format!("GET http://{core}{path} HTTP/1.1\r\nHost: {core}\r\nConnection: close\r\n\r\n"),

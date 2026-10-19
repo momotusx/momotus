@@ -84,6 +84,7 @@ async fn upstream_logs_never_name_the_origin() {
     let logs = Arc::new(Mutex::new(Vec::new()));
     let sink = logs.clone();
     let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
         .with_writer(move || Sink(sink.clone()))
         .finish();
     let _guard = tracing::subscriber::set_default(subscriber);
@@ -162,8 +163,13 @@ async fn upstream_logs_never_name_the_origin() {
     assert!(reply.starts_with(b"HTTP/1.1 403"));
 
     let logs = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
-    let refusals = logs.matches("refused a request for another host").count();
-    assert_eq!(refusals, 1, "one line per refusal: {logs}");
+    let refusals: Vec<&str> = logs
+        .lines()
+        .filter(|l| l.contains("refused a request for another host"))
+        .collect();
+    assert_eq!(refusals.len(), 1, "one line per refusal: {logs}");
+    // At debug: a hostile page can send many.
+    assert!(refusals[0].contains("DEBUG"), "{}", refusals[0]);
     // Every upstream call site wrote its line, with its fixed words.
     for line in [
         "stream upstream refused: blocked address",
@@ -176,15 +182,27 @@ async fn upstream_logs_never_name_the_origin() {
     ] {
         assert!(logs.contains(line), "no {line:?} in {logs}");
     }
+    // The core's own lines, debug included; the HTTP stack's debug lines
+    // (which name the address they connect to) are its own.
+    let ours: Vec<&str> = logs
+        .lines()
+        .filter(|l| {
+            l.split_whitespace()
+                .nth(2)
+                .is_some_and(|t| t.starts_with("mq_"))
+        })
+        .collect();
+    let ours = ours.join("\n");
+    assert!(ours.contains("DEBUG"), "{ours}");
     for name in [
         "log-origin.test",
         "memo-log.test",
         "10.0.0.1",
         "log-foreign.test",
     ] {
-        assert!(!logs.contains(name), "{logs}");
+        assert!(!ours.contains(name), "{ours}");
     }
     for port in [refusing, silent, dead, flaky, target, redirector] {
-        assert!(!logs.contains(&format!(":{port}")), "{logs}");
+        assert!(!ours.contains(&format!(":{port}")), "{ours}");
     }
 }

@@ -775,10 +775,10 @@ const PASSTHROUGH: [header::HeaderName; 6] = [
 ];
 
 /// DNS rebinding and proxy guard, before anything else on every path: only
-/// a request addressed to this server is answered, by its `Host` and by the
-/// authority of an absolute-form target (a player sending everything through
-/// the core as its proxy). Any other gets 403, and one log line that names
-/// no address.
+/// a request addressed to this server is answered, by its one `Host` and by
+/// the authority of an absolute-form or `CONNECT` target (a player sending
+/// everything through the core as its proxy). Any other gets 403, and one
+/// debug line that names no address (a hostile page can send many).
 async fn only_loopback(
     State(shared): State<Arc<Shared>>,
     request: Request<Body>,
@@ -786,13 +786,16 @@ async fn only_loopback(
 ) -> Response {
     let port = shared.addr.port();
     let ours = |h: &str| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}");
-    let host = request.headers().get(header::HOST);
+    // Exactly one: with two, a front end and this check could read
+    // different ones.
+    let mut hosts = request.headers().get_all(header::HOST).iter();
+    let host = hosts.next().filter(|_| hosts.next().is_none());
     let host = host.and_then(|h| h.to_str().ok());
     let authority = request.uri().authority().map(|a| a.as_str());
     if host.is_some_and(ours) && authority.is_none_or(ours) {
         return next.run(request).await;
     }
-    tracing::info!("refused a request for another host");
+    tracing::debug!("refused a request for another host");
     StatusCode::FORBIDDEN.into_response()
 }
 
