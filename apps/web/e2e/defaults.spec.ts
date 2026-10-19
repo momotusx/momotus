@@ -252,3 +252,23 @@ test("a pasted link that carries a sign-in is confirmed first, then sent again a
   // Acknowledged, the core tries the made-up host and says why it failed.
   await expect(page.locator(".install-state")).toContainText("Could not install");
 });
+
+test("Settings by keys: a switch keeps focus on its own row while the list reloads", async ({ browser }) => {
+  const page = await device(browser, "tv");
+  await page.goto("/recommended-addons?form=tv");
+  for (const key of ["trakt", "cinemeta"]) {
+    const row = page.locator(`[data-f="defaults:${key}"]`);
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.focus();
+    // A row the reload rebuilt would come back without this mark.
+    await row.evaluate((el) => (el.dataset.kept = "yes"));
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await states())[key], { timeout: 30_000 }).toBe("on");
+    await expect(row).toHaveAttribute("aria-pressed", "true");
+    const active = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      return { f: el?.dataset.f, kept: el?.dataset.kept };
+    });
+    expect(active, `focus stays on ${key}`).toEqual({ f: `defaults:${key}`, kept: "yes" });
+  }
+});

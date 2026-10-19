@@ -11,7 +11,8 @@ import Link2 from "lucide-solid/icons/link-2";
 import PackageSearch from "lucide-solid/icons/package-search";
 import QrCode from "lucide-solid/icons/qr-code";
 import Sparkle from "lucide-solid/icons/sparkle";
-import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { displayCaps, link, liveView, op, ping, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
@@ -35,12 +36,15 @@ interface Row {
 /** The core's defaults, read again whenever the addon list changes. */
 function useDefaults() {
   const addons = liveView<AddonsSnapshot>("addons");
-  const [defaults, setDefaults] = createSignal<DefaultAddons | null>(null);
+  // Each answer is reconciled by key, so an addon keeps its object across
+  // reloads and its row (and the focus on it) stays when a switch changes.
+  const [store, setStore] = createStore<{ defaults: DefaultAddons | null }>({ defaults: null });
+  const defaults = () => store.defaults;
   const [error, setError] = createSignal<string | null>(null);
   const load = () =>
     op<DefaultAddons>("defaultAddons").then(
       (d) => {
-        setDefaults(d);
+        setStore("defaults", reconcile(d, { key: "key" }));
         setError(null);
       },
       (e) => setError(reasonOf(e)),
@@ -232,11 +236,11 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
         )}
       </Show>
       <div class="dgroups" data-fgroup="defaults">
-        <For each={grouped(shown())}>
+        <Index each={grouped(shown())}>
           {(g) => (
-            <section class="dgroup" aria-label={g.title}>
-              <h2 class="kicker">{g.title}</h2>
-              <For each={g.addons}>
+            <section class="dgroup" aria-label={g().title}>
+              <h2 class="kicker">{g().title}</h2>
+              <For each={g().addons}>
                 {(a) => (
                   <DefaultRow
                     addon={a}
@@ -249,7 +253,7 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
               </For>
             </section>
           )}
-        </For>
+        </Index>
       </div>
       <Show when={props.defaults && !props.hasCatalog && catalogMissing(all(), off())}>
         <p class="st warn" role="status">
@@ -410,18 +414,19 @@ export function RecommendedAddons() {
         )}
       </For>
       <div class="dgroups" data-fgroup="defaults">
-        <For each={grouped(defaults()?.addons ?? [])}>
+        {/* Groups by position, rows by addon: a reload keeps every row. */}
+        <Index each={grouped(defaults()?.addons ?? [])}>
           {(g, gi) => (
-            <section class="dgroup" aria-label={g.title}>
-              <h2 class="kicker">{g.title}</h2>
-              <For each={g.addons}>
+            <section class="dgroup" aria-label={g().title}>
+              <h2 class="kicker">{g().title}</h2>
+              <For each={g().addons}>
                 {(a, i) => (
-                  <DefaultRow addon={a} on={a.installed === "on"} fkey={`defaults:${a.key}`} autofocus={gi() === 0 && i() === 0} onToggle={() => flip(a)} />
+                  <DefaultRow addon={a} on={a.installed === "on"} fkey={`defaults:${a.key}`} autofocus={gi === 0 && i() === 0} onToggle={() => flip(a)} />
                 )}
               </For>
             </section>
           )}
-        </For>
+        </Index>
       </div>
     </main>
   );
