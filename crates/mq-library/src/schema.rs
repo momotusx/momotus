@@ -280,7 +280,7 @@ CREATE TABLE allowed (
     hlc         TEXT NOT NULL,
     PRIMARY KEY (profile_id, item_id)
 );
-CREATE INDEX allowed_counted ON allowed (profile_id, allowed, added_ms, item_id);
+CREATE INDEX allowed_counted ON allowed (profile_id, allowed, added_ms);
 
 INSERT INTO profile_access (profile_id, kids, hlc)
     SELECT id, 0, '00000000000000000000000000000000' FROM profiles

@@ -102,8 +102,9 @@ impl AllowedRow {
                 names.push(name);
             }
         }
+        // A name alone is at most 200 characters, 802 bytes of JSON: only
+        // the other names ever go.
         while json_len(&self.name) + json_len(&names) > NAMES_BYTES && names.pop().is_some() {}
-        while json_len(&self.name) + json_len(&names) > NAMES_BYTES && self.name.pop().is_some() {}
         self.names = names;
         self.poster = self.poster.filter(|p| {
             p.starts_with("https://") && p.len() <= 512 && !p.chars().any(char::is_control)
@@ -135,16 +136,28 @@ impl Library {
     /// The policy and the access generation, from one read transaction, so
     /// a read error is told apart from an exclusion.
     pub fn policy_checked(&self, profile: &str) -> Result<(Policy, u64), LibraryError> {
+        self.policy_checked_with(profile, || {})
+    }
+
+    /// `policy_checked`, with `between` run after the policy is read and
+    /// before the generation is (tests force a commit there).
+    pub(crate) fn policy_checked_with(
+        &self,
+        profile: &str,
+        between: impl FnOnce(),
+    ) -> Result<(Policy, u64), LibraryError> {
         self.read(|c| {
             let tx = c.unchecked_transaction()?;
             let policy = read_policy(&tx, profile)?;
+            between();
             Ok((policy, access_generation(&tx)?))
         })
     }
 
-    /// Whether the profile may play `kind` `id` (and `video`, which must
-    /// belong to it under a kids policy), with the generation that decision
-    /// was read under: both from one read transaction.
+    /// Whether the profile may play `kind` `id`, with the generation that
+    /// decision was read under: both from one read transaction. Under a kids
+    /// policy the video is required and must belong to the title (a series
+    /// is never authorized as a whole).
     pub fn authorize(
         &self,
         profile: &str,
@@ -169,7 +182,7 @@ impl Library {
             let tx = c.unchecked_transaction()?;
             let policy = read_policy(&tx, profile)?;
             let ok = policy.allows(kind, id)
-                && (!policy.kids() || video.is_none_or(|v| Policy::belongs(id, v)));
+                && (!policy.kids() || video.is_some_and(|v| Policy::belongs(id, v)));
             between();
             let generation = access_generation(&tx)?;
             Ok(if ok {
@@ -184,8 +197,10 @@ impl Library {
     /// request arrived) only when that is newer than the stored one;
     /// otherwise nothing happens and the newer edit stands. Never stamped
     /// again above the stored one, so a slow Allow can never overtake a
-    /// later Remove (3.1). Returns whether it was written. Refused for the
-    /// owner, and for an entry outside its bounds.
+    /// later Remove (3.1). Allowing a title that is allowed already keeps
+    /// its allow time, so pressing Allow again never moves it past the cap.
+    /// Returns whether it was written. Refused for the owner, and for an
+    /// entry outside its bounds.
     pub fn write_allowed(
         &self,
         profile: &str,
@@ -195,9 +210,20 @@ impl Library {
         if profile == OWNER {
             return Err(LibraryError::OwnerKids);
         }
-        let row = row.clone().bounded().map_err(LibraryError::BadEntry)?;
+        let mut row = row.clone().bounded().map_err(LibraryError::BadEntry)?;
         self.write(|c| {
             refuse_gone(c, profile)?;
+            if row.allowed {
+                let kept: Option<i64> = c
+                    .query_row(
+                        "SELECT added_ms FROM allowed
+                         WHERE profile_id = ?1 AND item_id = ?2 AND allowed = 1",
+                        params![profile, row.item_id],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                row.added_ms = kept.unwrap_or(row.added_ms);
+            }
             let changed = sql::set_allowed(c, profile, &row, hlc)?;
             queue(c, changed, coll::ALLOWED, &[profile, &row.item_id])?;
             Ok(changed > 0)
@@ -207,9 +233,20 @@ impl Library {
     /// The profile's allowlist: the counted titles and the extras past the
     /// cap, from one read transaction.
     pub fn allowed_list(&self, profile: &str) -> Result<AllowedList, LibraryError> {
+        self.allowed_list_with(profile, || {})
+    }
+
+    /// `allowed_list`, with `between` run after the counted titles are read
+    /// and before the extras are (tests force a commit there).
+    pub(crate) fn allowed_list_with(
+        &self,
+        profile: &str,
+        between: impl FnOnce(),
+    ) -> Result<AllowedList, LibraryError> {
         self.read(|c| {
             let tx = c.unchecked_transaction()?;
             let counted = counted(&tx, profile)?;
+            between();
             let total: i64 = tx.query_row(
                 "SELECT COUNT(*) FROM allowed WHERE profile_id = ?1 AND allowed = 1",
                 params![profile],
@@ -251,7 +288,8 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AllowedRow> {
 }
 
 /// The first 1,000 allowed by allow time, ties by id: every device holding
-/// the same rows counts the same ones (3.4).
+/// the same rows counts the same ones (3.4). The index orders by allow time
+/// only, so the tie-break here is the one that decides.
 fn counted(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AllowedRow>> {
     let mut stmt = c.prepare(&format!(
         "{SELECT_ALLOWED} WHERE profile_id = ?1 AND allowed = 1
@@ -388,7 +426,7 @@ mod tests {
             .unwrap();
         let (_, before) = lib.policy_checked("kid").unwrap();
         let auth = lib
-            .authorize_with("kid", "movie", "tt1", None, || {
+            .authorize_with("kid", "movie", "tt1", Some("tt1"), || {
                 lib.write_allowed("kid", &entry("tt1", false), &hlc(3))
                     .unwrap();
             })
@@ -398,8 +436,77 @@ mod tests {
         assert!(after > before, "the removal raised it");
         assert!(!policy.allows("movie", "tt1"));
         assert_eq!(
-            lib.authorize("kid", "movie", "tt1", None).unwrap(),
+            lib.authorize("kid", "movie", "tt1", Some("tt1")).unwrap(),
             Authorization::Denied { generation: after }
         );
+    }
+
+    /// The same for the policy the watcher reads: a removal committed
+    /// between the policy and the generation leaves both as they were.
+    #[test]
+    fn a_policy_and_its_generation_are_one_snapshot() {
+        let lib = Library::temporary().unwrap();
+        lib.create_kids_profile("kid", "Kid", "", &hlc(1)).unwrap();
+        lib.write_allowed("kid", &entry("tt1", true), &hlc(2))
+            .unwrap();
+        let (_, before) = lib.policy_checked("kid").unwrap();
+        let (policy, generation) = lib
+            .policy_checked_with("kid", || {
+                lib.write_allowed("kid", &entry("tt1", false), &hlc(3))
+                    .unwrap();
+            })
+            .unwrap();
+        assert!(policy.allows("movie", "tt1"));
+        assert_eq!(generation, before, "the generation of that same policy");
+    }
+
+    /// The counted titles and the extras come from one snapshot: an allow
+    /// committed between the two reads shows in neither.
+    #[test]
+    fn a_list_and_its_extras_are_one_snapshot() {
+        let lib = Library::temporary().unwrap();
+        lib.create_kids_profile("kid", "Kid", "", &hlc(1)).unwrap();
+        for i in 0..MAX_ALLOWED {
+            let row = AllowedRow {
+                added_ms: i as i64,
+                ..entry(&format!("tt{i:04}"), true)
+            };
+            lib.write_allowed("kid", &row, &hlc(10 + i as u64)).unwrap();
+        }
+        let list = lib
+            .allowed_list_with("kid", || {
+                let late = AllowedRow {
+                    added_ms: 5000,
+                    ..entry("tt9999", true)
+                };
+                lib.write_allowed("kid", &late, &hlc(5000)).unwrap();
+            })
+            .unwrap();
+        assert_eq!(list.counted.len(), MAX_ALLOWED);
+        assert_eq!((list.over_count, list.over.len()), (0, 0), "{list:?}");
+        assert_eq!(lib.allowed_list("kid").unwrap().over_count, 1);
+    }
+
+    /// Every Cf range of the table goes, at both ends.
+    #[test]
+    fn format_characters_go_and_whitespace_folds() {
+        let ranges = [
+            (0x00AD, 0x00AD),
+            (0x0600, 0x0605),
+            (0x200B, 0x200F),
+            (0x202A, 0x202E),
+            (0x2060, 0x2064),
+            (0x2066, 0x206F),
+            (0xFEFF, 0xFEFF),
+            (0x13430, 0x1343F),
+            (0xE0001, 0xE007F),
+        ];
+        for (lo, hi) in ranges {
+            for c in [lo, hi] {
+                let ch = char::from_u32(c).unwrap();
+                assert_eq!(clean(&format!("U{ch}p")), "Up", "U+{c:04X}");
+            }
+        }
+        assert_eq!(clean("\t Up \n\n and\u{7}  away "), "Up and away");
     }
 }

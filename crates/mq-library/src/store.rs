@@ -26,6 +26,9 @@ pub enum LibraryError {
     /// An allowlist entry outside its bounds (plans/m11-kids.md 3.1).
     #[error("allowlist entry: {0}")]
     BadEntry(&'static str),
+    /// A kids profile is always a new one.
+    #[error("profile {0} already exists")]
+    ProfileExists(String),
 }
 
 impl From<rusqlite::Error> for LibraryError {

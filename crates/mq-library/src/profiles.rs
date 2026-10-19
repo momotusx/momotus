@@ -29,8 +29,10 @@ impl ProfileRow {
         self.lock.is_some() && self.access.is_some()
     }
 
+    /// Kids, or not known yet: fails closed, as the policy does. Only a
+    /// standard access register reads as not kids.
     pub fn kids(&self) -> bool {
-        self.access == Some(true)
+        self.access != Some(false)
     }
 
     pub fn pin_hash(&self) -> Option<&str> {
@@ -112,6 +114,15 @@ impl Library {
         self.create(id, name, avatar, true, stamp.into())
     }
 
+    /// Whether a profile row with this id is here (gone or not).
+    fn exists(c: &rusqlite::Connection, id: &str) -> rusqlite::Result<bool> {
+        c.query_row(
+            "SELECT EXISTS (SELECT 1 FROM profiles WHERE id = ?1)",
+            params![id],
+            |r| r.get(0),
+        )
+    }
+
     fn create(
         &self,
         id: &str,
@@ -120,7 +131,14 @@ impl Library {
         kids: bool,
         stamp: Stamp<'_>,
     ) -> Result<(), LibraryError> {
+        let mut taken = false;
         self.write(|c| {
+            // A kids profile is new: never an existing one made kids (its
+            // PIN cleared, its kind changed).
+            if kids && Self::exists(c, id)? {
+                taken = true;
+                return Ok(());
+            }
             let position: i64 = c.query_row(
                 "SELECT COALESCE(MAX(position) + 1, 0) FROM profiles",
                 [],
@@ -139,23 +157,40 @@ impl Library {
                 return Ok(());
             }
             copy_owner_addons(c, id, &stamp)
-        })
+        })?;
+        if taken {
+            return Err(LibraryError::ProfileExists(id.to_owned()));
+        }
+        Ok(())
     }
 
     /// Turns a kids profile into a standard one (plans/m11-kids.md 6.1),
     /// with a copy of the owner's addon list, in one transaction. There is
-    /// no way back: a standard profile never becomes kids.
+    /// no way back: a standard profile never becomes kids. Read inside the
+    /// write: anything but a kids profile is left as it is (its addon edits
+    /// never rewritten from the owner's). Returns whether it changed.
     pub fn make_standard<'a>(
         &self,
         id: &str,
         stamp: impl Into<Stamp<'a>>,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<bool, LibraryError> {
         let stamp = stamp.into();
         self.write(|c| {
+            let kids: Option<bool> = c
+                .query_row(
+                    "SELECT kids FROM profile_access WHERE profile_id = ?1",
+                    params![id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if kids != Some(true) {
+                return Ok(false);
+            }
             local(c, coll::PROFILE_ACCESS, &[id], &stamp, |h| {
                 sql::set_access(c, id, false, h)
             })?;
-            copy_owner_addons(c, id, &stamp)
+            copy_owner_addons(c, id, &stamp)?;
+            Ok(true)
         })
     }
 
