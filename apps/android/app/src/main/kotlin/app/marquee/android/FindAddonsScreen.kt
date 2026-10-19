@@ -117,6 +117,9 @@ class FindAddonsHolder(
     var list by mutableStateOf(OFFICIAL)
     var filter by mutableStateOf(FindAddons.Filter.All)
 
+    /** Each card's memory by its key, so a regrouped row never loses it. */
+    internal val memories = CardMemories()
+
     /** TV: the card that has focus, by entry key (memory only); null once a control above has it. */
     var focusedCard by mutableStateOf<String?>(null)
 
@@ -225,6 +228,29 @@ internal class OwnedFocus {
 
     /** At the end of a request: true when the focus should come back to the card. Read once. */
     fun landed(): Boolean = held.also { held = false }
+}
+
+/**
+ * What a card remembers across compositions. Rows are composed per row, so a card that comes or goes
+ * ahead of the others regroups every row after it; this memory is kept by the card's own key, apart
+ * from the rows, so it stays with its card.
+ */
+internal class CardMemory {
+    var noBrowser by mutableStateOf(false)
+    val owned = OwnedFocus()
+    val gate = SelectGate()
+    var sawBusy by mutableStateOf(false)
+    var landed by mutableStateOf(false)
+}
+
+/** Every card's memory by its key, for the page's life (memory only; a list holds a few hundred at most). */
+internal class CardMemories {
+    private val byKey = HashMap<String, CardMemory>()
+
+    operator fun get(key: String): CardMemory = byKey.getOrPut(key) { CardMemory() }
+
+    /** A row's cards with their own memories, whatever row they fall in now. */
+    fun forRow(keys: List<String>): List<CardMemory> = keys.map { get(it) }
 }
 
 /** What the landing reads each frame, newer than the composition that started it. */
@@ -464,14 +490,16 @@ fun FindAddonsScreen(
                             // entry added or moved keeps every other row's remembered state.
                             val ids = FindAddons.stableIds(entries)
                             items(rows, key = { "row:${holder.list}:${ids[it.first().key]}" }) { row ->
+                                val memories = holder.memories.forRow(row.map { it.key })
                                 Row(
                                     Modifier.height(IntrinsicSize.Max),
                                     horizontalArrangement = Arrangement.spacedBy(gap),
                                 ) {
-                                    for (entry in row) {
+                                    for ((entry, memory) in row.zip(memories)) {
                                         key(entry.key) {
                                             Card(
                                                 entry = entry,
+                                                memory = memory,
                                                 sameName = entry.name in repeated,
                                                 state = cards[entry.key],
                                                 focus = cardFocus,
@@ -579,6 +607,8 @@ private fun PasteLink(
 @Composable
 private fun Card(
     entry: ListedAddon,
+    /** Kept by the card's key outside the rows: a regroup recomposes the card, never forgets this. */
+    memory: CardMemory,
     sameName: Boolean,
     state: InstallCards.State?,
     /** TV: each card's requester by entry key, while it is composed. */
@@ -604,7 +634,6 @@ private fun Card(
             tv -> FindAddonsCopy.CONFIGURE_TV
             else -> FindAddonsCopy.CONFIGURE_HELP
         }
-    var noBrowser by remember(entry.key) { mutableStateOf(false) }
     val perform = { if (!busy) onPress(action) }
     val shape = RoundedCornerShape(if (tv) Marquee.radius.l else Marquee.radius.card)
     // The press, the busy state and the failure, as a screen reader says them: on TV the card is one
@@ -622,31 +651,29 @@ private fun Card(
         )
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
-    val gate = remember { SelectGate() }
+    val gate = memory.gate
     // Phone: this card's own install just landed while its button held the focus. The button goes, so
     // the focus (a keyboard's, a screen reader's) moves to the card's state instead of falling to the
     // link field at the top. Focus the user took elsewhere meanwhile stays where it is.
     val stay = remember { FocusRequester() }
-    val owned = remember(entry.key) { OwnedFocus() }
+    val owned = memory.owned
     val buttonGone by rememberUpdatedState(!pressable)
-    var sawBusy by remember(entry.key) { mutableStateOf(false) }
-    var landed by remember(entry.key) { mutableStateOf(false) }
     LaunchedEffect(busy) {
         if (busy) {
-            sawBusy = true
-        } else if (sawBusy) {
-            sawBusy = false
+            memory.sawBusy = true
+        } else if (memory.sawBusy) {
+            memory.sawBusy = false
             val held = owned.landed()
-            landed = held && state?.words == null
+            memory.landed = held && state?.words == null
         }
     }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(landed, action is Action.None) {
-        if (!tv && landed && action is Action.None) {
+    LaunchedEffect(memory.landed, action is Action.None) {
+        if (!tv && memory.landed && action is Action.None) {
             // The link field may have caught focus for a moment as the button went, and raised the keyboard.
             stay.requestFocus(FocusDirection.Enter)
             keyboard?.hide()
-            landed = false
+            memory.landed = false
         }
     }
     if (tv) {
@@ -753,7 +780,7 @@ private fun Card(
                     Box(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
                         failure?.let { Note(it, failed = true, side = 0.dp) }
                     }
-                    if (noBrowser) Note(FindAddonsCopy.NO_BROWSER, failed = true, side = 0.dp)
+                    if (memory.noBrowser) Note(FindAddonsCopy.NO_BROWSER, failed = true, side = 0.dp)
                 }
             }
         }
@@ -798,7 +825,7 @@ private fun Card(
                 if (configure) {
                     SecondaryButton(
                         FindAddonsCopy.CONFIGURE,
-                        { noBrowser = !openLink(context, entry.configureUrl) },
+                        { memory.noBrowser = !openLink(context, entry.configureUrl) },
                         icon = Icons.ExternalLink,
                         spoken = FindAddons.spoken(entry, Action.Configure, sameName),
                     )

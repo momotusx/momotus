@@ -4,7 +4,9 @@ import app.marquee.android.FindAddonsFocus.Ask
 import app.marquee.android.FindAddonsFocus.Target
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** TV focus on Find addons (plans/m12-addon-discovery.md 3.6) and a card's select. */
 class FindAddonsFocusTest {
@@ -78,5 +80,19 @@ class FindAddonsFocusTest {
         owned.changed(focused = true, buttonGone = false)
         owned.changed(focused = false, buttonGone = false)
         assertEquals(false, owned.landed())
+    }
+
+    @Test
+    fun `a card inserted ahead of the others leaves every card its own memory`() {
+        val memories = CardMemories()
+        // Two columns, [a, b] and [c, d]: b said no app opens web pages, c waits on its install.
+        memories.forRow(listOf("a", "b"))[1].noBrowser = true
+        memories.forRow(listOf("c", "d"))[0].sawBusy = true
+        // x comes first: every row regroups, as [x, a], [b, c], [d].
+        val rows = listOf(listOf("x", "a"), listOf("b", "c"), listOf("d")).map(memories::forRow)
+        assertFalse(rows[0][0].noBrowser || rows[0][0].sawBusy, "x starts fresh")
+        assertTrue(rows[1][0].noBrowser, "b keeps its note")
+        assertTrue(rows[1][1].sawBusy, "c keeps waiting on its install")
+        assertFalse(rows[0][1].noBrowser || rows[2][0].sawBusy, "a and d keep theirs too")
     }
 }
