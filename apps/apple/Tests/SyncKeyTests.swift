@@ -1,5 +1,4 @@
 import AppKit
-import Security
 import Foundation
 import Testing
 
@@ -64,14 +63,6 @@ private let account = try! JSONDecoder().decode(JSONValue.self, from: Data(#"{"r
         // The core refuses this record: the read fails, and the page says the list may be old.
         await #expect(throws: (any Error).self) { try await sync.loadDevices() }
         #expect(sync.listFailed)
-    }
-
-    @Test func aBuildWithoutTheKeychainHasNoAccountRatherThanAnUnreadableOne() throws {
-        // This test process is signed without the Keychain, as local Mac builds are.
-        let probe: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.marquee",
-                                    kSecAttrAccount as String: "probe", kSecUseDataProtectionKeychain as String: true]
-        guard SecItemCopyMatching(probe as CFDictionary, nil) == errSecMissingEntitlement else { return }
-        #expect(try SyncRecord.keychain.load() == nil)
     }
 
     @Test func aKeyLeftByADeletedInstallGoesBeforeTheCoreOpens() throws {

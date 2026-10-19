@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// The sync account's keystore record. The core never stores it: the app
 /// keeps it in the Keychain and hands it back per call. Tests pass their own.
@@ -13,14 +12,7 @@ struct SyncRecord: Sendable {
     var delete: @Sendable () -> Bool
 
     static let keychain = SyncRecord(
-        load: {
-            do {
-                return try Keychain.read("syncRecord").map { try JSONDecoder().decode(JSONValue.self, from: $0) }
-            } catch let error as KeychainError where error.status == errSecMissingEntitlement {
-                // A local build signed without the Keychain: nothing can be stored, so there is none.
-                return nil
-            }
-        },
+        load: { try Keychain.read("syncRecord").map { try JSONDecoder().decode(JSONValue.self, from: $0) } },
         store: { record in (try? JSONEncoder().encode(record)).map { Keychain.write("syncRecord", $0) } ?? false },
         delete: { Keychain.delete("syncRecord") }
     )
