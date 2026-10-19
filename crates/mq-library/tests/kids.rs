@@ -421,13 +421,23 @@ fn allow_values_from_another_device_are_held_to_the_local_rules() {
 #[test]
 fn names_stay_inside_one_kib_of_json_however_they_escape() {
     let lib = kid(&[]);
-    // 200 characters that each escape to two bytes, plus format characters
-    // that would escape to six if they stayed.
-    let heavy =
-        |c: char| -> String { std::iter::repeat_n(format!("{c}\u{200b}\u{feff}"), 200).collect() };
+    // Five different names of 200 characters that each escape to two
+    // bytes, with format characters between them that would escape to six
+    // if they stayed.
+    let heavy = |pair: &str| -> String {
+        let pair: Vec<char> = pair.chars().collect();
+        (0..200)
+            .map(|i| format!("{}\u{200b}\u{feff}", pair[i % 2]))
+            .collect()
+    };
     let row = AllowedRow {
-        name: heavy('"'),
-        names: vec![heavy('\\'), heavy('"'), heavy('\\'), heavy('\u{7f}')],
+        name: heavy("\"\""),
+        names: vec![
+            heavy("\\\\"),
+            heavy("\"\\"),
+            heavy("\\\""),
+            heavy("\"\u{7f}\""),
+        ],
         poster: Some(format!("https://img.example/{}", "p".repeat(480))),
         ..entry("tt1", "movie", 1)
     };
