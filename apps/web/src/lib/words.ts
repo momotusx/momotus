@@ -330,6 +330,9 @@ export const syncWords = {
   forgetFailed: "This browser could not forget the sync account: its sealed copy is still here. Try again.",
   vaultUnreadable: "This browser could not check whether it remembers a sync account, so nothing new starts here. Check again, or forget what it may remember.",
   checkAgain: "Check again",
+  continueText: "It failed again. You can sync in this tab without it: nothing is read from or stored in this browser, and a reload asks again.",
+  continueWithout: "Continue without remembering",
+  memoryOnly: "This browser's storage could not be read, so nothing is remembered here: the sync key lasts until this tab closes or reloads.",
   saveFailed: "This browser could not store the newest sync key. The copy it keeps still opens this account, and it tries again with the next change.",
   saveAgain: "Save again",
   storageFailed: "This browser could not store the sync key, so it does not remember this account. It lasts until this tab closes.",
@@ -504,8 +507,9 @@ export function failedSince(refused: number, unreadable: number, newer = 0): str
 
 /** The Settings row under Devices and sync: what is wrong or waits first, then the time. */
 export function syncSummary(s: { locked: boolean; problem: string | null; joined: boolean; refused: number; unreadable: number; newer?: number; report: Facts | null; time: string | null }): string {
-  if (s.locked) return syncWords.locked;
+  // A problem first: a storage that could not be read is locked too, and "locked with a passkey" would be wrong.
   if (s.problem) return s.problem;
+  if (s.locked) return syncWords.locked;
   if (!s.joined) return syncWords.offLine;
   const failed = failedSince(s.refused, s.unreadable, s.newer ?? 0);
   if (failed) return failed;

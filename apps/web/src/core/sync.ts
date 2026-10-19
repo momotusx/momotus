@@ -43,9 +43,13 @@ const [remembered, setRemembered] = createSignal(false);
 const [memoryProblem, setMemoryProblem] = createSignal<string | null>(null);
 /** Whether this browser was checked for a remembered account yet: until then nothing may start a new one. */
 const [settled, setSettled] = createSignal(false);
+/** Checks of this browser's storage that failed in a row (0: it was read). */
+const [unreadable, setUnreadable] = createSignal(0);
+/** The user went on without this browser's storage: nothing is read or sealed here until a reload. */
+const [memoryOnly, setMemoryOnly] = createSignal(false);
 /** Bumped by Forget and by leaving: a passkey answer from before it changes nothing. */
 let vaultGen = 0;
-export { devices, failed, fingerprint, joined, locked, memoryProblem, notice, problem, recovered, remembered, report, rounds, settled, syncedAt, syncing };
+export { devices, failed, fingerprint, joined, locked, memoryOnly, memoryProblem, notice, problem, recovered, remembered, report, rounds, settled, syncedAt, syncing, unreadable };
 
 export const dismissFailed = () => setFailed({ refused: 0, unreadable: 0, newer: 0 });
 
@@ -100,7 +104,7 @@ function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: 
       return result;
     } catch (e) {
       if (mine === account && e instanceof BridgeError && (e.code === "dropped" || e.code === "fork")) {
-        if (e.code === "dropped") forget();
+        if (e.code === "dropped") await forget();
         setProblem(problemOf(e));
       }
       throw e;
@@ -121,13 +125,19 @@ function reset() {
   setFailed({ refused: 0, unreadable: 0, newer: 0 });
 }
 
-/** The account is gone here (left, or this device was removed): the sealed copy goes too. */
-function forget() {
+/** The account is gone here (left, or this device was removed): the sealed copy goes too, before
+ * the caller says so. A copy that stays is said where the user is, with Try again. */
+async function forget() {
   reset();
   vaultGen++;
   setLocked(false);
   setRemembered(false);
-  void vault.clear().catch(() => setMemoryProblem(syncWords.forgetFailed));
+  try {
+    await vault.clear();
+  } catch {
+    vault.drop();
+    setMemoryProblem(syncWords.forgetFailed);
+  }
 }
 
 /** A new account record replaces none: a device that syncs (or remembers an
@@ -282,7 +292,7 @@ export async function signOut(force: boolean, local = false) {
   // `local`: nothing sent; only this device forgets the account (the way out of a list it is not on).
   await withRecord("signOut", { force, local }, () => null);
   if (mine !== account) return;
-  forget();
+  await forget();
   setProblem(null);
   setNotice(local ? syncWords.leftHere : syncWords.left);
 }
@@ -352,16 +362,26 @@ async function discover() {
     // A storage that does not answer in time counts as one that could not be read.
     const late = new Promise<never>((_, fail) => setTimeout(() => fail(new Error("the storage did not answer")), 10_000));
     const has = await Promise.race([vault.stored(), late]);
+    setUnreadable(0);
     if (!record) {
       setLocked(has);
       setMemoryProblem(null);
     }
   } catch {
+    setUnreadable((n) => n + 1);
     if (!record) {
       setLocked(true);
       setMemoryProblem(syncWords.vaultUnreadable);
     }
   }
+}
+
+/** After a second failed check: this tab syncs from memory only. Whatever the storage may hold
+ * stays there unread, and nothing is sealed into it. */
+export function continueWithout() {
+  setMemoryOnly(true);
+  setLocked(false);
+  setMemoryProblem(null);
 }
 
 /** Settles once this browser was checked for a remembered account. */

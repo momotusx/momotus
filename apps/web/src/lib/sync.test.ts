@@ -269,4 +269,6 @@ test("Settings names what failed or waits before the time, and a lock or a probl
   expect(syncSummary({ ...base, problem: "The sync server did not answer." })).toBe("The sync server did not answer.");
   expect(syncSummary({ ...base, joined: false })).toBe(syncWords.offLine);
   expect(syncSummary({ ...base, joined: false, locked: true })).toBe(syncWords.locked);
+  // Storage that could not be read counts as locked, and its own words win.
+  expect(syncSummary({ ...base, joined: false, locked: true, problem: syncWords.vaultUnreadable })).toBe(syncWords.vaultUnreadable);
 });

@@ -29,6 +29,8 @@ export class VaultError extends Error {
 
 let key: CryptoKey | null = null;
 let held: Sealed | null = null;
+/** Forgets in flight (each deletes the sealed copy): nothing is sealed again meanwhile. */
+let clearing = 0;
 
 function db(): Promise<IDBDatabase> {
   return new Promise((ok, fail) => {
@@ -42,7 +44,7 @@ function db(): Promise<IDBDatabase> {
 /** One request in its own transaction. It settles when the transaction
  * commits, not when the request succeeds: a write the browser then aborts
  * (quota, eviction, a closing tab) is a failed write. */
-async function tx<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest): Promise<T> {
+async function commit<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   const d = await db();
   try {
     return await new Promise<T>((ok, fail) => {
@@ -54,6 +56,19 @@ async function tx<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBR
     });
   } finally {
     d.close();
+  }
+}
+
+/** `commit`, failed after 10 s: a storage that hangs must not stall the sync ops waiting on it. */
+async function tx<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest): Promise<T> {
+  let timer = 0;
+  const late = new Promise<never>((_, fail) => {
+    timer = window.setTimeout(() => fail(new DOMException("the storage did not answer", "TimeoutError")), 10_000);
+  });
+  try {
+    return await Promise.race([commit<T>(mode, work), late]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -205,10 +220,10 @@ let saving: Promise<unknown> = Promise.resolve();
 export function save(record: SyncRecord): Promise<void> {
   const k = key;
   const h = held;
-  if (!k || !h) return Promise.resolve();
+  if (!k || !h || clearing > 0) return Promise.resolve();
   const run = saving.then(async () => {
     const sealed = await seal(record, k, h.credential, h.salt);
-    if (key !== k) return;
+    if (key !== k || clearing > 0) return;
     await write(sealed);
     held = sealed;
   });
@@ -217,21 +232,32 @@ export function save(record: SyncRecord): Promise<void> {
 }
 
 /** Forgets the sealed record here.
- * A delete that does not commit rejects (`forget`) and keeps what this page held. Once deleted, the
- * passkey manager is told the passkey guards nothing (where the browser can). */
+ * The key stays until the delete commits: while a sealed copy may still be here, a change that
+ * cannot be undone still asks for the passkey. A delete that does not commit rejects (`forget`)
+ * and keeps what this page held. Once deleted, the passkey manager is told the passkey guards
+ * nothing (where the browser can). */
 export async function clear(): Promise<void> {
-  const [k, h] = [key, held];
-  key = null;
-  held = null;
-  await saving;
-  // Which passkey guarded it: held when unlocked, else read (a locked page never opened it).
-  const entry = h ?? (await read().catch(() => undefined));
+  clearing++;
   try {
-    await tx("readwrite", (s) => s.delete(ENTRY));
-  } catch {
-    if (key === null) [key, held] = [k, h];
-    throw new VaultError("forget");
+    await saving;
+    const k = key;
+    // Which passkey guarded it: held when unlocked, else read (a locked page never opened it).
+    const entry = held ?? (await read().catch(() => undefined));
+    try {
+      await tx("readwrite", (s) => s.delete(ENTRY));
+    } catch {
+      throw new VaultError("forget");
+    }
+    if (key === k) [key, held] = [null, null];
+    // Nothing sealed here any more: that passkey guards nothing.
+    if (entry) void forgetPasskey(entry.credential);
+  } finally {
+    clearing--;
   }
-  // Nothing sealed here any more: that passkey guards nothing.
-  if (entry) void forgetPasskey(entry.credential);
+}
+
+/** This page stops using the key; what this browser holds stays (an account that is gone here
+ * whose sealed copy could not be deleted). */
+export function drop() {
+  [key, held] = [null, null];
 }

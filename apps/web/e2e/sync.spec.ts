@@ -90,17 +90,25 @@ const FORMS = {
   tv: { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 },
 };
 
-/** On a load the test marks (a session flag), IndexedDB answers 5 s late: the check for a remembered account is slow. */
+/** On a load the test marks (a session flag), IndexedDB answers 5 s late: the check for a remembered account is slow.
+ * Other marks make the first open fail, or every open on every load until the mark is removed. */
 function slowVaultOnMark() {
+  const failing = () => {
+    const failed = { onsuccess: null, onerror: null, onupgradeneeded: null, result: null, error: new DOMException("unreadable", "UnknownError") } as unknown as IDBOpenDBRequest & Record<string, unknown>;
+    setTimeout(() => (failed.onerror as ((e: Event) => void) | null)?.(new Event("error")));
+    return failed;
+  };
+  if (sessionStorage.getItem("mq.e2e.noIdb") === "1") {
+    IDBFactory.prototype.open = failing;
+    return;
+  }
   if (sessionStorage.getItem("mq.e2e.failIdb") === "1") {
     sessionStorage.removeItem("mq.e2e.failIdb");
     const open = IDBFactory.prototype.open;
-    IDBFactory.prototype.open = function (this: IDBFactory, ...args: Parameters<typeof open>) {
+    IDBFactory.prototype.open = function () {
       // Only the first open fails; the next one works again.
       IDBFactory.prototype.open = open;
-      const failed = { onsuccess: null, onerror: null, onupgradeneeded: null, result: null, error: new DOMException("unreadable", "UnknownError") } as unknown as IDBOpenDBRequest & Record<string, unknown>;
-      setTimeout(() => (failed.onerror as ((e: Event) => void) | null)?.(new Event("error")));
-      return failed;
+      return failing();
     };
     return;
   }
@@ -211,6 +219,31 @@ const go = async (page: Page, path: string) => {
   }, path);
   await expect(page).toHaveURL(new RegExp(`${path.replace(/[/?]/g, "\\$&")}$`));
 };
+/** IndexedDB deletes on `page` never commit: each transaction stays busy for `ms` (or until
+ * `restoreDeletes()`), then aborts. `restoreDeletes()` puts the real delete back. */
+async function failDeletes(page: Page, ms?: number) {
+  await page.evaluate((ms) => {
+    const del = IDBObjectStore.prototype.delete;
+    let restored = false;
+    (window as unknown as { restoreDeletes: () => void }).restoreDeletes = () => {
+      restored = true;
+      IDBObjectStore.prototype.delete = del;
+    };
+    IDBObjectStore.prototype.delete = function (...args: Parameters<typeof del>) {
+      const store = this;
+      const request = del.apply(this, args);
+      const until = ms === undefined ? Infinity : Date.now() + ms;
+      const spin = () => {
+        if (!restored && Date.now() < until) store.count().onsuccess = spin;
+        else store.transaction.abort();
+      };
+      request.addEventListener("success", spin);
+      return request;
+    };
+  }, ms);
+}
+const restoreDeletes = (page: Page) => page.evaluate(() => (window as unknown as { restoreDeletes: () => void }).restoreDeletes());
+
 const signCount = async () => {
   const { credentials } = (await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: { signCount: number }[] };
   return credentials.reduce((n, c) => n + c.signCount, 0);
@@ -452,6 +485,7 @@ test.describe.serial("sync across three devices", () => {
     film(code);
     await desk.locator('[data-f="sync-add:scan"]').click();
     await expect(desk.locator("#sync-review")).toHaveText("Approve a new device?");
+    await expect(desk.locator(".confirm").getByText("This asks for your passkey first.")).toBeVisible();
     await expect(desk.locator(".code")).toHaveCount(0);
     await shot(desk, "sync-review-desktop");
     // The browser aborts the sealed write that follows the approval.
@@ -772,8 +806,13 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator(".sync-kit-text")).toBeVisible();
     await phone.locator('[data-f="sync-kit:saved"]').click();
 
+    // Desk opens the comparison before a round found the different list: nothing to compare yet.
+    await go(desk, "/sync/fork");
+    await expect(desk.locator(".problem")).toContainText("There is nothing to compare.");
+    // A round finds it while the page is open (the tab comes back): the lists show without leaving.
+    await desk.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect(desk.locator(".sync-member", { hasText: "only on the server's list" })).toHaveCount(1);
     await go(desk, "/sync");
-    await syncNow(desk);
     await expect(state(desk)).toHaveText("The sync server lists different devices than this device knows. Compare the lists to keep syncing.");
     // Were this device off the server's list, the page says so and offers nothing to continue.
     editOnce.set(SYNC_PORTS.a, { op: "forkPreview", edit: (r) => (r.onServer = false) });
@@ -790,6 +829,8 @@ test.describe.serial("sync across three devices", () => {
     // Phone's kit is only on the server's list and goes; Desk's own kit only Desk knew.
     const serverOnly = desk.locator(".sync-member", { hasText: "only on the server's list" });
     await expect(serverOnly).toHaveCount(1);
+    // The top of the page: its title and what it is for.
+    await shot(desk, "sync-fork-top-desktop");
     await expect(serverOnly).toContainText("Removed anyway");
     await expect(serverOnly).toContainText("on Phone");
     const mineOnly = desk.locator(".set", { has: desk.locator("h2", { hasText: "Only this device knew these" }) });
@@ -830,7 +871,7 @@ test.describe.serial("sync across three devices", () => {
     await shot(desk, "sync-desktop");
   });
 
-  test("Desk removes the TV, then stops syncing, and forgets this browser", async () => {
+  test("Desk removes the TV and a kit while a Forget hangs, then stops syncing, and forgets this browser", async () => {
     const row = member(desk, "Living room TV");
     await row.locator('[data-f$=":remove"]').click();
     await expect(row.locator(".sync-ask")).toContainText("Remove Living room TV? It stops syncing");
@@ -844,16 +885,32 @@ test.describe.serial("sync across three devices", () => {
     await tv.keyboard.press("Enter");
     await expect(tv.locator("main > .st.bad")).toContainText("This device was removed from your sync account.");
 
-    // A removed kit stops being listed.
+    const credentials = async () => ((await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: unknown[] }).credentials.length;
+    const held = await credentials();
+    // Forget in this browser, whose delete the storage never answers: while it may still hold the
+    // sealed copy, removing a kit asks for the passkey.
+    await failDeletes(desk);
+    await desk.locator('[data-f="sync:forget-browser"]').click();
     const kitRow = member(desk, "Recovery kit");
     await expect(kitRow).toContainText("on Phone");
+    const signed = await signCount();
     await kitRow.locator('[data-f$=":remove"]').click();
     await expect(kitRow.locator(".sync-ask")).toContainText("Remove this recovery kit? It stops working.");
     await kitRow.locator('[data-f$=":confirm"]').click();
+    // A removed kit stops being listed.
     await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
+    expect(await signCount()).toBeGreaterThan(signed);
+    // A storage that never answers fails the Forget after 10 s: the page says so and stays remembered.
+    await expect(desk.locator(".sync-storage")).toContainText("This browser could not forget the sync account", { timeout: 15_000 });
+    await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
+    await restoreDeletes(desk);
+    await desk.locator('[data-f="sync:forget-again"]').click();
+    await expect(desk.locator(".sync-storage")).toHaveCount(0);
+    await expect(desk.getByText("Not remembered: the sync key lasts until this tab closes or reloads.")).toBeVisible();
+    await expect.poll(credentials).toBe(held - 1);
+    await desk.locator('[data-f="sync:remember"]').click();
+    await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
 
-    const credentials = async () => ((await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: unknown[] }).credentials.length;
-    const held = await credentials();
     // Count the passkey prompts: stopping sync asks it first.
     await desk.evaluate(() => {
       const w = window as unknown as { asked: number };
@@ -864,10 +921,20 @@ test.describe.serial("sync across three devices", () => {
         return get(o);
       };
     });
+    // The browser aborts the delete of the sealed copy after 1.5 s.
+    await failDeletes(desk, 1500);
     await desk.locator('[data-f="sync:leave"]').click();
-    await expect(desk.locator('[data-f="sync:start"]')).toBeVisible();
     await expect(desk.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
+    // Said once the delete was tried: the note is there when the notice is, with Try again.
+    expect(await desk.locator(".sync-storage").isVisible()).toBe(true);
+    await expect(desk.locator(".sync-storage")).toContainText("This browser could not forget the sync account: its sealed copy is still here.");
+    await expect(desk.locator('[data-f="sync:start"]')).toBeVisible();
     expect(await desk.evaluate(() => (window as unknown as { asked: number }).asked)).toBeGreaterThan(0);
+    expect((await kept(desk)).text).toContain("credential");
+    await shot(desk, "sync-left-forget-failed-desktop");
+    await restoreDeletes(desk);
+    await desk.locator('[data-f="sync:forget-again"]').click();
+    await expect(desk.locator(".sync-storage")).toHaveCount(0);
     // Nothing is sealed here any more, and the passkey that guarded it was dropped by its manager.
     await expect.poll(credentials).toBe(held - 1);
     expect((await kept(desk)).text).not.toContain("credential");
@@ -878,10 +945,10 @@ test.describe.serial("sync across three devices", () => {
   test("Phone reloads without remembering: the page no longer holds the account", async () => {
     await go(phone, "/sync");
     await expect(phone.getByText("This browser cannot lock the sync key with a passkey")).toBeVisible();
-    // The sync server will not let it leave (here: a different list): it stops syncing here only.
-    failOnce.set(SYNC_PORTS.b, { op: "signOut", code: "fork" });
+    // The sync server cannot take the leave (here: it answers 502): this device stops syncing here only.
+    failOnce.set(SYNC_PORTS.b, { op: "signOut" });
     await phone.locator('[data-f="sync:leave"]').click();
-    await expect(phone.getByText("The sync server lists different devices than this device knows. Compare the lists to keep syncing.").first()).toBeVisible();
+    await expect(phone.locator(".set .st.bad").first()).toContainText("This device still syncs.");
     await phone.locator('[data-f="sync:leave-here"]').click();
     await expect(phone.getByText("This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again.")).toBeVisible();
     expect(asked.filter((a) => a.port === SYNC_PORTS.b && a.op === "signOut")).toHaveLength(2);
@@ -895,6 +962,30 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator("main h1")).toBeVisible();
     expect(await phone.locator(".qrbox").count()).toBe(0);
     await expect(phone.locator(".qrbox svg")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("a TV whose storage cannot be read at all goes on without remembering", async () => {
+    await tv.evaluate(() => sessionStorage.setItem("mq.e2e.noIdb", "1"));
+    await tv.goto("/settings");
+    // Settings names the storage, not a passkey lock.
+    await expect(tv.locator('[data-f="settings:sync"]')).toContainText("This browser could not check whether it remembers a sync account");
+    await go(tv, "/sync");
+    await expect(tv.locator('[data-f="sync:recheck"]')).toBeVisible();
+    await expect(tv.locator('[data-f="sync:continue"]')).toHaveCount(0);
+    await tv.locator('[data-f="sync:recheck"]').focus();
+    await tv.keyboard.press("Enter");
+    // The second failed check offers to go on in this tab only.
+    await expect(tv.locator('[data-f="sync:continue"]')).toBeVisible();
+    await shot(tv, "sync-unreadable-tv");
+    await tv.locator('[data-f="sync:continue"]').focus();
+    await tv.keyboard.press("Enter");
+    await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
+    await go(tv, "/pair");
+    await expect(tv.locator(".qrbox svg")).toBeVisible();
+    // A storage that works again for the checks that follow.
+    await tv.evaluate(() => sessionStorage.removeItem("mq.e2e.noIdb"));
+    await tv.goto("/sync");
+    await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
   });
 
   test("nothing secret reaches storage, history, the URL or the console", async () => {

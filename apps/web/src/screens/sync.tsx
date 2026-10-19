@@ -23,7 +23,7 @@ import ShieldAlert from "lucide-solid/icons/shield-alert";
 import Trash from "lucide-solid/icons/trash";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import X from "lucide-solid/icons/x";
-import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { privateLink } from "../core/client";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import * as sync from "../core/sync";
@@ -196,8 +196,9 @@ function Locked() {
       setBusy(false);
     }
   };
-  // The storage could not be read: it may hold an account, so the page waits for a check or a forget.
-  const unreadable = () => sync.memoryProblem() === w.vaultUnreadable;
+  // The storage could not be read: it may hold an account, so the page waits for a check or a forget,
+  // and after a second failed check it may go on in memory only.
+  const unreadable = () => sync.unreadable() > 0;
   return (
     <section class="set">
       <Show when={!unreadable()}>
@@ -224,6 +225,14 @@ function Locked() {
           {w.forgetBrowser}
         </button>
       </div>
+      <Show when={sync.unreadable() > 1}>
+        <p class="note small sync-lead">{w.continueText}</p>
+        <div class="acts">
+          <button class="btn" data-f="sync:continue" onClick={sync.continueWithout}>
+            {w.continueWithout}
+          </button>
+        </div>
+      </Show>
     </section>
   );
 }
@@ -231,6 +240,7 @@ function Locked() {
 function NotJoined() {
   return (
     <>
+      <StorageNote />
       <Show when={sync.problem()}>{(p) => <Said tone="bad">{p().words}</Said>}</Show>
       <Show when={!sync.problem() && sync.notice()}>{(n) => <Said tone="ok">{n()}</Said>}</Show>
       <section class="set">
@@ -483,7 +493,7 @@ function Remember() {
       <Show
         when={sync.remembered()}
         fallback={
-          <Show when={can()} fallback={<p class="note small sync-lead">{can.loading ? "" : w.noPasskey}</p>}>
+          <Show when={can() && !sync.memoryOnly()} fallback={<p class="note small sync-lead">{can.loading ? "" : sync.memoryOnly() ? w.memoryOnly : w.noPasskey}</p>}>
             <p class="note small sync-lead">{w.rememberText}</p>
             <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
             <p class="note small sync-lead">{w.notRemembered}</p>
@@ -554,7 +564,9 @@ function Leave() {
         setUnsent(true);
         focusSoon('[data-f="sync:leave-again"]');
       }
-      if (stuck(codeOf(e))) setRefused(true);
+      // The sync server would not or could not let it leave (a different list, or a server that is
+      // gone): stopping here only still works. Not for edits that wait, or a passkey that said no.
+      if (codeOf(e) !== "unsent" && codeOf(e) !== "passkey") setRefused(true);
       setError(say(e, "leave"));
     } finally {
       setBusy(false);
@@ -700,6 +712,11 @@ function StorageNote() {
           <Show when={p() === w.saveFailed}>
             <button class="btn" data-f="sync:save-again" onClick={() => void sync.saveAgain()}>
               {w.saveAgain}
+            </button>
+          </Show>
+          <Show when={p() === w.forgetFailed}>
+            <button class="btn" data-f="sync:forget-again" onClick={() => void sync.forgetBrowser().catch(() => undefined)}>
+              {w.retry}
             </button>
           </Show>
         </div>
@@ -869,6 +886,9 @@ export function AddDevice() {
                       }}
                     >
                       <Field label={canScan() ? w.pasteLabel : w.pasteOnly} placeholder={w.pasteHint} value={code()} onInput={setCode} fkey="sync-add:code" mono />
+                      <Show when={sync.remembered()}>
+                        <p class="note small">{w.passkeyAsk}</p>
+                      </Show>
                       <button class="btn" classList={{ primary: !canScan() }} type="submit" data-f="sync-add:approve" aria-busy={busy() || undefined} aria-disabled={busy() || !code().trim() || undefined}>
                         <Show when={busy()} fallback={<Check aria-hidden />}>
                           <i class="spin" aria-hidden="true" />
@@ -884,6 +904,9 @@ export function AddDevice() {
                   <section class="confirm" aria-labelledby="sync-review">
                     <h2 id="sync-review">{w.reviewAsk}</h2>
                     <p class="note">{w.reviewText}</p>
+                    <Show when={sync.remembered()}>
+                      <p class="note small">{w.passkeyAsk}</p>
+                    </Show>
                     <div class="acts">
                       <button class="btn primary" data-f="sync-add:review-approve" onClick={() => void approve(qr())}>
                         <Check aria-hidden />
@@ -1153,9 +1176,10 @@ export function ForkReview() {
   const navigate = useNavigate();
   const done = () => navigate("/sync", { replace: true });
   // Only a device whose list differs compares: anything else would rotate the key for nothing.
-  // Read once: continuing clears the fork before the page leaves, which must not flip it.
-  const fork = untrack(() => sync.problem()?.code === "fork");
-  const forked = () => fork;
+  // A round may find the different list after the page opened (just unlocked); continuing clears
+  // it before the page leaves, which must not flip it back.
+  const [forked, setForked] = createSignal(sync.problem()?.code === "fork");
+  createEffect(() => sync.problem()?.code === "fork" && setForked(true));
   const [data, { refetch }] = createResource(() => forked() || undefined, () => sync.forkPreview());
   const got = () => (data.error ? undefined : data());
   const sides = () => {
