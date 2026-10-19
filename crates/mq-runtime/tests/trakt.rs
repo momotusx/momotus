@@ -1250,7 +1250,7 @@ async fn a_scrobble_racing_a_pull_lands_once() {
     view.report_progress(at(95), MINUTES, false);
     fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
     // Trakt also has an older play of it from another app, and another
-    // episode; the stop answers while the round runs.
+    // episode; the stop answers only after the round reached its writes.
     fake.list(
         "/sync/history",
         vec![
@@ -1266,7 +1266,7 @@ async fn a_scrobble_racing_a_pull_lands_once() {
         vec![Reply {
             status: 201,
             body: answer.to_string(),
-            delay: Duration::from_millis(1500),
+            delay: Duration::from_secs(8),
         }],
     );
     drop(view);
