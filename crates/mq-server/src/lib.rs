@@ -69,13 +69,42 @@ pub enum Upstream {
     },
 }
 
-/// An addon's subtitle file, served converted.
-#[derive(Debug, Clone, PartialEq)]
+/// A subtitle file, served converted.
+#[derive(Clone)]
 struct Subtitle {
-    url: String,
     lang: String,
-    /// The install whose answer named the file: its scope, no headers.
-    addon_url: Option<Url>,
+    origin: Origin,
+}
+
+#[derive(Clone)]
+enum Origin {
+    /// An addon's file. `addon_url` is the install whose answer named it:
+    /// its scope, no headers.
+    Url { url: String, addon_url: Option<Url> },
+    /// A file the core fetches itself, compared by `key`.
+    Fetch { key: String, fetch: Fetch },
+}
+
+/// How the core fetches a file of a built-in source: its bytes, or `None`
+/// when there are none, which the source has already reported.
+pub type Fetch =
+    Arc<dyn Fn() -> futures_util::future::BoxFuture<'static, Option<Vec<u8>>> + Send + Sync>;
+
+impl PartialEq for Subtitle {
+    fn eq(&self, other: &Self) -> bool {
+        self.lang == other.lang
+            && match (&self.origin, &other.origin) {
+                (
+                    Origin::Url { url, addon_url },
+                    Origin::Url {
+                        url: u,
+                        addon_url: a,
+                    },
+                ) => (url, addon_url) == (u, a),
+                (Origin::Fetch { key, .. }, Origin::Fetch { key: k, .. }) => key == k,
+                _ => false,
+            }
+    }
 }
 
 /// The addresses an install's own host adds to its playbacks' scope
@@ -701,14 +730,33 @@ impl SubtitleSlot {
     /// install whose answer named the file: the fetch reaches only its own
     /// host among private addresses. `None` once the playback was released.
     pub fn add(&self, url: &str, lang: &str, addon_url: Option<&Url>) -> Option<String> {
+        let origin = Origin::Url {
+            url: url.to_owned(),
+            addon_url: addon_url.cloned(),
+        };
+        self.push(lang, origin)
+    }
+
+    /// The URL that serves what `fetch` gives as UTF-8 WebVTT, the same for
+    /// the same `key`. `fetch` runs on every request of the URL, ends with
+    /// the playback, and reports its own failures: the route answers them
+    /// with an empty WebVTT and reports only a file it cannot read.
+    pub fn add_fetched(&self, key: &str, lang: &str, fetch: Fetch) -> Option<String> {
+        let origin = Origin::Fetch {
+            key: key.to_owned(),
+            fetch,
+        };
+        self.push(lang, origin)
+    }
+
+    fn push(&self, lang: &str, origin: Origin) -> Option<String> {
         let playback = self.playback.upgrade()?;
         if playback.released.is_cancelled() {
             return None;
         }
         let subtitle = Subtitle {
-            url: url.to_owned(),
             lang: lang.to_owned(),
-            addon_url: addon_url.cloned(),
+            origin,
         };
         let mut subtitles = lock(&playback.subtitles);
         let id = match subtitles.iter().position(|s| *s == subtitle) {
@@ -892,42 +940,44 @@ async fn serve_subtitle(
     let Some(subtitle) = subtitle else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let opts = RequestOptions {
-        priority: Priority::Playback,
-        timeout: Duration::from_secs(20),
-        ..Default::default()
-    };
-    let http = shared.http.scoped(&scope(subtitle.addon_url.as_ref()));
-    let fetch = http.get(&subtitle.url, &opts);
     let track = format!(
         "http://{}/sub/{token}/{id}/{}.vtt",
         shared.addr,
         sanitize(&subtitle.lang)
     );
-    // Release ends the fetch too.
-    let vtt = match playback.released.run_until_cancelled(fetch).await {
-        None => return StatusCode::NOT_FOUND.into_response(),
-        Some(Ok(response)) => {
-            to_vtt(&response.body, &subtitle.lang).ok_or(SubtitleTrouble::Unreadable)
-        }
-        Some(Err(e)) => {
-            tracing::warn!("subtitle upstream failed: {}", e.kind());
-            Err(match e {
-                HttpError::Timeout(_) | HttpError::Network(_) => SubtitleTrouble::Unreachable,
-                HttpError::Status { status, .. }
-                    if status >= 500 || matches!(status, 408 | 429) =>
-                {
-                    SubtitleTrouble::Unreachable
+    let read =
+        |bytes: &[u8]| to_vtt(bytes, &subtitle.lang).ok_or(Some(SubtitleTrouble::Unreadable));
+    // Release ends the fetch too. `Err(None)`: its source said it already.
+    let vtt = match subtitle.origin {
+        Origin::Url { url, addon_url } => {
+            let opts = RequestOptions {
+                priority: Priority::Playback,
+                timeout: Duration::from_secs(20),
+                ..Default::default()
+            };
+            let http = shared.http.scoped(&scope(addon_url.as_ref()));
+            match playback
+                .released
+                .run_until_cancelled(http.get(&url, &opts))
+                .await
+            {
+                None => return StatusCode::NOT_FOUND.into_response(),
+                Some(Ok(response)) => read(&response.body),
+                Some(Err(e)) => {
+                    tracing::warn!("subtitle upstream failed: {}", e.kind());
+                    Err(Some(trouble(&e)))
                 }
-                // Gone, refused, too large, or an address it may not reach:
-                // asking again gives the same.
-                _ => SubtitleTrouble::Unreadable,
-            })
+            }
         }
+        Origin::Fetch { fetch, .. } => match playback.released.run_until_cancelled(fetch()).await {
+            None => return StatusCode::NOT_FOUND.into_response(),
+            Some(Some(bytes)) => read(&bytes),
+            Some(None) => Err(None),
+        },
     };
     let vtt = vtt.unwrap_or_else(|trouble| {
         let report = lock(&playback.trouble).clone();
-        if let Some(report) = report {
+        if let Some((report, trouble)) = report.zip(trouble) {
             report(&track, trouble);
         }
         // An empty track, never an error: a player that meets an error on a
@@ -939,6 +989,18 @@ async fn serve_subtitle(
 
 /// What a subtitle that could not be served answers.
 const EMPTY_VTT: &str = "WEBVTT\n\n";
+
+fn trouble(e: &HttpError) -> SubtitleTrouble {
+    match e {
+        HttpError::Timeout(_) | HttpError::Network(_) => SubtitleTrouble::Unreachable,
+        HttpError::Status { status, .. } if *status >= 500 || matches!(status, 408 | 429) => {
+            SubtitleTrouble::Unreachable
+        }
+        // Gone, refused, too large, or an address it may not reach: asking
+        // again gives the same.
+        _ => SubtitleTrouble::Unreadable,
+    }
+}
 
 async fn serve(
     State(shared): State<Arc<Shared>>,

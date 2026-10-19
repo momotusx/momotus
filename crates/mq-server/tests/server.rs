@@ -756,6 +756,99 @@ async fn a_failing_subtitle_answers_empty_webvtt_and_says_why() {
     assert!(http.get(&quiet, &local()).await.is_err(), "released");
 }
 
+/// A built-in source's file, fetched by the core itself: served as WebVTT,
+/// one URL per key; a fetch that has nothing answers an empty WebVTT and
+/// reports nothing (its source did), a file it cannot read is reported.
+#[tokio::test]
+async fn a_fetched_subtitle_is_served_and_says_only_what_its_source_cannot() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = server.register(local_upstream(PLAYBACK.into()), "v.mkv");
+    let slot = lease.subtitles();
+    let heard: Arc<Mutex<Vec<(String, SubtitleTrouble)>>> = Arc::default();
+    let log = heard.clone();
+    slot.on_trouble(move |url, trouble| log.lock().unwrap().push((url.to_owned(), trouble)));
+    let calls = Arc::new(AtomicU64::new(0));
+    let fetched = |answer: Option<&'static [u8]>| -> mq_server::Fetch {
+        let calls = calls.clone();
+        Arc::new(move || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move { answer.map(<[u8]>::to_vec) })
+        })
+    };
+    let srt: &'static [u8] = "1\r\n00:00:01,000 --> 00:00:02,000\r\nMerhaba\r\n".as_bytes();
+    let url = slot
+        .add_fetched("160120:5", "tur", fetched(Some(srt)))
+        .unwrap();
+    assert!(url.ends_with("/tur.vtt"), "{url}");
+    assert_eq!(
+        slot.add_fetched("160120:5", "tur", fetched(None)),
+        Some(url.clone()),
+        "one address per key"
+    );
+    let text = text(&http.get(&url, &local()).await.unwrap());
+    assert!(
+        text.contains("00:00:01.000 --> 00:00:02.000\nMerhaba"),
+        "{text}"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    let none = slot.add_fetched("1:1", "tur", fetched(None)).unwrap();
+    let garbage = slot
+        .add_fetched("1:2", "tur", fetched(Some(b"no cues")))
+        .unwrap();
+    assert_eq!(text_of(&http, &none).await, "WEBVTT\n\n");
+    assert_eq!(text_of(&http, &garbage).await, "WEBVTT\n\n");
+    let told = std::mem::take(&mut *heard.lock().unwrap());
+    assert_eq!(told, vec![(garbage, SubtitleTrouble::Unreadable)]);
+
+    drop(lease);
+    assert!(http.get(&url, &local()).await.is_err(), "released");
+}
+
+/// A fetch still running when its playback ends: the route answers 404 and
+/// the fetch is dropped.
+#[tokio::test]
+async fn release_ends_a_fetch_in_progress() {
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = server.register(local_upstream(PLAYBACK.into()), "v.mkv");
+    let started = Arc::new(tokio::sync::Notify::new());
+    let begun = started.clone();
+    let url = lease
+        .subtitles()
+        .add_fetched(
+            "slow",
+            "tur",
+            Arc::new(move || {
+                let begun = begun.clone();
+                Box::pin(async move {
+                    begun.notify_one();
+                    std::future::pending::<Option<Vec<u8>>>().await
+                })
+            }),
+        )
+        .unwrap();
+    let asked = tokio::spawn({
+        let http = http.clone();
+        async move { http.get(&url, &local()).await }
+    });
+    started.notified().await;
+    drop(lease);
+    let answer = tokio::time::timeout(Duration::from_secs(5), asked)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(answer, Err(mq_http::HttpError::Status { status: 404, .. })),
+        "{answer:?}"
+    );
+}
+
+async fn text_of(http: &HttpClient, url: &str) -> String {
+    text(&http.get(url, &local()).await.unwrap())
+}
+
 /// Live: time range requests through the loopback server against an origin
 /// that redirects (archive.org). Run with `--ignored --nocapture`.
 #[tokio::test]
