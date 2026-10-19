@@ -175,9 +175,13 @@ struct FindAddonsScreen: View {
             StatusDot(tone: .warn, text: W.loading)
                 .padding(.bottom, Theme.Space.xs)
         } else if current?.state == .ready {
-            Button(action: retry) { Label(W.refresh, glyph: "rotate-cw") }
-                .buttonStyle(PillButtonStyle())
-                .focused($focus, equals: .refresh)
+            // On a phone the word would push the Community chip under the edge fade.
+            Button(action: retry) {
+                if metrics.wide { Label(W.refresh, glyph: "rotate-cw") } else { Glyph("rotate-cw") }
+            }
+            .buttonStyle(PillButtonStyle())
+            .accessibilityLabel(W.refresh)
+            .focused($focus, equals: .refresh)
         }
     }
 
