@@ -13,7 +13,7 @@ use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
-use mq_library::{AllowedRow, ContinueItem, Table};
+use mq_library::{AllowedRow, ContinueItem, Policy, Table};
 use mq_protocol::{ResourcePath, ResourceResponse};
 use serde::Serialize;
 use std::pin::Pin;
@@ -755,28 +755,42 @@ pub(crate) fn kids_tile(row: &AllowedRow) -> Tile {
     }
 }
 
+/// Whether a Continue Watching tile may show: the title passes the policy,
+/// and for kids its video is one of the title's (a row that pairs an
+/// allowed id with another title's video does not).
+fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool {
+    policy.allows(kind, id) && (!policy.kids() || Policy::belongs(id, video))
+}
+
 /// Continue Watching: unfinished videos plus Next Up (the released episode
 /// after a finished one), newest activity first. For kids, titles off the
 /// list are left out before any meta is asked for, and again when the
 /// tiles land (plans/m11-kids.md 4.2).
 // ponytail: runs the indexed queries on the async thread; each is a single
 // LIMIT 20 read, move to spawn_blocking if traces show it on the hot path.
-// For kids the 20 are taken before the list filter, so 20 newer plays of
-// removed titles leave the row short; read more if that shows up.
+// A kids profile reads every played title and filters before taking 20, so
+// newer plays of titles off the list never crowd out allowed ones.
 async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
     let library = core.library();
     let policy = core.policy();
+    let read = if policy.kids() {
+        usize::MAX >> 1
+    } else {
+        ROW_TILES
+    };
     let unfinished: Vec<ContinueItem> = library
-        .continue_watching(core.profile(), ROW_TILES)
+        .continue_watching(core.profile(), read)
         .unwrap_or_default()
         .into_iter()
-        .filter(|item| policy.allows(&item.kind, &item.item_id))
+        .filter(|item| shows(&policy, &item.kind, &item.item_id, &item.video_id))
+        .take(ROW_TILES)
         .collect();
     let finished: Vec<_> = library
-        .finished_series(core.profile(), ROW_TILES)
+        .finished_series(core.profile(), read)
         .unwrap_or_default()
         .into_iter()
-        .filter(|done| policy.allows("series", &done.item_id))
+        .filter(|done| shows(&policy, "series", &done.item_id, &done.video_id))
+        .take(ROW_TILES)
         .collect();
     // A new row shows at once from the library, so it never pushes the page
     // down late; artwork and Next Up follow when the metas answer.
@@ -817,7 +831,10 @@ fn apply_continue(
     mut items: Vec<(i64, Tile)>,
 ) {
     let policy = core.policy();
-    items.retain(|(_, t)| policy.allows(&t.kind, &t.id));
+    items.retain(|(_, t)| {
+        let video = t.video_id.as_deref().unwrap_or(&t.id);
+        shows(&policy, &t.kind, &t.id, video)
+    });
     items.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
     let tiles: Vec<Tile> = items.into_iter().take(ROW_TILES).map(|(_, t)| t).collect();
     let mut rows = lock(rows);

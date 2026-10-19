@@ -362,9 +362,14 @@ impl Core {
     /// Installed addons in the user's order. Rows whose manifest no longer
     /// parses are skipped rather than failing the whole list. A kids profile
     /// reads the owner's list without adult-flagged addons; its own list is
-    /// unused (plans/m11-kids.md 4.6).
+    /// unused (plans/m11-kids.md 4.6). When the profile cannot be read it
+    /// reads its own list: the owner's, whose addresses can hold keys, only
+    /// for a profile known to be kids.
     pub fn installed_addons(&self) -> Result<Vec<InstalledAddon>, CoreError> {
-        let kids = self.policy().kids();
+        let kids = matches!(
+            self.library().policy_checked(self.profile()),
+            Ok((policy, _)) if policy.kids()
+        );
         let rows = self
             .library()
             .addons(if kids { OWNER } else { self.profile() })?;

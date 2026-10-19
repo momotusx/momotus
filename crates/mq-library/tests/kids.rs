@@ -979,3 +979,31 @@ fn an_older_allow_on_a_full_list_loses_quietly() {
         Err(LibraryError::ListFull)
     ));
 }
+
+/// A kids Library holds the counted 1,000, the same ones the policy
+/// counts: the newest allow past the cap is not in it.
+#[test]
+fn the_kids_library_stops_at_the_counted_thousand() {
+    let lib = kid(&[]);
+    for i in 0..1000 {
+        let row = entry(&format!("tt{i:04}"), "movie", i);
+        lib.write_allowed("kid", &row, &hlc(100 + i as u64, 1))
+            .unwrap();
+    }
+    let extra = json!({"profile": "kid", "itemId": "tt5000", "kind": "movie",
+                       "name": "T", "allowed": true, "addedMs": 5000});
+    lib.apply(&[allow_record("kid", extra, 5000)]).unwrap();
+    let entries = lib.allowed_entries("kid").unwrap();
+    assert_eq!(entries.len(), 1000);
+    assert!(entries.iter().all(|e| e.item.item_id != "tt5000"));
+    let counted: Vec<String> = lib
+        .allowed_list("kid")
+        .unwrap()
+        .counted
+        .into_iter()
+        .map(|r| r.item_id)
+        .collect();
+    let mut shown: Vec<String> = entries.into_iter().map(|e| e.item.item_id).collect();
+    shown.sort();
+    assert_eq!(shown, counted);
+}

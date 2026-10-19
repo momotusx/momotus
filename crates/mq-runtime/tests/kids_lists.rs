@@ -415,7 +415,9 @@ async fn a_kids_library_is_its_list() {
     allow(&kid, "tt1", "movie", "Up", 1);
     allow(&kid, "tt2", "series", "Bluey", 2);
     played(&kid, "series", "tt2", "tt2:1:3", 50, false);
-    // A library row for a title not on the list (imported or synced).
+    // A title not on the list, played and in the library (an import, a
+    // sync): the library row is written after the play's cache row.
+    played(&kid, "movie", "tt9", "tt9", 60, false);
     let other = LibraryItemRow {
         item_id: "tt9".into(),
         kind: "movie".into(),
@@ -427,7 +429,11 @@ async fn a_kids_library_is_its_list() {
     kid.library()
         .upsert_item(kid.profile(), &other, true, &kid.hlc())
         .unwrap();
-    played(&kid, "movie", "tt9", "tt9", 60, false);
+    let held = kid.library().library(kid.profile()).unwrap();
+    assert!(
+        held.iter().any(|e| e.item.item_id == "tt9"),
+        "in library_items"
+    );
     let library = LibraryView::open(&kid);
     assert_eq!(library_ids(&library), ["tt2", "tt1"], "last watched first");
     let bluey = &library.snapshot().items[0];
@@ -477,4 +483,104 @@ async fn a_kid_reads_the_owners_addons_without_adult_ones() {
         .map(|a| a.manifest.name)
         .collect();
     assert_eq!(names, ["normal", "adult"], "the owner keeps both");
+}
+
+/// Many newer plays of titles off the list (an owner's prune) never crowd
+/// the allowed ones out of Continue Watching or Next Up.
+#[tokio::test]
+async fn continue_watching_filters_before_it_takes_twenty() {
+    let fixture = Fixture::default();
+    fixture.metas.lock().unwrap().insert(
+        "/meta/series/tt2.json".into(),
+        json!({"meta": {"id": "tt2", "type": "series", "name": "Bluey", "videos": [
+            {"id": "tt2:1:1", "title": "One", "season": 1, "episode": 1,
+             "released": "2020-01-01T00:00:00Z"},
+            {"id": "tt2:1:2", "title": "Two", "season": 1, "episode": 2,
+             "released": "2020-01-08T00:00:00Z"}]}}),
+    );
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", 1);
+    allow(&kid, "tt2", "series", "Bluey", 2);
+    played(&kid, "movie", "tt1", "tt1", 10, false);
+    played(&kid, "series", "tt2", "tt2:1:1", 11, true);
+    for i in 0..25 {
+        let id = format!("tt1{i:02}");
+        played(&kid, "movie", &id, &id, 100 + i, false);
+        let show = format!("tt3{i:02}");
+        played(&kid, "series", &show, &format!("{show}:1:1"), 200 + i, true);
+    }
+    let home = HomeView::open(&kid);
+    until("the allowed play and its Next Up", || {
+        let tiles: Vec<(String, Option<String>)> = home
+            .snapshot()
+            .rows
+            .into_iter()
+            .filter(|r| r.row_id == CONTINUE_ROW_ID)
+            .flat_map(|r| r.tiles)
+            .map(|t| (t.id, t.video_id))
+            .collect();
+        tiles.contains(&("tt1".into(), Some("tt1".into())))
+            && tiles.contains(&("tt2".into(), Some("tt2:1:2".into())))
+    })
+    .await;
+}
+
+/// A progress row that pairs an allowed id with another title's video
+/// (an import) gives no tile.
+#[tokio::test]
+async fn a_progress_row_with_another_titles_video_shows_no_tile() {
+    let fixture = Fixture::default();
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "series", "Show", 1);
+    allow(&kid, "tt2", "movie", "Up", 2);
+    played(&kid, "series", "tt1", "tt10:1:1", 20, false);
+    played(&kid, "movie", "tt2", "tt2", 10, false);
+    let home = HomeView::open(&kid);
+    until("the row", || row_ids(&home, CONTINUE_ROW_ID) == ["tt2"]).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(row_ids(&home, CONTINUE_ROW_ID), ["tt2"]);
+}
+
+/// A profile whose access cannot be read reads its own addons, never the
+/// owner's (whose addresses can hold keys).
+#[tokio::test]
+async fn an_unreadable_profile_reads_its_own_addons() {
+    let fixture = Fixture::default();
+    let dir = std::env::temp_dir().join(format!("mq-kids-addons-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let owner = Core::open(mq_runtime::CoreConfig {
+        data_dir: dir.clone(),
+        profile_id: OWNER.into(),
+        device_id: 0,
+    })
+    .unwrap();
+    let owners = fixture.addon("owners", false).await;
+    owner
+        .library()
+        .set_addons(OWNER, &[owners], &owner.hlc())
+        .unwrap();
+    let p = owner.create_profile("P", "owl").unwrap();
+    let own = fixture.addon("own", false).await;
+    owner
+        .library()
+        .set_addons(&p, &[own], &owner.hlc())
+        .unwrap();
+    rusqlite::Connection::open(dir.join("library.sqlite"))
+        .unwrap()
+        .execute(
+            "UPDATE profile_access SET kids = 'unreadable' WHERE profile_id = ?1",
+            [&p],
+        )
+        .unwrap();
+    let names: Vec<String> = owner
+        .for_profile(&p)
+        .installed_addons()
+        .unwrap()
+        .into_iter()
+        .map(|a| a.manifest.name)
+        .collect();
+    assert_eq!(names, ["own"]);
+    drop(owner);
+    let _ = std::fs::remove_dir_all(dir);
 }
