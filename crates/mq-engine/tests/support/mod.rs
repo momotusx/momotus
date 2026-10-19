@@ -1,8 +1,11 @@
 //! A seeder engine with a small two-file torrent on loopback, shared by the
 //! engine and server integration tests.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::io::{Read, Write};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use mq_engine::{Engine, EngineConfig, FileHint, TorrentHandle};
@@ -100,4 +103,60 @@ async fn wait_complete(engine: &Engine, t: TorrentHandle) {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     panic!("seeder never verified its data");
+}
+
+/// An HTTP tracker fixture on `[::1]`: every request gets `answer`, then the
+/// connection closes, or with `keep_alive` waits for the next request on
+/// it. Counts accepted connections and requests.
+#[allow(dead_code)] // only the tracker tests use it
+pub struct HttpTracker {
+    pub url: String,
+    connections: Arc<AtomicUsize>,
+    requests: Arc<AtomicUsize>,
+}
+
+#[allow(dead_code)]
+impl HttpTracker {
+    pub fn start(answer: Vec<u8>, keep_alive: bool) -> HttpTracker {
+        let listener = std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0)).unwrap();
+        let url = format!("http://{}/announce", listener.local_addr().unwrap());
+        let (connections, requests) =
+            (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        let (c, r) = (connections.clone(), requests.clone());
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                c.fetch_add(1, Ordering::SeqCst);
+                let (r, answer) = (r.clone(), answer.clone());
+                std::thread::spawn(move || {
+                    loop {
+                        let mut head = Vec::new();
+                        let mut buf = [0u8; 1024];
+                        while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                            match stream.read(&mut buf) {
+                                Ok(0) | Err(_) => return,
+                                Ok(n) => head.extend_from_slice(&buf[..n]),
+                            }
+                        }
+                        r.fetch_add(1, Ordering::SeqCst);
+                        if stream.write_all(&answer).is_err() || !keep_alive {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        HttpTracker {
+            url,
+            connections,
+            requests,
+        }
+    }
+
+    pub fn connections(&self) -> usize {
+        self.connections.load(Ordering::SeqCst)
+    }
+
+    pub fn requests(&self) -> usize {
+        self.requests.load(Ordering::SeqCst)
+    }
 }

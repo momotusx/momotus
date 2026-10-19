@@ -318,3 +318,173 @@ async fn a_torrent_add_rereads_the_interfaces() {
     .await;
     assert_eq!(test_dns::own_addresses(&http), [b], "read by the add");
 }
+
+// Phase 3: trackers.
+
+/// A torrent with only `trackers`, under `scope`, for `wait`: its trackers'
+/// refusals in that time.
+async fn announce_for(scope: &[IpAddr], trackers: &[String], wait: Duration) -> u64 {
+    let (engine, _http, _dir) = engine(scope).await;
+    let before = engine.refused();
+    let _ = timeout(wait, engine.add_magnet(NOWHERE, trackers, &[])).await;
+    settle().await;
+    engine.refused().since(before).trackers
+}
+
+/// Protected runs refuse every form (at least one each); controls none.
+fn assert_trackers_refused(control: bool, trackers: u64, forms: u64) {
+    if control {
+        assert_eq!(trackers, 0, "control: nothing refused");
+    } else {
+        assert!(
+            trackers >= forms,
+            "each form refused and counted: {trackers}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_canary_http_tracker_is_never_contacted() {
+    for control in [false, true] {
+        let scope = if control { vec![V4, V6] } else { vec![] };
+        // One canary per form: the IPv4 literal, its mapped form, a test
+        // name, `localhost` (the system resolver), the `[::1]` literal.
+        let p = [V4, V4, V4, V4, V6].map(|ip| Canary::tcp(ip, 0));
+        test_dns::set("canary-http.c27.test", &[V4]);
+        let port = |i: usize| p[i].addr().port();
+        let trackers = [
+            format!("http://{}/announce", p[0].addr()),
+            format!("http://[::ffff:127.0.0.1]:{}/announce", port(1)),
+            format!("http://canary-http.c27.test:{}/announce", port(2)),
+            format!("http://localhost:{}/announce", port(3)),
+            format!("http://{}/announce", p[4].addr()),
+        ];
+        let refused = announce_for(&scope, &trackers, Duration::from_secs(3)).await;
+        assert_canaries(control, &p.each_ref());
+        assert_trackers_refused(control, refused, 5);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_tracker_redirect_is_not_followed() {
+    let target = Canary::tcp(V4, 0);
+    let redirect = format!(
+        "HTTP/1.1 302 Found\r\nLocation: http://{}/announce\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        target.addr()
+    );
+    let tracker = support::HttpTracker::start(redirect.into_bytes(), false);
+    announce_for(
+        &[V6],
+        std::slice::from_ref(&tracker.url),
+        Duration::from_secs(3),
+    )
+    .await;
+    assert!(tracker.requests() >= 1, "the tracker got the announce");
+    assert_eq!(target.hits(), 0, "its redirect was not followed");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_http_announce_opens_a_new_connection() {
+    // An answer that asks for the next announce in a second, on a
+    // connection the tracker keeps open.
+    let body = b"d8:intervali1e12:min intervali1e5:peers0:e";
+    let mut answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    answer.extend(body);
+    let tracker = support::HttpTracker::start(answer, true);
+    announce_for(
+        &[V6],
+        std::slice::from_ref(&tracker.url),
+        Duration::from_millis(3500),
+    )
+    .await;
+    let (requests, connections) = (tracker.requests(), tracker.connections());
+    assert!(requests >= 3, "announces: {requests}");
+    assert_eq!(connections, requests, "one connection per announce");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_canary_udp_tracker_is_never_contacted() {
+    for control in [false, true] {
+        let scope = if control { vec![V4, V6] } else { vec![] };
+        // `udp://` is not a special scheme: an IPv4 host is a name and goes
+        // through the resolver; the bracketed forms are literals.
+        let q = [V4, V4, V4, V4, V6].map(|ip| Canary::udp(ip, 0));
+        test_dns::set("canary-udp.c27.test", &[V4]);
+        let port = |i: usize| q[i].addr().port();
+        let trackers = [
+            format!("udp://{}", q[0].addr()),
+            format!("udp://[::ffff:127.0.0.1]:{}", port(1)),
+            format!("udp://canary-udp.c27.test:{}", port(2)),
+            format!("udp://localhost:{}", port(3)),
+            format!("udp://{}", q[4].addr()),
+        ];
+        let refused = announce_for(&scope, &trackers, Duration::from_secs(3)).await;
+        assert_canaries(control, &q.each_ref());
+        assert_trackers_refused(control, refused, 5);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_cached_udp_tracker_address_meets_the_current_snapshot() {
+    use mq_engine::librqbit::dht::Id20;
+    use mq_engine::librqbit::tracker_comms::{AnnounceFields, Policy, UdpTrackerClient};
+    let on_link = |addr: &str| {
+        Ok(vec![Interface {
+            addr: addr.parse().unwrap(),
+            mask: Some("ffff:ffff:ffff:ffff::".parse().unwrap()),
+            loopback: false,
+            point_to_point: false,
+        }])
+    };
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    test_dns::set_interfaces(&http, on_link("2001:db8:1:2::abcd"));
+    let scope = http.torrent_scope(&[]);
+    let permits = scope.clone();
+    let policy = Policy {
+        permits: Arc::new(move |ip| permits.permits(ip)),
+        resolver: scope.resolver(),
+    };
+    let client = UdpTrackerClient::new(Default::default(), None, Some(policy))
+        .await
+        .unwrap();
+    // Public by class and off-link under the first snapshot.
+    let tracker: SocketAddr = "[2001:db8:1:3::1]:6969".parse().unwrap();
+    let fields = || AnnounceFields {
+        info_hash: Id20::new([1; 20]),
+        peer_id: Id20::new([2; 20]),
+        downloaded: 0,
+        left: 0,
+        uploaded: 0,
+        event: 0,
+        key: 0,
+        port: 6881,
+    };
+    let refused = scope.refused();
+    let first = timeout(
+        Duration::from_millis(300),
+        client.announce(tracker, fields()),
+    )
+    .await;
+    if let Ok(answer) = first {
+        let error = answer.expect_err("nothing answers there").to_string();
+        assert!(!error.contains("address policy"), "{error}");
+    }
+    assert_eq!(scope.refused(), refused, "sent, or failed to send");
+    // The tracker's prefix is on a link now: the same call is refused at
+    // once, before anything is sent.
+    test_dns::set_interfaces(&http, on_link("2001:db8:1:3::abcd"));
+    scope.refresh();
+    let second = timeout(
+        Duration::from_millis(300),
+        client.announce(tracker, fields()),
+    )
+    .await
+    .expect("refused at once");
+    let error = second.expect_err("refused").to_string();
+    assert!(error.contains("address policy"), "{error}");
+    assert_eq!(scope.refused(), refused + 1);
+}
