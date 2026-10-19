@@ -1,6 +1,8 @@
 package app.marquee.design
 
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -36,12 +38,47 @@ class LiveSpokenTest {
     fun `words that change while the line appears end as the newest`() {
         var said by mutableStateOf("Adding the addon")
         compose.setContent { MarqueeTheme(Form.Phone) { LiveSpoken(said) { MqText(said) } } }
+        compose.waitForIdle()
+        val view = liveRegion(compose.activity.window.decorView)!!
+        val written = mutableListOf<String>()
+        view.addTextChangedListener(
+            object : TextWatcher {
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int,
+                ) = Unit
+
+                override fun onTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    before: Int,
+                    count: Int,
+                ) = Unit
+
+                override fun afterTextChanged(s: Editable?) {
+                    written += s.toString()
+                }
+            },
+        )
         // The core refused the link at once: the warning replaces the line within the first moment.
         said = "This link carries a sign-in in its settings."
         compose.waitForIdle()
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(600))
         compose.waitForIdle()
-        val view = liveRegion(compose.activity.window.decorView)
-        assertEquals("This link carries a sign-in in its settings.", view?.text?.toString())
+        assertEquals("This link carries a sign-in in its settings.", view.text.toString())
+        // Written once: TalkBack drops a live region that changes again right after it spoke.
+        assertEquals(listOf("This link carries a sign-in in its settings."), written)
+
+        // A line already there changes twice at once (the next add, refused at once): written once again.
+        written.clear()
+        said = "Adding the addon"
+        compose.waitForIdle()
+        said = "This link carries a sign-in in its settings, maybe someone else's."
+        compose.waitForIdle()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(600))
+        compose.waitForIdle()
+        assertEquals(listOf("This link carries a sign-in in its settings, maybe someone else's."), written)
     }
 }

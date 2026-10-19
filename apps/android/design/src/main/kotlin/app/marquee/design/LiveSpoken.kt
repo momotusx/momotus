@@ -26,19 +26,25 @@ fun LiveSpoken(
                     setTextColor(android.graphics.Color.TRANSPARENT)
                 }
             },
-            // A live region speaks a change, not a view that comes with its text: one that just came
-            // (the sign-in code) gets its words a moment after it is attached. The words may change
-            // meanwhile (an add that was refused at once): the late write takes the newest ones.
+            // Each change is written a moment later, the newest words of that moment. A line that just
+            // appeared is attached by then (a live region speaks a change, not a view that comes with its
+            // text), and words that change at once (an add refused at once: "Adding the addon", then the
+            // warning) are written once: TalkBack drops a live region that changes again right after it spoke.
             update = { view ->
                 view.tag = spoken
-                if (view.isAttachedToWindow) {
-                    view.text = spoken
-                } else {
-                    view.postDelayed({ (view.tag as? String)?.let { if (view.text != it) view.text = it } }, 300)
-                }
+                view.postDelayed({ view.writeNewest() }, QUIET_MS)
             },
             modifier = Modifier.matchParentSize(),
         )
         Box(Modifier.clearAndSetSemantics {}) { content() }
     }
 }
+
+/** Writes the newest words; the same words again are no change. */
+private fun TextView.writeNewest() {
+    val newest = tag as? String ?: return
+    if (text.toString() != newest) text = newest
+}
+
+/** How long a live line waits before its words are written, so a change at once is written once. */
+private const val QUIET_MS = 400L
