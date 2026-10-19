@@ -84,7 +84,7 @@ struct SyncJoinScreen: View {
                 } else {
                     try await sync.createAccount(server: address, invite: text, name: device)
                 }
-                UserDefaults.standard.set(address, forKey: "syncServer")
+                UserDefaults.standard.set(address, forKey: SyncRecord.serverKey)
                 UserDefaults.standard.set(device, forKey: "syncName")
                 extra = ""
                 dismiss()
@@ -96,7 +96,7 @@ struct SyncJoinScreen: View {
 
     /// The sync server used before, when it is a plain address.
     private static var rememberedServer: String {
-        let saved = UserDefaults.standard.string(forKey: "syncServer") ?? ""
+        let saved = UserDefaults.standard.string(forKey: SyncRecord.serverKey) ?? ""
         return PairingWords.plainAddress(saved) ? saved : "https://"
     }
 }
@@ -492,9 +492,9 @@ struct RecoveryKitScreen: View {
 
     /// The letters, out of captures where the system allows it; never selectable: the system's
     /// Copy would put them on every device of the Apple account with no expiry.
-    private func letters(_ held: HeldKit, visible: Bool) -> some View {
+    private func letters(_ held: HeldKit, visible: Bool, hidden: String = W.kitHidden) -> some View {
         CaptureProof {
-            Text(visible ? held.kit : W.kitHidden)
+            Text(visible ? held.kit : hidden)
                 .font(visible ? .mono(Theme.type.title3) : .text(Theme.type.body))
                 .foregroundStyle(visible ? Theme.Palette.text : Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -503,16 +503,17 @@ struct RecoveryKitScreen: View {
         }
         .background(RoundedRectangle(cornerRadius: Theme.Radius.s).fill(Theme.Palette.surface))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(visible ? "\(W.kitShown): \(held.kit.map(String.init).joined(separator: " "))" : W.kitHidden)
+        .accessibilityLabel(visible ? "\(W.kitShown): \(held.kit.map(String.init).joined(separator: " "))" : hidden)
     }
 
     #if os(macOS)
     /// Hold to show, Show for 20 seconds (the OS prompt again: for a keyboard or VoiceOver
     /// user who cannot hold), and the seconds left (not announced: it changes every second).
-    private func macControls(left: Int, visible: Bool) -> some View {
+    private func macControls(left: Int, visible: Bool, canHold: Bool) -> some View {
         FlowRow(spacing: Theme.Space.xs) {
             Button {} label: { Label(W.holdToShow, glyph: "eye") }
                 .buttonStyle(HoldStyle(holding: $holding))
+                .disabled(!canHold)
             Button { reveal() } label: { Label(W.showForAWhile, glyph: "clock") }
                 .buttonStyle(PillButtonStyle())
                 .disabled(gate.asking)
@@ -536,12 +537,14 @@ struct RecoveryKitScreen: View {
             if held.id.isEmpty { Said(tone: .warn, text: W.kitIdUnknown) }
             #if os(macOS)
             // No API keeps a Mac window out of every screen recording: the kit shows for a
-            // while after each reveal, or while Show is held, and the page says why.
+            // while after each reveal, or while Hold to show is held within a minute of it,
+            // and the page says why.
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let visible = gate.shows(now: context.date, holding: holding)
+                let canHold = gate.canHold(now: context.date)
                 VStack(alignment: .leading, spacing: Theme.Space.s) {
-                    letters(held, visible: visible)
-                    macControls(left: gate.until.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) } ?? 0, visible: visible)
+                    letters(held, visible: visible, hidden: canHold ? W.kitHidden : W.kitHiddenLocked)
+                    macControls(left: gate.until.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) } ?? 0, visible: visible, canHold: canHold)
                 }
             }
             Text(W.macCapture)

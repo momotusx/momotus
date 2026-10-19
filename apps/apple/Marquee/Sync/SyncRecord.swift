@@ -25,8 +25,9 @@ struct SyncRecord: Sendable {
     /// True while it is pending: the app then never loads that key.
     func forgetLeftover(libraryExists: Bool, defaults: UserDefaults = .standard) -> Bool {
         guard !defaults.bool(forKey: Self.installedKey) else { return false }
-        // An update over a library, not a new install: nothing was left behind.
-        guard defaults.bool(forKey: Self.pendingKey) || !libraryExists else {
+        // An update, not a new install: nothing was left behind. A missing library alone proves
+        // nothing (tvOS keeps it in Caches, which the system purges); a join's server address does.
+        guard defaults.bool(forKey: Self.pendingKey) || !(libraryExists || defaults.string(forKey: Self.serverKey) != nil) else {
             defaults.set(true, forKey: Self.installedKey)
             return false
         }
@@ -57,6 +58,8 @@ struct SyncRecord: Sendable {
 
     /// Set once an install's first launch found nothing left behind, or removed it; deleting the app deletes it.
     static let installedKey = "installed"
+    /// The sync server's address, stored by every join: deleting the app deletes it.
+    static let serverKey = "syncServer"
     /// A record left by a deleted install is still to be removed.
     static let pendingKey = "syncLeftoverPending"
 }

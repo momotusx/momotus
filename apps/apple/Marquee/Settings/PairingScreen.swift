@@ -9,7 +9,7 @@ struct PairingScreen: View {
     let core: CoreClient
     /// Where Done goes after joining: Home from onboarding; nil goes back.
     var done: (() -> Void)?
-    @State private var server = UserDefaults.standard.string(forKey: "syncServer") ?? "https://"
+    @State private var server = UserDefaults.standard.string(forKey: SyncRecord.serverKey) ?? "https://"
     @State private var name = DeviceName.current
     /// The address had a user name or password: it was not kept or sent.
     @State private var badAddress = false
@@ -119,7 +119,7 @@ struct PairingScreen: View {
         guard !badAddress else { return }
         // A live account is replaced only after the user says so.
         if sync.joined, !confirmed { replacing = true; return }
-        UserDefaults.standard.set(trimmed, forKey: "syncServer")
+        UserDefaults.standard.set(trimmed, forKey: SyncRecord.serverKey)
         sync.startPairing(server: trimmed, name: name)
     }
 

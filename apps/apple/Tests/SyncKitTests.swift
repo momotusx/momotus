@@ -246,7 +246,12 @@ final class FakeKeychain: @unchecked Sendable {
         gate.answered(ok: true, now: t0)
         #expect(gate.shows(now: t0.addingTimeInterval(19), holding: false, mac: true))
         #expect(!gate.shows(now: t0.addingTimeInterval(20), holding: false, mac: true))
-        #expect(gate.shows(now: t0.addingTimeInterval(60), holding: true, mac: true))
+        // Held within a minute of the prompt it shows; after that only a new prompt does.
+        #expect(gate.shows(now: t0.addingTimeInterval(59), holding: true, mac: true) && gate.canHold(now: t0.addingTimeInterval(59)))
+        #expect(!gate.shows(now: t0.addingTimeInterval(61), holding: true, mac: true) && !gate.canHold(now: t0.addingTimeInterval(61)))
+        gate.ask()
+        gate.answered(ok: true, now: t0.addingTimeInterval(100))
+        #expect(gate.shows(now: t0.addingTimeInterval(150), holding: true, mac: true))
         // A phone shows it for as long as the page stays in view.
         #expect(gate.shows(now: t0.addingTimeInterval(600), holding: false, mac: false))
         gate.cover()

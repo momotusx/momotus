@@ -286,14 +286,10 @@ private struct JoinedSync: View {
             HStack(alignment: .top, spacing: Theme.Space.s) {
                 Glyph(member.kit ? "key-round" : "monitor-smartphone").frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: Theme.Space.xs) {
-                        Text(SyncRules.memberName(member))
-                            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                        if member.thisDevice {
-                            Text(W.thisDevice)
-                                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
-                                .foregroundStyle(Theme.Palette.muted)
-                        }
+                    // The tag beside the name while it fits on one line, else under it (large text).
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Theme.Space.xs) { memberName(member); thisDeviceTag(member) }
+                        VStack(alignment: .leading, spacing: 0) { memberName(member); thisDeviceTag(member) }
                     }
                     Text(W.addedLine(kit: member.kit, addedMs: member.addedMs, by: SyncRules.sponsorName(member, in: members)))
                         .font(.text(Theme.type.callout, relativeTo: .callout))
@@ -335,6 +331,21 @@ private struct JoinedSync: View {
             removing = list.members.first { $0.id == member.id }
         } catch {
             said = (member.id, .bad, W.removeStale)
+        }
+    }
+
+    private func memberName(_ member: MemberInfo) -> some View {
+        Text(SyncRules.memberName(member))
+            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+    }
+
+    @ViewBuilder private func thisDeviceTag(_ member: MemberInfo) -> some View {
+        if member.thisDevice {
+            Text(W.thisDevice)
+                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                .foregroundStyle(Theme.Palette.muted)
+                .lineLimit(1)
+                .fixedSize()
         }
     }
 
@@ -419,13 +430,13 @@ private struct LeaveSync: View {
             if refused { LeaveHere() }
         }
         #if !os(tvOS)
-        .confirmationDialog(W.leaveTitle, isPresented: Binding(get: { again != nil }, set: { if !$0 { again = nil } }), titleVisibility: .visible) {
-            Button(again == true ? W.leaveAnyway : W.leaveButton, role: .destructive) {
-                let force = again ?? false
+        // `presenting`: the stop it asks about is fixed when it opens, whatever clears `again` first.
+        .confirmationDialog(W.leaveTitle, isPresented: Binding(get: { again != nil }, set: { if !$0 { again = nil } }), titleVisibility: .visible, presenting: again) { force in
+            Button(force ? W.leaveAnyway : W.leaveButton, role: .destructive) {
                 Task { await leave(force: force, askedAgain: true) }
             }
             Button(W.cancel, role: .cancel) {}
-        } message: {
+        } message: { _ in
             Text(W.noLockAsk)
         }
         #endif

@@ -138,6 +138,8 @@ enum KitRules {
 /// each reveal, or while Show is held.
 struct KitGate: Equatable {
     static let macWindow: TimeInterval = 20
+    /// Mac: how long after the prompt Hold to show still works (once per prompt).
+    static let macHold: TimeInterval = 60
 
     /// The owner was confirmed and the page stayed in view since.
     private(set) var unlocked = false
@@ -147,6 +149,8 @@ struct KitGate: Equatable {
     private(set) var coveredWhileAsking = false
     /// Mac: when the kit hides again.
     private(set) var until: Date?
+    /// Mac: when Hold to show stops working, until the next prompt.
+    private(set) var holdUntil: Date?
 
     mutating func ask() {
         asking = true
@@ -159,12 +163,14 @@ struct KitGate: Equatable {
         guard ok, !coveredWhileAsking else { return }
         unlocked = true
         until = now.addingTimeInterval(Self.macWindow)
+        holdUntil = now.addingTimeInterval(Self.macHold)
     }
 
     /// The page left view: the background, another tab, leaving it.
     mutating func cover() {
         unlocked = false
         until = nil
+        holdUntil = nil
         if asking { coveredWhileAsking = true }
     }
 
@@ -178,10 +184,15 @@ struct KitGate: Equatable {
         if !asking { cover() }
     }
 
-    /// Mac: whether the kit shows now (held Show, or inside the window after a reveal).
+    /// Mac: whether the kit shows now (inside the window after a reveal, or held within a minute of it).
     func shows(now: Date = .now, holding: Bool, mac: Bool = KitRules.mac) -> Bool {
         guard unlocked else { return false }
-        return !mac || holding || (until.map { now < $0 } ?? false)
+        return !mac || (until.map { now < $0 } ?? false) || (holding && canHold(now: now))
+    }
+
+    /// Mac: Hold to show still works (a minute after the prompt); after that only a new prompt shows the kit.
+    func canHold(now: Date = .now) -> Bool {
+        unlocked && (holdUntil.map { now < $0 } ?? false)
     }
 
     #if DEBUG
@@ -189,6 +200,7 @@ struct KitGate: Equatable {
     mutating func previewUnlock(now: Date = .now) {
         unlocked = true
         until = now.addingTimeInterval(Self.macWindow)
+        holdUntil = now.addingTimeInterval(Self.macHold)
     }
     #endif
 }

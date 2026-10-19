@@ -145,8 +145,9 @@ enum SyncWords {
     static let kitIdUnknown = "Marquee could not tell which recovery kit in the device list is this one. If you do not save it, check the recovery kits in the list."
     static let kitUnseenUnknown = "A recovery kit was made here and never said saved, and Marquee cannot tell which one it is. Check the recovery kits in the list and remove those you do not hold."
     static let checked = "I checked"
-    static let macCapture = "Screen recording and screen sharing can capture what this window shows, so on a Mac the kit shows for 20 seconds after you confirm it is you, or while you hold Show."
-    static let kitHidden = "Hidden. Hold Show to see the kit."
+    static let macCapture = "Screen recording and screen sharing can capture what this window shows. So on a Mac the kit shows for 20 seconds after you confirm it is you, and Hold to show works for a minute after that."
+    static let kitHidden = "Hidden. Press and hold Hold to show, or choose Show for 20 seconds."
+    static let kitHiddenLocked = "Hidden. Show for 20 seconds asks for your password or Touch ID first."
     static let holdToShow = "Hold to show"
     static let showForAWhile = "Show for 20 seconds"
 

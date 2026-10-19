@@ -106,6 +106,16 @@ private let account = try! JSONDecoder().decode(JSONValue.self, from: Data(#"{"r
         #expect(store.bool(forKey: SyncRecord.installedKey) && store.object(forKey: SyncRecord.pendingKey) == nil)
     }
 
+    @Test func aJoinedDeviceWithoutItsLibraryKeepsItsKey() throws {
+        // A joined Apple TV updating to this build: its library in Caches was purged, and no
+        // install mark was ever set. Its server address proves the install.
+        let keychain = FakeKeychain(account)
+        let store = try defaults()
+        store.set("https://sync.example.org", forKey: SyncRecord.serverKey)
+        #expect(!keychain.record.forgetLeftover(libraryExists: false, defaults: store))
+        #expect(keychain.held == account && store.bool(forKey: SyncRecord.installedKey))
+    }
+
     @Test func aLeftoverTheKeychainCouldNotReadIsTriedAgain() throws {
         let keychain = FakeKeychain(account)
         let store = try defaults()
