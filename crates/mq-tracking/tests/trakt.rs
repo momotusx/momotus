@@ -686,7 +686,16 @@ async fn a_call_never_goes_out_with_another_connections_token() {
         tokio::spawn(async move {
             let gate = mq_tracking::trakt::Gate::default();
             let body = serde_json::json!({"episodes": []});
-            call::post(&api, &gate, &auth, &bound, "/sync/history/remove", &body).await
+            call::post(
+                &api,
+                &gate,
+                &auth,
+                &bound,
+                "/sync/history/remove",
+                &body,
+                None,
+            )
+            .await
         })
     };
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -769,4 +778,50 @@ async fn full_pages_that_repeat_are_an_error_not_a_cut_list() {
     let gate = mq_tracking::trakt::Gate::default();
     let read = call::get_all(&api, &gate, &auth, &bound(), "/sync/full", 2).await;
     assert!(read.is_err(), "{read:?}");
+}
+
+#[tokio::test]
+async fn a_write_past_its_deadline_is_not_sent_after_a_refresh_or_its_turn() {
+    let mock = Mock::default();
+    // The refresh answers after the write's time is up.
+    mock.on(
+        "/oauth/token",
+        vec![Reply(
+            200,
+            "application/json",
+            tokens_body("new-access", "new-refresh"),
+            Duration::from_millis(600),
+        )],
+    );
+    mock.on("/scrobble/start", vec![json(201, "{}")]);
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(aging_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let body = serde_json::json!({"progress": 90.0});
+    let bound = bound();
+    let soon = || Some(tokio::time::Instant::now() + Duration::from_millis(300));
+    let stop = |deadline| {
+        call::post(
+            &api,
+            &gate,
+            &auth,
+            &bound,
+            "/scrobble/stop",
+            &body,
+            deadline,
+        )
+    };
+    let late = stop(soon()).await;
+    assert!(matches!(late, Ok(Answer::Transient { .. })), "{late:?}");
+    assert_eq!(mock.seen("/oauth/token").len(), 1, "refreshed");
+    // A write just went: the next one's turn comes after its time is up.
+    let start = call::post(&api, &gate, &auth, &bound, "/scrobble/start", &body, None);
+    assert!(matches!(start.await, Ok(Answer::Ok { .. })));
+    let late = stop(soon()).await;
+    assert!(matches!(late, Ok(Answer::Transient { .. })), "{late:?}");
+    assert!(
+        mock.seen("/scrobble/stop").is_empty(),
+        "nothing left past its deadline"
+    );
 }

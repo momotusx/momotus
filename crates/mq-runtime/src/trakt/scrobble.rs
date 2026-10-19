@@ -492,7 +492,11 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
                 true
             } else {
                 let body = ids.scrobble(s.percent);
-                let answer = call::post(&api, &gate, &conn.auth, &bound, "/scrobble/stop", &body);
+                // Checked again as it leaves: a refresh or its turn may
+                // take it past its hour.
+                let deadline = s.stop_failing_since.map(|since| since + RETRY_AFTER_CAP);
+                let path = "/scrobble/stop";
+                let answer = call::post(&api, &gate, &conn.auth, &bound, path, &body, deadline);
                 changed = true;
                 stopped(core, conn, key, s, &ids, read(answer.await))
             };
@@ -523,7 +527,7 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
         let body = ids.scrobble(s.percent);
         let path = format!("/scrobble/{action}");
         changed = true;
-        match read(call::post(&api, &gate, &conn.auth, &bound, &path, &body).await) {
+        match read(call::post(&api, &gate, &conn.auth, &bound, &path, &body, None).await) {
             Reply::Ok(answer) => {
                 conn.ok();
                 s.tries = 0;
@@ -759,6 +763,68 @@ mod tests {
         assert!(stop_expired(Some(since), since + RETRY_AFTER_CAP));
     }
 
+    /// A core whose Trakt is at `base`, holding a record for account `a`.
+    async fn signed_in(base: &str) -> (Core, Arc<Conn>) {
+        let core = Core::temporary("p").unwrap();
+        core.set_trakt_config(Some(super::super::TraktConfig {
+            client_id: "client".into(),
+            redirect_uri: "https://marquee.example/trakt".into(),
+            hosts: mq_tracking::trakt::Hosts {
+                api: base.to_owned(),
+                auth: base.to_owned(),
+                local: true,
+            },
+        }));
+        let conn = core.trakt_conn();
+        let record = serde_json::from_value(json!({
+            "accessToken": "access", "refreshToken": "refresh", "createdAtMs": now_ms(),
+            "expiresAtMs": now_ms() + 86_400_000, "scope": "public", "account": "a",
+            "user": "u", "revision": 0, "generation": 1
+        }))
+        .unwrap();
+        assert!(conn.auth.set(Some(record)).await);
+        (core, conn)
+    }
+
+    /// A movie session at 50 percent that wants to play.
+    fn movie(bound: Option<Bound>) -> Sess {
+        Sess {
+            target: Target {
+                kind: "movie".into(),
+                item_id: "tt1".into(),
+                video_id: "tt1".into(),
+                name: "Film".into(),
+            },
+            report: Box::new(|_| {}),
+            session: "s".into(),
+            held: Arc::default(),
+            since: String::new(),
+            bound,
+            owner: Arc::default(),
+            percent: 50.0,
+            want: Want::Playing,
+            sent: Sent::Nothing,
+            closed: false,
+            ids: Some(Ok(TraktIds::Movie { imdb: "tt1".into() })),
+            tries: 0,
+            misses: 0,
+            not_before: None,
+            stop_failing_since: None,
+        }
+    }
+
+    /// `movie`, closed after a stop that failed first at `since`.
+    fn stopping(bound: Option<Bound>, since: Instant) -> Sess {
+        Sess {
+            want: Want::Paused,
+            sent: Sent::Playing,
+            closed: true,
+            tries: 1,
+            stop_failing_since: Some(since),
+            ..movie(bound)
+        }
+    }
+
     /// The worker gives a stop up at its hour before sending it again.
     #[tokio::test(start_paused = true)]
     async fn the_worker_sends_no_stop_past_its_hour() {
@@ -772,50 +838,10 @@ mod tests {
                 counted.fetch_add(1, Ordering::SeqCst);
             }
         });
-        let core = Core::temporary("p").unwrap();
-        core.set_trakt_config(Some(super::super::TraktConfig {
-            client_id: "client".into(),
-            redirect_uri: "https://marquee.example/trakt".into(),
-            hosts: mq_tracking::trakt::Hosts {
-                api: base.clone(),
-                auth: base,
-                local: true,
-            },
-        }));
-        let conn = core.trakt_conn();
-        let record = serde_json::from_value(json!({
-            "accessToken": "access", "refreshToken": "refresh", "createdAtMs": now_ms(),
-            "expiresAtMs": now_ms() + 86_400_000, "scope": "public", "account": "a",
-            "user": "u", "revision": 0, "generation": 1
-        }))
-        .unwrap();
-        assert!(conn.auth.set(Some(record)).await);
+        let (core, conn) = signed_in(&base).await;
         let since = Instant::now();
         tokio::time::advance(RETRY_AFTER_CAP).await;
-        let session = Sess {
-            target: Target {
-                kind: "movie".into(),
-                item_id: "tt1".into(),
-                video_id: "tt1".into(),
-                name: "Film".into(),
-            },
-            report: Box::new(|_| {}),
-            session: "s".into(),
-            held: Arc::default(),
-            since: String::new(),
-            bound: conn.auth.bound().await,
-            owner: Arc::default(),
-            percent: 50.0,
-            want: Want::Paused,
-            sent: Sent::Playing,
-            closed: true,
-            ids: Some(Ok(TraktIds::Movie { imdb: "tt1".into() })),
-            tries: 1,
-            misses: 0,
-            not_before: None,
-            stop_failing_since: Some(since),
-        };
-        let mut sessions = BTreeMap::from([(1, session)]);
+        let mut sessions = BTreeMap::from([(1, stopping(conn.auth.bound().await, since))]);
         act(&core, &conn, &mut sessions).await;
         std::thread::sleep(Duration::from_millis(200));
         assert!(sessions.is_empty(), "given up");
@@ -824,5 +850,47 @@ mod tests {
             0,
             "no request after its hour"
         );
+    }
+
+    /// A stop whose hour runs out while it waits its turn is not sent.
+    #[tokio::test(start_paused = true)]
+    async fn a_stop_whose_hour_ends_in_its_turn_is_not_sent() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let paths = seen.clone();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut head = Vec::new();
+                let mut chunk = [0u8; 4096];
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match socket.read(&mut chunk).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => head.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                let head = String::from_utf8_lossy(&head).to_string();
+                let path = head.split_whitespace().nth(1).unwrap_or_default();
+                lock(&paths).push(path.to_owned());
+                let body = r#"{"action":"start","movie":{"ids":{"imdb":"tt1"}}}"#;
+                let reply = format!(
+                    "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            }
+        });
+        let (core, conn) = signed_in(&base).await;
+        let since = Instant::now();
+        tokio::time::advance(RETRY_AFTER_CAP - Duration::from_millis(300)).await;
+        tokio::time::resume();
+        // A start goes: the stop's turn comes a second after it.
+        let mut sessions = BTreeMap::from([(1, movie(conn.auth.bound().await))]);
+        act(&core, &conn, &mut sessions).await;
+        let mut sessions = BTreeMap::from([(2, stopping(conn.auth.bound().await, since))]);
+        act(&core, &conn, &mut sessions).await;
+        assert!(sessions.is_empty(), "given up");
+        assert_eq!(*lock(&seen), ["/scrobble/start"], "no stop past its hour");
     }
 }

@@ -5,6 +5,7 @@ use super::api::{Answer, Api, Gate};
 use super::auth::{Auth, AuthError, Bound};
 use serde_json::Value;
 use std::future::Future;
+use tokio::time::Instant;
 
 /// A list is read until an empty page; more pages than this is an error.
 const MAX_PAGES: u32 = 1000;
@@ -71,6 +72,8 @@ pub async fn get(
     .await
 }
 
+/// A write; past `deadline` it is not sent, checked as it leaves (after a
+/// refresh and the pacing), and the answer is transient.
 pub async fn post(
     api: &Api,
     gate: &Gate,
@@ -78,9 +81,10 @@ pub async fn post(
     bound: &Bound,
     path: &str,
     body: &Value,
+    deadline: Option<Instant>,
 ) -> Result<Answer, AuthError> {
     with_token(api, auth, bound, |token| async move {
-        api.post(gate, path, body, &token).await
+        api.post(gate, path, body, &token, deadline).await
     })
     .await
 }

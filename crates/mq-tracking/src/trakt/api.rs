@@ -130,8 +130,19 @@ impl Api {
         self.send(Method::GET, &url, None, Some(token)).await
     }
 
-    pub async fn post(&self, gate: &Gate, path: &str, body: &Value, token: &str) -> Answer {
+    /// A write. Past `deadline` once its turn comes, it is not sent.
+    pub async fn post(
+        &self,
+        gate: &Gate,
+        path: &str,
+        body: &Value,
+        token: &str,
+        deadline: Option<Instant>,
+    ) -> Answer {
         Gate::wait(&gate.write, WRITE_GAP).await;
+        if deadline.is_some_and(|at| Instant::now() >= at) {
+            return transient("not sent: its time was up", None);
+        }
         let url = format!("{}{path}", self.hosts.api);
         self.send(Method::POST, &url, Some(body), Some(token)).await
     }
