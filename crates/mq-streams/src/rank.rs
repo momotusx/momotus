@@ -468,12 +468,13 @@ fn size_ok(size: Option<u64>, class: SourceClass, prefs: &StreamPrefs) -> bool {
     }
 }
 
-/// Whether the screen shows this dynamic range. Dolby Vision carries an
-/// HDR10 base, so an HDR10 screen shows it as HDR10.
+/// Whether the screen shows this dynamic range. Dolby Vision and HDR10+
+/// carry an HDR10 base, so an HDR10 screen shows them as HDR10.
 fn shows(h: Hdr, caps: &DeviceCaps) -> bool {
     h == Hdr::Sdr
         || caps.display_hdr.contains(&h)
-        || (h == Hdr::DolbyVision && caps.display_hdr.contains(&Hdr::Hdr10))
+        || (matches!(h, Hdr::DolbyVision | Hdr::Hdr10Plus)
+            && caps.display_hdr.contains(&Hdr::Hdr10))
 }
 
 /// An HDR file on a screen that cannot show it: colors look washed out.

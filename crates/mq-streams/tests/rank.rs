@@ -1012,6 +1012,28 @@ fn the_worst_news_comes_first() {
     );
 }
 
+/// HDR10+ and Dolby Vision carry an HDR10 base: an HDR10 screen shows them.
+#[test]
+fn hdr10_plus_plays_on_an_hdr10_screen() {
+    let case = Case {
+        caps: DeviceCaps {
+            display_height: 2160,
+            display_hdr: vec![Hdr::Hdr10],
+            ..caps_4k_dv()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![seeded(
+        1,
+        "Movie.2020.2160p.WEB-DL.HDR10+.x265-GRP",
+        300,
+        4.0,
+    )]);
+    let best = ranked.best().unwrap();
+    assert_eq!(best.key.playability, Playability::Native);
+    assert_ne!(kind(&best.line), "washedOut");
+}
+
 /// 3.3: phones count as their class.
 #[test]
 fn a_display_counts_as_its_screen_class() {
