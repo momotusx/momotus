@@ -156,6 +156,12 @@ export function plainAddress(url: string): boolean {
 /** Find addons copy, word for word the same as Android's `FindAddonsCopy`
  * and Apple's `FindAddonsWords` (each is tested against
  * `apps/shared/find-addons-words.json`). `{kind}` and `{host}` are filled in. */
+/** A pasted link whose settings carry a sign-in (`tokenInLink`). */
+export const tokenInLink = {
+  warn: "This link carries a sign-in: a token or a key. Whoever has it uses that account. Install it only if it is yours.",
+  confirm: "It is mine, install",
+};
+
 export const findAddons = {
   eyebrow: "Addons",
   title: "Find addons",

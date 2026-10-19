@@ -38,6 +38,15 @@
 .hero-skel .skel + .skel { height: 72px; width: 360px; border-radius: var(--radius-pill); }
 
 .home-problem { position: relative; margin: 40px var(--safe-side); }
+/* New recommended addons, under Continue Watching: glass with a hairline edge
+   and glass pills, since the hero keeps the screen's one white pill. */
+.defaults-card { display: flex; align-items: center; gap: 28px; margin: 36px var(--safe-side) 0; padding: 24px 32px; border-radius: var(--radius-l);
+  background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
+.dc-icon { width: 40px; height: 40px; flex: none; color: var(--muted); }
+.dc-text { flex: 1; min-width: 0; }
+.dc-text h2 { font: 700 var(--type-title3) / 1.15 var(--font-display); }
+.dc-text p { margin-top: 6px; font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
+.defaults-card .acts { flex: none; gap: 16px; }
 .problem-icon { width: 48px; height: 48px; color: var(--bad); }
 
 /* Rows. The header is a bar, the title, its source and a hairline to the edge. */
@@ -117,6 +126,11 @@
 [data-form="phone"] .hero-skel .skel { height: 70px; }
 [data-form="phone"] .hero-skel .skel + .skel { height: 46px; width: 180px; }
 [data-form="phone"] .home-problem { margin: 0 16px 24px; }
+[data-form="phone"] .defaults-card { flex-wrap: wrap; gap: 12px; margin: 20px 16px 0; padding: 16px; border-radius: 14px; }
+[data-form="phone"] .dc-icon { width: 22px; height: 22px; }
+[data-form="phone"] .dc-text h2 { font-size: 18px; }
+[data-form="phone"] .dc-text p { font-size: 13px; }
+[data-form="phone"] .defaults-card .acts { width: 100%; gap: 10px; }
 [data-form="phone"] .problem-icon { width: 28px; height: 28px; }
 [data-form="phone"] .row { margin-top: 20px; }
 [data-form="phone"] .row-head { padding: 0 16px; gap: 8px; flex-wrap: nowrap; }

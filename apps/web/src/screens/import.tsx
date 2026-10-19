@@ -1,4 +1,5 @@
-import { A } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
+import ChevronRight from "lucide-solid/icons/chevron-right";
 import Check from "lucide-solid/icons/check";
 import ExternalLink from "lucide-solid/icons/external-link";
 import House from "lucide-solid/icons/house";
@@ -14,7 +15,7 @@ import "./browse.css";
 import "./settings.css";
 
 /** Opening the view starts the sign-in; a new attempt opens it again. */
-function Attempt(props: { onRetry: () => void }) {
+function Attempt(props: { onRetry: () => void; welcome: boolean }) {
   const view = liveView<ImportSnapshot>("import");
   const s = () => view.state.data;
   const hostOf = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -134,10 +135,22 @@ function Attempt(props: { onRetry: () => void }) {
             <Show when={d().summary.seriesUnmatched}>
               <p class="note small">{d().summary.seriesUnmatched} series kept their watched marks unmatched: their episode lists could not be loaded.</p>
             </Show>
-            <A class="btn primary" href="/" data-f="import:home" data-autofocus>
-              <House aria-hidden />
-              Go to Home
-            </A>
+            {/* From the welcome doors, the recommended addons come next: the
+                ones Stremio brought show there without a switch. */}
+            <Show
+              when={props.welcome}
+              fallback={
+                <A class="btn primary" href="/" data-f="import:home" data-autofocus>
+                  <House aria-hidden />
+                  Go to Home
+                </A>
+              }
+            >
+              <A class="btn primary" href="/welcome?step=2&from=import" data-f="import:next" data-autofocus>
+                Continue
+                <ChevronRight aria-hidden />
+              </A>
+            </Show>
           </section>
         )}
       </Match>
@@ -156,6 +169,7 @@ function Attempt(props: { onRetry: () => void }) {
 }
 
 export default function Import() {
+  const [query] = useSearchParams();
   const [attempt, setAttempt] = createSignal(0);
   return (
     <main class="browse page settings-page column" data-vscroll>
@@ -165,7 +179,7 @@ export default function Import() {
         <Show when={form() === "tv"}> Nothing is typed on this screen.</Show>
       </p>
       <Show when={attempt() + 1} keyed>
-        <Attempt onRetry={() => setAttempt(attempt() + 1)} />
+        <Attempt onRetry={() => setAttempt(attempt() + 1)} welcome={query.from === "welcome"} />
       </Show>
     </main>
   );

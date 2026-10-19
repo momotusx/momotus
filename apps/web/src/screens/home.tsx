@@ -1,4 +1,4 @@
-import { A } from "@solidjs/router";
+import { A, useNavigate } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Info from "lucide-solid/icons/info";
 import Play from "lucide-solid/icons/play";
@@ -6,10 +6,15 @@ import Puzzle from "lucide-solid/icons/puzzle";
 import Wrench from "lucide-solid/icons/wrench";
 import Star from "lucide-solid/icons/star";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import { createSignal, For, Show } from "solid-js";
+import Sparkle from "lucide-solid/icons/sparkle";
+import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { CONTINUE_ROW, Row } from "../components/row";
-import { homeView } from "../core/client";
+import { homeView, liveView, op, prefsView } from "../core/client";
+import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
+import type { DefaultAddons } from "../core/generated/DefaultAddons";
+import { profiles } from "../core/profiles";
+import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
@@ -26,8 +31,54 @@ export function playHref(t: Tile): string | null {
   return null;
 }
 
+/** Once per list version, for a profile that misses some recommended
+ * addons: Review opens the step for those, Not now only closes it. Both
+ * mark the version seen (synced), so it shows on no other device. */
+function DefaultsCard() {
+  const addons = liveView<AddonsSnapshot>("addons");
+  const prefs = prefsView();
+  const [defaults, setDefaults] = createSignal<DefaultAddons | null>(null);
+  // Read again when the list changes (the store keeps its objects, so by value).
+  createEffect(
+    on(
+      () => addons.state.data?.addons.map((a) => `${a.url} ${a.enabled}`).join("|"),
+      () => void op<DefaultAddons>("defaultAddons").then(setDefaults, () => setDefaults(null)),
+    ),
+  );
+  const kids = () => profiles()?.profiles.find((p) => p.id === profiles()?.active)?.kids ?? false;
+  const offer = () => cardOffer(defaults(), prefs.state.data?.defaultsSeen, kids());
+  const seen = () => void op("setPrefs", { patch: { defaultsSeen: defaults()?.version } }).catch(() => undefined);
+  return (
+    <Show when={offer()}>
+      {(names) => (
+        <section class="defaults-card" aria-label={defaultsWords.cardTitle} data-fgroup="defaults-card">
+          <Sparkle aria-hidden class="dc-icon" />
+          <div class="dc-text">
+            <h2>{defaultsWords.cardTitle}</h2>
+            <p>{namesLine(names())}</p>
+          </div>
+          <div class="acts">
+            <A class="btn" href="/welcome?step=2&review=1" data-f="home:defaults:review" onClick={seen}>
+              Review
+            </A>
+            <button class="btn" data-f="home:defaults:later" onClick={seen}>
+              Not now
+            </button>
+          </div>
+        </section>
+      )}
+    </Show>
+  );
+}
+
 export default function Home() {
   const home = homeView();
+  // A profile that never had an addon list starts at the welcome steps.
+  const navigate = useNavigate();
+  const addons = liveView<AddonsSnapshot>("addons");
+  createEffect(() => {
+    if (addons.state.data?.fresh) navigate("/welcome", { replace: true });
+  });
   const [page, setPage] = createSignal<HTMLElement | null>(null);
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
   const empty = () => home.status.state === "open" && home.rows.length === 0;
@@ -147,7 +198,24 @@ export default function Home() {
 
         <Show
           when={!home.hero && allFailed(home.rows)}
-          fallback={<For each={home.rows}>{(row, i) => <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} />}</For>}
+          fallback={
+            <>
+              {/* Under Continue Watching, or first when there is none. */}
+              <Show when={!hasContinue()}>
+                <DefaultsCard />
+              </Show>
+              <For each={home.rows}>
+                {(row, i) => (
+                  <>
+                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} />
+                    <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
+                      <DefaultsCard />
+                    </Show>
+                  </>
+                )}
+              </For>
+            </>
+          }
         >
           <section class="problem home-problem">
             <CircleAlert aria-hidden class="problem-icon" />

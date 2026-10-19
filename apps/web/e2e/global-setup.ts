@@ -27,6 +27,10 @@ export default async function globalSetup() {
       }
     }
 
+    // This profile already answered the recommended addons (the Home card is
+    // e2e/defaults.spec.ts's, on cores of its own).
+    await c.req("setPrefs", { patch: { defaultsSeen: 1 } });
+
     // Game of Thrones S2:E3, 21 of 57 minutes (the pick is a Torrentio torrent).
     await watch(
       c,

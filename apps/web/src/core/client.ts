@@ -54,6 +54,8 @@ export const reasonOf = (e: unknown) =>
 
 /** Work from before a profile switch or a lock (`switched`): its screen is gone, so nothing shows it. */
 export const isSwitched = (e: unknown) => e instanceof BridgeError && e.code === "switched";
+/** `installAddon` refused a link whose settings carry a sign-in until the user confirms it is theirs. */
+export const isTokenInLink = (e: unknown) => e instanceof BridgeError && e.code === "tokenInLink";
 window.addEventListener("unhandledrejection", (e) => {
   if (isSwitched(e.reason)) e.preventDefault();
 });

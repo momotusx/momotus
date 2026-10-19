@@ -8,6 +8,7 @@ import Puzzle from "lucide-solid/icons/puzzle";
 import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Radio from "lucide-solid/icons/radio";
 import Rows3 from "lucide-solid/icons/rows-3";
+import Sparkle from "lucide-solid/icons/sparkle";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, type JSX, Show } from "solid-js";
 import { liveView, op, prefsView, reasonOf } from "../core/client";
@@ -15,6 +16,7 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { Prefs } from "../core/generated/Prefs";
 import type { QualityPref } from "../core/generated/QualityPref";
 import { chooseForm, type Form, form } from "../form";
+import { defaultsWords } from "../lib/defaults";
 import { findAddons, languageName, syncSummary, syncWords } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
@@ -151,6 +153,13 @@ export default function SettingsScreen() {
       <section class="set">
         <h2>Sources</h2>
         <div class="links">
+          <LinkRow
+            href="/recommended-addons"
+            fkey="settings:recommended"
+            icon={<Sparkle aria-hidden />}
+            title={defaultsWords.title}
+            text="Catalogs, streams, subtitles and lists Marquee recommends, a switch each."
+          />
           <LinkRow href="/find-addons" fkey="settings:find-addons" icon={<PackageSearch aria-hidden />} title={findAddons.title} text={findAddons.lede} />
           <LinkRow
             href="/addons"

@@ -23,20 +23,35 @@
 @media (hover: hover) { [data-form="desktop"] .door:hover { background: var(--raised); } }
 .step-body .aside { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
 
-/* Step 2: the link field, then two useful addons. */
+/* Step 2: the recommended addons in two columns of groups, a switch per row.
+   The whole row is the button; on, its switch takes the lighter selected fill. */
+.dgroups { columns: 2; column-gap: 40px; width: min(100%, 1560px); }
+/* A TV fits the step on one screen: catalogs and streams, subtitles, lists. */
+[data-form="tv"] .dgroups { columns: 3; }
+.dgroup { break-inside: avoid; display: grid; gap: 10px; padding-bottom: 22px; }
+.dgroup > .kicker { margin: 4px 0 2px; }
+.drow { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px; align-items: center; gap: 18px; width: 100%; min-height: 84px;
+  padding: 12px 22px; border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-align: left; }
+.drow.fixed { grid-template-columns: minmax(0, 1fr) auto; }
+.dtext b { display: block; font: 600 var(--type-callout) / 1.2 var(--font-text); }
+.dtext small { display: block; margin-top: 4px; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
+.switch { position: relative; width: 60px; height: 34px; border-radius: 17px; box-shadow: inset 0 0 0 2px var(--control); flex: none; }
+.switch i { position: absolute; top: 7px; left: 7px; width: 20px; height: 20px; border-radius: 50%; background: var(--muted);
+  transition: transform var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
+.drow[aria-pressed="true"] .switch { background: var(--selected-fill); box-shadow: var(--selected-edge); }
+.drow[aria-pressed="true"] .switch i { transform: translateX(26px); background: var(--text); }
+.dword { font: 600 var(--type-caption) var(--font-text); color: var(--muted); }
+.drow[aria-pressed="true"] .dword { color: var(--text); }
+.dstate { font: 500 var(--type-caption) var(--font-text); color: var(--muted); white-space: nowrap; }
+.drow:focus-visible, [data-form="tv"] .drow:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
+@media (hover: hover) { [data-form="desktop"] button.drow:hover { background: var(--raised); } }
 .step-body .install { margin: 0; width: min(100%, 1200px); }
 /* The field and Install share a line, as on Addons. */
 .step-body .field-line { min-width: 0; }
-.step-body > .kicker { margin-top: 10px; }
-.suggest { display: grid; grid-template-columns: repeat(2, minmax(0, 520px)); gap: 16px; }
-.sugg { display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-radius: 18px; background: var(--raised); text-align: left; }
-.sugg svg { width: 28px; height: 28px; flex: none; }
-.sugg b { display: block; font: 600 var(--type-callout) / 1.2 var(--font-text); }
-.sugg small { display: block; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); margin-top: 2px; }
-/* Installed: full strength, a green check and the word, never faded. */
-.sugg.done { background: transparent; box-shadow: inset 0 0 0 2px var(--control); cursor: default; }
-.sugg.done svg { color: var(--ok); }
 .step-body > .st { font: 500 var(--type-caption) / 1.3 var(--font-text); }
+.step-body .acts { display: flex; flex-wrap: wrap; gap: 16px; }
+/* Settings shows the same rows in one column. */
+.settings-page .dgroups { columns: 1; width: 100%; }
 
 /* Step 3: the setup check, a dot and a word per row, never color alone. */
 .check ul { display: grid; width: min(100%, 1200px); }
@@ -67,11 +82,17 @@
 [data-form="phone"] .door small { font-size: 13px; }
 [data-form="phone"] .door .chev { width: 18px; height: 18px; }
 [data-form="phone"] .step-body .aside { font-size: 13px; }
-[data-form="phone"] .suggest { grid-template-columns: 1fr; width: 100%; gap: 10px; }
-[data-form="phone"] .sugg { padding: 12px; gap: 12px; border-radius: 12px; }
-[data-form="phone"] .sugg svg { width: 18px; height: 18px; }
-[data-form="phone"] .sugg b { font-size: 15px; }
-[data-form="phone"] .sugg small { font-size: 12px; }
+[data-form="phone"] .dgroups { columns: 1; }
+[data-form="phone"] .dgroup { gap: 8px; padding-bottom: 14px; }
+[data-form="phone"] .drow { min-height: 60px; padding: 10px 14px; gap: 12px; border-radius: 12px; grid-template-columns: minmax(0, 1fr) auto; }
+[data-form="phone"] .drow .dword { display: none; }
+[data-form="phone"] .dtext b { font-size: 15px; }
+[data-form="phone"] .dtext small { font-size: 12px; }
+[data-form="phone"] .switch { width: 44px; height: 26px; border-radius: 13px; }
+[data-form="phone"] .switch i { top: 5px; left: 5px; width: 16px; height: 16px; }
+[data-form="phone"] .drow[aria-pressed="true"] .switch i { transform: translateX(18px); }
+[data-form="phone"] .dstate { font-size: 12px; }
+[data-form="phone"] .step-body .acts { gap: 10px; }
 [data-form="phone"] .check li { grid-template-columns: 84px minmax(0, 1fr) auto; min-height: 44px; gap: 8px; }
 [data-form="phone"] .check .cl { font-size: 14px; }
 [data-form="phone"] .check .st { font-size: 13px; }

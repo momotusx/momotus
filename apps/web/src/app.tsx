@@ -25,7 +25,7 @@ import Home from "./screens/home";
 import HomeRows from "./screens/home-rows";
 import Import from "./screens/import";
 import Library from "./screens/library";
-import Onboarding from "./screens/onboarding";
+import Onboarding, { RecommendedAddons } from "./screens/onboarding";
 import Pairing from "./screens/pairing";
 import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/profiles";
 import Player from "./screens/player";
@@ -47,7 +47,7 @@ const destinations: Destination[] = [
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid", "/sync", "/trakt"];
+const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid", "/sync", "/trakt"];
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
@@ -263,6 +263,7 @@ export function App() {
       <Route path="/library" component={Library} />
       <Route path="/calendar" component={CalendarScreen} />
       <Route path="/addons" component={Addons} />
+      <Route path="/recommended-addons" component={RecommendedAddons} />
       <Route path="/find-addons" component={FindAddons} />
       <Route path="/import" component={Import} />
       <Route path="/pair" component={Pairing} />

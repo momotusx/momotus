@@ -7,11 +7,11 @@ import Power from "lucide-solid/icons/power";
 import Trash2 from "lucide-solid/icons/trash";
 import { A } from "@solidjs/router";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
-import { liveView, op, reasonOf } from "../core/client";
+import { isTokenInLink, liveView, op, reasonOf } from "../core/client";
 import type { AddonInfo } from "../core/generated/AddonInfo";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import { form } from "../form";
-import { findAddons, kindLabel, providesText } from "../lib/words";
+import { findAddons, kindLabel, providesText, tokenInLink } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
 
@@ -25,16 +25,25 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
     props.onDraft?.(v);
   };
   const [state, setState] = createSignal<{ tone: string; text: string } | null>(null);
-  const install = async (e?: Event) => {
+  // A link the core refused because it carries a sign-in, waiting for "It is mine".
+  const [risky, setRisky] = createSignal<string | null>(null);
+  const install = async (e?: Event, acknowledged = false) => {
     e?.preventDefault();
-    const u = url().trim();
+    const u = acknowledged ? (risky() ?? "") : url().trim();
     if (!u) return;
+    setRisky(null);
     setState({ tone: "warn live", text: "Installing" });
     try {
-      const name = await op<{ id: string; name: string }>("installAddon", { url: u }).then((r) => r.name);
+      const fields = acknowledged ? { url: u, acknowledgeToken: true } : { url: u };
+      const name = await op<{ id: string; name: string }>("installAddon", fields).then((r) => r.name);
       setState({ tone: "ok", text: `Installed ${name}` });
       setUrl("");
     } catch (err) {
+      if (isTokenInLink(err)) {
+        setRisky(u);
+        setState({ tone: "warn", text: tokenInLink.warn });
+        return;
+      }
       setState({ tone: "bad", text: `Could not install: ${reasonOf(err)}` });
     }
   };
@@ -48,7 +57,13 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
           inputmode="url"
           placeholder="https://example.org/manifest.json or stremio://"
           value={url()}
-          onInput={(e) => setUrl(e.currentTarget.value)}
+          onInput={(e) => {
+            setUrl(e.currentTarget.value);
+            if (risky()) {
+              setRisky(null);
+              setState(null);
+            }
+          }}
           data-f={`${key}:url`}
           data-autofocus={props.autofocus ? "" : undefined}
           autocomplete="off"
@@ -56,7 +71,7 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
         />
       </label>
       {/* White only with a link to install: an empty field has no primary action. */}
-      <button class="btn" classList={{ primary: !!url().trim() }} type="submit" data-f={`${key}:go`}>
+      <button class="btn" classList={{ primary: !!url().trim() && !risky() }} type="submit" data-f={`${key}:go`}>
         <Plus aria-hidden />
         Install
       </button>
@@ -67,6 +82,11 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
             {s().text}
           </p>
         )}
+      </Show>
+      <Show when={risky()}>
+        <button class="btn primary" type="button" data-f={`${key}:ack`} onClick={() => void install(undefined, true)}>
+          {tokenInLink.confirm}
+        </button>
       </Show>
     </form>
   );

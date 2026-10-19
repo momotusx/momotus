@@ -1,31 +1,29 @@
-/** Welcome: one decision per step. 1: the two doors. 2 (Start fresh): add a
- * source. 3: the setup check, run on its own with a fix per row. The step
- * lives in the URL, so Back walks back through the steps. */
+/** Welcome: one decision per step. 1: the doors. 2: the recommended addons,
+ * a switch each (Start fresh, Browse first and a finished import all lead
+ * here; nothing is installed before Continue). 3: the setup check, run on
+ * its own with a fix per row. The step lives in the URL, so Back walks back
+ * through the steps. The Settings page of the same switches is at the end. */
 
-import { A, useSearchParams } from "@solidjs/router";
-import Check from "lucide-solid/icons/check";
+import { A, useNavigate, useSearchParams } from "@solidjs/router";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
+import Link2 from "lucide-solid/icons/link-2";
 import PackageSearch from "lucide-solid/icons/package-search";
-import Plus from "lucide-solid/icons/plus";
 import QrCode from "lucide-solid/icons/qr-code";
 import Sparkle from "lucide-solid/icons/sparkle";
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { displayCaps, link, liveView, op, ping, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
+import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
+import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { autoFocus } from "../focus/dom";
+import { form } from "../form";
+import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
 import { findAddons, type Tone } from "../lib/words";
 import { InstallField } from "./addons";
 import "./browse.css";
 import "./settings.css";
 import "./onboarding.css";
-
-// Official Stremio addons for metadata and subtitles. Marquee ships no
-// stream sources; the user adds those.
-const SUGGESTED = [
-  { url: "https://v3-cinemeta.strem.io/manifest.json", name: "Cinemeta", what: "Catalogs and details" },
-  { url: "https://opensubtitles-v3.strem.io/manifest.json", name: "OpenSubtitles v3", what: "Subtitles" },
-];
 
 interface Row {
   label: string;
@@ -34,48 +32,55 @@ interface Row {
   fix?: { label: string; run: () => void };
 }
 
+/** The core's defaults, read again whenever the addon list changes. */
+function useDefaults() {
+  const addons = liveView<AddonsSnapshot>("addons");
+  const [defaults, setDefaults] = createSignal<DefaultAddons | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
+  const load = () =>
+    op<DefaultAddons>("defaultAddons").then(
+      (d) => {
+        setDefaults(d);
+        setError(null);
+      },
+      (e) => setError(reasonOf(e)),
+    );
+  // The store keeps its objects across pushes, so the list is watched by value.
+  createEffect(on(() => addons.state.data?.addons.map((a) => `${a.url} ${a.enabled}`).join("|"), () => void load()));
+  return { addons, defaults, error };
+}
+
 export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
   const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : 1);
-  const go = (n: 1 | 2 | 3) => setQuery({ step: n === 1 ? undefined : String(n) });
   // A new step puts focus on its first action (on a remote or after keys).
   createEffect(on(step, () => queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(".welcome [data-autofocus]")))));
-
-  const addons = liveView<AddonsSnapshot>("addons");
-  const list = () => addons.state.data?.addons ?? [];
-  const [busy, setBusy] = createSignal<string | null>(null);
+  const { addons, defaults, error } = useDefaults();
+  const fresh = () => addons.state.data?.fresh ?? true;
   const [note, setNote] = createSignal<{ tone: Tone; text: string } | null>(null);
-  // One primary: Continue, unless a link waits in the field (then Install).
-  const [link, setLink] = createSignal("");
-  const add = async (url: string, name: string) => {
-    setBusy(url);
+  // A setup check fix: the one default it names, on.
+  const fix = async (key: string, name: string) => {
     setNote(null);
     try {
-      // Installed and turned off (an empty Home sends people here): turning it on needs no
-      // network, so it is tried first, before the list has loaded too; an addon that is not
-      // installed refuses it. Installing an installed one would keep it off.
-      const turnedOn = await op("setAddonEnabled", { url, enabled: true }).then(
-        () => true,
-        () => false,
-      );
-      if (!turnedOn) await op("installAddon", { url });
-      setNote({ tone: "ok", text: turnedOn ? `Turned ${name} on` : `Installed ${name}` });
+      await op("installDefaults", { choices: [{ key, on: true }] });
+      setNote({ tone: "ok", text: `Added ${name}` });
     } catch (e) {
-      setNote({ tone: "bad", text: `Could not install ${name}: ${reasonOf(e)}` });
-    } finally {
-      setBusy(null);
+      setNote({ tone: "bad", text: `Could not add ${name}: ${reasonOf(e)}` });
     }
   };
-  const installed = (url: string) => list().some((a) => a.url === url && a.enabled);
+  const hasCatalog = () => (addons.state.data?.addons ?? []).some((a) => a.enabled && a.provides.includes("catalog"));
 
   return (
     <main class="welcome page" data-vscroll>
       <header class="welcome-head">
         <div class="brand">Marquee</div>
-        <A class="skip" href="/" data-f="welcome:skip">
-          Browse first
-          <ChevronRight aria-hidden />
-        </A>
+        {/* Browse first still passes the switches: nothing is installed unasked. */}
+        <Show when={step() === 1}>
+          <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} data-f="welcome:skip">
+            Browse first
+            <ChevronRight aria-hidden />
+          </A>
+        </Show>
       </header>
       <Switch>
         <Match when={step() === 1}>
@@ -83,7 +88,7 @@ export default function Onboarding() {
             <h1>How would you like to begin?</h1>
             <p class="lead">No account needed. Everything stays on this device until you turn on sync.</p>
             <div class="doors" data-fgroup="doors">
-              <A class="door" href="/import" data-f="welcome:stremio" data-autofocus>
+              <A class="door" href="/import?from=welcome" data-f="welcome:stremio" data-autofocus>
                 <DoorOpen aria-hidden />
                 <span>
                   <b>I use Stremio</b>
@@ -91,11 +96,11 @@ export default function Onboarding() {
                 </span>
                 <ChevronRight aria-hidden class="chev" />
               </A>
-              <button class="door" data-f="welcome:fresh" onClick={() => go(2)}>
+              <button class="door" data-f="welcome:fresh" onClick={() => setQuery({ step: "2" })}>
                 <Sparkle aria-hidden />
                 <span>
                   <b>Start fresh</b>
-                  <small>Add a source, then browse and play.</small>
+                  <small>Pick from the recommended addons, then browse and play.</small>
                 </span>
                 <ChevronRight aria-hidden class="chev" />
               </button>
@@ -108,66 +113,181 @@ export default function Onboarding() {
                 <ChevronRight aria-hidden class="chev" />
               </A>
             </div>
-            <p class="aside">A source is an addon that finds a playable stream for a title. Marquee does not include any.</p>
           </section>
         </Match>
         <Match when={step() === 2}>
-          <section class="step-body" aria-label="Add a source">
-            <h1>Add a source</h1>
-            <p class="lead">Paste the link an addon's website gives you. Sources find streams; Marquee does not include any.</p>
-            <InstallField fkey="welcome" onDraft={setLink} />
-            <A class="btn find-link" href="/find-addons" data-f="welcome:find">
-              <PackageSearch aria-hidden />
-              {findAddons.title}
-            </A>
-            <h2 class="kicker">Also useful</h2>
-            <div class="suggest" data-fgroup="suggest">
-              <For each={SUGGESTED}>
-                {(s) => (
-                  <button
-                    class="sugg"
-                    classList={{ done: installed(s.url) }}
-                    data-f={`welcome:add:${s.name}`}
-                    aria-disabled={installed(s.url) || busy() === s.url}
-                    onClick={() => !installed(s.url) && busy() !== s.url && void add(s.url, s.name)}
-                  >
-                    <Show when={installed(s.url)} fallback={<Plus aria-hidden />}>
-                      <Check aria-hidden />
-                    </Show>
-                    <span>
-                      <b>{s.name}</b>
-                      <small>{installed(s.url) ? `Installed. ${s.what}` : busy() === s.url ? "Installing" : s.what}</small>
-                    </span>
-                  </button>
-                )}
-              </For>
-            </div>
-            <Show when={note()}>
-              {(n) => (
-                <p class={`st ${n().tone}`} role="status">
-                  <i class="dot" />
-                  {n().text}
-                </p>
-              )}
-            </Show>
-            <div class="acts">
-              <button class="btn" classList={{ primary: !link().trim() }} data-f="welcome:next" data-autofocus onClick={() => go(3)}>
-                Continue
-                <ChevronRight aria-hidden />
-              </button>
-            </div>
-          </section>
+          <Recommended
+            defaults={defaults()}
+            error={error()}
+            hasCatalog={hasCatalog()}
+            review={query.review === "1"}
+            fromImport={query.from === "import"}
+            then={query.then as string | undefined}
+          />
         </Match>
         <Match when={step() === 3}>
-          <SetupCheck list={list()} onAdd={add} onSource={() => go(2)} />
+          <SetupCheck list={addons.state.data?.addons ?? []} defaults={defaults()?.addons ?? []} note={note()} onFix={fix} />
         </Match>
       </Switch>
     </main>
   );
 }
 
+/** One default: a switch when it can be chosen, its state in words when the
+ * profile already has it. The whole row is the button, for a remote. */
+export function DefaultRow(props: {
+  addon: DefaultAddonInfo;
+  on: boolean | null;
+  status?: string;
+  fkey: string;
+  autofocus?: boolean;
+  onToggle?: () => void;
+}) {
+  const text = () => (
+    <span class="dtext">
+      <b>{props.addon.name}</b>
+      <small>{props.addon.line}</small>
+    </span>
+  );
+  return (
+    <Show
+      when={props.on !== null}
+      fallback={
+        <div class="drow fixed">
+          {text()}
+          <span class="dstate">{props.status}</span>
+        </div>
+      }
+    >
+      <button class="drow" aria-pressed={props.on ?? false} data-f={props.fkey} data-autofocus={props.autofocus ? "" : undefined} onClick={() => props.onToggle?.()}>
+        {text()}
+        <span class="switch" aria-hidden="true">
+          <i />
+        </span>
+        <span class="dword">{props.on ? "On" : "Off"}</span>
+      </button>
+    </Show>
+  );
+}
+
+/** Step 2: the nine, grouped, each on until turned off. After an import the
+ * ones Stremio brought show without a switch; Review (the Home card) shows
+ * only the missing ones. Continue names exactly the rows with a switch. */
+function Recommended(props: { defaults: DefaultAddons | null; error: string | null; hasCatalog: boolean; review: boolean; fromImport: boolean; then?: string }) {
+  const navigate = useNavigate();
+  const [off, setOff] = createSignal<ReadonlySet<string>>(new Set());
+  const [busy, setBusy] = createSignal(false);
+  const [problem, setProblem] = createSignal<string | null>(null);
+  const [more, setMore] = createSignal(false);
+  // One primary: Continue, unless a link waits in the field (then Install).
+  const [draft, setDraft] = createSignal("");
+  const all = () => props.defaults?.addons ?? [];
+  const shown = () => (props.review ? switchable(all()) : all());
+  const toggle = (key: string) => {
+    const next = new Set(off());
+    if (!next.delete(key)) next.add(key);
+    setOff(next);
+  };
+  const present = (a: DefaultAddonInfo) => (props.fromImport ? "From Stremio" : a.installed === "on" ? "Installed" : "Installed, off");
+  const go = async () => {
+    if (busy() || !props.defaults) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      await op("installDefaults", { choices: choicesFor(all(), off()) });
+      navigate(afterContinue(props.review ? "home" : props.then));
+    } catch (e) {
+      setProblem(`Could not add the addons: ${reasonOf(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section class="step-body" aria-label={defaultsWords.title}>
+      <h1>{defaultsWords.title}</h1>
+      <p class="lead">{props.review ? defaultsWords.review : defaultsWords.lead}</p>
+      <Show when={props.error}>
+        {(e) => (
+          <p class="st bad" role="status">
+            <i class="dot" />
+            {e()}
+          </p>
+        )}
+      </Show>
+      <div class="dgroups" data-fgroup="defaults">
+        <For each={grouped(shown())}>
+          {(g) => (
+            <section class="dgroup" aria-label={g.title}>
+              <h2 class="kicker">{g.title}</h2>
+              <For each={g.addons}>
+                {(a) => (
+                  <DefaultRow
+                    addon={a}
+                    on={a.installed === "absent" ? !off().has(a.key) : null}
+                    status={present(a)}
+                    fkey={`welcome:default:${a.key}`}
+                    onToggle={() => toggle(a.key)}
+                  />
+                )}
+              </For>
+            </section>
+          )}
+        </For>
+      </div>
+      <Show when={props.defaults && !props.hasCatalog && catalogMissing(all(), off())}>
+        <p class="st warn" role="status">
+          <i class="dot" />
+          {defaultsWords.noCatalog}
+        </p>
+      </Show>
+      <Show when={problem()}>
+        {(p) => (
+          <p class="st bad" role="status">
+            <i class="dot" />
+            {p()}
+          </p>
+        )}
+      </Show>
+      <div class="acts">
+        <button
+          class="btn"
+          classList={{ primary: !draft().trim() }}
+          data-f="welcome:next"
+          data-autofocus
+          aria-disabled={!props.defaults || busy()}
+          onClick={() => void go()}
+        >
+          Continue
+          <ChevronRight aria-hidden />
+        </button>
+        <Show when={!props.review && form() !== "tv"}>
+          <button class="btn" data-f="welcome:more" aria-expanded={more()} onClick={() => setMore(!more())}>
+            <Link2 aria-hidden />
+            Add another addon
+          </button>
+        </Show>
+      </div>
+      <Show when={!props.review && form() === "tv"}>
+        <p class="aside">{defaultsWords.tvMore}</p>
+      </Show>
+      <Show when={more()}>
+        <InstallField fkey="welcome" onDraft={setDraft} />
+        <A class="btn find-link" href="/find-addons" data-f="welcome:find">
+          <PackageSearch aria-hidden />
+          {findAddons.title}
+        </A>
+      </Show>
+    </section>
+  );
+}
+
 /** Runs on its own; each row that is not ready offers its fix. */
-function SetupCheck(props: { list: AddonsSnapshot["addons"]; onAdd: (url: string, name: string) => void; onSource: () => void }) {
+function SetupCheck(props: {
+  list: AddonsSnapshot["addons"];
+  defaults: DefaultAddonInfo[];
+  note: { tone: Tone; text: string } | null;
+  onFix: (key: string, name: string) => void;
+}) {
   const [online, setOnline] = createSignal(navigator.onLine);
   const onNet = () => setOnline(navigator.onLine);
   window.addEventListener("online", onNet);
@@ -183,6 +303,11 @@ function SetupCheck(props: { list: AddonsSnapshot["addons"]; onAdd: (url: string
     clearInterval(pinger);
   });
   const names = (kind: string) => props.list.filter((a) => a.enabled && a.provides.includes(kind)).map((a) => a.name);
+  // A missing kind is fixed by its recommended addon, named as the core names it.
+  const fixWith = (key: string) => {
+    const d = props.defaults.find((x) => x.key === key);
+    return d ? { label: `Add ${d.name}`, run: () => props.onFix(d.key, d.name) } : undefined;
+  };
   const rows = (): Row[] => {
     const caps = displayCaps();
     const catalogs = names("catalog");
@@ -194,24 +319,14 @@ function SetupCheck(props: { list: AddonsSnapshot["addons"]; onAdd: (url: string
     out.push(
       { label: "Network", tone: online() ? "ok" : "bad", text: online() ? "Online" : "Offline" },
       { label: "Display", tone: "ok", text: `${caps.displayHeight >= 2160 ? "4K" : `${caps.displayHeight}p`}${caps.hdr.length ? ", HDR" : ""}` },
-      {
-        label: "Catalogs",
-        tone: catalogs.length ? "ok" : "idle",
-        text: catalogs.length ? catalogs.join(", ") : "None yet",
-        fix: catalogs.length ? undefined : { label: "Add Cinemeta", run: () => props.onAdd(SUGGESTED[0]?.url ?? "", "Cinemeta") },
-      },
+      { label: "Catalogs", tone: catalogs.length ? "ok" : "idle", text: catalogs.length ? catalogs.join(", ") : "None yet", fix: catalogs.length ? undefined : fixWith("cinemeta") },
       {
         label: "Sources",
         tone: sources.length ? "ok" : "idle",
         text: sources.length ? sources.join(", ") : "None yet: titles cannot play",
-        fix: sources.length ? undefined : { label: "Add a source", run: props.onSource },
+        fix: sources.length ? undefined : fixWith("torrentio"),
       },
-      {
-        label: "Subtitles",
-        tone: subs.length ? "ok" : "idle",
-        text: subs.length ? subs.join(", ") : "None yet",
-        fix: subs.length ? undefined : { label: "Add OpenSubtitles", run: () => props.onAdd(SUGGESTED[1]?.url ?? "", "OpenSubtitles v3") },
-      },
+      { label: "Subtitles", tone: subs.length ? "ok" : "idle", text: subs.length ? subs.join(", ") : "None yet", fix: subs.length ? undefined : fixWith("opensubtitles") },
     );
     return out;
   };
@@ -238,6 +353,14 @@ function SetupCheck(props: { list: AddonsSnapshot["addons"]; onAdd: (url: string
           )}
         </For>
       </ul>
+      <Show when={props.note}>
+        {(n) => (
+          <p class={`st ${n().tone}`} role="status">
+            <i class="dot" />
+            {n().text}
+          </p>
+        )}
+      </Show>
       <div class="acts">
         <A class="btn primary" href="/" data-f="welcome:home" data-autofocus>
           Go to Home
@@ -245,5 +368,44 @@ function SetupCheck(props: { list: AddonsSnapshot["addons"]; onAdd: (url: string
         </A>
       </div>
     </section>
+  );
+}
+
+/** Settings: the same switches, applied at once. A switch turned on adds a
+ * missing default; one the profile has turns on or off where it is. */
+export function RecommendedAddons() {
+  const { defaults, error } = useDefaults();
+  const [problem, setProblem] = createSignal<string | null>(null);
+  const flip = (a: DefaultAddonInfo) => {
+    setProblem(null);
+    op("installDefaults", { choices: [{ key: a.key, on: a.installed !== "on" }] }).catch((e) => setProblem(`Could not change ${a.name}: ${reasonOf(e)}`));
+  };
+  return (
+    <main class="browse page settings-page column" data-vscroll>
+      <h1>{defaultsWords.title}</h1>
+      <p class="lede">{defaultsWords.settingsLede}</p>
+      <For each={[error(), problem()].filter(Boolean)}>
+        {(e) => (
+          <p class="st bad" role="status">
+            <i class="dot" />
+            {e}
+          </p>
+        )}
+      </For>
+      <div class="dgroups" data-fgroup="defaults">
+        <For each={grouped(defaults()?.addons ?? [])}>
+          {(g, gi) => (
+            <section class="dgroup" aria-label={g.title}>
+              <h2 class="kicker">{g.title}</h2>
+              <For each={g.addons}>
+                {(a, i) => (
+                  <DefaultRow addon={a} on={a.installed === "on"} fkey={`defaults:${a.key}`} autofocus={gi() === 0 && i() === 0} onToggle={() => flip(a)} />
+                )}
+              </For>
+            </section>
+          )}
+        </For>
+      </div>
+    </main>
   );
 }

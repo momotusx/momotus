@@ -45,6 +45,7 @@ for (const form of ["tv", "desktop"] as const) {
     for (const [path, block] of [
       ["/settings", ".link-row"],
       ["/addons", ".addon"],
+      ["/recommended-addons", "button.drow"],
       ["/profiles/manage", ".prow"],
     ] as const) {
       await page.goto(`${path}?form=${form}`);

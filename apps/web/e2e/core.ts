@@ -18,6 +18,8 @@ export const PORTS = { bridge: 17801 + shift, vite: 15301 + shift, source: 17802
 export const SYNC_PORTS = { relay: 17803 + shift, a: 17804 + shift, b: 17805 + shift, c: 17806 + shift };
 /** The Trakt spec's own: a core whose Trakt is the fake, the fake, and a core built without a Trakt app. */
 export const TRAKT_PORTS = { bridge: 17807 + shift, fake: 17808 + shift, plain: 17809 + shift };
+/** The default addons spec's own: a fresh core per walk, so the shared one never gets the defaults. */
+export const DEFAULTS_PORT = 17810 + shift;
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
