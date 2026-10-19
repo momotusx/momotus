@@ -2892,7 +2892,12 @@ mod auto_subtitle_tests {
             auto_subtitle(remembered, &tags(explicit), &tags(audio), &tracks)
         };
         // (remembered, profile languages, audio) -> the track turned on.
-        type Case<'a> = (Option<&'a str>, &'a [&'a str], &'a [&'a str], Option<&'a str>);
+        type Case<'a> = (
+            Option<&'a str>,
+            &'a [&'a str],
+            &'a [&'a str],
+            Option<&'a str>,
+        );
         let table: &[Case] = &[
             (None, &[], &[], None),
             (None, &[], &["en"], None),
