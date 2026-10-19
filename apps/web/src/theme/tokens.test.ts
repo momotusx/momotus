@@ -10,6 +10,8 @@ test("tokens.css matches design/tokens.json (run `bun run tokens`)", () => {
   expect(css).toContain('--font-display: "Inter Variable", Inter, system-ui, sans-serif;');
   expect(css).toContain("--weight-display: 800;");
   expect(css).toContain("--tracking-display: -0.035em;");
+  expect(css).toContain("--lift-focus-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.5);");
+  expect(css).toContain("--lift-primary-shadow: 0 3px 16px rgba(0, 0, 0, 0.28);");
   expect(css).toMatch(/:root\[data-form="phone"\] \{\n {2}--type-hero: 34px;/);
   // Dark only: no light theme block; the dark theme keeps its soft 14 px halo.
   expect(css).not.toContain('data-theme="light"');

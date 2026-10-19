@@ -73,11 +73,11 @@
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; transform: translateY(-6px) scale(var(--focus-scale-card)); }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
   outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
-  box-shadow: var(--focus-shadow), inset 0 0 0 1px rgba(255, 255, 255, .5); overflow: hidden; }
+  box-shadow: var(--focus-shadow), var(--lift-focus-edge); overflow: hidden; }
 .tile:focus-visible .cap b, [data-form="tv"] .tile:focus .cap b { color: var(--accent); }
 @media (hover: hover) {
   [data-form="desktop"] .tile:hover { transform: translateY(-8px); }
-  [data-form="desktop"] .tile:hover .pic { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .55); }
+  [data-form="desktop"] .tile:hover .pic { box-shadow: var(--lift-hover-edge); }
   [data-form="desktop"] .tile:hover .cap b { color: var(--accent); }
 }
 /* Progress: a thin accent line on a dark strip at the art's foot, so it

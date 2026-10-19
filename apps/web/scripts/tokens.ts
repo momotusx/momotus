@@ -19,6 +19,8 @@ export interface Tokens {
   weight: Scale;
   tracking: Scale;
   glass: { blur: number; saturate: number; highlight: string; shadow: string };
+  /** The white edge a card takes on focus or hover, and the primary pill's shadow. */
+  lift: { focusEdge: string; hoverEdge: string; primaryShadow: string };
 }
 
 // The self-hosted @fontsource-variable packages register these family names.
@@ -61,6 +63,7 @@ export function generate(t: Tokens): string {
     `--glass-saturate: ${t.glass.saturate};`,
     `--glass-highlight: ${t.glass.highlight};`,
     `--glass-shadow: ${t.glass.shadow};`,
+    ...Object.entries(t.lift).map(([k, v]) => `--lift-${kebab(k)}: ${v};`),
     `--motion-focus: ${t.motion.focusMs}ms;`,
     `--motion-panel: ${t.motion.panelMs}ms;`,
     `--ease: ${t.motion.ease};`,

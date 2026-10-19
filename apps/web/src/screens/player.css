@@ -56,7 +56,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 /* The interval inside the skip arrows. */
 .round-n { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -42%); font: 700 12px / 1 var(--font-text); }
 /* Play and pause: the white primary circle. */
-.round.main { width: 104px; height: 104px; background: var(--primary); color: var(--on-primary); box-shadow: 0 3px 16px var(--halo); }
+.round.main { width: 104px; height: 104px; background: var(--primary); color: var(--on-primary); box-shadow: var(--lift-primary-shadow); }
 .round.main svg { width: 44px; height: 44px; }
 .round svg.fill, .pa svg.fill { fill: currentColor; }
 .round:focus-visible, [data-form="tv"] .round:focus { transform: scale(var(--focus-scale-card)); }
@@ -98,7 +98,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
   align-items: flex-end; gap: 20px; transition: transform var(--motion-panel) var(--ease); }
 .player-scr:not(.idle) .skip-wrap { transform: translateY(-188px); }
 /* Skip: the white pill with an accent edge (design/DECISION.md); focus adds the ring. */
-.player-scr .btn.skip-btn { background: var(--primary); color: var(--on-primary); box-shadow: inset 0 0 0 3px var(--accent), 0 3px 16px var(--halo); transform-origin: right center; }
+.player-scr .btn.skip-btn { background: var(--primary); color: var(--on-primary); box-shadow: inset 0 0 0 3px var(--accent), var(--lift-primary-shadow); transform-origin: right center; }
 .skip-src { font: 500 var(--type-caption) / 1 var(--font-text); color: var(--muted); text-shadow: 0 1px 8px var(--halo);
   opacity: 0; transition: opacity var(--motion-focus) var(--ease); }
 .skip-wrap:focus-within .skip-src, .player-scr:not(.idle) .skip-src { opacity: 1; }
