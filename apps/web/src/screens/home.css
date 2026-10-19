@@ -10,13 +10,15 @@
 
 /* The hero: a rounded card inset from the page edges, its picture fading to
  * the page color from the left and the bottom so the words read on any art. */
-.hero { position: relative; margin: 24px 44px 0; height: 600px; border-radius: var(--radius-hero); overflow: hidden;
+/* The card sits 44 px in from the screen; its words start on the rows' grid
+ * line (the safe side), 36 px inside the card, clear of its 22 px corners. */
+.hero { --hero-inset: 44px; position: relative; margin: 24px var(--hero-inset) 0; height: 600px; border-radius: var(--radius-hero); overflow: hidden;
   background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); isolation: isolate; }
 .hero-bd { inset: 0; z-index: -1; }
 .hero-bd::after { background:
   linear-gradient(90deg, rgba(6, 9, 14, .94) 0%, rgba(6, 9, 14, .72) 28%, rgba(6, 9, 14, .18) 58%, rgba(6, 9, 14, 0) 72%),
   linear-gradient(0deg, rgba(6, 9, 14, .9) 0%, rgba(6, 9, 14, .3) 34%, rgba(6, 9, 14, 0) 58%); }
-.hero-body { position: absolute; inset: 0; padding: 0 0 40px 72px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; }
+.hero-body { position: absolute; inset: 0; padding: 0 0 40px calc(var(--safe-side) - var(--hero-inset)); display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; }
 .logo { display: block; object-fit: contain; object-position: left bottom; }
 .logo.pending { visibility: hidden; }
 /* The stack under the floating pill: logo, meta, three lines and the actions
@@ -97,7 +99,8 @@
 
 /* Phone */
 [data-form="phone"] .home .page { position: static; padding-bottom: 112px; }
-[data-form="phone"] .hero { margin: calc(8px + env(safe-area-inset-top)) 10px 0; height: 520px; border-radius: 26px; }
+/* Phone: the card's edges sit on the rows' 16 px gutter; the words keep 18 px inside. */
+[data-form="phone"] .hero { margin: calc(8px + env(safe-area-inset-top)) 16px 0; height: 520px; border-radius: 26px; }
 [data-form="phone"] .hero-bd::after { background:
   linear-gradient(180deg, rgba(6, 9, 14, .55) 0%, rgba(6, 9, 14, 0) 22%),
   linear-gradient(0deg, rgba(6, 9, 14, .96) 0%, rgba(6, 9, 14, .55) 38%, rgba(6, 9, 14, 0) 62%); }

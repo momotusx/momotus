@@ -352,7 +352,7 @@ export function ManageProfiles() {
   const s = () => profiles();
   const owner = () => s()?.profiles.find((p) => p.id === s()?.active)?.isOwner === true;
   return (
-    <main class="browse page settings-page profiles-manage" data-vscroll>
+    <main class="browse page settings-page column profiles-manage" data-vscroll>
       <h1>Manage profiles</h1>
       <Show when={owner()} fallback={<p class="note">Only the main profile manages profiles. You can edit your own from Settings.</p>}>
         <div class="prows" data-fgroup="manage">
@@ -485,7 +485,7 @@ export function EditProfile() {
   };
 
   return (
-    <main class="browse page settings-page profiles-edit" data-vscroll>
+    <main class="browse page settings-page column profiles-edit" data-vscroll>
       <Show when={isNew() ? owner() : mine() || owner()} fallback={<p class="note">Only the main profile can change other profiles.</p>}>
       <Show
         when={!flow()}

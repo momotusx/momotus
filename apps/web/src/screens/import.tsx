@@ -158,7 +158,7 @@ function Attempt(props: { onRetry: () => void }) {
 export default function Import() {
   const [attempt, setAttempt] = createSignal(0);
   return (
-    <main class="browse page settings-page" data-vscroll>
+    <main class="browse page settings-page column" data-vscroll>
       <h1>Import from Stremio</h1>
       <p class="lede">
         Brings your addons, library, Continue Watching and watched marks over once. Nothing is sent back to Stremio.

@@ -80,7 +80,7 @@ export default function HomeRows() {
 
   const phone = () => form() === "phone";
   return (
-    <main class="browse page settings-page home-rows" data-vscroll>
+    <main class="browse page settings-page column home-rows" data-vscroll>
       <h1>Home rows</h1>
       <p class="lede">
         Continue Watching always comes first. Choose which catalogs follow it, and their order.

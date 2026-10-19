@@ -30,7 +30,7 @@ export default function Debrid() {
   const account = (id: string) => debridAccounts()?.accounts.find((a) => a.service === id);
   const pending = (id: string) => debridAccounts()?.pending.some((r) => r.service === id) === true;
   return (
-    <main class="browse page settings-page debrid-page" data-vscroll>
+    <main class="browse page settings-page column debrid-page" data-vscroll>
       <h1>Debrid services</h1>
       <p class="lede">A debrid account plays torrents as fast direct links. Sign-ins and keys are never shown again or synced.</p>
       <p class="note small">A browser cannot store them safely: they last while Marquee's core runs. The apps keep them encrypted on the device.</p>

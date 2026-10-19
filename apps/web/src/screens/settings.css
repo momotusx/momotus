@@ -1,5 +1,12 @@
 /* Settings family: Settings, Addons, Import, Pairing. */
 
+/* One readable column centered under the navigation pill (as Netflix's and
+ * Apple's account pages) instead of a block at the left that leaves the
+ * right third of a wide screen empty. Pages opt in with `column`. */
+:is([data-form="tv"], [data-form="desktop"]) .settings-page.column { --column: 1400px; padding-inline: max(var(--safe-side), calc((100% - var(--column)) / 2)); }
+/* Inside the column, lists and forms take its full width. */
+.settings-page.column :is(.prows, .pedit, .pedit-pin, .pedit-danger) { max-width: none; }
+
 .settings-page .lede { font: 400 var(--type-body) / 1.4 var(--font-text); color: var(--muted); max-width: 1240px; margin: -16px 0 40px; }
 .set { margin-bottom: 60px; max-width: 1400px; }
 .set > h2 { font: 800 var(--type-title3) / 1.1 var(--font-display); margin-bottom: 24px; }
@@ -134,12 +141,13 @@
 .dcard-head h2 { font: 700 var(--type-headline) / 1.2 var(--font-text); }
 .dcard-acts { display: flex; flex-wrap: wrap; gap: 12px; }
 .dkey { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 20px; }
-.dlink { font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); align-self: center; }
+/* The key page link sits on Save's line, centered on the button. */
+.dlink { display: inline-flex; align-items: center; min-height: 72px; align-self: flex-end; font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); }
 .dlogin { display: grid; gap: 20px; }
 [data-form="phone"] .dcard { padding: 16px; border-radius: 14px; gap: 14px; }
 [data-form="phone"] .dcard-head h2 { font-size: 17px; }
 [data-form="phone"] .dkey { gap: 10px; }
-[data-form="phone"] .dlink { font-size: 13px; }
+[data-form="phone"] .dlink { min-height: 46px; font-size: 13px; }
 
 /* A way to the addon lists under a link field (Addons, Add a source). */
 .btn.find-link { margin: -12px 0 44px; }

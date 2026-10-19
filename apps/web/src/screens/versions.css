@@ -92,7 +92,8 @@
 [data-form="phone"] .alts { margin-top: 20px; }
 [data-form="phone"] .thead { display: none; }
 [data-form="phone"] .alist { margin: 0; padding: 0; overflow: visible; }
-[data-form="phone"] .vrow { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "q chips size" "q st st" "q via via"; row-gap: 4px; padding: 10px 8px; }
+/* The quality starts on the first line with the size, not floating mid-row. */
+[data-form="phone"] .vrow { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "q chips size" "q st st" "q via via"; align-items: start; row-gap: 4px; padding: 10px 8px; }
 [data-form="phone"] .vrow .q { grid-area: q; font-size: 15px; }
 [data-form="phone"] .vrow .chips { grid-area: chips; }
 [data-form="phone"] .vrow .size { grid-area: size; }

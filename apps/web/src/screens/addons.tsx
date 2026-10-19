@@ -161,7 +161,7 @@ export default function Addons() {
   const tv = () => form() === "tv";
   const [paste, setPaste] = createSignal(false);
   return (
-    <main class="browse page settings-page" data-vscroll>
+    <main class="browse page settings-page column" data-vscroll>
       <h1>Addons</h1>
       <p class="lede">Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.</p>
       <Show

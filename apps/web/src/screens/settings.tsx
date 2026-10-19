@@ -118,7 +118,7 @@ export default function SettingsScreen() {
     });
 
   return (
-    <main class="browse page settings-page" data-vscroll>
+    <main class="browse page settings-page column" data-vscroll>
       <h1>Settings</h1>
       <Show when={error()}>
         <p class="st bad" role="status">
