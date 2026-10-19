@@ -290,7 +290,7 @@ fun DefaultsScreen(
                 if (group == DefaultsCopy.CATALOGS &&
                     DefaultsCopy.catalogMissing(answer?.addons.orEmpty(), mode, holder.switches)
                 ) {
-                    Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp)
+                    LiveSpoken(DefaultsCopy.NO_CATALOG) { Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp) }
                 }
             }
             holder.failed?.let {

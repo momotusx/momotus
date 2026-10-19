@@ -696,7 +696,8 @@ internal fun InstallField(
                 field(Modifier)
                 button()
             }
-            if (status != null) SaidLine(status, side = 0.dp)
+            // Spoken as it changes (TalkBack): the sign-in warning above all, but also how an add went.
+            if (status != null) LiveSpoken(status.text) { SaidLine(status, side = 0.dp) }
             if (warned) {
                 SecondaryButton(
                     LinkInstall.TOKEN_CONFIRM,
