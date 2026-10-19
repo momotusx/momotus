@@ -1096,7 +1096,7 @@ function Lost(props: { id: string; done: () => void }) {
     setKeep(next);
   };
   const drop = createMemo(() => lostDrop(props.id, got()?.preview.devices ?? [], keep()));
-  const kits = createMemo(() => kitsGoing(got()?.preview.kits ?? [], members(), drop()));
+  const kits = createMemo(() => kitsGoing(got()?.preview ?? { kits: [], deviceKits: [] }, keep()));
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const report = async () => {

@@ -279,6 +279,11 @@ async fn reporting_a_lost_phone_after_recovering_keeps_what_the_user_holds() {
         .unwrap();
     phone.record = record;
     let mut laptop = Device::with(recover(&http(), &server, &kit, "Laptop").await.unwrap());
+    // The TV made a kit of its own: it stays if the TV is kept.
+    let (_, tv_kit, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+        .await
+        .unwrap();
+    tv.record = record;
     laptop.sync().await;
 
     let phone_id = phone.record.secret().id();
@@ -293,7 +298,20 @@ async fn reporting_a_lost_phone_after_recovering_keeps_what_the_user_holds() {
     .await
     .unwrap();
     assert_eq!(preview.devices, vec![tv_id], "the TV is listed to untick");
-    assert_eq!(preview.kits.len(), 1, "the kit shown on the phone goes");
+    assert_eq!(
+        preview.kits.len(),
+        2,
+        "the phone's kit and the TV's, with both ticked"
+    );
+    assert!(preview.kits.contains(&tv_kit));
+    // Each device to untick with the kits that stay with it.
+    assert_eq!(
+        preview.device_kits,
+        vec![mq_sync::DeviceKits {
+            device: tv_id,
+            kits: vec![tv_kit]
+        }]
+    );
     laptop.record = report_lost(
         &laptop.library,
         &http(),
@@ -304,9 +322,10 @@ async fn reporting_a_lost_phone_after_recovering_keeps_what_the_user_holds() {
     )
     .await
     .unwrap();
+    // The TV is kept, and its own kit with it.
     assert_eq!(
         laptop.names().await,
-        vec!["Laptop".to_owned(), "TV".to_owned()]
+        vec!["Laptop".to_owned(), "TV".to_owned(), "kit".to_owned()]
     );
 
     // The TV takes the new key and keeps syncing; the phone is out.

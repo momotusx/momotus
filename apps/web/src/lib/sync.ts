@@ -34,15 +34,11 @@ export function sponsorName(m: Pick<MemberInfo, "sponsor">, members: readonly Me
 /** What a lost report drops: the lost device and what it added that the user did not untick. */
 export const lostDrop = (lost: string, added: readonly string[], keep: ReadonlySet<string>) => [lost, ...added.filter((id) => !keep.has(id))];
 
-/** The kits that go with a lost report, as the core works them out: every
- * kit of the preview whose maker does not stay (a device the user unticked
- * keeps its kits). */
-export function kitsGoing(previewKits: readonly string[], members: readonly MemberInfo[], drop: readonly string[]): string[] {
-  const ids = new Set(members.map((m) => m.id));
-  return previewKits.filter((k) => {
-    const maker = members.find((m) => m.id === k)?.sponsor;
-    return !maker || !ids.has(maker) || drop.includes(maker);
-  });
+/** The kits that go with a lost report, from the core's answer: the preview's kits, less the
+ * ones a device the user unticked made (they stay with it). */
+export function kitsGoing(preview: { kits: readonly string[]; deviceKits: readonly { device: string; kits: readonly string[] }[] }, keep: ReadonlySet<string>): string[] {
+  const staying = new Set(preview.deviceKits.filter((d) => keep.has(d.device)).flatMap((d) => d.kits));
+  return preview.kits.filter((k) => !staying.has(k));
 }
 
 const param = (code: string, name: string) => {

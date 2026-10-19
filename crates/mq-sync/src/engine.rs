@@ -1427,7 +1427,8 @@ pub async fn devices(
 }
 
 /// What reporting `lost` drops by default: the devices it vouched for
-/// (transitively) for the user to untick, and the kits that always go.
+/// (transitively) for the user to untick, the kits that go with all of
+/// them, and the kits each of those devices made.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(
     feature = "ts",
@@ -1438,8 +1439,12 @@ pub async fn devices(
 pub struct LostPreview {
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub devices: Vec<Id>,
+    /// Every kit that goes when the lost device and all of `devices` go.
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub kits: Vec<Id>,
+    /// The kits each of `devices` made: they stay with a device the user
+    /// unticks, and go with it otherwise.
+    pub device_kits: Vec<DeviceKits>,
 }
 
 pub async fn lost_preview(
@@ -1453,8 +1458,24 @@ pub async fn lost_preview(
     let devices = session.roster.descendants(&lost, &session.member.id());
     let mut all = devices.clone();
     all.push(lost);
+    let made_by = |device: &Id| {
+        session
+            .roster
+            .members()
+            .iter()
+            .filter(|(_, m)| m.role == Role::Kit && m.sponsor.as_ref() == Some(device))
+            .map(|(id, _)| *id)
+            .collect()
+    };
     Ok(LostPreview {
         kits: session.roster.kits_of(&all),
+        device_kits: devices
+            .iter()
+            .map(|device| DeviceKits {
+                device: *device,
+                kits: made_by(device),
+            })
+            .collect(),
         devices,
     })
 }

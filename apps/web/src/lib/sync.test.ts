@@ -102,24 +102,14 @@ test("this device leads, then devices, then kits, oldest first", () => {
 });
 
 test("a lost report drops what the user left ticked, and the kits of what goes", () => {
-  // B is lost; B made kit K; C joined through K; C made kit K2; A made kit K3.
-  const members = [
-    member("a", { thisDevice: true }),
-    member("b", { sponsor: "a" }),
-    member("k", { kit: true, sponsor: "b" }),
-    member("c", { sponsor: "k" }),
-    member("k2", { kit: true, sponsor: "c" }),
-    member("k3", { kit: true, sponsor: "a" }),
-  ];
-  const preview = { devices: ["c"], kits: ["k", "k2"] };
+  // B is lost; B made kit K; C joined through K; C made kit K2; A made kit K3. As the core
+  // answers it: the kits that go with everything ticked, and the kits C made.
+  const preview = { devices: ["c"], kits: ["k", "k2"], deviceKits: [{ device: "c", kits: ["k2"] }] };
   expect(lostDrop("b", preview.devices, new Set())).toEqual(["b", "c"]);
-  expect(kitsGoing(preview.kits, members, lostDrop("b", preview.devices, new Set()))).toEqual(["k", "k2"]);
+  expect(kitsGoing(preview, new Set())).toEqual(["k", "k2"]);
   // Unticking C keeps C and the kit C made; the kit B made still goes.
-  const drop = lostDrop("b", preview.devices, new Set(["c"]));
-  expect(drop).toEqual(["b"]);
-  expect(kitsGoing(preview.kits, members, drop)).toEqual(["k"]);
-  // A kit whose maker is already gone always goes.
-  expect(kitsGoing(["k4"], [...members, member("k4", { kit: true, sponsor: "gone" })], ["b"])).toEqual(["k4"]);
+  expect(lostDrop("b", preview.devices, new Set(["c"]))).toEqual(["b"]);
+  expect(kitsGoing(preview, new Set(["c"]))).toEqual(["k"]);
 });
 
 test("every device a lost report drops has a row, also one the list does not know yet", () => {
