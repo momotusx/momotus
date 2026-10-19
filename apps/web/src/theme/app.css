@@ -11,6 +11,9 @@
 [data-form="phone"] { --nav-h: 64px; --content-top: 16px; }
 /* What focus scrolls into view lands below the floating navigation pill. */
 [data-vscroll] [data-row], [data-vscroll] [data-f] { scroll-margin-top: calc(var(--nav-top) + var(--nav-h) + 20px); }
+/* A focused control stays out of the bottom safe area (rows bring their top
+ * into view instead). */
+[data-vscroll] [data-f] { scroll-margin-bottom: var(--safe-bottom); }
 [data-form="phone"] [data-vscroll] [data-row], [data-form="phone"] [data-vscroll] [data-f] { scroll-margin-top: 12px; }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -135,6 +138,13 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .nav.on { color: var(--text); background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
 .nav:focus-visible, [data-form="tv"] .nav:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .nav:hover { color: var(--text); } }
+
+/* Behind the pill once the page scrolls: a scrim of the page color, so what
+ * slides under the navigation never runs into it. */
+.nav-scrim { position: absolute; left: 0; right: 0; top: 0; z-index: 9; height: calc(var(--nav-top) + var(--nav-h) + 56px); pointer-events: none;
+  background: linear-gradient(180deg, var(--bg) calc(var(--nav-top) + var(--nav-h)), transparent);
+  opacity: 0; transition: opacity var(--motion-panel) var(--ease); }
+.nav-scrim.on { opacity: 1; }
 
 /* Phone: a floating glass bar at the bottom. */
 .tabs { position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 20; height: var(--nav-h);

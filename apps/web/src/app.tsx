@@ -6,7 +6,7 @@ import House from "lucide-solid/icons/house";
 import LibraryBig from "lucide-solid/icons/library-big";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
-import { type Component, createEffect, createMemo, For, on, Show, untrack } from "solid-js";
+import { type Component, createEffect, createMemo, createSignal, For, on, Show, untrack } from "solid-js";
 import { AvatarArt } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
@@ -177,10 +177,24 @@ function Shell(props: RouteSectionProps) {
       }
     }),
   );
+  // A page scrolled away from its top slides under the floating pill: the
+  // scrim behind the pill shows then. Scroll does not bubble, so listen in
+  // the capture phase; a new page starts at its top until it scrolls.
+  const [scrolled, setScrolled] = createSignal(false);
+  const watchScroll = (app: HTMLDivElement) =>
+    app.addEventListener(
+      "scroll",
+      (e) => {
+        const page = e.target;
+        if (page instanceof HTMLElement && page.hasAttribute("data-vscroll")) setScrolled(page.scrollTop > 0);
+      },
+      { capture: true, passive: true },
+    );
   createEffect(
     on(
       () => location.pathname,
       () => {
+        setScrolled(false);
         const wasBack = wentBack;
         wentBack = false;
         // Touch has no cursor to place; remotes and keyboards do.
@@ -192,13 +206,14 @@ function Shell(props: RouteSectionProps) {
   // Nothing of a profile shows before the core says which one runs and
   // whether it is locked (plans/m11-profiles.md, P1 apps v2 5).
   return (
-    <div class="app">
+    <div class="app" ref={watchScroll}>
       {/* A lost core takes the profile with it: nothing shows until a reload starts the next one. */}
       <Show when={link() !== "closed"}>
         <Show when={profiles()} fallback={<Show when={profilesFailed()}>{(r) => <p class="banner bad">{r()}</p>}</Show>}>
           <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
             <Show when={!foreign()}>
             <Show when={nav() && form() !== "phone"}>
+              <div class="nav-scrim" classList={{ on: scrolled() }} aria-hidden="true" />
               <TopNav />
             </Show>
             <div class="screen">{props.children}</div>

@@ -67,10 +67,13 @@ export function reveal(el: HTMLElement) {
   const block = el.closest<HTMLElement>("[data-row]") ?? el;
   const b = block.getBoundingClientRect();
   const p = page.getBoundingClientRect();
-  // A row under the floating navigation is not visible: its scroll margin
-  // keeps it clear of the pill.
-  const clear = parseFloat(getComputedStyle(block).scrollMarginTop) || 0;
-  const visible = b.top >= p.top + clear && b.bottom <= p.bottom;
+  // A row under the floating navigation is not visible, nor an element in
+  // the TV safe area or under a list's fade: scroll margins keep it clear of
+  // both, and scrollIntoView honours them.
+  const style = getComputedStyle(block);
+  const above = parseFloat(style.scrollMarginTop) || 0;
+  const below = parseFloat(style.scrollMarginBottom) || 0;
+  const visible = b.top >= p.top + above && b.bottom <= p.bottom - below;
   if (!visible) block.scrollIntoView({ block: block === el ? "nearest" : "start", behavior });
 }
 
