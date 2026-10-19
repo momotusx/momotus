@@ -27,11 +27,12 @@ data class ApprovedPairing(
     override fun toString() = "ApprovedPairing(code=$code)"
 }
 
-/** Reply of `createRecoveryKit`: show [kit] once and keep no copy; store [record]. */
+/** Reply of `createRecoveryKit`: show [kit] once and keep no copy; store [record]. [id] is the kit's `syncDevices` entry. */
 @Serializable
 data class RecoveryKitResult(
     val kit: String,
+    val id: String,
     val record: SyncRecord,
 ) {
-    override fun toString() = "RecoveryKitResult(record)"
+    override fun toString() = "RecoveryKitResult(id=$id, record)"
 }

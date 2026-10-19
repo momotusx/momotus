@@ -258,7 +258,7 @@ class SyncAccountTest {
             sync.recover("https://sync.example.org", "KIT", "Phone")
             assertTrue(sync.joined)
             assertTrue(sync.recovered)
-            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","id":"k1","record":${record(2)}}""") }
             assertEquals("ABCD", sync.createRecoveryKit())
             assertFalse(sync.recovered)
             assertEquals(listOf(true, false), saved.toList())
@@ -425,7 +425,7 @@ class SyncAccountTest {
             val sync =
                 SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, savePendingKits = { saved += it })
             lists(list(me), list(me, kit("k1")))
-            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","id":"k1","record":${record(2)}}""") }
             assertEquals("ABCD", sync.createRecoveryKit())
             assertEquals(SyncAccount.HeldKit("k1", "ABCD"), sync.heldKit)
             // Its id is kept (never the kit), so a run that ends before "I saved it" knows it went unseen.
@@ -443,7 +443,7 @@ class SyncAccountTest {
                 ok(record(3).toString())
             }
             lists(list(me, kit("k1")), list(me, kit("k2")))
-            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","record":${record(4)}}""") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","id":"k2","record":${record(4)}}""") }
             assertEquals("EFGH", later.createRecoveryKit())
             assertTrue(asked.indexOf("removeDevice") in 0 until asked.indexOf("createRecoveryKit"))
             assertEquals(emptyList(), later.unseenKits)
@@ -451,26 +451,21 @@ class SyncAccountTest {
         }
 
     @Test
-    fun `only a kit this device made since the list before is taken as this kit`() =
+    fun `the kit's id is the one the core answers, never one read from the list`() =
         runBlocking {
             val store = Store(record(1))
             val sync = account(store)
-            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
-            // Another device added a kit between the two reads: not ours.
-            lists(list(me, member("tv")), list(me, member("tv"), kit("kTv", maker = "tv"), kit("k1")))
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","id":"k1","record":${record(2)}}""") }
+            // Another device added a kit meanwhile, made by this device's key as far as the list goes: not ours.
+            lists(list(me), list(me, kit("kOther"), kit("k1")))
             sync.createRecoveryKit()
             assertEquals("k1", sync.heldKit?.id)
             sync.kitSaved()
-            // Only another device's kit came: ours is not in the list yet, so its id stays unknown.
-            lists(list(me, member("tv")), list(me, member("tv"), kit("kTv2", maker = "tv")))
-            sync.createRecoveryKit()
-            assertEquals("", sync.heldKit?.id)
-            sync.kitSaved()
-            // No list before: nothing can be told apart.
-            lists(list(me)) // unused
+            // No list can be read at all: the id still comes with the kit.
             answers["syncDevices"] = { fail(null, "http status 502") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","id":"k2","record":${record(3)}}""") }
             sync.createRecoveryKit()
-            assertEquals("", sync.heldKit?.id)
+            assertEquals("k2", sync.heldKit?.id)
         }
 
     @Test
@@ -481,7 +476,7 @@ class SyncAccountTest {
             val sync =
                 SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, savePendingKits = { saved += it })
             lists(list(me), list(me, kit("k1")))
-            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","id":"k1","record":${record(2)}}""") }
             sync.createRecoveryKit()
             answers["removeDevice"] = { ok(record(3).toString()) }
             answers["syncDevices"] = { fail(null, "http status 502") }
@@ -491,6 +486,7 @@ class SyncAccountTest {
             assertEquals(emptyList(), saved.last())
             // Removed from another device: the next list without it ends the waiting too.
             lists(list(me), list(me, kit("k2")))
+            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","id":"k2","record":${record(4)}}""") }
             sync.createRecoveryKit()
             assertEquals("k2", sync.heldKit?.id)
             lists(list(me))
@@ -499,38 +495,25 @@ class SyncAccountTest {
         }
 
     @Test
-    fun `a kit whose id could not be read is never claimed gone, and a new kit keeps the older ones`() =
+    fun `an unseen kit is never claimed gone while the list cannot be read, and a new kit keeps it`() =
         runBlocking {
             val store = Store(record(1))
             val saved = CopyOnWriteArrayList<List<String>>()
             answers["syncDevices"] = { fail(null, "http status 502") }
-            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
-            val sync =
-                SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, savePendingKits = { saved += it })
-            sync.createRecoveryKit()
-            assertEquals(listOf(SyncAccount.UNKNOWN), saved.last())
-            // The next run, with an older kit that went unseen too: a new kit keeps both pending.
             val later =
                 SyncAccount(
                     CoreOps(client),
                     store,
                     scope,
                     io = Dispatchers.IO,
-                    pendingKitsAtStart = listOf("k9", SyncAccount.UNKNOWN),
+                    pendingKitsAtStart = listOf("k9"),
                     savePendingKits = { saved += it },
                 )
-            assertTrue(later.unknownUnseen)
-            assertEquals(listOf("k9"), later.unseenKits)
-            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","record":${record(3)}}""") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","id":"k10","record":${record(3)}}""") }
             later.createRecoveryKit()
-            // The list could not say, so neither is claimed gone, and the new kit joins them.
-            assertTrue(later.unknownUnseen)
+            // The list could not say, so the older one is not claimed gone, and the new kit joins it.
             assertEquals(listOf("k9"), later.unseenKits)
-            assertEquals(listOf("k9", SyncAccount.UNKNOWN, SyncAccount.UNKNOWN), saved.last())
-            // Only the user settles the unknown one, after checking the list; the held kit stays.
-            later.dismissUnknownUnseen()
-            assertFalse(later.unknownUnseen)
-            assertEquals(listOf("k9", SyncAccount.UNKNOWN), saved.last())
+            assertEquals(listOf("k9", "k10"), saved.last())
         }
 
     @Test
@@ -539,7 +522,7 @@ class SyncAccountTest {
             val store = Store(record(1))
             val sync = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, holdMs = 100)
             lists(list(me), list(me, kit("k1")))
-            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","id":"k1","record":${record(2)}}""") }
             sync.kitPage(open = true)
             sync.createRecoveryKit()
             delay(400)
@@ -565,7 +548,7 @@ class SyncAccountTest {
             lists(list(me), list(me, kit("k1")))
             answers["createRecoveryKit"] = {
                 answer.await()
-                ok("""{"kit":"ABCD","record":${record(2)}}""")
+                ok("""{"kit":"ABCD","id":"k1","record":${record(2)}}""")
             }
             val page = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             page.launch { sync.createRecoveryKit() }

@@ -66,10 +66,7 @@ open class SyncAccount(
     recoveredAtStart: Boolean = false,
     /** Keeps [recovered] across launches. */
     private val saveRecovered: (Boolean) -> Unit = {},
-    /**
-     * The kits made in earlier runs whose "I saved it" never came: their ids, [UNKNOWN] for one whose id
-     * could not be read.
-     */
+    /** The kits made in earlier runs whose "I saved it" never came: their ids. */
     pendingKitsAtStart: List<String> = emptyList(),
     /** Keeps those ids across launches (never a kit itself). */
     private val savePendingKits: (List<String>) -> Unit = {},
@@ -138,7 +135,7 @@ open class SyncAccount(
     var leftHere by mutableStateOf(false)
         private set
 
-    /** A kit made and not yet confirmed saved: its id ("" when the list did not show it) and its letters. */
+    /** A kit made and not yet confirmed saved: its id (its row in the device list) and its letters. */
     data class HeldKit(
         val id: String,
         val kit: String,
@@ -155,20 +152,14 @@ open class SyncAccount(
         private set
 
     /**
-     * Every kit made and not yet said saved, held or not, by id ([UNKNOWN] when it could not be read): a
-     * list, so a new kit never hides an older one that went unseen.
+     * Every kit made and not yet said saved, held or not, by id: a list, so a new kit never hides an older
+     * one that went unseen.
      */
     private var pending by mutableStateOf(pendingKitsAtStart)
 
-    private val heldEntry get() = heldKit?.id?.ifEmpty { UNKNOWN }
-
-    private fun othersPending() = pending.toMutableList().apply { heldEntry?.let { remove(it) } }
-
     /** Kits whose letters went before the user said they were saved: nobody holds them, the next kit removes them. */
-    val unseenKits: List<String> get() = othersPending().filter { it != UNKNOWN }
-
-    /** Such a kit whose id nobody could read: the page asks the user to check the list, never claims it gone. */
-    val unknownUnseen: Boolean get() = UNKNOWN in othersPending()
+    val unseenKits: List<String>
+        get() = pending.toMutableList().apply { heldKit?.let { remove(it.id) } }
 
     /** The last kit to go unseen did so because its hold ran out (not because the app closed). */
     var kitExpired by mutableStateOf(false)
@@ -352,9 +343,9 @@ open class SyncAccount(
     }
 
     /**
-     * A recovery kit, held in memory until the user says it is saved. A kit lost unseen goes first when the
-     * list shows it; one whose id nobody knows is never claimed gone. All of it runs in the app's scope: a
-     * page left meanwhile still keeps the new kit and its id.
+     * A recovery kit, held in memory until the user says it is saved, by the id the core answers with it.
+     * A kit lost unseen goes first when the list shows it, and is never claimed gone while the list cannot
+     * be read. All of it runs in the app's scope: a page left meanwhile still keeps the new kit and its id.
      */
     suspend fun createRecoveryKit(): String =
         scope
@@ -386,43 +377,17 @@ open class SyncAccount(
                 val made = withRecord("createRecoveryKit", { ops.createRecoveryKit(it) }) { it.record }
                 recovered = false
                 saveRecovered(false)
-                val after = runCatching { loadDevices() }.getOrNull()
-                hold(HeldKit(newKitId(before, after), made.kit))
+                // The list shows the new row; its id came with the kit.
+                runCatching { loadDevices() }
+                hold(HeldKit(made.id, made.kit))
                 made.kit
             }.await()
-
-    /**
-     * The id of the kit just made. The core answers the kit without it, so it comes from the lists read
-     * before and after, and only when it cannot be another's: a kit this device made (only this device's
-     * key adds kits as this device, one at a time) that the list before did not have, and only one such.
-     * Anything else stays unknown.
-     */
-    private fun newKitId(
-        before: Devices?,
-        after: Devices?,
-    ): String {
-        if (before == null || after == null) return ""
-        val me = after.members.firstOrNull { it.thisDevice }?.id ?: return ""
-        val known = before.members.map { it.id }.toSet()
-        return after.members
-            .filter { it.kit && it.sponsor == me && it.id !in known }
-            .singleOrNull()
-            ?.id
-            .orEmpty()
-    }
 
     /** The user saved the kit: it leaves memory, and nothing marks it pending. */
     fun kitSaved() {
         holdTimer?.cancel()
-        heldEntry?.let { entry -> pending = pending.toMutableList().apply { remove(entry) } }
+        heldKit?.let { kit -> pending = pending.toMutableList().apply { remove(kit.id) } }
         heldKit = null
-        savePendingKits(pending)
-    }
-
-    /** The user checked the list after a kit went unseen with no id. */
-    fun dismissUnknownUnseen() {
-        val keep = heldEntry
-        pending = pending.filter { it != UNKNOWN } + listOfNotNull(keep?.takeIf { it == UNKNOWN })
         savePendingKits(pending)
     }
 
@@ -449,7 +414,7 @@ open class SyncAccount(
         holdTimer?.cancel()
         heldKit = kit
         kitExpired = false
-        pending = pending + kit.id.ifEmpty { UNKNOWN }
+        pending = pending + kit.id
         savePendingKits(pending)
     }
 
@@ -466,7 +431,7 @@ open class SyncAccount(
     /** A held or unseen kit whose row left the list is gone: nobody needs to save or remove it. */
     private fun followKits(list: Devices) {
         val ids = list.members.map { it.id }.toSet()
-        for (id in pending.filter { it != UNKNOWN && it !in ids }) settle(id)
+        for (id in pending.filter { it !in ids }) settle(id)
     }
 
     private fun dropKits() {
@@ -639,9 +604,6 @@ open class SyncAccount(
 
         /** How long a made kit's letters stay in memory after its page is left, before it counts as unseen. */
         const val KIT_HOLD_MS = 5 * 60_000L
-
-        /** A pending kit whose id could not be read. */
-        const val UNKNOWN = "?"
 
         /** Codes after which the sync server will not let this device leave (the web's). */
         private val STUCK = setOf("fork", "wrongRelay", "relayBehind", "notJoined")

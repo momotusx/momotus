@@ -573,13 +573,8 @@ private fun DeviceList(
             Callout(Icons.TriangleAlert, if (sync.kitExpired) SyncCopy.KIT_EXPIRED else SyncCopy.KIT_UNSEEN)
             if (!tv && sync.heldKit == null) SecondaryButton(SyncCopy.MAKE_NEW_KIT, onKit, icon = Icons.KeyRound)
         }
-        // Which kit went unseen is not known: the user checks the list, and says so.
-        if (sync.unknownUnseen) {
-            Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN_UNKNOWN)
-            SecondaryButton(SyncCopy.CHECKED, sync::dismissUnknownUnseen, icon = Icons.Check)
-        }
         when {
-            sync.heldKit != null || sync.unseenKits.isNotEmpty() || sync.unknownUnseen -> {
+            sync.heldKit != null || sync.unseenKits.isNotEmpty() -> {
                 Unit
             }
 
@@ -1423,7 +1418,6 @@ fun RecoveryKitScreen(
                     if (sync.unseenKits.isNotEmpty()) {
                         Callout(Icons.TriangleAlert, if (sync.kitExpired) SyncCopy.KIT_EXPIRED else SyncCopy.KIT_UNSEEN)
                     }
-                    if (sync.unknownUnseen) Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN_UNKNOWN)
                     error?.let { Said(it, Status.Bad) }
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -1442,7 +1436,6 @@ fun RecoveryKitScreen(
                     }
                 } else {
                     Kicker(SyncCopy.KIT_SHOWN, side = 0.dp)
-                    if (held?.id.isNullOrEmpty()) Said(SyncCopy.KIT_ID_UNKNOWN, Status.Warn)
                     MqText(
                         SyncRules.kitLines(shown),
                         modifier =
