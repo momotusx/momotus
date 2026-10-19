@@ -10,9 +10,14 @@
 .chips-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
 .chips-row > .kicker { width: 130px; flex: none; }
 .chips-track { position: relative; flex: 1; min-width: 0; display: flex; gap: 14px; padding: 26px 30px; margin: -26px -30px; }
-/* A row that scrolls sideways fades at its end, so a cut chip reads as more
- * (focus scrolling keeps the focused chip clear of the fade). */
-.chips-track:not(.wrap) { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 96px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 96px), transparent); }
+/* A row that scrolls sideways fades toward a side with chips left to scroll
+ * to (Chips sets fade-start and fade-end), so a cut chip reads as more; focus
+ * scrolling keeps the focused chip clear of it. Right to left mirrors it. */
+.chips-track { --chip-fade: 96px; --chip-dir: 90deg; -webkit-mask-image: var(--chip-mask, none); mask-image: var(--chip-mask, none); }
+.chips-track:dir(rtl) { --chip-dir: 270deg; }
+.chips-track.fade-end { --chip-mask: linear-gradient(var(--chip-dir), #000 calc(100% - var(--chip-fade)), transparent); }
+.chips-track.fade-start { --chip-mask: linear-gradient(var(--chip-dir), transparent, #000 var(--chip-fade)); }
+.chips-track.fade-start.fade-end { --chip-mask: linear-gradient(var(--chip-dir), transparent, #000 var(--chip-fade), #000 calc(100% - var(--chip-fade)), transparent); }
 .chips-track.wrap { flex-wrap: wrap; overflow: visible; }
 .chips-row.wrap-row { align-items: flex-start; }
 .chips-row.wrap-row > .kicker { padding-top: 18px; }
@@ -61,7 +66,7 @@
 [data-form="phone"] .chips-row { flex-direction: column; align-items: stretch; gap: 6px; }
 [data-form="phone"] .chips-row > .kicker { width: auto; }
 [data-form="phone"] .chips-track { overflow-x: auto; gap: 8px; padding: 2px 16px; margin: 0 -16px; }
-[data-form="phone"] .chips-track:not(.wrap) { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
+[data-form="phone"] .chips-track { --chip-fade: 40px; }
 [data-form="phone"] .chip { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; }
 [data-form="phone"] .chip small { font-size: 12px; }
 [data-form="phone"] .chip svg { width: 16px; height: 16px; }

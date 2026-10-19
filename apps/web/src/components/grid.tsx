@@ -3,7 +3,7 @@
  * focus or the scroll position gets within two rows of the end. */
 
 import Check from "lucide-solid/icons/check";
-import { createEffect, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import type { Tile } from "../core/generated/Tile";
 import { remember } from "../focus/dom";
 import { form } from "../form";
@@ -102,10 +102,37 @@ export function Chips<T>(props: {
 }) {
   // Entering the row lands on the chip that is on.
   createEffect(() => remember(props.group, `${props.group}:${String(props.selected)}`));
+  // The row fades only toward a side with chips left to scroll to; the
+  // sides are logical (scrollLeft runs negative in right-to-left pages).
+  let track!: HTMLDivElement;
+  const [before, setBefore] = createSignal(false);
+  const [after, setAfter] = createSignal(false);
+  const measure = () => {
+    const done = Math.abs(track.scrollLeft);
+    setBefore(done > 1);
+    setAfter(track.scrollWidth - track.clientWidth - done > 1);
+  };
+  // The track and every chip are watched: chips change width when their
+  // words or the font arrive.
+  const ro = new ResizeObserver(() => measure());
+  onCleanup(() => ro.disconnect());
+  createEffect(() => {
+    void props.items.length;
+    queueMicrotask(() => {
+      ro.observe(track);
+      for (const chip of track.children) ro.observe(chip);
+    });
+  });
   return (
     <div class="chips-row" role="radiogroup" aria-label={props.label} data-fgroup={props.group}>
       <span class="kicker">{props.label}</span>
-      <div class="chips-track" data-hscroll="120">
+      <div
+        class="chips-track"
+        classList={{ "fade-start": before(), "fade-end": after() }}
+        data-hscroll="120"
+        ref={track}
+        onScroll={measure}
+      >
         <For each={props.items}>
           {(item, i) => (
             <button
