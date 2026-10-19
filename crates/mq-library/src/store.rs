@@ -1,5 +1,5 @@
 use crate::schema::migrations;
-use crate::sync::{Gone, Stamp, coll, local, queue, refuse_gone, sql};
+use crate::sync::{Gone, Stamp, coll, local, queue, refuse_gone, sql, stored_hlc};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -371,8 +371,14 @@ impl Library {
         self.write(|c| {
             refuse_gone(c, profile)?;
             let mut rows = addon_rows(c, profile)?;
+            let before = rows.clone();
             if let Err(e) = edit(&mut rows) {
                 refused = Some(e);
+                return Ok(());
+            }
+            // An edit that changed nothing (a retried request, a switch set
+            // to what it was) is no edit: no new stamp, nothing to push.
+            if rows == before && stored_hlc(c, coll::ADDONS, profile)?.is_some() {
                 return Ok(());
             }
             local(c, coll::ADDONS, &[profile], &stamp, |h| {
@@ -382,8 +388,36 @@ impl Library {
         refused.map_or(Ok(()), Err)
     }
 
+    /// Puts newer manifests of installed addons in place, by link, and
+    /// nothing else: the list's stamp stays and nothing is queued. A refresh
+    /// caches what the addons serve on this device; it is never an edit, so
+    /// it never changes which device's list wins.
+    pub fn refresh_addon_manifests(
+        &self,
+        profile: &str,
+        manifests: &[(String, String)],
+    ) -> Result<usize, LibraryError> {
+        self.write(|c| {
+            let mut changed = 0;
+            for (url, json) in manifests {
+                changed += c.execute(
+                    "UPDATE addons SET manifest_json = ?3
+                     WHERE profile_id = ?1 AND transport_url = ?2 AND manifest_json != ?3",
+                    rusqlite::params![profile, url, json],
+                )?;
+            }
+            Ok(changed)
+        })
+    }
+
     pub fn addons(&self, profile: &str) -> Result<Vec<AddonRow>, LibraryError> {
         self.read(|c| addon_rows(c, profile))
+    }
+
+    /// The hlc of the profile's addon list register, or `None` when no list
+    /// was ever written for it here or pulled (a profile that never had one).
+    pub fn addon_list_hlc(&self, profile: &str) -> Result<Option<String>, LibraryError> {
+        self.read(|c| stored_hlc(c, coll::ADDONS, profile))
     }
 
     pub fn upsert_item<'a>(

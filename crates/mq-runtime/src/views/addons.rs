@@ -48,6 +48,9 @@ pub struct AddonInfo {
 #[serde(rename_all = "camelCase")]
 pub struct AddonsSnapshot {
     pub addons: Vec<AddonInfo>,
+    /// The profile starts at the default addons step: it never had a list,
+    /// this device is in no sync account, and it is not a kids profile.
+    pub fresh: bool,
 }
 
 pub struct AddonsView {
@@ -133,5 +136,8 @@ fn list(core: &Core) -> AddonsSnapshot {
             })
         })
         .collect();
-    AddonsSnapshot { addons }
+    AddonsSnapshot {
+        addons,
+        fresh: core.addons_fresh(),
+    }
 }

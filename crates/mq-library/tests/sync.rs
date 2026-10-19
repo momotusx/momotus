@@ -440,3 +440,80 @@ fn a_local_write_above_a_newer_version_moves_the_clock_past_it() {
     let next = clock.tick(clock.wall_now());
     assert!(next > stored, "{next:?} is not after {stored:?}");
 }
+
+/// Manifest freshness is not list precedence (plans/m13-default-addons.md 5):
+/// a refresh keeps the list's stamp and pushes nothing, and an edit that
+/// changes nothing is no edit.
+mod freshness {
+    use super::hlc;
+    use mq_library::{AddonRow, Hlc, HlcClock, Library};
+
+    fn row(url: &str, manifest: &str) -> AddonRow {
+        AddonRow {
+            transport_url: url.into(),
+            manifest_json: manifest.into(),
+            position: 0,
+            enabled: true,
+            allow_private: false,
+        }
+    }
+
+    #[test]
+    fn a_manifest_refresh_keeps_the_lists_stamp_and_pushes_nothing() {
+        let lib = Library::temporary().unwrap();
+        let zero = Hlc::zero(4).encode();
+        lib.set_addons("p", &[row("https://a/manifest.json", "{}")], &zero)
+            .unwrap();
+        let queued = lib.outbox(100).unwrap().records.len();
+        let n = lib
+            .refresh_addon_manifests(
+                "p",
+                &[("https://a/manifest.json".into(), "{\"v\":2}".into())],
+            )
+            .unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(lib.addons("p").unwrap()[0].manifest_json, "{\"v\":2}");
+        assert_eq!(
+            lib.addon_list_hlc("p").unwrap().unwrap(),
+            zero,
+            "untouched stays untouched"
+        );
+        assert_eq!(
+            lib.outbox(100).unwrap().records.len(),
+            queued,
+            "nothing to push"
+        );
+        // The same manifest again changes nothing.
+        let n = lib
+            .refresh_addon_manifests(
+                "p",
+                &[("https://a/manifest.json".into(), "{\"v\":2}".into())],
+            )
+            .unwrap();
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn an_edit_that_changes_nothing_keeps_the_stamp_and_queues_nothing() {
+        let lib = Library::temporary().unwrap();
+        let clock = HlcClock::new(4);
+        let first = hlc(1_000, 2);
+        lib.set_addons("p", &[row("https://a/manifest.json", "{}")], &first)
+            .unwrap();
+        let queued = lib.outbox(100).unwrap().records.len();
+        lib.edit_addons("p", &clock, |rows| {
+            rows[0].enabled = true;
+            Ok::<(), mq_library::LibraryError>(())
+        })
+        .unwrap();
+        assert_eq!(lib.addon_list_hlc("p").unwrap().unwrap(), first);
+        assert_eq!(lib.outbox(100).unwrap().records.len(), queued);
+        // A real change is an edit.
+        lib.edit_addons("p", &clock, |rows| {
+            rows[0].enabled = false;
+            Ok::<(), mq_library::LibraryError>(())
+        })
+        .unwrap();
+        assert_ne!(lib.addon_list_hlc("p").unwrap().unwrap(), first);
+    }
+}

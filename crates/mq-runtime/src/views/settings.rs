@@ -30,6 +30,9 @@ pub struct Prefs {
     pub autoplay_next: bool,
     /// Which addon catalogs Home shows, and in what order.
     pub home_rows: HomeRows,
+    /// The default addons list version this profile was last offered
+    /// (`defaultAddons`): below the current one, Home offers the new ones once.
+    pub defaults_seen: u32,
 }
 
 /// Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`).
@@ -55,6 +58,7 @@ impl Default for Prefs {
             subtitle_languages: Vec::new(),
             autoplay_next: true,
             home_rows: HomeRows::default(),
+            defaults_seen: 0,
         }
     }
 }

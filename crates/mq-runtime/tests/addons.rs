@@ -173,3 +173,43 @@ async fn an_unchanged_manifest_writes_nothing() {
     assert_eq!(core.refresh_addons(1_000_000).await.unwrap(), 0);
     assert_eq!(core.library().outbox(usize::MAX).unwrap().last_id, queued);
 }
+
+/// A refresh is not an edit (plans/m13-default-addons.md 5): the manifest
+/// changes in place and the list keeps its stamp, so untouched defaults stay
+/// below any list another device wrote.
+#[tokio::test]
+async fn a_refresh_keeps_the_stored_lists_stamp() {
+    let origin = Origin::start().await;
+    let core = Core::temporary("p").unwrap();
+    let url = origin.url("a");
+    // As untouched defaults are: a list at this device's zero hlc.
+    let manifest = serde_json::json!({
+        "id": "a", "version": "1.0.0", "name": "a",
+        "resources": ["stream"], "types": ["movie"], "catalogs": []
+    });
+    let zeroed = mq_library::AddonRow {
+        transport_url: url.clone(),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    core.library()
+        .set_addons("p", &[zeroed], &core.zero_hlc())
+        .unwrap();
+    let queued = core.library().outbox(100).unwrap().records.len();
+    origin.serve("a", &["movie", "series"]);
+    assert_eq!(core.refresh_addons(1_000_000).await.unwrap(), 1);
+    let s = mq_library::Hlc::decode(&core.library().addon_list_hlc("p").unwrap().unwrap()).unwrap();
+    assert_eq!(
+        s,
+        mq_library::Hlc::decode(&core.zero_hlc()).unwrap(),
+        "still this device's zero hlc"
+    );
+    assert_eq!(
+        core.library().outbox(100).unwrap().records.len(),
+        queued,
+        "nothing pushed"
+    );
+    assert_eq!(row(&core, &url).2, ["movie", "series"]);
+}

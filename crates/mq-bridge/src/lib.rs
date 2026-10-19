@@ -3,7 +3,8 @@
 //! IPC channel.
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
-//! "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "setPrefs" | "setDebridKeys" |
+//! "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "defaultAddons" |
+//! "installDefaults" | "setPrefs" | "setDebridKeys" |
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "cancelPairing" |
@@ -68,6 +69,19 @@ enum Request {
     InstallAddon {
         id: u64,
         url: String,
+        /// The user saw the `tokenInLink` warning and installs it anyway.
+        #[serde(default, rename = "acknowledgeToken")]
+        acknowledge_token: bool,
+    },
+    /// The default addons and whether each is in the profile's list.
+    DefaultAddons {
+        id: u64,
+    },
+    /// Installs the defaults with the user's switches (a key left out is on).
+    InstallDefaults {
+        id: u64,
+        #[serde(default)]
+        choices: Vec<mq_runtime::defaults::DefaultChoice>,
     },
     /// An entry an open `addonCatalog` view shows, by its `key`.
     InstallListed {
@@ -598,6 +612,17 @@ impl Session {
                 let result = core.move_addon(&url, to);
                 self.reply(json!(id), done(result));
             }
+            Request::DefaultAddons { id } => {
+                let result = core
+                    .default_addons()
+                    .map_err(|e| e.to_string())
+                    .and_then(|d| to_value(&d));
+                self.reply(json!(id), result);
+            }
+            Request::InstallDefaults { id, choices } => {
+                let result = core.install_defaults(&choices);
+                self.reply(json!(id), done(result));
+            }
             Request::SetAddonEnabled { id, url, enabled } => {
                 let result = core.set_addon_enabled(&url, enabled);
                 self.reply(json!(id), done(result));
@@ -837,7 +862,20 @@ impl Session {
                 });
                 self.reply(json!(id), result);
             }
-            Request::InstallAddon { id, url } => {
+            Request::InstallAddon {
+                id,
+                url,
+                acknowledge_token,
+            } => {
+                // A sign-in in a pasted link's settings: warned and acknowledged first.
+                if !acknowledge_token && mq_runtime::link_carries_token(&url) {
+                    let refused = Failure::coded(
+                        "tokenInLink",
+                        "this link carries a sign-in in its settings: install it only if it is yours",
+                    );
+                    send_answer(&self.out, json!(id), Err(refused));
+                    return;
+                }
                 // Bound to the profile: a switch first makes it `switched`.
                 self.spawn_fenced(id, async move {
                     core.install_addon(&url)

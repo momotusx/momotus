@@ -524,6 +524,12 @@ impl Library {
         })
     }
 
+    /// Whether this device belongs to a sync account: it stores an account's
+    /// roster from the moment it joins until it leaves (`forget_sync`).
+    pub fn in_sync_account(&self) -> Result<bool, LibraryError> {
+        self.read(|c| c.query_row("SELECT EXISTS(SELECT 1 FROM sync_roster)", [], |r| r.get(0)))
+    }
+
     /// The account's roster entries this device verified, in order.
     pub fn roster_entries(&self, genesis: &str) -> Result<Vec<SignedEntry>, LibraryError> {
         self.read(|c| {
@@ -1005,7 +1011,7 @@ fn tables(coll: u8) -> &'static [(&'static str, &'static str)] {
     }
 }
 
-fn stored_hlc(c: &Connection, coll: u8, key: &str) -> rusqlite::Result<Option<String>> {
+pub(crate) fn stored_hlc(c: &Connection, coll: u8, key: &str) -> rusqlite::Result<Option<String>> {
     let Some((table, key_expr)) = tables(coll).first() else {
         return Ok(None);
     };

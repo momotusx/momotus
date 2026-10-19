@@ -1336,3 +1336,44 @@ async fn live_lists_and_install() {
         Installed::On
     );
 }
+
+/// Someone's sign-in in a link's settings (plans/m13-default-addons.md,
+/// decision 11): never listed, and flagged for a paste.
+#[test]
+fn links_that_carry_a_sign_in_are_never_listed() {
+    use mq_runtime::link_carries_token;
+    // Base64 JSON, as the Trakt Tv addon's configured links are.
+    let b64 = "eyJ0b2tlbiI6IngifQ"; // {"token":"x"}
+    assert!(link_carries_token(&format!(
+        "https://trakt.example/{b64}/manifest.json"
+    )));
+    // Percent-encoded JSON, at any depth, and key=value pairs.
+    assert!(link_carries_token(
+        "https://a.example/%7B%22user%22%3A%7B%22refresh_token%22%3A%22r%22%7D%7D/manifest.json"
+    ));
+    assert!(link_carries_token(
+        "https://a.example/apikey=k|lang=tr/manifest.json"
+    ));
+    assert!(link_carries_token(
+        "https://a.example/Access_Token=k/manifest.json"
+    ));
+    // Settings without one: Torrentio's providers, SubSense's languages, a bare link.
+    for plain in [
+        "https://torrentio.strem.fun/providers=yts,tokyotosho|sizefilter=15GB,5GB/manifest.json",
+        "https://subsense.nepiraw.com/%7B%22languages%22%3A%5B%22tur%22%5D%7D/manifest.json",
+        "https://v3-cinemeta.strem.io/manifest.json",
+        "https://a.example/token/manifest.json",
+    ] {
+        assert!(!link_carries_token(plain), "{plain}");
+    }
+    let listed = |url: &str| {
+        mq_runtime::views::addon_catalog::entries(&[serde_json::json!({
+            "transportUrl": url,
+            "manifest": {"id": "x.y", "version": "1.0.0", "name": "X",
+                          "resources": ["catalog"], "types": ["movie"], "catalogs": []}
+        })])
+        .len()
+    };
+    assert_eq!(listed("https://a.example/manifest.json"), 1);
+    assert_eq!(listed(&format!("https://a.example/{b64}/manifest.json")), 0);
+}

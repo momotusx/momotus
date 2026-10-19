@@ -1,3 +1,4 @@
+use crate::defaults::{self, DefaultAddonInfo, DefaultAddons, DefaultChoice, DefaultInstalled};
 use mq_addons::{
     AddonClient, AddonError, CacheControl, CacheStore, InstalledAddon, ResponseCache,
     StoredResponse,
@@ -60,6 +61,10 @@ pub enum CoreError {
     TraktNotConfigured,
     #[error("Trakt: {0}")]
     Trakt(String),
+    /// `installDefaults` refused: an unknown key, or a kids profile (it
+    /// reads the owner's addons).
+    #[error("default addons: {0}")]
+    Defaults(String),
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +155,16 @@ impl Device {
             // Never below what this library holds; the clock's own ceiling
             // bounds a row stamped by a lying relay.
             clock.observe(newest, clock.wall_now());
+        }
+        // A library from before default addons (its owner is there): its
+        // profiles get the card for new addons, never the first-run step.
+        if library.device_value(DEFAULTS_ERA)?.is_none() {
+            let era = if library.profile(OWNER)?.is_some() {
+                "legacy"
+            } else {
+                "fresh"
+            };
+            library.set_device_value(DEFAULTS_ERA, era)?;
         }
         // The owner, with the lowest hlc: what another device synced wins.
         library.ensure_profile(OWNER, OWNER_NAME, &Hlc::zero(device_id).encode())?;
@@ -611,21 +626,24 @@ impl Core {
             {
                 continue;
             }
-            let written = self.for_profile(profile).edit_addons(|rows| {
-                for row in rows.iter_mut() {
-                    if let Some(json) = newer(row) {
-                        row.manifest_json = json.clone();
-                        changed += 1;
-                    }
-                }
-                Ok(())
-            });
-            if let Err(e) = written {
+            // Not an edit: the manifests change in place, the list keeps its
+            // stamp and nothing is pushed (`refresh_addon_manifests`), so a
+            // refresh never changes which device's list wins.
+            let fresh: Vec<(String, String)> = library
+                .addons(profile)?
+                .iter()
+                .filter_map(|row| newer(row).map(|json| (row.transport_url.clone(), json.clone())))
+                .collect();
+            let written = library
+                .refresh_addon_manifests(profile, &fresh)
+                .map_err(CoreError::from);
+            match written {
+                Ok(n) => changed += n,
                 // A profile removed meanwhile, or a failed write: the next day tries again.
-                tracing::debug!(
+                Err(e) => tracing::debug!(
                     "addon refresh for a profile not written: {}",
                     error_kind(&e)
-                );
+                ),
             }
         }
         Ok(changed)
@@ -649,6 +667,119 @@ impl Core {
         })
     }
 
+    /// The default addons and whether each is in this profile's list, by
+    /// manifest id (plans/m13-default-addons.md 5).
+    pub fn default_addons(&self) -> Result<DefaultAddons, CoreError> {
+        let rows = self.library().addons(self.profile())?;
+        let state = |id: &str| {
+            rows.iter()
+                .filter(|r| manifest_id(&r.manifest_json).as_deref() == Some(id))
+                .map(|r| r.enabled)
+                .reduce(|a, b| a || b)
+                .map_or(DefaultInstalled::Absent, |on| {
+                    if on {
+                        DefaultInstalled::On
+                    } else {
+                        DefaultInstalled::Off
+                    }
+                })
+        };
+        Ok(DefaultAddons {
+            version: defaults::LIST_VERSION,
+            addons: defaults::list()
+                .iter()
+                .map(|d| DefaultAddonInfo {
+                    key: d.key.clone(),
+                    name: d.name.clone(),
+                    line: d.line.clone(),
+                    group: d.group.clone(),
+                    installed: state(&d.manifest.id),
+                })
+                .collect(),
+        })
+    }
+
+    /// Installs the defaults the user kept on and the ones turned off (off),
+    /// in one write with their bundled manifests: no network. A default
+    /// already in the list (by manifest id) only takes its switch. A key
+    /// left out of `choices` is on. Untouched defaults (a profile that never
+    /// had a list, every switch on) are stamped with this device's zero hlc,
+    /// so any list another device wrote wins over them; a switch turned off,
+    /// or a list that was there, makes it an edit. A call that changes
+    /// nothing (a retried Continue) writes nothing. Then the live manifests
+    /// are fetched in the background.
+    pub fn install_defaults(&self, choices: &[DefaultChoice]) -> Result<(), CoreError> {
+        if self.policy().kids() {
+            return Err(CoreError::Defaults(
+                "a kids profile uses the owner's addons".into(),
+            ));
+        }
+        if let Some(c) = choices
+            .iter()
+            .find(|c| !defaults::list().iter().any(|d| d.key == c.key))
+        {
+            return Err(CoreError::Defaults(format!("no default named {}", c.key)));
+        }
+        let on = |key: &str| choices.iter().find(|c| c.key == key).is_none_or(|c| c.on);
+        let untouched = self.library().addon_list_hlc(self.profile())?.is_none()
+            && choices.iter().all(|c| c.on);
+        let zero = self.zero_hlc();
+        let edit = |rows: &mut Vec<AddonRow>| {
+            for d in defaults::list() {
+                let id = d.manifest.id.as_str();
+                let present: Vec<usize> = (0..rows.len())
+                    .filter(|&i| manifest_id(&rows[i].manifest_json).as_deref() == Some(id))
+                    .collect();
+                if present.is_empty() {
+                    let json = serde_json::to_string(&d.manifest)
+                        .map_err(|e| CoreError::BadManifest(e.to_string()))?;
+                    put_addon(rows, &d.url, json);
+                    if let Some(row) = rows.last_mut() {
+                        row.enabled = on(&d.key);
+                    }
+                } else {
+                    for i in present {
+                        rows[i].enabled = on(&d.key);
+                    }
+                }
+            }
+            Ok(())
+        };
+        if untouched {
+            self.library().edit_addons(self.profile(), &zero, edit)?;
+        } else {
+            self.edit_addons(edit)?;
+        }
+        // The live manifests now, not in a day: bundled ones may be older.
+        self.library().set_device_value(ADDONS_REFRESHED, "0")?;
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let core = self.clone();
+            tokio::spawn(async move {
+                let now = mq_library::hlc::now_ms();
+                if let Err(e) = core.refresh_addons(now).await {
+                    tracing::debug!("addon refresh after the defaults: {}", error_kind(&e));
+                }
+            });
+        }
+        Ok(())
+    }
+
+    /// Whether this profile starts at the defaults step: it never had an
+    /// addon list, this device belongs to no sync account (a joined device
+    /// gets the account's list), and it is not a kids profile (it reads the
+    /// owner's list).
+    pub fn addons_fresh(&self) -> bool {
+        let library = self.library();
+        library
+            .device_value(DEFAULTS_ERA)
+            .is_ok_and(|era| era.as_deref() == Some("fresh"))
+            && library
+                .addon_list_hlc(self.profile())
+                .is_ok_and(|h| h.is_none())
+            && library.in_sync_account().is_ok_and(|joined| !joined)
+            && !self.policy().kids()
+    }
+
     pub fn set_addon_enabled(&self, transport_url: &str, enabled: bool) -> Result<(), CoreError> {
         self.edit_addons(|rows| {
             let at = position(rows, transport_url)?;
@@ -670,6 +801,10 @@ impl Core {
 
 /// Device state key of the time installed manifests were last refreshed.
 const ADDONS_REFRESHED: &str = "addons_refreshed_ms";
+/// Device state key: "fresh" on a device first opened with default addons,
+/// "legacy" on one that existed before (its profiles never start at the
+/// defaults step; Home offers the new ones once).
+const DEFAULTS_ERA: &str = "addon_defaults";
 /// Installed manifests are fetched again at most this often.
 const REFRESH_EVERY_MS: u64 = 24 * 60 * 60 * 1000;
 
@@ -685,21 +820,42 @@ fn error_kind(e: &CoreError) -> &'static str {
 /// names (position, whether it is on and the stored link kept), else at the
 /// end, on.
 pub(crate) fn put_addon(rows: &mut Vec<AddonRow>, url: &str, manifest_json: String) {
-    match position(rows, url) {
-        Ok(at) => rows[at].manifest_json = manifest_json,
-        Err(_) => rows.push(AddonRow {
-            transport_url: url.to_owned(),
-            manifest_json,
-            position: 0,
-            enabled: true,
-            // Grants nothing here (`AddonClient::client_for` reads the
-            // link); written for older app versions, which still read it.
-            allow_private: url::Url::parse(url)
-                .ok()
-                .and_then(|u| u.host_str().map(mq_http::is_private_host))
-                .unwrap_or(false),
-        }),
+    if let Ok(at) = position(rows, url) {
+        rows[at].manifest_json = manifest_json;
+        return;
     }
+    // A configured copy of a default (its manifest id, another link) takes
+    // the row of that default while it still has the default's own link,
+    // its place and switch kept: configuring Torrentio or Trakt on the
+    // addon's site never leaves two of them. A row the user moved to
+    // another link is never touched.
+    let default = manifest_id(&manifest_json).and_then(|id| defaults::by_id(&id));
+    if let Some(at) = default.and_then(|d| rows.iter().position(|r| r.transport_url == d.url)) {
+        rows[at].transport_url = url.to_owned();
+        rows[at].manifest_json = manifest_json;
+        return;
+    }
+    rows.push(AddonRow {
+        transport_url: url.to_owned(),
+        manifest_json,
+        position: 0,
+        enabled: true,
+        // Grants nothing here (`AddonClient::client_for` reads the
+        // link); written for older app versions, which still read it.
+        allow_private: url::Url::parse(url)
+            .ok()
+            .and_then(|u| u.host_str().map(mq_http::is_private_host))
+            .unwrap_or(false),
+    });
+}
+
+/// The id in a stored manifest.
+fn manifest_id(manifest_json: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Id {
+        id: String,
+    }
+    serde_json::from_str::<Id>(manifest_json).ok().map(|m| m.id)
 }
 
 /// The installed addon a command names (`find_row`).

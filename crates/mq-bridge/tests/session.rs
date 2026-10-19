@@ -656,3 +656,57 @@ async fn use_server_roster_without_a_head_is_refused() {
         "{reply}"
     );
 }
+
+/// The defaults over the protocol (plans/m13-default-addons.md): read, then
+/// installed with a switch off; and a pasted link carrying a sign-in is
+/// refused until confirmed, before anything is fetched.
+#[tokio::test]
+async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(Core::temporary("p").unwrap(), tx);
+    session
+        .handle_text(&json!({"id": 1, "op": "defaultAddons"}).to_string())
+        .await;
+    let listed = next(&mut rx).await;
+    let addons = listed["result"]["addons"].as_array().unwrap();
+    assert_eq!(addons.len(), 9, "{listed}");
+    assert_eq!(addons[1]["key"], "torrentio");
+    assert_eq!(addons[1]["installed"], "absent");
+    session
+        .handle_text(
+            &json!({"id": 2, "op": "installDefaults", "choices": [{"key": "torrentio", "on": false}]})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
+    session
+        .handle_text(&json!({"id": 3, "op": "defaultAddons"}).to_string())
+        .await;
+    let listed = next(&mut rx).await;
+    assert_eq!(listed["result"]["addons"][1]["installed"], "off");
+    assert_eq!(listed["result"]["addons"][0]["installed"], "on");
+
+    let theirs = "https://trakt.example/eyJ0b2tlbiI6IngifQ/manifest.json";
+    session
+        .handle_text(&json!({"id": 4, "op": "installAddon", "url": theirs}).to_string())
+        .await;
+    let refused = next(&mut rx).await;
+    assert_eq!(refused["ok"], false);
+    assert_eq!(refused["code"], "tokenInLink", "{refused}");
+    // Percent-encoded JSON settings are read too.
+    let encoded = "https://a.example/%7B%22apikey%22%3A%22k%22%7D/manifest.json";
+    session
+        .handle_text(&json!({"id": 5, "op": "installAddon", "url": encoded}).to_string())
+        .await;
+    assert_eq!(next(&mut rx).await["code"], "tokenInLink");
+    // Acknowledged, the install goes ahead (here it then fails to reach the made-up host).
+    session
+        .handle_text(
+            &json!({"id": 6, "op": "installAddon", "url": theirs, "acknowledgeToken": true})
+                .to_string(),
+        )
+        .await;
+    let tried = next(&mut rx).await;
+    assert_eq!(tried["ok"], false);
+    assert_ne!(tried["code"], "tokenInLink", "{tried}");
+}

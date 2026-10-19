@@ -2698,6 +2698,7 @@ name = "mq-runtime"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "eyeball",
@@ -2718,6 +2719,7 @@ dependencies = [
  "mq-streams",
  "mq-sync",
  "mq-tracking",
+ "percent-encoding",
  "rusqlite",
  "serde",
  "serde_json",
