@@ -263,9 +263,10 @@ impl Auth {
         let mut s = lock(&self.state);
         match (record, &s.record) {
             (None, _) => {
-                let generation = s.generation + 1;
                 *s = State {
-                    generation,
+                    generation: s.generation + 1,
+                    // Every sign-in begun before is stale.
+                    logins: s.logins + 1,
                     ..State::default()
                 };
                 true
@@ -288,6 +289,9 @@ impl Auth {
                 s.acked = true;
                 s.dead = None;
                 s.retry_at = None;
+                // A record installed or replaced (even at the same
+                // generation) makes every sign-in begun before it stale.
+                s.logins += 1;
                 true
             }
         }

@@ -96,8 +96,9 @@ pub fn body(answer: Result<Answer, AuthError>) -> Result<Value, CallError> {
 
 /// Every item of a paged list, page by page until an empty one (Trakt
 /// clamps `limit` and may shrink pages, so a short page is not the end).
-/// A page with no row not seen before ends it too (a list that ignores
-/// `page`); more than `MAX_PAGES` pages is an error, never a cut list.
+/// A short page with no row not seen before ends it too (a list that is
+/// not paged); a full one, or more than `MAX_PAGES` pages, is an error,
+/// never a cut list.
 pub async fn get_all(
     api: &Api,
     gate: &Gate,
@@ -127,14 +128,19 @@ async fn pages(
         let Value::Array(list) = body(get(api, gate, auth, bound, &url).await)? else {
             return Err(CallError::Transient("a list that is not a list".into()));
         };
-        let before = items.len();
+        let (before, full) = (items.len(), list.len() as u64 >= u64::from(limit));
         items.extend(
             list.into_iter()
                 .filter(|item| seen.insert(item.to_string())),
         );
-        // An empty page, or one with nothing new (a server that ignores
-        // `page`, or turns the same rows around), ends the list.
+        // An empty page, or one with nothing new (an unpaged list read
+        // again, or the same rows turned around), ends the list. A full
+        // page with nothing new means `page` is ignored but `limit` is not:
+        // the rest cannot be read, and a cut list is never an answer.
         if items.len() == before {
+            if full {
+                return Err(CallError::Transient("a list whose pages repeat".into()));
+            }
             return Ok(items);
         }
     }

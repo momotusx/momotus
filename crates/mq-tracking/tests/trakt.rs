@@ -411,6 +411,32 @@ async fn only_the_newest_sign_in_adopts() {
 }
 
 #[tokio::test]
+async fn a_record_installed_meanwhile_stales_a_sign_in() {
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(aging_record())).await);
+    // A's sign-in begins; then the app installs B at the same generation.
+    let a = auth.ticket().await;
+    let b = TraktRecord {
+        access_token: "b-access".into(),
+        account: "other".into(),
+        ..aging_record()
+    };
+    assert!(auth.set(Some(b)).await);
+    let tokens = auth::Tokens {
+        access_token: "a-access".into(),
+        refresh_token: "r".into(),
+        created_at_ms: 1,
+        expires_at_ms: 2,
+        scope: "public".into(),
+    };
+    assert!(
+        auth.adopt(tokens, "someone", "someone", a).await.is_none(),
+        "A's approval comes too late"
+    );
+    assert_eq!(auth.account().await.as_deref(), Some("other"), "B stays");
+}
+
+#[tokio::test]
 async fn a_refresh_never_brings_back_a_replaced_account() {
     let mock = Mock::default();
     mock.on(
@@ -730,4 +756,17 @@ async fn a_list_that_ignores_its_page_is_read_once() {
         .unwrap();
     assert_eq!(items, [1, 2], "no duplicates");
     assert_eq!(mock.seen("/sync/same").len(), 2);
+}
+
+#[tokio::test]
+async fn full_pages_that_repeat_are_an_error_not_a_cut_list() {
+    let mock = Mock::default();
+    // The server honors `limit` (2) but not `page`: the rest is out of reach.
+    mock.on("/sync/full", vec![json(200, "[1,2]"), json(200, "[1,2]")]);
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(fresh_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let read = call::get_all(&api, &gate, &auth, &bound(), "/sync/full", 2).await;
+    assert!(read.is_err(), "{read:?}");
 }
