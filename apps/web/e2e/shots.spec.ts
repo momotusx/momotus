@@ -18,6 +18,8 @@ interface Screen {
   ready: (page: Page, form: Form) => Promise<void>;
   /** Puts shared core state back after the shot. */
   after?: (page: Page) => Promise<void>;
+  /** Live codes and links covered in the image (account link codes). */
+  mask?: string;
 }
 
 const visible = (sel: string, timeout = 30_000) => async (page: Page) => {
@@ -204,10 +206,19 @@ const SCREENS: Screen[] = [
   { name: "welcome", path: "/welcome", ready: visible(".door") },
   { name: "welcome-source", path: "/welcome?step=2", ready: visible(".sugg") },
   { name: "welcome-check", path: "/welcome?step=3", ready: visible(".check li") },
-  { name: "import", path: "/import", ready: visible(".code, .problem") },
+  { name: "import", path: "/import", ready: visible(".code, .problem"), mask: ".code, .qrbox, b.mono, [data-f='import:open']" },
   { name: "pairing", path: "/pair", ready: visible(".install") },
   { name: "find-addons", path: "/find-addons", ready: visible(".fa-card:not(.skel)") },
+  { name: "debrid", path: "/debrid", ready: visible(".dcard") },
+  { name: "profiles", path: "/profiles", ready: visible(".ptile") },
+  { name: "profiles-manage", path: "/profiles/manage", ready: visible(".prow") },
+  { name: "profile-edit", path: "/profiles/new", ready: visible(".pedit") },
 ];
+
+// SHOTS_DIR and SHOTS_PREFIX send a run elsewhere (a design audit's before
+// and after) without touching the committed set.
+const OUT = process.env.SHOTS_DIR ?? "e2e/shots";
+const PREFIX = process.env.SHOTS_PREFIX ?? "";
 
 
 // Each shot opens a fresh context, so artwork is fetched once here and
@@ -267,7 +278,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
           .catch(() => undefined);
         // Let focus motion and image fades settle.
         await page.waitForTimeout(700);
-        await page.screenshot({ path: `e2e/shots/${screen.name}-${form}.jpg`, type: "jpeg", quality: 80 });
+        const mask = screen.mask ? [page.locator(screen.mask)] : [];
+        await page.screenshot({ path: `${OUT}/${PREFIX}${screen.name}-${form}.jpg`, type: "jpeg", quality: 80, mask });
         await screen.after?.(page);
         expect(errors).toEqual([]);
         await context.unrouteAll({ behavior: "ignoreErrors" });

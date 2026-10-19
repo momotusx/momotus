@@ -10,11 +10,14 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BBB_ID } from "./source";
 
-export const PORTS = { bridge: 17801, vite: 15301, source: 17802 };
+/** MQ_E2E_PORT_OFFSET moves every port, so two checkouts can run their
+ * suites at once (each run needs its own core and dev server). */
+const shift = Number(process.env.MQ_E2E_PORT_OFFSET) || 0;
+export const PORTS = { bridge: 17801 + shift, vite: 15301 + shift, source: 17802 + shift };
 /** The sync spec's own: a relay and one core per device, so the shared core never joins an account. */
-export const SYNC_PORTS = { relay: 17803, a: 17804, b: 17805, c: 17806 };
+export const SYNC_PORTS = { relay: 17803 + shift, a: 17804 + shift, b: 17805 + shift, c: 17806 + shift };
 /** The Trakt spec's own: a core whose Trakt is the fake, the fake, and a core built without a Trakt app. */
-export const TRAKT_PORTS = { bridge: 17807, fake: 17808, plain: 17809 };
+export const TRAKT_PORTS = { bridge: 17807 + shift, fake: 17808 + shift, plain: 17809 + shift };
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
