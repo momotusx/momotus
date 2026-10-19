@@ -18,6 +18,18 @@ import { gateOpen, onProfileReset, profiles } from "./profiles";
 import * as vault from "./vault";
 
 type Sub = Awaited<ReturnType<typeof bridge.subscribe>>;
+
+/** Work started here and not waited for by its caller (a store, an opening, a delete). */
+const busy = new Set<Promise<unknown>>();
+function track(work: Promise<unknown>) {
+  busy.add(work);
+  const done = () => void busy.delete(work);
+  void work.then(done, done);
+}
+/** Settles once nothing started here is still running, however long that takes (for tests). */
+export async function traktSettled() {
+  while (busy.size) await Promise.allSettled([...busy]);
+}
 /** One opening of the view for one profile; a switch, a lock or a reopen starts another.
  * `offered` names the last record it took, so a record pushed again is stored once. */
 type Session = { profile: string; sub: Promise<Sub | null>; offered?: string };
@@ -82,7 +94,7 @@ function got(session: Session, snapshot: TraktStatus) {
   const name = `${r.account}:${r.generation}:${r.revision}`;
   if (session.offered === name) return;
   session.offered = name;
-  void store(session, r);
+  track(store(session, r));
 }
 
 /** The profile's record first (when this page holds one), then the view. */
@@ -91,9 +103,11 @@ function openFor(profile: string) {
   current = session;
   setLockedHere(false);
   if (!vault.active())
-    void vault.holdsTrakt(profile).then(
-      (held) => current === session && setLockedHere(held),
-      () => undefined,
+    track(
+      vault.holdsTrakt(profile).then(
+        (held) => current === session && setLockedHere(held),
+        () => undefined,
+      ),
     );
   session.sub = records
     .resend(profile, still(session))
@@ -122,6 +136,7 @@ function openFor(profile: string) {
       return sub;
     })
     .catch(() => null);
+  track(session.sub);
 }
 
 async function closeView() {
@@ -140,9 +155,11 @@ createRoot(() =>
       (active) => {
         if (!active || current?.profile === active) return;
         // Two changes in a row: only the newest opens, once.
-        void closeView().then(() => {
-          if (current === null && gateOpen() && profiles()?.active === active) openFor(active);
-        });
+        track(
+          closeView().then(() => {
+            if (current === null && gateOpen() && profiles()?.active === active) openFor(active);
+          }),
+        );
       },
     ),
   ),
@@ -173,14 +190,14 @@ async function meetSealed() {
   }
   if (pending) await store(pending.session, pending.record);
 }
-vault.onOpened(() => void meetSealed());
+vault.onOpened(() => track(meetSealed()));
 
 // A profile removed here or by sync: its record goes from memory and its sealed copy from this
 // browser (no key needed). A delete that fails is tried again: the core names removed profiles
 // again when the next session starts.
 bridge.onProfileGone((profile) => {
   dropPending(profile);
-  void records.signedOut(profile).catch(() => undefined);
+  track(records.signedOut(profile).catch(() => undefined));
 });
 
 /** Stores what memory holds again, then acknowledges a record still waiting; the note goes once

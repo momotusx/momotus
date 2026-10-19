@@ -97,8 +97,13 @@ Object.defineProperty(navigator, "credentials", {
 
 const vault = await import("./vault");
 const trakt = await import("./trakt");
-/** Long enough for a seal (real WebCrypto) and the writes after it. */
-const settled = () => new Promise((done) => setTimeout(done, 40));
+/** Waits for everything the module started (seals, writes, openings) to finish: no fixed sleep. */
+const settled = () => trakt.traktSettled();
+/** Waits until `ready` holds, yielding to the event loop between looks (for work held open on purpose). */
+async function until(ready: () => boolean) {
+  for (let i = 0; i < 10_000 && !ready(); i++) await new Promise((done) => setTimeout(done, 0));
+  expect(ready()).toBe(true);
+}
 const live = () => views.filter((v) => !v.closed);
 let revision = 0;
 /** A record as the core offers one: each a new rotation. */
@@ -161,9 +166,13 @@ test("remembering seals the records under the passkey key, never in the clear", 
 
 test("a sealed write that lands after a switch acknowledges nothing for the new profile (the reviewer's ordering)", async () => {
   idb.hold = true;
-  await offer("t2");
-  // The write for p1 is still open when the session switches to p2.
-  await reset({ active: "p2", locked: false });
+  live().at(-1)?.handlers.snapshot(status({ record: record("t2") }));
+  // The write for p1 is open (held) when the session switches to p2.
+  await until(() => idb.hold === false);
+  await Promise.all(resets.map((fn) => fn()));
+  setSession({ active: "p2", locked: false });
+  // p1's session is over (its view closed); p2's opening waits behind the held write.
+  await until(() => sent.some((x) => x.name === "close trakt"));
   idb.release();
   await settled();
   expect(told()).toEqual(["close trakt", "subscribe trakt"]);

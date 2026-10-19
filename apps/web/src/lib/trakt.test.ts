@@ -177,6 +177,11 @@ test("records sealed here meet the ones in memory: the newer of each is kept", a
   expect(newer(record(3, 0), record(2, 9)).generation).toBe(3);
 });
 
+/** Lets the queued changes run as far as they can: promises only, no clock. */
+const flush = async () => {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+};
+
 test("changes run in the order they came", async () => {
   const log: string[] = [];
   let release: () => void = () => undefined;
@@ -195,12 +200,12 @@ test("changes run in the order they came", async () => {
   });
   const first = records.offered("p1", record(1, 0), open);
   const second = records.signedOut("p1");
-  await new Promise((r) => setTimeout(r, 5));
+  await flush();
   // The sign-out waits for the store and acknowledgement before it.
   expect(log).toEqual(["persist p1"]);
   release();
   await first;
-  await new Promise((r) => setTimeout(r, 5));
+  await flush();
   release();
   await second;
   expect(log).toEqual(["persist p1", "send a1.0", "forget p1"]);
