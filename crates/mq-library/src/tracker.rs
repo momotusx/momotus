@@ -193,6 +193,29 @@ impl Library {
         })
     }
 
+    /// A playback reached its end: the mark, and the write its session
+    /// holds for the tracker (`hold`), in one transaction, so a process
+    /// killed between them can never leave the mark without the write.
+    pub fn set_watched_holding<'a>(
+        &self,
+        profile: &str,
+        item_id: &str,
+        video_id: &str,
+        stamp: impl Into<Stamp<'a>>,
+        hold: Option<NewIntent<'_>>,
+    ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
+        self.write(|c| {
+            local(c, coll::WATCHED, &[profile, video_id], &stamp, |h| {
+                sql::set_watched(c, profile, item_id, video_id, true, h)
+            })?;
+            if let Some(intent) = hold {
+                put_intent(c, item_id, video_id, intent)?;
+            }
+            Ok(())
+        })
+    }
+
     /// Queues a tracker write; a pending write for the same video is
     /// replaced and the revision goes up. Returns the new revision.
     pub fn put_tracker_intent(
