@@ -200,8 +200,9 @@ export default function Home() {
           when={!home.hero && allFailed(home.rows)}
           fallback={
             <>
-              {/* Under Continue Watching, or first when there is none. */}
-              <Show when={!hasContinue()}>
+              {/* Under Continue Watching, or first when there is none; an empty
+                  Home already offers Set up Marquee, so not beside it. */}
+              <Show when={!hasContinue() && !empty()}>
                 <DefaultsCard />
               </Show>
               <For each={home.rows}>

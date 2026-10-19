@@ -290,3 +290,13 @@ test("after an import, Back from the setup check does not call Marquee's own ins
   await expect(page.locator(".drow.fixed", { hasText: "Torrentio" })).toContainText("Installed");
   await expect(page.locator(".drow.fixed", { hasText: "From Stremio" })).toHaveCount(0);
 });
+
+test("an empty Home offers Set up Marquee alone, not the defaults card beside it", async ({ browser }) => {
+  // A list with no catalog addon: Home is empty, and the profile is no longer fresh.
+  await install("https://torrentio.strem.fun/manifest.json");
+  const page = await device(browser, "desktop");
+  await page.goto("/?form=desktop");
+  await expect(page.locator('[data-f="home:setup"]')).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  await expect(page.locator(".defaults-card")).toHaveCount(0);
+});
