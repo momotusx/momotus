@@ -55,6 +55,16 @@ private let account = try! JSONDecoder().decode(JSONValue.self, from: Data(#"{"r
         #expect(!sync.keyLeft && keychain.held == nil)
     }
 
+    @Test func aListThatCouldNotBeReadSaysItMayBeOutOfDate() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let sync = SyncModel(core: core.client, records: FakeKeychain(account).record, defaults: try defaults())
+        #expect(!sync.listFailed)
+        // The core refuses this record: the read fails, and the page says the list may be old.
+        await #expect(throws: (any Error).self) { try await sync.loadDevices() }
+        #expect(sync.listFailed)
+    }
+
     @Test func aKeyLeftByADeletedInstallGoesBeforeTheCoreOpens() throws {
         // First launch of an install with no library: the old install's key goes.
         let keychain = FakeKeychain(account)
