@@ -35,30 +35,19 @@ class LinkInstall(
     // Bumped for a new profile: a request from before must not land on the new profile's pages.
     private var generation = 0
 
-    /** The refused add, kept until the user confirms the link is theirs or starts another one. */
-    private var refused: (() -> Job?)? = null
-
     /**
-     * Adds the addon [install] names (it returns the addon's name; its argument is whether the user
-     * confirmed a link that carries a sign-in); [added] runs on success, for the field to clear. A
-     * second add while one runs does nothing (null).
+     * Adds the addon [install] names (it returns the addon's name; its argument says whether the
+     * user confirmed a link that carries a sign-in); [added] runs on success, for the field to clear.
+     * A link refused for its sign-in leaves the warning; the user's confirm sends the field's link
+     * again with [acknowledgeToken]. A second add while one runs does nothing (null).
      */
     fun run(
         install: suspend (acknowledgeToken: Boolean) -> String,
         added: () -> Unit = {},
-    ): Job? = start(install, added, acknowledgeToken = false)
-
-    /** The user says the link with a sign-in is theirs: it is sent again, acknowledged. */
-    fun confirm(): Job? = refused?.invoke()
-
-    private fun start(
-        install: suspend (Boolean) -> String,
-        added: () -> Unit,
-        acknowledgeToken: Boolean,
+        acknowledgeToken: Boolean = false,
     ): Job? {
         if (busy) return null
         val mine = generation
-        refused = null
         said = Said("Adding the addon", failed = false, pending = true)
         return scope.launch {
             val after =
@@ -70,7 +59,6 @@ class LinkInstall(
                     throw e
                 } catch (e: CoreError) {
                     if (e.code == TOKEN_IN_LINK && !acknowledgeToken) {
-                        if (mine == generation) refused = { start(install, added, acknowledgeToken = true) }
                         Said(TOKEN_WARNING, failed = true, token = true)
                     } else {
                         Said("Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
@@ -82,10 +70,14 @@ class LinkInstall(
         }
     }
 
+    /** The field changed after a sign-in warning: the warning was about the old link, so it goes. */
+    fun edited() {
+        if (said?.token == true) said = null
+    }
+
     /** A new profile: nothing of the last one's add shows, and one still running lands nowhere. */
     fun forget() {
         generation++
-        refused = null
         said = null
     }
 

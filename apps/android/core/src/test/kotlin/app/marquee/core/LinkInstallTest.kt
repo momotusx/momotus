@@ -45,50 +45,60 @@ class LinkInstallTest {
         }
 
     @Test
-    fun `a link with a sign-in warns first and goes in only once the user confirms it`() =
+    fun `a link with a sign-in warns first and goes in only when sent again acknowledged`() =
         runTest {
             val link = LinkInstall(backgroundScope)
-            val sent = mutableListOf<Boolean>()
+            val sent = mutableListOf<Pair<String, Boolean>>()
             var cleared = 0
-            link.run({ ack ->
-                sent += ack
+
+            // The field's link at the moment of each press: what the page hands to run.
+            fun press(
+                url: String,
+                acknowledged: Boolean,
+            ) = link.run({ ack ->
+                sent += url to ack
                 if (!ack) throw CoreError("this link carries a sign-in", code = LinkInstall.TOKEN_IN_LINK)
                 "Trakt Tv"
-            }, added = { cleared++ })
+            }, added = { cleared++ }, acknowledgeToken = acknowledged)
+            press("https://a.example/token=1/manifest.json", acknowledged = false)
             runCurrent()
             assertEquals(LinkInstall.Said(LinkInstall.TOKEN_WARNING, failed = true, token = true), link.said)
             assertEquals(0, cleared)
-            link.confirm()
+            press("https://a.example/token=1/manifest.json", acknowledged = true)
             runCurrent()
-            assertEquals(listOf(false, true), sent)
+            assertEquals(
+                listOf(
+                    "https://a.example/token=1/manifest.json" to false,
+                    "https://a.example/token=1/manifest.json" to true,
+                ),
+                sent,
+            )
             assertEquals(LinkInstall.Said("Added Trakt Tv", failed = false), link.said)
             assertEquals(1, cleared)
-            // Confirmed once: nothing is left to confirm.
-            assertNull(link.confirm())
         }
 
     @Test
-    fun `another add or a profile switch drops the warning's confirm`() =
+    fun `an edit drops the sign-in warning, so a confirm never adds a link nobody was warned about`() =
         runTest {
             val link = LinkInstall(backgroundScope)
-            val sent = mutableListOf<String>()
-            val refuse: suspend (Boolean) -> String = { ack ->
-                sent += "token $ack"
-                throw CoreError("this link carries a sign-in", code = LinkInstall.TOKEN_IN_LINK)
-            }
-            link.run(refuse)
+            link.run({ throw CoreError("this link carries a sign-in", code = LinkInstall.TOKEN_IN_LINK) })
             runCurrent()
-            link.run({
-                sent += "plain $it"
-                "Cinemeta"
-            })
+            assertTrue(link.said?.token == true)
+            link.edited()
+            assertNull(link.said)
+            // Any other line stays through an edit: it says how the last add went.
+            link.run({ throw CoreError("the manifest is not valid JSON") })
             runCurrent()
-            assertNull(link.confirm())
-            link.run(refuse)
+            link.edited()
+            assertEquals(
+                LinkInstall.Said("Adding the addon did not work: the manifest is not valid JSON", failed = true),
+                link.said,
+            )
+            // A profile switch drops a warning too.
+            link.run({ throw CoreError("this link carries a sign-in", code = LinkInstall.TOKEN_IN_LINK) })
             runCurrent()
             link.forget()
-            assertNull(link.confirm())
-            assertEquals(listOf("token false", "plain false", "token false"), sent)
+            assertNull(link.said)
         }
 
     @Test

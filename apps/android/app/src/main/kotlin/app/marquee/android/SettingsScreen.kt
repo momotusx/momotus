@@ -614,10 +614,18 @@ internal fun LinkField(
     compact: Boolean = false,
 ) {
     val said = link.said?.let { Said(Place.Install, it.words, it.failed, it.pending) }
-    // A link whose settings carry a sign-in is refused first: the user says it is theirs to add it.
-    val confirm: (() -> Unit)? = if (link.said?.token == true) ({ link.confirm() }) else null
-    InstallField(link.busy, focus, said, side, compact, confirm) { url, clear ->
-        link.run({ ack -> session.ops.installAddon(url, acknowledgeToken = ack).name }, added = clear)
+    // A link whose settings carry a sign-in is refused first; the user's confirm sends the field's
+    // link (an edit drops the warning, so it is the link warned about), acknowledged.
+    InstallField(
+        link.busy,
+        focus,
+        said,
+        side,
+        compact,
+        warned = link.said?.token == true,
+        onEdit = link::edited,
+    ) { url, acknowledged, clear ->
+        link.run({ ack -> session.ops.installAddon(url, acknowledgeToken = ack).name }, clear, acknowledged)
     }
 }
 
@@ -631,10 +639,12 @@ internal fun InstallField(
     side: Dp = Marquee.safe.side,
     /** Find addons' phone page: no heading and the button beside the field, so the cards start higher. */
     compact: Boolean = false,
-    /** Adds the refused link anyway, after the warning that it carries a sign-in. */
-    onConfirm: (() -> Unit)? = null,
-    /** The link, and what clears the field once it is added. */
-    onInstall: (String, () -> Unit) -> Unit,
+    /** The last add was refused for a sign-in in the link: offer to add it anyway. */
+    warned: Boolean = false,
+    /** The text changed. */
+    onEdit: () -> Unit = {},
+    /** The link, whether the user confirmed its sign-in, and what clears the field once it is added. */
+    onInstall: (String, Boolean, () -> Unit) -> Unit,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -644,13 +654,16 @@ internal fun InstallField(
     val add = {
         if (!busy && text.isNotBlank()) {
             keyboard?.hide()
-            onInstall(text.trim()) { text = "" }
+            onInstall(text.trim(), false) { text = "" }
         }
     }
     val field: @Composable (Modifier) -> Unit = { modifier ->
         MqTextField(
             value = text,
-            onValueChange = { text = it },
+            onValueChange = {
+                text = it
+                onEdit()
+            },
             label = "Addon link",
             placeholder = "https://... manifest.json",
             modifier = modifier,
@@ -684,7 +697,13 @@ internal fun InstallField(
                 button()
             }
             if (status != null) SaidLine(status, side = 0.dp)
-            if (onConfirm != null) SecondaryButton(LinkInstall.TOKEN_CONFIRM, onConfirm, icon = Icons.ShieldAlert)
+            if (warned) {
+                SecondaryButton(
+                    LinkInstall.TOKEN_CONFIRM,
+                    { if (!busy) onInstall(text.trim(), true) { text = "" } },
+                    icon = Icons.ShieldAlert,
+                )
+            }
         }
     }
 }
