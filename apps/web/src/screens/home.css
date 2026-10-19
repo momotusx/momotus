@@ -24,6 +24,10 @@
 /* The stack under the floating pill: logo, meta, three lines and the actions
  * keep at least 24 px of air below the pill on a 600 px card. */
 .hero-logo { height: 100px; width: auto; max-width: 560px; margin-bottom: 16px; }
+/* Sized by area, as Netflix and the Apple TV app size title art: a stacked
+ * logo grows taller, a wide one stays low, both read with one weight. The
+ * plain height above stays for an engine without sqrt(). */
+.hero-logo { --logo-area: 36000; height: clamp(64px, calc(sqrt(var(--logo-area) / var(--r, 5.6)) * 1px), 140px); }
 .logo-text { font: var(--weight-display) var(--type-hero) / 1.0 var(--font-display); letter-spacing: var(--tracking-display); margin-bottom: 18px; max-width: 1100px; }
 /* Over artwork the eyebrow sits in a chip on the page color: accent text is 4.66:1 on `bg` and
    falls below 4.5:1 over light art even under the scrim. */
@@ -32,6 +36,9 @@
 .hero .meta b { font-weight: 400; color: var(--dim); }
 .hero-syn { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; max-width: 900px;
   font: 400 var(--type-callout) / 1.45 var(--font-text); color: var(--muted); margin-bottom: 22px; }
+/* Under a logo drawn taller than 100 px the synopsis keeps two lines, so the
+ * stack still clears the pill on the 600 px card. */
+:is([data-form="tv"], [data-form="desktop"]) .hero-body:has(.hero-logo[data-shape="tall"]) .hero-syn { -webkit-line-clamp: 2; }
 .acts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
 .hero-skel { display: grid; gap: 18px; width: 560px; }
 .hero-skel .skel { height: 110px; border-radius: var(--radius-m); }
@@ -71,6 +78,10 @@
 /* The name card sits under the picture: it shows while the art loads and
  * stays when there is none. */
 .tile .pic img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
+/* A picture still on its way pulses gently (the skeleton's beat), so a slow
+ * image reads as coming, not as a dark hole. */
+.tile .pic:has(> img.fade:not(.in)) { animation: arriving 1.2s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { .tile .pic:has(> img.fade:not(.in)) { animation: none; } }
 .pic-name { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center;
   font: var(--weight-heading) var(--type-headline) / 1.15 var(--font-display); letter-spacing: var(--tracking-heading); color: var(--text); overflow: hidden; overflow-wrap: anywhere; }
 .chip-rate { position: absolute; z-index: 2; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
@@ -115,6 +126,7 @@
   linear-gradient(0deg, rgba(6, 9, 14, .96) 0%, rgba(6, 9, 14, .55) 38%, rgba(6, 9, 14, 0) 62%); }
 [data-form="phone"] .hero-body { padding: 0 18px 20px; }
 [data-form="phone"] .hero-logo { height: 84px; max-width: 240px; margin-bottom: 12px; }
+[data-form="phone"] .hero-logo { --logo-area: 10000; height: clamp(40px, calc(sqrt(var(--logo-area) / var(--r, 5.6)) * 1px), 96px); }
 [data-form="phone"] .logo-text { font-size: var(--type-title1); margin-bottom: 8px; }
 [data-form="phone"] .hero .reason { font-size: 11px; margin-bottom: 10px; padding: 5px 10px; }
 [data-form="phone"] .hero .meta { font-size: 13px; gap: 4px 8px; margin-bottom: 10px; }

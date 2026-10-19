@@ -26,3 +26,10 @@ test("selected states use the generated tokens, not raw white edges", () => {
     expect(sheet).not.toMatch(/inset 0 0 0 2px rgba\(255, 255, 255, \.5\d?\)/);
   }
 });
+
+test("the browser bar takes the page color, and the page says it is dark only", () => {
+  const tokens = JSON.parse(readFileSync(tokensPath, "utf8"));
+  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  expect(html).toContain(`<meta name="theme-color" content="${tokens.color.dark.bg}" />`);
+  expect(html).toContain('<meta name="color-scheme" content="dark" />');
+});

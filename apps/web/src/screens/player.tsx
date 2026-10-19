@@ -118,6 +118,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
   const { time, duration, paused, buffered, started, rate } = engine;
+  // Paused by the viewer (not before the first frame, not at the end card).
+  const pausedNow = () => started() && paused() && !ended();
 
   const wake = () => {
     setOsd(true);
@@ -380,7 +382,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     <div
       class="player-scr"
       data-scheme="dark"
-      classList={{ idle: !osd() && !!url(), started: started() }}
+      classList={{ idle: !osd() && !!url(), started: started(), paused: pausedNow() }}
       onPointerMove={wake}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.
@@ -392,12 +394,16 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     >
       <Backdrop src={ctx.details()?.background} class="player-bd" dim />
       {engine.view}
+      {/* Paused, the picture steps back and the title says what it is, as
+          the Apple TV app, Netflix and Infuse do. */}
+      <div class="pdim" aria-hidden="true" />
       <div class="osd-top" />
       <div class="osd-bot" />
 
       <header class="ptitle">
         <h1>{ctx.details()?.name ?? ""}</h1>
         <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
+        <Show when={pausedNow() && (ctx.episode()?.overview ?? ctx.details()?.description)}>{(t) => <p class="psyn">{t()}</p>}</Show>
         <TraktMark state={snap()?.trakt} />
       </header>
       <Show when={endsAt()}>{(t) => <p class="clock num">Ends at {t()}</p>}</Show>

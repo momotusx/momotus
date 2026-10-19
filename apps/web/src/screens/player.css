@@ -19,6 +19,12 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .osd-bot { position: absolute; left: 0; right: 0; bottom: 0; height: 440px;
   background: linear-gradient(0deg, rgba(0, 0, 0, .8), rgba(0, 0, 0, .72) 52%, rgba(0, 0, 0, .3) 78%, transparent); pointer-events: none; }
 .ptitle, .clock, .tl { text-shadow: 0 1px 10px var(--halo); }
+/* Paused: the picture dims and the synopsis joins the title; playing again,
+ * both leave. */
+.pdim { position: absolute; inset: 0; background: color-mix(in srgb, var(--scrim) 62%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--motion-panel) var(--ease); }
+.player-scr.paused .pdim { opacity: 1; }
+.psyn { max-width: 1100px; margin-top: 18px; font: 400 var(--type-body) / 1.4 var(--font-text); color: var(--text);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .player-scr.idle { cursor: none; }
 .player-scr.idle .osd-top, .player-scr.idle .osd-bot, .player-scr.idle .ptitle, .player-scr.idle .clock, .player-scr.idle .osd { opacity: 0; pointer-events: none; }
 
@@ -129,6 +135,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .osd-bot { height: 260px; }
 [data-form="phone"] .ptitle h1 { font-size: 22px; }
 [data-form="phone"] .ptitle p { font-size: 15px; margin-top: 2px; }
+[data-form="phone"] .ptitle { right: var(--safe-side); }
+[data-form="phone"] .psyn { margin-top: 8px; font-size: 14px; -webkit-line-clamp: 2; }
 [data-form="phone"] .clock { display: none; }
 [data-form="phone"] .pstate { top: 140px; gap: 12px; }
 [data-form="phone"] .pstate .st { font-size: 17px; }

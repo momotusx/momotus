@@ -9,6 +9,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { separators } from "../components/separators";
 import { CONTINUE_ROW, Row } from "../components/row";
 import { homeView, liveView, op, prefsView } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
@@ -115,7 +116,7 @@ export default function Home() {
               <>
                 <p class="reason eyebrow">{h().reason}</p>
                 <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" />
-                <p class="meta">
+                <p class="meta" ref={separators}>
                   <Show when={h().tile.rating}>
                     <span class="rate num">
                       <Star aria-hidden />

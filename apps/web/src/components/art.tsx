@@ -68,6 +68,16 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
         src={trimmed() ?? undefined}
         alt={props.name}
         decoding="async"
+        // Its shape, so the CSS can size every logo to one area (a stacked
+        // logo as tall as it needs, a wide one as low).
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          const r = img.naturalWidth / img.naturalHeight;
+          img.style.setProperty("--r", r.toFixed(3));
+          // Narrower than 3.6:1, Home's hero draws it taller than 100 px, so
+          // the synopsis under it gives a line back (home.css).
+          img.dataset.shape = r < 3.6 ? "tall" : "wide";
+        }}
         onError={() => setBroken(true)}
       />
     </Show>

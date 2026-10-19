@@ -16,7 +16,10 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${PORTS.vite}`,
     colorScheme: "dark",
-    trace: "retain-on-failure",
+    // Recorded only when a test is retried after failing: recording every
+    // test (retain-on-failure) wrote about 2 GB per full run before the
+    // passing ones were dropped.
+    trace: "on-first-retry",
   },
   webServer: {
     command: "bunx vite",

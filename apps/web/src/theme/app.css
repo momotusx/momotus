@@ -119,6 +119,9 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 
 .skel { background: var(--surface); animation: skel 1.6s ease-in-out infinite alternate; }
 @keyframes skel { from { opacity: .55; } to { opacity: 1; } }
+/* A picture on its way: its surface breathes, never its opacity, so a focus
+ * ring on the same box stays solid. */
+@keyframes arriving { from { background-color: var(--surface); } to { background-color: var(--raised); } }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 
 /* Backdrop art fades in once decoded. */

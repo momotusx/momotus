@@ -12,6 +12,7 @@ import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { type TitleView, titleView, versionsView } from "../core/client";
 import type { Episode } from "../core/generated/Episode";
@@ -106,7 +107,7 @@ function TitlePage(props: { kind: string; id: string }) {
             <>
               <section class="info" aria-label={x().name}>
                 <Logo src={x().logo} name={x().name} class="title-logo" />
-                <p class="meta">
+                <p class="meta" ref={separators}>
                   {/* The rating leads, a gold star and the number, as on Home. */}
                   <Show when={x().rating}>
                     <span class="rate num" aria-label={`IMDb ${x().rating}`}>
