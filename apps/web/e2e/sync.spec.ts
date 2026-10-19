@@ -39,6 +39,8 @@ const secrets = new Set<string>();
 const failOnce = new Map<number, string>();
 /** Every request a page sent its core, by the core's port: op and view, nothing else. */
 const asked: { port: number; op?: string; view?: string }[] = [];
+/** The next answer to this op on a core's port is edited before the page sees it. */
+const editOnce = new Map<number, { op: string; edit: (result: Record<string, unknown>) => void }>();
 /** Desk's fake camera films this file (Chromium reads it when the camera opens). */
 let camera = "";
 let scratch = "";
@@ -122,11 +124,21 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS, 
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const core = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     const early: string[] = [];
+    const ops = new Map<number, string>();
     core.addEventListener("open", () => {
       for (const m of early.splice(0)) core.send(m);
     });
     core.addEventListener("message", (e) => {
       collect(String(e.data));
+      const reply = JSON.parse(String(e.data)) as { id?: number; result?: Record<string, unknown> };
+      const op = reply.id === undefined ? undefined : ops.get(reply.id);
+      const edit = editOnce.get(port);
+      if (op && edit && edit.op === op && reply.result) {
+        editOnce.delete(port);
+        edit.edit(reply.result);
+        ws.send(JSON.stringify(reply));
+        return;
+      }
       ws.send(String(e.data));
     });
     core.addEventListener("close", () => ws.close());
@@ -134,6 +146,7 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS, 
       collect(String(m));
       const request = JSON.parse(String(m)) as { id?: number; op?: string; view?: string };
       asked.push({ port, op: request.op, view: request.view });
+      if (request.id !== undefined && request.op) ops.set(request.id, request.op);
       if (request.op && request.op === failOnce.get(port)) {
         failOnce.delete(port);
         ws.send(JSON.stringify({ id: request.id, ok: false, error: "http status 502" }));
@@ -567,7 +580,7 @@ test.describe.serial("sync across three devices", () => {
     await go(desk, "/sync");
   });
 
-  test("Phone, found again: digits that differ remove the device that answered", async () => {
+  test("Phone, found again: They differ before it confirms ends the approval, and its join fails", async () => {
     await phone.locator('[data-f="sync:pair"]').click();
     // The server is remembered: the code shows at once.
     await phone.locator('[data-f="pair:copy"]').click();
@@ -576,10 +589,7 @@ test.describe.serial("sync across three devices", () => {
     await desk.locator('[data-f="sync-add:code"]').fill(code);
     await desk.locator('[data-f="sync-add:approve"]').click();
     const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
-    // Someone else's screen confirms the code Desk approved.
     await expect(phone.locator(".confirm .code")).toHaveText(digits);
-    await phone.locator('[data-f="pair:yes"]').click();
-    await expect(phone.locator(".summary h2")).toHaveText("This device joined the account");
     // The passkey answers without verifying the user first: the page refuses it, nothing
     // changes, and the button stays and says why.
     await passkey.cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId: passkey.id, isBadUV: true });
@@ -587,21 +597,19 @@ test.describe.serial("sync across three devices", () => {
     await expect(desk.locator(".confirm .st.bad")).toHaveText("The passkey did not confirm it, so nothing changed.");
     await expect(desk.locator('[data-f="sync-add:differ"]')).toBeVisible();
     await passkey.cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId: passkey.id, isBadUV: false });
+    // Desk says the digits differ before the device confirmed: the approval ends now.
     await desk.locator('[data-f="sync-add:differ"]').click();
-    await expect(desk.locator(".confirm .st")).toHaveText("The device that answered showed other digits, so it was removed. Nothing else changed.");
-    await phone.locator('[data-f="pair:done"]').click();
-    // Its first round may already have read the removal; else the next one does.
-    const removed = phone.locator("main > .st.bad");
-    await expect(async () => {
-      const now = phone.locator('[data-f="sync:now"]');
-      if (await now.isVisible()) await now.click({ timeout: 1000 }).catch(() => undefined);
-      await expect(removed).toContainText("This device was removed from your sync account.", { timeout: 2000 });
-    }).toPass({ timeout: 30_000 });
+    await expect(desk.locator(".confirm .st")).toHaveText("The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed.");
+    // Whoever holds the other screen confirms anyway: the join no longer fits.
+    await phone.locator('[data-f="pair:yes"]').click();
+    await expect(phone.locator(".problem h2")).toHaveText("Pairing stopped");
+    await expect(phone.locator(".problem p")).toContainText("changed while pairing");
     await desk.locator('[data-f="sync-add:done"]').click();
     await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
   });
 
   test("Phone pairs again; a code it rejects adds nothing", async () => {
+    await go(phone, "/sync");
     await phone.locator('[data-f="sync:pair"]').click();
     await phone.locator('[data-f="pair:copy"]').click();
     let code = await phone.evaluate(() => navigator.clipboard.readText());
@@ -633,6 +641,13 @@ test.describe.serial("sync across three devices", () => {
   });
 
   test("a restored sync server shows Desk a different list, which Desk compares before continuing", async () => {
+    // A kit Phone makes now is on both lists later: it goes only if Phone is ticked.
+    await go(phone, "/sync/kit");
+    await phone.locator('[data-f="sync-kit:make"]').click();
+    await expect(phone.locator(".sync-kit-text")).toBeVisible();
+    await phone.locator('[data-f="sync-kit:saved"]').click();
+    await go(desk, "/sync");
+    await syncNow(desk);
     const snapshot = join(scratch, "snapshot");
     const stop = async () => {
       relay.proc.kill();
@@ -662,10 +677,21 @@ test.describe.serial("sync across three devices", () => {
     await go(desk, "/sync");
     await syncNow(desk);
     await expect(state(desk)).toHaveText("The sync server lists different devices than this device knows. Compare the lists to keep syncing.");
+    // Were this device off the server's list, the page says so and offers nothing to continue.
+    editOnce.set(SYNC_PORTS.a, { op: "forkPreview", edit: (r) => (r.onServer = false) });
+    await desk.locator('[data-f="sync:server-list"]').click();
+    await expect(desk).toHaveURL(/\/sync\/fork$/);
+    await expect(desk.locator(".problem .st.bad")).toHaveText("The sync server's list no longer includes this device: it was removed there. Pair this device again from one that still syncs.");
+    await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveCount(0);
+    await desk.locator('[data-f="sync-fork:cancel"]').click();
+    await expect(desk).toHaveURL(/\/sync$/);
     await desk.locator('[data-f="sync:server-list"]').click();
     await expect(desk).toHaveURL(/\/sync\/fork$/);
     // Phone's kit is only on the server's list and goes; Desk's own kit only Desk knew.
-    await expect(desk.locator(".sync-member", { hasText: "on Phone" })).toContainText("Goes");
+    const serverOnly = desk.locator(".sync-member", { hasText: "only on the server's list" });
+    await expect(serverOnly).toHaveCount(1);
+    await expect(serverOnly).toContainText("Goes");
+    await expect(serverOnly).toContainText("on Phone");
     const mineOnly = desk.locator(".set", { has: desk.locator("h2", { hasText: "Only this device knew these" }) });
     await expect(mineOnly.locator(".sync-member")).toHaveCount(1);
     await expect(mineOnly.locator(".sync-member")).toContainText("on Desk");
@@ -675,12 +701,27 @@ test.describe.serial("sync across three devices", () => {
     await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveText("Continue and remove 1 device");
     await tvTick.click();
     await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveText("Continue with the server's list");
+    // Ticking Phone takes the kit it made along, and the page says so.
+    const phoneTick = desk.locator(".sync-check", { has: desk.locator("b", { hasText: /^Phone$/ }) });
+    await phoneTick.click();
+    await expect(phoneTick).toContainText("Its recovery kit goes with it.");
+    await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveText("Continue and remove 1 device and 1 recovery kit");
+    await phoneTick.click();
     await shot(desk, "sync-fork-desktop");
+    // Phone adds a kit while Desk looks: continuing is refused and the lists are shown again.
+    await go(phone, "/sync/kit");
+    await phone.locator('[data-f="sync-kit:make"]').click();
+    await expect(phone.locator(".sync-kit-text")).toBeVisible();
+    await phone.locator('[data-f="sync-kit:saved"]').click();
+    await desk.locator('[data-f="sync-fork:go"]').click();
+    await expect(desk.getByText("The sync server's list changed while you looked. Here it is again; check it before you continue.")).toBeVisible();
+    await expect(serverOnly).toHaveCount(2);
+    await expect(desk).toHaveURL(/\/sync\/fork$/);
     await desk.locator('[data-f="sync-fork:go"]').click();
     await expect(desk).toHaveURL(/\/sync$/);
     await expect(desk.locator(".sync-card")).not.toHaveAttribute("data-syncing", "", { timeout: 30_000 });
     await expect(state(desk)).toContainText("Synced at");
-    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV", "Phone"]);
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV", "Phone", "Recovery kit"]);
     await syncNow(phone);
     await expect(state(phone)).toContainText("Synced at");
     await expect.poll(async () => (await phone.locator(".sync-fp").textContent()) === (await desk.locator(".sync-fp").textContent())).toBe(true);
@@ -696,17 +737,14 @@ test.describe.serial("sync across three devices", () => {
     await row.locator('[data-f$=":confirm"]').click();
     await expect(desk.getByText("Removed: Living room TV. Done, but the device list did not refresh. Try again to see it.")).toBeVisible();
     await syncNow(desk);
-    await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Phone", "Recovery kit"]);
     await tv.locator('[data-f="sync:now"]').focus();
     await tv.keyboard.press("Enter");
     await expect(tv.locator("main > .st.bad")).toContainText("This device was removed from your sync account.");
 
-    // A kit made and then removed stops being listed.
-    await go(desk, "/sync/kit");
-    await desk.locator('[data-f="sync-kit:make"]').click();
-    await desk.locator('[data-f="sync-kit:saved"]').click();
+    // A removed kit stops being listed.
     const kitRow = member(desk, "Recovery kit");
-    await expect(kitRow).toContainText("on Desk");
+    await expect(kitRow).toContainText("on Phone");
     await kitRow.locator('[data-f$=":remove"]').click();
     await expect(kitRow.locator(".sync-ask")).toContainText("Remove this recovery kit? It stops working.");
     await kitRow.locator('[data-f$=":confirm"]').click();

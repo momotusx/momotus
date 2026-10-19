@@ -32,12 +32,12 @@ import { form } from "../form";
 import {
   fingerprintGroups,
   forkDrop,
+  forkKits,
   forkSides,
   kitsGoing,
   lostDrop,
   lostRows,
   memberName,
-  pairingMember,
   sortMembers,
   sponsorName,
   watchForCode,
@@ -46,6 +46,7 @@ import {
   addedLine,
   failedSince,
   forkButton,
+  goesWith,
   lostButton,
   lostKits,
   named,
@@ -739,13 +740,10 @@ export function AddDevice() {
     setBusy(true);
     setDifferError(null);
     try {
-      const id = await pairingMember(a.code);
-      const list = await sync.loadDevices();
-      if (id && list.members.some((m) => m.id === id)) {
-        await sync.removeDevice(id);
-        setDiffer(w.differRemoved);
-        await sync.loadDevices().catch(() => undefined);
-      } else setDiffer(w.differWaiting);
+      // Ended through the core whether or not the device joined yet: the key rotates now.
+      await sync.cancelPairing(a.code);
+      setDiffer(w.differEnded);
+      void sync.loadDevices().catch(() => undefined);
     } catch (e) {
       // A cancelled passkey or a failed call changes nothing: the button stays.
       setDifferError(say(e, "remove"));
@@ -1089,17 +1087,25 @@ export function ForkReview() {
     setTicked(next);
   };
   const drop = () => forkDrop(got()?.server ?? [], got()?.drops ?? [], ticked());
+  const kitsOf = (id: string) => got()?.kits.find((k) => k.device === id)?.kits.filter((k) => !goes(k)) ?? [];
+  const kitsGo = () => forkKits(got()?.kits ?? [], drop(), got()?.drops ?? []);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const go = async () => {
-    if (busy()) return;
+    const d = got();
+    if (busy() || !d) return;
     setBusy(true);
     setError(null);
     try {
-      await sync.useServerRoster(drop());
+      // Only the list the user saw: one that moved since is refused, then shown again.
+      await sync.useServerRoster(drop(), d.head);
     } catch (e) {
       setError(say(e, "serverList"));
       setBusy(false);
+      if (codeOf(e) === "rosterChanged") {
+        setTicked(new Set<string>());
+        void refetch();
+      }
       return;
     }
     done();
@@ -1126,7 +1132,7 @@ export function ForkReview() {
           when={!data.error}
           fallback={
             <section class="problem">
-              <Said tone="bad">{say(data.error, "load")}</Said>
+              <Said tone="bad">{say(data.error, "compare")}</Said>
               <div class="acts">
                 <button class="btn primary" data-f="sync-fork:retry" data-autofocus onClick={() => void refetch()}>
                   <RefreshCw aria-hidden />
@@ -1140,6 +1146,19 @@ export function ForkReview() {
           }
         >
           <Show when={got()} fallback={<Said tone="warn">{w.forkLoading}</Said>}>
+          <Show
+            when={got()?.onServer}
+            fallback={
+              <section class="problem">
+                <Said tone="bad">{w.forkOffList}</Said>
+                <div class="acts">
+                  <button class="btn" data-f="sync-fork:cancel" data-autofocus onClick={done}>
+                    {w.cancel}
+                  </button>
+                </div>
+              </section>
+            }
+          >
             <section class="set">
               <h2>{w.forkServer}</h2>
               <p class="note small sync-lead">{w.forkServerHelp}</p>
@@ -1176,6 +1195,9 @@ export function ForkReview() {
                               {tag(m)}
                             </b>
                             <small>{addedLine(m.kit, m.addedMs, sponsorName(m, all()))}</small>
+                            <Show when={ticked().has(m.id) && kitsOf(m.id).length}>
+                              <small class="sync-goes">{goesWith(kitsOf(m.id).length)}</small>
+                            </Show>
                           </span>
                         </button>
                       </Show>
@@ -1209,12 +1231,13 @@ export function ForkReview() {
             <div class="acts sync-lost-acts">
               <button class="btn" classList={{ danger: drop().length > 0 }} data-f="sync-fork:go" aria-busy={busy() || undefined} onClick={() => void go()}>
                 <MonitorSmartphone aria-hidden />
-                {busy() ? w.forkGoing : forkButton(drop().length)}
+                {busy() ? w.forkGoing : forkButton(drop().length, kitsGo().length)}
               </button>
               <button class="btn" data-f="sync-fork:cancel" onClick={done}>
                 {w.cancel}
               </button>
             </div>
+          </Show>
           </Show>
         </Show>
         </Show>

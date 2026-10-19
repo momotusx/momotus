@@ -53,22 +53,6 @@ const param = (code: string, name: string) => {
   }
 };
 
-/** The member id the device showing `code` will have: the first 16 bytes of
- * SHA-256 of its signing key (`g`, base64url), in hex, as the core derives it. */
-export async function pairingMember(code: string): Promise<string | null> {
-  const g = param(code, "g");
-  if (!g) return null;
-  let key: Uint8Array<ArrayBuffer>;
-  try {
-    key = Uint8Array.from(atob(g.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
-  } catch {
-    return null;
-  }
-  if (key.length !== 32) return null;
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", key));
-  return [...hash.slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 /** A link to the core that carries the sync record safely: encrypted, or on
  * this machine. A plain ws:// to another host would show it to the network. */
 export function isPrivateLink(url: string): boolean {
@@ -116,6 +100,11 @@ export function forkSides(mine: readonly MemberInfo[], server: readonly MemberIn
     serverOnly: server.filter((m) => !here.has(m.id)),
     mineOnly: mine.filter((m) => !there.has(m.id)),
   };
+}
+
+/** The kits that go with the ticked devices of the server's list, besides its own drops. */
+export function forkKits(kits: readonly { device: string; kits: string[] }[], ticked: readonly string[], drops: readonly string[]): string[] {
+  return kits.filter((k) => ticked.includes(k.device)).flatMap((k) => k.kits.filter((id) => !drops.includes(id)));
 }
 
 /** What continuing with the server's list removes: its own drops, and the

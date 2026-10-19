@@ -271,6 +271,9 @@ export const syncWords = {
   forkSame: "Both lists name the same devices.",
   forkGo: "Continue with the server's list",
   forkGoing: "Continuing",
+  forkOffList: "The sync server's list no longer includes this device: it was removed there. Pair this device again from one that still syncs.",
+  forkChanged: "The sync server's list changed while you looked. Here it is again; check it before you continue.",
+  forkTokenLost: "This device cannot read the sync server's list: the server no longer knows it. Sync from another of your devices, or pair this one again.",
   // Add a device
   addLede: "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code.",
   addWarning: "Approve only a code on a screen in front of you. Whoever controls that screen gets your account.",
@@ -288,8 +291,7 @@ export const syncWords = {
   approvedStep: "The new device now shows six digits. They must be these:",
   approvedHelp: "If they match, confirm on the new device. If they differ, say so there, and press They differ here.",
   differ: "They differ",
-  differRemoved: "The device that answered showed other digits, so it was removed. Nothing else changed.",
-  differWaiting: "It has not joined. Choose No, they differ on the new device; the approval lapses by itself within 10 minutes. If a device you do not know shows up in your list, remove it.",
+  differEnded: "The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed.",
   done: "Done",
   // The joining device's side
   copyCode: "Copy the code",
@@ -351,7 +353,11 @@ export const lostKits = (kits: number) =>
   `${kits === 1 ? "1 recovery kit made on these devices stops" : `${kits} recovery kits made on these devices stop`} working. Make a new one afterwards.`;
 
 /** The button that continues with the server's list, naming what the user ticked. */
-export const forkButton = (ticked: number) => (ticked ? `Continue and remove ${count(ticked, "device", "devices")}` : syncWords.forkGo);
+export const forkButton = (devices: number, kits = 0) =>
+  devices ? `Continue and remove ${count(devices, "device", "devices")}${kits ? ` and ${kits === 1 ? "1 recovery kit" : `${kits} recovery kits`}` : ""}` : syncWords.forkGo;
+
+/** On a ticked row of the server's list: the kits that go with it. */
+export const goesWith = (kits: number) => (kits === 1 ? "Its recovery kit goes with it." : `Its ${kits} recovery kits go with it.`);
 
 /** A member's second line: when it was added, and through which device. */
 export function addedLine(kit: boolean, addedMs: number, by: string | null): string {
@@ -388,6 +394,8 @@ export function syncProblem(code: string | undefined, message: string): string {
       return syncWords.plainLink;
     case "alreadyJoined":
       return syncWords.alreadyJoined;
+    case "rosterChanged":
+      return syncWords.forkChanged;
   }
   if (message.startsWith("roster: ")) return pairingProblem(`pairing: ${message.slice("roster: ".length)}`);
   if (message.startsWith("pairing: ") || message.startsWith("invalid url") || message.startsWith("blocked private address") || message.startsWith("the relay must use https"))
@@ -404,6 +412,7 @@ const notDone = {
   lost: "Nothing was removed.",
   leave: "This device still syncs.",
   serverList: "Nothing changed.",
+  compare: "The lists could not be compared.",
   unlock: "Sync is still locked.",
 } as const;
 
@@ -417,6 +426,7 @@ export function stepProblem(code: string | undefined, message: string, step: Syn
   if (step === "start" && message === "http status 403") return "This sync server needs an invite code, or the one entered is wrong.";
   if (step === "recover" && message === "http status 404") return syncWords.wrongKit;
   if (step === "start" || step === "recover") return pairingProblem(message);
+  if (step === "compare" && message === "http status 401") return syncWords.forkTokenLost;
   if (step === "approve" && (message === "http status 404" || message === "http status 410")) return "This code expired or was used already. Ask the new device for a new one.";
   if (message.startsWith("pairing: ") || message.startsWith("roster: ")) return syncProblem(undefined, message);
   return `${notDone[step]} The sync server did not answer. Try again in a moment.`;

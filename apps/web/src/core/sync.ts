@@ -234,6 +234,14 @@ export async function approvePairing(qr: string): Promise<string> {
   return (await withRecord<{ code: string; record: SyncRecord }>("approvePairing", { qr }, (r) => r.record)).code;
 }
 
+/** The digits on the new device differ: the approval of `qr` ends now, with a key rotation
+ * that drops the device if it joined. The passkey first. */
+export async function cancelPairing(qr: string) {
+  await gate();
+  await withRecord<SyncRecord>("cancelPairing", { qr }, (r) => r);
+  setFingerprint(null);
+}
+
 /** The kit, to show once: nothing here keeps it. */
 export async function makeKit(): Promise<string> {
   await gate();
@@ -272,10 +280,11 @@ export async function signOut(force: boolean) {
 /** Both sides of a different device list, read only. */
 export const forkPreview = () => withRecord<ForkPreview>("forkPreview", {}, () => null);
 
-/** After `fork`: the server's device list wins, dropping what it drops on its own and `drop`. */
-export async function useServerRoster(drop: string[]) {
+/** After `fork`: the server's device list wins, dropping what it drops on its own and `drop`.
+ * `head` is the preview's: a list that moved since is refused (`rosterChanged`). */
+export async function useServerRoster(drop: string[], head: string) {
   await gate();
-  await withRecord<SyncRecord>("useServerRoster", { drop }, (r) => r);
+  await withRecord<SyncRecord>("useServerRoster", { drop, head }, (r) => r);
   setProblem(null);
   setFingerprint(null);
   await syncNow();

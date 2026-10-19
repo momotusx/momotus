@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import {
   fingerprintGroups,
   forkDrop,
+  forkKits,
   forkSides,
   isPairingCode,
   isPrivateLink,
@@ -12,7 +12,6 @@ import {
   lostDrop,
   lostRows,
   memberName,
-  pairingMember,
   sortMembers,
   sponsorName,
   watchForCode,
@@ -21,6 +20,7 @@ import {
   addedLine,
   failedSince,
   forkButton,
+  goesWith,
   lostButton,
   lostKits,
   outcomeLine,
@@ -74,17 +74,9 @@ test("a look that ends after Cancel approves nothing", async () => {
   expect(found).toEqual(["marquee:pair?v=2&p=2"]);
 });
 
-test("a scanned code names the device it belongs to", async () => {
-  const sign = Buffer.alloc(32, 7);
-  const g = sign.toString("base64url");
-  const code = `marquee:pair?v=2&s=${encodeURIComponent("https://sync.example.org:8443")}&p=abc&k=x&g=${g}`;
-  // The host is always this account's own server: the question names none.
+test("the question before approving a scanned code names no host", () => {
+  // The host is always this account's own server: naming it would read as a check it is not.
   expect(syncWords.reviewAsk).toBe("Approve a new device?");
-  // As the core derives a member id: SHA-256 of the signing key, first 16 bytes.
-  const want = createHash("sha256").update(sign).digest().subarray(0, 16).toString("hex");
-  expect(await pairingMember(code)).toBe(want);
-  expect(await pairingMember("marquee:pair?v=2&g=AAAA")).toBeNull();
-  expect(await pairingMember("marquee:pair?v=2")).toBeNull();
 });
 
 test("the record goes only over an encrypted link or one on this machine", () => {
@@ -150,6 +142,18 @@ test("both sides of a different list, and what continuing removes", () => {
   expect(forkDrop(server, ["kit2"], new Set())).toEqual([]);
   expect(forkButton(0)).toBe("Continue with the server's list");
   expect(forkButton(2)).toBe("Continue and remove 2 devices");
+  // A ticked device takes the kits it made along, never the server's own drops twice.
+  const kits = [
+    { device: "laptop", kits: ["kl"] },
+    { device: "tv", kits: ["kt", "kit2"] },
+  ];
+  expect(forkKits(kits, ["laptop"], ["kit2"])).toEqual(["kl"]);
+  expect(forkKits(kits, ["laptop", "tv"], ["kit2"])).toEqual(["kl", "kt"]);
+  expect(forkKits(kits, [], [])).toEqual([]);
+  expect(forkButton(1, 1)).toBe("Continue and remove 1 device and 1 recovery kit");
+  expect(forkButton(2, 3)).toBe("Continue and remove 2 devices and 3 recovery kits");
+  expect(goesWith(1)).toBe("Its recovery kit goes with it.");
+  expect(goesWith(2)).toBe("Its 2 recovery kits go with it.");
 });
 
 test("a round is complete, waiting or failed, never green while changes failed", () => {
@@ -194,12 +198,16 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(syncProblem("passkey", "x")).toBe("The passkey did not confirm it, so nothing changed.");
   // A passkey without PRF is not a server that did not answer.
   expect(syncProblem("noPrf", "this passkey has no PRF")).toBe(syncWords.noPrf);
+  expect(syncProblem("rosterChanged", "x")).toBe(syncWords.forkChanged);
+  // A relay that lost this device's token cannot be read: it says so, never "try again".
+  expect(stepProblem(undefined, "http status 401", "compare")).toBe(syncWords.forkTokenLost);
+  expect(stepProblem(undefined, "http status 502", "compare")).toStartWith("The lists could not be compared.");
   expect(stepProblem("noPrf", "x", "unlock")).toBe(syncWords.noPrf);
   expect(syncProblem("plainLink", "x")).toBe(syncWords.plainLink);
   expect(syncProblem("alreadyJoined", "x")).toBe(syncWords.alreadyJoined);
   expect(syncProblem(undefined, "roster: this device cannot report itself")).toBe("This device cannot report itself.");
   expect(syncProblem(undefined, "pairing: not a pairing code")).toBe("Not a pairing code.");
-  const steps = ["start", "recover", "approve", "load", "kit", "remove", "lost", "leave", "serverList", "unlock"] as const;
+  const steps = ["start", "recover", "approve", "load", "kit", "remove", "lost", "leave", "serverList", "unlock", "compare"] as const;
   for (const raw of ["network: error sending request for url (http://user:secret@relay.example/v1/push)", "http status 502", "timed out after 10s"]) {
     for (const words of [syncProblem(undefined, raw), ...steps.map((s) => stepProblem(undefined, raw, s))]) {
       expect(words.includes("relay.example") || words.includes("secret") || words.includes("http")).toBe(false);

@@ -92,3 +92,4 @@
 .sync-note .btn { height: 52px; padding: 0 20px; font-size: var(--type-callout); }
 [data-form="phone"] .sync-note .btn { height: 38px; padding: 0 14px; }
 .sync-tag.bad { color: var(--bg); background: var(--bad); box-shadow: none; }
+.sync-mtext .sync-goes { color: var(--text); font-weight: 600; }
