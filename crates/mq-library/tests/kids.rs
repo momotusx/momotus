@@ -422,8 +422,8 @@ fn allow_values_from_another_device_are_held_to_the_local_rules() {
 fn names_stay_inside_one_kib_of_json_however_they_escape() {
     let lib = kid(&[]);
     // Five different names of 200 characters that each escape to two
-    // bytes, with format characters between them that would escape to six
-    // if they stayed.
+    // bytes, with format characters between them, which show as nothing
+    // and would only take room if they stayed.
     let heavy = |pair: &str| -> String {
         let pair: Vec<char> = pair.chars().collect();
         (0..200)
@@ -592,36 +592,42 @@ fn the_policy_counts_allowed_titles_by_kind() {
 #[test]
 fn the_cap_counts_the_first_thousand_by_allow_time_on_every_device() {
     let lib = kid(&[]);
-    // 1,002 titles, written newest id first so the id order disagrees with
-    // the allow time; two share the oldest time and are told apart by id.
-    let ids: Vec<String> = (0..1002).map(|i| format!("tt{i:04}")).collect();
-    for (i, id) in ids.iter().enumerate().rev() {
-        let added = if i == 0 { 1 } else { i as i64 };
-        lib.write_allowed("kid", &entry(id, "movie", added), &hlc(100 + i as u64, 1))
+    // 1,001 titles whose ids run against their allow times (the oldest
+    // allow has the highest id), and the last two allows share one
+    // millisecond across the cap: the id decides, never the order of
+    // writing (the tie is written with the higher id first).
+    let id = |i: usize| format!("tt{:04}", 1000 - i);
+    let added = |i: usize| if i == 1000 { 999 } else { i as i64 };
+    let mut order: Vec<usize> = (0..999).collect();
+    order.extend([999, 1000]);
+    for i in order {
+        let row = entry(&id(i), "movie", added(i));
+        lib.write_allowed("kid", &row, &hlc(100 + i as u64, 1))
             .unwrap();
     }
     let list = lib.allowed_list("kid").unwrap();
-    assert_eq!(list.counted.len(), 1000);
-    assert_eq!(list.over_count, 2);
+    assert_eq!((list.counted.len(), list.over_count), (1000, 1));
+    // tt0001 (written first) and tt0000 share the time: tt0000 counts.
     let over: Vec<&str> = list.over.iter().map(|r| r.item_id.as_str()).collect();
-    assert_eq!(over, ["tt1001", "tt1000"], "newest first");
+    assert_eq!(over, ["tt0001"], "the tie goes to the lower id");
     let policy = lib.policy("kid");
-    assert!(policy.allows("movie", "tt0000") && policy.allows("movie", "tt0999"));
-    assert!(!policy.allows("movie", "tt1000") && !policy.allows("movie", "tt1001"));
+    assert!(policy.allows("movie", "tt1000"), "the oldest allow counts");
+    assert!(
+        policy.allows("movie", "tt0000"),
+        "the tie's lower id counts"
+    );
+    assert!(!policy.allows("movie", "tt0001"));
     // Another device holding the same rows counts the same ones.
     let other = Library::temporary().unwrap();
     other.apply(&all(&lib)).unwrap();
     assert_eq!(other.policy("kid"), policy);
     // An older allow arriving late takes its place: the newest counted one
     // goes over (3.4, the price of agreeing without coordination).
-    let late = AllowedRow {
-        added_ms: 0,
-        ..entry("tt9999", "movie", 0)
-    };
+    let late = entry("tt9999", "movie", 0);
     lib.write_allowed("kid", &late, &hlc(5000, 1)).unwrap();
     let policy = lib.policy("kid");
     assert!(policy.allows("movie", "tt9999"));
-    assert!(!policy.allows("movie", "tt0999"), "pushed over");
+    assert!(!policy.allows("movie", "tt0000"), "pushed over");
 }
 
 #[test]
@@ -642,7 +648,8 @@ fn authorize_checks_the_title_the_video_and_names_its_generation() {
     let denied = Authorization::Denied { generation: now };
     let auth = |kind, id, video| lib.authorize("kid", kind, id, video).unwrap();
     assert_eq!(auth("series", "tt1", Some("tt1:1:2")), authorized);
-    assert_eq!(auth("series", "tt1", None), authorized);
+    assert_eq!(auth("series", "tt1", None), denied, "a series as a whole");
+    assert_eq!(auth("movie", "tt1", Some("tt1")), denied, "another kind");
     assert_eq!(auth("series", "tt1", Some("tt10:1:1")), denied);
     assert_eq!(auth("movie", "tt1", None), denied);
     assert_eq!(auth("series", "tt2", None), denied);
@@ -707,4 +714,123 @@ fn the_policy_fails_closed() {
     assert!(lib.authorize("kid", "movie", "tt1", None).is_err());
     drop((side, lib));
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_remove_from_another_device_beats_a_delayed_allow() {
+    let a = kid(&[]);
+    let b = Library::temporary().unwrap();
+    b.apply(&all(&a)).unwrap();
+    // A's Allow took its hlc (40) when the owner pressed it; while its
+    // fetch runs, B's Remove (50) arrives by sync.
+    let allow_hlc = hlc(40, 1);
+    b.write_allowed("kid", &removal("tt1"), &hlc(50, 2))
+        .unwrap();
+    let remove = b.register(coll::ALLOWED, "kid\u{1f}tt1").unwrap().unwrap();
+    a.apply(&[remove]).unwrap();
+    assert!(
+        !a.write_allowed("kid", &entry("tt1", "movie", 1), &allow_hlc)
+            .unwrap(),
+        "the delayed Allow lands below the Remove"
+    );
+    assert!(!a.policy("kid").allows("movie", "tt1"));
+    b.apply(&all(&a)).unwrap();
+    assert!(!b.policy("kid").allows("movie", "tt1"));
+}
+
+#[test]
+fn each_kind_of_access_change_raises_the_generation() {
+    let (lib, path, dir) = on_disk("triggers");
+    let side = rusqlite::Connection::open(&path).unwrap();
+    let mut last = generation(&lib);
+    let mut raised = |what: &str| {
+        let now = generation(&lib);
+        assert!(now > last, "{what}: {now} after {last}");
+        last = now;
+    };
+    lib.create_kids_profile("k2", "K2", "", &hlc(10, 1))
+        .unwrap();
+    raised("an access row inserted");
+    let access = record(
+        coll::PROFILE_ACCESS,
+        "k2",
+        json!({"profile": "k2", "kids": false}),
+        20,
+    );
+    lib.apply(&[access]).unwrap();
+    raised("an access row updated");
+    side.execute("DELETE FROM profile_access WHERE profile_id = 'k2'", [])
+        .unwrap();
+    raised("an access row deleted");
+    lib.write_allowed("kid", &entry("tt2", "movie", 2), &hlc(30, 1))
+        .unwrap();
+    raised("an allow row inserted");
+    lib.write_allowed("kid", &removal("tt2"), &hlc(40, 1))
+        .unwrap();
+    raised("an allow row updated");
+    side.execute("DELETE FROM allowed WHERE item_id = 'tt2'", [])
+        .unwrap();
+    raised("an allow row deleted");
+    drop((side, lib));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn allowing_again_keeps_the_allow_time() {
+    let lib = kid(&[]);
+    lib.write_allowed("kid", &entry("tt1", "movie", 5), &hlc(30, 1))
+        .unwrap();
+    // Allow pressed again later: the title keeps its place.
+    lib.write_allowed("kid", &entry("tt1", "movie", 99), &hlc(31, 1))
+        .unwrap();
+    assert_eq!(lib.allowed_list("kid").unwrap().counted[0].added_ms, 5);
+    // After a removal, an Allow is a new one.
+    lib.write_allowed("kid", &removal("tt1"), &hlc(32, 1))
+        .unwrap();
+    lib.write_allowed("kid", &entry("tt1", "movie", 120), &hlc(33, 1))
+        .unwrap();
+    assert_eq!(lib.allowed_list("kid").unwrap().counted[0].added_ms, 120);
+}
+
+#[test]
+fn a_profile_whose_access_is_unknown_reads_as_kids() {
+    let lib = Library::temporary().unwrap();
+    let profile = record(coll::PROFILES, "y", json!({"profile": "y", "name": "y"}), 9);
+    lib.apply(&[profile]).unwrap();
+    let y = lib.profile("y").unwrap().unwrap();
+    assert_eq!(y.access, None);
+    assert!(y.kids(), "fails closed");
+    assert!(!y.ready());
+}
+
+#[test]
+fn kids_edits_read_the_state_they_change() {
+    let lib = Library::temporary().unwrap();
+    lib.ensure_profile(OWNER, "Main", &hlc(0, 1)).unwrap();
+    // A kids profile is always new: an existing one keeps its PIN and kind.
+    lib.create_profile("std", "Std", "", &hlc(1, 1)).unwrap();
+    lib.set_pin_hash("std", Some("h"), &hlc(2, 1)).unwrap();
+    assert!(matches!(
+        lib.create_kids_profile("std", "Std", "", &hlc(3, 1)),
+        Err(LibraryError::ProfileExists(_))
+    ));
+    let std = lib.profile("std").unwrap().unwrap();
+    assert!(!std.kids() && std.pin_hash() == Some("h"));
+    // Made standard twice: the second time changes nothing, so the
+    // profile's own addon edits stay.
+    lib.create_kids_profile("kid", "Kid", "", &hlc(4, 1))
+        .unwrap();
+    assert!(lib.make_standard("kid", &hlc(5, 1)).unwrap());
+    let own = mq_library::AddonRow {
+        transport_url: "https://own/manifest.json".into(),
+        manifest_json: "{}".into(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    lib.set_addons("kid", std::slice::from_ref(&own), &hlc(6, 1))
+        .unwrap();
+    assert!(!lib.make_standard("kid", &hlc(7, 1)).unwrap());
+    assert_eq!(lib.addons("kid").unwrap(), [own]);
+    assert!(!lib.make_standard("std", &hlc(8, 1)).unwrap());
 }
