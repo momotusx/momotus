@@ -224,7 +224,13 @@ fun TrackPanel(
                             color = colors.muted,
                             weight = FontWeight.SemiBold,
                             maxLines = 1,
-                            modifier = Modifier.padding(start = 16.dp, top = 8.dp).semantics { heading() },
+                            modifier =
+                                Modifier
+                                    .padding(
+                                        start = 16.dp,
+                                        top = 8.dp,
+                                        bottom = 8.dp,
+                                    ).semantics { heading() },
                         )
                     }
                 }
