@@ -654,7 +654,8 @@ fn the_size_limit_keeps_a_large_torrent_below_one_that_fits() {
 
 /// Mutations 2 and 4: a ready 4K remux at 65 Mbit/s cannot keep up with a
 /// measured 25 Mbit/s (safe 17.5), so a ready 1080p wins, with no size
-/// limit and with prefer ready on or off.
+/// limit and with prefer ready on or off. Both play natively (E-AC-3), so
+/// only `sustains` keeps the remux's height from winning.
 #[test]
 fn a_ready_remux_that_cannot_keep_up_loses_to_a_1080p_that_can() {
     for (limit, prefer_ready) in [(None, true), (None, false), (Some(5u64 << 30), true)] {
@@ -676,11 +677,7 @@ fn a_ready_remux_that_cannot_keep_up_loses_to_a_1080p_that_can() {
             },
         };
         let ranked = case.rank(vec![
-            ready(
-                1,
-                "Movie.2020.2160p.UHD.BluRay.REMUX.HEVC.TrueHD.7.1-GRP",
-                54.5,
-            ),
+            ready(1, "Movie.2020.2160p.UHD.BluRay.REMUX.HEVC.DDP5.1-GRP", 54.5),
             ready(2, "Movie.2020.1080p.BluRay.x264-GRP", 7.0),
         ]);
         let best = ranked.best().unwrap();
@@ -718,6 +715,41 @@ fn your_language_wins_even_when_it_may_pause() {
     let best = ranked.best().unwrap();
     assert_eq!(first_line(best), "Movie.2020.1080p.BluRay.x264-GRP");
     assert!(!best.key.sustains, "it may pause, and still wins");
+}
+
+/// Mutation 10: a 2160p file under 4.6 Mbit/s is starved or upscaled and
+/// counts as 1080p, so a 4K at a real bitrate wins on the 4K TV, though the
+/// starved one has more seeders and a better source.
+#[test]
+fn a_starved_4k_counts_as_1080p() {
+    let case = Case {
+        caps: caps_4k_dv(),
+        prefs: StreamPrefs {
+            size_limit_bytes: None,
+            ..StreamPrefs::default()
+        },
+        conditions: Conditions {
+            runtime_s: Some(120 * 60),
+            p2p: Speed {
+                mbps: 25.0,
+                samples: 3,
+            },
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.2160p.BluRay.x265-LOW", 900, 2.6),
+        seeded(2, "Movie.2020.2160p.WEB-DL.x265-OK", 300, 8.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.2160p.WEB-DL.x265-OK"
+    );
+    assert_eq!(
+        row(&ranked, "Movie.2020.2160p.BluRay").key.effective_height,
+        1080
+    );
 }
 
 /// Mutation 11: a 900-seed HDTS copy loses to a real release with 60.
