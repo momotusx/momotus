@@ -80,6 +80,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.CodeText
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
@@ -134,35 +135,6 @@ private fun Context.deviceName(tv: Boolean): String =
         ?: if (tv) "Marquee TV" else "Marquee phone"
 
 private fun clock(ms: Long) = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(ms))
-
-/**
- * [content] with [spoken] read out by TalkBack once each time it changes: a native live region under it,
- * since a Compose live region on a card reached TalkBack only as a change of its parent. [content] is drawn
- * over it and not read twice; it must hold no control.
- */
-@Composable
-internal fun LiveSpoken(
-    spoken: String,
-    content: @Composable () -> Unit,
-) {
-    Box {
-        AndroidView(
-            factory = { context ->
-                TextView(context).apply {
-                    accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-                    setTextColor(android.graphics.Color.TRANSPARENT)
-                }
-            },
-            // A live region speaks a change, not a view that comes with its text: one that just came
-            // (the sign-in code) gets its words a moment after it is attached.
-            update = { view ->
-                if (view.isAttachedToWindow) view.text = spoken else view.postDelayed({ view.text = spoken }, 300)
-            },
-            modifier = Modifier.matchParentSize(),
-        )
-        Box(Modifier.clearAndSetSemantics {}) { content() }
-    }
-}
 
 /** A line of what happened: a dot in the tone and the words. */
 @Composable
