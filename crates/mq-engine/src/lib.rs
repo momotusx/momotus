@@ -221,6 +221,9 @@ pub enum EngineError {
     /// since: none of its file choices or ranges wakes it.
     #[error("the torrent is held")]
     Held,
+    /// [`Engine::remove`] left it: a playback still claims it.
+    #[error("another playback still uses the torrent")]
+    Claimed,
     #[error("torrent: {0:#}")]
     Torrent(#[from] anyhow::Error),
     #[error("io: {0}")]
@@ -336,6 +339,14 @@ pub(crate) struct Torrent {
     hold: Mutex<Holds>,
     readers: AtomicUsize,
     last_used: Mutex<Instant>,
+}
+
+impl Torrent {
+    /// Some playback uses it: neither a removal nor the disk budget deletes
+    /// it (a paused playback has no range open but still plays it).
+    fn claimed(&self) -> bool {
+        !lock(&self.hold).claims.is_empty()
+    }
 }
 
 /// A torrent's holds, one per profile (plans/m11-kids.md 4.4): a kids
@@ -727,11 +738,19 @@ impl Engine {
         Ok(s)
     }
 
-    /// Stops the torrent; `keep_data: false` also deletes its files.
+    /// Stops the torrent; `keep_data: false` also deletes its files. A
+    /// torrent some playback still claims stays as it is (`Claimed`): an Up
+    /// Next open that gave up on a pack must not take the episode that is
+    /// playing from it. A playback drops its own claim before removing.
     pub async fn remove(&self, h: TorrentHandle, keep_data: bool) -> Result<()> {
-        let t = lock(&self.inner.torrents)
-            .remove(&h)
-            .ok_or(EngineError::UnknownTorrent)?;
+        let t = {
+            let mut torrents = lock(&self.inner.torrents);
+            let t = torrents.get(&h).ok_or(EngineError::UnknownTorrent)?;
+            if t.claimed() {
+                return Err(EngineError::Claimed);
+            }
+            torrents.remove(&h).ok_or(EngineError::UnknownTorrent)?
+        };
         self.drop_torrent(&t, keep_data).await
     }
 
@@ -831,7 +850,8 @@ impl Engine {
     }
 
     /// Deletes whole idle torrents, least recently used first, until the
-    /// allocated size fits the budget. `keep` is never deleted.
+    /// allocated size fits the budget. `keep`, a torrent with a range open
+    /// and a claimed one are never deleted.
     async fn enforce_budget(&self, keep: Option<TorrentHandle>) {
         let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
             .iter()
@@ -850,7 +870,8 @@ impl Engine {
             let Some(t) = all.iter().find(|(x, _)| *x == h).map(|(_, t)| t) else {
                 continue;
             };
-            if Some(h) == keep || t.readers.load(Ordering::Relaxed) > 0 || bytes == 0 {
+            if Some(h) == keep || t.readers.load(Ordering::Relaxed) > 0 || t.claimed() || bytes == 0
+            {
                 continue;
             }
             lock(&self.inner.torrents).remove(&h);

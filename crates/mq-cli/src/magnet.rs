@@ -241,6 +241,8 @@ async fn run(
     drop(kept_head);
     let first = first.await.unwrap_or_default();
     let stats = engine.stats(t).await.map_err(|e| e.to_string())?;
+    // The lease's claim ends first: the engine keeps a claimed torrent.
+    drop(lease);
     let _ = engine.remove(t, false).await;
     Ok(json!({
         "event": "run",

@@ -1215,7 +1215,9 @@ async fn open_torrent(
         Ok((_, _, Started::Wrong(why))) => why.to_owned(),
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
     };
-    // The next candidate plays instead: stop downloading this one.
+    // The next candidate plays instead: stop downloading this one, unless
+    // another playback still claims it (the engine then keeps it).
+    drop(claim);
     let _ = engine.remove(torrent, false).await;
     Err(failed)
 }

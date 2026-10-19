@@ -8,7 +8,7 @@ mod support;
 
 use std::time::Duration;
 
-use mq_engine::{Engine, EngineError, FileHint, TorrentHandle};
+use mq_engine::{Engine, EngineConfig, EngineError, FileHint, TorrentHandle};
 use tokio::io::AsyncReadExt;
 
 const KID: &str = "kid";
@@ -166,6 +166,114 @@ async fn a_hold_binds_only_its_own_profile() {
         assert!(matches!(
             engine.select_file(t, KID, &movie).await,
             Err(EngineError::Held)
+        ));
+    };
+    tokio::time::timeout(Duration::from_secs(90), run)
+        .await
+        .expect("finished in time");
+}
+
+/// Up Next opens the next episode from the pack the current one plays, and
+/// gives up on it (its head was late): the torrent and its files stay, and
+/// the playing episode reads on. Once it ends, the removal goes through.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_open_that_gives_up_leaves_a_torrent_another_playback_claims() {
+    let s = support::swarm(true).await;
+    let run = async {
+        let engine = &s.leecher;
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let playing = engine.claim(t, OWNER).unwrap();
+        let movie = engine
+            .select_file(t, OWNER, &FileHint::Name("movie.mkv".into()))
+            .await
+            .unwrap();
+        let reader = playing.open_reader(movie).await.unwrap();
+        assert_eq!(
+            read(engine, t, OWNER, movie).await.unwrap(),
+            s.movie[..64 * 1024]
+        );
+
+        let next = engine.claim(t, OWNER).unwrap();
+        let other = engine
+            .select_file(t, OWNER, &FileHint::Name("a.nfo".into()))
+            .await
+            .unwrap();
+        assert_ne!(other, movie);
+        drop(next);
+        assert!(matches!(
+            engine.remove(t, false).await,
+            Err(EngineError::Claimed)
+        ));
+
+        let (a, b) = (3 << 20, (3 << 20) + 64 * 1024);
+        let mut range = reader.range(a as u64, Some(b as u64)).await.unwrap();
+        range.ready().await.unwrap();
+        let mut out = Vec::new();
+        range.read_to_end(&mut out).await.unwrap();
+        assert!(out == s.movie[a..b], "the playing episode reads on");
+
+        drop((range, reader, playing));
+        engine.remove(t, false).await.unwrap();
+        assert!(matches!(
+            engine.stats(t).await,
+            Err(EngineError::UnknownTorrent)
+        ));
+    };
+    tokio::time::timeout(Duration::from_secs(90), run)
+        .await
+        .expect("finished in time");
+}
+
+/// The disk budget evicts idle torrents, never a claimed one: a playback
+/// paused with no range open keeps its torrent. Unclaimed, the next
+/// maintenance round (every 5 s) evicts it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_disk_budget_never_evicts_a_claimed_torrent() {
+    let s = support::swarm(true).await;
+    let run = async {
+        let dir = tempfile::tempdir().unwrap();
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let ip = std::net::Ipv4Addr::LOCALHOST.into();
+        let engine = Engine::start(EngineConfig {
+            discovery: false,
+            cache_budget_bytes: 1,
+            ..EngineConfig::new(dir.path(), http.torrent_scope(&[ip]))
+        })
+        .await
+        .unwrap();
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let claim = engine.claim(t, OWNER).unwrap();
+        let movie = engine
+            .select_file(t, OWNER, &FileHint::Name("movie.mkv".into()))
+            .await
+            .unwrap();
+        assert_eq!(
+            read(&engine, t, OWNER, movie).await.unwrap(),
+            s.movie[..64 * 1024]
+        );
+
+        tokio::time::sleep(Duration::from_secs(11)).await;
+        assert!(
+            engine.stats(t).await.is_ok(),
+            "a claimed torrent was evicted"
+        );
+
+        drop(claim);
+        for _ in 0..30 {
+            if engine.stats(t).await.is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        assert!(matches!(
+            engine.stats(t).await,
+            Err(EngineError::UnknownTorrent)
         ));
     };
     tokio::time::timeout(Duration::from_secs(90), run)
