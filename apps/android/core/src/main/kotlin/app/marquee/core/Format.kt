@@ -4,13 +4,22 @@ import java.util.Locale
 
 /** Small pure formatters shared by both UI trees (the Kotlin twin of the web's `lib/format.ts`). */
 object Format {
-    /** 1_267_015_352 -> "1.3 GB", 14_621_544 -> "15 MB". */
-    fun bytes(n: Long): String =
-        when {
-            n >= 1_000_000_000L -> String.format(Locale.US, "%.1f GB", n / 1e9)
-            n >= 1_000_000L -> "${Math.round(n / 1e6)} MB"
-            else -> "${maxOf(1L, Math.round(n / 1e3))} KB"
+    /**
+     * A stream's size in the 1024-based units addons print, as the web's `bytes`: 5 GiB is "5 GB" (the
+     * size limit reads the same), one decimal under 100 GB without a trailing ".0", MB under 1 GB.
+     */
+    fun bytes(n: Long): String {
+        val gb = n / GIB
+        return when {
+            gb >= 100 -> "${Math.round(gb)} GB"
+            gb >= 1 -> "${String.format(Locale.US, "%.1f", gb).removeSuffix(".0")} GB"
+            n >= MIB -> "${Math.round(n / MIB)} MB"
+            else -> "${maxOf(1L, Math.round(n / 1024.0))} KB"
         }
+    }
+
+    private const val GIB = 1024.0 * 1024 * 1024
+    private const val MIB = 1024.0 * 1024
 
     /** 161 -> "2:41", 3725 -> "1:02:05". */
     fun clock(seconds: Long): String {

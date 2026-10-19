@@ -117,7 +117,7 @@ object VersionsCopy {
             quality
         }
 
-    /** "1.3 GB, Real-Debrid" (the size is left out when the source does not say). */
+    /** "1.2 GB, Real-Debrid" (the size is left out when the source does not say). */
     fun source(row: VersionRow): String = listOfNotNull(row.sizeBytes?.let(Format::bytes), row.via).joinToString(", ")
 
     /** The line under the primary button: the recommended version, a wait, or why nothing can play. */

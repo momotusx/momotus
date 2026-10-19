@@ -55,7 +55,7 @@ class VersionsCopyTest {
     @Test
     fun `a row reads as quality and features, then size and source`() {
         assertEquals("4K, HDR10", VersionsCopy.headline(row()))
-        assertEquals("1.3 GB, Real-Debrid", VersionsCopy.source(row()))
+        assertEquals("1.2 GB, Real-Debrid", VersionsCopy.source(row()))
         assertEquals("Real-Debrid", VersionsCopy.source(row(sizeBytes = null)))
         assertEquals("4K", VersionsCopy.headline(row(features = emptyList())))
     }
@@ -71,10 +71,10 @@ class VersionsCopyTest {
         val notReady = VersionsCopy.line(snapshot(done = true).copy(rows = listOf(row())))
         assertEquals(VersionLine.Problem("No version is ready to play yet. Choose one to start it."), notReady)
         val chosen = VersionsCopy.line(snapshot(recommended = row())) as VersionLine.Chosen
-        assertEquals(listOf("4K", "HDR10", "1.3 GB"), chosen.facts)
+        assertEquals(listOf("4K", "HDR10", "1.2 GB"), chosen.facts)
         assertEquals("Ready on Real-Debrid", chosen.status)
         assertEquals(true, chosen.good)
-        assertEquals("4K, HDR10, 1.3 GB, Ready on Real-Debrid, via Real-Debrid", chosen.spoken)
+        assertEquals("4K, HDR10, 1.2 GB, Ready on Real-Debrid, via Real-Debrid", chosen.spoken)
         val torrent =
             row().copy(
                 status = VersionStatus.Torrent(10),

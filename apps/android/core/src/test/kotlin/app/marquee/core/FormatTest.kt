@@ -6,9 +6,13 @@ import kotlin.test.assertNull
 
 class FormatTest {
     @Test
-    fun bytes() {
-        assertEquals("1.3 GB", Format.bytes(1_267_015_352))
-        assertEquals("15 MB", Format.bytes(14_621_544))
+    fun `sizes read in the 1024-based units addons print`() {
+        val gib = 1L shl 30
+        assertEquals("5 GB", Format.bytes(5 * gib))
+        assertEquals("7.4 GB", Format.bytes((7.4 * gib).toLong()))
+        assertEquals("1.2 GB", Format.bytes(1_267_015_352))
+        assertEquals("120 GB", Format.bytes(120 * gib + gib / 3))
+        assertEquals("14 MB", Format.bytes(14_621_544))
         assertEquals("1 KB", Format.bytes(10))
     }
 
