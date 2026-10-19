@@ -1,6 +1,7 @@
 package app.marquee.core
 
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.FallbackEnumSerializer
 import app.marquee.core.model.Group
 import app.marquee.core.model.HideReason
 import app.marquee.core.model.Reason
@@ -15,10 +16,16 @@ class UnknownValueTest {
     // two new hide reasons, a new group and a new reason on the recommended row.
     private val snapshot =
         """{"done":true,"failedAddons":[],"frozen":false,""" +
+            """"conditions":{"account":false,"engine":false,"freeBytes":null,"hdr":true,""" +
+            """"http":{"mbps":15,"samples":0},"minSeeders":50,"network":"other","p2p":{"mbps":10,"samples":0},""" +
+            """"runtimeMin":null,"screenClass":2160,"sizeLimitBytes":5368709120},"blocked":null,"note":null,""" +
             """"hidden":{"byReason":[["geoBlocked",2],["tooLarge",1],["expired",1]],"count":4},"pendingAddons":[],""" +
             """"recommended":{"failoverCount":0,"features":[],"group":"cachedElsewhere",""" +
             """"key":"url:http://127.0.0.1:7780/hls/master.m3u8","languages":[],"quality":"1080p",""" +
             """"reasons":["playsDirectly","fastestSeeders"],"releaseName":"Sintel.2010.1080p.local.AES.m3u8",""" +
+            """"line":{"kind":"ready","service":null,"sizeBytes":null},"sourceClass":"ready","bitrateMbps":null,""" +
+            """"score":{"binge":false,"effectiveHeight":1080,"language":true,"legit":true,"playability":"native",""" +
+            """"sizeOk":true,"start":4,"sustains":true,"viable":true,"within":535,"yearOk":true},""" +
             """"sizeBytes":null,"status":{"kind":"direct"},"via":"Local Test"},"rows":[],"slowAddons":[]}"""
 
     @Test
@@ -34,6 +41,24 @@ class UnknownValueTest {
             "2 are hidden for another reason, 1 is over your size limit, 1 is hidden for another reason",
             VersionsCopy.hiddenDetail(versions.hidden),
         )
+    }
+
+    private enum class Speed(
+        val wire: String,
+    ) {
+        Fast("fast"),
+        Unknown("unknown"),
+        ;
+
+        object Serializer : FallbackEnumSerializer<Speed>("Speed", Speed.entries, Speed::wire, Unknown)
+    }
+
+    @Test
+    fun `an enum with its own unknown value falls back to it`() {
+        assertEquals(Speed.Unknown, CoreJson.decodeFromString(Speed.Serializer, "\"unknown\""))
+        assertEquals(Speed.Unknown, CoreJson.decodeFromString(Speed.Serializer, "\"warp\""))
+        assertEquals(Speed.Fast, CoreJson.decodeFromString(Speed.Serializer, "\"fast\""))
+        assertEquals("\"unknown\"", CoreJson.encodeToString(Speed.Serializer, Speed.Unknown))
     }
 
     @Test

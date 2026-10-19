@@ -22,7 +22,7 @@ open class FallbackEnumSerializer<E : Enum<E>>(
 
     override fun deserialize(decoder: Decoder): E {
         val name = decoder.decodeString()
-        return values.firstOrNull { it != fallback && wire(it) == name } ?: fallback
+        return values.firstOrNull { wire(it) == name } ?: fallback
     }
 
     override fun serialize(
