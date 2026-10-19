@@ -73,7 +73,15 @@ pub(crate) struct Snapshot {
     /// Microseconds from adapter start to the first ready range.
     pub ready_us: Option<u64>,
     pub dwh: Option<Stats>,
+    /// The capacity sample (plans/m13-stream-choice.md 5): payload bytes
+    /// received while block requests were outstanding, and that time, in
+    /// the first 30 s.
+    pub sample_bytes: u64,
+    pub sample_busy_us: u64,
 }
+
+/// The capacity sample covers the adapter's first 30 s.
+const SAMPLE_WINDOW_US: u64 = 30_000_000;
 
 /// Pure translation state: librqbit events in, wire actions out. Time comes
 /// only through `tick`, so tests drive it without a runtime.
@@ -94,6 +102,8 @@ pub(crate) struct Translator {
     now_us: u64,
     ready_us: Option<u64>,
     actions: Vec<Action>,
+    sample_bytes: u64,
+    sample_busy_us: u64,
 }
 
 impl Translator {
@@ -130,6 +140,8 @@ impl Translator {
             now_us: 0,
             ready_us: None,
             actions: Vec::new(),
+            sample_bytes: 0,
+            sample_busy_us: 0,
         }
     }
 
@@ -141,10 +153,16 @@ impl Translator {
         Snapshot {
             ready_us: self.ready_us,
             dwh: self.sched.as_ref().map(|s| s.stats().clone()),
+            sample_bytes: self.sample_bytes,
+            sample_busy_us: self.sample_busy_us,
         }
     }
 
     pub fn tick(&mut self, now_us: u64) -> Vec<Wire> {
+        // Time with a block request outstanding counts toward the sample.
+        if !self.sent.is_empty() && now_us <= SAMPLE_WINDOW_US {
+            self.sample_busy_us += now_us.saturating_sub(self.now_us);
+        }
         self.now_us = self.now_us.max(now_us);
         self.feed(Event::Tick {
             now_us: self.now_us,
@@ -248,9 +266,13 @@ impl Translator {
                 let block = ((u64::from(piece) * self.piece_len + u64::from(begin))
                     / u64::from(BLOCK)) as BlockIdx;
                 let total = self.files.last().map_or(0, |f| f.0 + f.1);
-                s.bytes += total
+                let payload = total
                     .saturating_sub(u64::from(block) * u64::from(BLOCK))
                     .min(u64::from(BLOCK));
+                s.bytes += payload;
+                if self.now_us <= SAMPLE_WINDOW_US {
+                    self.sample_bytes += payload;
+                }
                 if let Some(sent) = self.sent.remove(&(s.id, block)) {
                     let sample = self.now_us.saturating_sub(sent).max(1);
                     s.rtt_us = if s.rtt_us == 0 {
@@ -605,6 +627,43 @@ mod tests {
         tr.on_ext(ExtEvent::PeerChoked { peer: addr(1) });
         assert!(tr.sent.is_empty());
         assert_eq!(tr.sched.as_ref().unwrap().outstanding(1), 0);
+    }
+
+    /// plans/m13-stream-choice.md 5: the sample counts payload while block
+    /// requests are out, and only in the first 30 s.
+    #[test]
+    fn a_capacity_sample_counts_only_time_with_requests_out() {
+        let mut tr = translator(true);
+        tr.tick(1_000);
+        open(&mut tr, 1, 0);
+        // Nothing asked yet: idle time does not count.
+        tr.tick(2_001_000);
+        assert_eq!(tr.snapshot().sample_busy_us, 0);
+        tr.on_ext(ExtEvent::PeerConnected {
+            peer: addr(1),
+            bitfield: vec![0xff, 0xff],
+        });
+        let out = tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(1) });
+        let first = out[0];
+        tr.tick(2_051_000);
+        tr.on_ext(ExtEvent::Block {
+            peer: addr(1),
+            piece: first.piece,
+            begin: first.begin,
+        });
+        let s = tr.snapshot();
+        assert_eq!((s.sample_bytes, s.sample_busy_us), (16 * KIB, 50_000));
+        // Past 30 s nothing more counts.
+        tr.tick(40_000_000);
+        let second = out[1];
+        tr.on_ext(ExtEvent::Block {
+            peer: addr(1),
+            piece: second.piece,
+            begin: second.begin,
+        });
+        let s = tr.snapshot();
+        assert_eq!(s.sample_bytes, 16 * KIB);
+        assert!(s.sample_busy_us < 30_000_000);
     }
 
     #[test]

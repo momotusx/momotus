@@ -261,6 +261,10 @@ pub struct TorrentStats {
     pub seeks: u64,
     /// Ranges open on the torrent, each one scheduler demand.
     pub readers: usize,
+    /// The capacity sample: payload bytes received while block requests
+    /// were outstanding, and that time, in the first 30 s.
+    pub sample_bytes: u64,
+    pub sample_busy_ms: u64,
     /// The torrent is paused (idle past its keep-warm minute, or held).
     pub paused: bool,
     /// [`Engine::pause_now`] holds it for some profile: none of that
@@ -693,6 +697,7 @@ impl Engine {
         }
         let snap = lock(&l.snapshot).clone();
         s.ready_ms = snap.ready_us.map(|us| us / 1000);
+        (s.sample_bytes, s.sample_busy_ms) = (snap.sample_bytes, snap.sample_busy_us / 1000);
         s.dwh = l.dwh;
         if let Some(d) = snap.dwh {
             (
