@@ -36,6 +36,55 @@ pub(crate) const OPEN: Duration = Duration::from_secs(20);
 const STALL: Duration = Duration::from_secs(6);
 /// Cursor failures in a row that end a response.
 const RETRIES: u32 = 3;
+/// The capacity sample covers a playback's first 30 s
+/// (plans/m13-stream-choice.md 5).
+const SAMPLE_WINDOW: Duration = Duration::from_secs(30);
+
+/// Bytes received while at least one cursor waited on the origin, and that
+/// time: the connection's capacity, not the reader's pace (a cursor held
+/// back by the read-ahead limit waits on no one).
+#[derive(Debug)]
+struct Sample {
+    started: std::time::Instant,
+    waiting: usize,
+    since: Option<std::time::Instant>,
+    busy: Duration,
+    bytes: u64,
+}
+
+impl Sample {
+    fn new(now: std::time::Instant) -> Self {
+        Self {
+            started: now,
+            waiting: 0,
+            since: None,
+            busy: Duration::ZERO,
+            bytes: 0,
+        }
+    }
+
+    /// A cursor starts waiting for the origin's next chunk.
+    fn wait(&mut self, now: std::time::Instant) {
+        if self.waiting == 0 {
+            self.since = Some(now);
+        }
+        self.waiting += 1;
+    }
+
+    /// A cursor's wait ended with `bytes`; only the first 30 s count.
+    fn got(&mut self, bytes: u64, now: std::time::Instant) {
+        self.waiting = self.waiting.saturating_sub(1);
+        let end = now.min(self.started + SAMPLE_WINDOW);
+        if now <= self.started + SAMPLE_WINDOW {
+            self.bytes += bytes;
+        }
+        if self.waiting == 0
+            && let Some(since) = self.since.take()
+        {
+            self.busy += end.saturating_duration_since(since);
+        }
+    }
+}
 
 /// Why a playback cannot be served from the cache.
 #[derive(Debug, Clone)]
@@ -151,6 +200,7 @@ struct Shared {
     /// Held around the release check and each cache write, so nothing
     /// lands in the cache after release clears it.
     writing: Mutex<()>,
+    sample: Mutex<Sample>,
 }
 
 /// One HTTP playback.
@@ -180,6 +230,7 @@ impl Source {
                 passthrough: AtomicBool::new(false),
                 released: CancellationToken::new(),
                 writing: Mutex::default(),
+                sample: Mutex::new(Sample::new(std::time::Instant::now())),
             }),
             cursors: Mutex::default(),
             tick: AtomicU64::new(0),
@@ -197,6 +248,13 @@ impl Source {
         }
         self.shared.cache.clear();
         *lock(&self.shared.redirect) = None;
+    }
+
+    /// The capacity sample so far: bytes and time with the origin's answer
+    /// awaited, in the first 30 s.
+    pub(crate) fn sample(&self) -> (u64, Duration) {
+        let s = lock(&self.shared.sample);
+        (s.bytes, s.busy)
     }
 
     /// Cancelled once the playback is released.
@@ -570,7 +628,14 @@ async fn pump(shared: &Shared, cursor: &Cursor, mut upstream: StreamingResponse)
                 return Phase::Closed;
             }
         }
-        match upstream.next_chunk().await {
+        lock(&shared.sample).wait(std::time::Instant::now());
+        let next = upstream.next_chunk().await;
+        let got = match &next {
+            Some(Ok(chunk)) => chunk.len() as u64,
+            _ => 0,
+        };
+        lock(&shared.sample).got(got, std::time::Instant::now());
+        match next {
             Some(Ok(chunk)) => {
                 pending.extend_from_slice(&chunk);
                 // A released playback's cache is cleared; never refill it.
@@ -611,4 +676,33 @@ fn content_range(headers: &HeaderMap) -> Option<(u64, u64, u64)> {
         last.trim().parse().ok()?,
         len.trim().parse().ok()?,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// Only time with the origin's answer awaited counts, overlapping waits
+    /// once, and nothing past the first 30 s.
+    #[test]
+    fn the_sample_counts_time_waiting_on_the_origin() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut s = Sample::new(t0);
+        s.wait(at(0));
+        s.got(1_000_000, at(100));
+        // Until 5 s no cursor waits (the read-ahead limit holds them): no
+        // time counts.
+        s.wait(at(5_000));
+        // A second cursor overlaps the first.
+        s.wait(at(5_050));
+        s.got(500_000, at(5_100));
+        s.got(500_000, at(5_200));
+        assert_eq!((s.bytes, s.busy), (2_000_000, Duration::from_millis(300)));
+        // A wait that ends past 30 s counts up to 30 s and no bytes.
+        s.wait(at(29_900));
+        s.got(9_000_000, at(31_000));
+        assert_eq!((s.bytes, s.busy), (2_000_000, Duration::from_millis(400)));
+    }
 }

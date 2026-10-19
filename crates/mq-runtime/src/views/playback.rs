@@ -50,7 +50,6 @@ const STALL_WINDOW: Duration = Duration::from_secs(15);
 const STALL_FLOOR: u64 = 256 << 10;
 /// A capacity sample is read this long after its source started
 /// (plans/m13-stream-choice.md 5).
-#[cfg(feature = "torrent")]
 const SAMPLE_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -917,6 +916,10 @@ async fn resolve_next(
                     s.snapshot.binge_group = stream.binge_group.clone();
                     snapshot.set(s.snapshot.clone());
                 }
+                if matches!(upstream, Upstream::Http { .. }) {
+                    let attempt = lock(&state).snapshot.attempt;
+                    spawn_http_sample(&core, &state, attempt);
+                }
                 remember_stream(&core, &target, &stream);
                 // The addons ask with the hash; the built-in source lists at
                 // once and ranks with the frame rate. Pending ends with both.
@@ -1276,6 +1279,43 @@ fn spawn_sample(core: &Core, torrent: mq_engine::TorrentHandle, seeders: Option<
             bytes: stats.sample_bytes,
             busy: Duration::from_millis(stats.sample_busy_ms),
             seeders,
+        };
+        let min = core.prefs().streams.min_seeders;
+        crate::speed::record(
+            core.library(),
+            core.network(),
+            &sample,
+            min,
+            mq_library::hlc::now_ms(),
+        );
+    });
+}
+
+/// Reads an HTTP playback's capacity sample once its first 30 s are over,
+/// while it is still the playing source and the view lives, and counts it
+/// into the estimate.
+fn spawn_http_sample(core: &Core, state: &Arc<Mutex<State>>, attempt: u64) {
+    let (core, state) = (core.clone(), Arc::downgrade(state));
+    tokio::spawn(async move {
+        tokio::time::sleep(SAMPLE_AFTER).await;
+        let Some(state) = state.upgrade() else {
+            return;
+        };
+        let sample = {
+            let s = lock(&state);
+            if s.closed || s.snapshot.attempt != attempt {
+                return;
+            }
+            s.lease.as_ref().and_then(Lease::sample)
+        };
+        let Some((bytes, busy)) = sample else {
+            return;
+        };
+        let sample = crate::speed::Sample {
+            kind: crate::speed::Kind::Http,
+            bytes,
+            busy,
+            seeders: None,
         };
         let min = core.prefs().streams.min_seeders;
         crate::speed::record(

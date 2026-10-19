@@ -693,6 +693,18 @@ impl Lease {
             _ => None,
         }
     }
+
+    /// The connection's capacity as this playback measured it
+    /// (plans/m13-stream-choice.md 5): bytes received while the origin's
+    /// answer was awaited, and that time, in its first 30 s. `None` for a
+    /// torrent (the engine counts its own), a manifest, or an origin that
+    /// ignores ranges.
+    pub fn sample(&self) -> Option<(u64, std::time::Duration)> {
+        match &self.playback.body {
+            Content::Http(source) if !source.passthrough() => Some(source.sample()),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Debug for Lease {
