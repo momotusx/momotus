@@ -175,7 +175,7 @@ impl Core {
         let conn = self.trakt_conn();
         let bound = futures_util::FutureExt::now_or_never(conn.auth.bound()).flatten();
         report(match bound {
-            Some(_) => TraktPlayback::On,
+            Some(_) => shown(&conn),
             None if super::setting(self, ACCOUNT_SETTING).is_some() => TraktPlayback::ThisDeviceOff,
             None => TraktPlayback::Off,
         });
@@ -465,7 +465,7 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
         if s.ids.is_none() {
             match resolve(core, at, &s.target).await {
                 Ok(ids) => {
-                    (s.report)(TraktPlayback::On);
+                    (s.report)(shown(conn));
                     s.ids = Some(Ok(ids));
                 }
                 Err(Miss::Permanent(reason)) => {
@@ -572,7 +572,8 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
                 conn.failed(&reason);
                 s.sent = next;
             }
-            Reply::Off => {}
+            // The sign-in may have died on this call.
+            Reply::Off => (s.report)(shown(conn)),
             Reply::Transient(reason, after) => {
                 conn.failed(&reason);
                 s.tries += 1;
@@ -704,6 +705,16 @@ fn end(core: &Core, s: &Sess, delivered: bool) {
 fn remember(core: &Core, at: Bind<'_>, video_id: &str, percent: f64) {
     let value = json!({"percent": percent, "at": now_ms()}).to_string();
     at.set_state(core, &format!("sent:{video_id}"), &value);
+}
+
+/// What a playback with a connection shows: `On` while its sign-in works.
+/// A dead one (sign in again) records nothing, which the apps show as
+/// `ThisDeviceOff` (this device is not signed in).
+fn shown(conn: &Conn) -> TraktPlayback {
+    match futures_util::FutureExt::now_or_never(conn.auth.status()) {
+        Some(Err(AuthError::Reconnect(_))) => TraktPlayback::ThisDeviceOff,
+        _ => TraktPlayback::On,
+    }
 }
 
 /// The session's ids; a permanent miss is listed as unmapped.

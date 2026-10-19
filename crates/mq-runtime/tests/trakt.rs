@@ -3187,3 +3187,30 @@ async fn a_scrobble_that_cannot_read_its_profile_tries_again() {
     drop(core);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[tokio::test]
+async fn a_dead_sign_in_never_shows_a_playback_as_recorded() {
+    let (core, fake) = signed_in("a-dead-play").await;
+    // The start meets a 401 and the refresh is refused: the sign-in dies.
+    fake.queue("POST /scrobble/start", vec![reply(401, json!({}))]);
+    fake.queue(
+        "POST /oauth/token",
+        vec![reply(400, json!({"error": "invalid_grant"}))],
+    );
+    let playing = PlaybackView::open(&core, Vec::new(), episode(1));
+    assert_eq!(playing.snapshot().trakt, TraktPlayback::On);
+    playing.report_progress(at(10), MINUTES, false);
+    until("the dead start shown", || {
+        playing.snapshot().trakt == TraktPlayback::ThisDeviceOff
+    })
+    .await;
+    assert!(matches!(status(&core).state, TraktState::Reconnect { .. }));
+    drop(playing);
+    // A playback opened now, paused (nothing to send): never shown recorded.
+    let paused = PlaybackView::open(&core, Vec::new(), episode(2));
+    assert_eq!(paused.snapshot().trakt, TraktPlayback::ThisDeviceOff);
+    paused.report_progress(at(10), MINUTES, true);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(paused.snapshot().trakt, TraktPlayback::ThisDeviceOff);
+    assert!(fake.seen("POST", "/scrobble/start").len() == 1);
+}
