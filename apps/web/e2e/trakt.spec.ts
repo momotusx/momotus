@@ -19,6 +19,8 @@ const cores: { proc: ChildProcess; data: string }[] = [];
 let page: Page;
 let plain: Page;
 const consoleLines: string[] = [];
+/** Every op a page sent its core, in order. */
+const ops: string[] = [];
 const errors: string[] = [];
 
 const FORMS = {
@@ -37,7 +39,16 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS):
     });
     core.addEventListener("message", (e) => ws.send(String(e.data)));
     core.addEventListener("close", () => ws.close());
-    ws.onMessage((m) => (core.readyState === WebSocket.OPEN ? core.send(String(m)) : early.push(String(m))));
+    ws.onMessage((m) => {
+      try {
+        const op = (JSON.parse(String(m)) as { op?: string }).op;
+        if (op) ops.push(op);
+      } catch {
+        // Not a request.
+      }
+      if (core.readyState === WebSocket.OPEN) core.send(String(m));
+      else early.push(String(m));
+    });
     ws.onClose(() => core.close());
   });
   const p = await context.newPage();
@@ -90,6 +101,14 @@ const shot = async (p: Page, name: string) => {
 };
 
 const card = (p: Page) => p.locator(".trakt-card");
+/** No token in storage, history, the URL or the console, now. */
+async function noTokenKept(p: Page) {
+  const text = await kept(p);
+  for (const secret of fake.secrets) expect(text.includes(secret), "a token is kept").toBe(false);
+  const logged = consoleLines.join("\n");
+  for (const secret of fake.secrets) expect(logged.includes(secret), "a token reached the console").toBe(false);
+}
+const setTrakts = () => ops.filter((o) => o === "setTrakt").length;
 const asked = (method: string, path: string) => fake.seen.filter((s) => s.method === method && s.path === path).length;
 
 test.describe.serial("Trakt on the web", () => {
@@ -123,7 +142,11 @@ test.describe.serial("Trakt on the web", () => {
   });
 
   test("Connect shows the code to enter at Trakt; approved there, the card says who is connected", async () => {
-    await go(page, "/trakt");
+    // Settings lists Trakt with its state, and leads to its page.
+    await go(page, "/settings");
+    await expect(page.locator('[data-f="settings:trakt"]')).toContainText("Keep watched marks and resume points in step with your Trakt account.");
+    await page.locator('[data-f="settings:trakt"]').click();
+    await expect(page).toHaveURL(/\/trakt$/);
     await expect(card(page)).toHaveAttribute("data-state", "off");
     await expect(card(page)).toContainText("Not connected.");
     await page.locator('[data-f="trakt:connect"]').click();
@@ -131,6 +154,9 @@ test.describe.serial("Trakt on the web", () => {
     await expect(page.locator('[data-f="trakt:url"]')).toHaveAttribute("href", "https://trakt.tv/activate");
     await expect(page.locator(".trakt-code .qrbox svg")).toBeVisible();
     await expect(page.locator(".trakt-code .st")).toContainText(/Good for (9|10):\d\d\./);
+    // The code is announced once; the time left ticks outside any live region.
+    await expect(page.locator(".trakt-code .sr[role=status]")).toHaveText(`Code ${USER_CODE.split("").join(" ")}`);
+    expect(await page.locator(".trakt-code .st").evaluate((el) => !!el.closest("[aria-live], [role=status], [role=alert]"))).toBe(false);
     await shot(page, "trakt-code-desktop");
     fake.approve();
     await expect(page.locator(".trakt-connect .st.ok")).toHaveText(`Connected as ${USER}`, { timeout: 15_000 });
@@ -139,6 +165,9 @@ test.describe.serial("Trakt on the web", () => {
     await expect(card(page).locator(".trakt-state .st")).toHaveText(`Connected as ${USER}`);
     // Kept in this tab only: this browser does not remember a sync account.
     await expect(card(page)).toContainText("The sign-in lasts until this tab closes or reloads.");
+    // The record was acknowledged, and nothing of it is kept where the page could read it.
+    expect(setTrakts()).toBe(1);
+    await noTokenKept(page);
   });
 
   test("Sync now runs a round against Trakt", async () => {
@@ -148,6 +177,27 @@ test.describe.serial("Trakt on the web", () => {
     expect(asked("GET", "/sync/last_activities")).toBeGreaterThan(before);
     await expect(card(page)).toContainText(/Last synced \d/);
     await shot(page, "trakt-connected-desktop");
+    await go(page, "/settings");
+    await expect(page.locator('[data-f="settings:trakt"]')).toContainText("Connected as marquee-tester");
+    await page.locator('[data-f="settings:trakt"]').scrollIntoViewIfNeeded();
+    await shot(page, "trakt-settings-desktop");
+    await go(page, "/trakt");
+    await noTokenKept(page);
+  });
+
+  test("a second tab and a reload hold no record and leave Trakt connected", async () => {
+    const before = setTrakts();
+    const second = await page.context().newPage();
+    await second.goto("/trakt");
+    await expect(card(second)).toHaveAttribute("data-state", "connected");
+    await second.close();
+    await page.reload();
+    await expect(card(page)).toHaveAttribute("data-state", "connected");
+    // Neither page held a record, so neither told the core anything about one.
+    expect(setTrakts()).toBe(before);
+    await page.locator('[data-f="trakt:sync"]').click();
+    await expect(card(page).locator(".st.ok").last()).toHaveText(/^Synced: \d+ sent, \d+ brought in$/, { timeout: 20_000 });
+    await noTokenKept(page);
   });
 
   test("a playback shows the Trakt mark and scrobbles; a stop Trakt refuses lists the film", async () => {
@@ -176,6 +226,11 @@ test.describe.serial("Trakt on the web", () => {
     fake.answer("POST /scrobble/pause", [404]);
     await page.evaluate(() => document.querySelector("video")?.pause());
     await expect.poll(() => asked("POST", "/scrobble/pause"), { timeout: 15_000 }).toBeGreaterThan(paused);
+    // The mark says why, in words that show on every form.
+    await expect(mark).toHaveAttribute("data-trakt", "unmapped", { timeout: 15_000 });
+    await expect(mark.locator("span:not(.sr)")).toContainText("this title could not be matched");
+    await page.mouse.move(700, 450);
+    await shot(page, "trakt-player-unmapped-desktop");
     await go(page, "/trakt");
     await expect(page.locator(".trakt-unmapped li").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".trakt-unmapped")).toContainText("Big Buck Bunny");
@@ -196,6 +251,8 @@ test.describe.serial("Trakt on the web", () => {
     await expect(card(plain)).toHaveAttribute("data-state", "notConfigured");
     await expect(card(plain)).toContainText("Trakt is not set up in this build of Marquee");
     await expect(card(plain).locator("button")).toHaveCount(0);
+    // The one way on, focused for the remote.
+    await expect.poll(() => plain.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("trakt:back");
     await shot(plain, "trakt-not-configured-tv");
   });
 

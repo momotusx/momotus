@@ -6,6 +6,7 @@ import KeyRound from "lucide-solid/icons/key-round";
 import PackageSearch from "lucide-solid/icons/package-search";
 import Puzzle from "lucide-solid/icons/puzzle";
 import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
+import Radio from "lucide-solid/icons/radio";
 import Rows3 from "lucide-solid/icons/rows-3";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, type JSX, Show } from "solid-js";
@@ -16,6 +17,8 @@ import type { QualityPref } from "../core/generated/QualityPref";
 import { chooseForm, type Form, form } from "../form";
 import { findAddons, languageName, syncSummary, syncWords } from "../lib/words";
 import * as sync from "../core/sync";
+import { traktLink, traktStatus } from "../core/trakt";
+import { rowLine, traktWords } from "../lib/trakt";
 import "./browse.css";
 import "./settings.css";
 import UserPen from "lucide-solid/icons/user-pen";
@@ -24,6 +27,8 @@ import { AvatarArt } from "../components/avatar";
 import { profiles } from "../core/profiles";
 import { debridAccounts } from "../core/debrid";
 import { inUse } from "../lib/debrid";
+
+const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 // ISO 639-1 for audio (stream prefs) and 639-2 for subtitles, as the core expects.
 const LANGS: [iso1: string, iso2: string][] = [
@@ -170,6 +175,7 @@ export default function SettingsScreen() {
         <h2>Devices and sync</h2>
         <div class="links">
           <LinkRow href="/sync" fkey="settings:sync" icon={<MonitorSmartphone aria-hidden />} title={syncWords.title} text={syncLine()} />
+          <LinkRow href="/trakt" fkey="settings:trakt" icon={<Radio aria-hidden />} title={traktWords.title} text={rowLine(traktStatus(), traktLink, clockTime)} />
         </div>
       </section>
 

@@ -18,6 +18,14 @@ export const traktWords = {
   signingOut: "Signing out",
   keptInTab: "The sign-in lasts until this tab closes or reloads. With sync on, Remember this browser on Devices and sync keeps it.",
   keptSealed: "The sign-in is kept in this browser, locked with your passkey.",
+  saveFailed: "This browser could not store the newest Trakt sign-in. Until it does, a reload may ask you to sign in to Trakt again.",
+  saveAgain: "Save again",
+  deleteFailed: "Signed out of Trakt, but this browser could not delete the sign-in it keeps. Try again.",
+  readFailed: "This browser could not read the Trakt sign-ins it keeps, so it stores no new one over them. Try again.",
+  tryAgain: "Try again",
+  plainLink: "Trakt is off on this page: its link to Marquee's core is not encrypted, so no Trakt sign-in may travel over it. Open Marquee on the computer that runs the core, or use the app.",
+  backToSettings: "Back to Settings",
+  importLabel: "Trakt history brought in",
 } as const;
 
 /** Fills `{name}` fields. */
@@ -77,6 +85,13 @@ export function stateCard(status: TraktStatus, clock: (ms: number) => string): {
   }
 }
 
+/** Settings' line for Trakt: off (or not read yet) invites, the other states say themselves. */
+export function rowLine(status: TraktStatus | null, privateLink: boolean, clock: (ms: number) => string): string {
+  if (!privateLink) return traktWords.plainLink;
+  if (!status || status.state === "off") return traktWords.rowOff;
+  return stateCard(status, clock).line;
+}
+
 /** Writes still waiting, in words, or nothing. */
 export const pendingLine = (count: number) =>
   count <= 0 ? null : count === 1 ? traktWords.pendingOne : fill(traktWords.pendingMany, { count });
@@ -117,14 +132,16 @@ export function newer(a: TraktRecord | undefined, b: TraktRecord): TraktRecord {
 }
 
 export interface TraktRecordsIo {
-  /** `setTrakt`: the acknowledgement of an offered record, and the resend after open, unlock and a switch. */
-  send(record: TraktRecord | null): Promise<void>;
-  /** Keeps every profile's record where this browser remembers (resolves at once where it does not). */
+  /** `setTrakt`: the acknowledgement of an offered record, and the resend before the view opens. */
+  send(record: TraktRecord): Promise<void>;
+  /** Keeps every profile's record where this browser remembers (resolves at once where it does
+   * not); rejects when that storage failed. */
   persist(all: Record<string, TraktRecord>): Promise<void>;
 }
 
-/** Every profile's Trakt record, in this tab's memory (and through `persist`, sealed where
- * the browser remembers). Each change runs in turn, in the order it came. */
+/** Every profile's Trakt record, in this tab's memory (and through `persist`, sealed where the
+ * browser remembers). Each change runs in turn, in the order it came. Nothing is ever sent for
+ * a profile once `still()` says its session is over: a switch or a lock in between drops it. */
 export class TraktRecords {
   private all: Record<string, TraktRecord> = {};
   private queue: Promise<unknown> = Promise.resolve();
@@ -138,34 +155,45 @@ export class TraktRecords {
   }
 
   private persist() {
-    // Memory holds it either way: a storage that fails says so itself and never holds back the acknowledgement.
-    return this.io.persist({ ...this.all }).catch(() => undefined);
+    return this.io.persist({ ...this.all });
   }
 
   get(profile: string): TraktRecord | undefined {
     return this.all[profile];
   }
 
-  /** A record the `trakt` view offered for `profile`: stored first, then acknowledged. */
-  offered(profile: string, record: TraktRecord): Promise<void> {
+  /** A record the `trakt` view offered for `profile`: kept in memory, stored, then acknowledged
+   * while `still()` holds. A store that fails rejects and acknowledges nothing: the core offers
+   * the record again, and `save` retries. */
+  offered(profile: string, record: TraktRecord, still: () => boolean): Promise<void> {
     return this.inTurn(async () => {
       this.all[profile] = record;
       await this.persist();
-      await this.io.send(record);
+      if (still()) await this.io.send(record);
     });
   }
 
-  /** After the core opened, an unlock or a switch: this profile's record, or none. */
-  resend(profile: string): Promise<void> {
-    return this.inTurn(() => this.io.send(this.all[profile] ?? null));
+  /** Before the view opens (at start, after a switch or an unlock): this profile's record, while
+   * `still()` holds. A page holding none sends nothing: the core keeps what another tab gave it. */
+  resend(profile: string, still: () => boolean): Promise<void> {
+    return this.inTurn(async () => {
+      const record = this.all[profile];
+      if (record && still()) await this.io.send(record);
+    });
   }
 
-  /** Signed out of Trakt: the profile's record goes, here and where it was sealed. */
+  /** Signed out of Trakt: the profile's record goes, here and where it was sealed (rejects when
+   * the sealed copy could not be deleted; `save` tries again). */
   signedOut(profile: string): Promise<void> {
     return this.inTurn(async () => {
       delete this.all[profile];
       await this.persist();
     });
+  }
+
+  /** Stores what memory holds again, after a store that failed. */
+  save(): Promise<void> {
+    return this.inTurn(() => this.persist());
   }
 
   /** What the browser had sealed, now opened (or a Remember just turned on): the newer of each

@@ -1,6 +1,7 @@
 /** The player's Trakt mark (`PlaybackSnapshot.trakt`): whether this playback
- * reaches Trakt, as a small pill with its icon, and the whole sentence for
- * screen readers. Nothing when the profile does not use Trakt. */
+ * reaches Trakt. Tracked, it is a small pill with the whole sentence for
+ * screen readers; not tracked, the sentence itself shows, on every form, so
+ * a TV or a phone says why too. Nothing when the profile does not use Trakt. */
 
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Radio from "lucide-solid/icons/radio";
@@ -13,12 +14,20 @@ export function TraktMark(props: { state: TraktPlayback | undefined }) {
   return (
     <Show when={playbackMark(props.state)}>
       {(m) => (
-        <p class={`trakt-mark ${m().tone}`} data-trakt={props.state} title={m().label}>
-          <Show when={m().tone === "on"} fallback={<CircleAlert aria-hidden />}>
+        <p class={`trakt-mark ${m().tone}`} data-trakt={props.state}>
+          <Show
+            when={m().tone === "on"}
+            fallback={
+              <>
+                <CircleAlert aria-hidden />
+                <span>{m().label}</span>
+              </>
+            }
+          >
             <Radio aria-hidden />
+            <span aria-hidden="true">{traktWords.title}</span>
+            <span class="sr">{m().label}</span>
           </Show>
-          <span aria-hidden="true">{traktWords.title}</span>
-          <span class="sr">{m().label}</span>
         </p>
       )}
     </Show>

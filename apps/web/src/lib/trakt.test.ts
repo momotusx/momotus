@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import shared from "../../../shared/trakt-words.json";
 import type { TraktLoginSnapshot } from "../core/generated/TraktLoginSnapshot";
 import type { TraktStatus } from "../core/generated/TraktStatus";
-import { fill, loginLine, loginRetry, newer, pendingLine, playbackMark, stateCard, timeLeft, type TraktRecord, TraktRecords, traktWords } from "./trakt";
+import { fill, rowLine, loginLine, loginRetry, newer, pendingLine, playbackMark, stateCard, timeLeft, type TraktRecord, TraktRecords, traktWords } from "./trakt";
 
 const base = { user: "ana", lastOkMs: 0, lastError: null, pendingWrites: 0, unmapped: [], importing: null, record: null };
 const clock = () => "2:05 PM";
@@ -92,57 +92,78 @@ const record = (generation: number, revision: number, account = "u1"): TraktReco
 function harness(persistFails = false) {
   const log: string[] = [];
   const stored: Record<string, TraktRecord>[] = [];
+  const failing = { now: persistFails };
   const records = new TraktRecords({
-    send: async (r) => void log.push(`send ${r ? r.accessToken : "none"}`),
+    send: async (r) => void log.push(`send ${r.accessToken}`),
     persist: async (all) => {
       log.push(`persist ${Object.keys(all).sort().join(",") || "none"}`);
+      if (failing.now) throw new Error("storage failed");
       stored.push(all);
-      if (persistFails) throw new Error("storage failed");
     },
   });
-  return { log, stored, records };
+  return { log, stored, records, failing };
 }
+const open = () => true;
 
 test("an offered record is stored first, then acknowledged", async () => {
   const { log, stored, records } = harness();
-  await records.offered("p1", record(1, 0));
+  await records.offered("p1", record(1, 0), open);
   expect(log).toEqual(["persist p1", "send a1.0"]);
   expect(stored[0]?.p1?.accessToken).toBe("a1.0");
   expect(records.get("p1")?.accessToken).toBe("a1.0");
 });
 
-test("a storage that fails keeps the record in memory and still acknowledges it", async () => {
-  const { log, records } = harness(true);
-  await records.offered("p1", record(1, 0));
-  expect(log).toEqual(["persist p1", "send a1.0"]);
+test("a store that fails acknowledges nothing; Save again stores it", async () => {
+  const { log, stored, records, failing } = harness(true);
+  expect(await records.offered("p1", record(1, 0), open).then(() => "acknowledged", () => "refused")).toBe("refused");
+  expect(log).toEqual(["persist p1"]);
+  // Memory still holds it for this tab.
   expect(records.get("p1")).toBeDefined();
+  failing.now = false;
+  await records.save();
+  expect(stored.at(-1)?.p1?.accessToken).toBe("a1.0");
 });
 
-test("after an unlock or a switch the open profile's record goes again, and another profile's never", async () => {
+test("an acknowledgement whose session ended (a switch or a lock meanwhile) is dropped", async () => {
   const { log, records } = harness();
-  await records.offered("p1", record(1, 0));
+  await records.offered("p1", record(1, 0), () => false);
+  expect(log).toEqual(["persist p1"]);
+  await records.resend("p1", () => false);
+  expect(log).toEqual(["persist p1"]);
+});
+
+test("before the view opens the profile's record goes again; a profile with none sends nothing", async () => {
+  const { log, records } = harness();
+  await records.offered("p1", record(1, 0), open);
   log.length = 0;
-  await records.resend("p1");
-  await records.resend("p2");
-  await records.resend("p1");
-  expect(log).toEqual(["send a1.0", "send none", "send a1.0"]);
+  await records.resend("p1", open);
+  await records.resend("p2", open);
+  await records.resend("p1", open);
+  expect(log).toEqual(["send a1.0", "send a1.0"]);
 });
 
 test("signing out deletes the profile's record, here and where it was sealed", async () => {
   const { log, stored, records } = harness();
-  await records.offered("p1", record(1, 0));
-  await records.offered("p2", record(1, 0, "u2"));
+  await records.offered("p1", record(1, 0), open);
+  await records.offered("p2", record(1, 0, "u2"), open);
   log.length = 0;
   await records.signedOut("p1");
   expect(log).toEqual(["persist p2"]);
   expect(stored.at(-1)).toEqual({ p2: record(1, 0, "u2") });
-  await records.resend("p1");
-  expect(log.at(-1)).toBe("send none");
+  await records.resend("p1", open);
+  expect(log).toEqual(["persist p2"]);
+});
+
+test("a sealed copy that could not be deleted on sign-out is not reported as gone", async () => {
+  const { records, failing } = harness();
+  await records.offered("p1", record(1, 0), open);
+  failing.now = true;
+  expect(await records.signedOut("p1").then(() => "deleted", () => "kept")).toBe("kept");
 });
 
 test("records sealed here meet the ones in memory: the newer of each is kept", async () => {
   const { records } = harness();
-  await records.offered("p1", record(2, 3));
+  await records.offered("p1", record(2, 3), open);
   // The sealed copy is older for p1 and the only one for p2.
   expect(await records.restored({ p1: record(2, 1), p2: record(1, 0, "u2") }, "p1")).toBe(false);
   expect(records.get("p1")?.accessToken).toBe("a2.3");
@@ -156,14 +177,14 @@ test("changes run in the order they came", async () => {
   const log: string[] = [];
   let release: () => void = () => undefined;
   const records = new TraktRecords({
-    send: async (r) => void log.push(`send ${r?.accessToken ?? "none"}`),
+    send: async (r) => void log.push(`send ${r.accessToken}`),
     persist: (all) =>
       new Promise((done) => {
         log.push(`persist ${Object.keys(all).join(",") || "none"}`);
         release = done;
       }),
   });
-  const first = records.offered("p1", record(1, 0));
+  const first = records.offered("p1", record(1, 0), open);
   const second = records.signedOut("p1");
   await new Promise((r) => setTimeout(r, 5));
   // The sign-out waits for the store and acknowledgement before it.
@@ -174,4 +195,11 @@ test("changes run in the order they came", async () => {
   release();
   await second;
   expect(log).toEqual(["persist p1", "send a1.0", "persist none"]);
+});
+
+test("Settings' Trakt line: an invitation when off, the state otherwise, and the link's words on a plain link", () => {
+  expect(rowLine(null, true, clock)).toBe(traktWords.rowOff);
+  expect(rowLine(status({ state: "off" }), true, clock)).toBe(traktWords.rowOff);
+  expect(rowLine(status({ state: "connected" }), true, clock)).toBe("Connected as ana");
+  expect(rowLine(status({ state: "connected" }), false, clock)).toBe(traktWords.plainLink);
 });

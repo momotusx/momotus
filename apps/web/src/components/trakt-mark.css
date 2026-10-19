@@ -4,3 +4,4 @@
 .trakt-mark svg { width: 18px; height: 18px; }
 .trakt-mark.warn svg { color: var(--warn); }
 [data-form="phone"] .trakt-mark { margin-top: 8px; padding: 4px 10px 4px 8px; }
+.trakt-mark.warn { max-width: min(900px, 80vw); border-radius: var(--radius-card); line-height: 1.3; }

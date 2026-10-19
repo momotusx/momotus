@@ -4,6 +4,7 @@
  * state the core reports has its own words and its one way on. The record
  * lives in src/core/trakt.ts and is never shown. */
 
+import { A } from "@solidjs/router";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Link from "lucide-solid/icons/link";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
@@ -16,11 +17,12 @@ import { liveView } from "../core/client";
 import type { TraktLoginSnapshot } from "../core/generated/TraktLoginSnapshot";
 import type { TraktStatus } from "../core/generated/TraktStatus";
 import { remembered } from "../core/sync";
-import { traktSignOut, traktStatus, traktSync } from "../core/trakt";
+import { traktLink, traktSignOut, traktStatus, traktStorage, traktSync } from "../core/trakt";
 import { form } from "../form";
 import { fill, loginLine, loginRetry, pendingLine, stateCard, syncedLine, timeLeft, type TraktAction, traktWords as w } from "../lib/trakt";
 import "./browse.css";
 import "./settings.css";
+import "./sync.css";
 import "./trakt.css";
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -51,6 +53,8 @@ export default function TraktScreen() {
     <main class="browse page settings-page trakt-page" data-vscroll>
       <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
       <p class="lede">{w.lede}</p>
+      <StorageNote />
+      <Show when={traktLink} fallback={<Said tone="bad">{w.plainLink}</Said>}>
       <Show when={traktStatus()} fallback={<Said tone="warn">{w.loading}</Said>}>
         {(s) => (
           <Show when={attempt() > 0} fallback={<Card status={s()} connect={() => setAttempt((n) => n + 1)} />}>
@@ -58,6 +62,7 @@ export default function TraktScreen() {
             <For each={[attempt()]}>{() => <Connect again={() => setAttempt((n) => n + 1)} close={() => setAttempt(0)} />}</For>
           </Show>
         )}
+      </Show>
       </Show>
     </main>
   );
@@ -86,9 +91,9 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
     setBusy("signOut");
     setSaid(null);
     try {
-      await traktSignOut();
+      // A sealed copy that stayed is said by the storage note instead.
+      if (await traktSignOut()) setSaid({ tone: "ok", text: w.signedOut });
       setAsking(false);
-      setSaid({ tone: "ok", text: w.signedOut });
     } catch (e) {
       setSaid({ tone: "bad", text: fill(w.signOutFailed, { reason: reasonOf(e) }) });
     } finally {
@@ -149,13 +154,15 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
                 <div class="trakt-import">
                   <dt>{fill(w.importing, { done: i().done, total: i().total })}</dt>
                   <dd>
-                    <progress max={Math.max(1, i().total)} value={i().done} />
+                    <progress max={Math.max(1, i().total)} value={i().done} aria-label={w.importLabel} />
                   </dd>
                 </div>
               )}
             </Show>
           </dl>
-          <p class="note small">{remembered() ? w.keptSealed : w.keptInTab}</p>
+          <Show when={!traktStorage()}>
+            <p class="note small">{remembered() ? w.keptSealed : w.keptInTab}</p>
+          </Show>
         </Show>
         <Show when={said()}>{(s) => <Said tone={s().tone}>{s().text}</Said>}</Show>
         <Show
@@ -175,7 +182,16 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
             </div>
           }
         >
-          <Show when={card().actions.length}>
+          <Show
+            when={card().actions.length}
+            fallback={
+              <div class="acts">
+                <A class="btn" href="/settings" data-f="trakt:back" data-autofocus>
+                  {w.backToSettings}
+                </A>
+              </div>
+            }
+          >
             <div class="acts">
               <For each={card().actions}>{(a, i) => button(a, i() === 0)}</For>
             </div>
@@ -217,7 +233,7 @@ function Connect(props: { again: () => void; close: () => void }) {
     return l?.phase === "code" ? l : null;
   };
   return (
-    <section class="set trakt-connect" aria-live="polite">
+    <section class="set trakt-connect">
       <Switch fallback={<Said tone="warn">{w.starting}</Said>}>
         <Match when={view.state.status.state === "failed" && view.state.status}>
           {(f) => (
@@ -254,8 +270,9 @@ function Connect(props: { again: () => void; close: () => void }) {
                 <p class="code" aria-hidden="true">
                   {c().userCode}
                 </p>
-                <p class="sr">{`Code ${c().userCode.split("").join(" ")}`}</p>
-                <p class="st warn live">
+                {/* Announced once, when the code shows; the time left is not a live region. */}
+                <p class="sr" role="status">{`Code ${c().userCode.split("").join(" ")}`}</p>
+                <p class="st warn">
                   <i class="dot" />
                   <span>
                     {w.waiting} {fill(w.goodFor, { time: timeLeft(c().expiresMs, now()) })}.
@@ -299,5 +316,29 @@ function Connect(props: { again: () => void; close: () => void }) {
         </Match>
       </Switch>
     </section>
+  );
+}
+
+/** What this browser's storage did wrong with the Trakt sign-in, at the top, with its retry. */
+function StorageNote() {
+  const [busy, setBusy] = createSignal(false);
+  const retry = async (run: () => Promise<void>) => {
+    if (busy()) return;
+    setBusy(true);
+    await run().catch(() => undefined);
+    setBusy(false);
+  };
+  return (
+    <Show when={traktStorage()}>
+      {(p) => (
+        <div class="sync-note bad trakt-storage" role="alert">
+          <TriangleAlert aria-hidden />
+          <span>{p().words}</span>
+          <button class="btn" data-f="trakt:storage-retry" aria-busy={busy() || undefined} onClick={() => void retry(p().retry)}>
+            {p().words === w.saveFailed ? w.saveAgain : w.tryAgain}
+          </button>
+        </div>
+      )}
+    </Show>
   );
 }
