@@ -5,8 +5,8 @@
 use crate::codec::{RawVideo, language};
 use crate::io::Src;
 use crate::{
-    AudioCodec, AudioTrack, ByteSpan, Container, Field, StreamProbe, SubtitleCodec, SubtitleTrack,
-    VideoCodec, VideoInfo,
+    AudioCodec, AudioTrack, ByteSpan, Container, Field, Hev1Entry, StreamProbe, SubtitleCodec,
+    SubtitleTrack, VideoCodec, VideoInfo,
 };
 use bytes::Bytes;
 
@@ -284,6 +284,11 @@ async fn trak(
         .or_else(|| ms(media_duration, scale));
     let stsd = read_leaf(src, &l, b"stsd", 1 << 20).await;
     let entry = stsd.as_deref().and_then(sample_entry);
+    if &handler == b"vide"
+        && let (Some(body), Some(leaf)) = (&stsd, l.iter().find(|x| &x.kind == b"stsd"))
+    {
+        out.hev1.extend(hev1_entries(body, leaf.start));
+    }
     let title = Field::header(handler_name(&hdlr));
     let lang = language(lang);
     match &handler {
@@ -352,6 +357,52 @@ fn subtitle_codec(k: &Kind) -> SubtitleCodec {
         b"stpp" => SubtitleCodec::Ttml,
         k => SubtitleCodec::Other(fourcc(k)),
     }
+}
+
+/// The `hev1` entries of a video `stsd` whose body starts at file offset
+/// `at`: after its version, flags and entry count, each entry is a box.
+fn hev1_entries(stsd: &[u8], at: u64) -> Vec<Hev1Entry> {
+    let mut out = Vec::new();
+    let mut pos = 8;
+    while let Some(size) = be32(stsd, pos).map(|s| s as usize).filter(|s| *s >= 8) {
+        let Some(body) = stsd.get(pos + 8..pos + size) else {
+            break;
+        };
+        if stsd.get(pos + 4..pos + 8) == Some(b"hev1") {
+            let parameter_sets = Boxes(body.get(78..).unwrap_or_default())
+                .find(|(k, _)| k == b"hvcC")
+                .is_some_and(|(_, c)| hvcc_parameter_sets(c).unwrap_or(false));
+            out.push(Hev1Entry {
+                fourcc_at: at + pos as u64 + 4,
+                parameter_sets,
+            });
+        }
+        pos += size;
+    }
+    out
+}
+
+/// The `hvcC` record's NAL arrays (ISO/IEC 14496-15 8.3.3.1) hold at least
+/// one VPS, SPS and PPS (types 32, 33 and 34).
+fn hvcc_parameter_sets(b: &[u8]) -> Option<bool> {
+    let mut seen = [false; 3];
+    let mut pos = 23;
+    for _ in 0..*b.get(22)? {
+        let kind = b.get(pos)? & 0x3f;
+        let count = be16(b, pos + 1)?;
+        pos += 3;
+        for _ in 0..count {
+            pos += 2 + usize::from(be16(b, pos)?);
+        }
+        if count > 0
+            && let Some(slot) = kind
+                .checked_sub(32)
+                .and_then(|i| seen.get_mut(usize::from(i)))
+        {
+            *slot = true;
+        }
+    }
+    Some(seen.iter().all(|s| *s))
 }
 
 /// Visual sample entry: 78 bytes of fixed fields, then child boxes.

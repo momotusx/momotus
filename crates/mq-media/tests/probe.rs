@@ -1029,3 +1029,69 @@ proptest! {
         probe_blocking(data);
     }
 }
+
+// ---------------------------------------------------------------- hev1
+
+/// A synthetic file from `tests/fixtures` (ffmpeg's testsrc, 64x64, 1 s).
+fn fixture(name: &str) -> Vec<u8> {
+    let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read(path).unwrap()
+}
+
+fn at(data: &[u8], kind: &[u8; 4]) -> u64 {
+    data.windows(4)
+        .position(|w| w == kind)
+        .expect("type in file") as u64
+}
+
+async fn hev1(data: &[u8]) -> Vec<Hev1Entry> {
+    hev1_entries(
+        &mem(data),
+        ProbeBudget::default(),
+        &CancellationToken::new(),
+    )
+    .await
+}
+
+/// ffmpeg's hev1 files carry VPS, SPS and PPS in `hvcC`: the entry is
+/// found where `moov` sits, at the head or after `mdat`, and the full
+/// probe reports the same.
+#[tokio::test]
+async fn hev1_entries_are_found_with_moov_at_the_head_or_the_tail() {
+    for name in ["hev1-moov-head.mp4", "hev1-moov-tail.mp4"] {
+        let data = fixture(name);
+        let want = vec![Hev1Entry {
+            fourcc_at: at(&data, b"hev1"),
+            parameter_sets: true,
+        }];
+        assert_eq!(hev1(&data).await, want, "{name}");
+        assert_eq!(run(&mem(&data)).await.hev1, want, "{name}");
+    }
+}
+
+/// An `hvcC` with no parameter set arrays: listed, but not relabelable.
+#[tokio::test]
+async fn an_hev1_entry_without_parameter_sets_says_so() {
+    let mut data = fixture("hev1-moov-tail.mp4");
+    let record = at(&data, b"hvcC") as usize + 4;
+    data[record + 22] = 0; // numOfArrays
+    let want = vec![Hev1Entry {
+        fourcc_at: at(&data, b"hev1"),
+        parameter_sets: false,
+    }];
+    assert_eq!(hev1(&data).await, want);
+}
+
+/// `hvc1` and H.264 files have none, and a Matroska file costs one read.
+#[tokio::test]
+async fn hvc1_h264_and_matroska_have_no_hev1_entries() {
+    for name in ["hvc1.mp4", "h264.mp4"] {
+        assert!(hev1(&fixture(name)).await.is_empty(), "{name}");
+    }
+    let mut mkv = vec![0x1a, 0x45, 0xdf, 0xa3];
+    mkv.resize(4096, 0);
+    let reader = mem(&mkv);
+    let found = hev1_entries(&reader, ProbeBudget::default(), &CancellationToken::new()).await;
+    assert!(found.is_empty());
+    assert_eq!(*reader.log.lock().unwrap(), vec![0]);
+}

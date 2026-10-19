@@ -204,6 +204,19 @@ pub struct Attachment {
     pub mime: Field<String>,
 }
 
+/// An MP4 or MOV video sample entry of type `hev1`. Apple's AVFoundation
+/// decodes HEVC only from `hvc1` entries: an `hev1` file plays its sound
+/// with no picture. The same entry served as `hvc1` decodes when its `hvcC`
+/// carries the parameter sets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hev1Entry {
+    /// File offset of the entry's four-byte type.
+    pub fourcc_at: u64,
+    /// The `hvcC` holds VPS, SPS and PPS: served as `hvc1` it plays on
+    /// Apple. Without them it plays there in no form.
+    pub parameter_sets: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ByteSpan {
     pub offset: u64,
@@ -220,6 +233,8 @@ pub struct StreamProbe {
     pub attachments: Vec<Attachment>,
     /// MKV `Cues` or MP4 `moov`: the region a player reads to seek.
     pub seek_index: Field<ByteSpan>,
+    /// Every video track's `hev1` sample entries (MP4 and MOV only).
+    pub hev1: Vec<Hev1Entry>,
     pub budget_exhausted: bool,
     pub cancelled: bool,
     /// Error that stopped the probe early, for example `RangeUnsupported`.
@@ -252,6 +267,22 @@ pub async fn probe(
     out.bytes_read = src.bytes_read;
     out.elapsed = started.elapsed();
     out
+}
+
+/// The `hev1` sample entries of an MP4 or MOV file; none for any other
+/// container. Only the MP4 path runs, so a Matroska file costs one read.
+pub async fn hev1_entries(
+    reader: &dyn RangeReader,
+    budget: ProbeBudget,
+    cancel: &CancellationToken,
+) -> Vec<Hev1Entry> {
+    let mut src = io::Src::new(reader, budget, cancel);
+    let mut out = StreamProbe::default();
+    src.load_len().await;
+    if src.read(0, 16).await.is_some_and(|head| mp4::sniff(&head)) {
+        mp4::probe(&mut src, &mut out).await;
+    }
+    out.hev1
 }
 
 /// OpenSubtitles hash: file size plus the wrapping sum of the little-endian
