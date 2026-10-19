@@ -160,7 +160,7 @@ class TvVersionsTest {
                 }
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
-        val view = VersionsView(client, scope, JsonObject(emptyMap())).also { it.open() }
+        val view = VersionsView(client, scope, JsonObject(emptyMap()))
         compose.setContent {
             MarqueeTheme(Form.Tv) {
                 TvVersions(
@@ -174,9 +174,12 @@ class TvVersionsTest {
                 )
             }
         }
-        // The core's state thread writes the snapshot; Compose hears of it once the change is applied and a frame
-        // runs. Each round applies, idles and looks again (the header counts the versions once the screen drew the
-        // snapshot). The bound is for a stuck screen only: on a machine at load 70 a draw took over 30 s.
+        // The view opens once the screen composed and its recomposer runs: a snapshot the core's state thread
+        // writes in the moment between the first composition and the recomposer starting is never heard of,
+        // and the screen stays on "Opening" (seen once in about 75 gate runs, on a cold build).
+        compose.waitForIdle()
+        view.open()
+        // Each round applies, idles and looks again: the header counts the versions once the screen drew the snapshot.
         val deadline = System.currentTimeMillis() + 120_000
         while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty()) {
             check(System.currentTimeMillis() < deadline) {
