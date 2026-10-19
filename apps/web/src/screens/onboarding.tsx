@@ -217,6 +217,14 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
     setProblem(null);
     try {
       await op("installDefaults", { choices: choicesFor(all(), off()) });
+      // Back from the next step must not call Marquee's own installs "From
+      // Stremio": this entry stops saying it came from an import. (A second
+      // router navigation here would be dropped, so the entry is rewritten.)
+      if (props.fromImport) {
+        const here = new URL(window.location.href);
+        here.searchParams.delete("from");
+        history.replaceState(history.state, "", `${here.pathname}${here.search}`);
+      }
       navigate(afterContinue(props.review ? "home" : props.then));
     } catch (e) {
       setProblem(`Could not add the addons: ${reasonOf(e)}`);

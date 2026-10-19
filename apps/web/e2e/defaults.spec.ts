@@ -272,3 +272,21 @@ test("Settings by keys: a switch keeps focus on its own row while the list reloa
     expect(active, `focus stays on ${key}`).toEqual({ f: `defaults:${key}`, kept: "yes" });
   }
 });
+
+test("after an import, Back from the setup check does not call Marquee's own installs From Stremio", async ({ browser }) => {
+  const page = await device(browser, "desktop", { importDone: true });
+  await page.goto("/welcome?form=desktop");
+  await page.locator('[data-f="welcome:stremio"]').click();
+  await expect(page).toHaveURL(/\/import\?from=welcome/);
+  await install(CINEMETA);
+  await page.locator('[data-f="import:next"]').click();
+  await expect(page).toHaveURL(/step=2&from=import/);
+  await expect(page.locator(".drow.fixed", { hasText: "Cinemeta" })).toContainText("From Stremio");
+  await page.locator('[data-f="welcome:next"]').click();
+  await expect(page).toHaveURL(/step=3/);
+  await page.goBack();
+  await expect(page).toHaveURL(/step=2/);
+  await expect(page).not.toHaveURL(/from=import/);
+  await expect(page.locator(".drow.fixed", { hasText: "Torrentio" })).toContainText("Installed");
+  await expect(page.locator(".drow.fixed", { hasText: "From Stremio" })).toHaveCount(0);
+});
