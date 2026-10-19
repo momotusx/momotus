@@ -15,6 +15,7 @@ import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.RowState
 import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SyncReport
+import app.marquee.core.model.TraktPlayback
 import app.marquee.core.model.Tuple2
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
@@ -88,9 +89,10 @@ class ShapeDecodeTest {
                     "bingeGroup":"torrentio|4k",
                     "segments":[{"kind":"intro","startMs":30000,"endMs":75000,"source":"TheIntroDB"},
                                 {"kind":"credits","startMs":2400000,"endMs":2520000,"source":"TheIntroDB"}],
-                    "nextAtMs":2400000}""",
+                    "nextAtMs":2400000,"trakt":"thisDeviceOff"}""",
             )
         assertEquals(PlaybackPhase.Ready, snapshot.phase)
+        assertEquals(TraktPlayback.ThisDeviceOff, snapshot.trakt)
         assertEquals(2L, snapshot.attempt)
         assertEquals(5_000_000_000L, snapshot.sizeBytes)
         assertEquals("OpenSubtitles", snapshot.subtitles.single().source)

@@ -316,6 +316,7 @@ private fun AppNav(
                             onImport = { backStack.add(Route.Import) },
                             onSync = { backStack.add(Route.Sync) },
                             onDebrid = { backStack.add(Route.Debrid) },
+                            onTrakt = { backStack.add(Route.Trakt) },
                             onHomeRows = { backStack.add(Route.HomeRows) },
                             onFindAddons = { backStack.add(Route.FindAddons) },
                             link = app.linkInstall,
@@ -332,6 +333,7 @@ private fun AppNav(
                             onImport = {},
                             onSync = {},
                             onDebrid = {},
+                            onTrakt = {},
                             onHomeRows = {},
                             onFindAddons = { backStack.add(Route.FindAddons) },
                             sourcesOnly = true,
@@ -346,6 +348,12 @@ private fun AppNav(
                         })
                     }
                     entry<Route.Debrid> { DebridScreen(session) }
+                    entry<Route.Trakt> {
+                        TraktScreen(
+                            session,
+                            (LocalContext.current.applicationContext as MarqueeApp).trakt,
+                        )
+                    }
                     entry<Route.HomeRows> { HomeRowsScreen(session) }
                     entry<Route.Pairing> {
                         // From onboarding, a join is the way in: Done goes Home. From Settings it goes back.

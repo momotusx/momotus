@@ -3,9 +3,12 @@ package app.marquee.android
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import androidx.compose.runtime.snapshotFlow
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.session.CoreSession
+import app.marquee.core.trakt.SecretTraktRecords
+import app.marquee.core.trakt.TraktAccount
 import app.marquee.design.createImageLoader
 import coil3.ImageLoader
 import coil3.PlatformContext
@@ -13,6 +16,7 @@ import coil3.SingletonImageLoader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** What this device can play right now (see [MarqueeApp.deviceCaps]). */
@@ -29,6 +33,10 @@ class MarqueeApp :
 
     /** The session's profile and whether profile content may show (plans/m11-profiles.md). */
     lateinit var profiles: ProfileGate
+        private set
+
+    /** The running profile's Trakt account (plans/m7-trakt.md): its record, status and view. */
+    lateinit var trakt: TraktAccount
         private set
     private lateinit var lifecycle: AppLifecycle
 
@@ -58,10 +66,24 @@ class MarqueeApp :
                 else -> if (debuggable) Log.d(TAG, message)
             }
         }
+        // Debug builds only: Trakt from a local fake, read by a dev build of the core library.
+        DebugEntry.devTrakt(this)
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
         sync = SyncController(session, this).also { it.start() }
         profiles = ProfileGate(session).also { it.start() }
+        trakt =
+            TraktAccount(session.ops, SecretTraktRecords(session.secrets), session.scope) { push ->
+                val view = session.trakt(push)
+                AutoCloseable { view.close() }
+            }
+        // Each time a profile's content may show (the core opened, unlocked, switched), its record goes to
+        // the core and its `trakt` view opens; a shut gate (a switch, a lock, a core that stopped) closes it.
+        session.scope.launch(Dispatchers.Main) {
+            snapshotFlow { profiles.snapshot?.active?.takeIf { profiles.open } }.collect { active ->
+                if (active == null) trakt.end() else trakt.begin(active)
+            }
+        }
         lifecycle = AppLifecycle(this, session, sync).also { it.register() }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }
         deviceCaps = {

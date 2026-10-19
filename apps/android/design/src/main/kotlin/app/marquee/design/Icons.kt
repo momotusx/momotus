@@ -86,6 +86,14 @@ object Icons {
         )
     }
 
+    val CheckCheck: ImageVector by lazy {
+        strokeIcon(
+            "check-check",
+        "M18 6 7 17l-5-5",
+        "m22 10-7.5 7.5L13 16",
+        )
+    }
+
     val ChevronDown: ImageVector by lazy {
         strokeIcon(
             "chevron-down",
@@ -135,6 +143,15 @@ object Icons {
             "circle-check",
         "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
         "m16 9-5.5 5.5L8 12",
+        )
+    }
+
+    val CircleQuestionMark: ImageVector by lazy {
+        strokeIcon(
+            "circle-question-mark",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3",
+        "M12 17h.01",
         )
     }
 
@@ -385,6 +402,17 @@ object Icons {
             "link",
         "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71",
         "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+        )
+    }
+
+    val ListChecks: ImageVector by lazy {
+        strokeIcon(
+            "list-checks",
+        "M13 5h8",
+        "M13 12h8",
+        "M13 19h8",
+        "m3 17 2 2 4-4",
+        "m3 7 2 2 4-4",
         )
     }
 
@@ -664,6 +692,18 @@ object Icons {
             "tv",
         "m17 2-5 5-5-5",
         "M4 7h16a2 2 0 0 1 2 2v11a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2z",
+        )
+    }
+
+    val Unlink: ImageVector by lazy {
+        strokeIcon(
+            "unlink",
+        "m18.84 12.25 1.72-1.71h-.02a5.004 5.004 0 0 0-.12-7.07 5.006 5.006 0 0 0-6.95 0l-1.72 1.71",
+        "m5.17 11.75-1.71 1.71a5.004 5.004 0 0 0 .12 7.07 5.006 5.006 0 0 0 6.95 0l1.71-1.71",
+        "M8 2L8 5",
+        "M2 8L5 8",
+        "M16 19L16 22",
+        "M19 16L22 16",
         )
     }
 

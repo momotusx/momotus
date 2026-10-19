@@ -31,6 +31,8 @@ import app.marquee.core.model.SearchSnapshot
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleUpdate
+import app.marquee.core.model.TraktLoginSnapshot
+import app.marquee.core.model.TraktStatus
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.model.applyDiffs
 import kotlinx.coroutines.CoroutineScope
@@ -277,6 +279,30 @@ class DebridLoginView(
         DebridLoginSnapshot.serializer(),
     )
 
+/** The profile's Trakt status, open for the profile's session; each push may offer a record to store. */
+class TraktView(
+    client: CoreClient,
+    scope: CoroutineScope,
+    /** Every snapshot, on the state thread, as it arrives (not once per frame). */
+    private val onStatus: (TraktStatus) -> Unit,
+) : RecordView<TraktStatus>(client, scope, "trakt", NO_PARAMS, TraktStatus.serializer()) {
+    override fun applySnapshot(snapshot: TraktStatus) {
+        super.applySnapshot(snapshot)
+        onStatus(snapshot)
+    }
+
+    override fun applyUpdates(updates: List<TraktStatus>) {
+        super.applyUpdates(updates)
+        updates.lastOrNull()?.let(onStatus)
+    }
+}
+
+/** A Trakt sign-in by code (one at a time): the code and its QR, then done or why not. */
+class TraktLoginView(
+    client: CoreClient,
+    scope: CoroutineScope,
+) : RecordView<TraktLoginSnapshot>(client, scope, "traktLogin", NO_PARAMS, TraktLoginSnapshot.serializer())
+
 /** The picker's view: the session's profile, whether it is locked, and every profile. */
 class ProfilesView(
     client: CoreClient,
@@ -331,12 +357,15 @@ class PlaybackView(
     fun progress(
         positionMs: Long,
         durationMs: Long,
+        /** The viewer paused (or it ended): a Trakt scrobble pauses; playing again starts it. */
+        paused: Boolean = false,
     ) {
         if (positionMs < 0 || durationMs <= 0) return
         post(
             command("progress") {
                 put("positionMs", positionMs)
                 put("durationMs", durationMs)
+                put("paused", paused)
             },
         )
     }

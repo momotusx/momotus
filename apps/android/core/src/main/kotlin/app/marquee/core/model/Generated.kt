@@ -630,6 +630,8 @@ data class PlaybackSnapshot(
     val segments: List<Segment> = emptyList(),
     /** When to offer the Up Next card: the credits start from a source that matched the release; null keeps the app's own timing. */
     val nextAtMs: Long? = null,
+    /** Trakt's side: `on` scrobbles, `unmapped` (Trakt cannot name it), `off`, `thisDeviceOff` (the profile uses Trakt, this device is not signed in). */
+    val trakt: TraktPlayback,
 )
 
 @Serializable
@@ -914,6 +916,138 @@ data class Trailer(
     val youtubeId: String,
     /** The watch page, for apps that hand trailers to a browser or the YouTube app. */
     val url: String,
+)
+
+@Serializable
+data class TraktImporting(
+    val done: Int,
+    val total: Int,
+)
+
+@Serializable
+@JsonClassDiscriminator("phase")
+sealed interface TraktLoginSnapshot {
+    @Serializable
+    @SerialName("starting")
+    data object Starting : TraktLoginSnapshot
+
+    @Serializable
+    @SerialName("code")
+    data class Code(
+        val userCode: String,
+        val url: String,
+        val qr: String,
+        val expiresMs: Long,
+    ) : TraktLoginSnapshot
+
+    @Serializable
+    @SerialName("done")
+    data class Done(
+        val user: String,
+    ) : TraktLoginSnapshot
+
+    @Serializable
+    @SerialName("expired")
+    data object Expired : TraktLoginSnapshot
+
+    @Serializable
+    @SerialName("denied")
+    data object Denied : TraktLoginSnapshot
+
+    @Serializable
+    @SerialName("notConfigured")
+    data object NotConfigured : TraktLoginSnapshot
+
+    @Serializable
+    @SerialName("failed")
+    data class Failed(
+        val reason: String,
+    ) : TraktLoginSnapshot
+}
+
+/** Trakt's side of a playback (`PlaybackSnapshot.trakt`). */
+@Serializable
+enum class TraktPlayback {
+    @SerialName("on") On,
+    @SerialName("unmapped") Unmapped,
+    @SerialName("off") Off,
+    @SerialName("thisDeviceOff") ThisDeviceOff,
+}
+
+/** What one round did (`traktSync`). */
+@Serializable
+data class TraktReport(
+    /** Rows read from Trakt. */
+    val pulled: Int,
+    /** Marks and resume points that changed the library. */
+    val applied: Int,
+    /** Writes Trakt took. */
+    val pushed: Int,
+    /** Writes still waiting. */
+    val pending: Int,
+    /** Items listed as unmapped in this round. */
+    val unmapped: Int,
+)
+
+@Serializable
+@JsonClassDiscriminator("state")
+sealed interface TraktState {
+    @Serializable
+    @SerialName("connected")
+    data object Connected : TraktState
+
+    @Serializable
+    @SerialName("failing")
+    data class Failing(
+        val sinceMs: Long,
+        val reason: String,
+    ) : TraktState
+
+    @Serializable
+    @SerialName("reconnect")
+    data class Reconnect(
+        val reason: String,
+    ) : TraktState
+
+    @Serializable
+    @SerialName("off")
+    data object Off : TraktState
+
+    @Serializable
+    @SerialName("thisDeviceOff")
+    data object ThisDeviceOff : TraktState
+
+    @Serializable
+    @SerialName("notConfigured")
+    data object NotConfigured : TraktState
+}
+
+/** The profile's Trakt status (`trakt` view). */
+@Serializable
+data class TraktStatus(
+    val state: String,
+    val sinceMs: Long? = null,
+    val reason: String? = null,
+    val user: String? = null,
+    val lastOkMs: Long? = null,
+    /** A status and Trakt's `error` field, never a body. */
+    val lastError: String? = null,
+    val pendingWrites: Int,
+    /** The newest items Trakt could not take or give, newest first. */
+    val unmapped: List<TraktUnmapped> = emptyList(),
+    val importing: TraktImporting? = null,
+    /** A record the app has not stored: store it, then `setTrakt(record)`. */
+    val record: KeystoreRecord? = null,
+) {
+    // Holds keys or a token: never printed.
+    override fun toString() = "TraktStatus(state=$state, sinceMs=$sinceMs, reason=$reason, user=$user, lastOkMs=$lastOkMs, lastError=$lastError, pendingWrites=$pendingWrites, unmapped=$unmapped, importing=$importing, record=${record?.let { "hidden" }})"
+}
+
+@Serializable
+data class TraktUnmapped(
+    val itemId: String,
+    val name: String,
+    val reason: String,
 )
 
 @Serializable

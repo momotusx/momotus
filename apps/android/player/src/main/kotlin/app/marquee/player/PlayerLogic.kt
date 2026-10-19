@@ -11,6 +11,8 @@ import app.marquee.core.model.SubtitleTrack
 data class ProgressReport(
     val positionMs: Long,
     val durationMs: Long,
+    /** The viewer paused, or it ended: Trakt hears a pause (plans/m7-trakt.md section 3). */
+    val paused: Boolean = false,
 )
 
 /**
@@ -23,9 +25,12 @@ fun progressReport(
     firstFrame: Boolean,
     positionMs: Long,
     durationMs: Long,
+    playWhenReady: Boolean = true,
+    ended: Boolean = false,
 ): ProgressReport? {
     if (!firstFrame || positionMs < 0 || durationMs <= 0) return null
-    return ProgressReport(positionMs.coerceAtMost(durationMs), durationMs)
+    // Buffering with play asked for is not a pause.
+    return ProgressReport(positionMs.coerceAtMost(durationMs), durationMs, paused = !playWhenReady || ended)
 }
 
 /**

@@ -15,6 +15,7 @@ import app.marquee.core.ffi.CoreListener
 import app.marquee.core.ffi.MarqueeCore
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridTombstone
+import app.marquee.core.model.TraktStatus
 import app.marquee.core.secrets.DebridCore
 import app.marquee.core.secrets.DeviceId
 import app.marquee.core.secrets.KeystoreKeySource
@@ -35,6 +36,8 @@ import app.marquee.core.views.ProfilesView
 import app.marquee.core.views.SearchView
 import app.marquee.core.views.SettingsView
 import app.marquee.core.views.TitleView
+import app.marquee.core.views.TraktLoginView
+import app.marquee.core.views.TraktView
 import app.marquee.core.views.VersionsView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -239,6 +242,10 @@ class CoreSession(
     fun profiles() = ProfilesView(client, scope).also { it.open() }
 
     fun debridLogin(service: String) = DebridLoginView(client, scope, service).also { it.open() }
+
+    fun trakt(onStatus: (TraktStatus) -> Unit) = TraktView(client, scope, onStatus).also { it.open() }
+
+    fun traktLogin() = TraktLoginView(client, scope).also { it.open() }
 
     fun pairing(
         server: String,

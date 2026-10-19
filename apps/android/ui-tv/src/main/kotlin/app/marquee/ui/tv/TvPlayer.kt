@@ -67,6 +67,7 @@ import app.marquee.player.Scrim
 import app.marquee.player.Scrubber
 import app.marquee.player.SkipButton
 import app.marquee.player.TrackPanel
+import app.marquee.player.TraktMark
 import app.marquee.player.UpNextCard
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
@@ -458,6 +459,7 @@ private fun Header(
         controller.episode?.let {
             MqText(it, role = TextRole.Body, modifier = Modifier.padding(top = 8.dp))
         }
+        TraktMark(controller.trakt, Modifier.padding(top = 8.dp))
     }
 }
 

@@ -67,9 +67,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.TraktCopy
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.Segment
+import app.marquee.core.model.TraktPlayback
 import app.marquee.design.CapsLabel
 import app.marquee.design.Form
 import app.marquee.design.Icons
@@ -553,3 +555,31 @@ fun speedText(speed: Float): String = if (speed % 1f == 0f) "${speed.toInt()}x" 
 val SPEEDS = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
 
 fun nextSpeed(current: Float): Float = SPEEDS[(SPEEDS.indexOf(current) + 1) % SPEEDS.size]
+
+/**
+ * Trakt's side of this play (`PlaybackSnapshot.trakt`): a small mark with the plain word "Trakt" (no
+ * logo), read out in words. Nothing shows while the profile does not use Trakt.
+ */
+@Composable
+fun TraktMark(
+    trakt: TraktPlayback?,
+    modifier: Modifier = Modifier,
+) {
+    val spoken = TraktCopy.player(trakt) ?: return
+    val recorded = trakt == TraktPlayback.On
+    val icon =
+        when (trakt) {
+            TraktPlayback.On -> Icons.CheckCheck
+            TraktPlayback.Unmapped -> Icons.CircleQuestionMark
+            else -> Icons.Unlink
+        }
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier.clearAndSetSemantics { contentDescription = spoken },
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(icon, tint = if (recorded) Marquee.colors.text else Marquee.colors.warn, size = if (tv) 20.dp else 16.dp)
+        MqText(TraktCopy.TITLE, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
+    }
+}

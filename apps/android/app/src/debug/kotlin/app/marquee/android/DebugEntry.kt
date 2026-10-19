@@ -93,6 +93,23 @@ object DebugEntry {
         diagnostics?.stop()
         diagnostics = null
     }
+
+    /**
+     * Points Trakt at a local fake for emulator walks: the base URL in `files/dev-trakt` (written with
+     * `adb shell run-as`), an http URL on this device, read only by a core library built with debug
+     * assertions (`build-core.sh dev`), which only debug builds package. No file, no change.
+     */
+    fun devTrakt(context: android.content.Context) {
+        val url =
+            java.io
+                .File(context.filesDir, "dev-trakt")
+                .takeIf { it.exists() }
+                ?.readText()
+                ?.trim()
+                ?.ifEmpty { null } ?: return
+        android.system.Os.setenv("MQ_DEV_TRAKT", url, true)
+        CoreLog.w("debug: MQ_DEV_TRAKT is $url (the core takes it only as an http URL on this device)")
+    }
 }
 
 @Composable

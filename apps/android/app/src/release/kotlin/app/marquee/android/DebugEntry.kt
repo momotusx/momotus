@@ -14,4 +14,7 @@ object DebugEntry {
     fun launched(activity: ComponentActivity) = Unit
 
     fun destroy() = Unit
+
+    @Suppress("UNUSED_PARAMETER")
+    fun devTrakt(context: android.content.Context) = Unit
 }

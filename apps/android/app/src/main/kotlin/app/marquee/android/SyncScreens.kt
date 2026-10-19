@@ -137,7 +137,7 @@ private fun clock(ms: Long) = DateFormat.getTimeInstance(DateFormat.SHORT).forma
 
 /** A line of what happened: a dot in the tone and the words. */
 @Composable
-private fun Said(
+internal fun Said(
     text: String,
     tone: Status,
 ) {
@@ -182,7 +182,7 @@ private fun Labeled(
 
 /** A highlighted line with its icon: a warning or a step the user should take. */
 @Composable
-private fun Callout(
+internal fun Callout(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
 ) {
@@ -335,7 +335,7 @@ private fun AskAgain(
 
 /** The first button of a step that replaces the focused one takes the focus, so a remote keeps its place. */
 @Composable
-private fun stepFocus(): FocusRequester {
+internal fun stepFocus(): FocusRequester {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -345,7 +345,7 @@ private fun stepFocus(): FocusRequester {
 }
 
 /** Once a step that held the focus has gone, the focus goes to the first of [targets] that takes it. */
-private fun CoroutineScope.refocus(vararg targets: FocusRequester) {
+internal fun CoroutineScope.refocus(vararg targets: FocusRequester) {
     launch {
         withFrameNanos { }
         targets.any { runCatching { it.requestFocus(FocusDirection.Enter) }.getOrDefault(false) }

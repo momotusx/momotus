@@ -35,6 +35,8 @@ const LONG = new Set([
   "endMs",
   "nextAtMs",
   "attempt",
+  "sinceMs",
+  "lastOkMs",
 ]);
 const FLOAT = new Set(["progress"]);
 const INT = new Set([
@@ -67,6 +69,10 @@ const INT = new Set([
   "addonsImported",
   "seriesUnmatched",
   "byReason[]",
+  "pendingWrites",
+  "unmapped",
+  "done",
+  "total",
 ]);
 
 type TypeIr =
@@ -107,6 +113,8 @@ function typeIr(node: ts.TypeNode, field: string): TypeIr {
   if (node.kind === ts.SyntaxKind.StringKeyword) return { k: "string" };
   if (node.kind === ts.SyntaxKind.BooleanKeyword) return { k: "boolean" };
   if (node.kind === ts.SyntaxKind.NumberKeyword) return { k: "number", field };
+  // An opaque record the app keeps in its keystore and hands back verbatim (the Trakt record).
+  if (node.kind === ts.SyntaxKind.UnknownKeyword) return { k: "nullable", of: { k: "ref", name: "KeystoreRecord", args: [] } };
   if (ts.isUnionTypeNode(node)) {
     const parts = node.types.filter((t) => !(ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword));
     if (parts.length === node.types.length - 1 && parts.length === 1) {
@@ -142,6 +150,28 @@ function isStringLiteral(t: ts.TypeNode): t is ts.LiteralTypeNode {
   return ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal);
 }
 
+function taggedOf(name: string, members: ts.TypeLiteralNode[]): { tagField: string; variants: Variant[] } {
+  // The tag is the property that is a string literal in every member.
+  const first = members[0] as ts.TypeLiteralNode;
+  const tagField = first.members
+    .filter(ts.isPropertySignature)
+    .map((m) => unquote(m.name.getText()))
+    .find((candidate) =>
+      members.every((m) =>
+        m.members.some(
+          (p) => ts.isPropertySignature(p) && unquote(p.name.getText()) === candidate && p.type && isStringLiteral(p.type),
+        ),
+      ),
+    );
+  if (!tagField) throw new Error(`${name}: no common tag property`);
+  const variants = members.map((m) => {
+    const tagMember = m.members.find((p) => ts.isPropertySignature(p) && unquote(p.name.getText()) === tagField);
+    const tag = unquote(((tagMember as ts.PropertySignature).type as ts.LiteralTypeNode).literal.getText());
+    return { tag, fields: fieldsOf(m, tagField) };
+  });
+  return { tagField, variants };
+}
+
 function declOf(statement: ts.TypeAliasDeclaration): Decl | null {
   const name = statement.name.text;
   if (handWritten.has(name)) return null;
@@ -152,26 +182,24 @@ function declOf(statement: ts.TypeAliasDeclaration): Decl | null {
     return { name, doc, kind: "enum", values: type.types.map((t) => unquote((t as ts.LiteralTypeNode).literal.getText())) };
   }
   if (ts.isUnionTypeNode(type) && type.types.every(ts.isTypeLiteralNode)) {
-    const members = type.types as ts.TypeLiteralNode[];
-    // The tag is the property that is a string literal in every member.
-    const first = members[0] as ts.TypeLiteralNode;
-    const tagField = first.members
-      .filter(ts.isPropertySignature)
-      .map((m) => unquote(m.name.getText()))
-      .find((candidate) =>
-        members.every((m) =>
-          m.members.some(
-            (p) => ts.isPropertySignature(p) && unquote(p.name.getText()) === candidate && p.type && isStringLiteral(p.type),
-          ),
-        ),
-      );
-    if (!tagField) throw new Error(`${name}: no common tag property`);
-    const variants = members.map((m) => {
-      const tagMember = m.members.find((p) => ts.isPropertySignature(p) && unquote(p.name.getText()) === tagField);
-      const tag = unquote(((tagMember as ts.PropertySignature).type as ts.LiteralTypeNode).literal.getText());
-      return { tag, fields: fieldsOf(m, tagField) };
-    });
-    return { name, doc, kind: "tagged", tagField, variants };
+    return { name, doc, kind: "tagged", ...taggedOf(name, type.types as ts.TypeLiteralNode[]) };
+  }
+  // serde's flatten of a tagged enum into a struct: `{common} & ({tag: "a", ...} | ...)`. One class
+  // with the tag as text and every variant's fields, null where the variant has none.
+  if (ts.isIntersectionTypeNode(type) && type.types.length === 2) {
+    const [common, rest] = type.types as [ts.TypeNode, ts.TypeNode];
+    const union = ts.isParenthesizedTypeNode(rest) ? rest.type : rest;
+    if (ts.isTypeLiteralNode(common) && ts.isUnionTypeNode(union) && union.types.every(ts.isTypeLiteralNode)) {
+      const { tagField, variants } = taggedOf(name, union.types as ts.TypeLiteralNode[]);
+      const fields: Field[] = [{ name: tagField, type: { k: "string" }, doc: null }];
+      for (const f of variants.flatMap((v) => v.fields)) {
+        const nullable: TypeIr = f.type.k === "nullable" ? f.type : { k: "nullable", of: f.type };
+        const seen = fields.find((g) => g.name === f.name);
+        if (seen && JSON.stringify(seen.type) !== JSON.stringify(nullable)) throw new Error(`${name}.${f.name}: variants disagree`);
+        if (!seen) fields.push({ ...f, type: nullable });
+      }
+      return { name, doc, kind: "object", fields: [...fields, ...fieldsOf(common)] };
+    }
   }
   throw new Error(`${name}: unsupported declaration`);
 }
@@ -221,7 +249,7 @@ function params(fields: Field[], indent: string): string {
 const SECRET_UNIONS = new Set(["DebridCredential"]);
 
 const isRecord = (t: TypeIr): boolean =>
-  (t.k === "ref" && t.name === "SyncRecord") || (t.k === "nullable" && isRecord(t.of));
+  (t.k === "ref" && (t.name === "SyncRecord" || t.name === "KeystoreRecord")) || (t.k === "nullable" && isRecord(t.of));
 
 /**
  * A class that carries the keystore record gets a `toString` that never prints it (it holds keys

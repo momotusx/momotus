@@ -71,6 +71,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object Debrid : Route
 
+    /** The profile's Trakt account: connect, its state, Sync now, Sign out, what did not match. */
+    @Serializable
+    data object Trakt : Route
+
     /** Which catalogs Home shows after Continue Watching, and their order. */
     @Serializable
     data object HomeRows : Route

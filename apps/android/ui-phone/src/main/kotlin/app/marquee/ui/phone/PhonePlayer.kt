@@ -65,6 +65,7 @@ import app.marquee.player.Scrim
 import app.marquee.player.Scrubber
 import app.marquee.player.SkipButton
 import app.marquee.player.TrackPanel
+import app.marquee.player.TraktMark
 import app.marquee.player.UpNextCard
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
@@ -216,6 +217,7 @@ fun PhonePlayer(
                         controller.episode?.let {
                             MqText(it, role = TextRole.Callout, maxLines = 1)
                         }
+                        TraktMark(controller.trakt, Modifier.padding(top = 4.dp))
                     }
                     if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
                 }

@@ -20,6 +20,13 @@ class PlayerLogicTest {
     }
 
     @Test
+    fun `a report says when the viewer paused or it ended, and buffering is not a pause`() {
+        assertEquals(false, progressReport(true, 5_000, 60_000, playWhenReady = true)?.paused)
+        assertEquals(true, progressReport(true, 5_000, 60_000, playWhenReady = false)?.paused)
+        assertEquals(true, progressReport(true, 60_000, 60_000, playWhenReady = true, ended = true)?.paused)
+    }
+
+    @Test
     fun `a report keeps the position inside the video`() {
         assertEquals(ProgressReport(5_000, 60_000), progressReport(true, 5_000, 60_000))
         assertEquals(ProgressReport(60_000, 60_000), progressReport(true, 61_500, 60_000))

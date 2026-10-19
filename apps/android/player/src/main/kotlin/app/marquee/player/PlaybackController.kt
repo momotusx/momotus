@@ -25,6 +25,7 @@ import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SubtitleTrack
+import app.marquee.core.model.TraktPlayback
 import app.marquee.core.views.PlaybackView
 import app.marquee.core.views.ViewStatus
 import kotlinx.coroutines.CoroutineScope
@@ -111,6 +112,10 @@ class PlaybackController(
 
     /** The position the core says the Up Next card is due (the credits start); null means the last seconds. */
     var nextAtMs: Long? by mutableStateOf(null)
+        private set
+
+    /** Trakt's side of this play, for the player's mark; null until the core says. */
+    var trakt: TraktPlayback? by mutableStateOf(null)
         private set
 
     /** Where Skip credits was pressed: Up Next shows at once from there, until the viewer seeks back before it. */
@@ -239,6 +244,7 @@ class PlaybackController(
         bingeGroup = s.bingeGroup
         segments = s.segments
         nextAtMs = s.nextAtMs
+        trakt = s.trakt
         subtitlesPending = s.subtitlesPending
         snapshotSubs = s.subtitles
         when (s.phase) {
@@ -369,6 +375,8 @@ class PlaybackController(
 
     private fun playingChanged(isPlaying: Boolean) {
         if (isPlaying) {
+            // Playing again after a pause: Trakt hears it now, not at the next report.
+            if (stage == Stage.Paused) report()
             stage = Stage.Playing
         } else if (player.playbackState == Player.STATE_READY && raised) {
             stage = Stage.Paused
@@ -439,9 +447,10 @@ class PlaybackController(
         if (loadedUrl == null || handlingFailure) return
         // The real position, also at the end: ExoPlayer can reach ENDED early on a truncated file, and
         // reporting the duration then would mark a part-watched film as finished.
-        progressReport(firstFrame, player.currentPosition, player.duration)?.let {
-            CoreLog.d("progress ${it.positionMs} of ${it.durationMs} ms")
-            playback.progress(it.positionMs, it.durationMs)
+        val ended = player.playbackState == Player.STATE_ENDED
+        progressReport(firstFrame, player.currentPosition, player.duration, player.playWhenReady, ended)?.let {
+            CoreLog.d("progress ${it.positionMs} of ${it.durationMs} ms${if (it.paused) ", paused" else ""}")
+            playback.progress(it.positionMs, it.durationMs, it.paused)
         }
     }
 

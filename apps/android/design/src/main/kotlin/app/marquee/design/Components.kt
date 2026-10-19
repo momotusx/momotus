@@ -452,6 +452,8 @@ fun StatusWord(
     tone: Status,
     modifier: Modifier = Modifier,
     color: Color = Marquee.colors.text,
+    /** A state said in a whole sentence takes the lines it needs. */
+    maxLines: Int = 2,
 ) {
     Row(
         modifier,
@@ -460,7 +462,7 @@ fun StatusWord(
     ) {
         StatusDot(tone)
         // A second line on a small phone or a large font, never an ellipsis over what happened.
-        MqText(text, role = TextRole.Callout, color = color, maxLines = 2)
+        MqText(text, role = TextRole.Callout, color = color, maxLines = maxLines)
     }
 }
 

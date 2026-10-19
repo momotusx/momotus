@@ -8,6 +8,7 @@ import app.marquee.core.model.Devices
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.InstalledAddon
+import app.marquee.core.model.KeystoreRecord
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
@@ -15,6 +16,7 @@ import app.marquee.core.model.RecoveryKitResult
 import app.marquee.core.model.RestoreAnswer
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
+import app.marquee.core.model.TraktReport
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
@@ -309,6 +311,22 @@ class CoreOps(
             "signOut",
             mapOf("record" to record, "force" to JsonPrimitive(force), "local" to JsonPrimitive(local)),
         )
+    }
+
+    // Trakt (plans/m7-trakt.md section 3): the record is the profile's, from the keystore; the core keeps it in
+    // memory only. Refused with `locked` while the session is locked, and `notConfigured` in a build without Trakt.
+
+    /** The profile's stored record (null: none here), after `open`, `unlockProfile` and `switchProfile`, and as the ack. */
+    suspend fun setTrakt(record: KeystoreRecord?) {
+        client.request("setTrakt", mapOf("record" to (record ?: JsonNull)))
+    }
+
+    /** One round now, the "Sync now" button; the core schedules the others. */
+    suspend fun traktSync(): TraktReport = call("traktSync", emptyMap(), TraktReport.serializer())
+
+    /** Signs this device out of Trakt for the profile (revoke best effort); the app then deletes the record. */
+    suspend fun traktSignOut() {
+        client.request("traktSignOut")
     }
 
     /**

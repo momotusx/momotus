@@ -29,6 +29,7 @@ object CoreTimeouts {
             "reportLost",
             "signOut",
             "useServerRoster",
+            "traktSync",
         )
 
     fun forOp(op: String): Duration = if (op in networkOps) network else local

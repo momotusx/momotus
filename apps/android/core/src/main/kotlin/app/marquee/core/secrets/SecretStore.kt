@@ -65,7 +65,7 @@ class KeystoreKeySource(
 }
 
 /**
- * Debrid keys and the sync record, sealed as `version(1) || iv(12) || ciphertext` with AAD
+ * Debrid keys, the sync record and the Trakt records, sealed as `version(1) || iv(12) || ciphertext` with AAD
  * `marquee/secrets/v1` and written atomically (temp file, fsync, rename). The core keeps none of
  * these; the app hands them over per call. The sync record is opaque JSON handed back verbatim.
  *
@@ -94,11 +94,14 @@ class SecretStore(
         val debridRecords: List<DebridRecord> = emptyList(),
         /** Written before a disconnect is sent: a record with this generation is never restored. */
         val debridTombstones: List<DebridTombstone> = emptyList(),
+        /** Each profile's Trakt record (plans/m7-trakt.md section 3), opaque, by profile id. */
+        val traktRecords: Map<String, JsonObject> = emptyMap(),
     ) {
         // The default would print every key and token.
         override fun toString() =
             "Secrets(debridKeys=${debridKeys.size}, syncRecord=${syncRecord != null}, " +
-                "debridRecords=${debridRecords.size}, debridTombstones=${debridTombstones.size})"
+                "debridRecords=${debridRecords.size}, debridTombstones=${debridTombstones.size}, " +
+                "traktRecords=${traktRecords.size})"
     }
 
     @Serializable
@@ -107,6 +110,7 @@ class SecretStore(
         val syncRecord: JsonObject? = null,
         val debridRecords: List<DebridRecord> = emptyList(),
         val debridTombstones: List<DebridTombstone> = emptyList(),
+        val traktRecords: Map<String, JsonObject> = emptyMap(),
     )
 
     /** Observable, so a screen that says "kept for this session" updates when a write fails. */
@@ -173,6 +177,7 @@ class SecretStore(
                 blob.syncRecord,
                 blob.debridRecords,
                 blob.debridTombstones,
+                blob.traktRecords,
             )
         } catch (e: Exception) {
             if (e.cannotOpenForGood()) {
@@ -206,6 +211,7 @@ class SecretStore(
                     secrets.syncRecord,
                     secrets.debridRecords,
                     secrets.debridTombstones,
+                    secrets.traktRecords,
                 )
             val plain = json.encodeToString(Blob.serializer(), blob).encodeToByteArray()
             val cipher = Cipher.getInstance(TRANSFORMATION)

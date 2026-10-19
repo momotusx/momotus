@@ -57,6 +57,7 @@ import app.marquee.core.DebridCopy
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.LinkInstall
 import app.marquee.core.SyncCopy
+import app.marquee.core.TraktCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
@@ -140,6 +141,7 @@ fun SettingsScreen(
     onImport: () -> Unit,
     onSync: () -> Unit,
     onDebrid: () -> Unit,
+    onTrakt: () -> Unit,
     onHomeRows: () -> Unit,
     onFindAddons: () -> Unit,
     /** Opened from "Add a source": the link field first and only the source addons, as on Apple. */
@@ -357,6 +359,11 @@ fun SettingsScreen(
                 },
                 onDebrid,
             )
+        }
+        item(key = "trakt") {
+            val trakt = (LocalContext.current.applicationContext as MarqueeApp).trakt
+            // The state is said whole, never cut short.
+            LinkRow(Icons.ListChecks, TraktCopy.TITLE, TraktCopy.row(trakt.status, ::clockTime), onTrakt, lines = 4)
         }
         item(key = "devices-head") { Kicker("Devices and sync") }
         item(key = "devices") {

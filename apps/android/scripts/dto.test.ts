@@ -35,3 +35,10 @@ test("debrid credentials never print their keys or tokens", () => {
   );
   expect(kotlin).toContain("val revision: Long,");
 });
+
+test("a status flattened with its tagged state is one class, its tag as text, its record never printed", () => {
+  const kotlin = generate(sourceDir);
+  expect(kotlin).toContain("data class TraktStatus(\n    val state: String,\n    val sinceMs: Long? = null,");
+  expect(kotlin).toContain("val record: KeystoreRecord? = null,");
+  expect(kotlin).toContain('record=${record?.let { "hidden" }})"');
+});
