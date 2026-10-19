@@ -3,9 +3,10 @@
  * languages and spellings (OpenSubtitles' specials among them), with a
  * profile that prefers Turkish. Off comes first, then Turkish, then the
  * browser's language, then the rest by name; files of one language are
- * told apart by name. */
+ * told apart by name. Turkish turns on at start, until the viewer says
+ * otherwise. */
 
-import { expect, test } from "@playwright/test";
+import { type Browser, expect, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -77,6 +78,51 @@ test.afterAll(() => {
   if (core) cleanup(core.proc, core.data);
   addon?.close();
   media?.close();
+});
+
+async function playerPage(browser: Browser) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const upstream = new WebSocket(`ws://127.0.0.1:${LANGS_PORT}/ws`);
+    const early: string[] = [];
+    upstream.addEventListener("open", () => {
+      for (const m of early.splice(0)) upstream.send(m);
+    });
+    upstream.addEventListener("message", (e) => ws.send(String(e.data)));
+    upstream.addEventListener("close", () => ws.close());
+    ws.onMessage((m) => (upstream.readyState === WebSocket.OPEN ? upstream.send(String(m)) : early.push(String(m))));
+    ws.onClose(() => upstream.close());
+  });
+  const page = await context.newPage();
+  const open = async () => {
+    await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=desktop`);
+    await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await page.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.muted = true;
+    });
+    await startIfPaused(page);
+  };
+  return { context, page, open };
+}
+
+// First in the file: it leaves the title's remembered choice at Off.
+test("the profile's language turns on at start; Off wins and is remembered", async ({ browser }) => {
+  const { context, page, open } = await playerPage(browser);
+  await open();
+  const summary = page.locator('[data-f="player:subs"] small');
+  // Turkish is the profile's subtitle language, the audio is not Turkish.
+  await expect(summary).toHaveText("Turkish", { timeout: 30_000 });
+  await expect.poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("showing");
+  // The viewer turns it off: off now, and on the next play of the title.
+  await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await page.locator('[data-f="sub:off"]').dispatchEvent("click");
+  await expect(summary).toHaveText(/^Off, \d+ found$/);
+  await open();
+  await expect(summary).toHaveText(/^Off, \d+ found$/, { timeout: 30_000 });
+  await page.waitForTimeout(1000);
+  await expect(summary).toHaveText(/^Off, \d+ found$/);
+  await context.close();
 });
 
 test("the subtitle menu is one section per language, preferred first", async ({ browser }) => {

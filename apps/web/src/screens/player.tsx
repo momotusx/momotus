@@ -206,13 +206,33 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const cycleSpeed = () => engine.setRate(SPEEDS[(SPEEDS.indexOf(rate()) + 1) % SPEEDS.length] ?? 1);
 
   // The core serves every subtitle as UTF-8 WebVTT on a loopback URL.
-  const pickSubtitle = (t: SubtitleTrack | null) => {
-    setPanel(null);
+  const showSubtitle = (t: SubtitleTrack | null) => {
     setSubError(null);
     const sub = t ? { url: t.url, lang: t.lang } : null;
     setTrack(sub);
     engine.setSubtitle(sub);
   };
+  const pickSubtitle = (t: SubtitleTrack | null) => {
+    setPanel(null);
+    showSubtitle(t);
+  };
+
+  // The viewer's own pick, or Off, wins over the core's start pick for the
+  // rest of this play, and the core remembers it for the title.
+  let chose = false;
+  const chooseSubtitle = (t: SubtitleTrack | null) => {
+    chose = true;
+    void playback()?.command({ type: "subtitleChosen", url: t?.url ?? null });
+    pickSubtitle(t);
+  };
+  // The core's start pick (`autoSubtitle`, plans/m13-subtitle-languages.md
+  // 6): turned on once the list settles, unless the viewer chose already.
+  createEffect(() => {
+    const auto = snap()?.autoSubtitle;
+    if (!auto || chose || untrack(track)) return;
+    const t = snap()?.subtitles.find((s) => s.url === auto);
+    if (t) showSubtitle(t);
+  });
 
   // A file the core could not serve plays as an empty track and comes back
   // as a note. Only the picked track is fetched, so a new note is about it:
@@ -357,6 +377,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   // A subtitle inside the file replaces the core's one, and the other way round.
   const pickFileSub = (id: string) => {
+    // A track in the file is the viewer's choice too.
+    chose = true;
     pickSubtitle(null);
     engine.selectTrack("sub", id);
   };
@@ -660,7 +682,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         <aside class="panel" aria-label="Subtitles" data-fgroup="subs">
           <h2>Subtitles</h2>
           <div class="panel-list" data-vscroll>
-            <button class="opt" classList={{ on: !track() }} data-f="sub:off" data-autofocus onClick={() => pickSubtitle(null)}>
+            <button class="opt" classList={{ on: !track() }} data-f="sub:off" data-autofocus onClick={() => chooseSubtitle(null)}>
               <Show when={!track()}>
                 <Check aria-hidden class="opt-check" />
               </Show>
@@ -673,7 +695,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <h3>{section.name}</h3>
                   <For each={section.tracks}>
                     {({ track: t, index }) => (
-                      <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${index}`} onClick={() => pickSubtitle(t)}>
+                      <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${index}`} onClick={() => chooseSubtitle(t)}>
                         <Show when={track()?.url === t.url}>
                           <Check aria-hidden class="opt-check" />
                         </Show>
