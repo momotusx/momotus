@@ -71,11 +71,32 @@ private tailrec fun Context.activity(): ComponentActivity? =
     }
 
 /**
+ * The player entry the window belongs to. A player that replaces a player (the next episode, an offered
+ * version) comes in while the old one fades out: the old one's leaving, and what it still sets on its
+ * way out, must not undo what the new one set.
+ */
+internal class WindowClaim {
+    private var owner: Any? = null
+
+    fun claim(entry: Any) {
+        owner = entry
+    }
+
+    fun owns(entry: Any): Boolean = owner === entry
+
+    fun release(entry: Any) {
+        if (owner === entry) owner = null
+    }
+}
+
+private val windowClaim = WindowClaim()
+
+/**
  * What the window does while the player is up. On every form the screen stays awake while
  * something plays or loads and the system bars are hidden. On a phone the player also locks to
  * landscape and goes to a small picture-in-picture window when the viewer leaves while it plays (Android 12
  * and later do that by themselves once told; before it, the activity asks through [PipHooks]).
- * All of it is put back when the player leaves.
+ * All of it is put back when the player leaves, unless another player has taken the window ([WindowClaim]).
  */
 @Composable
 fun rememberPlayerWindow(
@@ -86,41 +107,52 @@ fun rememberPlayerWindow(
     val view = LocalView.current
     val activity = remember(context) { context.activity() }
     val window = remember(activity, controller) { PlayerWindow(activity, controller) }
+    val entry = remember { Any() }
+    val owns = { windowClaim.owns(entry) }
+    // First, so it is disposed last: the effects below still own the window while they put it back.
+    DisposableEffect(entry) {
+        windowClaim.claim(entry)
+        onDispose { windowClaim.release(entry) }
+    }
 
     val awake = controller.stage != Stage.Paused && controller.stage != Stage.Ended && controller.stage != Stage.Failed
     DisposableEffect(awake) {
-        view.keepScreenOn = awake
-        onDispose { view.keepScreenOn = false }
+        if (owns()) view.keepScreenOn = awake
+        onDispose { if (owns()) view.keepScreenOn = false }
     }
 
     if (activity != null) {
         // Immersive on every form: nothing but the picture and our own controls.
         DisposableEffect(activity) {
             val bars = WindowCompat.getInsetsController(activity.window, view)
-            bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            bars.hide(WindowInsetsCompat.Type.systemBars())
-            onDispose { bars.show(WindowInsetsCompat.Type.systemBars()) }
+            if (owns()) {
+                bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                bars.hide(WindowInsetsCompat.Type.systemBars())
+            }
+            onDispose { if (owns()) bars.show(WindowInsetsCompat.Type.systemBars()) }
         }
     }
     if (phone && activity != null) {
         DisposableEffect(activity) {
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            onDispose { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+            if (owns()) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            onDispose { if (owns()) activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
         }
         if (Build.VERSION.SDK_INT >= 26) {
             val playing = controller.stage == Stage.Playing
             val ratio = controller.videoRatio
             DisposableEffect(activity, playing, ratio) {
-                runCatching { activity.setPictureInPictureParams(pipParams(controller, autoEnter = playing)) }
-                PipHooks.enter = { if (playing) window.enterPip() }
-                onDispose { PipHooks.enter = null }
+                if (owns()) {
+                    runCatching { activity.setPictureInPictureParams(pipParams(controller, autoEnter = playing)) }
+                    PipHooks.enter = { if (playing) window.enterPip() }
+                }
+                onDispose { if (owns()) PipHooks.enter = null }
             }
             DisposableEffect(activity) {
                 val listener = Consumer<PictureInPictureModeChangedInfo> { window.inPip = it.isInPictureInPictureMode }
                 activity.addOnPictureInPictureModeChangedListener(listener)
                 onDispose {
                     activity.removeOnPictureInPictureModeChangedListener(listener)
-                    if (Build.VERSION.SDK_INT >= 31) {
+                    if (Build.VERSION.SDK_INT >= 31 && owns()) {
                         // Leaving the player must not send the next screen to the small window.
                         runCatching {
                             activity.setPictureInPictureParams(
