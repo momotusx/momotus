@@ -387,8 +387,10 @@ class DebridStoreTest {
             val store = DebridStore(shared, shared, scope)
             store.pending(listOf(record("g1", 2)))
             val drop = store.disconnect("torbox", "g1")
-            withTimeout(5_000) { store.idle() }
+            // Waits on the handle itself: an ended pump leaves `idle` before it has settled the tasks it left.
+            withTimeout(5_000) { drop.join() }
             assertTrue(drop.isCancelled)
+            withTimeout(5_000) { store.idle() }
             assertEquals(1L, shared.stored["torbox"]?.revision)
             assertEquals(emptyList(), shared.stones.toList())
         }
@@ -407,8 +409,10 @@ class DebridStoreTest {
             val drop = store.disconnect("torbox", "g1")
             shared.writeGate = null
             gate.complete(Unit)
-            withTimeout(5_000) { store.idle() }
+            // Waits on the handle itself: an ended pump leaves `idle` before it has settled the tasks it left.
+            withTimeout(5_000) { drop.join() }
             assertTrue(drop.isCancelled)
+            withTimeout(5_000) { store.idle() }
             store.pending(listOf(record("g1", 2)))
             withTimeout(5_000) { store.idle() }
             assertEquals(2L, shared.stored["torbox"]?.revision, "the generation is still written")
@@ -425,8 +429,10 @@ class DebridStoreTest {
             shared.cancelDeletes = 1
             val store = DebridStore(shared, shared, scope)
             val drop = store.disconnect("torbox", "g1")
-            withTimeout(5_000) { store.idle() }
+            // Waits on the handle itself: an ended pump leaves `idle` before it has settled the tasks it left.
+            withTimeout(5_000) { drop.join() }
             assertTrue(drop.isCancelled)
+            withTimeout(5_000) { store.idle() }
             assertEquals(1, shared.stones.size, "the tombstone stays until the record is gone")
             store.pending(emptyList())
             withTimeout(5_000) { store.idle() }
@@ -454,8 +460,10 @@ class DebridStoreTest {
             val repeat = store.disconnect("torbox", "g1")
             shared.writeGate = null
             gate.complete(Unit)
-            withTimeout(5_000) { store.idle() }
+            // Waits on the handle itself: an ended pump leaves `idle` before it has settled the tasks it left.
+            withTimeout(5_000) { repeat.join() }
             assertTrue(repeat.isCancelled)
+            withTimeout(5_000) { store.idle() }
             store.pending(listOf(record("g1", 2)))
             withTimeout(5_000) { store.idle() }
             assertEquals(null, shared.stored["torbox"], "g1 is never written again")
@@ -482,8 +490,10 @@ class DebridStoreTest {
             val repeat = store.disconnect("torbox", "g1")
             shared.writeGate = null
             gate.complete(Unit)
-            withTimeout(5_000) { store.idle() }
+            // Waits on the handle itself: an ended pump leaves `idle` before it has settled the tasks it left.
+            withTimeout(5_000) { repeat.join() }
             assertTrue(repeat.isCancelled)
+            withTimeout(5_000) { store.idle() }
             store.pending(listOf(record("g1", 2)))
             withTimeout(5_000) { store.idle() }
             assertEquals(null, shared.stored["torbox"], "g1 is never written again")
