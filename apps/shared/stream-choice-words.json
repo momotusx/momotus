@@ -16,6 +16,11 @@
       "text": "Not ready yet, has to download first",
       "details": ["{service} does not have it yet"]
     },
+    "stalled": {
+      "tone": "bad",
+      "text": "Did not start here last time",
+      "details": ["Almost nothing arrived when this device last tried it"]
+    },
     "veryFew": {
       "tone": "bad",
       "text": "May not start",
