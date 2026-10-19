@@ -25,12 +25,12 @@ use url::Url;
 use crate::tracker_comms_http;
 use crate::tracker_comms_udp;
 use crate::tracker_comms_udp::Policy;
+use crate::tracker_comms_udp::UdpTrackerClient;
+use librqbit_core::hash_id::Id20;
 
 /// Marquee fork (C27): the most an HTTP tracker answer may hold. An announce
 /// answer with a few hundred compact peers is a few KiB.
 const MAX_HTTP_ANSWER: usize = 256 * 1024;
-use crate::tracker_comms_udp::UdpTrackerClient;
-use librqbit_core::hash_id::Id20;
 
 pub struct TrackerComms {
     info_hash: Id20,
