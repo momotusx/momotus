@@ -56,8 +56,8 @@ pub(crate) static LOGOS: &[mq_server::Logo] = &[
     ),
     logo(
         "rottentomatoes",
-        "image/svg+xml",
-        include_bytes!("../assets/defaults/rottentomatoes.svg"),
+        "image/png",
+        include_bytes!("../assets/defaults/rottentomatoes.png"),
     ),
     logo(
         "torrentcatalogs",

@@ -424,11 +424,8 @@ async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
         assert!(url.ends_with(&format!("/{}", d.key)), "{url}");
         let (status, mime, body) = get(url).await;
         assert_eq!(status, 200, "{url}");
-        let image = match mime.as_str() {
-            "image/png" => body.starts_with(b"\x89PNG"),
-            "image/svg+xml" => String::from_utf8_lossy(&body).contains("<svg"),
-            _ => false,
-        };
+        // Bitmaps only: the apps' image loaders do not draw SVG.
+        let image = mime == "image/png" && body.starts_with(b"\x89PNG");
         assert!(image, "{}: {mime}, {} bytes", d.key, body.len());
         served.push(d.key.clone());
     }
