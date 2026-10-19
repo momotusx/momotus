@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use librqbit::{ExtEvent, ManagedTorrent};
 use mq_engine_sched::{
-    Action, BLOCK, Bitfield, BlockIdx, Config, DemandId, Event, Geometry, PeerId, Scheduler, Stats,
+    Action, Bitfield, BlockIdx, Config, DemandId, Event, Geometry, PeerId, Scheduler, Stats,
 };
 use tokio::sync::{mpsc, watch};
 
@@ -87,6 +87,8 @@ const SAMPLE_WINDOW_US: u64 = 30_000_000;
 /// only through `tick`, so tests drive it without a runtime.
 pub(crate) struct Translator {
     sched: Option<Scheduler>,
+    /// Block numbering, in both modes; `None` only for an empty torrent.
+    geo: Option<Geometry>,
     piece_len: u64,
     files: Vec<(u64, u64)>,
     num_pieces: u32,
@@ -107,7 +109,7 @@ pub(crate) struct Translator {
 }
 
 impl Translator {
-    /// `drive` hands block choice to DWH; it needs 16 KiB-aligned pieces.
+    /// `drive` hands block choice to DWH, for any piece length.
     pub fn new(piece_len: u32, file_lens: &[u64], cfg: Config, drive: bool) -> Self {
         let mut offset = 0;
         let files = file_lens
@@ -119,12 +121,14 @@ impl Translator {
             .collect();
         let num_pieces = offset.div_ceil(u64::from(piece_len.max(1))) as u32;
         let (blocking_bytes, tail_bytes) = (cfg.blocking_bytes, cfg.tail_bytes);
-        let sched = drive
-            .then(|| Geometry::new(piece_len, file_lens))
-            .flatten()
+        let geo = Geometry::new(piece_len, file_lens);
+        let sched = geo
+            .clone()
+            .filter(|_| drive)
             .map(|geo| Scheduler::new(geo, cfg));
         Self {
             sched,
+            geo,
             piece_len: u64::from(piece_len.max(1)),
             files,
             num_pieces,
@@ -260,15 +264,11 @@ impl Translator {
             }
             ExtEvent::PeerGone { peer } => self.drop_peer(peer),
             ExtEvent::Block { peer, piece, begin } => {
-                let Some(s) = self.peers.get_mut(&peer) else {
+                let (Some(s), Some(geo)) = (self.peers.get_mut(&peer), &self.geo) else {
                     return Vec::new();
                 };
-                let block = ((u64::from(piece) * self.piece_len + u64::from(begin))
-                    / u64::from(BLOCK)) as BlockIdx;
-                let total = self.files.last().map_or(0, |f| f.0 + f.1);
-                let payload = total
-                    .saturating_sub(u64::from(block) * u64::from(BLOCK))
-                    .min(u64::from(BLOCK));
+                let block = geo.block_at(piece, begin);
+                let payload = u64::from(geo.block_len(block));
                 s.bytes += payload;
                 if self.now_us <= SAMPLE_WINDOW_US {
                     self.sample_bytes += payload;
@@ -723,9 +723,46 @@ mod tests {
         assert!(*ready.borrow());
     }
 
+    /// A piece length that is not a multiple of 16 KiB (YTS uses 136 KiB)
+    /// is still driven: every piece ends in a short block, and a delivered
+    /// block maps back to the request it answers.
     #[test]
-    fn unaligned_pieces_fall_back_to_stock() {
-        let tr = Translator::new(1000, &[10_000], Config::standard(), true);
-        assert!(!tr.drives());
+    fn unaligned_pieces_are_driven_in_blocks_per_piece() {
+        let mut tr = Translator::new(40_000, &[400_000], Config::standard(), true);
+        assert!(tr.drives());
+        tr.tick(1_000);
+        open(&mut tr, 1, 0);
+        tr.on_ext(ExtEvent::PeerConnected {
+            peer: addr(1),
+            bitfield: vec![0xff, 0xc0],
+        });
+        let out = tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(1) });
+        let wire: Vec<_> = out.iter().map(|w| (w.piece, w.begin, w.len)).collect();
+        assert_eq!(
+            wire[..4],
+            [
+                (0, 0, 16_384),
+                (0, 16_384, 16_384),
+                (0, 32_768, 7_232),
+                (1, 0, 16_384)
+            ]
+        );
+        tr.tick(51_000);
+        for w in &out[2..4] {
+            tr.on_ext(ExtEvent::Block {
+                peer: addr(1),
+                piece: w.piece,
+                begin: w.begin,
+            });
+        }
+        assert_eq!(tr.peers[&addr(1)].bytes, 7_232 + 16_384);
+        assert_eq!(tr.peers[&addr(1)].rtt_us, 50_000);
+        assert!(!tr.sent.contains_key(&(1, 2)) && !tr.sent.contains_key(&(1, 3)));
+        let stats = tr.sched.as_ref().unwrap().stats();
+        assert_eq!(
+            stats.payload_bytes,
+            7_232 + 16_384,
+            "both requests answered"
+        );
     }
 }

@@ -157,6 +157,11 @@ impl Harness {
             match *a {
                 Action::Request { peer, block } => {
                     let piece = self.geo.piece_of(block);
+                    let (p, begin, len) = self.geo.wire(block);
+                    assert!(
+                        p == piece && len > 0 && begin + len <= self.geo.piece_size(p),
+                        "block {block} is not inside piece {piece}"
+                    );
                     let (have, choked, _) = self.peers.get(&peer).expect("request to unknown peer");
                     assert!(
                         have.get(piece),
@@ -325,11 +330,120 @@ fn geometry_maps_blocks_pieces_and_files() {
     assert_eq!(g.wire(5), (1, BLOCK, BLOCK));
     assert_eq!(g.piece_blocks(3), 12..13);
     assert_eq!(g.pieces_in(65_535, 65_537), 0..2);
-    assert!(Geometry::new(10_000, &[1]).is_none());
+    assert!(Geometry::new(0, &[1]).is_none());
     assert!(Geometry::new(BLOCK, &[0]).is_none());
     let full = Bitfield::full(70);
     assert_eq!(full.count_ones(), 70);
     assert!(!full.get(70));
+}
+
+/// The YTS Sintel shape (a779fa75): 1028 pieces of 136 KiB, 8.5 blocks, the
+/// last piece shared by the video's end and three small files.
+#[test]
+fn unaligned_pieces_end_in_a_short_block() {
+    let g = Geometry::new(136 * KIB as u32, &[143_100_616, 584, 53_226, 1_858]).unwrap();
+    assert_eq!((g.num_pieces(), g.blocks_per_piece()), (1028, 9));
+    assert_eq!(g.piece_blocks(0), 0..9);
+    assert_eq!(g.wire(7), (0, 7 * BLOCK, BLOCK));
+    assert_eq!(g.wire(8), (0, 8 * BLOCK, 8 * KIB as u32));
+    assert_eq!(g.wire(9), (1, 0, BLOCK));
+    assert_eq!(g.block_at(1, 8 * BLOCK), 17);
+    assert_eq!(g.piece_of(17), 1);
+    // The last piece holds 132,156 bytes: 8 full blocks and 1,084 bytes.
+    assert_eq!(g.piece_size(1027), 132_156);
+    assert_eq!(g.piece_blocks(1027), 9243..9252);
+    assert_eq!(g.num_blocks(), 9252);
+    assert_eq!(g.wire(9251), (1027, 8 * BLOCK, 1_084));
+    let bytes: u64 = (0..g.num_blocks()).map(|b| u64::from(g.block_len(b))).sum();
+    assert_eq!(bytes, g.total_len());
+    for p in [0, 513, 1027] {
+        let r = g.piece_blocks(p);
+        let sum: u32 = r.clone().map(|b| g.block_len(b)).sum();
+        assert_eq!(sum, g.piece_size(p));
+        assert!(r.clone().all(|b| g.piece_of(b) == p));
+        assert!(r.clone().all(|b| g.block_at(p, g.wire(b).1) == b));
+    }
+}
+
+/// Aligned pieces keep the numbering they always had: block `b` starts at
+/// torrent byte `b * BLOCK`, so their requests are unchanged.
+#[test]
+fn aligned_pieces_keep_global_block_numbers() {
+    for (piece_len, files) in [
+        (16 * KIB as u32, vec![1u64]),
+        (64 * KIB as u32, vec![10_000, 200_000]),
+        (256 * KIB as u32, vec![37_000, 5 * MIB + 12_345]),
+        (4 << 20, vec![9 * MIB + 1]),
+    ] {
+        let g = Geometry::new(piece_len, &files).unwrap();
+        let total = g.total_len();
+        assert_eq!(u64::from(g.num_blocks()), total.div_ceil(u64::from(BLOCK)));
+        for b in 0..g.num_blocks() {
+            let start = u64::from(b) * u64::from(BLOCK);
+            let len = (total - start).min(u64::from(BLOCK)) as u32;
+            let piece = (start / u64::from(piece_len)) as u32;
+            let begin = (start % u64::from(piece_len)) as u32;
+            assert_eq!(g.wire(b), (piece, begin, len), "{piece_len} {b}");
+        }
+    }
+}
+
+/// Head and tail readiness on unaligned pieces shared across files, then a
+/// seek into the middle and a read of the subtitle file, which lives in the
+/// last piece with the end of the picture.
+#[test]
+fn unaligned_shared_pieces_reach_ready_and_seek() {
+    // 40,000-byte pieces (2 blocks and 7,232 bytes): [nfo, video, jpg, srt].
+    let g = Geometry::new(40_000, &[584, MIB + 1_234, 53_226, 1_858]).unwrap();
+    let last = g.num_pieces() - 1;
+    let mut h = Harness::new(g, small_cfg());
+    h.peer(1, MIB);
+    let serve = |h: &mut Harness, demand: DemandId| {
+        for _ in 0..1_000 {
+            let Some(&(block, peer)) = h.out.iter().next() else {
+                return false;
+            };
+            h.tick(1);
+            if h.deliver(peer, block).contains(&Action::Ready { demand }) {
+                return true;
+            }
+        }
+        false
+    };
+    h.send(Event::RangeOpened {
+        demand: 1,
+        file: 1,
+        start: 0,
+        end_hint: None,
+    });
+    assert!(serve(&mut h, 1), "head and tail ready");
+    let video = h.geo.files()[1];
+    let tail = h.geo.piece_at(video.offset + video.len - 1);
+    assert!(
+        h.verified.get(0) && h.verified.get(tail),
+        "shared pieces verified"
+    );
+    assert!(
+        h.log.iter().any(
+            |a| matches!(*a, Action::Request { block, .. } if h.geo.block_len(block) == 7_232)
+        ),
+        "short blocks requested"
+    );
+    h.send(Event::RangeOpened {
+        demand: 2,
+        file: 1,
+        start: 600_000,
+        end_hint: None,
+    });
+    assert!(serve(&mut h, 2), "seek ready");
+    let acts = h.send(Event::RangeOpened {
+        demand: 3,
+        file: 3,
+        start: 0,
+        end_hint: None,
+    });
+    assert!(acts.contains(&Action::Ready { demand: 3 }) || serve(&mut h, 3));
+    assert!(h.verified.get(last), "the srt's piece verified");
 }
 
 #[test]
@@ -713,12 +827,13 @@ fn op() -> impl Strategy<Value = Op> {
 
 fn scenario() -> impl Strategy<Value = (Geometry, Config)> {
     (
-        prop::sample::select(vec![16u32, 32, 64]),
+        // 40,000 bytes: pieces that end in a short block, as YTS torrents do.
+        prop::sample::select(vec![16 * 1024u32, 32 * 1024, 64 * 1024, 40_000]),
         prop::collection::vec(1..300_000u64, 1..=3),
         any::<bool>(),
     )
-        .prop_map(|(kib, files, tail)| {
-            let geo = Geometry::new(kib * 1024, &files).unwrap();
+        .prop_map(|(piece_len, files, tail)| {
+            let geo = Geometry::new(piece_len, &files).unwrap();
             let cfg = Config {
                 blocking_bytes: 32 * KIB,
                 critical_min_bytes: 48 * KIB,

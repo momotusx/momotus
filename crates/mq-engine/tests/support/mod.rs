@@ -33,6 +33,17 @@ pub async fn swarm_on(ip: IpAddr, dwh: bool) -> Swarm {
 /// 256 KiB pieces, seeded on loopback with discovery off. The seeder is
 /// addressed on `ip`; each engine's policy allows its own list.
 pub async fn swarm_scoped(ip: IpAddr, seeder: &[IpAddr], leecher: &[IpAddr], dwh: bool) -> Swarm {
+    swarm_with(ip, seeder, leecher, 256 * 1024, dwh).await
+}
+
+/// [`swarm_scoped`] in `piece_len` pieces.
+pub async fn swarm_with(
+    ip: IpAddr,
+    seeder: &[IpAddr],
+    leecher: &[IpAddr],
+    piece_len: u32,
+    dwh: bool,
+) -> Swarm {
     let (seed_dir, leech_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let src = seed_dir.path().join("src");
     std::fs::create_dir_all(&src).unwrap();
@@ -47,7 +58,7 @@ pub async fn swarm_scoped(ip: IpAddr, seeder: &[IpAddr], leecher: &[IpAddr], dwh
         mq_engine::librqbit::CreateTorrentOptions {
             name: Some("Movie"),
             trackers: vec![],
-            piece_length: Some(256 * 1024),
+            piece_length: Some(piece_len),
         },
         &spawner,
     )

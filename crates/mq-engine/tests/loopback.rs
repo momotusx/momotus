@@ -3,6 +3,7 @@
 
 mod support;
 
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use mq_engine::{Engine, FileHint, TorrentHandle};
@@ -23,8 +24,7 @@ async fn read_range(
     out
 }
 
-async fn leech_and_compare(dwh: bool) {
-    let s = support::swarm(dwh).await;
+async fn leech_and_compare(s: support::Swarm, dwh: bool) {
     let run = async {
         let t = s
             .leecher
@@ -63,10 +63,19 @@ async fn leech_and_compare(dwh: bool) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn streams_from_a_loopback_seeder_with_dwh() {
-    leech_and_compare(true).await;
+    leech_and_compare(support::swarm(true).await, true).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn streams_from_a_loopback_seeder_with_the_stock_picker() {
-    leech_and_compare(false).await;
+    leech_and_compare(support::swarm(false).await, false).await;
+}
+
+/// 136 KiB pieces, as YTS makes them: 8.5 blocks, so every piece ends in a
+/// short block. DWH drives them and the bytes match.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn streams_unaligned_pieces_with_dwh() {
+    let ip = Ipv4Addr::LOCALHOST.into();
+    let s = support::swarm_with(ip, &[ip], &[ip], 136 * 1024, true).await;
+    leech_and_compare(s, true).await;
 }

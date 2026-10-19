@@ -21,9 +21,12 @@ pub const BLOCK: u32 = 16 * 1024;
 pub type PeerId = u32;
 pub type DemandId = u64;
 pub type PieceIdx = u32;
-/// Global block index: block `b` covers torrent bytes starting at
-/// `b * BLOCK`. Use [`Geometry::wire`] for the `(piece, begin, length)`
-/// triple of a REQUEST or CANCEL message.
+/// Block index: block `b % bpp` of piece `b / bpp`, where `bpp` is
+/// [`Geometry::blocks_per_piece`]. Blocks are counted from each piece's
+/// start, as librqbit counts chunks, so a piece length that is not a
+/// multiple of [`BLOCK`] ends every piece in a short block. Use
+/// [`Geometry::wire`] for the `(piece, begin, length)` triple of a REQUEST
+/// or CANCEL message.
 pub type BlockIdx = u32;
 
 /// Fixed-size bit set used for peer bitfields and local piece state.
@@ -92,7 +95,8 @@ pub struct FileSpan {
     pub len: u64,
 }
 
-/// Torrent shape: piece length, total length, file offsets, 16 KiB blocks.
+/// Torrent shape: piece length, total length, file offsets, 16 KiB blocks
+/// counted from each piece's start.
 #[derive(Clone, Debug)]
 pub struct Geometry {
     piece_len: u32,
@@ -101,11 +105,11 @@ pub struct Geometry {
 }
 
 impl Geometry {
-    /// `None` unless `piece_len` is a positive multiple of [`BLOCK`] (true for
-    /// every real torrent) and the payload is non-empty and addressable with
-    /// `u32` block indexes (64 TiB).
+    /// `None` unless `piece_len` is positive and the payload is non-empty and
+    /// addressable with `u32` block indexes (64 TiB). Any piece length works:
+    /// YTS torrents use 136 KiB, 8.5 blocks.
     pub fn new(piece_len: u32, file_lens: &[u64]) -> Option<Self> {
-        if piece_len == 0 || !piece_len.is_multiple_of(BLOCK) {
+        if piece_len == 0 {
             return None;
         }
         let mut offset = 0u64;
@@ -114,14 +118,20 @@ impl Geometry {
             files.push(FileSpan { offset, len });
             offset = offset.checked_add(len)?;
         }
-        if offset == 0 || offset.div_ceil(BLOCK as u64) > u32::MAX as u64 {
-            return None;
-        }
-        Some(Self {
+        let geo = Self {
             piece_len,
             total: offset,
             files,
-        })
+        };
+        (offset > 0 && geo.blocks() <= u64::from(u32::MAX)).then_some(geo)
+    }
+
+    /// Blocks of every piece before the last, plus the last piece's own.
+    fn blocks(&self) -> u64 {
+        let len = u64::from(self.piece_len);
+        let full = self.total.saturating_sub(1) / len;
+        full * u64::from(self.blocks_per_piece())
+            + (self.total - full * len).div_ceil(u64::from(BLOCK))
     }
 
     pub fn piece_len(&self) -> u32 {
@@ -141,11 +151,19 @@ impl Geometry {
     }
 
     pub fn num_blocks(&self) -> u32 {
-        self.total.div_ceil(BLOCK as u64) as u32
+        self.blocks() as u32
     }
 
     pub fn blocks_per_piece(&self) -> u32 {
-        self.piece_len / BLOCK
+        self.piece_len.div_ceil(BLOCK)
+    }
+
+    /// Bytes in piece `p`: `piece_len`, less for the last, 0 past the end.
+    pub fn piece_size(&self, p: PieceIdx) -> u32 {
+        let start = u64::from(p) * u64::from(self.piece_len);
+        self.total
+            .saturating_sub(start)
+            .min(u64::from(self.piece_len)) as u32
     }
 
     pub fn piece_of(&self, b: BlockIdx) -> PieceIdx {
@@ -158,14 +176,24 @@ impl Geometry {
     }
 
     pub fn piece_blocks(&self, p: PieceIdx) -> Range<BlockIdx> {
-        let bpp = self.blocks_per_piece();
-        let start = p.saturating_mul(bpp).min(self.num_blocks());
-        start..start.saturating_add(bpp).min(self.num_blocks())
+        let start = p
+            .saturating_mul(self.blocks_per_piece())
+            .min(self.num_blocks());
+        start..start + self.piece_size(p).div_ceil(BLOCK)
+    }
+
+    /// The block a PIECE message carries: byte `begin` of piece `piece`.
+    pub fn block_at(&self, piece: PieceIdx, begin: u32) -> BlockIdx {
+        piece
+            .saturating_mul(self.blocks_per_piece())
+            .saturating_add(begin / BLOCK)
     }
 
     pub fn block_len(&self, b: BlockIdx) -> u32 {
-        let start = b as u64 * BLOCK as u64;
-        self.total.saturating_sub(start).min(BLOCK as u64) as u32
+        let bpp = self.blocks_per_piece();
+        self.piece_size(b / bpp)
+            .saturating_sub(b % bpp * BLOCK)
+            .min(BLOCK)
     }
 
     /// `(piece, begin, length)` as carried by REQUEST and CANCEL messages.
