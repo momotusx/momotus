@@ -231,7 +231,7 @@ test("onboarding: one decision per step, Back walks the steps", async ({ page })
   await expect(page.locator('[data-f="welcome:url"]')).toHaveCount(0);
   // A default this profile has shows its state in words, without a switch.
   await expect(page.locator(".drow.fixed", { hasText: "Cinemeta" })).toContainText("Installed");
-  await expect(page.locator('[data-f="welcome:default:trakt"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-f="welcome:default:trakt"]')).toHaveAttribute("aria-checked", "true");
   // Continue would add the defaults to the shared core: Back instead.
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/welcome(\?form=tv)?$/);
