@@ -60,6 +60,15 @@ pub fn rank(streams: Vec<ParsedStream>, input: &RankInput<'_>) -> Ranked {
     Ranked { rows, hidden }
 }
 
+/// A torrent's info hash, lowercase.
+fn info_hash(s: &ParsedStream) -> Option<String> {
+    match &s.source {
+        Source::Torrent { info_hash, .. } => Some(info_hash.to_ascii_lowercase()),
+        Source::ClientResolve(r) => r.info_hash.as_ref().map(|h| h.to_ascii_lowercase()),
+        _ => None,
+    }
+}
+
 /// The class a stream would play as, or why it is hidden.
 fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReason> {
     if let Some(reason) = gate_reason(s, input) {
@@ -543,7 +552,15 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         (Some(b), Some(safe)) => b <= safe,
         _ => true,
     };
-    let start = start(class, s.seeders, input.prefs);
+    // Seeders an addon lists are a hint; a swarm that stalled here is not
+    // started first again.
+    let dead = matches!(class, SourceClass::Swarm | SourceClass::Unknown)
+        && info_hash(s).is_some_and(|h| input.conditions.dead_swarms.contains(&h));
+    let start = if dead {
+        0
+    } else {
+        start(class, s.seeders, input.prefs)
+    };
     let key = RankKey {
         language: input.prefs.languages.is_empty()
             || langs.is_empty()
@@ -594,6 +611,9 @@ fn line(
         return ReasonLine::Fetch {
             service: s.service.clone(),
         };
+    }
+    if torrent && key.start == 0 && s.seeders.is_none_or(|n| n >= FEW_SEEDERS) {
+        return ReasonLine::Stalled;
     }
     if let (true, Some(n)) = (torrent, s.seeders)
         && n < FEW_SEEDERS

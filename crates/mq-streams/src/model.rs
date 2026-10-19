@@ -155,6 +155,10 @@ pub struct Conditions {
     pub engine: bool,
     /// The profile has a debrid account.
     pub debrid: bool,
+    /// Info hashes (lowercase) whose swarm sent almost nothing when this
+    /// device last tried them: they may not start, whatever the seeders an
+    /// addon lists.
+    pub dead_swarms: Vec<String>,
 }
 
 impl Default for Conditions {
@@ -175,6 +179,7 @@ impl Default for Conditions {
             free_bytes: None,
             engine: false,
             debrid: false,
+            dead_swarms: Vec::new(),
         }
     }
 }
@@ -384,6 +389,8 @@ pub enum ReasonLine {
         samples: u32,
     },
     WashedOut,
+    /// The swarm sent almost nothing when this device last tried it.
+    Stalled,
     #[serde(rename_all = "camelCase")]
     Large {
         #[cfg_attr(feature = "ts", ts(type = "number"))]

@@ -419,6 +419,7 @@ impl VersionsView {
             free_bytes: core.free_bytes(),
             engine: core.has_engine(),
             debrid: core.debrid().is_some(),
+            dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
         };
         let item_id = item_id.map_or_else(
             || {

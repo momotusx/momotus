@@ -14,11 +14,11 @@ use mq_addons::{AddonEvent, Deadlines};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
-use mq_server::{Format, Lease, SubtitleSlot, Upstream};
+use mq_server::{Format, Lease, SubtitleSlot, SubtitleTrouble, Upstream};
 use mq_streams::ParsedStream;
 use serde::Serialize;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 use stremio_core::types::addon::ExtraValue;
 use tokio::task::JoinHandle;
@@ -40,6 +40,16 @@ const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 /// gets the URL (players give up on a silent body after a few seconds).
 #[cfg(feature = "torrent")]
 const TORRENT_READY_TIMEOUT: Duration = Duration::from_secs(60);
+/// ...but a swarm whose verified bytes grow by less than this in this long
+/// is dead, whatever seeders its addon listed: the next candidate plays.
+#[cfg(feature = "torrent")]
+const STALL_WINDOW: Duration = Duration::from_secs(15);
+#[cfg(feature = "torrent")]
+const STALL_FLOOR: u64 = 256 << 10;
+/// A capacity sample is read this long after its source started
+/// (plans/m13-stream-choice.md 5).
+#[cfg(feature = "torrent")]
+const SAMPLE_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -76,6 +86,9 @@ pub struct PlaybackSnapshot {
     pub subtitles: Vec<SubtitleTrack>,
     /// Subtitles addons are still being asked.
     pub subtitles_pending: bool,
+    /// Subtitle sources that gave nothing this time, each once, shown under
+    /// the subtitle list (plans/m13-turkcealtyazi.md 4.2).
+    pub subtitle_notes: Vec<SubtitleNote>,
     /// The next released episode, for an Up Next card.
     pub next: Option<NextEpisode>,
     /// The playing stream's binge group; pass it as `bingeGroup` when opening
@@ -124,6 +137,37 @@ pub struct SubtitleTrack {
     pub source: String,
     pub forced: bool,
     pub hearing_impaired: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleNote {
+    /// As `SubtitleTrack::source`: the addon name.
+    pub source: String,
+    pub problem: SubtitleProblem,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum SubtitleProblem {
+    /// The source did not answer; its tracks stay and may load later.
+    Unreachable,
+    /// The source turns requests away for a few minutes.
+    Blocked,
+    /// The source's pages changed and cannot be read until an update.
+    Changed,
+    /// A file of the source could not be read; its track left the list.
+    TrackFailed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -224,6 +268,7 @@ impl State {
                 attempts: Vec::new(),
                 subtitles: Vec::new(),
                 subtitles_pending: false,
+                subtitle_notes: Vec::new(),
                 next: None,
                 binge_group: None,
                 segments: Vec::new(),
@@ -657,6 +702,7 @@ fn release_all(s: &mut State) {
     s.snapshot.url = None;
     s.snapshot.manifest = false;
     s.snapshot.subtitles.clear();
+    s.snapshot.subtitle_notes.clear();
     s.lease = None;
 }
 
@@ -807,6 +853,7 @@ async fn resolve_next(
                 // The stream's own tracks come from its addon.
                 let addon_url = stream.addon_url.as_ref();
                 let slot = lease.subtitles();
+                listen_for_trouble(&slot, Arc::downgrade(&state), snapshot.clone(), run);
                 let reader = lease.reader();
                 {
                     let mut s = lock(&state);
@@ -1016,21 +1063,36 @@ async fn open_torrent(
         (None, None, Some(season), Some(episode)) => FileHint::Episode { season, episode },
         _ => FileHint::Largest,
     };
+    let by_episode = matches!(hint, FileHint::Episode { .. });
     let started = async {
         let file = engine.select_file(torrent, profile, &hint).await?;
         let reader = claim.open_reader(file).await?;
+        let info = reader.file().clone();
+        // The file the addon pointed at must be the one listed (3.4).
+        if let Some(why) = wrong_file(&info.path, info.len, stream.size_bytes, target, by_episode) {
+            return Ok((file, info, Started::Wrong(why)));
+        }
         let mut head = reader.range(0, None).await?;
-        let ready = tokio::time::timeout(TORRENT_READY_TIMEOUT, head.ready()).await;
-        Ok::<_, mq_engine::EngineError>((file, reader.file().clone(), ready))
+        let progress = || async { engine.stats(torrent).await.ok().map(|s| s.downloaded_bytes) };
+        let ready = watch_start(
+            head.ready(),
+            progress,
+            STALL_WINDOW,
+            STALL_FLOOR,
+            TORRENT_READY_TIMEOUT,
+        )
+        .await;
+        Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let failed = match started.await {
-        Ok((file, info, Ok(Ok(())))) => {
+        Ok((file, info, Started::Ready(Ok(())))) => {
             let name = info
                 .path
                 .rsplit('/')
                 .next()
                 .unwrap_or(&info.path)
                 .to_owned();
+            spawn_sample(core, torrent, stream.seeders);
             let upstream = Upstream::Torrent { claim, file };
             return Ok((upstream, Some(name), Some(info.len)));
         }
@@ -1038,15 +1100,130 @@ async fn open_torrent(
         // torrent, its hold and its files stay, since another profile may
         // be playing it, and the next candidate plays instead.
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
-        Ok((_, _, Err(_))) => {
+        Ok((_, _, Started::Late)) => {
             did_not_start();
             "the swarm did not send the start of the video in time".to_owned()
         }
-        Ok((_, _, Ok(Err(e)))) | Err(e) => e.to_string(),
+        Ok((_, _, Started::Stalled)) => {
+            did_not_start();
+            // Ranked last here for a day: the listed seeders were wrong.
+            crate::speed::record_dead(core.library(), info_hash, mq_library::hlc::now_ms());
+            "the swarm sent almost nothing; trying the next version".to_owned()
+        }
+        Ok((_, _, Started::Wrong(why))) => why.to_owned(),
+        Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
     };
     // The next candidate plays instead: stop downloading this one.
     let _ = engine.remove(torrent, false).await;
     Err(failed)
+}
+
+/// How a torrent's start went.
+#[cfg(any(test, feature = "torrent"))]
+enum Started<T> {
+    Ready(T),
+    /// Verified bytes grew by less than the floor in a window.
+    Stalled,
+    /// The deadline passed while bytes still came.
+    Late,
+    /// The file is not the one the version listed.
+    #[cfg_attr(test, allow(dead_code))]
+    Wrong(&'static str),
+}
+
+/// Waits for `ready` while `progress` (verified bytes, read each second)
+/// keeps growing by `floor` within every `window`; a swarm that stops
+/// short is cut early, one that keeps coming gets until `deadline`.
+#[cfg(any(test, feature = "torrent"))]
+async fn watch_start<T, P, F>(
+    ready: impl std::future::Future<Output = T>,
+    mut progress: P,
+    window: Duration,
+    floor: u64,
+    deadline: Duration,
+) -> Started<T>
+where
+    P: FnMut() -> F,
+    F: std::future::Future<Output = Option<u64>>,
+{
+    let start = tokio::time::Instant::now();
+    tokio::pin!(ready);
+    let mut mark = (progress().await.unwrap_or(0), start);
+    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            out = &mut ready => return Started::Ready(out),
+            _ = tick.tick() => {
+                let now = tokio::time::Instant::now();
+                if now - start >= deadline {
+                    return Started::Late;
+                }
+                let bytes = progress().await.unwrap_or(mark.0);
+                if bytes >= mark.0.saturating_add(floor) {
+                    mark = (bytes, now);
+                } else if now - mark.1 >= window {
+                    return Started::Stalled;
+                }
+            }
+        }
+    }
+}
+
+/// Why the file a torrent opened is not the version listed (3.4): larger
+/// than the listed size by more than 10% (smaller is a pack's file), or
+/// named for another episode. `by_episode`: the file was found by the
+/// episode already.
+#[cfg(any(test, feature = "torrent"))]
+fn wrong_file(
+    path: &str,
+    len: u64,
+    listed: Option<u64>,
+    target: &PlayTarget,
+    by_episode: bool,
+) -> Option<&'static str> {
+    if listed.is_some_and(|l| len as f64 > l as f64 * 1.1) {
+        return Some("the torrent's file is larger than the version listed");
+    }
+    if by_episode {
+        return None;
+    }
+    let r = mq_relparse::parse(path.rsplit('/').next().unwrap_or(path));
+    let other = |named: &[u32], want: Option<u32>| {
+        want.is_some_and(|w| !named.is_empty() && !named.contains(&w))
+    };
+    (other(&r.episodes, target.episode) || other(&r.seasons, target.season))
+        .then_some("the torrent's file is another episode")
+}
+
+/// Reads the torrent's capacity sample once its first 30 s are over and
+/// counts it into the estimate; a torrent removed by then (it failed over)
+/// gives none.
+#[cfg(feature = "torrent")]
+fn spawn_sample(core: &Core, torrent: mq_engine::TorrentHandle, seeders: Option<u32>) {
+    let core = core.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(SAMPLE_AFTER).await;
+        let Ok(engine) = core.torrent_engine().await else {
+            return;
+        };
+        let Ok(stats) = engine.stats(torrent).await else {
+            return;
+        };
+        let sample = crate::speed::Sample {
+            kind: crate::speed::Kind::P2p,
+            bytes: stats.sample_bytes,
+            busy: Duration::from_millis(stats.sample_busy_ms),
+            seeders,
+        };
+        let min = core.prefs().streams.min_seeders;
+        crate::speed::record(
+            core.library(),
+            core.network(),
+            &sample,
+            min,
+            mq_library::hlc::now_ms(),
+        );
+    });
 }
 
 /// Verified torrent bytes for the subtitle hash.
@@ -1168,6 +1345,49 @@ fn source_word(source: &Source) -> &'static str {
         Source::Archive { .. } => "Archive",
         _ => "These",
     }
+}
+
+/// Hears the subtitle route's failures for this run's tracks. Weak: the
+/// state owns the lease, which owns this reporter.
+fn listen_for_trouble(
+    slot: &SubtitleSlot,
+    state: Weak<Mutex<State>>,
+    snapshot: SharedObservable<PlaybackSnapshot>,
+    run: u64,
+) {
+    slot.on_trouble(move |url, trouble| {
+        let Some(state) = state.upgrade() else {
+            return;
+        };
+        let mut s = lock(&state);
+        if current(&s, run) && note_trouble(&mut s.snapshot, url, trouble) {
+            snapshot.set(s.snapshot.clone());
+        }
+    });
+}
+
+/// The note for a track the route could not serve; a file that cannot be
+/// read also leaves the list. False when nothing changed.
+fn note_trouble(snapshot: &mut PlaybackSnapshot, url: &str, trouble: SubtitleTrouble) -> bool {
+    let Some(at) = snapshot.subtitles.iter().position(|t| t.url == url) else {
+        return false;
+    };
+    let note = match trouble {
+        SubtitleTrouble::Unreachable => SubtitleNote {
+            source: snapshot.subtitles[at].source.clone(),
+            problem: SubtitleProblem::Unreachable,
+        },
+        SubtitleTrouble::Unreadable => SubtitleNote {
+            source: snapshot.subtitles[at].source.clone(),
+            problem: SubtitleProblem::TrackFailed,
+        },
+    };
+    let removed = trouble == SubtitleTrouble::Unreadable;
+    let new = !snapshot.subtitle_notes.contains(&note);
+    if new {
+        snapshot.subtitle_notes.push(note);
+    }
+    new || removed
 }
 
 /// A track served through the loopback server as UTF-8 WebVTT, whatever
@@ -1467,5 +1687,116 @@ mod tests {
         let s = lock(&state);
         assert_eq!(s.next, 0, "no candidate taken");
         assert_eq!(s.snapshot.phase, PlaybackPhase::Resolving);
+    }
+
+    /// The engine's verified bytes, scripted per second.
+    fn fake_progress(script: Vec<u64>) -> impl FnMut() -> std::future::Ready<Option<u64>> {
+        let mut at = 0;
+        move || {
+            let bytes = script.get(at).or(script.last()).copied();
+            at += 1;
+            std::future::ready(bytes)
+        }
+    }
+
+    /// Dead-swarm failover: metadata came, then no data. The start gives up
+    /// after the 15 s window, not the 60 s deadline.
+    #[tokio::test(start_paused = true)]
+    async fn a_swarm_that_sends_nothing_is_cut_after_the_window() {
+        let window = Duration::from_secs(15);
+        let begun = tokio::time::Instant::now();
+        let started = watch_start(
+            std::future::pending::<()>(),
+            fake_progress(vec![0]),
+            window,
+            256 << 10,
+            Duration::from_secs(60),
+        )
+        .await;
+        assert!(matches!(started, Started::Stalled));
+        let took = begun.elapsed();
+        assert!(
+            (window..window + Duration::from_secs(2)).contains(&took),
+            "{took:?}"
+        );
+    }
+
+    /// A swarm that keeps sending is never cut early: it gets the deadline,
+    /// and a ready head wins at once.
+    #[tokio::test(start_paused = true)]
+    async fn a_swarm_that_keeps_sending_is_never_cut_early() {
+        let growing: Vec<u64> = (0..100).map(|s| s * (300 << 10)).collect();
+        let started = watch_start(
+            std::future::pending::<()>(),
+            fake_progress(growing.clone()),
+            Duration::from_secs(15),
+            256 << 10,
+            Duration::from_secs(60),
+        )
+        .await;
+        assert!(matches!(started, Started::Late));
+        let started = watch_start(
+            tokio::time::sleep(Duration::from_secs(20)),
+            fake_progress(growing),
+            Duration::from_secs(15),
+            256 << 10,
+            Duration::from_secs(60),
+        )
+        .await;
+        assert!(matches!(started, Started::Ready(())));
+        // A trickle under the floor in every window is dead.
+        let trickle: Vec<u64> = (0..100).map(|s| s * (10 << 10)).collect();
+        let started = watch_start(
+            std::future::pending::<()>(),
+            fake_progress(trickle),
+            Duration::from_secs(15),
+            256 << 10,
+            Duration::from_secs(60),
+        )
+        .await;
+        assert!(matches!(started, Started::Stalled));
+    }
+
+    /// 3.4: the engine's file must be the version listed; only larger
+    /// fails (a pack's file is smaller), and another episode fails.
+    #[test]
+    fn the_engines_file_must_be_the_version_listed() {
+        let episode = PlayTarget {
+            season: Some(1),
+            episode: Some(5),
+            ..PlayTarget::default()
+        };
+        let gb = 1u64 << 30;
+        let file = "Show/Show.S01E05.1080p.WEB.mkv";
+        assert_eq!(
+            wrong_file(file, 2 * gb, Some(2 * gb), &episode, false),
+            None
+        );
+        assert_eq!(
+            wrong_file(file, 2 * gb, Some(40 * gb), &episode, false),
+            None,
+            "a pack's size listed"
+        );
+        assert!(
+            wrong_file(file, 3 * gb, Some(2 * gb), &episode, false).is_some(),
+            "larger"
+        );
+        let other = "Show/Show.S01E06.1080p.WEB.mkv";
+        assert!(wrong_file(other, gb, Some(gb), &episode, false).is_some());
+        assert_eq!(
+            wrong_file(other, gb, Some(gb), &episode, true),
+            None,
+            "found by the episode"
+        );
+        assert_eq!(
+            wrong_file(
+                "Movie.2020.1080p.mkv",
+                gb,
+                None,
+                &PlayTarget::default(),
+                false
+            ),
+            None
+        );
     }
 }

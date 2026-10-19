@@ -1044,6 +1044,10 @@ sealed interface ReasonLine {
     data object WashedOut : ReasonLine
 
     @Serializable
+    @SerialName("stalled")
+    data object Stalled : ReasonLine
+
+    @Serializable
     @SerialName("large")
     data class Large(
         val sizeBytes: Long,

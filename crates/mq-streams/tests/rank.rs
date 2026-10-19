@@ -1344,3 +1344,30 @@ fn a_stated_mp4_goes_before_an_unstated_container_on_an_mp4_player() {
         Playability::Native
     );
 }
+
+/// Dead-swarm failover: a swarm that sent almost nothing on this device
+/// is not started first again, whatever seeders its addon lists; it says
+/// it stalled.
+#[test]
+fn a_swarm_that_stalled_here_is_not_started_first() {
+    let stalled = seeded(1, "Movie.2020.1080p.BluRay.x264-DEAD", 900, 2.0);
+    let hash = stalled["infoHash"].as_str().unwrap().to_owned();
+    let case = Case {
+        conditions: Conditions {
+            dead_swarms: vec![hash],
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        stalled,
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-LIVE", 60, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-LIVE"
+    );
+    let dead = row(&ranked, "Movie.2020.1080p.BluRay");
+    assert!(!dead.key.viable);
+    assert_eq!(dead.line, ReasonLine::Stalled);
+}

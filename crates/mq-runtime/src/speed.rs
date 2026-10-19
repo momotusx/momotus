@@ -176,6 +176,52 @@ pub fn reset(lib: &Library, network: Network) {
     }
 }
 
+/// How long a swarm that stalled here stays demoted.
+// ponytail: one day, whatever the network; per network if the race shows a
+// swarm that stalls on cellular and starts on Wi-Fi.
+const DEAD_FOR_MS: u64 = 86_400_000;
+/// Stalled swarms kept at most (the oldest go first).
+const DEAD_KEPT: usize = 200;
+const DEAD_KEY: &str = "dead_swarms";
+
+fn dead_map(lib: &Library) -> std::collections::BTreeMap<String, u64> {
+    lib.device_value(DEAD_KEY)
+        .ok()
+        .flatten()
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default()
+}
+
+/// Info hashes (lowercase) whose swarm stalled on this device in the last
+/// day: the ranking does not start them first (seeders an addon lists
+/// are a hint).
+pub fn dead_swarms(lib: &Library, now_ms: u64) -> Vec<String> {
+    dead_map(lib)
+        .into_iter()
+        .filter(|(_, at)| now_ms.saturating_sub(*at) < DEAD_FOR_MS)
+        .map(|(hash, _)| hash)
+        .collect()
+}
+
+/// The swarm of `info_hash` sent almost nothing after its metadata.
+pub fn record_dead(lib: &Library, info_hash: &str, now_ms: u64) {
+    let mut dead = dead_map(lib);
+    dead.retain(|_, at| now_ms.saturating_sub(*at) < DEAD_FOR_MS);
+    dead.insert(info_hash.to_ascii_lowercase(), now_ms);
+    while dead.len() > DEAD_KEPT {
+        let Some(oldest) = dead
+            .iter()
+            .min_by_key(|(_, at)| **at)
+            .map(|(h, _)| h.clone())
+        else {
+            break;
+        };
+        dead.remove(&oldest);
+    }
+    let value = serde_json::to_string(&dead).unwrap_or_default();
+    let _ = lib.set_device_value(DEAD_KEY, &value);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,6 +305,16 @@ mod tests {
         };
         assert!(!record(&lib, net, &unknown, 50, 0));
         assert!((mbps(&lib, net, Kind::P2p, 0) - 40.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn a_stalled_swarm_stays_demoted_for_a_day() {
+        let lib = Library::temporary().unwrap();
+        record_dead(&lib, "AAAA", 1_000);
+        record_dead(&lib, "bbbb", 2_000);
+        assert_eq!(dead_swarms(&lib, 2_000), ["aaaa", "bbbb"]);
+        assert_eq!(dead_swarms(&lib, 1_000 + DEAD_FOR_MS), ["bbbb"]);
+        assert!(dead_swarms(&lib, 2_000 + DEAD_FOR_MS).is_empty());
     }
 
     #[test]
