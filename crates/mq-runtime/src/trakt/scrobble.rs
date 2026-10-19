@@ -240,6 +240,8 @@ struct Sess {
     /// Kept once known for good; a miss that may pass is looked up again.
     ids: Option<Result<TraktIds, String>>,
     tries: u32,
+    /// Failed lookups of its ids, apart from its sends.
+    misses: u32,
     /// After a failed send, nothing goes before this (backoff, or Trakt's
     /// `Retry-After`).
     not_before: Option<Instant>,
@@ -316,6 +318,7 @@ fn fold(sessions: &mut BTreeMap<u64, Sess>, waiting: &mut Vec<oneshot::Sender<()
                     closed: false,
                     ids: None,
                     tries: 0,
+                    misses: 0,
                     not_before: None,
                     stop_failing_since: None,
                 },
@@ -452,11 +455,12 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
                     changed = true;
                 }
                 Err(Miss::Transient(reason)) => {
-                    // Looked up again after a while; never remembered.
+                    // Looked up again after a while; never remembered. Its
+                    // own count: a stop keeps every one of its tries.
                     conn.failed(&reason);
-                    s.tries += 1;
-                    s.not_before = Some(Instant::now() + backoff(s.tries));
-                    retry = earliest(retry, backoff(s.tries));
+                    s.misses += 1;
+                    s.not_before = Some(Instant::now() + backoff(s.misses));
+                    retry = earliest(retry, backoff(s.misses));
                     changed = true;
                     if s.closed {
                         // A close with no ids: the stop cannot go; its held
@@ -479,13 +483,18 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
         let superseded = newest_playing.is_some_and(|n| n > id);
         if s.closed || (superseded && matches!(s.sent, Sent::Playing | Sent::Paused)) {
             let sends = s.sent != Sent::Stopped && s.percent >= MIN_PERCENT;
-            let done = if sends {
+            let done = if !sends {
+                true
+            } else if stop_expired(s.stop_failing_since, Instant::now()) {
+                // Its hour is up: given up before another request goes.
+                changed = true;
+                unanswered(core, key, s);
+                true
+            } else {
                 let body = ids.scrobble(s.percent);
                 let answer = call::post(&api, &gate, &conn.auth, &bound, "/scrobble/stop", &body);
                 changed = true;
                 stopped(core, conn, key, s, &ids, read(answer.await))
-            } else {
-                true
             };
             if !done {
                 retry = earliest(
@@ -627,17 +636,26 @@ fn stopped(
                 s.not_before = Some(Instant::now() + wait);
                 return false;
             }
-            // Unanswered: Trakt may have the play or not. The held write
-            // goes out, after a look at the minutes around the stop.
-            if s.percent >= PLAY_PERCENT && s.held.load(Ordering::SeqCst) {
-                let at = now_ms().to_string();
-                let name = format!("check:{}", s.target.video_id);
-                let _ = core.library().set_tracker_state(key, &name, &at);
-            }
-            end(core, s, false);
+            unanswered(core, key, s);
             true
         }
     }
+}
+
+/// A stop given up: Trakt may have the play or not. The held write goes
+/// out, after a look at the minutes around the stop.
+fn unanswered(core: &Core, key: TrackerKey<'_>, s: &Sess) {
+    if s.percent >= PLAY_PERCENT && s.held.load(Ordering::SeqCst) {
+        let at = now_ms().to_string();
+        let name = format!("check:{}", s.target.video_id);
+        let _ = core.library().set_tracker_state(key, &name, &at);
+    }
+    end(core, s, false);
+}
+
+/// Whether a stop failing since `since` is past its hour at `now`.
+fn stop_expired(since: Option<Instant>, now: Instant) -> bool {
+    since.is_some_and(|since| now.saturating_duration_since(since) >= RETRY_AFTER_CAP)
 }
 
 /// When a failed stop is tried again (`None`: given up as unanswered):
@@ -730,5 +748,81 @@ mod tests {
         // Before it: the backoff, and four tries at most.
         assert_eq!(stop_wait(1, None, Duration::ZERO), Some(backoff(1)));
         assert_eq!(stop_wait(STOP_TRIES, None, Duration::ZERO), None);
+    }
+
+    #[test]
+    fn a_stop_past_its_hour_is_not_sent_again() {
+        let since = Instant::now();
+        let minute = Duration::from_secs(60);
+        assert!(!stop_expired(None, since + RETRY_AFTER_CAP), "never failed");
+        assert!(!stop_expired(Some(since), since + RETRY_AFTER_CAP - minute));
+        assert!(stop_expired(Some(since), since + RETRY_AFTER_CAP));
+    }
+
+    /// The worker gives a stop up at its hour before sending it again.
+    #[tokio::test(start_paused = true)]
+    async fn the_worker_sends_no_stop_past_its_hour() {
+        use std::sync::atomic::AtomicUsize;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let counted = accepted.clone();
+        std::thread::spawn(move || {
+            for _ in listener.incoming().flatten() {
+                counted.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        let core = Core::temporary("p").unwrap();
+        core.set_trakt_config(Some(super::super::TraktConfig {
+            client_id: "client".into(),
+            redirect_uri: "https://marquee.example/trakt".into(),
+            hosts: mq_tracking::trakt::Hosts {
+                api: base.clone(),
+                auth: base,
+                local: true,
+            },
+        }));
+        let conn = core.trakt_conn();
+        let record = serde_json::from_value(json!({
+            "accessToken": "access", "refreshToken": "refresh", "createdAtMs": now_ms(),
+            "expiresAtMs": now_ms() + 86_400_000, "scope": "public", "account": "a",
+            "user": "u", "revision": 0, "generation": 1
+        }))
+        .unwrap();
+        assert!(conn.auth.set(Some(record)).await);
+        let since = Instant::now();
+        tokio::time::advance(RETRY_AFTER_CAP).await;
+        let session = Sess {
+            target: Target {
+                kind: "movie".into(),
+                item_id: "tt1".into(),
+                video_id: "tt1".into(),
+                name: "Film".into(),
+            },
+            report: Box::new(|_| {}),
+            session: "s".into(),
+            held: Arc::default(),
+            since: String::new(),
+            bound: conn.auth.bound().await,
+            owner: Arc::default(),
+            percent: 50.0,
+            want: Want::Paused,
+            sent: Sent::Playing,
+            closed: true,
+            ids: Some(Ok(TraktIds::Movie { imdb: "tt1".into() })),
+            tries: 1,
+            misses: 0,
+            not_before: None,
+            stop_failing_since: Some(since),
+        };
+        let mut sessions = BTreeMap::from([(1, session)]);
+        act(&core, &conn, &mut sessions).await;
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(sessions.is_empty(), "given up");
+        assert_eq!(
+            accepted.load(Ordering::SeqCst),
+            0,
+            "no request after its hour"
+        );
     }
 }

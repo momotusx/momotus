@@ -366,11 +366,11 @@ impl Core {
         Ok((meta, name))
     }
 
-    /// Each episode's TVDB id by video id, from the first meta answer in
-    /// addon order whose videos carry them (served from the addon cache after
-    /// the first look); a meta without any asks the next addon. stremio-core's
-    /// `Video` has no such field, so it is read from the raw JSON; a number
-    /// or a numeric string is read.
+    /// Each episode's TVDB id by video id, from every meta addon in order
+    /// (served from the addon cache after the first look): an earlier addon's
+    /// id wins, a later one fills the episodes it lacks (a season it does not
+    /// list yet). stremio-core's `Video` has no such field, so it is read
+    /// from the raw JSON; a number or a numeric string is read.
     pub async fn episode_tvdb_ids(&self, id: &str) -> Result<HashMap<String, u64>, TvdbMiss> {
         let path = ResourcePath {
             resource: "meta".into(),
@@ -384,6 +384,7 @@ impl Core {
         let mut reason = "None of your addons has details for this title".to_owned();
         // Every addon asked answered that it has no such title.
         let mut unknown = None;
+        let mut ids = HashMap::new();
         for addon in addons.iter().filter(|a| a.supports(&path)) {
             let name = &addon.manifest.name;
             let raw = match self.addons().fetch(addon, &path, META_TIMEOUT).await {
@@ -412,22 +413,20 @@ impl Core {
                 continue;
             }
             unknown = Some(false);
-            let ids: HashMap<String, u64> = raw["meta"]["videos"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|v| {
-                    let id = &v["tvdb_id"];
-                    let tvdb = id.as_u64().or_else(|| id.as_str()?.trim().parse().ok())?;
-                    Some((v["id"].as_str()?.to_owned(), tvdb))
-                })
-                .collect();
-            if !ids.is_empty() {
-                return Ok(ids);
+            let before = ids.len();
+            for v in raw["meta"]["videos"].as_array().into_iter().flatten() {
+                let tvdb = &v["tvdb_id"];
+                let tvdb = tvdb.as_u64().or_else(|| tvdb.as_str()?.trim().parse().ok());
+                if let (Some(video), Some(tvdb)) = (v["id"].as_str(), tvdb) {
+                    ids.entry(video.to_owned()).or_insert(tvdb);
+                }
             }
-            reason = format!("{name} gave no TVDB ids for this title");
+            if ids.len() == before {
+                reason = format!("{name} gave no TVDB ids for this title");
+            }
         }
         match unknown {
+            _ if !ids.is_empty() => Ok(ids),
             Some(true) => Err(TvdbMiss::Unknown(reason)),
             _ => Err(TvdbMiss::Unavailable(reason)),
         }

@@ -4,7 +4,7 @@
 //! and only once every fetch they depend on worked. Every call of a round
 //! is bound to the connection the round started under.
 
-use super::map::{self, Mapper, Miss, PlaceMiss, TraktIds};
+use super::map::{self, Look, Mapper, Miss, PlaceMiss, TraktIds};
 use super::{Conn, Trakt};
 use crate::Core;
 use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
@@ -284,7 +284,7 @@ impl Round<'_> {
                 // No runtime anywhere: nothing to place it on.
                 Ok(None) => continue,
                 Err(reason) => {
-                    match map::failed(self.core, self.key, &placed.item_id, reason) {
+                    match map::failed(self.core, self.key, Look::Runtime, &placed.item_id, reason) {
                         Miss::Transient(reason) => self.left = Some(reason),
                         Miss::Permanent(_) => {}
                     }
@@ -359,7 +359,7 @@ impl Round<'_> {
             return Ok(Some(((percent / 100.0 * duration as f64) as i64, duration)));
         }
         let (meta, _) = self.core.fetch_meta(&placed.kind, &placed.item_id).await?;
-        map::succeeded(self.core, self.key, &placed.item_id);
+        map::succeeded(self.core, self.key, Look::Runtime, &placed.item_id);
         let runtime = meta.preview.runtime.as_deref().and_then(runtime_ms);
         Ok(runtime.map(|runtime| {
             (
@@ -416,13 +416,17 @@ impl Round<'_> {
     /// details cannot place now wait for a later try; writes Trakt cannot
     /// name are dropped.
     async fn drain(&mut self) {
-        for _ in 0..50 {
+        'batches: for _ in 0..50 {
             let intents = self
                 .core
                 .library()
                 .ready_tracker_intents(self.key, now_ms() as i64, BATCH)
                 .unwrap_or_default();
-            if intents.is_empty() || self.fence().is_err() {
+            // With no usable sign-in, the writes wait for one without
+            // spending their backoff.
+            let signed_in = futures_util::FutureExt::now_or_never(self.conn.auth.status())
+                .is_some_and(|status| status.is_ok());
+            if intents.is_empty() || !signed_in || self.fence().is_err() {
                 break;
             }
             let mut adds = Vec::new();
@@ -459,8 +463,8 @@ impl Round<'_> {
                 }
             }
             for (path, batch) in [("/sync/history", adds), ("/sync/history/remove", removes)] {
-                if !batch.is_empty() {
-                    self.send(path, batch).await;
+                if !batch.is_empty() && !self.send(path, batch).await {
+                    break 'batches;
                 }
             }
         }
@@ -487,7 +491,8 @@ impl Round<'_> {
         rows.iter().any(|row| ids.resolved(row))
     }
 
-    async fn send(&mut self, path: &str, batch: Vec<(Intent, TraktIds)>) {
+    /// Sends one batch. `false` when the sign-in failed: nothing more goes.
+    async fn send(&mut self, path: &str, batch: Vec<(Intent, TraktIds)>) -> bool {
         let mut body = json!({"movies": [], "episodes": []});
         for (intent, ids) in &batch {
             let at = (intent.op == IntentOp::Add).then(|| iso(intent.watched_ms));
@@ -531,14 +536,22 @@ impl Round<'_> {
                     }
                     self.ack(intent);
                 }
+                true
+            }
+            // The sign-in failed, not the writes: they wait as they are,
+            // without spending their backoff.
+            Err(CallError::Auth(e)) => {
+                if e != AuthError::Off {
+                    self.conn.failed(&super::reason(&CallError::Auth(e)));
+                }
+                false
             }
             Err(e) => {
-                if !matches!(e, CallError::Auth(AuthError::Off)) {
-                    self.conn.failed(&super::reason(&e));
-                }
+                self.conn.failed(&super::reason(&e));
                 for (intent, _) in &batch {
                     self.retry(intent);
                 }
+                true
             }
         }
     }
@@ -630,6 +643,12 @@ fn acknowledged(answer: &Value, sent: &Value, removes: bool) -> Result<(), Strin
         let named = |m: &Value| m["ids"].is_object() && sent.iter().any(|s| s["ids"] == m["ids"]);
         if !lost.iter().all(named) {
             return Err("Trakt's answer named an item that was not sent".into());
+        }
+        // Each item once: a repeated entry would stand for one never named.
+        let distinct: std::collections::HashSet<String> =
+            lost.iter().map(|m| m["ids"].to_string()).collect();
+        if distinct.len() != lost.len() {
+            return Err("Trakt's answer named an item twice".into());
         }
         if !removes && counted + lost.len() as u64 != sent.len() as u64 {
             return Err("Trakt's answer did not count the writes".into());
@@ -723,5 +742,15 @@ mod tests {
                                 "not_found": {"movies": [], "episodes": [stranger]}});
             assert!(acknowledged(&answer, &sent, false).is_err(), "{answer}");
         }
+    }
+
+    #[test]
+    fn a_not_found_entry_named_twice_acknowledges_nothing() {
+        let sent = json!({"movies": [], "episodes": [{"ids": {"tvdb": 1}}, {"ids": {"tvdb": 2}}]});
+        // Two entries for A: the count adds up, but B was never named.
+        let twice = json!({"added": {"movies": 0, "episodes": 0},
+                           "not_found": {"movies": [],
+                                         "episodes": [{"ids": {"tvdb": 1}}, {"ids": {"tvdb": 1}}]}});
+        assert!(acknowledged(&twice, &sent, false).is_err());
     }
 }

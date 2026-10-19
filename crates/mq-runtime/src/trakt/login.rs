@@ -201,8 +201,11 @@ impl Login {
         let conn = core.trakt_conn();
         // The ticket is checked and the record written under one lock: a
         // newer sign-in, a sign-out or a record from the app meanwhile wins.
+        let approved = tokens.access_token.clone();
         let Some(record) = conn.auth.adopt(tokens, &account, &user, self.ticket).await else {
-            return self.overtaken();
+            self.overtaken();
+            // Approved but not taken: Trakt drops them too.
+            return auth::revoke(&api, &approved).await;
         };
         if let Err(e) = core.trakt_connected(&conn, &record.account, record.generation) {
             tracing::warn!("trakt: sign-in not recorded: {e}");

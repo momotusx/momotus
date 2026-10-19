@@ -82,8 +82,30 @@ pub(super) enum Miss {
     Transient(String),
 }
 
+/// What a failed look was for; each counts on its own.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Look {
+    /// A show's TVDB ids.
+    Show,
+    /// One episode's TVDB id, in details that have others.
+    Episode,
+    /// A title's runtime (for a resume point).
+    Runtime,
+}
+
+impl Look {
+    fn name(self, item: &str) -> String {
+        let kind = match self {
+            Look::Show => "show",
+            Look::Episode => "episode",
+            Look::Runtime => "runtime",
+        };
+        format!("{FAILING}{kind}:{item}")
+    }
+}
+
 /// The show's TVDB ids, or why not. A failure is transient until it has
-/// lasted (`FAILED_LOOKS` over a day); an addon saying it has no such
+/// lasted (`FAILED_LOOKS` over a day); every addon saying it has no such
 /// show is permanent at once.
 pub(super) async fn show_ids(
     core: &Core,
@@ -92,17 +114,17 @@ pub(super) async fn show_ids(
 ) -> Result<HashMap<String, u64>, Miss> {
     match core.episode_tvdb_ids(show).await {
         Ok(ids) => {
-            succeeded(core, key, show);
+            succeeded(core, key, Look::Show, show);
             Ok(ids)
         }
         Err(TvdbMiss::Unknown(reason)) => Err(Miss::Permanent(reason)),
-        Err(TvdbMiss::Unavailable(reason)) => Err(failed(core, key, show, reason)),
+        Err(TvdbMiss::Unavailable(reason)) => Err(failed(core, key, Look::Show, show, reason)),
     }
 }
 
-/// A read for `item` (a show's details, a title's runtime) worked.
-pub(super) fn succeeded(core: &Core, key: TrackerKey<'_>, item: &str) {
-    let name = format!("{FAILING}{item}");
+/// A look for `item` worked: its failures are forgotten.
+pub(super) fn succeeded(core: &Core, key: TrackerKey<'_>, look: Look, item: &str) {
+    let name = look.name(item);
     if core
         .library()
         .tracker_state(key, &name)
@@ -114,18 +136,31 @@ pub(super) fn succeeded(core: &Core, key: TrackerKey<'_>, item: &str) {
     }
 }
 
-/// A read for `item` failed: counted, and permanent once it has lasted.
-pub(super) fn failed(core: &Core, key: TrackerKey<'_>, item: &str, reason: String) -> Miss {
-    let name = format!("{FAILING}{item}");
+/// A look for `item` failed: counted, and permanent once it has lasted.
+pub(super) fn failed(
+    core: &Core,
+    key: TrackerKey<'_>,
+    look: Look,
+    item: &str,
+    reason: String,
+) -> Miss {
+    let name = look.name(item);
     let name = name.as_str();
     let library = core.library();
     let now = now_ms() as i64;
-    let stored: Value = library
+    let mut stored: Value = library
         .tracker_state(key, name)
         .ok()
         .flatten()
         .and_then(|v| serde_json::from_str(&v).ok())
         .unwrap_or_default();
+    // Failures long past (it worked meanwhile, unrecorded) start over.
+    if stored["last"]
+        .as_i64()
+        .is_some_and(|last| now - last > 2 * FAILING_FOR_MS)
+    {
+        stored = Value::Null;
+    }
     let first = stored["first"].as_i64().unwrap_or(now);
     let last = stored["last"].as_i64().unwrap_or(i64::MIN / 2);
     let mut looks = stored["looks"].as_u64().unwrap_or(0);
@@ -169,7 +204,14 @@ pub(super) async fn ids(
             tvdb,
             show_imdb: item_id.to_owned(),
         }),
-        None => Err(Miss::Permanent("no TVDB id in the show's details".into())),
+        // No addon lists it yet (a new episode, a season to come).
+        None => Err(failed(
+            core,
+            key,
+            Look::Episode,
+            video_id,
+            "no addon gives this episode a TVDB id".into(),
+        )),
     }
 }
 
@@ -264,11 +306,19 @@ impl<'a> Mapper<'a> {
                 kind: "series".into(),
                 name,
             }),
-            None => Err(PlaceMiss::Permanent(Unplaced {
-                id: imdb.to_owned(),
-                name,
-                reason: "the episode is not in the show's details".into(),
-            })),
+            // No addon lists it yet: a look that failed, as above.
+            None => {
+                let item = format!("{imdb}:tvdb{tvdb}");
+                let reason = "no addon lists this episode yet".to_owned();
+                match failed(self.core, self.key, Look::Episode, &item, reason) {
+                    Miss::Permanent(reason) => Err(PlaceMiss::Permanent(Unplaced {
+                        id: imdb.to_owned(),
+                        name,
+                        reason,
+                    })),
+                    Miss::Transient(reason) => Err(PlaceMiss::Transient(reason)),
+                }
+            }
         }
     }
 }

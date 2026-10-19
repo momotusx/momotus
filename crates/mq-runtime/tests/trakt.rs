@@ -67,6 +67,8 @@ struct Fake {
     meta_status: Arc<Mutex<HashMap<String, u16>>>,
     /// The meta addon's videos carry no TVDB ids.
     meta_no_tvdb: Arc<std::sync::atomic::AtomicBool>,
+    /// The meta addon also lists a second season (TVDB ids 2001 to 2003).
+    meta_season_two: Arc<std::sync::atomic::AtomicBool>,
     seen: Arc<Mutex<Vec<Req>>>,
 }
 
@@ -84,6 +86,7 @@ impl Fake {
             meta_down: Arc::default(),
             meta_status: Arc::default(),
             meta_no_tvdb: Arc::default(),
+            meta_season_two: Arc::default(),
             seen: Arc::default(),
         }
     }
@@ -175,6 +178,17 @@ impl Fake {
                 .flatten()
             {
                 video.as_object_mut().unwrap().remove("tvdb_id");
+            }
+            return reply(200, answer);
+        }
+        if req.path.starts_with("/meta/series/") && self.meta_season_two.load(Ordering::SeqCst) {
+            let mut answer = meta(&req.path);
+            let videos = answer["meta"]["videos"].as_array_mut().unwrap();
+            for e in 1..=3 {
+                videos.push(
+                    json!({"id": format!("{SHOW}:2:{e}"), "title": format!("S2E{e}"),
+                                   "season": 2, "episode": e, "tvdb_id": 2000 + e}),
+                );
             }
             return reply(200, answer);
         }
@@ -732,7 +746,17 @@ async fn a_wrong_show_answer_marks_it_unmapped() {
 #[tokio::test]
 async fn episodes_trakt_cannot_name_are_unmapped() {
     let (core, fake) = signed_in("a-unknown").await;
-    // The fourth episode has no TVDB id; the special is season 0.
+    // The fourth episode has no TVDB id in any addon, and has had none on
+    // separate looks for a day; the special is season 0.
+    let lasted = json!({"first": now() - 2 * 86_400_000, "last": now() - 3_600_000,
+                        "looks": 3});
+    core.library()
+        .set_tracker_state(
+            key("a-unknown"),
+            "failing:episode:tt100:1:4",
+            &lasted.to_string(),
+        )
+        .unwrap();
     let mut special = episode(1);
     special.video_id = "tt100:0:1".into();
     for target in [episode(4), special] {
@@ -1735,6 +1759,11 @@ async fn a_newer_sign_in_overtakes_an_older_one() {
         None,
         "the overtaken sign-in adopted nothing"
     );
+    let revoked = fake.seen("POST", "/oauth/revoke");
+    assert!(
+        revoked.iter().any(|r| r.body["token"] == "a-tok"),
+        "its approved tokens were revoked: {revoked:?}"
+    );
     drop((older, newer));
 }
 
@@ -2138,7 +2167,7 @@ async fn a_show_whose_details_never_load_never_holds_the_others() {
     let failing = json!({"first": now() - 2 * 86_400_000, "last": now() - 3_600_000,
                          "looks": 3});
     core.library()
-        .set_tracker_state(key("a-stuck"), "failing:tt300", &failing.to_string())
+        .set_tracker_state(key("a-stuck"), "failing:show:tt300", &failing.to_string())
         .unwrap();
     core.trakt_sync().await.unwrap();
     assert!(
@@ -2300,4 +2329,116 @@ async fn a_profile_deleted_elsewhere_stops_its_scrobbles() {
         "no call for a profile removed elsewhere: {late:?}"
     );
     drop(view);
+}
+
+#[tokio::test]
+async fn a_second_season_only_a_later_addon_lists_waits_then_goes() {
+    let (core, fake) = signed_in("a-season").await;
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:2:1", true).unwrap();
+    // No addon lists season two yet: the mark waits, not dropped.
+    core.trakt_sync().await.unwrap();
+    assert!(history_writes(&fake).is_empty());
+    assert_eq!(pending(&core, "a-season"), 1, "kept for a later look");
+    assert!(status(&core).unmapped.is_empty(), "never listed");
+    // A second meta addon lists it: the first addon's details do not hide it.
+    let later = Fake::new("a-season");
+    later.meta_season_two.store(true, Ordering::SeqCst);
+    let base = later.start().await;
+    core.install_addon(&format!("{base}/manifest.json"))
+        .await
+        .unwrap();
+    due(&core, "a-season");
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        history_writes(&fake),
+        [("/sync/history".to_owned(), vec![2001])]
+    );
+}
+
+#[tokio::test]
+async fn a_runtime_that_keeps_failing_counts_apart_from_the_ids() {
+    let (core, fake) = signed_in("a-runtime").await;
+    // The details answer for the ids, then fail for the runtime; neither
+    // answer is kept by the addon cache.
+    let answer = Reply {
+        status: 200,
+        body: meta("/meta/series/tt100.json").to_string(),
+        delay: Duration::ZERO,
+        headers: "Cache-Control: no-store\r\n".into(),
+    };
+    fake.queue("GET /meta/series/tt100.json", vec![answer, down()]);
+    // The runtime has failed on separate looks for a day already.
+    let lasted = json!({"first": now() - 2 * 86_400_000, "last": now() - 3_600_000,
+                        "looks": 3});
+    core.library()
+        .set_tracker_state(
+            key("a-runtime"),
+            "failing:runtime:tt100",
+            &lasted.to_string(),
+        )
+        .unwrap();
+    let mut item = episode_row(3, now());
+    item["progress"] = json!(50.0);
+    item["paused_at"] = json!(iso(now()));
+    fake.list("/sync/playback", vec![item]);
+    let moved = activities(&iso(now()));
+    *fake.activities.lock().unwrap() = moved.clone();
+    core.trakt_sync().await.unwrap();
+    // The ids' success did not wipe the runtime's day: it is given up.
+    assert_eq!(core.library().progress("p", "tt100:1:3").unwrap(), None);
+    let stored: Option<Value> =
+        state(&core, "a-runtime", "activities").map(|s| serde_json::from_str(&s).unwrap());
+    assert_eq!(stored, Some(moved), "nothing waits any more");
+}
+
+#[tokio::test]
+async fn writes_wait_for_a_working_sign_in_without_backing_off() {
+    let (core, fake) = signed_in("a-dead").await;
+    // The write meets a 401, and the refresh is refused: the sign-in is dead.
+    fake.queue("POST /sync/history", vec![reply(401, json!({}))]);
+    fake.queue(
+        "POST /oauth/token",
+        vec![reply(400, json!({"error": "invalid_grant"}))],
+    );
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    let _ = core.trakt_sync().await;
+    assert!(matches!(status(&core).state, TraktState::Reconnect { .. }));
+    let now_ready = core
+        .library()
+        .ready_tracker_intents(key("a-dead"), now(), 100)
+        .unwrap();
+    assert_eq!(now_ready.len(), 1, "no backoff spent on a dead sign-in");
+    // Signed in again: it goes at once.
+    core.set_trakt(Some(record_as("a-dead", "fresh-access", 2)))
+        .await
+        .unwrap();
+    core.trakt_sync().await.unwrap();
+    let sent = fake.seen("POST", "/sync/history");
+    assert_eq!(sent.last().map(|r| r.token.as_str()), Some("fresh-access"));
+    assert_eq!(pending(&core, "a-dead"), 0);
+}
+
+#[tokio::test]
+async fn failed_lookups_leave_the_stop_its_tries() {
+    let (core, fake) = signed_in("a-budget").await;
+    fake.meta_down.store(true, Ordering::SeqCst);
+    let view = PlaybackView::open(&core, Vec::new(), episode(2));
+    // Three lookups fail while it plays (1 s, 2 s, then 4 s apart).
+    view.report_progress(at(50), MINUTES, false);
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    view.report_progress(at(51), MINUTES, false);
+    tokio::time::sleep(Duration::from_millis(2100)).await;
+    view.report_progress(at(52), MINUTES, false);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(fake.scrobbles().is_empty());
+    fake.meta_down.store(false, Ordering::SeqCst);
+    // The first stop fails; the stop still has its own tries.
+    fake.queue("POST /scrobble/stop", vec![down()]);
+    drop(view);
+    fake.wait_within("the stop tried again", 30, |f| {
+        f.seen("POST", "/scrobble/stop").len() == 2
+    })
+    .await;
 }
