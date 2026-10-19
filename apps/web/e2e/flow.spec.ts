@@ -296,9 +296,17 @@ test("an episode row plays that episode, not the resume target", async ({ page }
   await page.keyboard.press("Enter");
   const row = page.locator(`[data-f="ep:${SAMPLE_EPISODE}"]`);
   await expect(row).toBeVisible({ timeout: 30_000 });
+  const title = /\/title\/series\/tt0944947(\?|$)/;
   const toTitle = async () => {
-    for (let i = 0; i < 3 && !/\/title\/series\/tt0944947(\?|$)/.test(page.url()); i++) await page.keyboard.press("Escape");
-    await expect(page).toHaveURL(/\/title\/series\/tt0944947(\?|$)/);
+    // One Escape at a time: each one lands (the address changes) before the
+    // next is decided. A second Escape sent while the first was still on its
+    // way reached the title page and went on to Home.
+    for (let i = 0; i < 3 && !title.test(page.url()); i++) {
+      const from = page.url();
+      await page.keyboard.press("Escape");
+      await expect.poll(() => page.url(), { timeout: 10_000 }).not.toBe(from);
+    }
+    await expect(page).toHaveURL(title);
   };
   try {
     // Primary action: play this episode with the core's pick for it (the
