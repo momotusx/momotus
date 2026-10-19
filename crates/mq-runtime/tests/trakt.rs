@@ -1,0 +1,1287 @@
+//! Trakt in the runtime (plans/m7-trakt.md, P3 to P5), against a local
+//! fake Trakt that also serves the meta addon the episodes are mapped with.
+
+use mq_library::{IntentOp, NewIntent, TrackerKey};
+use mq_runtime::{
+    Core, PlayTarget, PlaybackView, TitleView, TraktConfig, TraktHosts, TraktLoginSnapshot,
+    TraktLoginView, TraktPlayback, TraktRecord, TraktState, TraktView,
+};
+use serde_json::{Value, json};
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+
+const SHOW: &str = "tt100";
+const MOVIE: &str = "tt200";
+
+/// One request as the fake saw it.
+#[derive(Debug, Clone)]
+struct Req {
+    method: String,
+    path: String,
+    query: String,
+    body: Value,
+    at: std::time::Instant,
+}
+
+#[derive(Debug, Clone)]
+struct Reply {
+    status: u16,
+    body: String,
+    delay: Duration,
+}
+
+fn reply(status: u16, body: Value) -> Reply {
+    Reply {
+        status,
+        body: body.to_string(),
+        delay: Duration::ZERO,
+    }
+}
+
+#[derive(Clone)]
+struct Fake {
+    account: String,
+    /// Replies to send first, by "METHOD path".
+    queued: Arc<Mutex<HashMap<String, VecDeque<Reply>>>>,
+    /// Paged lists, by path.
+    lists: Arc<Mutex<HashMap<String, Vec<Value>>>>,
+    /// Trakt shrinks pages to this (0: the asked limit).
+    page: Arc<AtomicUsize>,
+    activities: Arc<Mutex<Value>>,
+    /// The show each TVDB episode id resolves to.
+    shows: Arc<Mutex<HashMap<u64, String>>>,
+    /// Overrides the action a stop answers.
+    stop_action: Arc<Mutex<Option<String>>>,
+    seen: Arc<Mutex<Vec<Req>>>,
+}
+
+impl Fake {
+    fn new(account: &str) -> Self {
+        let shows = (1001..=1006).map(|t| (t, SHOW.to_owned())).collect();
+        Self {
+            account: account.to_owned(),
+            queued: Arc::default(),
+            lists: Arc::default(),
+            page: Arc::default(),
+            activities: Arc::new(Mutex::new(activities("2026-01-01T00:00:00.000Z"))),
+            shows: Arc::new(Mutex::new(shows)),
+            stop_action: Arc::default(),
+            seen: Arc::default(),
+        }
+    }
+
+    fn queue(&self, route: &str, replies: Vec<Reply>) {
+        self.queued
+            .lock()
+            .unwrap()
+            .entry(route.into())
+            .or_default()
+            .extend(replies);
+    }
+
+    fn list(&self, path: &str, items: Vec<Value>) {
+        self.lists.lock().unwrap().insert(path.into(), items);
+    }
+
+    fn seen(&self, method: &str, path: &str) -> Vec<Req> {
+        let seen = self.seen.lock().unwrap();
+        seen.iter()
+            .filter(|r| r.method == method && r.path == path)
+            .cloned()
+            .collect()
+    }
+
+    /// The scrobble actions sent, in order, with their progress.
+    fn scrobbles(&self) -> Vec<(String, f64)> {
+        let seen = self.seen.lock().unwrap();
+        seen.iter()
+            .filter_map(|r| {
+                let action = r.path.strip_prefix("/scrobble/")?;
+                Some((
+                    action.to_owned(),
+                    r.body["progress"].as_f64().unwrap_or(-1.0),
+                ))
+            })
+            .collect()
+    }
+
+    async fn wait_for(&self, what: &str, check: impl Fn(&Fake) -> bool) {
+        for _ in 0..400 {
+            if check(self) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        panic!("waited 10 s for {what}: {:?}", self.scrobbles());
+    }
+
+    fn answer(&self, req: &Req) -> Reply {
+        let route = format!("{} {}", req.method, req.path);
+        if let Some(r) = self
+            .queued
+            .lock()
+            .unwrap()
+            .get_mut(&route)
+            .and_then(VecDeque::pop_front)
+        {
+            return r;
+        }
+        match (req.method.as_str(), req.path.as_str()) {
+            ("GET", "/manifest.json") => reply(
+                200,
+                json!({
+                    "id": "meta", "version": "1.0.0", "name": "Meta",
+                    "types": ["series", "movie"], "resources": ["meta"], "catalogs": [],
+                    "idPrefixes": ["tt"]
+                }),
+            ),
+            ("GET", path) if path.starts_with("/meta/") => reply(200, meta(path)),
+            ("GET", "/sync/last_activities") => reply(200, self.activities.lock().unwrap().clone()),
+            ("GET", "/users/settings") => reply(
+                200,
+                json!({"user": {"username": "tester", "ids": {"slug": "tester", "uuid": self.account}}}),
+            ),
+            ("POST", path) if path.starts_with("/scrobble/") => {
+                let progress = req.body["progress"].as_f64().unwrap_or(0.0);
+                let action = match &path[10..] {
+                    "stop" => self.stop_action.lock().unwrap().clone().unwrap_or_else(|| {
+                        if progress >= 80.0 {
+                            "scrobble"
+                        } else {
+                            "pause"
+                        }
+                        .to_owned()
+                    }),
+                    other => other.to_owned(),
+                };
+                let mut body = json!({"id": 1, "action": action, "progress": progress});
+                if let Some(imdb) = req.body["movie"]["ids"]["imdb"].as_str() {
+                    body["movie"] = json!({"title": "Film", "ids": {"imdb": imdb}});
+                }
+                if let Some(tvdb) = req.body["episode"]["ids"]["tvdb"].as_u64() {
+                    let show = self.shows.lock().unwrap().get(&tvdb).cloned();
+                    body["episode"] = json!({"season": 1, "number": 1, "ids": {"tvdb": tvdb}});
+                    body["show"] = json!({"title": "Show", "ids": {"imdb": show}});
+                }
+                reply(201, body)
+            }
+            ("POST", "/sync/history" | "/sync/history/remove") => reply(
+                201,
+                json!({"added": {"movies": 0, "episodes": 0}, "deleted": {"movies": 0, "episodes": 0},
+                       "not_found": {"movies": [], "episodes": []}}),
+            ),
+            ("POST", "/oauth/revoke") => reply(200, json!({})),
+            ("GET", path) => {
+                let items = self
+                    .lists
+                    .lock()
+                    .unwrap()
+                    .get(path)
+                    .cloned()
+                    .unwrap_or_default();
+                let q = |k: &str| {
+                    req.query
+                        .split('&')
+                        .find_map(|p| p.strip_prefix(&format!("{k}=")))
+                        .and_then(|v| v.parse::<usize>().ok())
+                };
+                let mut limit = q("limit").unwrap_or(100);
+                let cap = self.page.load(Ordering::SeqCst);
+                if cap > 0 {
+                    limit = limit.min(cap);
+                }
+                let page = q("page").unwrap_or(1);
+                let start = (page - 1) * limit;
+                let slice: Vec<Value> = items.into_iter().skip(start).take(limit).collect();
+                reply(200, json!(slice))
+            }
+            _ => reply(404, json!({})),
+        }
+    }
+
+    async fn start(&self) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let fake = self.clone();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let fake = fake.clone();
+                tokio::spawn(async move {
+                    let mut buf = Vec::new();
+                    let mut chunk = [0u8; 8192];
+                    let (head, body) = loop {
+                        let n = socket.read(&mut chunk).await.unwrap_or(0);
+                        if n == 0 {
+                            return;
+                        }
+                        buf.extend_from_slice(&chunk[..n]);
+                        let text = String::from_utf8_lossy(&buf).to_string();
+                        if let Some(end) = text.find("\r\n\r\n") {
+                            let head = text[..end].to_owned();
+                            let len = head
+                                .lines()
+                                .find_map(|l| {
+                                    let (k, v) = l.split_once(':')?;
+                                    k.eq_ignore_ascii_case("content-length")
+                                        .then(|| v.trim().parse::<usize>().ok())?
+                                })
+                                .unwrap_or(0);
+                            if buf.len() >= end + 4 + len {
+                                break (head, text[end + 4..end + 4 + len].to_owned());
+                            }
+                        }
+                    };
+                    let mut words = head.split_whitespace();
+                    let method = words.next().unwrap_or_default().to_owned();
+                    let target = words.next().unwrap_or_default();
+                    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+                    let req = Req {
+                        method,
+                        path: path.to_owned(),
+                        query: query.to_owned(),
+                        body: serde_json::from_str(&body).unwrap_or(Value::Null),
+                        at: std::time::Instant::now(),
+                    };
+                    let answer = fake.answer(&req);
+                    fake.seen.lock().unwrap().push(req);
+                    tokio::time::sleep(answer.delay).await;
+                    let resp = format!(
+                        "HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        answer.status,
+                        answer.body.len(),
+                        answer.body
+                    );
+                    let _ = socket.write_all(resp.as_bytes()).await;
+                });
+            }
+        });
+        base
+    }
+}
+
+/// The meta addon's answers: a show with six episodes (TVDB ids 1001 to
+/// 1006, the fourth without one) and a special, and a movie.
+fn meta(path: &str) -> Value {
+    if path.contains(MOVIE) {
+        return json!({"meta": {"id": MOVIE, "type": "movie", "name": "Film", "runtime": "100 min"}});
+    }
+    let mut videos: Vec<Value> = (1..=6)
+        .map(|e| {
+            let mut v = json!({"id": format!("{SHOW}:1:{e}"), "title": format!("E{e}"), "season": 1, "episode": e});
+            if e != 4 {
+                v["tvdb_id"] = json!(1000 + e);
+            }
+            v
+        })
+        .collect();
+    videos.push(json!({"id": format!("{SHOW}:0:1"), "title": "Special", "season": 0, "episode": 1, "tvdb_id": 9001}));
+    json!({"meta": {"id": SHOW, "type": "series", "name": "Show", "runtime": "40 min", "videos": videos}})
+}
+
+fn activities(at: &str) -> Value {
+    json!({
+        "all": at,
+        "movies": {"watched_at": at, "paused_at": at},
+        "episodes": {"watched_at": at, "paused_at": at},
+    })
+}
+
+fn record(account: &str) -> TraktRecord {
+    let now = mq_library::hlc::now_ms();
+    serde_json::from_value(json!({
+        "accessToken": "access", "refreshToken": "refresh", "createdAtMs": now,
+        "expiresAtMs": now + 7 * 86_400_000, "scope": "public", "account": account,
+        "user": "tester", "revision": 0, "generation": 1
+    }))
+    .unwrap()
+}
+
+/// A core whose Trakt is the fake, with the fake's meta addon installed.
+async fn setup(account: &str) -> (Core, Fake) {
+    let fake = Fake::new(account);
+    let base = fake.start().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_trakt_config(Some(TraktConfig {
+        client_id: "client".into(),
+        redirect_uri: "https://marquee.example/trakt".into(),
+        hosts: TraktHosts {
+            api: base.clone(),
+            auth: base.clone(),
+            local: true,
+        },
+    }));
+    core.install_addon(&format!("{base}/manifest.json"))
+        .await
+        .unwrap();
+    (core, fake)
+}
+
+/// Signed in, with the rounds that follow done (the scheduler's and one
+/// more), so a test's own requests are the only ones after.
+async fn signed_in(account: &str) -> (Core, Fake) {
+    let (core, fake) = setup(account).await;
+    core.set_trakt(Some(record(account))).await.unwrap();
+    core.trakt_sync().await.unwrap();
+    fake.wait_for("the scheduler's round", |f| {
+        f.seen("GET", "/sync/last_activities").len() >= 2
+    })
+    .await;
+    core.trakt_sync().await.unwrap();
+    (core, fake)
+}
+
+fn episode(e: u32) -> PlayTarget {
+    PlayTarget {
+        kind: "series".into(),
+        item_id: SHOW.into(),
+        video_id: format!("{SHOW}:1:{e}"),
+        name: Some("Show".into()),
+        poster: None,
+        season: Some(1),
+        episode: Some(e),
+    }
+}
+
+fn key(account: &str) -> TrackerKey<'_> {
+    TrackerKey {
+        profile: "p",
+        tracker: "trakt",
+        account,
+    }
+}
+
+const MINUTES: u64 = 40 * 60 * 1000;
+
+fn at(percent: u64) -> u64 {
+    MINUTES * percent / 100
+}
+
+fn watched(core: &Core, video: &str) -> bool {
+    core.library()
+        .watched_among("p", &[video])
+        .unwrap()
+        .contains(video)
+}
+
+#[tokio::test]
+async fn start_pause_and_stop_follow_the_player() {
+    let (core, fake) = signed_in("a-follow").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(10), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    // A seek in the same state sends nothing.
+    view.report_progress(at(30), MINUTES, false);
+    view.report_progress(at(31), MINUTES, true);
+    fake.wait_for("pause", |f| f.scrobbles().len() == 2).await;
+    view.report_progress(at(40), MINUTES, false);
+    fake.wait_for("start again", |f| f.scrobbles().len() == 3)
+        .await;
+    view.report_progress(at(50), MINUTES, false);
+    drop(view);
+    fake.wait_for("stop", |f| f.scrobbles().len() == 4).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let sent = fake.scrobbles();
+    let actions: Vec<&str> = sent.iter().map(|(a, _)| a.as_str()).collect();
+    assert_eq!(actions, ["start", "pause", "start", "stop"], "{sent:?}");
+    assert_eq!(sent[0].1, 10.0);
+    assert_eq!(sent[1].1, 31.0);
+    assert_eq!(sent[3].1, 50.0, "the stop carries the last position");
+    let body = &fake.seen("POST", "/scrobble/start")[0].body;
+    assert_eq!(body["episode"]["ids"]["tvdb"], 1001, "{body}");
+    // Trakt answered `pause` (under 80 percent): no mark.
+    assert!(!watched(&core, "tt100:1:1"));
+}
+
+fn actions(fake: &Fake) -> Vec<String> {
+    fake.scrobbles().into_iter().map(|(a, _)| a).collect()
+}
+
+fn pending(core: &Core, account: &str) -> usize {
+    core.library().tracker_pending(key(account)).unwrap().0
+}
+
+fn ready(core: &Core, account: &str) -> Vec<mq_library::Intent> {
+    core.library()
+        .ready_tracker_intents(key(account), i64::MAX, 100)
+        .unwrap()
+}
+
+/// History writes sent, each as (path, its episodes' TVDB ids).
+fn history_writes(fake: &Fake) -> Vec<(String, Vec<u64>)> {
+    let seen = fake.seen.lock().unwrap();
+    seen.iter()
+        .filter(|r| r.method == "POST" && r.path.starts_with("/sync/history"))
+        .map(|r| {
+            let ids = r.body["episodes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e["ids"]["tvdb"].as_u64())
+                .collect();
+            (r.path.clone(), ids)
+        })
+        .collect()
+}
+
+async fn until(what: &str, check: impl Fn() -> bool) {
+    for _ in 0..200 {
+        if check() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("waited 10 s for {what}");
+}
+
+#[tokio::test]
+async fn pause_then_start_sends_only_the_newest() {
+    let (core, fake) = signed_in("a-newest").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    // A burst before the worker runs: only the last state goes.
+    view.report_progress(at(10), MINUTES, true);
+    view.report_progress(at(10), MINUTES, false);
+    view.report_progress(at(11), MINUTES, true);
+    view.report_progress(at(12), MINUTES, false);
+    fake.wait_for("start", |f| !f.scrobbles().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(fake.scrobbles(), [("start".to_owned(), 12.0)]);
+    std::mem::forget(view);
+}
+
+#[tokio::test]
+async fn background_pauses_and_resume_starts() {
+    let (core, fake) = signed_in("a-background").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(20), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    view.report_progress(at(25), MINUTES, false);
+    // Answers once the pause is sent, with the true position: playback may
+    // go on in picture in picture.
+    core.trakt_background().await;
+    assert_eq!(fake.scrobbles().last(), Some(&("pause".to_owned(), 25.0)));
+    view.report_progress(at(26), MINUTES, false);
+    fake.wait_for("start again", |f| f.scrobbles().len() == 3)
+        .await;
+    assert_eq!(actions(&fake), ["start", "pause", "start"]);
+    std::mem::forget(view);
+}
+
+#[tokio::test]
+async fn close_sends_one_stop_after_the_view_is_gone() {
+    let (core, fake) = signed_in("a-close").await;
+    // Under one percent: the close sends nothing.
+    let short = PlaybackView::open(&core, Vec::new(), episode(1));
+    short.report_progress(10_000, MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    drop(short);
+    let view = PlaybackView::open(&core, Vec::new(), episode(2));
+    view.report_progress(at(60), MINUTES, false);
+    fake.wait_for("second start", |f| f.scrobbles().len() == 2)
+        .await;
+    drop(view);
+    fake.wait_for("stop", |f| f.scrobbles().len() == 3).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(actions(&fake), ["start", "start", "stop"]);
+    assert_eq!(fake.scrobbles()[2].1, 60.0);
+}
+
+#[tokio::test]
+async fn a_play_to_the_end_is_held_then_confirmed_by_its_stop() {
+    let (core, fake) = signed_in("a-held").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(2));
+    view.report_progress(at(95), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    // The local mark is set, and its write waits for the session.
+    assert!(watched(&core, "tt100:1:2"));
+    assert_eq!(pending(&core, "a-held"), 1);
+    assert!(ready(&core, "a-held").is_empty(), "held while it plays");
+    core.trakt_sync().await.unwrap();
+    assert!(history_writes(&fake).is_empty());
+    drop(view);
+    fake.wait_for("stop", |f| f.scrobbles().len() == 2).await;
+    until("the held write to go", || pending(&core, "a-held") == 0).await;
+    // Trakt took the play: nothing else is sent.
+    core.trakt_sync().await.unwrap();
+    assert!(
+        history_writes(&fake).is_empty(),
+        "{:?}",
+        history_writes(&fake)
+    );
+    assert!(watched(&core, "tt100:1:2"));
+}
+
+#[tokio::test]
+async fn a_stop_answered_pause_releases_the_held_write() {
+    let (core, fake) = signed_in("a-release").await;
+    *fake.stop_action.lock().unwrap() = Some("pause".into());
+    let view = PlaybackView::open(&core, Vec::new(), episode(2));
+    view.report_progress(at(95), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    drop(view);
+    fake.wait_for("stop", |f| f.scrobbles().len() == 2).await;
+    until("the release", || ready(&core, "a-release").len() == 1).await;
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        history_writes(&fake),
+        [("/sync/history".to_owned(), vec![1002])]
+    );
+    assert_eq!(pending(&core, "a-release"), 0);
+}
+
+#[tokio::test]
+async fn an_unanswered_stop_checks_the_minutes_around_it() {
+    let (core, fake) = signed_in("a-ambiguous").await;
+    let down = || Reply {
+        status: 503,
+        body: "{}".into(),
+        delay: Duration::ZERO,
+    };
+    fake.queue("POST /scrobble/stop", (0..8).map(|_| down()).collect());
+    let three = PlaybackView::open(&core, Vec::new(), episode(3));
+    let five = PlaybackView::open(&core, Vec::new(), episode(5));
+    three.report_progress(at(95), MINUTES, false);
+    five.report_progress(at(95), MINUTES, false);
+    fake.wait_for("starts", |f| f.scrobbles().len() >= 2).await;
+    drop(three);
+    drop(five);
+    fake.wait_for("every stop tried", |f| {
+        f.seen("POST", "/scrobble/stop").len() >= 8
+    })
+    .await;
+    until("both released", || ready(&core, "a-ambiguous").len() == 2).await;
+    // Trakt has episode 3's play in the minutes around its stop, not 5's.
+    let now = mq_library::hlc::now_ms() as i64;
+    fake.list(
+        "/sync/history",
+        vec![json!({
+            "watched_at": iso(now), "type": "episode",
+            "episode": {"season": 1, "number": 3, "ids": {"tvdb": 1003}},
+            "show": {"title": "Show", "ids": {"imdb": SHOW}}
+        })],
+    );
+    core.trakt_sync().await.unwrap();
+    let checks: Vec<String> = fake
+        .seen("GET", "/sync/history")
+        .into_iter()
+        .map(|r| r.query)
+        .filter(|q| q.contains("end_at") && q.contains("page=1&"))
+        .collect();
+    assert_eq!(checks.len(), 2, "{checks:?}");
+    assert_eq!(
+        history_writes(&fake),
+        [("/sync/history".to_owned(), vec![1005])]
+    );
+    assert_eq!(pending(&core, "a-ambiguous"), 0);
+}
+
+/// An RFC 3339 time, as Trakt writes them.
+fn iso(ms: i64) -> String {
+    let secs = ms.div_euclid(1000);
+    let days = secs.div_euclid(86_400);
+    let rem = secs.rem_euclid(86_400);
+    // Days to a civil date (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60,
+        ms.rem_euclid(1000)
+    )
+}
+
+#[tokio::test]
+async fn an_unmark_after_the_start_wins_over_the_scrobble() {
+    let (core, fake) = signed_in("a-unmark").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(95), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    assert!(watched(&core, "tt100:1:1"));
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", false).unwrap();
+    drop(view);
+    fake.wait_for("stop", |f| f.scrobbles().len() == 2).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!watched(&core, "tt100:1:1"), "the user's unmark stays");
+    // And Trakt gets the removal.
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        history_writes(&fake),
+        [("/sync/history/remove".to_owned(), vec![1001])]
+    );
+}
+
+fn status(core: &Core) -> mq_runtime::TraktStatus {
+    TraktView::open(core).snapshot()
+}
+
+#[tokio::test]
+async fn a_wrong_show_answer_marks_it_unmapped() {
+    let (core, fake) = signed_in("a-wrong").await;
+    fake.shows.lock().unwrap().insert(1001, "tt999".into());
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(50), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    until("unmapped", || {
+        view.snapshot().trakt == TraktPlayback::Unmapped
+    })
+    .await;
+    drop(view);
+    // Another episode of that show: nothing is sent for this account.
+    let next = PlaybackView::open(&core, Vec::new(), episode(2));
+    next.report_progress(at(50), MINUTES, false);
+    drop(next);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(actions(&fake), ["start"], "no stop and no second start");
+    let unmapped = status(&core).unmapped;
+    assert_eq!(unmapped.len(), 1, "{unmapped:?}");
+    assert_eq!(unmapped[0].item_id, SHOW);
+    assert_eq!(unmapped[0].reason, "Trakt matched it to another title");
+}
+
+#[tokio::test]
+async fn episodes_trakt_cannot_name_are_unmapped() {
+    let (core, fake) = signed_in("a-unknown").await;
+    // The fourth episode has no TVDB id; the special is season 0.
+    let mut special = episode(1);
+    special.video_id = "tt100:0:1".into();
+    for target in [episode(4), special] {
+        let view = PlaybackView::open(&core, Vec::new(), target);
+        view.report_progress(at(50), MINUTES, false);
+        until("unmapped", || {
+            view.snapshot().trakt == TraktPlayback::Unmapped
+        })
+        .await;
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(fake.scrobbles().is_empty());
+    let reasons: Vec<String> = status(&core)
+        .unmapped
+        .into_iter()
+        .map(|u| u.reason)
+        .collect();
+    assert!(
+        reasons.iter().any(|r| r == "a special (season 0)"),
+        "{reasons:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_episode_change_stops_the_old_session_first() {
+    let (core, fake) = signed_in("a-change").await;
+    let one = PlaybackView::open(&core, Vec::new(), episode(1));
+    one.report_progress(at(90), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    // The player moves on before it closes the old view.
+    let two = PlaybackView::open(&core, Vec::new(), episode(2));
+    two.report_progress(at(1), MINUTES, false);
+    fake.wait_for("stop and start", |f| f.scrobbles().len() == 3)
+        .await;
+    drop(one);
+    two.report_progress(at(40), MINUTES, false);
+    drop(two);
+    fake.wait_for("last stop", |f| f.scrobbles().len() == 4)
+        .await;
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    let sent: Vec<(String, u64)> = fake
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|r| r.path.starts_with("/scrobble/"))
+        .map(|r| {
+            (
+                r.path[10..].to_owned(),
+                r.body["episode"]["ids"]["tvdb"].as_u64().unwrap(),
+            )
+        })
+        .collect();
+    let expected = [
+        ("start", 1001),
+        ("stop", 1001),
+        ("start", 1002),
+        ("stop", 1002),
+    ];
+    assert_eq!(
+        sent,
+        expected.map(|(a, t)| (a.to_owned(), t)),
+        "the old episode's stop goes before the new one's start"
+    );
+}
+
+#[tokio::test]
+async fn writes_held_by_a_killed_process_are_released() {
+    let core = Core::temporary("p").unwrap();
+    let lib = core.library();
+    lib.set_tracker_account("p", "trakt", Some("a-killed"), 1, 1)
+        .unwrap();
+    let intent = NewIntent {
+        key: key("a-killed"),
+        op: IntentOp::Add,
+        watched_ms: 5,
+        session: Some("gone-1"),
+    };
+    lib.put_tracker_intent(SHOW, "tt100:1:1", intent).unwrap();
+    assert!(ready(&core, "a-killed").is_empty());
+    // Trakt's first use in this process releases them.
+    core.set_trakt_config(None);
+    assert_eq!(ready(&core, "a-killed").len(), 1);
+}
+
+#[tokio::test]
+async fn scrobbles_wait_for_the_record() {
+    let (core, fake) = setup("a-wait").await;
+    // Another device signed the profile in; this one has no record yet.
+    core.library()
+        .set_setting("p", "trakt.account", "\"a-wait\"", core.clock())
+        .unwrap();
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    assert_eq!(view.snapshot().trakt, TraktPlayback::ThisDeviceOff);
+    view.report_progress(at(20), MINUTES, false);
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assert!(fake.scrobbles().is_empty());
+    core.set_trakt(Some(record("a-wait"))).await.unwrap();
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    until("on", || view.snapshot().trakt == TraktPlayback::On).await;
+    std::mem::forget(view);
+}
+
+#[tokio::test]
+async fn a_failed_start_is_tried_again_unless_overtaken() {
+    let (core, fake) = signed_in("a-retry").await;
+    let down = || Reply {
+        status: 503,
+        body: "{}".into(),
+        delay: Duration::ZERO,
+    };
+    fake.queue("POST /scrobble/start", vec![down()]);
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(20), MINUTES, false);
+    fake.wait_for("retried start", |f| f.scrobbles().len() == 2)
+        .await;
+    assert_eq!(actions(&fake), ["start", "start"]);
+    // A failed start overtaken by a pause is not tried again.
+    fake.queue("POST /scrobble/start", vec![down()]);
+    let other = PlaybackView::open(&core, Vec::new(), episode(2));
+    other.report_progress(at(20), MINUTES, false);
+    fake.wait_for("third start", |f| f.scrobbles().len() == 3)
+        .await;
+    other.report_progress(at(21), MINUTES, true);
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let starts_of_two = fake
+        .seen("POST", "/scrobble/start")
+        .iter()
+        .filter(|r| r.body["episode"]["ids"]["tvdb"] == 1002)
+        .count();
+    assert_eq!(starts_of_two, 1, "{:?}", fake.scrobbles());
+    std::mem::forget((view, other));
+}
+
+#[tokio::test]
+async fn a_refused_scrobble_is_not_tried_again() {
+    let (core, fake) = signed_in("a-limit").await;
+    fake.queue(
+        "POST /scrobble/start",
+        vec![Reply {
+            status: 420,
+            body: String::new(),
+            delay: Duration::ZERO,
+        }],
+    );
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(20), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    assert_eq!(actions(&fake), ["start"]);
+    assert_eq!(
+        status(&core).last_error.as_deref(),
+        Some("status 420 (account limit)")
+    );
+    std::mem::forget(view);
+}
+
+fn now() -> i64 {
+    mq_library::hlc::now_ms() as i64
+}
+
+fn episode_row(e: u64, at_ms: i64) -> Value {
+    json!({
+        "watched_at": iso(at_ms), "type": "episode",
+        "episode": {"season": 1, "number": e, "ids": {"tvdb": 1000 + e}},
+        "show": {"title": "Show", "ids": {"imdb": SHOW, "trakt": 77}}
+    })
+}
+
+fn movie_row(imdb: &str, at_ms: i64) -> Value {
+    json!({
+        "watched_at": iso(at_ms), "last_watched_at": iso(at_ms), "type": "movie",
+        "movie": {"title": "Film", "ids": {"imdb": imdb}}
+    })
+}
+
+fn state(core: &Core, account: &str, name: &str) -> Option<String> {
+    core.library().tracker_state(key(account), name).unwrap()
+}
+
+#[tokio::test]
+async fn hand_marks_go_out_in_one_batch_and_unmarks_as_removals() {
+    let (core, fake) = signed_in("a-hand").await;
+    let title = TitleView::open(&core, "series", SHOW);
+    for e in 1..=3 {
+        title.set_watched(&format!("tt100:1:{e}"), true).unwrap();
+    }
+    assert_eq!(pending(&core, "a-hand"), 3);
+    let report = core.trakt_sync().await.unwrap();
+    assert_eq!(
+        history_writes(&fake),
+        [("/sync/history".to_owned(), vec![1001, 1002, 1003])]
+    );
+    let body = &fake.seen("POST", "/sync/history")[0].body;
+    assert!(body["episodes"][0]["watched_at"].is_string(), "{body}");
+    assert_eq!((report.pushed, report.pending), (3, 0));
+    title.set_watched("tt100:1:2", false).unwrap();
+    // A mark that does not flip queues nothing.
+    title.set_watched("tt100:1:1", true).unwrap();
+    assert_eq!(pending(&core, "a-hand"), 1);
+    core.trakt_sync().await.unwrap();
+    let writes = history_writes(&fake);
+    assert_eq!(writes[1], ("/sync/history/remove".to_owned(), vec![1002]));
+    let body = &fake.seen("POST", "/sync/history/remove")[0].body;
+    assert!(body["episodes"][0].get("watched_at").is_none(), "{body}");
+}
+
+#[tokio::test]
+async fn history_not_found_is_unmapped_and_a_200_acknowledges() {
+    let (core, fake) = signed_in("a-notfound").await;
+    fake.queue(
+        "POST /sync/history",
+        vec![reply(
+            200,
+            json!({"added": {"episodes": 1}, "not_found": {"movies": [], "episodes": [{"ids": {"tvdb": 1002}}]}}),
+        )],
+    );
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    title.set_watched("tt100:1:2", true).unwrap();
+    let report = core.trakt_sync().await.unwrap();
+    assert_eq!((report.pushed, report.pending, report.unmapped), (1, 0, 1));
+    let unmapped = status(&core).unmapped;
+    assert_eq!(unmapped[0].item_id, SHOW);
+    assert_eq!(unmapped[0].reason, "Trakt does not know it");
+}
+
+#[tokio::test]
+async fn a_failed_history_write_waits_and_an_old_one_shows_failing() {
+    let (core, fake) = signed_in("a-failing").await;
+    let down = Reply {
+        status: 503,
+        body: "{}".into(),
+        delay: Duration::ZERO,
+    };
+    fake.queue("POST /sync/history", vec![down]);
+    let tracker = Some((key("a-failing"), now() - 31 * 60 * 1000));
+    core.library()
+        .set_watched_by_hand("p", SHOW, "tt100:1:1", true, core.clock(), tracker)
+        .unwrap();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(pending(&core, "a-failing"), 1, "kept for a retry");
+    let waiting = core
+        .library()
+        .ready_tracker_intents(key("a-failing"), now(), 10)
+        .unwrap();
+    assert!(waiting.is_empty(), "not before its retry time");
+    match status(&core).state {
+        TraktState::Failing { reason, .. } => {
+            assert_eq!(reason, "Trakt did not answer: status 503")
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_round_reads_history_from_its_cursor_day() {
+    let (core, fake) = signed_in("a-history").await;
+    let cursor = state(&core, "a-history", "history_day").expect("set by the first round");
+    fake.list(
+        "/sync/history",
+        vec![
+            episode_row(1, now() - 3_600_000),
+            movie_row(MOVIE, now() - 7_200_000),
+        ],
+    );
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    let report = core.trakt_sync().await.unwrap();
+    let asked = fake.seen("GET", "/sync/history");
+    assert!(
+        asked[0]
+            .query
+            .starts_with(&format!("start_at={cursor}T00:00:00.000Z&page=1")),
+        "{}",
+        asked[0].query
+    );
+    assert!(watched(&core, "tt100:1:1") && watched(&core, MOVIE));
+    assert_eq!(report.applied, 2);
+    // Nothing moved: no history read.
+    let before = fake.seen("GET", "/sync/history").len();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(fake.seen("GET", "/sync/history").len(), before);
+}
+
+#[tokio::test]
+async fn a_failed_page_keeps_the_cursor() {
+    let (core, fake) = signed_in("a-page").await;
+    fake.page.store(1, Ordering::SeqCst);
+    let rows = vec![
+        episode_row(1, now() - 3_600_000),
+        episode_row(2, now() - 1_800_000),
+    ];
+    fake.list("/sync/history", rows.clone());
+    let stored = state(&core, "a-page", "activities");
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    let down = Reply {
+        status: 503,
+        body: "{}".into(),
+        delay: Duration::ZERO,
+    };
+    fake.queue(
+        "GET /sync/history",
+        vec![reply(200, json!([rows[0]])), down],
+    );
+    assert!(core.trakt_sync().await.is_err());
+    assert!(
+        !watched(&core, "tt100:1:1"),
+        "nothing applied from a partial read"
+    );
+    assert_eq!(
+        state(&core, "a-page", "activities"),
+        stored,
+        "the cursor stayed"
+    );
+    core.trakt_sync().await.unwrap();
+    assert!(watched(&core, "tt100:1:1") && watched(&core, "tt100:1:2"));
+}
+
+#[tokio::test]
+async fn first_connect_reads_every_page_and_resumes() {
+    let (core, fake) = setup("a-first").await;
+    fake.page.store(2, Ordering::SeqCst);
+    let t = now() - 86_400_000;
+    fake.list(
+        "/sync/watched/movies",
+        ["tt200", "tt201", "tt202"]
+            .map(|m| movie_row(m, t))
+            .to_vec(),
+    );
+    fake.list(
+        "/sync/watched/shows",
+        vec![json!({"last_updated_at": "2026-10-01T00:00:00.000Z",
+                    "show": {"title": "Show", "ids": {"trakt": 77, "imdb": SHOW}}})],
+    );
+    fake.list(
+        "/sync/history/shows/77",
+        [1, 2, 3, 5, 6].map(|e| episode_row(e, t)).to_vec(),
+    );
+    // The first show history read fails: the import stops there.
+    let down = Reply {
+        status: 503,
+        body: "{}".into(),
+        delay: Duration::ZERO,
+    };
+    fake.queue("GET /sync/history/shows/77", vec![down]);
+    core.set_trakt(Some(record("a-first"))).await.unwrap();
+    let _ = core.trakt_sync().await;
+    let _ = core.trakt_sync().await;
+    assert!(
+        ["tt200", "tt201", "tt202"]
+            .iter()
+            .all(|m| watched(&core, m))
+    );
+    for e in [1, 2, 3, 5, 6] {
+        assert!(watched(&core, &format!("tt100:1:{e}")), "episode {e}");
+    }
+    assert_eq!(
+        state(&core, "a-first", "show:77").as_deref(),
+        Some("2026-10-01T00:00:00.000Z")
+    );
+    // Every page: 5 rows at 2 a page is 3 pages and an empty one.
+    let pages = fake
+        .seen("GET", "/sync/history/shows/77")
+        .iter()
+        .filter(|r| r.query.contains("page="))
+        .count();
+    assert!(pages >= 4, "{pages}");
+    // A later reconcile skips the unchanged show.
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    let before = fake.seen("GET", "/sync/history/shows/77").len();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(fake.seen("GET", "/sync/history/shows/77").len(), before);
+}
+
+#[tokio::test]
+async fn a_backdated_play_is_reconciled_with_episode_ids() {
+    let (core, fake) = signed_in("a-backdated").await;
+    // The watched time moved, but no row is newer than the last one seen:
+    // a play added in the past.
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    fake.list(
+        "/sync/watched/shows",
+        vec![json!({"last_updated_at": iso(now()),
+                    "show": {"title": "Show", "ids": {"trakt": 77, "imdb": SHOW}}})],
+    );
+    fake.list(
+        "/sync/history/shows/77",
+        vec![episode_row(2, 1_000_000_000_000)],
+    );
+    core.trakt_sync().await.unwrap();
+    assert!(watched(&core, "tt100:1:2"));
+}
+
+#[tokio::test]
+async fn rows_dated_ahead_wait() {
+    let (core, fake) = signed_in("a-future").await;
+    let today = state(&core, "a-future", "history_day").unwrap();
+    fake.list(
+        "/sync/history",
+        vec![
+            episode_row(1, now() - 3_600_000),
+            episode_row(3, now() + 86_400_000),
+        ],
+    );
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    core.trakt_sync().await.unwrap();
+    assert!(watched(&core, "tt100:1:1"));
+    assert!(!watched(&core, "tt100:1:3"), "a row dated tomorrow waits");
+    assert_eq!(
+        state(&core, "a-future", "history_day"),
+        Some(today),
+        "not past it"
+    );
+    // In a reconcile, the show stays open to be read again.
+    fake.list("/sync/history", vec![]);
+    *fake.activities.lock().unwrap() = activities(&iso(now() + 1000));
+    fake.list(
+        "/sync/watched/shows",
+        vec![json!({"last_updated_at": iso(now()),
+                    "show": {"title": "Show", "ids": {"trakt": 78, "imdb": SHOW}}})],
+    );
+    fake.list(
+        "/sync/history/shows/78",
+        vec![episode_row(5, now() + 86_400_000)],
+    );
+    core.trakt_sync().await.unwrap();
+    assert!(!watched(&core, "tt100:1:5"));
+    assert_eq!(state(&core, "a-future", "show:78"), None);
+}
+
+#[tokio::test]
+async fn own_pauses_do_not_come_back_and_others_resume() {
+    let (core, fake) = signed_in("a-echo").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(2));
+    view.report_progress(at(40), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    view.report_progress(at(40), MINUTES, true);
+    fake.wait_for("pause", |f| f.scrobbles().len() == 2).await;
+    std::mem::forget(view);
+    // Episode 5 has older local progress with its duration (30 minutes).
+    let old = mq_library::Hlc {
+        wall_ms: (now() - 86_400_000) as u64,
+        counter: 0,
+        device: 1,
+    }
+    .encode();
+    let row = mq_library::ProgressRow {
+        video_id: "tt100:1:5",
+        item_id: SHOW,
+        position_ms: 60_000,
+        duration_ms: 1_800_000,
+        updated_ms: now() - 86_400_000,
+    };
+    core.library().set_progress("p", row, old.as_str()).unwrap();
+    let item = |e: u64, progress: f64| {
+        let mut row = episode_row(e, now());
+        row["progress"] = json!(progress);
+        row["paused_at"] = json!(iso(now()));
+        row
+    };
+    fake.list(
+        "/sync/playback",
+        vec![item(2, 40.3), item(3, 50.0), item(5, 60.0), item(6, 1.5)],
+    );
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    core.trakt_sync().await.unwrap();
+    let progress = |v: &str| core.library().progress("p", v).unwrap();
+    assert_eq!(
+        progress("tt100:1:2"),
+        Some((at(40) as i64, MINUTES as i64)),
+        "own pause"
+    );
+    // No local duration: the meta's 40 minutes, 97 percent of it.
+    assert_eq!(progress("tt100:1:3"), Some((1_164_000, 2_400_000)));
+    assert_eq!(progress("tt100:1:5"), Some((1_080_000, 1_800_000)));
+    assert_eq!(progress("tt100:1:6"), None, "under 2 percent");
+}
+
+#[tokio::test]
+async fn without_an_app_every_trakt_op_says_not_configured() {
+    // Tests build with no MARQUEE_TRAKT_CLIENT_ID: the build's default.
+    let core = Core::temporary("p").unwrap();
+    let refused = core.set_trakt(Some(record("x"))).await;
+    assert!(matches!(
+        refused,
+        Err(mq_runtime::CoreError::TraktNotConfigured)
+    ));
+    core.set_trakt(None).await.unwrap();
+    let sync = core.trakt_sync().await;
+    assert!(matches!(
+        sync,
+        Err(mq_runtime::CoreError::TraktNotConfigured)
+    ));
+    assert_eq!(status(&core).state, TraktState::NotConfigured);
+    let login = TraktLoginView::open(&core);
+    assert_eq!(login.snapshot(), TraktLoginSnapshot::NotConfigured);
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    assert_eq!(view.snapshot().trakt, TraktPlayback::Off);
+}
+
+#[tokio::test]
+async fn a_device_code_sign_in_offers_the_record_until_stored() {
+    let (core, fake) = setup("a-login").await;
+    fake.queue(
+        "POST /oauth/device/code",
+        vec![reply(
+            200,
+            json!({"device_code": "dev", "user_code": "ABCD1234",
+                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+        )],
+    );
+    let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
+                        "created_at": now() / 1000, "scope": "public", "token_type": "bearer"});
+    fake.queue(
+        "POST /oauth/device/token",
+        vec![
+            reply(400, json!({})),
+            reply(429, json!({})),
+            reply(200, tokens),
+        ],
+    );
+    let login = TraktLoginView::open(&core);
+    until("the code", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Code { ref user_code, .. } if user_code == "ABCD1234")
+    })
+    .await;
+    for _ in 0..300 {
+        if login.snapshot() != TraktLoginSnapshot::Starting
+            && !matches!(login.snapshot(), TraktLoginSnapshot::Code { .. })
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        login.snapshot(),
+        TraktLoginSnapshot::Done {
+            user: "tester".into()
+        }
+    );
+    // Slowed down once: the third poll came at least 5 s after the second.
+    let polls = fake.seen("POST", "/oauth/device/token");
+    assert_eq!(polls.len(), 3);
+    let gap = polls[2].at - polls[1].at;
+    assert!(gap >= Duration::from_secs(5), "{gap:?}");
+    let held = status(&core);
+    assert_eq!(
+        (held.state.clone(), held.user.as_deref()),
+        (TraktState::Connected, Some("tester"))
+    );
+    let record = held.record.expect("offered to the app");
+    assert_eq!(record.account, "a-login");
+    core.set_trakt(Some(record)).await.unwrap();
+    assert_eq!(status(&core).record, None, "stored");
+}
+
+#[tokio::test]
+async fn signing_out_drops_the_accounts_work_and_keeps_the_library() {
+    let (core, fake) = signed_in("a-out").await;
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    assert_eq!(pending(&core, "a-out"), 1);
+    assert!(state(&core, "a-out", "history_day").is_some());
+    // Another device of the profile is still signed in.
+    core.library()
+        .set_setting("p", "trakt.device.42", "\"a-out\"", core.clock())
+        .unwrap();
+    core.trakt_sign_out().await.unwrap();
+    assert_eq!(fake.seen("POST", "/oauth/revoke").len(), 1);
+    assert_eq!(pending(&core, "a-out"), 0);
+    assert_eq!(state(&core, "a-out", "history_day"), None);
+    assert!(watched(&core, "tt100:1:1"), "the library keeps its marks");
+    assert_eq!(status(&core).state, TraktState::ThisDeviceOff);
+    // The last device out: the profile stops using Trakt.
+    core.library()
+        .set_setting("p", "trakt.device.42", "null", core.clock())
+        .unwrap();
+    core.trakt_sign_out().await.unwrap();
+    assert_eq!(status(&core).state, TraktState::Off);
+}
+
+#[tokio::test]
+async fn a_scrobble_racing_a_pull_lands_once() {
+    let (core, fake) = signed_in("a-race").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(95), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    // Trakt also has an older play of it from another app, and another
+    // episode; the stop answers while the round runs.
+    fake.list(
+        "/sync/history",
+        vec![
+            episode_row(1, now() - 3_600_000),
+            episode_row(2, now() - 1_800_000),
+        ],
+    );
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    let answer = json!({"action": "scrobble", "progress": 95.0,
+                        "episode": {"ids": {"tvdb": 1001}}, "show": {"ids": {"imdb": SHOW}}});
+    fake.queue(
+        "POST /scrobble/stop",
+        vec![Reply {
+            status: 201,
+            body: answer.to_string(),
+            delay: Duration::from_millis(1500),
+        }],
+    );
+    drop(view);
+    let report = core.trakt_sync().await.unwrap();
+    fake.wait_for("stop", |f| f.scrobbles().len() == 2).await;
+    until("the held write to go", || pending(&core, "a-race") == 0).await;
+    core.trakt_sync().await.unwrap();
+    assert_eq!(actions(&fake), ["start", "stop"]);
+    assert!(
+        history_writes(&fake).is_empty(),
+        "the play went once, as the scrobble"
+    );
+    assert!(watched(&core, "tt100:1:1") && watched(&core, "tt100:1:2"));
+    assert!(report.applied >= 1, "{report:?}");
+}
+
+#[tokio::test]
+async fn another_devices_sign_in_shows_this_device_off() {
+    let (core, _fake) = setup("a-other").await;
+    assert_eq!(status(&core).state, TraktState::Off);
+    core.library()
+        .set_setting("p", "trakt.account", "\"a-other\"", core.clock())
+        .unwrap();
+    assert_eq!(status(&core).state, TraktState::ThisDeviceOff);
+}

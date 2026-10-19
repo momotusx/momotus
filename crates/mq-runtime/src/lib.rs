@@ -8,6 +8,7 @@ mod debrid;
 pub mod live;
 mod profiles;
 pub mod segments;
+mod trakt;
 pub mod views;
 
 pub use crate::core::{Core, CoreConfig, CoreError};
@@ -16,8 +17,13 @@ pub use crate::debrid::{
     DebridRecord, DebridSnapshot, DebridTombstone, DebridView, RestoreAnswer,
 };
 pub use crate::profiles::{MAX_PROFILES, ProfileError};
+pub use crate::trakt::{
+    TraktConfig, TraktImporting, TraktLoginSnapshot, TraktLoginView, TraktPlayback, TraktReport,
+    TraktState, TraktStatus, TraktUnmapped, TraktView,
+};
 pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;
+pub use mq_tracking::trakt::{Hosts as TraktHosts, TraktRecord};
 pub use views::addon_catalog::{
     AddonCatalogSnapshot, AddonCatalogView, AddonList, CINEMETA, Configuration, Installed,
     ListState, ListedAddon, ListedEntry, ListedError, ListedFailure,

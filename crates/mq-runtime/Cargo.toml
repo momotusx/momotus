@@ -24,6 +24,7 @@ mq-debrid = { path = "../mq-debrid" }
 mq-import = { path = "../mq-import" }
 mq-media = { path = "../mq-media" }
 mq-sync = { path = "../mq-sync" }
+mq-tracking = { path = "../mq-tracking" }
 mq-engine = { path = "../mq-engine", optional = true }
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }

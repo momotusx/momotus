@@ -270,13 +270,26 @@ impl TitleView {
         Ok(())
     }
 
+    /// Marks or unmarks by hand. With Trakt connected, a mark that flips
+    /// queues the write for Trakt in the same transaction.
     pub fn set_watched(&self, video_id: &str, watched: bool) -> Result<(), crate::CoreError> {
-        self.core.library().set_watched(
-            self.core.profile(),
+        let (library, profile) = (self.core.library(), self.core.profile());
+        let account = library.tracker_account(profile, crate::trakt::TRACKER)?;
+        let tracker = account.as_ref().map(|(account, _)| {
+            let key = mq_library::TrackerKey {
+                profile,
+                tracker: crate::trakt::TRACKER,
+                account,
+            };
+            (key, mq_library::hlc::now_ms() as i64)
+        });
+        library.set_watched_by_hand(
+            profile,
             &self.id,
             video_id,
             watched,
             self.core.clock(),
+            tracker,
         )?;
         Ok(())
     }

@@ -87,6 +87,10 @@ pub struct PlaybackSnapshot {
     /// matched the release; null keeps the app's own timing.
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub next_at_ms: Option<u64>,
+    /// Trakt's side: `on` scrobbles, `unmapped` (Trakt cannot name it),
+    /// `off`, `thisDeviceOff` (the profile uses Trakt, this device is not
+    /// signed in).
+    pub trakt: crate::trakt::TraktPlayback,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -195,6 +199,8 @@ pub struct PlaybackView {
     state: Arc<Mutex<State>>,
     /// The resolve task and its run.
     task: Mutex<Option<(u64, JoinHandle<()>)>>,
+    /// The Trakt session; dropped after the last save, which sends the stop.
+    trakt: Option<crate::trakt::Scrobble>,
 }
 
 impl State {
@@ -216,6 +222,7 @@ impl State {
                 binge_group: None,
                 segments: Vec::new(),
                 next_at_ms: None,
+                trakt: crate::trakt::TraktPlayback::Off,
             },
             candidates,
             next: 0,
@@ -257,13 +264,33 @@ impl PlaybackView {
             })
             .map(|(pos, _)| pos as u64);
         let state = State::new(candidates, resume_ms);
+        let snapshot = SharedObservable::new(state.snapshot.clone());
+        let shared = Arc::new(Mutex::new(state));
+        let report = {
+            let (shared, snapshot) = (Arc::downgrade(&shared), snapshot.clone());
+            move |trakt| {
+                if let Some(state) = shared.upgrade() {
+                    let mut s = lock(&state);
+                    s.snapshot.trakt = trakt;
+                    snapshot.set(s.snapshot.clone());
+                }
+            }
+        };
+        let session = crate::trakt::ScrobbleTarget {
+            kind: target.kind.clone(),
+            item_id: target.item_id.clone(),
+            video_id: target.video_id.clone(),
+            name: target.name.clone().unwrap_or_default(),
+        };
+        let trakt = core.trakt_scrobble(session, Box::new(report));
         let view = Self {
             core: core.clone(),
             target: Arc::new(target),
             plays: plays.into(),
-            snapshot: SharedObservable::new(state.snapshot.clone()),
-            state: Arc::new(Mutex::new(state)),
+            snapshot,
+            state: shared,
             task: Mutex::new(None),
+            trakt,
         };
         view.spawn_resolve();
         view
@@ -369,9 +396,13 @@ impl PlaybackView {
         }
     }
 
-    /// Player position report. Saved at most every few seconds; the last
-    /// report is always saved when the view closes.
-    pub fn report_progress(&self, position_ms: u64, duration_ms: u64) {
+    /// Player position report, `paused` when the player is paused. Saved at
+    /// most every few seconds; the last report is always saved when the
+    /// view closes. Trakt gets start and pause from it.
+    pub fn report_progress(&self, position_ms: u64, duration_ms: u64, paused: bool) {
+        if let Some(trakt) = &self.trakt {
+            trakt.progress(position_ms, duration_ms, paused);
+        }
         let due = {
             let mut s = lock(&self.state);
             s.last = Some((position_ms, duration_ms));
@@ -394,7 +425,11 @@ impl PlaybackView {
             s.saved_at = Some(Instant::now());
             (pos, dur, first)
         };
-        if let Err(e) = save_progress(&self.core, &self.target, position_ms, duration_ms, first) {
+        let saved = save_progress(&self.core, &self.target, position_ms, duration_ms, first);
+        if let (Ok(true), Some(trakt)) = (&saved, &self.trakt) {
+            trakt.finished(&self.core);
+        }
+        if let Err(e) = saved {
             tracing::warn!("progress save failed: {e}");
         }
     }
@@ -564,13 +599,14 @@ fn attempt(stream: &ParsedStream, error: &str) -> Attempt {
     }
 }
 
+/// Saves a position; returns whether it marked the video watched.
 fn save_progress(
     core: &Core,
     target: &PlayTarget,
     position_ms: u64,
     duration_ms: u64,
     first: bool,
-) -> Result<(), crate::CoreError> {
+) -> Result<bool, crate::CoreError> {
     let (library, profile) = (core.library(), core.profile());
     // Continue Watching needs a name and poster for titles outside the library.
     if first
@@ -599,7 +635,8 @@ fn save_progress(
         },
         core.clock(),
     )?;
-    if duration_ms > 0 && position_ms as f64 >= duration_ms as f64 * FINISHED_RATIO {
+    let finished = duration_ms > 0 && position_ms as f64 >= duration_ms as f64 * FINISHED_RATIO;
+    if finished {
         library.set_watched(
             profile,
             &target.item_id,
@@ -608,7 +645,7 @@ fn save_progress(
             core.clock(),
         )?;
     }
-    Ok(())
+    Ok(finished)
 }
 
 /// Tries candidates from `state.next` until one answers, then publishes its

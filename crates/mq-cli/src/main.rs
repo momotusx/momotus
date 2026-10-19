@@ -478,7 +478,7 @@ async fn play(
         },
     )
     .await?;
-    playback.report_progress(ready.resume_ms.unwrap_or(0) + seconds * 1000, 0);
+    playback.report_progress(ready.resume_ms.unwrap_or(0) + seconds * 1000, 0, false);
     let subs = until(Duration::from_secs(10), || {
         let s = playback.snapshot();
         (!s.subtitles_pending).then_some(s.subtitles)

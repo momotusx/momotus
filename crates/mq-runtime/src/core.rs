@@ -34,6 +34,10 @@ pub enum CoreError {
     Torrent(String),
     #[error("debrid: {0}")]
     Debrid(String),
+    #[error("Trakt is not set up in this build")]
+    TraktNotConfigured,
+    #[error("Trakt: {0}")]
+    Trakt(String),
 }
 
 #[derive(Debug, Clone)]
@@ -89,6 +93,8 @@ struct Device {
     sync_gate: Arc<Mutex<()>>,
     /// PIN attempts, one throttle for every session and profile.
     pins: std::sync::Mutex<crate::profiles::Throttle>,
+    /// Trakt connections, sessions and rounds, started on first use.
+    trakt: std::sync::OnceLock<Arc<crate::trakt::Trakt>>,
 }
 
 /// Devices open in this process, by canonical data directory.
@@ -113,6 +119,7 @@ impl Device {
             clock,
             sync_gate: Arc::default(),
             pins: std::sync::Mutex::new(crate::profiles::Throttle::new(std::time::Instant::now())),
+            trakt: std::sync::OnceLock::new(),
         }))
     }
 
@@ -213,6 +220,13 @@ impl Core {
 
     pub(crate) fn pins(&self) -> &std::sync::Mutex<crate::profiles::Throttle> {
         &self.inner.device.pins
+    }
+
+    pub(crate) fn trakt_service(&self) -> &Arc<crate::trakt::Trakt> {
+        self.inner
+            .device
+            .trakt
+            .get_or_init(|| crate::trakt::Trakt::new(self.http().clone(), self.library()))
     }
 
     /// A fresh hlc. Local library writes take `clock()` instead, so they are
@@ -321,7 +335,7 @@ impl Core {
     /// Each episode's TVDB id by video id, from the same meta answer (served
     /// from the addon cache after the first look). stremio-core's `Video`
     /// has no such field, so it is read from the raw JSON. Metas that do not
-    /// carry it give an empty map.
+    /// carry it give an empty map. A number or a numeric string is read.
     pub async fn episode_tvdb_ids(
         &self,
         id: &str,
@@ -335,7 +349,11 @@ impl Core {
             .as_array()
             .into_iter()
             .flatten()
-            .filter_map(|v| Some((v["id"].as_str()?.to_owned(), v["tvdb_id"].as_u64()?)))
+            .filter_map(|v| {
+                let id = &v["tvdb_id"];
+                let tvdb = id.as_u64().or_else(|| id.as_str()?.trim().parse().ok())?;
+                Some((v["id"].as_str()?.to_owned(), tvdb))
+            })
             .collect())
     }
 

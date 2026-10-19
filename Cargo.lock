@@ -2716,6 +2716,7 @@ dependencies = [
  "mq-server",
  "mq-streams",
  "mq-sync",
+ "mq-tracking",
  "rusqlite",
  "serde",
  "serde_json",

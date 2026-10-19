@@ -1,0 +1,573 @@
+//! One round (plans/m7-trakt.md 4.7): what moved on Trakt comes into the
+//! library through `import_plays` and `import_resume_points`, then the
+//! outbox goes out. Cursors move in the transaction that applies their rows,
+//! and only once every fetch they depend on worked.
+
+use super::map::{self, Mapper, TraktIds};
+use super::{Conn, Trakt};
+use crate::Core;
+use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
+use mq_library::hlc::now_ms;
+use mq_library::{ImportedPlay, ImportedResume, Intent, IntentOp, TrackerKey};
+use mq_tracking::trakt::call::{self, CallError};
+use mq_tracking::trakt::{Api, AuthError, Gate};
+use serde::Serialize;
+use serde_json::{Value, json};
+
+/// Trakt's largest page.
+const PAGE: u32 = 250;
+/// History writes per request.
+const BATCH: usize = 100;
+/// The reconcile runs at least this often.
+const RECONCILE_EVERY_MS: i64 = 24 * 60 * 60 * 1000;
+/// An ambiguous stop is a play already on Trakt when one lies this close.
+const CHECK_WINDOW_MS: i64 = 3 * 60 * 1000;
+/// Own sends this close to a pulled resume point make it an echo.
+const ECHO_MS: i64 = 2 * 60 * 1000;
+const ECHO_POINTS: f64 = 1.0;
+/// A pulled resume point under this percent is skipped.
+const MIN_PERCENT: f64 = 2.0;
+/// Rows dated further ahead are left for a later round.
+const FUTURE_SLACK_MS: i64 = 10 * 60 * 1000;
+
+/// What one round did (`traktSync`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+pub struct TraktReport {
+    /// Rows read from Trakt.
+    pub pulled: u32,
+    /// Marks and resume points that changed the library.
+    pub applied: u32,
+    /// Writes Trakt took.
+    pub pushed: u32,
+    /// Writes still waiting.
+    pub pending: u32,
+    /// Items listed as unmapped in this round.
+    pub unmapped: u32,
+}
+
+/// Runs one round for the profile. One at a time; a sign-out or a new
+/// sign-in meanwhile drops what it would write.
+pub(super) async fn round(
+    core: &Core,
+    trakt: &Trakt,
+    conn: &Conn,
+) -> Result<TraktReport, CallError> {
+    let _turn = conn.round.lock().await;
+    let Some((api, _)) = trakt.api() else {
+        return Err(CallError::Transient(
+            "Trakt is not set up in this build".into(),
+        ));
+    };
+    let generation = conn.auth.generation().await;
+    let account = conn
+        .auth
+        .account()
+        .await
+        .ok_or(CallError::Auth(AuthError::Off))?;
+    let gate = trakt.gate(&account);
+    let mut round = Round {
+        core,
+        conn,
+        api: &api,
+        gate: &gate,
+        key: conn.key(&account),
+        generation,
+        mapper: Mapper::new(core),
+        report: TraktReport::default(),
+        now: now_ms() as i64,
+    };
+    let result = round.run().await;
+    match &result {
+        Ok(()) | Err(CallError::Auth(AuthError::Off)) => {}
+        Err(e) => conn.failed(&super::reason(e)),
+    }
+    conn.set_importing(None);
+    let pending = core.library().tracker_pending(round.key).map_or(0, |p| p.0);
+    round.report.pending = pending as u32;
+    result.map(|()| round.report)
+}
+
+struct Round<'a> {
+    core: &'a Core,
+    conn: &'a Conn,
+    api: &'a Api,
+    gate: &'a Gate,
+    key: TrackerKey<'a>,
+    generation: u64,
+    mapper: Mapper<'a>,
+    report: TraktReport,
+    now: i64,
+}
+
+impl Round<'_> {
+    async fn run(&mut self) -> Result<(), CallError> {
+        let acts = self.get("/sync/last_activities").await?;
+        let stored = self.state_json("activities");
+        let first = stored.is_null();
+        let moved = |kind: &str, field: &str| acts[kind][field] != stored[kind][field];
+        let reconciled = self
+            .state("reconciled_ms")
+            .and_then(|v| v.parse::<i64>().ok());
+        let mut reconcile = reconciled.is_none_or(|at| self.now - at > RECONCILE_EVERY_MS);
+        if !first && (moved("movies", "watched_at") || moved("episodes", "watched_at")) {
+            let previous = ["movies", "episodes"]
+                .iter()
+                .filter_map(|k| ms(&stored[k]["watched_at"]))
+                .max();
+            if !self.history(previous).await? {
+                // Moved with no row at or after the previous mark: a play
+                // dated in the past, or a removal.
+                reconcile = true;
+            }
+        }
+        if reconcile {
+            self.reconcile().await?;
+        }
+        if moved("movies", "paused_at") || moved("episodes", "paused_at") {
+            self.playback().await?;
+        }
+        self.fence()?;
+        self.core
+            .library()
+            .set_tracker_state(self.key, "activities", &acts.to_string())
+            .map_err(store)?;
+        // The reads worked; a write that fails next says so itself.
+        self.conn.ok();
+        self.drain().await;
+        Ok(())
+    }
+
+    /// History from the cursor's day, every page. Returns whether a row lies
+    /// at or after `previous`.
+    async fn history(&mut self, previous: Option<i64>) -> Result<bool, CallError> {
+        let cursor = self.state("history_day").unwrap_or_else(|| day(self.now));
+        let path = format!("/sync/history?start_at={cursor}T00:00:00.000Z");
+        let rows = self.get_all(&path).await?;
+        let reached = rows
+            .iter()
+            .any(|r| ms(&r["watched_at"]).is_some_and(|at| Some(at) >= previous));
+        let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await;
+        // The cursor moves to the newest day taken, never back, and never
+        // past a row left for later.
+        let taken = plays
+            .iter()
+            .map(|p| p.watched_ms)
+            .filter(|&at| at <= self.now + FUTURE_SLACK_MS);
+        let new_day = taken
+            .max()
+            .map(day)
+            .filter(|d| *d > cursor)
+            .unwrap_or(cursor);
+        self.import(&plays, &[("history_day", new_day.as_str())])?;
+        Ok(reached)
+    }
+
+    /// Everything Trakt has watched, adds only: movies from the watched
+    /// list, shows from their own history when their `last_updated_at`
+    /// moved. A show's checkpoint commits with its plays, so an
+    /// interrupted first import goes on where it stopped.
+    async fn reconcile(&mut self) -> Result<(), CallError> {
+        let movies = self.get_all("/sync/watched/movies").await?;
+        let plays = self.plays(&movies, |r| ms(&r["last_watched_at"])).await;
+        self.import(&plays, &[])?;
+        let shows = self
+            .get_all("/sync/watched/shows?extended=noseasons")
+            .await?;
+        let todo: Vec<(u64, String)> = shows
+            .iter()
+            .filter_map(|s| {
+                let id = s["show"]["ids"]["trakt"].as_u64()?;
+                let updated = s["last_updated_at"].as_str()?.to_owned();
+                let seen = self.state(&format!("show:{id}"));
+                (seen.as_deref() != Some(updated.as_str())).then_some((id, updated))
+            })
+            .collect();
+        let total = todo.len() as u32;
+        for (done, (id, updated)) in todo.into_iter().enumerate() {
+            self.importing(done as u32, total);
+            let rows = self.get_all(&format!("/sync/history/shows/{id}")).await?;
+            let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await;
+            let later = plays
+                .iter()
+                .any(|p| p.watched_ms > self.now + FUTURE_SLACK_MS);
+            let checkpoint = format!("show:{id}");
+            // A play dated ahead keeps the show open, to be read again.
+            let state: &[(&str, &str)] = if later {
+                &[]
+            } else {
+                &[(checkpoint.as_str(), updated.as_str())]
+            };
+            self.import(&plays, state)?;
+        }
+        let now = self.now.to_string();
+        let today = day(self.now);
+        let mut state = vec![("reconciled_ms", now.as_str())];
+        if self.state("history_day").is_none() {
+            state.push(("history_day", today.as_str()));
+        }
+        self.import(&[], &state)
+    }
+
+    /// Resume points: an item newer than the local progress becomes one,
+    /// unless it is this device's own pause or stop coming back.
+    async fn playback(&mut self) -> Result<(), CallError> {
+        let items = self.get_all("/sync/playback").await?;
+        let mut points = Vec::new();
+        for item in &items {
+            let percent = item["progress"].as_f64().unwrap_or(0.0);
+            let Some(paused_ms) = ms(&item["paused_at"]) else {
+                continue;
+            };
+            if percent < MIN_PERCENT {
+                continue;
+            }
+            let placed = match self.mapper.place(item).await {
+                Ok(placed) => placed,
+                Err(u) => {
+                    self.unplaced(&u);
+                    continue;
+                }
+            };
+            if self.echo(&placed.video_id, percent, paused_ms) {
+                continue;
+            }
+            let Some((position_ms, duration_ms)) = self.position(&placed, percent).await else {
+                continue;
+            };
+            points.push(ImportedResume {
+                item_id: placed.item_id,
+                video_id: placed.video_id,
+                kind: placed.kind,
+                name: placed.name,
+                position_ms,
+                duration_ms,
+                paused_ms,
+            });
+        }
+        self.fence()?;
+        let taken = self
+            .core
+            .library()
+            .import_resume_points(self.key.profile, &points, self.core.clock().device())
+            .map_err(store)?;
+        self.report.applied += taken as u32;
+        Ok(())
+    }
+
+    /// One of this device's own sends: within a point and two minutes.
+    fn echo(&self, video_id: &str, percent: f64, at: i64) -> bool {
+        let Some(sent) = self.state(&format!("sent:{video_id}")) else {
+            return false;
+        };
+        let sent: Value = serde_json::from_str(&sent).unwrap_or_default();
+        let (Some(p), Some(t)) = (sent["percent"].as_f64(), sent["at"].as_i64()) else {
+            return false;
+        };
+        (p - percent).abs() <= ECHO_POINTS && (t - at).abs() <= ECHO_MS
+    }
+
+    /// Where a percent lands: on the local duration, else 97 percent of the
+    /// meta's runtime (players count credits differently).
+    async fn position(&self, placed: &map::Mapped, percent: f64) -> Option<(i64, i64)> {
+        let local = self
+            .core
+            .library()
+            .progress(self.key.profile, &placed.video_id)
+            .ok()
+            .flatten()
+            .filter(|&(_, duration)| duration > 0);
+        if let Some((_, duration)) = local {
+            return Some(((percent / 100.0 * duration as f64) as i64, duration));
+        }
+        let (meta, _) = self
+            .core
+            .fetch_meta(&placed.kind, &placed.item_id)
+            .await
+            .ok()?;
+        let runtime = runtime_ms(meta.preview.runtime.as_deref()?)?;
+        Some((
+            (percent / 100.0 * runtime as f64 * 0.97).floor() as i64,
+            runtime,
+        ))
+    }
+
+    /// Places rows and turns them into plays; rows that cannot be placed
+    /// are listed as unmapped.
+    async fn plays(
+        &mut self,
+        rows: &[Value],
+        at: impl Fn(&Value) -> Option<i64>,
+    ) -> Vec<ImportedPlay> {
+        self.report.pulled += rows.len() as u32;
+        let mut plays = Vec::new();
+        for row in rows {
+            match self.mapper.place(row).await {
+                Ok(placed) => plays.push(ImportedPlay {
+                    item_id: placed.item_id,
+                    video_id: placed.video_id,
+                    kind: placed.kind,
+                    name: placed.name,
+                    // Unknown dates sort before any real edit.
+                    watched_ms: at(row).unwrap_or(1),
+                }),
+                Err(u) => self.unplaced(&u),
+            }
+        }
+        plays
+    }
+
+    fn import(&mut self, plays: &[ImportedPlay], state: &[(&str, &str)]) -> Result<(), CallError> {
+        self.fence()?;
+        let state: Vec<_> = state.iter().map(|(k, v)| (self.key, *k, *v)).collect();
+        let report = self
+            .core
+            .library()
+            .import_plays(self.key.profile, plays, self.now, &state)
+            .map_err(store)?;
+        self.report.applied += report.applied as u32;
+        Ok(())
+    }
+
+    /// Sends the writes that may go now, scrobbles first, in batches.
+    async fn drain(&mut self) {
+        for _ in 0..50 {
+            let lane = self.conn.lane.lock().await;
+            let intents = self
+                .core
+                .library()
+                .ready_tracker_intents(self.key, now_ms() as i64, BATCH)
+                .unwrap_or_default();
+            if intents.is_empty() || self.fence().is_err() {
+                break;
+            }
+            let mut adds = Vec::new();
+            let mut removes = Vec::new();
+            for intent in intents {
+                let kind = if intent.video_id == intent.item_id {
+                    "movie"
+                } else {
+                    "series"
+                };
+                match map::ids(self.core, kind, &intent.item_id, &intent.video_id).await {
+                    Ok(ids) if intent.op == IntentOp::Add => {
+                        if self.already_there(&intent, &ids).await {
+                            self.ack(&intent);
+                        } else {
+                            adds.push((intent, ids));
+                        }
+                    }
+                    Ok(ids) => removes.push((intent, ids)),
+                    Err(reason) => {
+                        self.unplaced(&map::Unplaced {
+                            id: intent.item_id.clone(),
+                            name: intent.item_id.clone(),
+                            reason,
+                        });
+                        self.ack(&intent);
+                    }
+                }
+            }
+            let mut sent = false;
+            for (path, batch) in [("/sync/history", adds), ("/sync/history/remove", removes)] {
+                if !batch.is_empty() {
+                    sent = true;
+                    self.send(path, batch).await;
+                }
+            }
+            drop(lane);
+            if !sent {
+                continue;
+            }
+        }
+        self.plan_retry();
+    }
+
+    /// An add released by a stop that got no answer: Trakt may have taken
+    /// the play already. One look at the minutes around the stop.
+    async fn already_there(&mut self, intent: &Intent, ids: &TraktIds) -> bool {
+        let name = format!("check:{}", intent.video_id);
+        let Some(stop) = self.state(&name).and_then(|v| v.parse::<i64>().ok()) else {
+            return false;
+        };
+        let path = format!(
+            "/sync/history?start_at={}&end_at={}",
+            iso(stop - CHECK_WINDOW_MS),
+            iso(stop + CHECK_WINDOW_MS)
+        );
+        let Ok(rows) = self.get_all(&path).await else {
+            // Not known: sent, as a missed play is worse than a second one.
+            return false;
+        };
+        let _ = self.core.library().delete_tracker_state(self.key, &name);
+        rows.iter().any(|row| ids.resolved(row))
+    }
+
+    async fn send(&mut self, path: &str, batch: Vec<(Intent, TraktIds)>) {
+        let mut body = json!({"movies": [], "episodes": []});
+        for (intent, ids) in &batch {
+            let at = (intent.op == IntentOp::Add).then(|| iso(intent.watched_ms));
+            let (list, entry) = ids.history(at);
+            body[list].as_array_mut().expect("a list").push(entry);
+        }
+        let answer =
+            call::body(call::post(self.api, self.gate, &self.conn.auth, path, &body).await);
+        match answer {
+            Ok(answer) => {
+                self.conn.ok();
+                let missing = &answer["not_found"];
+                for (intent, ids) in &batch {
+                    let (list, entry) = ids.history(None);
+                    let lost = missing[list]
+                        .as_array()
+                        .is_some_and(|l| l.iter().any(|m| m["ids"] == entry["ids"]));
+                    if lost {
+                        self.unplaced(&map::Unplaced {
+                            id: intent.item_id.clone(),
+                            name: intent.item_id.clone(),
+                            reason: "Trakt does not know it".into(),
+                        });
+                    } else {
+                        self.report.pushed += 1;
+                    }
+                    self.ack(intent);
+                }
+            }
+            Err(e) => {
+                if !matches!(e, CallError::Auth(AuthError::Off)) {
+                    self.conn.failed(&super::reason(&e));
+                }
+                for (intent, _) in &batch {
+                    let _ = self.core.library().fail_tracker_intent(
+                        self.key,
+                        &intent.video_id,
+                        intent.rev,
+                        now_ms() as i64,
+                    );
+                }
+            }
+        }
+    }
+
+    fn ack(&mut self, intent: &Intent) {
+        let _ = self
+            .core
+            .library()
+            .ack_tracker_intent(self.key, &intent.video_id, intent.rev);
+    }
+
+    /// When the scheduler should come back for writes waiting on a retry.
+    fn plan_retry(&self) {
+        let next = self
+            .core
+            .library()
+            .tracker_next_retry(self.key)
+            .ok()
+            .flatten();
+        *super::lock(&self.conn.retry_at) = next.map(|n| n as u64);
+    }
+
+    fn unplaced(&mut self, u: &map::Unplaced) {
+        self.report.unmapped += 1;
+        map::record(self.core, self.key, &u.id, &u.name, &u.reason);
+    }
+
+    fn importing(&self, done: u32, total: u32) {
+        self.conn
+            .set_importing(Some(super::TraktImporting { done, total }));
+        self.core.trakt_refresh(self.conn);
+    }
+
+    /// The connection this round started under is still the one in use.
+    fn fence(&self) -> Result<(), CallError> {
+        let now = futures_util::FutureExt::now_or_never(self.conn.auth.generation()).unwrap_or(0);
+        if now == self.generation {
+            Ok(())
+        } else {
+            Err(CallError::Auth(AuthError::Off))
+        }
+    }
+
+    async fn get(&self, path: &str) -> Result<Value, CallError> {
+        call::body(call::get(self.api, self.gate, &self.conn.auth, path).await)
+    }
+
+    async fn get_all(&self, path: &str) -> Result<Vec<Value>, CallError> {
+        call::get_all(self.api, self.gate, &self.conn.auth, path, PAGE).await
+    }
+
+    fn state(&self, name: &str) -> Option<String> {
+        self.core
+            .library()
+            .tracker_state(self.key, name)
+            .ok()
+            .flatten()
+    }
+
+    fn state_json(&self, name: &str) -> Value {
+        self.state(name)
+            .and_then(|v| serde_json::from_str(&v).ok())
+            .unwrap_or(Value::Null)
+    }
+}
+
+fn store(e: mq_library::LibraryError) -> CallError {
+    CallError::Transient(format!("library: {e}"))
+}
+
+pub(super) fn ms(value: &Value) -> Option<i64> {
+    DateTime::parse_from_rfc3339(value.as_str()?)
+        .ok()
+        .map(|d| d.timestamp_millis())
+}
+
+pub(super) fn iso(ms: i64) -> String {
+    Utc.timestamp_millis_opt(ms)
+        .single()
+        .map(|d| d.to_rfc3339_opts(SecondsFormat::Millis, true))
+        .unwrap_or_default()
+}
+
+fn day(ms: i64) -> String {
+    iso(ms).get(..10).unwrap_or("1970-01-01").to_owned()
+}
+
+/// A meta's runtime ("47 min", "1h 32min", "2 h") in ms.
+fn runtime_ms(text: &str) -> Option<i64> {
+    let mut minutes = 0i64;
+    let mut number = String::new();
+    let mut seen = false;
+    for c in text.chars().chain([' ']) {
+        if c.is_ascii_digit() {
+            number.push(c);
+            continue;
+        }
+        if !number.is_empty() {
+            let n: i64 = number.parse().ok()?;
+            number.clear();
+            seen = true;
+            minutes += if c == 'h' { n * 60 } else { n };
+        }
+    }
+    (seen && minutes > 0).then_some(minutes * 60_000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtimes_and_dates_read() {
+        assert_eq!(runtime_ms("47 min"), Some(47 * 60_000));
+        assert_eq!(runtime_ms("1h 32min"), Some(92 * 60_000));
+        assert_eq!(runtime_ms("2h"), Some(120 * 60_000));
+        assert_eq!(runtime_ms("N/A"), None);
+        let at = ms(&json!("2026-10-19T10:20:30.000Z")).unwrap();
+        assert_eq!(iso(at), "2026-10-19T10:20:30.000Z");
+        assert_eq!(day(at), "2026-10-19");
+    }
+}

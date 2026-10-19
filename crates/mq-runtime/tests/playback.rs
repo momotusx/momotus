@@ -425,9 +425,9 @@ async fn saves_progress_resumes_and_marks_finished() {
 
     let view = PlaybackView::open(&core, candidates.clone(), target());
     assert_eq!(view.snapshot().resume_ms, None);
-    view.report_progress(60_000, 900_000);
+    view.report_progress(60_000, 900_000, false);
     // Throttled: this one is held until the view closes.
-    view.report_progress(61_000, 900_000);
+    view.report_progress(61_000, 900_000, false);
     assert_eq!(
         core.library().progress("p", "tt1727587").unwrap(),
         Some((60_000, 900_000))
@@ -442,7 +442,7 @@ async fn saves_progress_resumes_and_marks_finished() {
 
     let view = PlaybackView::open(&core, candidates.clone(), target());
     assert_eq!(view.snapshot().resume_ms, Some(61_000));
-    view.report_progress(890_000, 900_000);
+    view.report_progress(890_000, 900_000, false);
     drop(view);
     assert!(
         core.library()
