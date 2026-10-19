@@ -346,6 +346,9 @@ fn release_from(name: &str, description: &str, hint: Option<&str>) -> ParsedRele
         .or(first_text.map(|l| strip_marker(l)))
         .unwrap_or("");
     let mut release = parse(primary);
+    // The addon labels this file (Torrentio names a pack file 480p when
+    // the pack says 1080p): its name fills gaps before the description.
+    fill_gaps(&mut release, &name_hints(name));
     let mut extras: Vec<&str> = Vec::new();
     extras.extend(first_text.map(|l| strip_marker(l)));
     extras.extend(
@@ -359,7 +362,6 @@ fn release_from(name: &str, description: &str, hint: Option<&str>) -> ParsedRele
             fill_gaps(&mut release, &parse(&normalize_labels(extra)));
         }
     }
-    fill_gaps(&mut release, &name_hints(name));
     merge_languages(&mut release.languages, &flag_languages(description));
     release
 }
@@ -420,6 +422,26 @@ mod tests {
             ("Movie.2025.1080p.WEBRip.x264", Quality::WebRip),
         ] {
             assert_eq!(parse(name).quality, quality, "{name}");
+        }
+    }
+
+    /// One Piece E1 in a batch pack (the M13 corpus): the pack names 1080p,
+    /// Torrentio labels each file. The 480p copy's label wins over the pack.
+    #[test]
+    fn a_pack_file_takes_the_addons_resolution_label() {
+        let pack = "[Anime Time] One Piece (0001-1071+Movies+Specials) [BD+CR] [Dual Audio] [1080p][HEVC 10bit x265][AAC][Multi Sub] [Batch]";
+        let file = "[Anime Time] One Piece - 0001 - I'm Luffy! The Man Who's Gonna Be King of the Pirates!.mkv";
+        for (label, folder, want) in [
+            (
+                "480p",
+                "Episode 001-206 Uncropped (480p)",
+                Resolution::R480p,
+            ),
+            ("1080p", "Season 01 - East Blue", Resolution::R1080p),
+        ] {
+            let text = format!("{pack}\n{folder}/{file}\n👤 846 💾 215.21 MB ⚙️ NyaaSi");
+            let f = parse_addon_stream(&format!("Torrentio\n{label}"), &text, Some(file));
+            assert_eq!(f.release.resolution, want, "{folder}");
         }
     }
 
