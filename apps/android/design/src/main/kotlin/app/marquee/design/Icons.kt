@@ -53,6 +53,14 @@ object Icons {
         )
     }
 
+    val Camera: ImageVector by lazy {
+        strokeIcon(
+            "camera",
+        "M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z",
+        "M9 13a3 3 0 1 0 6 0a3 3 0 1 0 -6 0z",
+        )
+    }
+
     val Captions: ImageVector by lazy {
         strokeIcon(
             "captions",
@@ -162,6 +170,14 @@ object Icons {
             "compass",
         "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
         "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z",
+        )
+    }
+
+    val Copy: ImageVector by lazy {
+        strokeIcon(
+            "copy",
+        "M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z",
+        "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2",
         )
     }
 
@@ -352,6 +368,18 @@ object Icons {
         )
     }
 
+    val LifeBuoy: ImageVector by lazy {
+        strokeIcon(
+            "life-buoy",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        "m4.93 4.93 4.24 4.24",
+        "m14.83 9.17 4.24-4.24",
+        "m14.83 14.83 4.24 4.24",
+        "m9.17 14.83-4.24 4.24",
+        "M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0z",
+        )
+    }
+
     val Link: ImageVector by lazy {
         strokeIcon(
             "link",
@@ -378,12 +406,31 @@ object Icons {
         )
     }
 
+    val LogOut: ImageVector by lazy {
+        strokeIcon(
+            "log-out",
+        "m16 17 5-5-5-5",
+        "M21 12H9",
+        "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4",
+        )
+    }
+
     val Monitor: ImageVector by lazy {
         strokeIcon(
             "monitor",
         "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z",
         "M8 21L16 21",
         "M12 17L12 21",
+        )
+    }
+
+    val MonitorSmartphone: ImageVector by lazy {
+        strokeIcon(
+            "monitor-smartphone",
+        "M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8",
+        "M10 19v-3.96 3.15",
+        "M7 19h5",
+        "M18 12h2a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2z",
         )
     }
 
@@ -549,6 +596,15 @@ object Icons {
             "settings",
         "M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915",
         "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0z",
+        )
+    }
+
+    val ShieldAlert: ImageVector by lazy {
+        strokeIcon(
+            "shield-alert",
+        "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
+        "M12 8v4",
+        "M12 16h.01",
         )
     }
 

@@ -60,7 +60,7 @@ class MarqueeApp :
         }
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
-        sync = SyncController(session).also { it.start() }
+        sync = SyncController(session, this).also { it.start() }
         profiles = ProfileGate(session).also { it.start() }
         lifecycle = AppLifecycle(this, session, sync).also { it.register() }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }

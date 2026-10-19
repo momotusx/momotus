@@ -39,9 +39,29 @@ sealed interface Route : NavKey {
     @Serializable
     data object Pairing : Route
 
-    /** The sync account this device is in. */
+    /** Devices and sync: this device's account, or the ways to join one. */
     @Serializable
     data object Sync : Route
+
+    /** Start a sync account, or ([kit]) join one with a recovery kit. */
+    @Serializable
+    data class SyncJoin(
+        val kit: Boolean,
+    ) : Route
+
+    /** Approve a new device with the code it shows. */
+    @Serializable
+    data object AddDevice : Route
+
+    /** Make a recovery kit, shown once. */
+    @Serializable
+    data object RecoveryKit : Route
+
+    /** Report the account's device [id] lost. */
+    @Serializable
+    data class ReportLost(
+        val id: String,
+    ) : Route
 
     /** Debrid accounts: a key per service, kept on this device. */
     @Serializable

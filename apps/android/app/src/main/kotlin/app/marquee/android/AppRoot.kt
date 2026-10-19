@@ -314,7 +314,7 @@ private fun AppNav(
                             onManageProfiles = { backStack.add(Route.ManageProfiles) },
                             sync,
                             onImport = { backStack.add(Route.Import) },
-                            onSync = { backStack.add(if (sync.joined) Route.Sync else Route.Pairing) },
+                            onSync = { backStack.add(Route.Sync) },
                             onDebrid = { backStack.add(Route.Debrid) },
                             onHomeRows = { backStack.add(Route.HomeRows) },
                             onFindAddons = { backStack.add(Route.FindAddons) },
@@ -356,7 +356,20 @@ private fun AppNav(
                             }
                         })
                     }
-                    entry<Route.Sync> { SyncScreen(sync) }
+                    entry<Route.Sync> {
+                        SyncScreen(
+                            sync,
+                            onPair = { backStack.add(Route.Pairing) },
+                            onJoin = { backStack.add(Route.SyncJoin(it)) },
+                            onAdd = { backStack.add(Route.AddDevice) },
+                            onKit = { backStack.add(Route.RecoveryKit) },
+                            onLost = { backStack.add(Route.ReportLost(it)) },
+                        )
+                    }
+                    entry<Route.SyncJoin> { route -> SyncJoinScreen(sync, route.kit, onDone = ::pop) }
+                    entry<Route.AddDevice> { AddDeviceScreen(sync, onDone = ::pop) }
+                    entry<Route.RecoveryKit> { RecoveryKitScreen(sync, onDone = ::pop) }
+                    entry<Route.ReportLost> { route -> ReportLostScreen(sync, route.id, onDone = ::pop) }
                     entry<Route.Title> { route ->
                         TitleScreen(
                             route,

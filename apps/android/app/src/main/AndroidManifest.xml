@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Scanning a new device's pairing code (Add a device); asked for only when the user taps Scan. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- The screen-lock prompt before removing a device, reporting one lost or making a recovery kit. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
         android:name=".MarqueeApp"

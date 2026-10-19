@@ -16,9 +16,13 @@ junit = "4.13.2"
 robolectric = "4.17"
 coil = "3.6.3"
 zxing = "3.5.3"
+camerax = "1.6.2"
 
 [libraries]
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "splash" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }

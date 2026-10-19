@@ -3,13 +3,19 @@ package app.marquee.core
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.Trace
 import app.marquee.core.model.AddonsSnapshot
+import app.marquee.core.model.ApprovedPairing
+import app.marquee.core.model.Devices
 import app.marquee.core.model.DiscoverSnapshot
 import app.marquee.core.model.HomeSnapshot
 import app.marquee.core.model.HomeUpdate
 import app.marquee.core.model.LibrarySnapshot
+import app.marquee.core.model.LostPreview
+import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Prefs
+import app.marquee.core.model.RecoveryKitResult
 import app.marquee.core.model.SearchSnapshot
+import app.marquee.core.model.SyncReport
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleUpdate
 import app.marquee.core.model.VersionsSnapshot
@@ -17,9 +23,11 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -107,6 +115,69 @@ class TraceDecodeTest {
                 .jsonPrimitive.long
         val reply = trace.first { it.dir == "in" && it.msg["id"]?.jsonPrimitive?.long == id }
         strict.decodeFromJsonElement(Prefs.serializer(), reply.msg.getValue("result"))
+    }
+
+    /** Two cores and a real sync server (scripts/capture-sync-trace.ts); records and kits are placeholders. */
+    @Test
+    fun `sync answers and the pairing view`() {
+        val replies =
+            mapOf(
+                "syncNow" to SyncReport.serializer(),
+                "syncDevices" to Devices.serializer(),
+                "lostPreview" to LostPreview.serializer(),
+                "approvePairing" to ApprovedPairing.serializer(),
+                "createRecoveryKit" to RecoveryKitResult.serializer(),
+            )
+        val trace =
+            javaClass
+                .getResource("/traces/sync.jsonl")!!
+                .readText()
+                .lines()
+                .filter { it.isNotBlank() }
+        val opOf = HashMap<String, String>()
+        val decoded = HashMap<String, Int>()
+        for (text in trace) {
+            val line = strict.parseToJsonElement(text) as JsonObject
+            val device = line.getValue("device").jsonPrimitive.content
+            val msg = line.getValue("msg") as JsonObject
+            val key = "$device:${msg["id"]}"
+            if (line.getValue("dir").jsonPrimitive.content == "out") {
+                opOf[key] = msg.getValue("op").jsonPrimitive.content
+                continue
+            }
+            val op = if (msg["updates"] != null) "pairing" else opOf.getValue(key)
+            val result = msg["result"] as? JsonObject
+            when {
+                op == "pairing" -> {
+                    strict.decodeFromJsonElement(ListSerializer(PairingSnapshot.serializer()), msg.getValue("updates"))
+                }
+
+                op == "subscribe" -> {
+                    strict.decodeFromJsonElement(PairingSnapshot.serializer(), result!!.getValue("snapshot"))
+                }
+
+                op in replies -> {
+                    strict.decodeFromJsonElement(replies.getValue(op), result!!)
+                }
+
+                else -> {
+                    continue
+                }
+            }
+            decoded[op] = (decoded[op] ?: 0) + 1
+        }
+        assertEquals(
+            mapOf(
+                "subscribe" to 1,
+                "pairing" to 3,
+                "approvePairing" to 1,
+                "syncNow" to 2,
+                "syncDevices" to 2,
+                "lostPreview" to 1,
+                "createRecoveryKit" to 1,
+            ),
+            decoded,
+        )
     }
 
     @Test

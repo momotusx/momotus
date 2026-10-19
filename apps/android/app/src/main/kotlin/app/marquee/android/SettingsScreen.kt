@@ -52,6 +52,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DebridCopy
 import app.marquee.core.FindAddonsCopy
+import app.marquee.core.SyncCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
@@ -364,17 +365,23 @@ fun SettingsScreen(
         }
         item(key = "devices-head") { Kicker("Devices and sync") }
         item(key = "devices") {
-            if (sync.joined) {
-                val words = sync.problem ?: if (sync.syncing) "Syncing" else "Library, progress and addons follow you."
-                LinkRow(Icons.RefreshCw, "Sync", words, onSync)
-            } else {
-                LinkRow(
-                    Icons.QrCode,
-                    "Pair this device",
-                    "Show a code here, then approve this device from one that already syncs.",
-                    onSync,
-                )
-            }
+            // One page for the account: its state when joined, else the ways to join one (the web's line).
+            val last = sync.lastSynced
+            val words =
+                when {
+                    !sync.joined -> SyncCopy.OFF_LINE
+
+                    sync.problem != null -> sync.problem?.words.orEmpty()
+
+                    sync.syncing -> SyncCopy.SYNCING
+
+                    last != null -> "On. Synced at ${java.text.DateFormat.getTimeInstance(
+                        java.text.DateFormat.SHORT,
+                    ).format(java.util.Date(last))}."
+
+                    else -> "On."
+                }
+            LinkRow(Icons.MonitorSmartphone, SyncCopy.TITLE, words, onSync)
         }
         item(key = "home-head") { Kicker("Home") }
         item(key = "home-rows") {
@@ -446,7 +453,7 @@ private fun ProfileLinkRow(
 
 /** A row that opens another page: its icon, name and what it does, and a chevron (the web's LinkRow). */
 @Composable
-private fun LinkRow(
+internal fun LinkRow(
     icon: ImageVector,
     title: String,
     text: String,
