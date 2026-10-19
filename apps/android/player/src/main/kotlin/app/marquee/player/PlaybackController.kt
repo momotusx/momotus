@@ -169,6 +169,13 @@ class PlaybackController(
 
             override fun onIsPlayingChanged(isPlaying: Boolean) = playingChanged(isPlaying)
 
+            // A pause or play while buffering changes nothing that onIsPlayingChanged sees: report it
+            // here, paused coming from playWhenReady (Trakt's scrobble follows it).
+            override fun onPlayWhenReadyChanged(
+                playWhenReady: Boolean,
+                reason: Int,
+            ) = report()
+
             override fun onRenderedFirstFrame() = renderedFirstFrame()
 
             override fun onPositionDiscontinuity(
@@ -448,7 +455,15 @@ class PlaybackController(
         // The real position, also at the end: ExoPlayer can reach ENDED early on a truncated file, and
         // reporting the duration then would mark a part-watched film as finished.
         val ended = player.playbackState == Player.STATE_ENDED
-        progressReport(firstFrame, player.currentPosition, player.duration, player.playWhenReady, ended)?.let {
+        val suppressed = player.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
+        progressReport(
+            firstFrame,
+            player.currentPosition,
+            player.duration,
+            player.playWhenReady,
+            ended,
+            suppressed,
+        )?.let {
             CoreLog.d("progress ${it.positionMs} of ${it.durationMs} ms${if (it.paused) ", paused" else ""}")
             playback.progress(it.positionMs, it.durationMs, it.paused)
         }

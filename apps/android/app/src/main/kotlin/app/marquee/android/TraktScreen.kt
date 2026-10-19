@@ -99,6 +99,10 @@ class TraktHolder(
     var said: Pair<String, Status>? by mutableStateOf(null)
         private set
 
+    /** The core signed out but the file kept the record: Try again deletes it. */
+    var notStored by mutableStateOf(false)
+        private set
+
     var busy by mutableStateOf(false)
         private set
 
@@ -121,11 +125,14 @@ class TraktHolder(
             TraktCopy.synced(trakt.syncNow()) to Status.Ok
         }
 
+    /** Signed out only once the record is gone from the file; else it says so, with Try again. */
     fun signOut() {
+        if (busy) return
         asking = false
         act(TraktCopy::signOutFailed) {
-            trakt.signOut()
-            TraktCopy.SIGNED_OUT to Status.Idle
+            val stored = trakt.signOut()
+            notStored = !stored
+            if (stored) TraktCopy.SIGNED_OUT to Status.Idle else TraktCopy.SIGN_OUT_NOT_STORED to Status.Warn
         }
     }
 
@@ -136,6 +143,7 @@ class TraktHolder(
         if (busy) return
         busy = true
         said = null
+        notStored = false
         viewModelScope.launch {
             said =
                 try {
@@ -241,10 +249,26 @@ private fun Account(
 ) {
     val scope = rememberCoroutineScope()
     val actionFocus = remember { FocusRequester() }
+    val tv = Marquee.form == Form.Tv
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             if (status == null) return@Column
-            StatusWord(TraktCopy.state(status, ::clockTime), toneOf(status.state), maxLines = Int.MAX_VALUE)
+            // With no action (a build without Trakt), the state line takes focus on a TV, so a remote reads it.
+            val noAction = TraktCopy.signIn(status.state) == null && !TraktCopy.signedIn(status.state)
+            StatusWord(
+                TraktCopy.state(status, ::clockTime),
+                toneOf(status.state),
+                modifier =
+                    if (tv && noAction) {
+                        Modifier
+                            .marqueeFocus(Marquee.radius.pill)
+                            .semantics(mergeDescendants = true) {}
+                            .focusable()
+                    } else {
+                        Modifier
+                    },
+                maxLines = Int.MAX_VALUE,
+            )
             if (TraktCopy.signedIn(status.state)) {
                 val facts =
                     listOfNotNull(
@@ -270,7 +294,13 @@ private fun Account(
                 holder.asking -> {
                     MqText(TraktCopy.SIGN_OUT_ASK, role = TextRole.Callout)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-                        SecondaryButton(TraktCopy.SIGN_OUT, holder::signOut, icon = Icons.LogOut)
+                        // While Sync now runs the ask stays, its Sign out waiting until the round ends.
+                        SecondaryButton(
+                            TraktCopy.SIGN_OUT,
+                            holder::signOut,
+                            icon = Icons.LogOut,
+                            enabled = !holder.busy,
+                        )
                         SecondaryButton(TraktCopy.CANCEL, {
                             holder.asking = false
                             scope.refocus(actionFocus)
@@ -302,7 +332,10 @@ private fun Account(
                     }
                 }
             }
-            holder.said?.let { (text, tone) -> Said(text, tone) }
+            // What an action ended with, read out once by TalkBack (Synced, Sync did not work, Signed out).
+            val said = holder.said
+            LiveSpoken(said?.first.orEmpty()) { said?.let { (text, tone) -> Said(text, tone) } }
+            if (holder.notStored) SecondaryButton(TraktCopy.TRY_AGAIN, holder::signOut, icon = Icons.RefreshCw)
         }
     }
 }
@@ -339,30 +372,28 @@ private fun SignIn(
                 ) {
                     // A TV signs in from a phone: the QR leads. A phone opens the page itself.
                     if (tv) Qr(phase.qr, "Trakt sign-in QR code", 240.dp)
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        MqText(
-                            if (tv) TraktCopy.SCAN_OR_OPEN else TraktCopy.OPEN,
-                            role = TextRole.Callout,
-                            color = colors.muted,
-                        )
-                        MqText(DebridCopy.address(phase.url), role = TextRole.Headline, weight = FontWeight.Bold)
-                        MqText(TraktCopy.ENTER_CODE, role = TextRole.Callout, color = colors.muted)
-                        MqText(
-                            phase.userCode,
-                            modifier =
-                                Modifier.semantics {
-                                    contentDescription = "Code ${phase.userCode.toList().joinToString(" ")}"
-                                },
-                            role = TextRole.Title1,
-                            weight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 4.sp,
-                        )
-                        MqText(
-                            TraktCopy.goodFor(ProfileCopy.waitText(phase.expiresMs - now)),
-                            role = TextRole.Caption,
-                            color = colors.muted,
-                        )
+                    // Read out once when the code comes (where to go, then the code a character at a time),
+                    // never the time left: the focus is on Cancel, so a live region carries it.
+                    val address = DebridCopy.address(phase.url)
+                    val lead = if (tv) TraktCopy.SCAN_OR_OPEN else TraktCopy.OPEN
+                    LiveSpoken("$lead $address ${TraktCopy.ENTER_CODE} ${TraktCopy.spokenCode(phase.userCode)}") {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            MqText(lead, role = TextRole.Callout, color = colors.muted)
+                            MqText(address, role = TextRole.Headline, weight = FontWeight.Bold)
+                            MqText(TraktCopy.ENTER_CODE, role = TextRole.Callout, color = colors.muted)
+                            MqText(
+                                phase.userCode,
+                                role = TextRole.Title1,
+                                weight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 4.sp,
+                            )
+                            MqText(
+                                TraktCopy.goodFor(ProfileCopy.waitText(phase.expiresMs - now)),
+                                role = TextRole.Caption,
+                                color = colors.muted,
+                            )
+                        }
                     }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {

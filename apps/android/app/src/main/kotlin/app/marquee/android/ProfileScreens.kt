@@ -886,6 +886,7 @@ fun EditProfileScreen(
     val mine = p != null && p.id == s.active
     val owner = s.profiles.firstOrNull { it.id == s.active }?.isOwner == true
     val scope = rememberCoroutineScope()
+    val trakt = (LocalContext.current.applicationContext as MarqueeApp).trakt
     val colors = Marquee.colors
     val start =
         remember(id) { ProfileCopy.parseAvatar(p?.avatar ?: ProfileCopy.nextAvatar(s.profiles.map { it.avatar })) }
@@ -1181,6 +1182,8 @@ fun EditProfileScreen(
                                     scope.launch {
                                         try {
                                             session.ops.deleteProfile(p.id)
+                                            // Its Trakt sign-in leaves the keystore (the core's gone push does it too).
+                                            trakt.forget(p.id)
                                             leave()
                                         } catch (e: CancellationException) {
                                             throw e

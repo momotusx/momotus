@@ -33,6 +33,8 @@ import kotlinx.coroutines.launch
  */
 class ProfileGate(
     private val session: CoreSession,
+    /** Runs after the gate shut and the app let go of the old profile, right before `switchProfile`. */
+    private val beforeSwitch: suspend () -> Unit = {},
 ) {
     private var view: ProfilesView? by mutableStateOf(null)
 
@@ -199,6 +201,8 @@ class ProfileGate(
             // the wait then lasts until the app is in front again and its root answers. Elapsed
             // time is never taken for an answer.
             snapshotFlow { resetCount }.first { it >= count }
+            // A Trakt record already on its way reaches the core before the switch (TraktAccount.quiet).
+            beforeSwitch()
             for (attempt in 1..10) {
                 try {
                     session.ops.switchProfile(profile, pin)

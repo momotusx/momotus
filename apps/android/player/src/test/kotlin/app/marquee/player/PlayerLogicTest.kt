@@ -24,6 +24,8 @@ class PlayerLogicTest {
         assertEquals(false, progressReport(true, 5_000, 60_000, playWhenReady = true)?.paused)
         assertEquals(true, progressReport(true, 5_000, 60_000, playWhenReady = false)?.paused)
         assertEquals(true, progressReport(true, 60_000, 60_000, playWhenReady = true, ended = true)?.paused)
+        // Play asked for, held by the system (audio focus lost): nothing plays, so Trakt hears a pause.
+        assertEquals(true, progressReport(true, 5_000, 60_000, playWhenReady = true, suppressed = true)?.paused)
     }
 
     @Test

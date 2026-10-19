@@ -27,10 +27,12 @@ fun progressReport(
     durationMs: Long,
     playWhenReady: Boolean = true,
     ended: Boolean = false,
+    /** Play is asked for but the system holds it (audio focus lost, output gone): nothing plays. */
+    suppressed: Boolean = false,
 ): ProgressReport? {
     if (!firstFrame || positionMs < 0 || durationMs <= 0) return null
-    // Buffering with play asked for is not a pause.
-    return ProgressReport(positionMs.coerceAtMost(durationMs), durationMs, paused = !playWhenReady || ended)
+    // Buffering with play asked for is not a pause; held by the system is.
+    return ProgressReport(positionMs.coerceAtMost(durationMs), durationMs, !playWhenReady || ended || suppressed)
 }
 
 /**

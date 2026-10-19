@@ -48,6 +48,8 @@ uniffi-bindgen generate --library "$UNSTRIPPED" --language kotlin \
   --config "$ROOT/apps/android/uniffi.toml" --out-dir "$OUT/generated"
 
 rm -rf "$LIBS"
+# A plain build drops a dev library left from before, which debug builds would otherwise package.
+if [ "$DEV_ASSERTIONS" = false ]; then rm -rf "$ROOT/apps/android/core/src/debug/jniLibs"; fi
 for pair in "${TRIPLES[@]}"; do
   triple=${pair%%:*}
   abi=${pair##*:}

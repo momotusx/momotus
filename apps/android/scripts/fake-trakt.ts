@@ -7,6 +7,8 @@
  *   /_login?next=approve|deny|expire|pending   how the next device-code polls answer (default pending)
  *   /_api?mode=ok|reconnect                    reconnect: every call 401 and a refresh 400 invalid_grant
  *   /_seen                                     the requests so far, one per line
+ *   /_delay?path=/oauth/device/code&ms=8000    answer that path this late (a screen reader walk turns
+ *                                              TalkBack on meanwhile); ms=0 ends it
  * Run: PORT=17920 bun scripts/fake-trakt.ts */
 
 const port = Number(process.env.PORT ?? 17920);
@@ -16,6 +18,7 @@ const showDelayMs = Number(process.env.SHOW_DELAY_MS ?? 2500);
 let login: "approve" | "deny" | "expire" | "pending" = "pending";
 let api: "ok" | "reconnect" = "ok";
 let codes = 0;
+const delays = new Map<string, number>();
 const seen: string[] = [];
 
 const at = "2026-10-01T20:00:00.000Z";
@@ -76,6 +79,7 @@ async function answer(req: Request, url: URL, body: any): Promise<Response> {
     if (url.pathname === "/_login") login = (url.searchParams.get("next") as typeof login) ?? "pending";
     if (url.pathname === "/_api") api = (url.searchParams.get("mode") as typeof api) ?? "ok";
     if (url.pathname === "/_seen") return new Response(seen.join("\n") + "\n");
+    if (url.pathname === "/_delay") delays.set(url.searchParams.get("path") ?? "", Number(url.searchParams.get("ms") ?? 0));
     return json(200, { login, api });
   }
   switch (route) {
@@ -144,6 +148,8 @@ Bun.serve({
     try {
       body = text ? JSON.parse(text) : null;
     } catch {}
+    const late = delays.get(url.pathname) ?? 0;
+    if (late > 0) await Bun.sleep(late);
     const res = await answer(req, url, body);
     if (!url.pathname.startsWith("/_")) {
       // The progress and action of a scrobble say what the player sent; tokens are never written out.

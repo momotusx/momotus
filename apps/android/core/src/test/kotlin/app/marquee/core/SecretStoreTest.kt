@@ -3,6 +3,7 @@ package app.marquee.core
 import app.marquee.core.secrets.DeviceId
 import app.marquee.core.secrets.KeySource
 import app.marquee.core.secrets.SecretStore
+import app.marquee.core.trakt.SecretTraktRecords
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
@@ -141,6 +142,28 @@ class SecretStoreTest {
         failing = false
         assertTrue(store.updateDurably { it.copy(syncRecord = null) })
         assertTrue(SecretStore(file, switchable).load().debridKeys.isEmpty())
+    }
+
+    @Test
+    fun `a Trakt record's delete counts only once it is on disk`() {
+        var failing = false
+        val keys = SoftwareKeys()
+        val switchable =
+            object : KeySource {
+                override fun key(): SecretKey = if (failing) throw ProviderException("keystore is busy") else keys.key()
+
+                override fun reset() = Unit
+            }
+        val records = SecretTraktRecords(SecretStore(file, switchable))
+        assertTrue(records.save("p1", record))
+        failing = true
+        // The file cannot be written: the delete says so, and the record is still there, also after a restart.
+        assertFalse(records.delete("p1"))
+        assertEquals(record, records.load("p1"))
+        failing = false
+        assertEquals(record, SecretTraktRecords(SecretStore(file, switchable)).load("p1"))
+        assertTrue(records.delete("p1"))
+        assertEquals(null, SecretTraktRecords(SecretStore(file, switchable)).load("p1"))
     }
 
     @Test

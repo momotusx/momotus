@@ -72,6 +72,15 @@ object TraktCopy {
     const val PLAYER_UNMAPPED = "Trakt: this title could not be matched, so this play is not recorded"
     const val PLAYER_THIS_DEVICE_OFF = "Trakt: this device is not signed in, so this play is not recorded"
 
+    /** Android only, not in the shared words: the core signed out, the file kept the sign-in. */
+    const val SIGN_OUT_NOT_STORED =
+        "Signed out of Trakt, but this device could not delete its copy of the sign-in, so it would come " +
+            "back after a restart. Try again."
+    const val TRY_AGAIN = "Try again"
+
+    /** The code as a screen reader says it once: one character at a time. */
+    fun spokenCode(code: String) = "Code ${code.toList().joinToString(" ")}"
+
     private fun String.fill(vararg pairs: Pair<String, Any>) =
         pairs.fold(this) { text, (key, value) -> text.replace("{$key}", value.toString()) }
 

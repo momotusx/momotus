@@ -156,6 +156,10 @@ class CoreClient(
     @Volatile
     var onCoreDied: ((reason: String) -> Unit)? = null
 
+    /** A profile was removed, here or on another device (`{"profile": "gone", id}`): drop its keystore entries. */
+    @Volatile
+    var onProfileGone: ((id: String) -> Unit)? = null
+
     init {
         scope.launch { pump() }
     }
@@ -433,9 +437,13 @@ class CoreClient(
         val id = message["id"]?.jsonPrimitive?.longOrNull
         if (id == null) {
             // A session event, not a reply: `{"profile": "gone", id}`. The profiles view's next
-            // snapshot carries what changed; this device keeps no per-profile secrets yet.
+            // snapshot carries what changed; the profile's keystore entries go here.
             if (message["profile"] != null) {
                 CoreLog.d("session event: profile ${message["profile"]?.jsonPrimitive?.contentOrNull}")
+                val gone = message["id"]?.jsonPrimitive?.contentOrNull
+                if (message["profile"]?.jsonPrimitive?.contentOrNull == "gone" && gone != null) {
+                    actions += { onProfileGone?.invoke(gone) }
+                }
             } else {
                 CoreLog.w("reply without an id: ${message["error"]?.jsonPrimitive?.contentOrNull}")
             }

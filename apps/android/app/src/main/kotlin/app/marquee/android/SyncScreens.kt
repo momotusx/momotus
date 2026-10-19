@@ -135,6 +135,35 @@ private fun Context.deviceName(tv: Boolean): String =
 
 private fun clock(ms: Long) = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(ms))
 
+/**
+ * [content] with [spoken] read out by TalkBack once each time it changes: a native live region under it,
+ * since a Compose live region on a card reached TalkBack only as a change of its parent. [content] is drawn
+ * over it and not read twice; it must hold no control.
+ */
+@Composable
+internal fun LiveSpoken(
+    spoken: String,
+    content: @Composable () -> Unit,
+) {
+    Box {
+        AndroidView(
+            factory = { context ->
+                TextView(context).apply {
+                    accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                    setTextColor(android.graphics.Color.TRANSPARENT)
+                }
+            },
+            // A live region speaks a change, not a view that comes with its text: one that just came
+            // (the sign-in code) gets its words a moment after it is attached.
+            update = { view ->
+                if (view.isAttachedToWindow) view.text = spoken else view.postDelayed({ view.text = spoken }, 300)
+            },
+            modifier = Modifier.matchParentSize(),
+        )
+        Box(Modifier.clearAndSetSemantics {}) { content() }
+    }
+}
+
 /** A line of what happened: a dot in the tone and the words. */
 @Composable
 internal fun Said(
@@ -477,24 +506,10 @@ private fun StateCard(
             val notes = report?.let(SyncCopy::notes).orEmpty()
             val warnings = (listOfNotNull(problem?.words) + notes + listOfNotNull(failedSince)).joinToString(" ")
             // The warnings, read out once each time they change (a background round too), never the time of
-            // every round: a native live region carries them, since a Compose one on this card reached
-            // TalkBack only as a change of its parent. The visible lines are drawn over it and not read twice.
-            Box {
-                AndroidView(
-                    factory = { context ->
-                        TextView(context).apply {
-                            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-                            setTextColor(android.graphics.Color.TRANSPARENT)
-                        }
-                    },
-                    update = { it.text = warnings },
-                    modifier = Modifier.matchParentSize(),
-                )
+            // every round.
+            LiveSpoken(warnings) {
                 if (warnings.isNotEmpty()) {
-                    Column(
-                        Modifier.clearAndSetSemantics {},
-                        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                    ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                         problem?.let { Said(it.words, Status.Bad) }
                         for (note in notes) Note(note, side = 0.dp)
                         failedSince?.let { Note(it, failed = true, side = 0.dp) }

@@ -71,12 +71,14 @@ class MarqueeApp :
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
         sync = SyncController(session, this).also { it.start() }
-        profiles = ProfileGate(session).also { it.start() }
+        profiles = ProfileGate(session, beforeSwitch = { trakt.quiet() }).also { it.start() }
         trakt =
             TraktAccount(session.ops, SecretTraktRecords(session.secrets), session.scope) { push ->
                 val view = session.trakt(push)
                 AutoCloseable { view.close() }
             }
+        // A profile removed here or by sync takes its Trakt sign-in with it.
+        session.client.onProfileGone = trakt::forget
         // Each time a profile's content may show (the core opened, unlocked, switched), its record goes to
         // the core and its `trakt` view opens; a shut gate (a switch, a lock, a core that stopped) closes it.
         session.scope.launch(Dispatchers.Main) {

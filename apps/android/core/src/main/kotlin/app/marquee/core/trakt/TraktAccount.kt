@@ -26,7 +26,8 @@ interface TraktRecords {
         record: KeystoreRecord,
     ): Boolean
 
-    fun delete(profile: String)
+    /** False when the file could not drop it: the record stays where it was. */
+    fun delete(profile: String): Boolean
 }
 
 /** The encrypted secrets file: this device only, its key in the Android Keystore, never backed up. */
@@ -43,9 +44,8 @@ class SecretTraktRecords(
         return secrets.health != SecretStore.Health.MemoryOnly
     }
 
-    override fun delete(profile: String) {
-        secrets.update { it.copy(traktRecords = it.traktRecords - profile) }
-    }
+    // Durable, as a debrid disconnect: a delete that stays in memory would come back at the next start.
+    override fun delete(profile: String) = secrets.updateDurably { it.copy(traktRecords = it.traktRecords - profile) }
 }
 
 /**
@@ -69,36 +69,53 @@ class TraktAccount(
     var status: TraktStatus? by mutableStateOf(null)
         private set
 
-    /** The last record could be kept in memory only: after a restart this device signs in again. */
+    /** The running profile's record could be kept in memory only: after a restart this device signs in again. */
     var memoryOnly by mutableStateOf(false)
         private set
+
+    /** Profiles whose last record stayed in memory only, so [memoryOnly] follows the profile that runs. */
+    private val inMemory = HashSet<String>()
 
     @Volatile
     private var profile: String? = null
     private var view: AutoCloseable? = null
+
+    /** Each begin and end takes a turn: only the newest begin hands over and opens a view. */
+    @Volatile
+    private var turns = 0
 
     /** The record last handed over as an acknowledgement, so a push repeating it is not stored twice. */
     @Volatile
     private var acked: KeystoreRecord? = null
     private val line = Mutex()
 
-    /** [profile] runs, unlocked: hand the core its record, then follow its status. */
+    /**
+     * [profile] runs, unlocked: hand the core its record, then follow its status. With no record here
+     * nothing is sent: the core keeps what it holds (a sign-in whose record is still on its way).
+     */
     fun begin(profile: String) {
-        end()
-        this.profile = profile
+        val turn =
+            synchronized(this) {
+                end()
+                this.profile = profile
+                turns
+            }
         scope.launch {
             line.withLock {
-                if (this@TraktAccount.profile != profile) return@withLock
-                try {
-                    ops.setTrakt(records.load(profile))
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // A build without Trakt answers notConfigured; the view says so.
-                    CoreLog.w("trakt: the record was not handed over: ${CoreLog.describe(e)}")
+                if (turns != turn) return@withLock
+                memoryOnly = profile in inMemory
+                records.load(profile)?.let { record ->
+                    try {
+                        ops.setTrakt(record)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // A build without Trakt answers notConfigured; the view says so.
+                        CoreLog.w("trakt: the record was not handed over: ${CoreLog.describe(e)}")
+                    }
                 }
                 synchronized(this@TraktAccount) {
-                    if (this@TraktAccount.profile == profile) view = openView { pushed(profile, it) }
+                    if (turns == turn) view = openView { pushed(profile, it) }
                 }
             }
         }
@@ -107,6 +124,7 @@ class TraktAccount(
     /** The profile stops (a switch, a lock, a core that stopped): its view closes. */
     @Synchronized
     fun end() {
+        turns++
         profile = null
         acked = null
         status = null
@@ -125,9 +143,12 @@ class TraktAccount(
         scope.launch {
             line.withLock {
                 // Stored whatever runs now: it is the newest record of that profile's account.
-                memoryOnly = !records.save(owner, record)
-                // ponytail: checked once before the send; a switch waits for this view to close first.
+                val stored = records.save(owner, record)
+                if (stored) inMemory -= owner else inMemory += owner
+                // The check and the send are one step under the lock: a switch first takes the lock too
+                // ([quiet]), so a record sent here reaches the core before the switch, never after it.
                 if (profile != owner) return@withLock
+                memoryOnly = !stored
                 try {
                     ops.setTrakt(record)
                 } catch (e: CancellationException) {
@@ -141,19 +162,43 @@ class TraktAccount(
         }
     }
 
+    /**
+     * Waits until no record is being handed to the core. The profile switch calls it after [end] and before
+     * `switchProfile`: a send under way reaches the core first, and later ones see the profile has left.
+     */
+    suspend fun quiet() = line.withLock {}
+
     /** One round now. */
     suspend fun syncNow(): TraktReport = scope.async { ops.traktSync() }.await()
 
-    /** Signs this device out for the running profile, then deletes its record; a refusal keeps it. */
-    suspend fun signOut() =
+    /**
+     * Signs this device out for the running profile, then deletes its record from the file. False when
+     * the file could not drop it: the core is signed out, and the record would come back at the next
+     * start, so the page says so and offers to try again. A refusal from the core throws and keeps it.
+     */
+    suspend fun signOut(): Boolean =
         scope
             .async {
                 line.withLock {
-                    val owner = profile ?: return@withLock
+                    val owner = profile ?: return@withLock true
                     ops.traktSignOut()
-                    records.delete(owner)
                     acked = null
+                    inMemory -= owner
                     memoryOnly = false
+                    records.delete(owner)
                 }
             }.await()
+
+    /**
+     * A profile was deleted, here or by sync (`{"profile": "gone"}`, also sent at start for one removed
+     * meanwhile): its record leaves the file. The core revokes and drops its own state; a delete that
+     * fails is tried again at the next start, when the core says it is gone again.
+     */
+    fun forget(profile: String) {
+        scope.launch {
+            line.withLock {
+                if (!records.delete(profile)) CoreLog.w("trakt: a deleted profile's record could not be removed yet")
+            }
+        }
+    }
 }

@@ -8,6 +8,7 @@ import app.marquee.core.model.TraktStatus
 import app.marquee.core.session.CoreOps
 import app.marquee.core.trakt.TraktAccount
 import app.marquee.core.trakt.TraktRecords
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -41,12 +43,19 @@ class TraktAccountTest {
     /** What happened, in order: core requests (`setTrakt <record>`), keystore writes, view opens and closes. */
     private val events = CopyOnWriteArrayList<String>()
 
-    /** Per op: the answer (`{"ok":...}` fields) to send. */
-    private val answers = ConcurrentHashMap<String, (JsonObject) -> String>()
+    /** Per op: the answer (`{"ok":...}` fields) to send, possibly after a wait. */
+    private val answers = ConcurrentHashMap<String, suspend (JsonObject) -> String>()
 
     private inner class Records : TraktRecords {
         val held = ConcurrentHashMap<String, KeystoreRecord>()
         var durable = true
+
+        /** False: the file cannot be written, so a delete keeps the record. */
+        var deletable = true
+
+        /** Holds a save until completed: the worker stops right before its check and send. */
+        @Volatile
+        var saving: CompletableDeferred<Unit>? = null
 
         override fun load(profile: String) = held[profile]
 
@@ -54,14 +63,20 @@ class TraktAccountTest {
             profile: String,
             record: KeystoreRecord,
         ): Boolean {
+            saving?.let { runBlocking { it.await() } }
             held[profile] = record
             events += "store $profile ${name(record)}"
             return durable
         }
 
-        override fun delete(profile: String) {
+        override fun delete(profile: String): Boolean {
+            if (!deletable) {
+                events += "delete $profile refused"
+                return false
+            }
             held.remove(profile)
             events += "delete $profile"
+            return true
         }
     }
 
@@ -130,12 +145,24 @@ class TraktAccountTest {
             begin(sync, "p1")
             until("open again") { events.count { it == "open p1" } == 2 }
             assertEquals(listOf("setTrakt r1", "open p1", "close p1", "setTrakt r1", "open p1"), events.toList())
-            // Another profile: its own record, here none.
+            // Another profile with nothing stored: nothing is sent, the core keeps what it holds.
             events.clear()
             sync.end()
             begin(sync, "p2")
             until("p2 open") { "open p2" in events }
-            assertEquals(listOf("close p1", "setTrakt none", "open p2"), events.toList())
+            assertEquals(listOf("close p1", "open p2"), events.toList())
+        }
+
+    @Test
+    fun `two begins in a row leave one view open`() =
+        runBlocking {
+            val sync = account(Records())
+            begin(sync, "p1")
+            begin(sync, "p1")
+            until("open") { "open p1" in events }
+            delay(150)
+            val opened = events.count { it == "open p1" } - events.count { it == "close p1" }
+            assertEquals(1, opened, events.toString())
         }
 
     @Test
@@ -191,10 +218,36 @@ class TraktAccountTest {
             assertFailsWith<CoreError> { sync.signOut() }
             assertEquals(record("r1"), records.held["p1"])
             answers.remove("traktSignOut")
-            sync.signOut()
+            // The file cannot drop it: not signed out here yet, and the record stays for Try again.
+            records.deletable = false
+            assertFalse(sync.signOut())
+            assertEquals(record("r1"), records.held["p1"])
+            records.deletable = true
+            assertTrue(sync.signOut())
             assertNull(records.held["p1"])
             val order = events.filter { it == "traktSignOut" || it.startsWith("delete") }
-            assertEquals(listOf("traktSignOut", "traktSignOut", "delete p1"), order)
+            assertEquals(
+                listOf("traktSignOut", "traktSignOut", "delete p1 refused", "traktSignOut", "delete p1"),
+                order,
+            )
+        }
+
+    @Test
+    fun `a deleted profile's record goes, from this device's delete and from the core's gone push`() =
+        runBlocking {
+            val records =
+                Records().apply {
+                    held["p2"] = record("r2")
+                    held["p3"] = record("r3")
+                }
+            val sync = account(records)
+            // Deleted here: the page calls forget after deleteProfile.
+            sync.forget("p2")
+            until("p2 gone") { records.held["p2"] == null }
+            // Deleted on another device (or before this start): the core says so.
+            client.onProfileGone = sync::forget
+            client.onMessage("""{"profile":"gone","id":"p3"}""")
+            until("p3 gone") { records.held["p3"] == null }
         }
 
     @Test
@@ -207,5 +260,73 @@ class TraktAccountTest {
             views.getValue("p1")(status(record("r3")))
             until("acknowledged") { "setTrakt r3" in events }
             assertTrue(sync.memoryOnly)
+        }
+
+    @Test
+    fun `a record whose profile left before its send is never sent, so another profile never gets it`() =
+        runBlocking {
+            val records = Records()
+            val sync = account(records)
+            begin(sync, "p1")
+            until("open") { "open p1" in events }
+            events.clear()
+            records.saving = CompletableDeferred()
+            views.getValue("p1")(status(record("rA")))
+            until("the worker holds the lock") { records.saving != null && events.isEmpty() }
+            // The switch to p2: the gate shuts (end), then waits for the worker before switchProfile.
+            delay(50)
+            sync.end()
+            val switched = scope.launch { sync.quiet().also { events += "switch" } }
+            records.saving?.complete(Unit)
+            switched.join()
+            assertEquals(listOf("store p1 rA", "switch"), events.filterNot { it.startsWith("close") })
+        }
+
+    @Test
+    fun `a switch waits for a send already under way, so the record reaches its own profile first`() =
+        runBlocking {
+            val records = Records()
+            val sync = account(records)
+            begin(sync, "p1")
+            until("open") { "open p1" in events }
+            val reply = CompletableDeferred<Unit>()
+            answers["setTrakt"] = { _ ->
+                reply.await()
+                """"ok":true,"result":{}"""
+            }
+            events.clear()
+            views.getValue("p1")(status(record("rA")))
+            until("sent") { "setTrakt rA" in events }
+            sync.end()
+            val switched = scope.launch { sync.quiet().also { events += "switch" } }
+            delay(150)
+            assertTrue("switch" !in events, "the switch waited")
+            reply.complete(Unit)
+            switched.join()
+            assertEquals(listOf("store p1 rA", "setTrakt rA", "switch"), events.filterNot { it.startsWith("close") })
+        }
+
+    @Test
+    fun `the storage warning belongs to the profile whose record it is`() =
+        runBlocking {
+            val records = Records().apply { durable = false }
+            val sync = account(records)
+            begin(sync, "p1")
+            until("open") { "open p1" in events }
+            views.getValue("p1")(status(record("r1")))
+            until("p1 says so") { sync.memoryOnly }
+            sync.end()
+            begin(sync, "p2")
+            until("p2 open") { "open p2" in events }
+            until("p2 clear") { !sync.memoryOnly }
+            // A late save of p1's next record while p2 runs says nothing on p2's page.
+            views.getValue("p1")(status(record("r1b")))
+            until("stored") { "store p1 r1b" in events }
+            delay(50)
+            assertFalse(sync.memoryOnly)
+            sync.end()
+            begin(sync, "p1")
+            until("p1 again") { events.count { it == "open p1" } == 2 }
+            until("p1 says so again") { sync.memoryOnly }
         }
 }

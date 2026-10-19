@@ -68,6 +68,7 @@ import app.marquee.player.Scrubber
 import app.marquee.player.SkipButton
 import app.marquee.player.TrackPanel
 import app.marquee.player.TraktMark
+import app.marquee.player.TraktWarning
 import app.marquee.player.UpNextCard
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
@@ -344,6 +345,12 @@ fun TvPlayer(
                 EndsAt(controller, Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 70.dp))
             }
         }
+
+        // Not recorded on Trakt: said under the title block, and still there when the controls hide.
+        TraktWarning(
+            controller.trakt,
+            Modifier.align(Alignment.TopStart).padding(start = safe.side, top = safe.top + 150.dp),
+        )
 
         if (stage == Stage.Opening || stage == Stage.Failed || controller.status != null) {
             PlayerStatus(

@@ -557,29 +557,55 @@ val SPEEDS = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
 fun nextSpeed(current: Float): Float = SPEEDS[(SPEEDS.indexOf(current) + 1) % SPEEDS.size]
 
 /**
- * Trakt's side of this play (`PlaybackSnapshot.trakt`): a small mark with the plain word "Trakt" (no
- * logo), read out in words. Nothing shows while the profile does not use Trakt.
+ * Trakt's side of this play when it is recorded (`PlaybackSnapshot.trakt` on): a small mark with the
+ * plain word "Trakt" (no logo) in the title block, read out as a sentence. The states where the play is
+ * not recorded say so in [TraktWarning], which stays when the controls hide.
  */
 @Composable
 fun TraktMark(
     trakt: TraktPlayback?,
     modifier: Modifier = Modifier,
 ) {
+    if (trakt != TraktPlayback.On) return
     val spoken = TraktCopy.player(trakt) ?: return
-    val recorded = trakt == TraktPlayback.On
-    val icon =
-        when (trakt) {
-            TraktPlayback.On -> Icons.CheckCheck
-            TraktPlayback.Unmapped -> Icons.CircleQuestionMark
-            else -> Icons.Unlink
-        }
     val tv = Marquee.form == Form.Tv
     Row(
         modifier.clearAndSetSemantics { contentDescription = spoken },
         horizontalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MqIcon(icon, tint = if (recorded) Marquee.colors.text else Marquee.colors.warn, size = if (tv) 20.dp else 16.dp)
+        MqIcon(Icons.CheckCheck, tint = Marquee.colors.text, size = if (tv) 20.dp else 16.dp)
         MqText(TraktCopy.TITLE, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
+    }
+}
+
+/**
+ * Why this play does not reach Trakt (unmapped, or this device not signed in), as a visible sentence on
+ * a glass pill. It stays while the controls hide, so a viewer who never opens them still learns it.
+ */
+@Composable
+fun TraktWarning(
+    trakt: TraktPlayback?,
+    modifier: Modifier = Modifier,
+) {
+    if (trakt != TraktPlayback.Unmapped && trakt != TraktPlayback.ThisDeviceOff) return
+    val words = TraktCopy.player(trakt) ?: return
+    val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(Marquee.radius.pill)
+    Row(
+        modifier
+            .widthIn(max = if (tv) 720.dp else 420.dp)
+            .clip(shape)
+            .background(Marquee.colors.glass)
+            .padding(horizontal = if (tv) 16.dp else 12.dp, vertical = if (tv) 10.dp else 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(
+            if (trakt == TraktPlayback.Unmapped) Icons.CircleQuestionMark else Icons.Unlink,
+            tint = Marquee.colors.warn,
+            size = if (tv) 20.dp else 16.dp,
+        )
+        MqText(words, role = TextRole.Caption, color = Marquee.colors.text)
     }
 }

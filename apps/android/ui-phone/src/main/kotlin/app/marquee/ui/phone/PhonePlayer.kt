@@ -66,6 +66,7 @@ import app.marquee.player.Scrubber
 import app.marquee.player.SkipButton
 import app.marquee.player.TrackPanel
 import app.marquee.player.TraktMark
+import app.marquee.player.TraktWarning
 import app.marquee.player.UpNextCard
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
@@ -222,6 +223,16 @@ fun PhonePlayer(
                     if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
                 }
             }
+        }
+        // Not recorded on Trakt: said under the title row, and still there when the controls hide.
+        if (!inPip) {
+            TraktWarning(
+                controller.trakt,
+                Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.displayCutout)
+                    .padding(start = 16.dp, top = 84.dp, end = 16.dp),
+            )
         }
         // Above the top scrim: the status sits under the title bar on a phone.
         if (!inPip) {
