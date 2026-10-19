@@ -40,6 +40,18 @@ targetTemplates:
         embed: false
       - sdk: Security.framework
       - sdk: SystemConfiguration.framework
+    preBuildScripts:
+      # build-core.sh --dev marks its core (debug assertions, the loopback Trakt hook):
+      # it never goes into a Release build or an archive.
+      - name: Refuse a dev core outside Debug
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/Core/MarqueeCore.xcframework/Info.plist
+        script: |
+          if [ "$CONFIGURATION" != "Debug" ] && [ -e "$SRCROOT/Core/MarqueeCore.xcframework/DEV" ]; then
+            echo "error: Core/MarqueeCore.xcframework is a --dev build (debug assertions, the loopback Trakt hook). Run apps/apple/scripts/build-core.sh without --dev first."
+            exit 1
+          fi
     settings:
       base:
         PRODUCT_NAME: Marquee

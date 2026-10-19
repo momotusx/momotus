@@ -63,6 +63,10 @@ done
 rm -rf "$out/MarqueeCore.xcframework"
 mkdir -p "$out"
 xcodebuild -create-xcframework "${args[@]}" -output "$out/MarqueeCore.xcframework" >/dev/null
+# The app's build phase refuses a marked core outside Debug: it never ships.
+if [[ "$dev_assertions" == true ]]; then
+  echo "built with --dev: debug assertions and the loopback Trakt hook" > "$out/MarqueeCore.xcframework/DEV"
+fi
 # The libraries are 140 MB or more each: hard-link them instead of keeping copies.
 for lib in "$out"/MarqueeCore.xcframework/*/libmarquee_core.a; do
   case "$(basename "$(dirname "$lib")")" in
