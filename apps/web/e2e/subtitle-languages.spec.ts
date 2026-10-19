@@ -2,7 +2,8 @@
  * Buck Bunny from a local addon whose stream names subtitles in many
  * languages and spellings (OpenSubtitles' specials among them), with a
  * profile that prefers Turkish. Off comes first, then Turkish, then the
- * rest by name; files of one language are told apart by name. */
+ * browser's language, then the rest by name; files of one language are
+ * told apart by name. */
 
 import { expect, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
@@ -103,7 +104,9 @@ test("the subtitle menu is one section per language, preferred first", async ({ 
   await startIfPaused(page);
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   const panel = page.locator('aside[aria-label="Subtitles"]');
-  await expect(panel.locator(".sub-lang h3")).toHaveText(["Turkish", "Chinese (Traditional)", "English", "German", "Portuguese (Brazil)"]);
+  // Turkish, the profile's; English, the browser's language standing in
+  // for audio languages the profile never set; then the rest by name.
+  await expect(panel.locator(".sub-lang h3")).toHaveText(["Turkish", "English", "Chinese (Traditional)", "German", "Portuguese (Brazil)"]);
   // Off first, then the sections.
   await expect(panel.locator(".opt").first()).toHaveAttribute("data-f", "sub:off");
   const names = (language: string) => panel.locator(`section.sub-lang[aria-label="${language}"] .opt b`);
