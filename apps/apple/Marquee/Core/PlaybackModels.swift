@@ -182,16 +182,19 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// Why subtitle files did not load, one per source and problem; empty
     /// again after a failover. An older core sends none: read `notes`.
     let subtitleNotes: [SubtitleNote]?
-    /// The version the core moves on to while `resolving` (optional for older cores).
-    let trying: VersionPick?
-    /// On `failed`: a version the core offers instead (optional for older cores).
-    let offer: VersionPick?
+    /// The recommendation failed for a reason of its own and the view moved
+    /// on by itself to this version: named while `resolving` (optional for older cores).
+    let trying: OtherVersion?
+    /// On `failed`, after a version picked by hand: the ranking's next pick,
+    /// opened with its key from the same Versions view (optional for older cores).
+    let offer: OtherVersion?
 
     var notes: [SubtitleNote] { subtitleNotes ?? [] }
 }
 
-/// A version the core names: its key for `switchVersion`, its words for the viewer.
-struct VersionPick: Decodable, Hashable, Sendable {
+/// A version the playback moved on to, or offers instead: its key for
+/// `switchVersion`, its label ("1080p WEB") for the viewer.
+struct OtherVersion: Decodable, Hashable, Sendable {
     let key: String
     let label: String
 }

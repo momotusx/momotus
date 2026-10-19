@@ -315,11 +315,11 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
 }
 
 @Test func theCoreNamesTheNextVersionWhileItResolves() throws {
-    let moving = try phase("resolving", #","trying":{"key":"k2","label":"720p WEB, 1.1 GB"}"#)
-    #expect(moving.trying == VersionPick(key: "k2", label: "720p WEB, 1.1 GB"))
-    #expect(PlayerLayout.waitingWords(moving, notice: "This source failed: 404. Trying the next one.") == "Trying the next version: 720p WEB, 1.1 GB")
+    let moving = try phase("resolving", #","trying":{"key":"k2","label":"720p WEB"}"#)
+    #expect(moving.trying == OtherVersion(key: "k2", label: "720p WEB"))
+    #expect(PlayerLayout.waitingWords(moving, notice: "This source failed: 404. Trying the next one.") == "Trying the next version: 720p WEB")
     // Once it is ready the name has done its job: the player's own words, or the plain wait.
-    let ready = try phase("ready", #","trying":{"key":"k2","label":"720p WEB, 1.1 GB"}"#)
+    let ready = try phase("ready", #","trying":{"key":"k2","label":"720p WEB"}"#)
     #expect(PlayerLayout.waitingWords(ready, notice: nil) == "Getting the stream ready")
     // An older core names nothing.
     let older = try phase("resolving")
@@ -329,7 +329,7 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
 }
 
 @Test func aFailedPlaybackCanOfferTheNextVersion() throws {
-    let failed = try phase("failed", #","offer":{"key":"k3","label":"1080p WEB, 2.3 GB"}"#)
+    let failed = try phase("failed", #","offer":{"key":"k3","label":"1080p WEB"}"#)
     #expect(failed.offer?.key == "k3")
-    #expect(failed.offer?.label == "1080p WEB, 2.3 GB")
+    #expect(failed.offer?.label == "1080p WEB")
 }
