@@ -141,7 +141,7 @@ private struct SeasonButtonStyle: ButtonStyle {
 
 private struct SeasonFocus: ViewModifier {
     let pressed: Bool
-    @Environment(\.isFocused) private var focused
+    @KeyboardFocused private var focused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {

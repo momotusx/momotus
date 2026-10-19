@@ -88,7 +88,7 @@ struct ChipStyle: ButtonStyle {
     private struct ChipBody: View {
         let configuration: ButtonStyleConfiguration
         let selected: Bool
-        @Environment(\.isFocused) private var focused
+        @KeyboardFocused private var focused
         @State private var hovered = false
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

@@ -254,3 +254,10 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     // A shown frame is never a missing picture, however long it plays.
     #expect(!PlayerLayout.pictureMissing(shown: true, advanced: 600, playingFor: 600))
 }
+
+@Test func focusShowsOnlyForKeyboardNavigation() {
+    // A click focuses the page (the player takes the keyboard): no control rings for it.
+    #expect(!FocusRule.shown(focused: true, keyboardNavigation: false))
+    #expect(FocusRule.shown(focused: true, keyboardNavigation: true))
+    #expect(!FocusRule.shown(focused: false, keyboardNavigation: true))
+}

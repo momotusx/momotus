@@ -64,8 +64,9 @@ struct FocusRing<S: InsettableShape>: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay {
             // tvOS and macOS only: iOS keeps no TV-style ring, and the system
-            // draws its own indicator for keyboard users.
-            if active, !touch {
+            // draws its own indicator for keyboard users. On the Mac only for
+            // keyboard navigation, never for a click (FocusRule).
+            if FocusRule.shown(focused: active, keyboardNavigation: KeyboardNavigation.on), !touch {
                 shape.inset(by: -(3 + Theme.Focus.ring))
                     .strokeBorder(Theme.Palette.accent, lineWidth: Theme.Focus.ring)
                     .shadow(color: Theme.Palette.halo, radius: Theme.Focus.halo / 2)
@@ -116,7 +117,7 @@ private struct Interactive<S: InsettableShape>: View {
     /// A card: its art carries the ring (`cardArt`) and the card lifts.
     var card = false
 
-    @Environment(\.isFocused) private var focused
+    @KeyboardFocused private var focused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovered = false
 
@@ -275,7 +276,7 @@ private struct RoundLabel<Icon: View, Title: View>: View {
     let title: Title
     let on: Bool
     let pressed: Bool
-    @Environment(\.isFocused) private var focused
+    @KeyboardFocused private var focused
     @Environment(\.isEnabled) private var enabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovered = false

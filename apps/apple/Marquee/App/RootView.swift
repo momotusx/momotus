@@ -426,7 +426,7 @@ struct NavLinkStyle: ButtonStyle {
     private struct Link: View {
         let configuration: ButtonStyleConfiguration
         let on: Bool
-        @Environment(\.isFocused) private var focused
+        @KeyboardFocused private var focused
         @State private var hovered = false
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
