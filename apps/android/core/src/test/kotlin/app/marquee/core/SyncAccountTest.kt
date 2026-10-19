@@ -323,7 +323,8 @@ class SyncAccountTest {
         runBlocking {
             val store = Store(record(1))
             val unseen = CopyOnWriteArrayList<String?>()
-            val sync = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, saveUnseenKit = { unseen += it })
+            val sync =
+                SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, savePendingKit = { unseen += it })
             var reads = 0
             answers["syncDevices"] = {
                 // Before the kit: this device; after it: the kit too.
@@ -340,14 +341,14 @@ class SyncAccountTest {
             }
             answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
             assertEquals("ABCD", sync.createRecoveryKit())
-            assertEquals("ABCD", sync.unsavedKit)
+            assertEquals(SyncAccount.HeldKit("k1", "ABCD"), sync.heldKit)
             // Its id is kept (never the kit), so a run that ends before "I saved it" knows it went unseen.
             assertEquals("k1", unseen.last())
             sync.kitSaved()
-            assertNull(sync.unsavedKit)
+            assertNull(sync.heldKit)
             assertNull(unseen.last())
             // The next run: the app ended before "I saved it".
-            val later = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, unseenKitAtStart = "k1")
+            val later = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, pendingKitAtStart = "k1")
             assertEquals("k1", later.unseenKit)
             asked.clear()
             reads = 1
@@ -416,5 +417,140 @@ class SyncAccountTest {
             sync.join(record(1, account = "new"))
             sync.lostPreview("x")
             assertEquals("new", sentAccount)
+        }
+
+    @Test
+    fun `stopping here only sends nothing to the server and forgets the account here`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            var local: Boolean? = null
+            answers["signOut"] = { msg ->
+                local =
+                    msg
+                        .getValue("local")
+                        .jsonPrimitive.content
+                        .toBoolean()
+                ok("{}")
+            }
+            sync.leaveHere()
+            assertEquals(true, local)
+            assertNull(store.held)
+            assertFalse(sync.joined)
+            assertTrue(sync.leftHere)
+            // A plain stop says nothing about the server still listing this device.
+            store.held = record(1)
+            val other = account(store)
+            other.signOut(force = false)
+            assertFalse(other.leftHere)
+        }
+
+    @Test
+    fun `a held kit removed before it was saved is gone, and so is its waiting state`() =
+        runBlocking {
+            val store = Store(record(1))
+            val pending = CopyOnWriteArrayList<String?>()
+            val sync =
+                SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, savePendingKit = { pending += it })
+            var reads = 0
+            answers["syncDevices"] = {
+                reads++
+                ok(
+                    if (reads ==
+                        1
+                    ) {
+                        list(member("me", me = true))
+                    } else {
+                        list(member("me", me = true), member("k1", kit = true))
+                    },
+                )
+            }
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
+            sync.createRecoveryKit()
+            assertEquals("k1", sync.heldKit?.id)
+            answers["removeDevice"] = { ok(record(3).toString()) }
+            answers["syncDevices"] = { fail(null, "http status 502") }
+            // Removed here, while the list cannot be read: the kit is gone all the same.
+            sync.removeDevice("k1")
+            assertNull(sync.heldKit)
+            assertNull(pending.last())
+            // Removed from another device: the next list without it ends the waiting too.
+            reads = 0
+            answers["syncDevices"] = {
+                reads++
+                ok(
+                    if (reads ==
+                        1
+                    ) {
+                        list(member("me", me = true))
+                    } else {
+                        list(member("me", me = true), member("k2", kit = true))
+                    },
+                )
+            }
+            sync.createRecoveryKit()
+            assertEquals("k2", sync.heldKit?.id)
+            answers["syncDevices"] = { ok(list(member("me", me = true))) }
+            sync.loadDevices()
+            assertNull(sync.heldKit)
+        }
+
+    @Test
+    fun `a kit whose id could not be read is never claimed gone`() =
+        runBlocking {
+            val store = Store(record(1))
+            val unknown = CopyOnWriteArrayList<Boolean>()
+            val pending = CopyOnWriteArrayList<String?>()
+            answers["syncDevices"] = { fail(null, "http status 502") }
+            answers["createRecoveryKit"] = { ok("""{"kit":"ABCD","record":${record(2)}}""") }
+            val sync =
+                SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, savePendingKit = { pending += it })
+            sync.createRecoveryKit()
+            // The list did not show the new kit: its id is not known.
+            assertEquals("", pending.last())
+            // The next run: the letters are gone, and nobody can tell which kit it was.
+            val later =
+                SyncAccount(
+                    CoreOps(client),
+                    store,
+                    scope,
+                    io = Dispatchers.IO,
+                    pendingKitAtStart = "",
+                    saveUnknownUnseen = { unknown += it },
+                )
+            assertTrue(later.unknownUnseen)
+            assertNull(later.unseenKit)
+            answers["createRecoveryKit"] = { ok("""{"kit":"EFGH","record":${record(3)}}""") }
+            later.createRecoveryKit()
+            // A new kit does not settle it: only the user, after checking the list.
+            assertTrue(later.unknownUnseen)
+            later.dismissUnknownUnseen()
+            assertFalse(later.unknownUnseen)
+            assertEquals(false, unknown.last())
+            // A known unseen kit stays when the list cannot say it is gone.
+            val known = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, pendingKitAtStart = "k9")
+            known.createRecoveryKit()
+            assertEquals("k9", known.unseenKit)
+        }
+
+    @Test
+    fun `a kit made on a page that closed before the answer is still held`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            val answer = CompletableDeferred<Unit>()
+            answers["syncDevices"] = { ok(list(member("me", me = true))) }
+            answers["createRecoveryKit"] = {
+                answer.await()
+                ok("""{"kit":"ABCD","record":${record(2)}}""")
+            }
+            val page = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            page.launch { sync.createRecoveryKit() }
+            until("the core was asked") { asked.contains("createRecoveryKit") }
+            page.cancel()
+            answer.complete(Unit)
+            until("held") { sync.heldKit != null }
+            assertEquals("ABCD", sync.heldKit?.kit)
+            assertEquals(2, store.held.revision())
         }
 }

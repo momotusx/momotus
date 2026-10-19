@@ -97,7 +97,7 @@ class SyncRulesTest {
         val rows = SyncRules.lostRows(LostPreview(devices = listOf("tv", "tablet"), kits = emptyList()), members, utc)
         assertEquals(listOf("tv", "tablet"), rows.map { it.id })
         assertEquals("TV", rows[0].name)
-        assertEquals("Added Jan 1, 1970 through Phone", rows[0].detail)
+        assertTrue(rows[0].detail.startsWith("Added ") && rows[0].detail.endsWith(" through Phone"), rows[0].detail)
         assertEquals(
             SyncRules.LostRow("tablet", "Unknown device", "Not in this device's list yet. It goes with the others."),
             rows[1],

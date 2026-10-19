@@ -295,12 +295,20 @@ class CoreOps(
                 mapOf("record" to record, "lost" to text(lost), "keep" to JsonArray(keep.map(::text))),
             ).jsonObject
 
-    /** Sends what is queued, then leaves the account; the caller deletes its stored record. Without [force] it fails while edits are unsent. */
+    /**
+     * Sends what is queued, then leaves the account; the caller deletes its stored record. Without [force] it
+     * fails while edits are unsent. With [local]: no round and nothing sent, only this device forgets the
+     * account (the way out for a device the sync server will not let leave).
+     */
     suspend fun signOut(
         record: SyncRecord,
         force: Boolean = false,
+        local: Boolean = false,
     ) {
-        client.request("signOut", mapOf("record" to record, "force" to JsonPrimitive(force)))
+        client.request(
+            "signOut",
+            mapOf("record" to record, "force" to JsonPrimitive(force), "local" to JsonPrimitive(local)),
+        )
     }
 
     /**

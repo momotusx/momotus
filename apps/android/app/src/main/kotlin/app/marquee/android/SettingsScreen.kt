@@ -34,8 +34,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -45,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -479,7 +482,13 @@ internal fun LinkRow(
             MqText(title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
             MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = lines)
         }
-        MqIcon(Icons.ChevronRight, tint = colors.muted)
+        // Points the way the page goes: left in a right-to-left layout.
+        val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+        MqIcon(
+            Icons.ChevronRight,
+            modifier = Modifier.graphicsLayer { scaleX = if (rtl) -1f else 1f },
+            tint = colors.muted,
+        )
     }
 }
 

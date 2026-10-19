@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -65,10 +66,13 @@ open class SyncAccount(
     recoveredAtStart: Boolean = false,
     /** Keeps [recovered] across launches. */
     private val saveRecovered: (Boolean) -> Unit = {},
-    /** A kit made in an earlier run whose "I saved it" never came (its id, or "" when the list did not show it). */
-    unseenKitAtStart: String? = null,
-    /** Keeps the made-but-not-saved kit's id across launches (never the kit itself). */
-    private val saveUnseenKit: (String?) -> Unit = {},
+    /** The kit made in an earlier run whose "I saved it" never came: its id, or "" when the list did not show it. */
+    pendingKitAtStart: String? = null,
+    /** Keeps the id of the kit made and not yet saved across launches (never the kit itself). */
+    private val savePendingKit: (String?) -> Unit = {},
+    /** A kit went unseen and nobody could tell which: kept until the user checked the list. */
+    unknownUnseenAtStart: Boolean = false,
+    private val saveUnknownUnseen: (Boolean) -> Unit = {},
 ) {
     /** A failure in words, with the core's code when it has one (the page offers a fix for some). */
     data class Problem(
@@ -125,19 +129,38 @@ open class SyncAccount(
     var recovered by mutableStateOf(recoveredAtStart)
         private set
 
+    /** The last leave was here only: the sync server still lists this device. */
+    var leftHere by mutableStateOf(false)
+        private set
+
+    /** A kit made and not yet confirmed saved: its id ("" when the list did not show it) and its letters. */
+    data class HeldKit(
+        val id: String,
+        val kit: String,
+    ) {
+        override fun toString() = "HeldKit(id=$id)"
+    }
+
     /**
-     * A kit made and not yet confirmed saved, in memory only (never on disk): the kit page shows it again
-     * after Back or a new activity, until the user says it is saved.
+     * The kit made and not yet confirmed saved, in memory only (never on disk), for [KIT_HOLD_MS] at most:
+     * the kit page shows it again after the screen lock, until the user says it is saved. It goes when its
+     * row leaves the list.
      */
-    var unsavedKit: String? by mutableStateOf(null)
+    var heldKit: HeldKit? by mutableStateOf(null)
         private set
 
     /**
-     * A kit made earlier whose letters are gone before the user said it was saved (the app ended): its id
-     * when the list showed it, else "". Nobody holds it, so the next kit removes it.
+     * A kit made whose letters went before the user said it was saved (the app ended, or the hold ran out):
+     * its id. Nobody holds it, so the next kit removes it.
      */
-    var unseenKit: String? by mutableStateOf(unseenKitAtStart)
+    var unseenKit: String? by mutableStateOf(pendingKitAtStart?.takeIf { it.isNotEmpty() })
         private set
+
+    /** Such a kit whose id nobody could read: the page asks the user to check the list, never claims it gone. */
+    var unknownUnseen by mutableStateOf(unknownUnseenAtStart || pendingKitAtStart?.isEmpty() == true)
+        private set
+
+    private var holdTimer: Job? = null
 
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
@@ -231,9 +254,8 @@ open class SyncAccount(
                 account++
                 store.save(record)
             }
-        unsavedKit = null
-        unseenKit = null
-        saveUnseenKit(null)
+        dropKits()
+        leftHere = false
         return scope.launch {
             heldOnly = !durable
             joined = true
@@ -253,7 +275,8 @@ open class SyncAccount(
 
     /** After pairing: the join goes to the app, which stores it whatever the page does next. */
     fun didJoin(record: SyncRecord) {
-        join(record)
+        // The keystore write happens off the main thread the pairing page calls from.
+        scope.launch(io) { join(record) }
     }
 
     /** Forgets the failures listed since joining. */
@@ -300,6 +323,7 @@ open class SyncAccount(
             devices = list
             fingerprint = list.fingerprint
             listFailed = false
+            followKits(list)
         }
         return list
     }
@@ -312,41 +336,103 @@ open class SyncAccount(
         return approved.code
     }
 
-    /** A recovery kit, to show once: nothing here keeps it. The page asks who is there first. */
-    suspend fun createRecoveryKit(): String {
-        val before =
-            runCatching { loadDevices() }
-                .getOrNull()
-                ?.members
-                ?.filter { it.kit }
-                ?.map { it.id }
-                ?.toSet()
-        // A kit lost unseen goes first: nobody holds it.
-        unseenKit?.takeIf { it.isNotEmpty() && before?.contains(it) == true }?.let { id ->
-            withRecord("removeDevice", { ops.removeDevice(it, id) }) { it }
-        }
-        val made = withRecord("createRecoveryKit", { ops.createRecoveryKit(it) }) { it.record }
-        unsavedKit = made.kit
-        unseenKit = null
-        recovered = false
-        saveRecovered(false)
-        // Its id, kept until "I saved it": should the app end first, the next kit removes this one.
-        val after = runCatching { loadDevices() }.getOrNull()
-        saveUnseenKit(
-            after
-                ?.members
-                ?.firstOrNull { it.kit && before != null && it.id !in before }
-                ?.id
-                .orEmpty(),
-        )
-        return made.kit
+    /**
+     * A recovery kit, held in memory until the user says it is saved. A kit lost unseen goes first when the
+     * list shows it; one whose id nobody knows is never claimed gone. All of it runs in the app's scope: a
+     * page left meanwhile still keeps the new kit and its id.
+     */
+    suspend fun createRecoveryKit(): String =
+        scope
+            .async {
+                val before =
+                    runCatching { loadDevices() }
+                        .getOrNull()
+                        ?.members
+                        ?.filter { it.kit }
+                        ?.map { it.id }
+                        ?.toSet()
+                unseenKit?.let { id ->
+                    when {
+                        before == null -> Unit
+                        id in before -> withRecord("removeDevice", { ops.removeDevice(it, id) }) { it }
+                        else -> Unit
+                    }
+                    // Gone only when the list said so or the removal went through.
+                    if (before != null) clearUnseen()
+                }
+                val made = withRecord("createRecoveryKit", { ops.createRecoveryKit(it) }) { it.record }
+                recovered = false
+                saveRecovered(false)
+                val after = runCatching { loadDevices() }.getOrNull()
+                val id =
+                    after
+                        ?.members
+                        ?.firstOrNull { it.kit && before != null && it.id !in before }
+                        ?.id
+                        .orEmpty()
+                hold(HeldKit(id, made.kit))
+                made.kit
+            }.await()
+
+    /** The user saved the kit: it leaves memory, and nothing marks it pending. */
+    fun kitSaved() {
+        holdTimer?.cancel()
+        heldKit = null
+        savePendingKit(null)
     }
 
-    /** The user saved the kit: it leaves memory, and nothing marks it unseen. */
-    fun kitSaved() {
-        unsavedKit = null
+    /** The user checked the list after a kit went unseen with no id. */
+    fun dismissUnknownUnseen() {
+        unknownUnseen = false
+        saveUnknownUnseen(false)
+    }
+
+    private fun hold(kit: HeldKit) {
+        heldKit = kit
+        savePendingKit(kit.id)
+        holdTimer?.cancel()
+        // ponytail: a fixed hold; the letters never outlive it, and the kit then counts as unseen.
+        holdTimer =
+            scope.launch {
+                delay(KIT_HOLD_MS)
+                if (heldKit === kit) lose(kit)
+            }
+    }
+
+    /** The letters go unseen: the next kit removes this one, or the user checks the list when its id is unknown. */
+    private fun lose(kit: HeldKit) {
+        heldKit = null
+        if (kit.id.isEmpty()) {
+            unknownUnseen = true
+            saveUnknownUnseen(true)
+        } else {
+            unseenKit = kit.id
+        }
+    }
+
+    private fun clearUnseen() {
         unseenKit = null
-        saveUnseenKit(null)
+        if (heldKit == null) savePendingKit(null)
+    }
+
+    /** A held or unseen kit whose row left the list is gone: nobody needs to save or remove it. */
+    private fun followKits(list: Devices) {
+        val ids = list.members.map { it.id }.toSet()
+        heldKit?.takeIf { it.id.isNotEmpty() && it.id !in ids }?.let {
+            holdTimer?.cancel()
+            heldKit = null
+            savePendingKit(null)
+        }
+        unseenKit?.takeIf { it !in ids }?.let { clearUnseen() }
+    }
+
+    private fun dropKits() {
+        holdTimer?.cancel()
+        heldKit = null
+        unseenKit = null
+        unknownUnseen = false
+        savePendingKit(null)
+        saveUnknownUnseen(false)
     }
 
     /** What reporting [lost] would drop: its devices (ticked) and its kits (always). */
@@ -359,6 +445,13 @@ open class SyncAccount(
      */
     suspend fun removeDevice(device: String) {
         withRecord("removeDevice", { ops.removeDevice(it, device) }) { it }
+        // A held or unseen kit that was just removed needs no saving and no removing, list or no list.
+        if (heldKit?.id == device) {
+            holdTimer?.cancel()
+            heldKit = null
+            savePendingKit(null)
+        }
+        if (unseenKit == device) clearUnseen()
         runCatching { loadDevices() }
     }
 
@@ -376,6 +469,7 @@ open class SyncAccount(
         withRecord("signOut", { ops.signOut(it, force) }) { null }
         forget()
         problem = null
+        leftHere = false
     }
 
     /** After `fork`: both device lists, read only, for the user to compare. */
@@ -401,14 +495,15 @@ open class SyncAccount(
     }
 
     /**
-     * Drops the account here only, when the relay cannot take this device back (wrong relay, entries
-     * lost). The library stays.
+     * Stop syncing here only: no round and nothing sent; the core forgets the account's keys, roster and
+     * cursors and this device its record, so it can pair again. For a device the sync server will not let
+     * leave (off its list, a lost token, a fork it cannot settle). The library stays.
      */
-    fun forgetHere() {
-        scope.launch {
-            forget()
-            problem = null
-        }
+    suspend fun leaveHere() {
+        withRecord("signOut", { ops.signOut(it, force = false, local = true) }) { null }
+        forget()
+        problem = null
+        leftHere = true
     }
 
     /**
@@ -493,13 +588,14 @@ open class SyncAccount(
         lastSynced = null
         recovered = false
         saveRecovered(false)
-        unsavedKit = null
-        unseenKit = null
-        saveUnseenKit(null)
+        dropKits()
     }
 
     companion object {
         private const val ROUNDS = 5
+
+        /** How long a made kit's letters stay in memory before it counts as unseen. */
+        const val KIT_HOLD_MS = 5 * 60_000L
 
         /** A failure of [action] in words, with its code. */
         fun problemOf(

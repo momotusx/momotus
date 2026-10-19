@@ -43,10 +43,9 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -55,6 +54,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -379,7 +379,10 @@ fun SyncScreen(
         block("lede") { MqText(SyncCopy.LEDE, color = Marquee.colors.muted) }
         if (!sync.joined) {
             block("not-joined") {
-                if (left) StatusWord(SyncCopy.LEFT, Status.Ok)
+                when {
+                    sync.leftHere -> MqText(SyncCopy.LEFT_HERE, role = TextRole.Callout)
+                    left -> StatusWord(SyncCopy.LEFT, Status.Ok)
+                }
                 sync.problem?.let { Said(it.words, Status.Bad) }
             }
             item(key = "pair") { LinkRow(Icons.QrCode, SyncCopy.PAIR_TITLE, SyncCopy.PAIR_TEXT, onPair) }
@@ -438,14 +441,13 @@ private fun StateCard(
             val problem = sync.problem
             val report = sync.lastReport
             val last = sync.lastSynced
-            // What a round said, read out when it changes (a background round too).
-            Column(
-                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-            ) {
+            // The state line keeps its slot: what changes in it never reshapes the card around the warnings, so
+            // a change below is a change of the live region itself and is read out.
+            Box {
                 when {
+                    // Said in the warnings below.
                     problem != null -> {
-                        Said(problem.words, Status.Bad)
+                        Unit
                     }
 
                     sync.syncing -> {
@@ -466,10 +468,29 @@ private fun StateCard(
                         StatusWord(SyncCopy.NOT_SYNCED, Status.Idle)
                     }
                 }
-                report?.let { for (note in SyncCopy.notes(it)) Note(note, side = 0.dp) }
-                // A refused or unreadable change stays listed until the user dismisses it.
-                SyncCopy.failedSince(sync.failed.refused, sync.failed.unreadable, sync.failed.newer)?.let {
-                    Note(it, failed = true, side = 0.dp)
+            }
+            // A refused or unreadable change stays listed until the user dismisses it.
+            val failedSince = SyncCopy.failedSince(sync.failed.refused, sync.failed.unreadable, sync.failed.newer)
+            val notes = report?.let(SyncCopy::notes).orEmpty()
+            // The warnings are read out once each time they change (a background round too), never the time
+            // of every round. ponytail: the platform announcement, since a Compose live region on this card
+            // reached TalkBack only as a change of its parent (API 34); revisit when Compose sends it.
+            val warnings = (listOfNotNull(problem?.words) + notes + listOfNotNull(failedSince)).joinToString(" ")
+            val view = LocalView.current
+            var heard by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(warnings) {
+                @Suppress("DEPRECATION")
+                if (heard != null && warnings.isNotEmpty() && warnings != heard) view.announceForAccessibility(warnings)
+                heard = warnings
+            }
+            if (warnings.isNotEmpty()) {
+                Column(
+                    Modifier.semantics(mergeDescendants = true) {},
+                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                ) {
+                    problem?.let { Said(it.words, Status.Bad) }
+                    for (note in notes) Note(note, side = 0.dp)
+                    failedSince?.let { Note(it, failed = true, side = 0.dp) }
                 }
             }
             FlowRow(
@@ -495,7 +516,7 @@ private fun StateCard(
                 }
             }
             // Forgetting is for a relay that cannot take this device back: it keeps the library.
-            if (problem?.code in setOf("wrongRelay", "relayBehind", "notJoined")) ForgetHere(sync)
+            if (problem?.code in STUCK) LeaveHere(sync)
             // From whichever answer came last, a round or the list; the device list says when it is stale.
             sync.fingerprint?.let { Fingerprint(it) }
         }
@@ -536,7 +557,7 @@ private fun DeviceList(
     ) {
         when {
             // Shown until the user says it is saved: nobody holds it yet.
-            sync.unsavedKit != null -> {
+            sync.heldKit != null -> {
                 Callout(Icons.KeyRound, SyncCopy.KIT_WAITING)
                 SecondaryButton(SyncCopy.SHOW_KIT, onKit, icon = Icons.KeyRound)
             }
@@ -545,6 +566,12 @@ private fun DeviceList(
             sync.unseenKit != null -> {
                 Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN)
                 if (!tv) SecondaryButton(SyncCopy.MAKE_NEW_KIT, onKit, icon = Icons.KeyRound)
+            }
+
+            // Which kit went unseen is not known: the user checks the list, and says so.
+            sync.unknownUnseen -> {
+                Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN_UNKNOWN)
+                SecondaryButton(SyncCopy.CHECKED, sync::dismissUnknownUnseen, icon = Icons.Check)
             }
 
             sync.recovered || noKit -> {
@@ -557,19 +584,21 @@ private fun DeviceList(
                 Callout(Icons.KeyRound, text)
             }
         }
+        // No list and the round's failure above says why: no empty heading.
+        if (sync.devices == null && listError != null && sync.problem != null) return@Column
         Kicker(SyncCopy.DEVICES, side = 0.dp)
         said?.takeIf { it.first == "list" }?.let { StatusWord(it.second, Status.Ok) }
-        // A round that failed already says so above: one failure is shown once.
-        listError?.takeIf { sync.problem == null }?.let { Said(it, Status.Bad) }
-        if (sync.devices == null && listError == null) StatusWord(SyncCopy.LOADING_DEVICES, Status.Warn)
-        // A later read failed: the list below is the last one that came, and says so.
-        if (sync.listFailed && sync.devices != null && listError == null) {
+        val shownList = sync.devices
+        // No list at all: why, unless the round's failure above already says it (one failure shown once).
+        if (shownList == null) {
+            listError?.takeIf { sync.problem == null }?.let { Said(it, Status.Bad) }
+            if (listError == null) StatusWord(SyncCopy.LOADING_DEVICES, Status.Warn)
+        }
+        // The list below is not from the latest read: it says so, whatever else is shown.
+        if (shownList != null && sync.listFailed) {
             Said(SyncCopy.LIST_STALE, Status.Warn)
             SecondaryButton(SyncCopy.RETRY, {
-                scope.launch {
-                    listError =
-                        runCatching { sync.loadDevices() }.exceptionOrNull()?.let { wordsOf(it, Action.Devices) }
-                }
+                scope.launch { runCatching { sync.loadDevices() } }
             }, icon = Icons.RefreshCw)
         }
         for (member in members) {
@@ -612,6 +641,17 @@ private fun MemberRow(
     val scope = rememberCoroutineScope()
     val owner = rememberOwnerCheck()
     val name = SyncRules.memberName(member)
+    // Kits share one name: a screen reader tells them apart by when and where each was made.
+    val spokenRemove =
+        if (member.kit) {
+            "${SyncCopy.REMOVE} $name, ${SyncCopy.addedLine(
+                true,
+                member.addedMs,
+                SyncRules.sponsorName(member, members),
+            )}"
+        } else {
+            "${SyncCopy.REMOVE} $name"
+        }
     var asking by remember { mutableStateOf(false) }
     var again by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -666,8 +706,14 @@ private fun MemberRow(
             }
 
             asking -> {
-                // The kits it made go with it: counted from a list read now, as the sync server has it.
-                LaunchedEffect(Unit) { runCatching { sync.loadDevices() } }
+                // The kits it made go with it: counted from a list read now, as the sync server has it. Until
+                // that read worked the ask cannot name them, so it cannot be confirmed.
+                var fresh by remember { mutableStateOf<Boolean?>(null) }
+                var reads by remember { mutableStateOf(0) }
+                LaunchedEffect(reads) {
+                    fresh = null
+                    fresh = runCatching { sync.loadDevices() }.isSuccess
+                }
                 MqText(
                     if (member.kit) {
                         SyncCopy.REMOVE_KIT_ASK
@@ -676,18 +722,24 @@ private fun MemberRow(
                     },
                     role = TextRole.Callout,
                 )
+                when (fresh) {
+                    null -> StatusWord(SyncCopy.LOADING_DEVICES, Status.Warn)
+                    false -> Said(SyncCopy.REMOVE_STALE, Status.Warn)
+                    true -> Unit
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                 ) {
+                    if (fresh == false) SecondaryButton(SyncCopy.RETRY, { reads++ }, icon = Icons.RefreshCw)
                     SecondaryButton("${SyncCopy.REMOVE} $name", {
-                        if (busy) return@SecondaryButton
+                        if (busy || fresh != true) return@SecondaryButton
                         onSaid(null)
                         scope.launch {
                             guarded(owner, tv, SyncCopy.AUTH_REMOVE, askAgain = { again = true }) { remove() }
                                 ?.let { onSaid(member.id to it) }
                         }
-                    }, icon = Icons.Trash, busy = busy)
+                    }, icon = Icons.Trash, busy = busy, enabled = fresh == true, spoken = spokenRemove)
                     // A remote lands on Cancel: two presses never remove a device.
                     SecondaryButton(SyncCopy.CANCEL, {
                         asking = false
@@ -704,7 +756,7 @@ private fun MemberRow(
                     SecondaryButton(SyncCopy.REMOVE, {
                         onSaid(null)
                         asking = true
-                    }, icon = Icons.Trash, spoken = "${SyncCopy.REMOVE} $name", focusRequester = removeFocus)
+                    }, icon = Icons.Trash, spoken = spokenRemove, focusRequester = removeFocus)
                     if (!member.kit) {
                         SecondaryButton(
                             SyncCopy.REPORT_LOST,
@@ -751,7 +803,7 @@ private fun Leave(
             } catch (e: Exception) {
                 val problem = SyncAccount.problemOf(e, Action.Leave)
                 unsent = problem.code == "unsent"
-                unreachable = problem.code == null
+                unreachable = problem.code == null || problem.code in STUCK
                 error = problem.words
             } finally {
                 busy = false
@@ -784,26 +836,58 @@ private fun Leave(
         }
     }
     // The state card offers it already when a round said why.
-    if (unreachable && sync.problem?.code !in setOf("wrongRelay", "relayBehind", "notJoined")) ForgetHere(sync)
+    if (unreachable && sync.problem?.code !in STUCK) LeaveHere(sync)
 }
 
-/** Forget the account on this device only: an ask that says what is lost first. */
+/** Codes after which the sync server will not let this device leave: only stopping here helps (the web's). */
+private val STUCK = setOf("fork", "wrongRelay", "relayBehind", "notJoined")
+
+/**
+ * Stop syncing here only: nothing is sent, the core forgets the account on this device, which can pair
+ * again. An ask says what is lost first.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ForgetHere(sync: SyncController) {
+private fun LeaveHere(
+    sync: SyncController,
+    onLeft: () -> Unit = {},
+) {
+    val tv = Marquee.form == Form.Tv
+    val scope = rememberCoroutineScope()
+    val owner = rememberOwnerCheck()
     var asking by remember { mutableStateOf(false) }
-    if (!asking) {
-        SecondaryButton(SyncCopy.FORGET_HERE, { asking = true }, icon = Icons.Trash)
-        return
-    }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-        MqText(SyncCopy.FORGET_ASK, role = TextRole.Callout)
-        MqText(SyncCopy.FORGET_HERE_TEXT, role = TextRole.Callout, color = Marquee.colors.muted)
+        MqText(SyncCopy.LEAVE_HERE_TEXT, role = TextRole.Callout, color = Marquee.colors.muted)
+        error?.let { Said(it, Status.Bad) }
+        if (!asking) {
+            SecondaryButton(SyncCopy.LEAVE_HERE, { asking = true }, icon = Icons.LogOut)
+            return@Column
+        }
+        MqText(SyncCopy.LEAVE_HERE_ASK, role = TextRole.Callout)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
-            SecondaryButton(SyncCopy.FORGET_IT, sync::forgetHere, icon = Icons.Trash)
+            SecondaryButton(SyncCopy.LEAVE_HERE_BUTTON, {
+                if (busy) return@SecondaryButton
+                busy = true
+                error = null
+                scope.launch {
+                    try {
+                        // Leaving ends access, so a device with no screen lock still may.
+                        error = guarded(owner, tv, SyncCopy.AUTH_LEAVE, askAgain = null) { sync.leaveHere() }
+                        if (error == null) onLeft()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        error = wordsOf(e, Action.Leave)
+                    } finally {
+                        busy = false
+                    }
+                }
+            }, icon = Icons.LogOut, busy = busy)
             SecondaryButton(SyncCopy.CANCEL, { asking = false }, focusRequester = stepFocus())
         }
     }
@@ -849,6 +933,7 @@ fun SyncJoinScreen(
     val submitFocus = remember { FocusRequester() }
     // A kit on screen: no screenshot, screen recording or recents thumbnail of this page.
     if (kit) SecureWindow()
+    var showLetters by remember { mutableStateOf(false) }
 
     suspend fun join(
         s: String,
@@ -923,8 +1008,9 @@ fun SyncJoinScreen(
                         { extra = it },
                         label = SyncCopy.KIT,
                         placeholder = SyncCopy.KIT_HINT,
-                        // Dots, not letters: a TV room or a shoulder can read a kit.
-                        visualTransformation = PasswordVisualTransformation(),
+                        // Dots, not letters, unless the user asks: a TV room or a shoulder can read a kit.
+                        visualTransformation =
+                            if (showLetters) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions =
                             KeyboardOptions(
                                 capitalization = KeyboardCapitalization.Characters,
@@ -934,6 +1020,12 @@ fun SyncJoinScreen(
                             ),
                     )
                 }
+                // 32 letters typed blind on a remote cannot be checked: the user may look, the page stays secure.
+                SecondaryButton(
+                    if (showLetters) SyncCopy.HIDE_LETTERS else SyncCopy.SHOW_LETTERS,
+                    { showLetters = !showLetters },
+                    icon = if (showLetters) Icons.EyeOff else Icons.Eye,
+                )
             }
             Labeled(SyncCopy.DEVICE) {
                 MqTextField(name, { name = it }, label = SyncCopy.DEVICE, placeholder = "Marquee")
@@ -1092,18 +1184,35 @@ fun AddDeviceScreen(
                 val shown = digits
                 val pending = reviewing
                 when {
+                    // The approval ended: the old digits and "confirm on the new device" go, and a new code can come.
+                    shown != null && ended -> {
+                        Said(SyncCopy.DIFFER_ENDED, Status.Warn)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                        ) {
+                            PrimaryButton(SyncCopy.ADD_AGAIN, {
+                                digits = null
+                                approvedQr = null
+                                ended = false
+                                code = ""
+                                scope.refocus(fieldFocus)
+                            }, icon = Icons.QrCode, focusRequester = stepFocus())
+                            SecondaryButton(SyncCopy.DONE, onDone, icon = Icons.Check)
+                        }
+                    }
+
                     shown != null -> {
                         MqText(SyncCopy.APPROVED_STEP)
                         CodeText(shown)
                         MqText(SyncCopy.APPROVED_HELP, role = TextRole.Callout, color = Marquee.colors.muted)
-                        if (ended) Said(SyncCopy.DIFFER_ENDED, Status.Warn)
                         differError?.let { Said(it, Status.Bad) }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                         ) {
                             PrimaryButton(SyncCopy.DONE, onDone, icon = Icons.Check, focusRequester = stepFocus())
-                            if (!ended) SecondaryButton(SyncCopy.DIFFER, ::theyDiffer, icon = Icons.X, busy = busy)
+                            SecondaryButton(SyncCopy.DIFFER, ::theyDiffer, icon = Icons.X, busy = busy)
                         }
                     }
 
@@ -1228,6 +1337,9 @@ fun RecoveryKitScreen(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var copied by remember { mutableStateOf(false) }
+
+    /** The held kit shows only after the screen lock in this visit: making it, or Show the kit. */
+    var revealed by remember { mutableStateOf(false) }
     // A kit on screen: no screenshot, screen recording or recents thumbnail of this page.
     SecureWindow()
     DisposableEffect(Unit) {
@@ -1240,11 +1352,29 @@ fun RecoveryKitScreen(
         error = null
         scope.launch {
             try {
-                error = guarded(owner, tv = false, SyncCopy.AUTH_KIT, askAgain = {}) { sync.createRecoveryKit() }
+                error =
+                    guarded(owner, tv = false, SyncCopy.AUTH_KIT, askAgain = {}) {
+                        sync.createRecoveryKit()
+                        revealed = true
+                    }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 error = wordsOf(e, Action.Kit)
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    // The same screen lock as making it: anyone holding the unlocked phone must not read a held kit.
+    fun reveal() {
+        if (busy) return
+        busy = true
+        error = null
+        scope.launch {
+            try {
+                error = guarded(owner, tv = false, SyncCopy.AUTH_KIT, askAgain = {}) { revealed = true }
             } finally {
                 busy = false
             }
@@ -1262,12 +1392,25 @@ fun RecoveryKitScreen(
         }
         block("body") {
             NeedsAccount(sync, onDone) {
-                // Held by the app until "I saved it": Back, a new activity or a font change shows it again.
-                val shown = sync.unsavedKit
-                if (shown == null) {
+                // Held by the app until "I saved it" (a few minutes at most), and shown again after the screen lock.
+                val held = sync.heldKit
+                val shown = held?.kit?.takeIf { revealed }
+                if (held != null && shown == null) {
+                    Callout(Icons.KeyRound, SyncCopy.KIT_WAITING)
+                    MqText(SyncCopy.KIT_ASK_SHOW, role = TextRole.Callout, color = Marquee.colors.muted)
+                    error?.let { Said(it, Status.Bad) }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                    ) {
+                        PrimaryButton(SyncCopy.SHOW_KIT, ::reveal, icon = Icons.KeyRound)
+                        SecondaryButton(SyncCopy.CANCEL, onDone)
+                    }
+                } else if (shown == null) {
                     MqText(SyncCopy.KIT_LEDE, color = Marquee.colors.muted)
                     MqText(SyncCopy.KIT_ONCE, role = TextRole.Callout, color = Marquee.colors.muted)
                     if (sync.unseenKit != null) Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN)
+                    if (sync.unknownUnseen) Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN_UNKNOWN)
                     error?.let { Said(it, Status.Bad) }
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -1584,16 +1727,18 @@ fun ForkScreen(
     }
     val shown = preview
     val drop = shown?.let { SyncRules.forkDrop(it.server, it.drops, ticked) }.orEmpty()
-    val kits = shown?.let { SyncRules.forkKits(it, drop) }.orEmpty()
+    // The kits that go with a ticked device; one ticked itself counts once, as a device.
+    val kits = shown?.let { SyncRules.forkKits(it, drop) }.orEmpty().filter { it !in drop }
     val go: suspend () -> Unit = go@{
         val p = preview ?: return@go
         busy = true
         error = null
         changed = false
         try {
-            // The page was the review: without a screen lock, Continue is the explicit step.
+            // A list can let devices in: a phone without a screen lock refuses, as for approving; on a TV
+            // without one this reviewed page was the second step (a non-null askAgain refuses on a phone).
             val refused =
-                guarded(owner, tv, SyncCopy.AUTH_SERVER_LIST, askAgain = null) {
+                guarded(owner, tv, SyncCopy.AUTH_SERVER_LIST, askAgain = { }.takeUnless { tv }) {
                     sync.useServerRoster(SyncRules.forkDrop(p.server, p.drops, ticked), p.head)
                 }
             if (refused == null) onDone() else error = refused
@@ -1631,6 +1776,8 @@ fun ForkScreen(
             loadError != null -> {
                 block("failed") {
                     Said(loadError.orEmpty(), Status.Bad)
+                    // The server no longer knows this device: retrying cannot help, stopping here can.
+                    if (loadError == SyncCopy.FORK_TOKEN_LOST) LeaveHere(sync, onLeft = onDone)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -1652,6 +1799,7 @@ fun ForkScreen(
                 block("off") {
                     Said(SyncCopy.FORK_OFF_LIST, Status.Bad)
                     SecondaryButton(SyncCopy.CANCEL, onDone, focusRequester = stepFocus())
+                    LeaveHere(sync, onLeft = onDone)
                 }
             }
 
@@ -1660,7 +1808,8 @@ fun ForkScreen(
                 val all = shown.server + shown.mine
                 val serverOnly = sides.serverOnly.map { it.id }.toSet()
                 val rows = SyncRules.sortMembers(shown.server)
-                val tickable = rows.filter { !it.thisDevice && it.id !in shown.drops }
+                val goingWith = kits.toSet()
+                val tickable = rows.filter { !it.thisDevice && it.id !in shown.drops && it.id !in goingWith }
 
                 fun lines(m: MemberInfo) =
                     listOfNotNull(
@@ -1673,7 +1822,7 @@ fun ForkScreen(
                     MqText(SyncCopy.FORK_SERVER_HELP, role = TextRole.Callout, color = Marquee.colors.muted)
                 }
                 itemsIndexed(rows, key = { _, m -> "server:${m.id}" }) { _, m ->
-                    if (m.thisDevice || m.id in shown.drops) {
+                    if (m.thisDevice || m.id in shown.drops || m.id in goingWith) {
                         PlainRow(
                             SyncRules.memberName(m),
                             if (m.thisDevice) SyncCopy.THIS_DEVICE else SyncCopy.FORK_GOES,
@@ -2031,10 +2180,29 @@ internal fun SyncState(sync: SyncController) {
     val problem = sync.problem
     val last = sync.lastSynced
     when {
-        sync.syncing -> StatusWord(SyncCopy.SYNCING, Status.Warn)
-        problem != null -> Note(problem.words, failed = true, side = 0.dp)
-        last != null -> StatusWord("Synced at ${clock(last)}", Status.Ok)
-        else -> StatusWord(SyncCopy.NOT_SYNCED, Status.Idle)
+        sync.syncing -> {
+            StatusWord(SyncCopy.SYNCING, Status.Warn)
+        }
+
+        problem != null -> {
+            Note(problem.words, failed = true, side = 0.dp)
+        }
+
+        // The round's real state: a join whose first round failed or waits never reads as all done.
+        last != null && sync.lastReport != null -> {
+            val report = sync.lastReport!!
+            val tone =
+                when (SyncCopy.outcome(report)) {
+                    SyncCopy.Outcome.Complete -> Status.Ok
+                    SyncCopy.Outcome.Pending -> Status.Warn
+                    SyncCopy.Outcome.Failed -> Status.Bad
+                }
+            StatusWord(SyncCopy.stateLine(clock(last), report), tone)
+        }
+
+        else -> {
+            StatusWord(SyncCopy.NOT_SYNCED, Status.Idle)
+        }
     }
     sync.lastReport?.let { report ->
         for (note in SyncCopy.notes(report)) MqText(note, role = TextRole.Caption, color = Marquee.colors.muted)

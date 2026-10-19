@@ -57,6 +57,22 @@ class SyncCopyTest {
     }
 
     @Test
+    fun `a local leave with a record not this device's own changed nothing`() {
+        assertEquals(
+            "This device's sync key does not match the account stored here, so nothing changed.",
+            SyncCopy.problem("wrongRecord", "", Action.Leave),
+        )
+    }
+
+    @Test
+    fun `approving a code of a device already in the account says so`() {
+        assertEquals(
+            "This code belongs to a device already in the account.",
+            SyncCopy.problem(null, "pairing: this code belongs to a device already in the account", Action.Approve),
+        )
+    }
+
+    @Test
     fun `pairing keeps the core's own reasons and never shows an address`() {
         assertEquals(
             "The code is for another sync server.",
@@ -180,11 +196,25 @@ class SyncCopyTest {
         val utc = TimeZone.getTimeZone("UTC")
         // 2026-10-19 12:00 UTC
         val day = 1_792_411_200_000L
-        assertEquals("Added Oct 19, 2026, the first device", SyncCopy.addedLine(false, day, null, utc, Locale.US))
-        assertEquals("Added Oct 19, 2026 through Phone", SyncCopy.addedLine(false, day, "Phone", utc, Locale.US))
-        assertEquals("Made Oct 19, 2026 on Phone", SyncCopy.addedLine(true, day, "Phone", utc, Locale.US))
-        // The device's own date format.
-        assertEquals("Added 19 okt 2026 through Phone", SyncCopy.addedLine(false, day, "Phone", utc, Locale("nl")))
+
+        // Day and time, in the device's own format (the JDK writes a narrow space before AM).
+        fun plain(line: String) = line.replace('\u202f', ' ')
+        assertEquals(
+            "Added Oct 19, 2026, 12:00 PM, the first device",
+            plain(SyncCopy.addedLine(false, day, null, utc, Locale.US)),
+        )
+        assertEquals(
+            "Added Oct 19, 2026, 12:00 PM through Phone",
+            plain(SyncCopy.addedLine(false, day, "Phone", utc, Locale.US)),
+        )
+        assertEquals(
+            "Made Oct 19, 2026, 12:00 PM on Phone",
+            plain(SyncCopy.addedLine(true, day, "Phone", utc, Locale.US)),
+        )
+        assertEquals(
+            "Added 19 okt 2026 12:00 through Phone",
+            SyncCopy.addedLine(false, day, "Phone", utc, Locale("nl")),
+        )
         assertEquals("Remove 1 device", SyncCopy.lostButton(1))
         assertEquals("Remove 3 devices", SyncCopy.lostButton(3))
         assertEquals(

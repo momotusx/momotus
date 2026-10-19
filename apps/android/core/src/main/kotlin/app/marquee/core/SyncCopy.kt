@@ -85,14 +85,19 @@ object SyncCopy {
     const val SYNC_AGAIN = "Sync again"
     const val LEFT = "This device no longer syncs. Your library stays here."
     const val USE_SERVER = "Compare device lists"
-    const val FORGET_HERE = "Forget it on this device"
-    const val FORGET_IT = "Forget it"
-    const val FORGET_ASK =
-        "Forget the sync account on this device? Its key is deleted here. If no other device and no recovery kit " +
-            "holds this account, its synced data cannot be read again."
-    const val FORGET_HERE_TEXT =
-        "Forgetting needs no sync server and keeps your library. Your other devices still list this one until " +
-            "you remove it there."
+    const val LEAVE_HERE = "Stop syncing here only"
+    const val LEAVE_HERE_TEXT =
+        "This device forgets the account without telling the sync server, which lists it until another device " +
+            "removes it. Your library stays here, and you can pair this device again."
+
+    /** Android asks first: the key goes, and with it the only way in when no other device or kit holds one. */
+    const val LEAVE_HERE_ASK =
+        "Stop syncing here only? This device deletes its key for the account. If no other device and no " +
+            "recovery kit holds this account, its synced data cannot be read again."
+    const val LEAVE_HERE_BUTTON = "Stop syncing here"
+    const val LEFT_HERE =
+        "This device no longer syncs. The sync server still lists it until another device removes it; you can " +
+            "pair it again."
 
     // Add a device
     const val ADD_LEDE =
@@ -121,9 +126,12 @@ object SyncCopy {
         "If they match, confirm on the new device. If they differ, say so there, and press They differ here."
     const val DONE = "Done"
     const val DIFFER = "They differ"
+    const val ADD_AGAIN = "Add a device again"
+    const val SHOW_LETTERS = "Show the letters"
+    const val HIDE_LETTERS = "Hide the letters"
     const val DIFFER_ENDED =
         "The approval ended and your sync key changed: whoever answered cannot join with it, and a device that " +
-            "already did is removed."
+            "already did is removed, with any device it added."
 
     // Compare device lists, after the sync server showed a different one
     const val FORK_TITLE = "Compare device lists"
@@ -134,14 +142,15 @@ object SyncCopy {
     const val FORK_LOADING = "Asking the sync server for its list"
     const val FORK_SERVER = "On the sync server's list"
     const val FORK_SERVER_HELP =
-        "Ticked devices are removed when you continue. Those marked as going are removed anyway: this device had " +
-            "removed them, or they are recovery kits only the server knows."
+        "Ticked devices are removed when you continue, with the recovery kits they made. Those marked Goes are " +
+            "removed anyway: this device had removed them, they are recovery kits only the server knows, or they " +
+            "go with a ticked device."
     const val FORK_GOES = "Goes"
     const val FORK_SERVER_ONLY = "Only on the server's list"
     const val FORK_MINE = "Only this device knew these"
     const val FORK_MINE_HELP =
-        "They are not on the server's list, so they are gone once you continue. Make a new recovery kit " +
-            "afterwards if one of them was yours."
+        "They are not on the server's list, so they are gone once you continue: a device among them must pair " +
+            "again, and a recovery kit among them stops working. Make a new kit afterwards if one was yours."
     const val FORK_SAME = "Both lists name the same devices."
     const val FORK_GO = "Continue with the server's list"
     const val FORK_GOING = "Continuing"
@@ -185,9 +194,16 @@ object SyncCopy {
         "A recovery kit was made here, but the app closed before you said you saved it, and it cannot be shown " +
             "again. Make a new one: Marquee removes the unseen one."
     const val MAKE_NEW_KIT = "Make a new kit"
+    const val KIT_UNSEEN_UNKNOWN =
+        "A recovery kit was made here and never said saved, and Marquee cannot tell which one it is. Check the " +
+            "recovery kits in the list and remove those you do not hold."
+    const val CHECKED = "I checked"
+    const val KIT_ASK_SHOW = "The kit is shown again only after your screen lock."
 
     // Remove and report lost
     const val REMOVE_KIT_ASK = "Remove this recovery kit? It stops working."
+    const val REMOVE_STALE =
+        "The list could not be read again, so the kits named here may be out of date. Try again before you remove."
     const val LOST_LEDE = "{name} is removed from your account and cannot read anything you change from now on."
     const val LOST_ADDED = "Devices added through {name}"
     const val LOST_ADDED_HELP =
@@ -211,8 +227,7 @@ object SyncCopy {
 
     /** The last read of the device list failed: what shows may be from before. */
     const val LIST_STALE =
-        "This list and the 12 characters may be out of date: the sync server did not answer when this device " +
-            "asked again."
+        "This list and the 12 characters may be out of date: this device could not read the list again."
 
     /** The keystore kept a new record in memory only: nothing is sent until it is stored. */
     const val STORAGE =
@@ -291,9 +306,10 @@ object SyncCopy {
         zone: TimeZone = TimeZone.getDefault(),
         locale: Locale = Locale.getDefault(),
     ): String {
+        // Day and time: kits made the same day read apart.
         val day =
             DateFormat
-                .getDateInstance(DateFormat.MEDIUM, locale)
+                .getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale)
                 .apply { timeZone = zone }
                 .format(Date(addedMs))
         if (kit) return if (by != null) "Made $day on $by" else "Made $day"
@@ -361,6 +377,11 @@ object SyncCopy {
 
             "unconfirmed" -> {
                 return "Nothing changed: this device did not confirm it is you."
+            }
+
+            // The core refuses a local leave with a record that is not this device's own: nothing was wiped.
+            "wrongRecord" -> {
+                return "This device's sync key does not match the account stored here, so nothing changed."
             }
 
             "rosterChanged" -> {
