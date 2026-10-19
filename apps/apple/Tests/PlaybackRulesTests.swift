@@ -305,3 +305,31 @@ private func sub(_ n: Int, _ lang: String, _ language: String, _ heading: String
     #expect(SubtitleMenu.heading(new) == "Portuguese (Brazil)")
     #expect(SubtitleMenu.title(new) == "OpenSubtitles v3 2")
 }
+
+private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnapshot {
+    let json = """
+        {"phase":"\(phase)","url":null,"key":"k1","filename":null,"sizeBytes":null,"resumeMs":null,
+         "attempts":[],"subtitles":[],"subtitlesPending":false,"next":null,"bingeGroup":null\(extra)}
+        """
+    return try JSONDecoder().decode(PlaybackSnapshot.self, from: Data(json.utf8))
+}
+
+@Test func theCoreNamesTheNextVersionWhileItResolves() throws {
+    let moving = try phase("resolving", #","trying":{"key":"k2","label":"720p WEB, 1.1 GB"}"#)
+    #expect(moving.trying == VersionPick(key: "k2", label: "720p WEB, 1.1 GB"))
+    #expect(PlayerLayout.waitingWords(moving, notice: "This source failed: 404. Trying the next one.") == "Trying the next version: 720p WEB, 1.1 GB")
+    // Once it is ready the name has done its job: the player's own words, or the plain wait.
+    let ready = try phase("ready", #","trying":{"key":"k2","label":"720p WEB, 1.1 GB"}"#)
+    #expect(PlayerLayout.waitingWords(ready, notice: nil) == "Getting the stream ready")
+    // An older core names nothing.
+    let older = try phase("resolving")
+    #expect(older.trying == nil && older.offer == nil)
+    #expect(PlayerLayout.waitingWords(older, notice: "This source failed: 404. Trying the next one.") == "This source failed: 404. Trying the next one.")
+    #expect(PlayerLayout.waitingWords(nil, notice: nil) == "Getting the stream ready")
+}
+
+@Test func aFailedPlaybackCanOfferTheNextVersion() throws {
+    let failed = try phase("failed", #","offer":{"key":"k3","label":"1080p WEB, 2.3 GB"}"#)
+    #expect(failed.offer?.key == "k3")
+    #expect(failed.offer?.label == "1080p WEB, 2.3 GB")
+}

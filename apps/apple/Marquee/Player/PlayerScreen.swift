@@ -341,7 +341,16 @@ private struct StatusOverlay: View {
     @FocusState private var primary: Bool
 
     @ViewBuilder private var actions: some View {
-        if let chooseVersion {
+        if let offer = model.playback?.offer {
+            // The core's next version comes first; the others stay a step away.
+            Button("Play \(offer.label)") { model.switchVersion(offer.key) }
+                .buttonStyle(PillButtonStyle(prominent: true)).fixedSize()
+                .focused($primary)
+            if let chooseVersion {
+                Button("Choose another version", action: chooseVersion).buttonStyle(PillButtonStyle()).fixedSize()
+            }
+            Button("Back", action: back).buttonStyle(PillButtonStyle()).fixedSize()
+        } else if let chooseVersion {
             Button("Choose another version", action: chooseVersion).buttonStyle(PillButtonStyle(prominent: true)).fixedSize()
                 .focused($primary)
             Button("Back", action: back).buttonStyle(PillButtonStyle()).fixedSize()
@@ -378,7 +387,7 @@ private struct StatusOverlay: View {
             VStack(spacing: 14) {
                 ProgressView().controlSize(.large).tint(.white)
                 if model.firstFrameMs == nil {
-                    Text(model.notice ?? "Getting the stream ready")
+                    Text(PlayerLayout.waitingWords(model.playback, notice: model.notice))
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(.white.opacity(0.8))
                 }

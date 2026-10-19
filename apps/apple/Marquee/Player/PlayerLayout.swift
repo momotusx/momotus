@@ -27,6 +27,15 @@ enum PlayerLayout {
 
     static let pictureWait: Double = 4
 
+    /// Under the spinner: the version the core moves on to while it resolves,
+    /// else the player's own word on a failed source, else the plain wait.
+    static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?) -> String {
+        if playback?.phase == "resolving", let label = playback?.trying?.label {
+            return "Trying the next version: \(label)"
+        }
+        return notice ?? "Getting the stream ready"
+    }
+
     /// What `progress` tells Trakt when the player's state changes: a pause, or a
     /// play after one, from anywhere (the Lock Screen, a call); buffering is
     /// neither. Nil when there is nothing new to say.
