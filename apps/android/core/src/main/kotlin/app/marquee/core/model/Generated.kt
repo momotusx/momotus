@@ -525,11 +525,14 @@ sealed interface ListState {
     ) : ListState
 }
 
-/** What reporting `lost` drops by default: the devices it vouched for (transitively) for the user to untick, and the kits that always go. */
+/** What reporting `lost` drops by default: the devices it vouched for (transitively) for the user to untick, the kits that go with all of them, and the kits each of those devices made. */
 @Serializable
 data class LostPreview(
     val devices: List<String> = emptyList(),
+    /** Every kit that goes when the lost device and all of `devices` go. */
     val kits: List<String> = emptyList(),
+    /** The kits each of `devices` made: they stay with a device the user unticks, and go with it otherwise. */
+    val deviceKits: List<DeviceKits> = emptyList(),
 )
 
 /** A member of the account as the devices screen shows it. */
