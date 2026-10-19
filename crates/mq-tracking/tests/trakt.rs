@@ -170,7 +170,7 @@ async fn device_flow_waits_slows_down_and_gets_tokens() {
         "/oauth/device/code",
         vec![json(
             200,
-            r#"{"device_code":"dc","user_code":"5055CC52","verification_url":"https://trakt.tv/activate","expires_in":600,"interval":5}"#,
+            r#"{"device_code":"dc","user_code":"5055CC52","verification_url":"https://auth.trakt.tv/activate","expires_in":600,"interval":5}"#,
         )],
     );
     mock.on(

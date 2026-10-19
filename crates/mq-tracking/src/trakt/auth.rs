@@ -44,7 +44,8 @@ impl fmt::Debug for TraktRecord {
     }
 }
 
-/// The code a user types (or scans) at trakt.tv/activate.
+/// The code a user types (or scans) at the page Trakt names in
+/// `verification_url` (auth.trakt.tv/activate).
 #[derive(Clone, PartialEq)]
 pub struct DeviceCode {
     pub device_code: String,

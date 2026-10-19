@@ -40,8 +40,8 @@ private func status(_ json: String) throws -> TraktStatus {
 
     @Test func aSignInSaysWhereItStandsAndOffersANewCodeOnlyWhereItHelps() throws {
         let decode = { (json: String) in try JSONDecoder().decode(TraktLoginSnapshot.self, from: Data(json.utf8)) }
-        let code = try decode(#"{"phase":"code","userCode":"AB12","url":"https://trakt.tv/activate","qr":"https://trakt.tv/activate","expiresMs":600000}"#)
-        #expect(code == .code(userCode: "AB12", url: "https://trakt.tv/activate", qr: "https://trakt.tv/activate", expiresMs: 600_000))
+        let code = try decode(#"{"phase":"code","userCode":"AB12","url":"https://auth.trakt.tv/activate","qr":"https://auth.trakt.tv/activate/AB12","expiresMs":600000}"#)
+        #expect(code == .code(userCode: "AB12", url: "https://auth.trakt.tv/activate", qr: "https://auth.trakt.tv/activate/AB12", expiresMs: 600_000))
         #expect(TraktRules.loginLine(try decode(#"{"phase":"done","user":"ana"}"#)) == "Connected as ana")
         for retry in [#"{"phase":"expired"}"#, #"{"phase":"denied"}"#, #"{"phase":"failed","reason":"x"}"#] {
             #expect(TraktRules.loginRetry(try decode(retry)))
