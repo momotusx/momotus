@@ -107,3 +107,39 @@ test("tv: an episode whose still fails shows the series art with its number, not
   }
   await context.close();
 });
+
+for (const form of Object.keys(FORMS) as Form[]) {
+  test(`${form}: recommended addons read at a glance: filled when on, a mark each, one white primary`, async ({ browser }) => {
+    const { context, page, go } = await open(browser, form, "/welcome?step=2");
+    await go();
+    const rows = page.locator("button.drow");
+    await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    // One switch turned off, so both states are on screen.
+    if (form === "phone") await rows.first().tap();
+    else await rows.first().click();
+    await expect(rows.first()).toHaveAttribute("aria-pressed", "false");
+    const tracks = await rows.evaluateAll((els) =>
+      els.map((r) => ({ on: r.getAttribute("aria-pressed") === "true", track: getComputedStyle(r.querySelector(".switch") as Element).backgroundColor })),
+    );
+    expect(tracks.some((t) => t.on)).toBe(true);
+    // On is a white track, off an empty one: the state reads without the word.
+    for (const t of tracks) expect(t.track).toBe(t.on ? "rgb(255, 255, 255)" : "rgba(0, 0, 0, 0)");
+    // Every row shows its mark: the logo, or the name's initial.
+    const marks = await page.locator(".drow").evaluateAll((els) =>
+      els.map((r) => ({ name: r.querySelector(".dtext b")?.textContent ?? "", mark: r.querySelector(".dlogo img") ? "logo" : (r.querySelector(".dlogo b")?.textContent ?? "") })),
+    );
+    expect(marks.length).toBeGreaterThan(0);
+    for (const m of marks) expect(m.mark === "logo" || m.mark === m.name.charAt(0), `${m.name} has a mark`).toBe(true);
+    // Continue is the one white primary.
+    await expect(page.locator(".btn.primary")).toHaveCount(1);
+    await expect(page.locator(".btn.primary")).toContainText("Continue");
+    if (form !== "phone") {
+      const gaps = await page.locator(".dgroups").evaluate((g) => {
+        const r = g.getBoundingClientRect();
+        return { left: r.left, right: innerWidth - r.right };
+      });
+      expect(Math.abs(gaps.left - gaps.right), "the step is centered").toBeLessThanOrEqual(2);
+    }
+    await context.close();
+  });
+}

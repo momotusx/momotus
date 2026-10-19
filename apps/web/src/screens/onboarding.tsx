@@ -133,6 +133,20 @@ export default function Onboarding() {
   );
 }
 
+/** A default's mark: its logo when the core sends one (`logo` is optional
+ * until it does), else its initial on a neutral tile, also when the logo
+ * does not load. */
+function AddonMark(props: { addon: DefaultAddonInfo & { logo?: string | null } }) {
+  const [broken, setBroken] = createSignal(false);
+  return (
+    <span class="dlogo" aria-hidden="true">
+      <Show when={props.addon.logo && !broken()} fallback={<b>{props.addon.name.charAt(0)}</b>}>
+        <img src={props.addon.logo as string} alt="" decoding="async" onError={() => setBroken(true)} />
+      </Show>
+    </span>
+  );
+}
+
 /** One default: a switch when it can be chosen, its state in words when the
  * profile already has it. The whole row is the button, for a remote. */
 export function DefaultRow(props: {
@@ -144,10 +158,13 @@ export function DefaultRow(props: {
   onToggle?: () => void;
 }) {
   const text = () => (
-    <span class="dtext">
-      <b>{props.addon.name}</b>
-      <small>{props.addon.line}</small>
-    </span>
+    <>
+      <AddonMark addon={props.addon} />
+      <span class="dtext">
+        <b>{props.addon.name}</b>
+        <small>{props.addon.line}</small>
+      </span>
+    </>
   );
   return (
     <Show
