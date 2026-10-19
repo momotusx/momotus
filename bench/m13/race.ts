@@ -80,6 +80,7 @@ function race(mq: string, builtFrom: string) {
         stalls: result.stalls ?? null,
         stallMs: result.stallMs ?? null,
         attempts: result.attempts ?? null,
+        failures: result.failures ?? null,
         ok: result.ok === true,
         error: result.ok ? null : failure,
         wallMs: Date.now() - started,
