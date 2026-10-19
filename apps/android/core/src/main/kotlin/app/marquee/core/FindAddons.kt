@@ -130,6 +130,21 @@ object FindAddons {
         return "$what for $head"
     }
 
+    /**
+     * A name for each entry (by key) that holds none of its link and stays with it when the list
+     * changes order: the manifest id and the host, numbered when they repeat. For Compose item keys,
+     * which are saved, so a link's keys must not be in them.
+     */
+    fun stableIds(entries: List<ListedAddon>): Map<String, String> {
+        val seen = HashMap<String, Int>()
+        return entries.associate { e ->
+            val base = "${e.id}@${e.host}"
+            val n = (seen[base] ?: 0) + 1
+            seen[base] = n
+            e.key to if (n == 1) base else "$base#$n"
+        }
+    }
+
     /** Names shown by more than one card of a list: their cards also say the host. */
     fun repeatedNames(entries: List<ListedAddon>): Set<String> =
         entries

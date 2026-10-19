@@ -62,4 +62,21 @@ class FindAddonsFocusTest {
         gate.reset()
         assertEquals(false, gate.keyUp())
     }
+
+    @Test
+    fun `an install that ends takes the focus back only from its own button`() {
+        val owned = OwnedFocus()
+        // Pressed by touch: the button never had the focus.
+        assertEquals(false, owned.landed())
+        // The button keeps the focus through the request; it goes as the addon installs.
+        owned.changed(focused = true, buttonGone = false)
+        owned.changed(focused = false, buttonGone = true)
+        assertEquals(true, owned.landed())
+        // Read once.
+        assertEquals(false, owned.landed())
+        // The user moved to the link field while it ran.
+        owned.changed(focused = true, buttonGone = false)
+        owned.changed(focused = false, buttonGone = false)
+        assertEquals(false, owned.landed())
+    }
 }

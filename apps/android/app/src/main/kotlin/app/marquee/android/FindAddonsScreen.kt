@@ -76,6 +76,7 @@ import app.marquee.core.FindAddons.Action
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.FindAddonsPage
 import app.marquee.core.InstallCards
+import app.marquee.core.LinkInstall
 import app.marquee.core.model.ListState
 import app.marquee.core.model.ListedAddon
 import app.marquee.core.session.CoreSession
@@ -203,6 +204,29 @@ internal class SelectGate {
     }
 }
 
+/**
+ * Phone: whether a card's button still holds the focus when its request ends, so only then does the
+ * card take it back. A loss while the button is there (the user moved to another control or the link
+ * field) gives it up; a loss because the button went (the addon installed) does not.
+ */
+internal class OwnedFocus {
+    private var held = false
+
+    fun changed(
+        focused: Boolean,
+        buttonGone: Boolean,
+    ) {
+        if (focused) {
+            held = true
+        } else if (!buttonGone) {
+            held = false
+        }
+    }
+
+    /** At the end of a request: true when the focus should come back to the card. Read once. */
+    fun landed(): Boolean = held.also { held = false }
+}
+
 /** What the landing reads each frame, newer than the composition that started it. */
 private class Now(
     val failed: Boolean,
@@ -216,6 +240,7 @@ private class Now(
 fun FindAddonsScreen(
     session: CoreSession,
     cards: InstallCards,
+    link: LinkInstall,
     /** TV: opens the page with the link field (a remote types there; this page has no field). */
     onPasteLink: () -> Unit,
 ) {
@@ -357,7 +382,7 @@ fun FindAddonsScreen(
                         )
                     }
                 } else {
-                    PasteLink(session)
+                    PasteLink(session, link)
                 }
             }
             item(key = "lists") {
@@ -435,9 +460,10 @@ fun FindAddonsScreen(
                         }
 
                         else -> {
-                            // Keyed by place in the whole list: an entry's key may hold keys, and item keys are saved.
-                            val places = entries.withIndex().associate { (at, e) -> e.key to at }
-                            items(rows, key = { "row:${holder.list}:${places[it.first().key]}" }) { row ->
+                            // Keyed by the first card's id and host, never its link (item keys are saved): an
+                            // entry added or moved keeps every other row's remembered state.
+                            val ids = FindAddons.stableIds(entries)
+                            items(rows, key = { "row:${holder.list}:${ids[it.first().key]}" }) { row ->
                                 Row(
                                     Modifier.height(IntrinsicSize.Max),
                                     horizontalArrangement = Arrangement.spacedBy(gap),
@@ -533,31 +559,14 @@ private fun CommunityNote() {
     }
 }
 
-/** The phone's Paste a link field at the top: Settings' own install field, with its own state. */
+/** The phone's Paste a link field at the top: Settings' field and its one add-by-link flow. */
 @Composable
-private fun PasteLink(session: CoreSession) {
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var said by remember { mutableStateOf<Said?>(null) }
+private fun PasteLink(
+    session: CoreSession,
+    link: LinkInstall,
+) {
     val focus = remember { FocusRequester() }
-    InstallField(busy, focus, said, side = 0.dp, compact = true) { url, clear ->
-        busy = true
-        said = Said(Place.Install, "Adding the addon", failed = false, pending = true)
-        scope.launch {
-            said =
-                try {
-                    val added = session.ops.installAddon(url)
-                    clear()
-                    Said(Place.Install, "Added ${added.name}", failed = false)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Said(Place.Install, "Adding the addon did not work: ${InstallCards.wordsOf(e)}", failed = true)
-                } finally {
-                    busy = false
-                }
-        }
-    }
+    LinkField(session, link, focus, side = 0.dp, compact = true)
 }
 
 /**
@@ -614,9 +623,12 @@ private fun Card(
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
     val gate = remember { SelectGate() }
-    // Phone: this card's own install just landed. Its button goes, so focus (a keyboard's, a screen
-    // reader's) moves to the card's state instead of falling to the link field at the top.
+    // Phone: this card's own install just landed while its button held the focus. The button goes, so
+    // the focus (a keyboard's, a screen reader's) moves to the card's state instead of falling to the
+    // link field at the top. Focus the user took elsewhere meanwhile stays where it is.
     val stay = remember { FocusRequester() }
+    val owned = remember(entry.key) { OwnedFocus() }
+    val buttonGone by rememberUpdatedState(!pressable)
     var sawBusy by remember(entry.key) { mutableStateOf(false) }
     var landed by remember(entry.key) { mutableStateOf(false) }
     LaunchedEffect(busy) {
@@ -624,7 +636,8 @@ private fun Card(
             sawBusy = true
         } else if (sawBusy) {
             sawBusy = false
-            landed = state?.words == null
+            val held = owned.landed()
+            landed = held && state?.words == null
         }
     }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -779,6 +792,7 @@ private fun Card(
                         icon = if (action is Action.TurnOn) Icons.Power else Icons.Plus,
                         busy = busy,
                         spoken = pressWords,
+                        onFocusChange = { owned.changed(it, buttonGone) },
                     )
                 }
                 if (configure) {

@@ -52,6 +52,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DebridCopy
 import app.marquee.core.FindAddonsCopy
+import app.marquee.core.LinkInstall
 import app.marquee.core.SyncCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
@@ -140,6 +141,7 @@ fun SettingsScreen(
     onFindAddons: () -> Unit,
     /** Opened from "Add a source": the link field first and only the source addons, as on Apple. */
     sourcesOnly: Boolean = false,
+    link: LinkInstall,
 ) {
     val holder =
         viewModel<SettingsHolder>(
@@ -213,12 +215,7 @@ fun SettingsScreen(
                 )
             }
             item(key = "install") {
-                InstallField(busy != null, installFocus, said?.takeIf { it.place == Place.Install }) { url, clear ->
-                    run("Adding the addon", Place.Install, then = clear) {
-                        val added = session.ops.installAddon(url)
-                        said = Said(Place.Install, "Added ${added.name}", failed = false)
-                    }
-                }
+                LinkField(session, link, installFocus)
             }
             item(key = "find") {
                 LinkRow(
@@ -330,12 +327,7 @@ fun SettingsScreen(
         said?.takeIf { it.place == Place.Addons }?.let { item(key = "addons-said") { SaidLine(it) } }
         if (sourcesOnly) return@LazyColumn
         item(key = "install") {
-            InstallField(busy != null, installFocus, said?.takeIf { it.place == Place.Install }) { url, clear ->
-                run("Adding the addon", Place.Install, then = clear) {
-                    val added = session.ops.installAddon(url)
-                    said = Said(Place.Install, "Added ${added.name}", failed = false)
-                }
-            }
+            LinkField(session, link, installFocus)
         }
         item(key = "import") {
             LinkRow(
@@ -575,6 +567,24 @@ private fun AddonRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * The link field with the one add-by-link flow ([LinkInstall]): Settings and Find addons' Paste a
+ * link show the same request, which goes on when the page closes.
+ */
+@Composable
+internal fun LinkField(
+    session: CoreSession,
+    link: LinkInstall,
+    focus: FocusRequester,
+    side: Dp = Marquee.safe.side,
+    compact: Boolean = false,
+) {
+    val said = link.said?.let { Said(Place.Install, it.words, it.failed, it.pending) }
+    InstallField(link.busy, focus, said, side, compact) { url, clear ->
+        link.run({ session.ops.installAddon(url).name }, added = clear)
     }
 }
 

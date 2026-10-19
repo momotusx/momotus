@@ -10,9 +10,16 @@ import app.marquee.core.model.Installed
 import app.marquee.core.model.ListState
 import app.marquee.core.model.ListedAddon
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class FindAddonsTest {
     private fun entry(
@@ -243,5 +250,68 @@ class FindAddonsTest {
             )
         assertEquals(ListState.Loading, snapshot.lists[0].state)
         assertEquals(ListState.Failed("Cinemeta did not answer."), snapshot.lists[1].state)
+    }
+
+    /**
+     * The snapshot fixture above is written by hand from the core's fixture of the live lists: each of
+     * its entries must still be in that file, in the same list, with the same id, name and setup.
+     */
+    @Test
+    fun `the snapshot fixture matches the core's fixture of the live lists`() {
+        val core = File("../../../crates/mq-runtime/tests/fixtures/addon_catalog")
+        val live =
+            listOf("official", "community")
+                .flatMap { list ->
+                    val addons = CoreJson.parseToJsonElement(File(core, "$list.json").readText()).jsonObject
+                    addons.getValue("addons").jsonArray.map { a ->
+                        val o = a.jsonObject
+                        val manifest = o.getValue("manifest").jsonObject
+                        val hints = manifest["behaviorHints"] as? JsonObject
+
+                        fun hint(name: String) = hints?.get(name)?.jsonPrimitive?.booleanOrNull == true
+                        val setup =
+                            when {
+                                hint("configurationRequired") -> Configuration.Required
+                                hint("configurable") -> Configuration.Optional
+                                else -> Configuration.None
+                            }
+                        o.getValue("transportUrl").jsonPrimitive.content to
+                            listOf(
+                                list,
+                                manifest.getValue("id").jsonPrimitive.content,
+                                manifest.getValue("name").jsonPrimitive.content,
+                                setup.name,
+                            )
+                    }
+                }.toMap()
+        val text = javaClass.getResource("/addon-catalog.json")!!.readText()
+        val snapshot =
+            Json(
+                CoreJson,
+            ) { ignoreUnknownKeys = false }.decodeFromString(AddonCatalogSnapshot.serializer(), text)
+        for (list in snapshot.lists) {
+            for (e in list.entries) {
+                assertEquals(live[e.key], listOf(list.id, e.id, e.name, e.configuration.name), e.name)
+            }
+        }
+    }
+
+    @Test
+    fun `row ids hold no link and stay with their entry when one is added before it`() {
+        val a =
+            entry(
+                name = "A",
+            ).copy(key = "https://a.example/secret-key/manifest.json", id = "org.a", host = "a.example")
+        val b = entry(name = "B").copy(key = "https://b.example/manifest.json", id = "org.b", host = "b.example")
+        val copy = b.copy(key = "https://b.example/other/manifest.json")
+        val before = FindAddons.stableIds(listOf(a, b))
+        val after =
+            FindAddons.stableIds(
+                listOf(b.copy(key = "https://new.example/manifest.json", id = "org.new"), a, b, copy),
+            )
+        assertEquals(before[a.key], after[a.key])
+        assertEquals(before[b.key], after[b.key])
+        assertEquals("org.b@b.example#2", after[copy.key])
+        assertTrue(after.values.none { "secret" in it || "manifest" in it })
     }
 }

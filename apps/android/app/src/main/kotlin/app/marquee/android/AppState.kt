@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import app.marquee.core.InstallCards
+import app.marquee.core.LinkInstall
 import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
@@ -42,6 +43,9 @@ class AppState(
 
     /** Find addons cards' Installing and failure states: they outlive the page, never the profile. */
     val installCards = InstallCards(viewModelScope)
+
+    /** Adding an addon by its link (Settings, Find addons): it outlives the page, never the profile. */
+    val linkInstall = LinkInstall(viewModelScope)
 
     private var homeView: HomeView? = null
 
@@ -82,6 +86,7 @@ class AppState(
         homeView = null
         tvHome = TvHomeState()
         installCards.forgetAll()
+        linkInstall.forget()
         if (home) {
             sentHome = true
             start = Start.Home
