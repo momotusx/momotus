@@ -9,7 +9,7 @@ publish.workspace = true
 ts = ["dep:ts-rs", "mq-streams/ts", "mq-sync/ts"]
 # Built-in torrent engine (full builds; store builds play torrents only
 # through debrid).
-torrent = ["dep:mq-engine", "mq-server/torrent"]
+torrent = ["dep:mq-engine", "mq-server/torrent", "dep:libc"]
 # The engine's range barrier, for tests of a playback stopped mid-setup.
 test-hooks = ["torrent", "mq-engine/test-hooks"]
 
@@ -28,6 +28,8 @@ mq-media = { path = "../mq-media" }
 mq-sync = { path = "../mq-sync" }
 mq-tracking = { path = "../mq-tracking" }
 mq-engine = { path = "../mq-engine", optional = true }
+# Free space where torrents are kept (statvfs), in builds with the engine.
+libc = { version = "0.2", optional = true }
 bytes = "1"
 # Reading addon links' config segments (`carries_token`).
 base64 = "0.22"

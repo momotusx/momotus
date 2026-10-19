@@ -51,6 +51,16 @@ const DEBRID: &str = r#"{"streams":[
  {"name":"RD 1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-DEMAND","clientResolve":{"type":"debrid","service":"realdebrid","infoHash":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","fileIdx":0,"isCached":true},"behaviorHints":{"cached":true,"service":"realdebrid","videoSize":3100000000}}
 ]}"#;
 
+/// A core that opens the torrent rows here: with the engine in full builds,
+/// else (store builds) through an account (plans/m13-stream-choice.md 3.4).
+fn opens_torrents() -> Core {
+    let core = Core::temporary("p").unwrap();
+    if !core.has_engine() {
+        core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    }
+    core
+}
+
 fn params() -> VersionsParams {
     VersionsParams {
         kind: "series".into(),
@@ -135,7 +145,7 @@ const SECOND: &str = r#"{"streams":[
 #[tokio::test]
 async fn installs_sharing_a_manifest_id_keep_their_own_name_rank_and_progress() {
     mq_relparse::warm_up();
-    let core = Core::temporary("p").unwrap();
+    let core = opens_torrents();
     // The first install answers after the fan-out's 2.5 s soft deadline, so
     // it alone becomes slow; it is not the last install with that id.
     let first = named_addon("same", "First", Duration::from_secs(3), FIRST).await;
@@ -250,7 +260,7 @@ async fn frozen_pick_survives_late_results() {
 #[tokio::test]
 async fn freezing_before_any_answer_keeps_the_first_pick_coming() {
     mq_relparse::warm_up();
-    let core = Core::temporary("p").unwrap();
+    let core = opens_torrents();
     let torrents = stream_addon("torrents", Duration::from_millis(300), TORRENTS).await;
     core.library()
         .set_addons("p", &[torrents], &core.hlc())
@@ -307,7 +317,7 @@ const TWO_GROUPS: &str = r#"{"streams":[
 #[tokio::test]
 async fn remembers_the_release_line_played_last_for_the_title() {
     mq_relparse::warm_up();
-    let core = Core::temporary("p").unwrap();
+    let core = opens_torrents();
     let addon = stream_addon("torrents", Duration::ZERO, TWO_GROUPS).await;
     core.library()
         .set_addons("p", &[addon], &core.hlc())
@@ -359,7 +369,7 @@ async fn until(
 #[tokio::test]
 async fn versions_follow_installed_addons() {
     mq_relparse::warm_up();
-    let core = Core::temporary("p").unwrap();
+    let core = opens_torrents();
     let view = VersionsView::open(&core, params());
     until(&view, "done with no addon", |s| {
         s.done && s.recommended.is_none()
@@ -387,7 +397,7 @@ async fn versions_follow_installed_addons() {
 #[tokio::test]
 async fn a_frozen_pick_stays_until_its_addon_goes() {
     mq_relparse::warm_up();
-    let core = Core::temporary("p").unwrap();
+    let core = opens_torrents();
     let first = stream_addon("first", Duration::ZERO, FIRST).await;
     core.library()
         .set_addons("p", std::slice::from_ref(&first), &core.hlc())
@@ -427,7 +437,7 @@ async fn a_frozen_pick_stays_until_its_addon_goes() {
 #[tokio::test]
 async fn unrelated_addon_writes_keep_the_rows() {
     mq_relparse::warm_up();
-    let core = Core::temporary("p").unwrap();
+    let core = opens_torrents();
     let first = stream_addon("first", Duration::ZERO, FIRST).await;
     core.library()
         .set_addons("p", std::slice::from_ref(&first), &core.hlc())

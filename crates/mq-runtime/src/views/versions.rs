@@ -20,8 +20,10 @@ use mq_streams::{
     Reason, ReasonLine, SourceClass, Speed, StreamPrefs, Target, normalize, rank, screen_class,
 };
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::task::JoinSet;
 use url::Url;
 
@@ -171,8 +173,19 @@ pub enum BlockedReason {
     NothingPlaysHere,
 }
 
+/// How long `done` waits for the meta and for each cache check (4.2,
+/// r4 N4): the apps play at `done`.
+const SIDE_WAIT: Duration = Duration::from_secs(3);
+
 struct State {
     conditions: VersionsConditions,
+    /// What the ranking reads beyond the device and the user; the meta and
+    /// the cache checks fill it in.
+    rank: Conditions,
+    /// Cache answers by lowercase info hash, and the hashes asked.
+    cache: HashMap<String, bool>,
+    asked: HashSet<String>,
+    blocked: Option<BlockedVersions>,
     streams: Vec<ParsedStream>,
     ranked: Ranked,
     recommended: Option<RankedRow>,
@@ -395,17 +408,35 @@ impl VersionsView {
             extra: vec![],
         };
         let eligible = eligible(core, &path);
-        // ponytail: phase 2 of plans/m13-stream-choice.md reads the
-        // engine, runtime, years, speed and free space. Until the
-        // blocked state exists the engine is assumed, so torrents stay
-        // listed as before.
+        let facts = &params.facts;
         let conditions = Conditions {
-            engine: true,
+            runtime_s: facts.runtime_s,
+            title_year: facts.title_year,
+            episode_year: facts.episode_year,
+            episodes_in_season: facts.episodes_in_season,
+            http: core.speed(crate::speed::Kind::Http),
+            p2p: core.speed(crate::speed::Kind::P2p),
+            free_bytes: core.free_bytes(),
+            engine: core.has_engine(),
             debrid: core.debrid().is_some(),
-            ..Conditions::default()
         };
+        let item_id = item_id.map_or_else(
+            || {
+                params
+                    .video_id
+                    .split(':')
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned()
+            },
+            str::to_owned,
+        );
         let state = Arc::new(Mutex::new(State {
             conditions: view_conditions(core, &params, &conditions),
+            rank: conditions,
+            cache: HashMap::new(),
+            asked: HashSet::new(),
+            blocked: None,
             streams: Vec::new(),
             ranked: Ranked::default(),
             recommended: None,
@@ -424,7 +455,7 @@ impl VersionsView {
         let ranking = Arc::new(Ranking {
             kids: verified.as_ref().map(|v| v.names.clone()),
             params,
-            conditions,
+            item_id,
         });
         tasks.spawn(supervise(
             core.clone(),
@@ -450,6 +481,10 @@ impl VersionsView {
     fn denied_view(core: &Core, params: &VersionsParams) -> Self {
         let state = State {
             conditions: view_conditions(core, params, &Conditions::default()),
+            rank: Conditions::default(),
+            cache: HashMap::new(),
+            asked: HashSet::new(),
+            blocked: None,
             streams: Vec::new(),
             ranked: Ranked::default(),
             recommended: None,
@@ -623,6 +658,7 @@ fn restart(s: &mut State, addons: &[InstalledAddon]) {
         .collect();
     s.slow.clear();
     s.failed.clear();
+    s.blocked = None;
     s.done = addons.is_empty();
 }
 
@@ -649,7 +685,38 @@ async fn collect(
     };
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     let mut next_index = 0u32;
-    while let Some(event) = fanout.next().await {
+    // The meta and the cache checks: `done` waits for them (or 3 s each).
+    let mut side: JoinSet<Side> = JoinSet::new();
+    if needs_meta(params, &lock(&state).rank) {
+        side.spawn(meta_facts(
+            core.clone(),
+            params.kind.clone(),
+            ranking.item_id.clone(),
+            params.video_id.clone(),
+            params.target.season,
+        ));
+    }
+    let mut answered = addons.is_empty();
+    loop {
+        let event = tokio::select! {
+            event = fanout.next(), if !answered => match event {
+                Some(event) => event,
+                None => {
+                    answered = true;
+                    AddonEvent::Done
+                }
+            },
+            Some(joined) = side.join_next() => {
+                let mut s = lock(&state);
+                if let Ok(found) = joined {
+                    found.apply(&mut s);
+                }
+                settle(&core, &mut s, &ranking, answered && side.is_empty());
+                snapshot.set(render(&s));
+                continue;
+            }
+            else => break,
+        };
         // Parsing is CPU work: keep it off the async threads that feed UIs.
         let parsed = match &event {
             AddonEvent::Arrived {
@@ -695,6 +762,9 @@ async fn collect(
         let mut s = lock(&state);
         match event {
             AddonEvent::Arrived { transport_url, .. } => {
+                for (store, hashes) in cache_asks(&core, &parsed, &mut s.asked) {
+                    side.spawn(cache_check(core.clone(), store, hashes));
+                }
                 s.streams.extend(parsed);
                 s.pending.retain(|(url, _)| *url != transport_url);
                 s.slow.retain(|(url, _)| *url != transport_url);
@@ -718,14 +788,218 @@ async fn collect(
                 s.slow.retain(|(url, _)| *url != transport_url);
                 s.failed.push(name_of(&transport_url, &addon_id));
             }
-            AddonEvent::Done => s.done = true,
+            AddonEvent::Done => answered = true,
         }
-        rerank(&mut s, &ranking);
-        if s.done {
-            maybe_prefetch(&core, &mut s, (params.target.season, params.target.episode));
-        }
+        settle(&core, &mut s, &ranking, answered && side.is_empty());
         snapshot.set(render(&s));
     }
+}
+
+/// Ranks again with what is known now; once `done`, warms the pick's
+/// link and says why nothing is listed when nothing is.
+fn settle(core: &Core, s: &mut State, ranking: &Ranking, done: bool) {
+    s.done = done;
+    apply_cache(s);
+    rerank(s, ranking);
+    let target = &ranking.params.target;
+    if s.done {
+        maybe_prefetch(core, s, (target.season, target.episode));
+    }
+    s.blocked = blocked(s, ranking);
+}
+
+/// What a side task found.
+enum Side {
+    Meta(TitleFacts),
+    /// Cache answers by lowercase info hash.
+    Cache(Vec<(String, bool)>),
+}
+
+impl Side {
+    fn apply(self, s: &mut State) {
+        match self {
+            Side::Meta(f) => {
+                let c = &mut s.rank;
+                c.runtime_s = c.runtime_s.or(f.runtime_s);
+                c.title_year = c.title_year.or(f.title_year);
+                c.episode_year = c.episode_year.or(f.episode_year);
+                c.episodes_in_season = c.episodes_in_season.or(f.episodes_in_season);
+                s.conditions.runtime_min = c.runtime_s.map(|r| r / 60);
+            }
+            Side::Cache(found) => s.cache.extend(found),
+        }
+    }
+}
+
+/// The app sent no runtime or year, or for an episode no air date or
+/// season size: the meta has them.
+fn needs_meta(params: &VersionsParams, c: &Conditions) -> bool {
+    let episode = params.target.episode.is_some();
+    c.runtime_s.is_none()
+        || c.title_year.is_none()
+        || (episode && (c.episode_year.is_none() || c.episodes_in_season.is_none()))
+}
+
+/// The title's runtime, year, the episode's air date and the season's
+/// episode count from the first meta addon that answers, within 3 s.
+async fn meta_facts(
+    core: Core,
+    kind: String,
+    item_id: String,
+    video_id: String,
+    season: Option<u32>,
+) -> Side {
+    let Ok(Ok((meta, _))) = tokio::time::timeout(SIDE_WAIT, core.fetch_meta(&kind, &item_id)).await
+    else {
+        return Side::Meta(TitleFacts::default());
+    };
+    let p = &meta.preview;
+    let video = meta.videos.iter().find(|v| v.id == video_id);
+    let season = video
+        .and_then(|v| v.series_info.as_ref())
+        .map(|i| i.season)
+        .or(season);
+    let episodes = season.map(|n| {
+        meta.videos
+            .iter()
+            .filter(|v| v.series_info.as_ref().is_some_and(|i| i.season == n))
+            .count() as u32
+    });
+    let released = video
+        .and_then(|v| v.released)
+        .map(|d| d.date_naive().to_string());
+    Side::Meta(TitleFacts::read(
+        p.runtime.as_deref(),
+        p.release_info.as_deref(),
+        released.as_deref(),
+        episodes,
+    ))
+}
+
+/// A stream's info hash, lowercase, when a streaming service could have it.
+fn info_hash(s: &ParsedStream) -> Option<String> {
+    match &s.source {
+        mq_protocol::Source::Torrent { info_hash, .. } => Some(info_hash.to_ascii_lowercase()),
+        mq_protocol::Source::ClientResolve(r) => {
+            r.info_hash.as_ref().map(|h| h.to_ascii_lowercase())
+        }
+        _ => None,
+    }
+}
+
+/// The hashes of `streams` no one answered or asked about yet, by the
+/// store each resolves on (the one its service names when that account is
+/// here, else the default): one check per store and arrival.
+fn cache_asks(
+    core: &Core,
+    streams: &[ParsedStream],
+    asked: &mut HashSet<String>,
+) -> Vec<(Option<mq_debrid::StoreId>, Vec<String>)> {
+    let Some(resolver) = core.debrid() else {
+        return Vec::new();
+    };
+    let stores = resolver.stores();
+    let mut asks: Vec<(Option<mq_debrid::StoreId>, Vec<String>)> = Vec::new();
+    for s in streams.iter().filter(|s| s.cached.is_none()) {
+        let Some(hash) = info_hash(s).filter(|h| asked.insert(h.clone())) else {
+            continue;
+        };
+        let store = s
+            .service
+            .as_deref()
+            .and_then(mq_debrid::StoreId::from_service)
+            .filter(|id| stores.contains(id));
+        match asks.iter_mut().find(|(st, _)| *st == store) {
+            Some((_, hashes)) => hashes.push(hash),
+            None => asks.push((store, vec![hash])),
+        }
+    }
+    asks
+}
+
+/// One cache check, within 3 s; a store without a reliable check, an error
+/// or no answer in time leaves the rows as they were.
+async fn cache_check(core: Core, store: Option<mq_debrid::StoreId>, hashes: Vec<String>) -> Side {
+    use mq_debrid::CacheStatus;
+    let Some(resolver) = core.debrid() else {
+        return Side::Cache(Vec::new());
+    };
+    let answers = tokio::time::timeout(SIDE_WAIT, resolver.check(store, &hashes)).await;
+    let Ok(Ok(answers)) = answers else {
+        return Side::Cache(Vec::new());
+    };
+    Side::Cache(
+        hashes
+            .into_iter()
+            .zip(answers)
+            .filter_map(|(h, a)| match a {
+                CacheStatus::Cached => Some((h, true)),
+                CacheStatus::NotCached => Some((h, false)),
+                CacheStatus::Unknown => None,
+            })
+            .collect(),
+    )
+}
+
+/// Our cache answers on the rows no addon said anything about.
+fn apply_cache(s: &mut State) {
+    if s.cache.is_empty() {
+        return;
+    }
+    let cache = &s.cache;
+    for stream in s.streams.iter_mut().filter(|st| st.cached.is_none()) {
+        if let Some(cached) = info_hash(stream).and_then(|h| cache.get(&h)) {
+            stream.cached = Some(*cached);
+        }
+    }
+}
+
+/// Every addon answered, nothing is listed, and the hidden rows say why
+/// (3.11): the reason, how many, and those rows ranked as they would be
+/// once it is fixed. An account comes first (it opens the most), then free
+/// space, then a device that plays nothing found.
+fn blocked(s: &State, ranking: &Ranking) -> Option<BlockedVersions> {
+    if !s.done || !s.ranked.rows.is_empty() {
+        return None;
+    }
+    let of = |reason| -> Vec<ParsedStream> {
+        s.ranked
+            .hidden
+            .iter()
+            .filter(|h| h.reason == reason)
+            .map(|h| h.stream.clone())
+            .collect()
+    };
+    let params = &ranking.params;
+    let mut caps = params.caps.clone();
+    let mut c = s.rank.clone();
+    let (reason, streams) = [
+        (BlockedReason::NeedsAccount, of(HideReason::NeedsDebrid)),
+        (BlockedReason::NoSpace, of(HideReason::NoSpace)),
+        (BlockedReason::NothingPlaysHere, of(HideReason::Unplayable)),
+    ]
+    .into_iter()
+    .find(|(_, streams)| !streams.is_empty())?;
+    match reason {
+        BlockedReason::NeedsAccount => c.debrid = true,
+        BlockedReason::NoSpace => c.free_bytes = None,
+        BlockedReason::NothingPlaysHere => caps.has_fallback_engine = true,
+    }
+    let count = streams.len() as u32;
+    let input = RankInput {
+        caps: &caps,
+        prefs: &params.prefs,
+        target: &params.target,
+        last_binge_group: params.last_binge_group.as_deref(),
+        kids: ranking.kids.as_deref(),
+        conditions: &c,
+    };
+    let rows = rank(streams, &input).rows.iter().map(row_dto).collect();
+    Some(BlockedVersions {
+        reason,
+        count,
+        rows,
+    })
 }
 
 /// Once the pick settles (every addon answered, or the user moved focus),
@@ -755,11 +1029,12 @@ fn plays(caps: &DeviceCaps) -> Vec<mq_server::Format> {
 }
 
 /// What the ranking reads: the view's params, for a kids profile the
-/// allowed title's names (plans/m11-kids.md 4.4), and the conditions.
+/// allowed title's names (plans/m11-kids.md 4.4), and the title's id for
+/// its meta.
 struct Ranking {
     params: VersionsParams,
     kids: Option<Vec<String>>,
-    conditions: Conditions,
+    item_id: String,
 }
 
 fn rerank(s: &mut State, ranking: &Ranking) {
@@ -770,7 +1045,7 @@ fn rerank(s: &mut State, ranking: &Ranking) {
         target: &params.target,
         last_binge_group: params.last_binge_group.as_deref(),
         kids: ranking.kids.as_deref(),
-        conditions: &ranking.conditions,
+        conditions: &s.rank,
     };
     s.ranked = rank(s.streams.clone(), &input);
     if !s.frozen {
@@ -818,7 +1093,7 @@ fn render(s: &State) -> VersionsSnapshot {
     }
     VersionsSnapshot {
         conditions: s.conditions.clone(),
-        blocked: None,
+        blocked: s.blocked.clone(),
         note: None,
         recommended: s.recommended.as_ref().map(row_dto),
         rows,

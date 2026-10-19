@@ -358,10 +358,18 @@ impl Core {
         cfg!(feature = "torrent")
     }
 
-    /// Free space where the engine keeps torrents; `None` without the
-    /// engine or where it cannot be read.
+    /// Free space where the engine keeps torrents (the nearest folder that
+    /// exists); `None` without the engine or where it cannot be read.
     pub fn free_bytes(&self) -> Option<u64> {
-        // ponytail: wired in phase 2 of plans/m13-stream-choice.md (statvfs).
+        #[cfg(all(unix, feature = "torrent"))]
+        {
+            let mut dir = self.inner.torrent_dir.as_path();
+            while !dir.exists() {
+                dir = dir.parent()?;
+            }
+            free_space(dir)
+        }
+        #[cfg(not(all(unix, feature = "torrent")))]
         None
     }
 
@@ -419,7 +427,11 @@ impl Core {
                 // No exception for a LAN or an addon's host: one engine
                 // serves every addon (plans/c27-torrent-policy.md 3.2).
                 let policy = self.http().torrent_scope(&[]);
-                let config = mq_engine::EngineConfig::new(&self.inner.torrent_dir, policy);
+                let mut config = mq_engine::EngineConfig::new(&self.inner.torrent_dir, policy);
+                // One file at the 5 GB default plus read-ahead, at most half
+                // the free space (plans/m13-stream-choice.md 5).
+                let budget: u64 = 6 << 30;
+                config.cache_budget_bytes = self.free_bytes().map_or(budget, |f| budget.min(f / 2));
                 mq_engine::Engine::start(config)
                     .await
                     .map_err(|e| CoreError::Torrent(e.to_string()))
@@ -1093,6 +1105,23 @@ fn meta_failure(name: &str, error: &AddonError) -> String {
         }
         _ => format!("{name} could not be reached"),
     }
+}
+
+/// `f_bavail x f_frsize` of the file system holding `dir`.
+#[cfg(all(unix, feature = "torrent"))]
+fn free_space(dir: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
+    let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: `path` is NUL terminated and `stat` is a buffer statvfs
+    // fills when it returns 0.
+    if unsafe { libc::statvfs(path.as_ptr(), stat.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: statvfs returned 0, so it wrote `stat`.
+    let stat = unsafe { stat.assume_init() };
+    #[allow(clippy::unnecessary_cast)]
+    Some(stat.f_bavail as u64 * stat.f_frsize as u64)
 }
 
 #[cfg(test)]

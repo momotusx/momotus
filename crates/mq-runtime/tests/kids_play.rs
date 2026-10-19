@@ -104,6 +104,10 @@ const PIN: &str = "1357";
 /// The owner with a PIN and `fixture`'s addon, and a kids profile.
 async fn kid(fixture: &Fixture) -> (Core, Core) {
     let owner = Core::temporary(OWNER).unwrap();
+    // Store builds open torrents only through an account (M13 3.4).
+    if !owner.has_engine() {
+        owner.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    }
     owner.set_pin(OWNER, Some(PIN), None).await.unwrap();
     let addon = fixture.addon().await;
     owner
