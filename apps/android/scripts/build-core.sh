@@ -11,7 +11,11 @@
 # UniFFI version of the core, installed once:
 #   cargo install --path apps/android/tools/uniffi-bindgen --locked --target-dir <scratch>
 #
-# Usage: build-core.sh [armv7]   (armv7 adds the 32-bit ABI, size measurement only, no emulator run)
+# Usage: build-core.sh [armv7|dev]
+#   armv7 adds the 32-bit ABI (size measurement only, no emulator run).
+#   dev turns debug assertions on, which compiles the bridge's dev hooks in (Trakt from a local fake on
+#   this machine, `MQ_DEV_TRAKT`, for emulator walks), in its own target dir, into src/debug/jniLibs:
+#   only debug builds of the app package it. The plain build has no debug assertions and so no hook.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -21,14 +25,21 @@ STRIP=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip
 OUT=$ROOT/apps/android/core/src/main
 ABIS=(-t arm64-v8a)
 TRIPLES=(aarch64-linux-android:arm64-v8a)
+DEV_ASSERTIONS=false
+LIBS=$OUT/jniLibs
 if [ "${1:-}" = "armv7" ]; then
   ABIS+=(-t armeabi-v7a)
   TRIPLES+=(armv7-linux-androideabi:armeabi-v7a)
+elif [ "${1:-}" = "dev" ]; then
+  DEV_ASSERTIONS=true
+  TARGET=$TARGET-dev
+  LIBS=$ROOT/apps/android/core/src/debug/jniLibs
 fi
 
 cd "$ROOT"
 
 CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none ANDROID_NDK_HOME=$NDK \
+  CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$DEV_ASSERTIONS \
   cargo ndk "${ABIS[@]}" --platform 24 build --release -p mq-ffi -j 4
 
 UNSTRIPPED=$TARGET/aarch64-linux-android/release/libmarquee_core.so
@@ -36,11 +47,11 @@ rm -rf "$OUT/generated"
 uniffi-bindgen generate --library "$UNSTRIPPED" --language kotlin \
   --config "$ROOT/apps/android/uniffi.toml" --out-dir "$OUT/generated"
 
-rm -rf "$OUT/jniLibs"
+rm -rf "$LIBS"
 for pair in "${TRIPLES[@]}"; do
   triple=${pair%%:*}
   abi=${pair##*:}
-  mkdir -p "$OUT/jniLibs/$abi"
-  "$STRIP" --strip-all -o "$OUT/jniLibs/$abi/libmarquee_core.so" "$TARGET/$triple/release/libmarquee_core.so"
+  mkdir -p "$LIBS/$abi"
+  "$STRIP" --strip-all -o "$LIBS/$abi/libmarquee_core.so" "$TARGET/$triple/release/libmarquee_core.so"
 done
-ls -l "$OUT"/jniLibs/*/libmarquee_core.so
+ls -l "$LIBS"/*/libmarquee_core.so

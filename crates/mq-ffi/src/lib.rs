@@ -100,6 +100,8 @@ impl MarqueeCore {
             .map_err(|e| FfiError::Open {
                 message: e.to_string(),
             })?;
+        // Debug builds only: Trakt from a local fake (`MQ_DEV_TRAKT`, the dev bridge's rule).
+        mq_bridge::dev_trakt(&core);
 
         let (out_tx, mut out_rx) = Output::channel();
         let (in_tx, mut in_rx) = mpsc::unbounded_channel::<String>();

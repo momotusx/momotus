@@ -20,6 +20,7 @@
 /apps/web/playwright-report/
 /apps/web/e2e/.cache/
 /apps/android/core/src/main/jniLibs/
+/apps/android/core/src/debug/jniLibs/
 /apps/android/core/src/main/generated/
 /apps/android/local.properties
 /apps/android/.kotlin/

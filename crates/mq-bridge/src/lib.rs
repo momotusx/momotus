@@ -40,7 +40,9 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, watch};
 
+mod dev;
 pub mod output;
+pub use dev::dev_trakt;
 pub use output::{Outgoing, Output, SendError};
 use tokio::task::JoinHandle;
 
