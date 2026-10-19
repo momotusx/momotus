@@ -210,3 +210,37 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     pending = nil
     #expect(ticked(time: 1203, pending: pending) == 1203)
 }
+
+// Subtitle notes (plans/m13-turkcealtyazi.md 4.2).
+
+@Test func eachSubtitleProblemHasItsWords() {
+    let words = ["unreachable", "blocked", "changed", "trackFailed", "somethingNew"].map { SubtitleNote(source: "OpenSubtitles v3", problem: $0).words }
+    #expect(words == [
+        "OpenSubtitles v3 did not answer. Try its subtitles again in a moment.",
+        "OpenSubtitles v3 is turning requests away. Marquee will try again in a few minutes.",
+        "OpenSubtitles v3 changed its pages, so Marquee cannot read them. An update will fix this.",
+        "A subtitle file from OpenSubtitles v3 could not be read. Pick another one.",
+        "Subtitles from OpenSubtitles v3 did not load.",
+    ])
+}
+
+@Test func aNewNoteIsSaidAndAFileThatLeftGoesOff() {
+    let file = SubtitleTrack(url: "http://127.0.0.1:1/sub/t/1.vtt", lang: "tur", label: nil, source: "SubSense", forced: false, hearingImpaired: false)
+    let other = SubtitleTrack(url: "http://127.0.0.1:1/sub/t/2.vtt", lang: "eng", label: nil, source: "SubSense", forced: false, hearingImpaired: false)
+    let slow = SubtitleNote(source: "SubSense", problem: "unreachable")
+    let gone = SubtitleNote(source: "SubSense", problem: "trackFailed")
+    // Did not answer: said, and the file stays in the list and stays on.
+    #expect(PlayerLayout.subtitleTrouble(picked: file, old: [], new: [slow], tracks: [file, other])
+        == SubtitleTrouble(say: slow.words, off: false))
+    // Could not be read: it left the list, so subtitles go off.
+    #expect(PlayerLayout.subtitleTrouble(picked: file, old: [slow], new: [slow, gone], tracks: [other])
+        == SubtitleTrouble(say: gone.words, off: true))
+    // A note already said is not said again.
+    #expect(PlayerLayout.subtitleTrouble(picked: file, old: [slow], new: [slow], tracks: [file]) == nil)
+    // Nothing picked: nothing to say about it.
+    #expect(PlayerLayout.subtitleTrouble(picked: nil, old: [], new: [gone], tracks: []) == nil)
+    // A failover empties both lists without a note: the file stays picked.
+    #expect(PlayerLayout.subtitleTrouble(picked: file, old: [slow], new: [], tracks: []) == nil)
+    // After it, the same note counts as new again.
+    #expect(SubtitleNote.added(from: [], to: [slow]) == [slow])
+}

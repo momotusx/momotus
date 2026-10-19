@@ -100,6 +100,22 @@ struct PlayerScreen: View {
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
+            if let status = model.subtitleStatus, model.playback?.phase != "failed" {
+                // Why the picked subtitles did not load, for a few seconds, clear of Skip at the other corner.
+                Text(status)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Theme.Space.s)
+                    .padding(.vertical, Theme.Space.xs)
+                    .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(.black.opacity(0.62)))
+                    .frame(maxWidth: 520, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, Theme.Space.m)
+                    .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
             if let segment = model.segment, model.playback?.phase != "failed", !model.showEndCard {
                 // Netflix places it bottom right on the controls' top line, and it
                 // stays there whether or not the controls show.
@@ -128,6 +144,9 @@ struct PlayerScreen: View {
         .animation(Theme.Motion.panel, value: model.showNext)
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
+        .animation(Theme.Motion.panel, value: model.subtitleStatus)
+        // Said once, as it shows.
+        .onChange(of: model.subtitleStatus) { _, now in if let now { announce(now) } }
         // A Trakt warning is said once, when it arrives.
         .onChange(of: model.playback?.trakt) { _, now in
             if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }

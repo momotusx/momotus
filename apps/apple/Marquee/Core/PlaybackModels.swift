@@ -107,6 +107,45 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let nextAtMs: Int64?
     /// Trakt's side of this play (optional for older cores).
     let trakt: TraktPlayback?
+    /// Why subtitle files did not load, one per source and problem; empty
+    /// again after a failover. An older core sends none: read `notes`.
+    let subtitleNotes: [SubtitleNote]?
+
+    var notes: [SubtitleNote] { subtitleNotes ?? [] }
+}
+
+/// What the player does about a subtitle note: the words to say for a few
+/// seconds, and whether the picked file goes off.
+struct SubtitleTrouble: Equatable {
+    let say: String
+    let off: Bool
+}
+
+/// A subtitle source's trouble (plans/m13-turkcealtyazi.md 4.2). The route
+/// answers every failed file with an empty WebVTT, so the player never sees
+/// an error: this note is how the viewer learns why.
+struct SubtitleNote: Decodable, Hashable, Sendable {
+    /// The addon's name, as on `SubtitleTrack.source`.
+    let source: String
+    /// "unreachable", "blocked", "changed", "trackFailed"; a string, so a newer core's value still decodes.
+    let problem: String
+
+    /// The words the player shows, the same on every app.
+    var words: String {
+        switch problem {
+        case "unreachable": "\(source) did not answer. Try its subtitles again in a moment."
+        case "blocked": "\(source) is turning requests away. Marquee will try again in a few minutes."
+        case "changed": "\(source) changed its pages, so Marquee cannot read them. An update will fix this."
+        case "trackFailed": "A subtitle file from \(source) could not be read. Pick another one."
+        default: "Subtitles from \(source) did not load."
+        }
+    }
+
+    /// The notes a snapshot adds to the last one, in its order. A failover
+    /// empties the list, so the count starts again from nothing.
+    static func added(from old: [SubtitleNote], to new: [SubtitleNote]) -> [SubtitleNote] {
+        new.filter { !old.contains($0) }
+    }
 }
 
 /// Where a source starts: where the last one stopped when a failover

@@ -289,6 +289,11 @@ struct PlayerControls: View {
                         Choice(text: subtitleName(track, source: true), selected: model.subtitle == track)
                     }
                 }
+                // Why a source's files did not load, in the core's order, for as long as the core says so.
+                if let notes = model.playback?.notes, !notes.isEmpty {
+                    Divider()
+                    ForEach(notes, id: \.self) { Text($0.words) }
+                }
             }
             .focused($focus, equals: .subtitles)
             if let versions, let snapshot = versions.snapshot {

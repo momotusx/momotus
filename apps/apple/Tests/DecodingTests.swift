@@ -161,3 +161,19 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(hero.runtime == "142 min")
     #expect(hero.description?.hasPrefix("A banker") == true)
 }
+
+// Subtitle notes (plans/m13-turkcealtyazi.md 4.2).
+
+private func playback(_ extra: String) throws -> PlaybackSnapshot {
+    let json = #"{"phase": "ready", "url": "http://127.0.0.1:1/s/t/a.mkv", "key": null, "filename": null, "sizeBytes": null, "resumeMs": null,"#
+        + #" "attempts": [], "subtitles": [], "subtitlesPending": false, "next": null, "bingeGroup": null, "nextAtMs": null"# + extra + "}"
+    return try JSONDecoder().decode(PlaybackSnapshot.self, from: Data(json.utf8))
+}
+
+@Test func subtitleNotesDecodeWithoutTheFieldAndWithAnUnknownProblem() throws {
+    // An older core sends none: an empty list.
+    #expect(try playback("").notes == [])
+    let notes = try playback(#", "subtitleNotes": [{"source": "TurkceAltyazi.org", "problem": "blocked"}, {"source": "Subs", "problem": "somethingNew"}]"#).notes
+    #expect(notes == [SubtitleNote(source: "TurkceAltyazi.org", problem: "blocked"), SubtitleNote(source: "Subs", problem: "somethingNew")])
+    #expect(notes[1].words == "Subtitles from Subs did not load.")
+}

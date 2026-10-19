@@ -20,6 +20,8 @@ final class PlayerModel {
     private(set) var firstFrameMs: Int?
     /// A local player error the core has not answered yet.
     private(set) var notice: String?
+    /// Why the picked subtitle file did not load, shown for a few seconds over the video.
+    private(set) var subtitleStatus: String?
     /// The picture's size, for placing subtitles on it rather than on the screen.
     private(set) var videoSize: CGSize = .zero
     private(set) var subtitle: SubtitleTrack?
@@ -325,9 +327,24 @@ final class PlayerModel {
 
     var subtitleText: String? { WebVTT.text(at: position, in: cues) }
 
+    private func showSubtitleStatus(_ words: String) {
+        subtitleStatus = words
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            if subtitleStatus == words { subtitleStatus = nil }
+        }
+    }
+
     // MARK: core and player plumbing
 
     private func apply(_ snapshot: PlaybackSnapshot) {
+        if let trouble = PlayerLayout.subtitleTrouble(
+            picked: subtitle, old: playback?.notes ?? [], new: snapshot.notes, tracks: snapshot.subtitles
+        ) {
+            showSubtitleStatus(trouble.say)
+            // Its file played as an empty one: the position stays, and no other version is tried.
+            if trouble.off { selectSubtitle(nil) }
+        }
         playback = snapshot
         switch snapshot.phase {
         case "ready":

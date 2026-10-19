@@ -4,6 +4,19 @@ import CoreGraphics
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
 enum PlayerLayout {
+    /// What a snapshot's subtitle notes do to the picked file, as the web
+    /// does: only the picked file is fetched, so a note new to this snapshot
+    /// is about it and is said; when the file also left the list (it could
+    /// not be read) subtitles go off, and nothing else changes. Nil without
+    /// a picked file or a new note: a failover empties both lists without a
+    /// note, and the file stays picked.
+    static func subtitleTrouble(
+        picked: SubtitleTrack?, old: [SubtitleNote], new: [SubtitleNote], tracks: [SubtitleTrack]
+    ) -> SubtitleTrouble? {
+        guard let picked, let note = SubtitleNote.added(from: old, to: new).last else { return nil }
+        return SubtitleTrouble(say: note.words, off: !tracks.contains { $0.url == picked.url })
+    }
+
     /// What `progress` tells Trakt when the player's state changes: a pause, or a
     /// play after one, from anywhere (the Lock Screen, a call); buffering is
     /// neither. Nil when there is nothing new to say.
