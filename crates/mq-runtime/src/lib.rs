@@ -53,6 +53,6 @@ pub use views::search::{SearchSnapshot, SearchView};
 pub use views::settings::{HomeRows, Prefs, SettingsView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{
-    BlockedReason, BlockedVersions, TitleFacts, VersionRow, VersionsConditions, VersionsParams,
-    VersionsSnapshot, VersionsView,
+    BlockedReason, BlockedVersions, Pick, PickHandle, TitleFacts, VersionRow, VersionsConditions,
+    VersionsParams, VersionsSnapshot, VersionsView,
 };

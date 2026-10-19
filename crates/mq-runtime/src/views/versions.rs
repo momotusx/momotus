@@ -179,6 +179,11 @@ const SIDE_WAIT: Duration = Duration::from_secs(3);
 
 struct State {
     conditions: VersionsConditions,
+    /// A playback of the recommendation failed in this view.
+    recommendation_failed: bool,
+    /// A pick already counted in this view (only the first does).
+    learned: bool,
+    note: Option<LearnedNote>,
     /// What the ranking reads beyond the device and the user; the meta and
     /// the cache checks fill it in.
     rank: Conditions,
@@ -211,7 +216,44 @@ pub struct VersionsView {
     verified: Option<Verified>,
     /// A kids policy refused the target: the view does no work.
     denied: bool,
+    /// What counting a pick reads (3.9).
+    learning: Box<Learning>,
     _tasks: JoinSet<()>,
+}
+
+/// What a pick needs to count: the screen class it teaches, the device
+/// (for HDR), the title, and the profile's preferences before learning.
+struct Learning {
+    on: bool,
+    screen_class: u32,
+    caps: DeviceCaps,
+    item_id: String,
+    prefs: StreamPrefs,
+}
+
+/// A row the user picked: its stream and failover chain for playback, the
+/// handle playback reports a failure through, and the learning note if
+/// this pick crossed one.
+pub struct Pick {
+    pub candidates: Vec<ParsedStream>,
+    pub handle: PickHandle,
+    pub note: Option<LearnedNote>,
+}
+
+/// Playback reports through this that the picked row failed; when it was
+/// the recommendation, no later pick in the view teaches anything (3.9).
+#[derive(Clone)]
+pub struct PickHandle {
+    state: std::sync::Weak<Mutex<State>>,
+    recommended: bool,
+}
+
+impl PickHandle {
+    pub fn failed(&self) {
+        if let (true, Some(state)) = (self.recommended, self.state.upgrade()) {
+            lock(&state).recommendation_failed = true;
+        }
+    }
 }
 
 /// A kids profile's target as the list allows it (plans/m11-kids.md 4.3):
@@ -388,6 +430,17 @@ impl VersionsView {
         } else {
             None
         };
+        let screen = screen_class(params.caps.display_height);
+        let learning = Box::new(Learning {
+            on: params.prefs.learn && verified.is_none(),
+            screen_class: screen,
+            caps: params.caps.clone(),
+            item_id: item_id
+                .unwrap_or_else(|| params.video_id.split(':').next().unwrap_or_default())
+                .to_owned(),
+            prefs: params.prefs.clone(),
+        });
+        params.prefs = core.learned_prefs(params.prefs, screen);
         if params.last_binge_group.is_none() {
             let item_id =
                 item_id.unwrap_or_else(|| params.video_id.split(':').next().unwrap_or_default());
@@ -420,6 +473,7 @@ impl VersionsView {
             engine: core.has_engine(),
             debrid: core.debrid().is_some(),
             dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
+            limit_chosen: core.size_limit_chosen(),
         };
         let item_id = item_id.map_or_else(
             || {
@@ -434,6 +488,9 @@ impl VersionsView {
         );
         let state = Arc::new(Mutex::new(State {
             conditions: view_conditions(core, &params, &conditions),
+            recommendation_failed: false,
+            learned: false,
+            note: None,
             rank: conditions,
             cache: HashMap::new(),
             asked: HashSet::new(),
@@ -475,6 +532,7 @@ impl VersionsView {
             state,
             verified,
             denied: false,
+            learning,
             _tasks: tasks,
         }
     }
@@ -482,6 +540,9 @@ impl VersionsView {
     fn denied_view(core: &Core, params: &VersionsParams) -> Self {
         let state = State {
             conditions: view_conditions(core, params, &Conditions::default()),
+            recommendation_failed: false,
+            learned: false,
+            note: None,
             rank: Conditions::default(),
             cache: HashMap::new(),
             asked: HashSet::new(),
@@ -504,6 +565,13 @@ impl VersionsView {
             state: Arc::new(Mutex::new(state)),
             verified: None,
             denied: true,
+            learning: Box::new(Learning {
+                on: false,
+                screen_class: screen_class(params.caps.display_height),
+                caps: params.caps.clone(),
+                item_id: String::new(),
+                prefs: params.prefs.clone(),
+            }),
             _tasks: JoinSet::new(),
         }
     }
@@ -567,6 +635,60 @@ impl VersionsView {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// The user picked row `key` to play. A pick counts toward learning
+    /// (3.9) when the view is frozen, it is not the recommendation nor the
+    /// stream last played for the title, no playback of the recommendation
+    /// failed here, learning is on, the profile is not a kids one, and no
+    /// pick counted in this view yet.
+    pub fn pick(&self, key: &str) -> Pick {
+        let candidates = self.candidates(key);
+        let mut s = lock(&self.state);
+        let recommended = s.recommended.as_ref().is_some_and(|r| r.stream.key == key);
+        let handle = PickHandle {
+            state: Arc::downgrade(&self.state),
+            recommended,
+        };
+        let l = &self.learning;
+        let counts = l.on && s.frozen && !recommended && !s.recommendation_failed && !s.learned;
+        let chose = s.ranked.rows.iter().find(|r| r.stream.key == key);
+        let taught = match (counts, chose, &s.recommended) {
+            (true, Some(chose), Some(over)) if !self.replays(key) => {
+                crate::learn::choice(chose, over, &l.caps)
+            }
+            _ => None,
+        };
+        let mut note = None;
+        if let Some((choice, delta)) = taught {
+            s.learned = true;
+            note = self
+                .core
+                .learn_pick(l.screen_class, choice, delta, l.prefs.clone());
+            if note.is_some() {
+                s.note = note.clone();
+                self.snapshot.set(render(&s));
+            }
+        }
+        Pick {
+            candidates,
+            handle,
+            note,
+        }
+    }
+
+    /// `key` is the stream last played for the title: a replay teaches
+    /// nothing.
+    fn replays(&self, key: &str) -> bool {
+        let remembered = self
+            .core
+            .library()
+            .stream_memory(self.core.profile(), &self.learning.item_id)
+            .ok()
+            .flatten();
+        remembered
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+            .is_some_and(|m| m["key"] == key)
     }
 
     pub fn recommended(&self) -> Option<RankedRow> {
@@ -1095,7 +1217,7 @@ fn render(s: &State) -> VersionsSnapshot {
     VersionsSnapshot {
         conditions: s.conditions.clone(),
         blocked: s.blocked.clone(),
-        note: None,
+        note: s.note.clone(),
         recommended: s.recommended.as_ref().map(row_dto),
         rows,
         hidden: HiddenSummary {

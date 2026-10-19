@@ -4,7 +4,8 @@
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
 //! "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "defaultAddons" |
-//! "installDefaults" | "setPrefs" | "streamConditions" | "resetSpeed" | "setDebridKeys" |
+//! "installDefaults" | "setPrefs" | "streamConditions" | "resetSpeed" | "forgetLearned" |
+//! "undoLearned" | "setDebridKeys" |
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "cancelPairing" |
@@ -251,6 +252,19 @@ enum Request {
     /// estimates. Replies `StreamConditions`.
     ResetSpeed {
         id: u64,
+    },
+    /// "Forget what was learned" (plans/m13-stream-choice.md 3.9). Replies
+    /// `Prefs`.
+    ForgetLearned {
+        id: u64,
+    },
+    /// Undo of a learning note: that choice on that screen class goes back
+    /// to zero and no longer learns. Replies `Prefs`.
+    UndoLearned {
+        id: u64,
+        #[serde(rename = "screenClass")]
+        screen_class: u32,
+        choice: mq_runtime::learn::LearnedChoice,
     },
     /// Answers at once from the request loop: the core is alive.
     Ping {
@@ -841,6 +855,24 @@ impl Session {
                 let result = to_value(&core.reset_speed());
                 self.reply(json!(id), result);
             }
+            Request::ForgetLearned { id } => {
+                let result = core
+                    .forget_learned()
+                    .map_err(|e| e.to_string())
+                    .and_then(|p| to_value(&p));
+                self.reply(json!(id), result);
+            }
+            Request::UndoLearned {
+                id,
+                screen_class,
+                choice,
+            } => {
+                let result = core
+                    .undo_learned(screen_class, choice)
+                    .map_err(|e| e.to_string())
+                    .and_then(|p| to_value(&p));
+                self.reply(json!(id), result);
+            }
             Request::SetPrefs { id, patch } => {
                 let result = core
                     .set_prefs(&patch)
@@ -1392,10 +1424,11 @@ impl Session {
         else {
             return Err(format!("no versions subscription {versions_sub}"));
         };
-        let candidates = versions.candidates(&param(params, "key")?);
+        // The pick counts toward learning and hears back when it fails.
+        let pick = versions.pick(&param(params, "key")?);
         let plays = versions.plays();
         drop(shared);
-        if candidates.is_empty() {
+        if pick.candidates.is_empty() {
             return Err("that version is no longer listed".into());
         }
         let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
@@ -1408,7 +1441,7 @@ impl Session {
             season: num("season"),
             episode: num("episode"),
         };
-        Ok(PlaybackView::open_for(core, candidates, target, &plays))
+        Ok(PlaybackView::open_picked(core, pick, target, &plays))
     }
 }
 

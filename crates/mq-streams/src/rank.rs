@@ -643,6 +643,7 @@ fn line(
         return ReasonLine::Large {
             size_bytes: size,
             limit_bytes: limit,
+            chosen: input.conditions.limit_chosen,
         };
     }
     if let (true, Some(n), 1) = (torrent, s.seeders, key.start) {

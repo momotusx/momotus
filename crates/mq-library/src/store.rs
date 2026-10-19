@@ -887,6 +887,22 @@ impl Library {
         })
     }
 
+    /// The stream last played for a title, as `set_stream_memory` stored it.
+    pub fn stream_memory(
+        &self,
+        profile: &str,
+        item_id: &str,
+    ) -> Result<Option<String>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT stream_json FROM stream_memory WHERE profile_id = ?1 AND item_id = ?2",
+                params![profile, item_id],
+                |r| r.get(0),
+            )
+            .optional()
+        })
+    }
+
     /// The binge group of the stream last played for a title.
     pub fn last_binge_group(
         &self,

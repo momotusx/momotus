@@ -159,6 +159,9 @@ pub struct Conditions {
     /// device last tried them: they may not start, whatever the seeders an
     /// addon lists.
     pub dead_swarms: Vec<String>,
+    /// The size limit is one the user set (or an older app's quality set),
+    /// not the default: the line says "the size you chose".
+    pub limit_chosen: bool,
 }
 
 impl Default for Conditions {
@@ -180,6 +183,7 @@ impl Default for Conditions {
             engine: false,
             debrid: false,
             dead_swarms: Vec::new(),
+            limit_chosen: false,
         }
     }
 }
@@ -397,6 +401,9 @@ pub enum ReasonLine {
         size_bytes: u64,
         #[cfg_attr(feature = "ts", ts(type = "number"))]
         limit_bytes: u64,
+        /// The user set the limit: "Larger than the size you chose";
+        /// otherwise "Large file" (3.7).
+        chosen: bool,
     },
     #[serde(rename_all = "camelCase")]
     Few {

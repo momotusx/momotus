@@ -1054,6 +1054,8 @@ sealed interface ReasonLine {
     data class Large(
         val sizeBytes: Long,
         val limitBytes: Long,
+        /** The user set the limit: "Larger than the size you chose"; otherwise "Large file" (3.7). */
+        val chosen: Boolean,
     ) : ReasonLine
 
     @Serializable

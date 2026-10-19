@@ -1371,3 +1371,31 @@ fn a_swarm_that_stalled_here_is_not_started_first() {
     assert!(!dead.key.viable);
     assert_eq!(dead.line, ReasonLine::Stalled);
 }
+
+/// 3.7: a large file says whether the limit is one the user chose.
+#[test]
+fn a_large_file_says_whether_the_limit_was_chosen() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2020.1080p.BluRay.x264-BIG", 900, 9.0),
+            seeded(2, "Movie.2020.1080p.WEBRip.x264-FIT", 300, 3.0),
+        ]
+    };
+    let large = |ranked: &Ranked| row(ranked, "Movie.2020.1080p.BluRay").line.clone();
+    let default = Case::stick().rank(rows());
+    assert!(matches!(
+        large(&default),
+        ReasonLine::Large { chosen: false, .. }
+    ));
+    let case = Case {
+        conditions: Conditions {
+            limit_chosen: true,
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    assert!(matches!(
+        large(&case.rank(rows())),
+        ReasonLine::Large { chosen: true, .. }
+    ));
+}

@@ -221,6 +221,9 @@ struct State {
     run: u64,
     /// The view is gone: no lease is ever adopted again.
     closed: bool,
+    /// The Versions pick this playback came from: a failure is reported
+    /// to it (plans/m13-stream-choice.md 3.9).
+    pick: Option<crate::views::versions::PickHandle>,
     last: Option<(u64, u64)>,
     saved_at: Option<Instant>,
     dirty: bool,
@@ -280,6 +283,7 @@ impl State {
             lease: None,
             run: 0,
             closed: false,
+            pick: None,
             last: None,
             saved_at: None,
             dirty: false,
@@ -306,6 +310,16 @@ impl PlaybackView {
     pub fn open_for(
         core: &Core,
         candidates: Vec<ParsedStream>,
+        target: PlayTarget,
+        plays: &[Format],
+    ) -> Self {
+        Self::open_with(core, candidates, None, target, plays)
+    }
+
+    fn open_with(
+        core: &Core,
+        candidates: Vec<ParsedStream>,
+        pick: Option<crate::views::versions::PickHandle>,
         target: PlayTarget,
         plays: &[Format],
     ) -> Self {
@@ -341,7 +355,8 @@ impl PlaybackView {
                 pos > 0 && (dur == 0 || (pos as f64) < dur as f64 * FINISHED_RATIO)
             })
             .map(|(pos, _)| pos as u64);
-        let state = State::new(candidates, resume_ms);
+        let mut state = State::new(candidates, resume_ms);
+        state.pick = pick;
         let snapshot = SharedObservable::new(state.snapshot.clone());
         let shared = Arc::new(Mutex::new(state));
         let report = {
@@ -373,6 +388,17 @@ impl PlaybackView {
         };
         view.spawn_resolve();
         view
+    }
+
+    /// `open_for` the row the user picked in Versions: a source of it that
+    /// fails is reported back to the pick.
+    pub fn open_picked(
+        core: &Core,
+        pick: crate::views::versions::Pick,
+        target: PlayTarget,
+        plays: &[Format],
+    ) -> Self {
+        Self::open_with(core, pick.candidates, Some(pick.handle), target, plays)
     }
 
     /// A kids policy refused the target at open.
@@ -473,6 +499,9 @@ impl PlaybackView {
             if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
                 let attempt = attempt(stream, error);
                 s.snapshot.attempts.push(attempt);
+            }
+            if let Some(pick) = &s.pick {
+                pick.failed();
             }
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
@@ -900,6 +929,9 @@ async fn resolve_next(
             Err(error) => {
                 let mut s = lock(&state);
                 s.snapshot.attempts.push(attempt(&stream, &error));
+                if let Some(pick) = &s.pick {
+                    pick.failed();
+                }
                 snapshot.set(s.snapshot.clone());
             }
         }

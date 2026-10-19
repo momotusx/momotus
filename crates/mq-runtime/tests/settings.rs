@@ -16,8 +16,11 @@ async fn patches_merge_per_field_and_the_view_follows() {
         .set_prefs(&json!({"streams": {"quality": "dataSaver"}, "autoplayNext": false}))
         .unwrap();
     assert_eq!(prefs.streams.languages, ["tr", "en"]);
-    assert_eq!(prefs.streams.max_height, Some(1080));
     assert_eq!(prefs.streams.quality, QualityPref::DataSaver);
+    // The old `quality` is stored as the fields it maps to
+    // (plans/m13-stream-choice.md 4.1): Data saver is 720p and 2 GB.
+    assert_eq!(prefs.streams.max_height, Some(720));
+    assert_eq!(prefs.streams.size_limit_bytes, Some(2 << 30));
     assert_eq!(core.prefs(), prefs, "stored and read back");
 
     for _ in 0..100 {

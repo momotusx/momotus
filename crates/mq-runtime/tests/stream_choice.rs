@@ -205,3 +205,211 @@ async fn a_torrent_the_check_finds_cached_is_ready_before_done() {
     // The pick is then warmed, which asks the service once more.
     assert!(server.count("POST", "/v1/api/torrents/checkcached") >= 1);
 }
+
+/// Learning (3.9): two 1080p torrents, R small and well seeded (the
+/// recommendation), C three times its size.
+fn sizes() -> String {
+    serde_json::json!({ "streams": [
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-SMALL\n👤 900 💾 1.2 GB",
+          "infoHash": HASH_A, "fileIdx": 0 },
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-LARGE\n👤 300 💾 4.0 GB",
+          "infoHash": HASH_B, "fileIdx": 0 },
+    ]})
+    .to_string()
+}
+
+const LARGE: &str = "bt:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:0";
+
+async fn learning_core() -> (Core, Server) {
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &sizes()),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    (core, server)
+}
+
+async fn settled_view(core: &Core) -> VersionsView {
+    let facts = TitleFacts::read(Some("52 min"), Some("2019-"), Some("2019-05-01"), Some(2));
+    let view = VersionsView::open(core, params(facts));
+    until("done", || view.snapshot().done).await;
+    view
+}
+
+/// One counter per pick, only from a frozen view, and only the first pick
+/// of a view; at 3 the note comes with the preferences now in effect, and
+/// the next view applies them.
+#[tokio::test]
+async fn three_bigger_picks_raise_the_size_limit_with_a_note() {
+    let (core, _server) = learning_core().await;
+    let view = settled_view(&core).await;
+    assert_ne!(view.snapshot().recommended.unwrap().key, LARGE);
+    // Not frozen: the pick teaches nothing.
+    assert!(view.pick(LARGE).note.is_none());
+    assert_eq!(core.prefs().learned.fhd.size, 0);
+    let mut notes = Vec::new();
+    for _ in 0..3 {
+        let view = settled_view(&core).await;
+        view.freeze();
+        notes.push(view.pick(LARGE).note);
+        // A second pick in the same view does not count.
+        view.pick(LARGE);
+    }
+    let learned = core.prefs().learned.fhd;
+    assert_eq!((learned.size, learned.height, learned.ready), (3, 0, 0));
+    assert!(notes[0].is_none() && notes[1].is_none());
+    let note = notes[2].clone().expect("a note at 3");
+    assert!(note.up && note.screen_class == 1080);
+    assert_eq!(note.prefs.size_limit_bytes, Some(10 << 30));
+    let view = settled_view(&core).await;
+    assert_eq!(view.snapshot().conditions.size_limit_bytes, Some(10 << 30));
+}
+
+/// Mutation 18: picking the stream last played for the title again is a
+/// replay; mutation 19: a pick after the recommendation failed here.
+#[tokio::test]
+async fn replays_and_picks_after_a_failure_teach_nothing() {
+    let (core, _server) = learning_core().await;
+    let memory = serde_json::json!({ "key": LARGE }).to_string();
+    core.library()
+        .set_stream_memory("p", "tt1", None, &memory, core.clock())
+        .unwrap();
+    let view = settled_view(&core).await;
+    view.freeze();
+    view.pick(LARGE);
+    assert_eq!(core.prefs().learned.fhd.size, 0, "a replay");
+
+    core.library()
+        .set_stream_memory("p", "tt1", None, "{\"key\":\"other\"}", core.clock())
+        .unwrap();
+    let view = settled_view(&core).await;
+    view.freeze();
+    let recommended = view.snapshot().recommended.unwrap().key;
+    view.pick(&recommended).handle.failed();
+    view.pick(LARGE);
+    assert_eq!(
+        core.prefs().learned.fhd.size,
+        0,
+        "the recommendation failed"
+    );
+
+    let view = settled_view(&core).await;
+    view.freeze();
+    view.pick(LARGE);
+    assert_eq!(core.prefs().learned.fhd.size, 1, "a real choice");
+}
+
+/// Mutation 20: "Forget what was learned" raises the epoch above every
+/// stamp, so a counter an offline device wrote before the reset reads as
+/// zero when it arrives.
+#[tokio::test]
+async fn a_reset_survives_an_offline_device() {
+    let (core, _server) = learning_core().await;
+    let now = mq_library::hlc::now_ms();
+    let old = serde_json::json!({ "learned": { "fhd": { "size": -3, "epoch": 0, "atMs": now } } });
+    core.set_prefs(&old).unwrap();
+    let view = settled_view(&core).await;
+    assert_eq!(view.snapshot().conditions.size_limit_bytes, Some(5 << 29));
+    let prefs = core.forget_learned().unwrap();
+    assert_eq!(prefs.learned_epoch, 1);
+    // The offline device's counter lands after the reset.
+    core.set_prefs(&old).unwrap();
+    let view = settled_view(&core).await;
+    assert_eq!(view.snapshot().conditions.size_limit_bytes, Some(5 << 30));
+    // An older epoch leaf does not lower it either.
+    core.set_prefs(&serde_json::json!({ "learnedEpoch": 0 }))
+        .unwrap();
+    let view = settled_view(&core).await;
+    assert_eq!(view.snapshot().conditions.size_limit_bytes, Some(5 << 30));
+}
+
+/// 3.9: a preference set by hand zeroes its counter; Undo of a note mutes
+/// that choice.
+#[tokio::test]
+async fn a_hand_set_limit_zeroes_its_counter_and_undo_mutes() {
+    let (core, _server) = learning_core().await;
+    core.set_prefs(&serde_json::json!({ "learned": { "fhd": { "size": 2, "height": 1 } } }))
+        .unwrap();
+    core.set_prefs(&serde_json::json!({ "streams": { "sizeLimitBytes": 2147483648u64 } }))
+        .unwrap();
+    let learned = core.prefs().learned.fhd;
+    assert_eq!((learned.size, learned.height), (0, 1));
+    let prefs = core
+        .undo_learned(1080, mq_runtime::learn::LearnedChoice::Height)
+        .unwrap();
+    assert_eq!(prefs.learned.fhd.height, 0);
+    assert_eq!(
+        prefs.learned.fhd.muted,
+        [mq_runtime::learn::LearnedChoice::Height]
+    );
+}
+
+/// 4.1: an older device's `quality` is read as the new fields, and the
+/// first stream write stores them, so it is mapped once.
+#[tokio::test]
+async fn the_old_quality_is_mapped_once() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_setting("p", "streams.quality", "\"dataSaver\"", core.clock())
+        .unwrap();
+    let streams = core.prefs().streams;
+    assert_eq!(streams.size_limit_bytes, Some(2 << 30));
+    assert_eq!(streams.max_height, Some(720));
+    core.set_prefs(&serde_json::json!({ "streams": { "languages": ["tr"] } }))
+        .unwrap();
+    // Changing the old field later moves nothing: the mapping is stored.
+    core.library()
+        .set_setting("p", "streams.quality", "\"best\"", core.clock())
+        .unwrap();
+    let streams = core.prefs().streams;
+    assert_eq!(streams.size_limit_bytes, Some(2 << 30));
+    assert_eq!(streams.max_height, Some(720));
+    assert_eq!(streams.languages, ["tr"]);
+
+    let fresh = Core::temporary("q").unwrap();
+    assert_eq!(
+        fresh.prefs().streams.size_limit_bytes,
+        Some(5 << 30),
+        "no old field: v2"
+    );
+}
+
+/// 3.7: a size limit the user set is named as chosen on a large row; the
+/// default limit is not.
+#[tokio::test]
+async fn a_limit_the_user_set_is_named_as_chosen() {
+    let (core, _server) = learning_core().await;
+    let large_line = |view: &VersionsView| {
+        let s = view.snapshot();
+        let row = s
+            .recommended
+            .iter()
+            .chain(&s.rows)
+            .find(|r| r.key == LARGE)
+            .cloned()
+            .expect("the large row");
+        row.line
+    };
+    core.set_prefs(&serde_json::json!({ "streams": { "sizeLimitBytes": 2147483648u64 } }))
+        .unwrap();
+    // A long episode, so the 4 GB file keeps up and its size is the news.
+    let facts = TitleFacts::read(Some("120 min"), Some("2019-"), Some("2019-05-01"), Some(2));
+    let view = VersionsView::open(
+        &core,
+        VersionsParams {
+            prefs: core.prefs().streams,
+            ..params(facts)
+        },
+    );
+    until("done", || view.snapshot().done).await;
+    assert!(
+        matches!(
+            large_line(&view),
+            mq_streams::ReasonLine::Large { chosen: true, .. }
+        ),
+        "{:?}",
+        large_line(&view)
+    );
+}
