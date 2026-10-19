@@ -50,6 +50,9 @@ const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps"
 const DEFAULTED = new Map([
   ["AddonsSnapshot.fresh", "false"],
   ["AddonInfo.builtIn", "false"],
+  ["SubtitleTrack.language", "\"\""],
+  ["SubtitleTrack.languageName", "\"\""],
+  ["SubtitleTrack.name", "\"\""],
   ["Prefs.defaultsSeen", "0"],
 ]);
 const INT = new Set([

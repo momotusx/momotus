@@ -1245,8 +1245,14 @@ enum class SubtitleProblem(
 @Serializable
 data class SubtitleTrack(
     val url: String,
-    /** As the addon gives it, usually ISO 639-2 ("eng"). */
+    /** As the addon gives it, usually ISO 639-2 ("eng"), sometimes an OpenSubtitles special ("pob"). */
     val lang: String,
+    /** The language as one tag for every spelling of it: ISO 639-1 where there is one, with its region or script ("en", "pt-BR", "zh-Hant", "es-419"); tracks of one tag sit together in `subtitles`. */
+    val language: String = "",
+    /** The language's English name ("Portuguese (Brazil)"): the heading of its group. */
+    val languageName: String = "",
+    /** What tells this track from the others of its language: the release it was made for when the addon names it, else its source; numbered when two would read the same. */
+    val name: String = "",
     val label: String? = null,
     /** Addon name. */
     val source: String,

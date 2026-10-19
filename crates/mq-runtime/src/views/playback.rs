@@ -137,13 +137,62 @@ pub struct NextEpisode {
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleTrack {
     pub url: String,
-    /// As the addon gives it, usually ISO 639-2 ("eng").
+    /// As the addon gives it, usually ISO 639-2 ("eng"), sometimes an
+    /// OpenSubtitles special ("pob").
     pub lang: String,
+    /// The language as one tag for every spelling of it: ISO 639-1 where
+    /// there is one, with its region or script ("en", "pt-BR", "zh-Hant",
+    /// "es-419"); tracks of one tag sit together in `subtitles`.
+    pub language: String,
+    /// The language's English name ("Portuguese (Brazil)"): the heading
+    /// of its group.
+    pub language_name: String,
+    /// What tells this track from the others of its language: the release
+    /// it was made for when the addon names it, else its source; numbered
+    /// when two would read the same.
+    pub name: String,
     pub label: Option<String>,
     /// Addon name.
     pub source: String,
     pub forced: bool,
     pub hearing_impaired: bool,
+    /// The release text `name` starts from, when there is one.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub(crate) release: Option<String>,
+}
+
+impl SubtitleTrack {
+    /// A track in `lang` from `source`, its language read and its name set
+    /// to the release text, else the source, until `reorder` tells
+    /// duplicates apart.
+    fn new(
+        url: String,
+        lang: &str,
+        label: Option<String>,
+        source: &str,
+        release: Option<String>,
+    ) -> Self {
+        let language = crate::languages::language(lang);
+        // A label that only names the language says nothing more.
+        let release = release.map(|r| r.trim().to_owned()).filter(|r| {
+            !r.is_empty()
+                && !r.eq_ignore_ascii_case(&language.name)
+                && !r.eq_ignore_ascii_case(lang)
+        });
+        Self {
+            url,
+            lang: lang.to_owned(),
+            language: language.tag,
+            name: release.clone().unwrap_or_else(|| source.to_owned()),
+            language_name: language.name,
+            label,
+            source: source.to_owned(),
+            forced: false,
+            hearing_impaired: false,
+            release,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -964,7 +1013,7 @@ async fn resolve_next(
         };
         match opened {
             Ok((upstream, filename, size, lease)) => {
-                let wanted = core.prefs().subtitle_languages;
+                let wanted = preferred_languages(&core);
                 // The stream's own tracks come from its addon.
                 let addon_url = stream.addon_url.as_ref();
                 let slot = lease.subtitles();
@@ -1738,7 +1787,7 @@ async fn built_in_tracks(
     let listing = listed.unwrap_or(mq_turkcealtyazi::Listing::Problem(
         mq_turkcealtyazi::Problem::Unreachable,
     ));
-    let wanted = core.prefs().subtitle_languages;
+    let wanted = preferred_languages(core);
     let owned = OwnedPlaying {
         group: playing.group.map(str::to_owned),
         source: playing.source,
@@ -1770,13 +1819,10 @@ async fn built_in_tracks(
                 let _ = url_cell.set(url.clone());
                 s.order.insert(url.clone(), (position + 1, rank));
                 if !s.snapshot.subtitles.iter().any(|known| known.url == url) {
+                    let label = Some(found.label.clone());
                     s.snapshot.subtitles.push(SubtitleTrack {
-                        url,
-                        lang: "tur".into(),
-                        label: Some(found.label),
-                        source: BUILT_IN.into(),
-                        forced: false,
                         hearing_impaired: found.row.hearing_impaired,
+                        ..SubtitleTrack::new(url, "tur", label, BUILT_IN, Some(found.label))
                     });
                 }
             }
@@ -1887,14 +1933,38 @@ fn track(
     slot: &SubtitleSlot,
     addon_url: Option<&Url>,
 ) -> Option<SubtitleTrack> {
+    let url = slot.add(w.url.as_str(), &w.lang, addon_url)?;
     Some(SubtitleTrack {
-        url: slot.add(w.url.as_str(), &w.lang, addon_url)?,
-        lang: w.lang.clone(),
-        label: w.label.clone(),
-        source: source.to_owned(),
         forced: w.forced,
         hearing_impaired: w.hearing_impaired,
+        ..SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w))
     })
+}
+
+/// The release a file was made for, as the addon names it: its label, or
+/// OpenSubtitles' file name (without its extension) or release name.
+fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
+    let extra = |key: &str| {
+        w.extra
+            .get(key)?
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    };
+    let file = extra("subtitleFileName").map(|f| {
+        let stem = f
+            .rsplit_once('.')
+            .map_or(f, |(stem, ext)| if ext.len() <= 4 { stem } else { f });
+        stem.to_owned()
+    });
+    let text = w
+        .label
+        .clone()
+        .filter(|l| !l.trim().is_empty())
+        .or(file)
+        .or_else(|| extra("movieReleaseName").map(str::to_owned))?;
+    // At most 80 characters: a line in a menu.
+    Some(text.chars().take(80).collect())
 }
 
 /// The video's bytes in process, for the subtitle hash and the frame rate:
@@ -1963,7 +2033,7 @@ async fn find_subtitles(
         .filter(|a| a.supports(&path) && !is_built_in(a))
         .cloned()
         .collect();
-    let wanted = core.prefs().subtitle_languages;
+    let wanted = preferred_languages(core);
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     while let Some(event) = fanout.next().await {
         let mut s = lock(state);
@@ -2012,23 +2082,66 @@ fn extra_value(name: &str, value: String) -> ExtraValue {
     }
 }
 
-/// Preferred languages first, in preference order; within a language, by
-/// the source's place in the installed list (the stream's own first), then
-/// the source's own rank, whenever each answered.
-fn reorder(s: &mut State, wanted: &[String]) {
+/// The profile's languages, most wanted first, as language tags: its
+/// subtitle languages, then its audio languages.
+fn preferred_languages(core: &Core) -> Vec<String> {
+    let prefs = core.prefs();
+    let mut tags: Vec<String> = Vec::new();
+    for code in prefs
+        .subtitle_languages
+        .iter()
+        .chain(&prefs.streams.languages)
+    {
+        let tag = crate::languages::language(code).tag;
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+    tags
+}
+
+/// Tracks grouped by language: the preferred languages first in their
+/// order (a regional one, "pt-BR", counts with its language), then the
+/// others by English name. Within a language, by the source's place in the
+/// installed list (the stream's own first), then the source's own rank,
+/// whenever each answered. Then each track's `name`: two that would read
+/// the same in one language are numbered in that order.
+fn reorder(s: &mut State, preferred: &[String]) {
     let State {
         snapshot, order, ..
     } = s;
-    snapshot.subtitles.sort_by_key(|t| {
-        let language = wanted
-            .iter()
-            .position(|w| w.eq_ignore_ascii_case(&t.lang))
-            .unwrap_or(wanted.len());
+    let rank = |tag: &str| {
+        let primary = crate::languages::primary(tag);
+        preferred.iter().position(|p| p == tag).or_else(|| {
+            preferred
+                .iter()
+                .position(|p| crate::languages::primary(p) == primary)
+        })
+    };
+    snapshot.subtitles.sort_by_cached_key(|t| {
         (
-            language,
+            rank(&t.language).unwrap_or(usize::MAX),
+            t.language_name.to_lowercase(),
+            t.language.clone(),
             order.get(&t.url).copied().unwrap_or((usize::MAX, 0)),
         )
     });
+    let base = |t: &SubtitleTrack| t.release.clone().unwrap_or_else(|| t.source.clone());
+    let mut seen: HashMap<(String, String), usize> = HashMap::new();
+    let mut total: HashMap<(String, String), usize> = HashMap::new();
+    for t in &snapshot.subtitles {
+        *total.entry((t.language.clone(), base(t))).or_default() += 1;
+    }
+    for t in &mut snapshot.subtitles {
+        let key = (t.language.clone(), base(t));
+        let n = seen.entry(key.clone()).or_default();
+        *n += 1;
+        t.name = if total[&key] > 1 {
+            format!("{} {}", key.1, n)
+        } else {
+            key.1
+        };
+    }
 }
 
 /// The episode after this one in season and episode order, skipping

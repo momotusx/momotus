@@ -1021,3 +1021,87 @@ async fn offers_the_next_released_episode_and_the_binge_group() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(view.snapshot().next, None);
 }
+
+/// The owner's list: many languages in many spellings, OpenSubtitles'
+/// specials, and several files of one language from one source.
+#[tokio::test]
+async fn subtitles_come_grouped_by_language_named_and_told_apart() {
+    let (base, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({
+        "subtitleLanguages": ["tur"],
+        "streams": { "languages": ["en"] }
+    }))
+    .unwrap();
+    let sub = |id: &str, lang: &str, more: serde_json::Value| {
+        let mut s = serde_json::json!({"id": id, "lang": lang, "url": format!("https://subs.test/{id}.srt")});
+        s.as_object_mut()
+            .unwrap()
+            .extend(more.as_object().unwrap().clone());
+        s
+    };
+    let none = serde_json::json!({});
+    let subtitles = serde_json::json!([
+        sub("1", "pob", none.clone()),
+        sub(
+            "2",
+            "eng",
+            serde_json::json!({"subtitleFileName": "Show.S01E01.DVDRip.XviD-ORPHEUS.srt"})
+        ),
+        sub("3", "spl", none.clone()),
+        sub("4", "tur", serde_json::json!({"label": "TOPAZ"})),
+        sub("5", "eng", serde_json::json!({"label": "English"})),
+        sub("6", "zht", none.clone()),
+        sub("7", "ger", none.clone()),
+        sub("8", "tur", serde_json::json!({"label": "TOPAZ"})),
+        sub("9", "deu", none.clone()),
+        sub("10", "eng", none.clone()),
+        sub("11", "zhc", none.clone()),
+        sub("12", "mne", none.clone()),
+        sub(
+            "13",
+            "fre",
+            serde_json::json!({"movieReleaseName": "Show.S01.WEB-NTb"})
+        ),
+    ]);
+    let streams =
+        serde_json::json!({"streams": [{"url": format!("{base}/v.mkv"), "subtitles": subtitles}]});
+    let view = PlaybackView::open(&core, setup(&core, &streams.to_string()), target());
+    let s = until(&view, "the tracks", |s| {
+        s.phase == PlaybackPhase::Ready && !s.subtitles_pending
+    })
+    .await;
+    let rows: Vec<(&str, &str, &str)> = s
+        .subtitles
+        .iter()
+        .map(|t| {
+            (
+                t.language.as_str(),
+                t.language_name.as_str(),
+                t.name.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            // The profile's subtitle language, then its audio language.
+            ("tr", "Turkish", "TOPAZ 1"),
+            ("tr", "Turkish", "TOPAZ 2"),
+            ("en", "English", "Show.S01E01.DVDRip.XviD-ORPHEUS"),
+            ("en", "English", "Local 1"),
+            ("en", "English", "Local 2"),
+            // The rest by English name; one language however it is spelled.
+            ("yue", "Chinese (Cantonese)", "Local"),
+            ("zh-Hant", "Chinese (Traditional)", "Local"),
+            ("fr", "French", "Show.S01.WEB-NTb"),
+            ("de", "German", "Local 1"),
+            ("de", "German", "Local 2"),
+            ("cnr", "Montenegrin", "Local"),
+            ("pt-BR", "Portuguese (Brazil)", "Local"),
+            ("es-419", "Spanish (Latin America)", "Local"),
+        ]
+    );
+    // The addon's own code is kept for the player.
+    assert_eq!(s.subtitles[11].lang, "pob");
+}
