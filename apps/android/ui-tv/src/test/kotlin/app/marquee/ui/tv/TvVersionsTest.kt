@@ -3,11 +3,17 @@ package app.marquee.ui.tv
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -52,6 +58,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 
 /** The Versions screen on a TV with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.11). */
+@OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w960dp-h540dp")
 class TvVersionsTest {
@@ -205,11 +212,16 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `versions that play only through an account offer Add an account first`() {
-        show(snapshot(blocked = BlockedVersions(BlockedReason.NeedsAccount, 12)))
+    fun `versions that need an account offer Add an account, and Right from Show them enters the list`() {
+        show(snapshot(blocked = BlockedVersions(BlockedReason.NeedsAccount, 12, listOf(row("a", ReasonLine.Few(31))))))
         compose.onNodeWithText("Add an account").performClick()
         assertEquals(1, accounts)
-        compose.onNodeWithText("Show them").assertExists()
+        compose.onNodeWithText("Show them").performClick()
+        compose.onNodeWithText("Show them").requestFocus()
+        compose.onNodeWithText("Show them").performKeyInput { pressKey(Key.DirectionRight) }
+        // ponytail: Robolectric's narrow fonts keep the two buttons on one line, so this checks where Right ends,
+        // not the rule for the wrapped buttons of a real TV (Add an account above, reaching further right).
+        compose.onNodeWithContentDescription("1080p, HDR10, 2 GB, via Torrentio").assertIsFocused()
     }
 
     @Test

@@ -348,6 +348,8 @@ fun StateMessage(
     onSecondary: (() -> Unit)? = null,
     actionIcon: ImageVector? = null,
     secondaryIcon: ImageVector? = null,
+    /** Where the D-pad goes from the second button (a TV list beside the message). */
+    secondaryModifier: Modifier = Modifier,
 ) {
     val tv = Marquee.form == Form.Tv
     Column(
@@ -375,7 +377,7 @@ fun StateMessage(
                 PrimaryButton(actionLabel, onAction, icon = actionIcon, focusRequester = primary)
             }
             if (secondaryLabel != null && onSecondary != null) {
-                SecondaryButton(secondaryLabel, onSecondary, icon = secondaryIcon)
+                SecondaryButton(secondaryLabel, onSecondary, secondaryModifier, icon = secondaryIcon)
             }
         }
     }

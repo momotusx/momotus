@@ -130,6 +130,8 @@ fun TvVersions(
         snapshot != null && snapshot.done && snapshot.recommended == null && snapshot.rows.isEmpty() && blocked == null
     // "Show them": the blocked rows, as they would rank once the reason is fixed.
     var showBlocked by remember { mutableStateOf(false) }
+    // The list, for Right from Show them: Add an account reaches further right, so focus search alone stops there.
+    val list = remember { FocusRequester() }
     // The target exists once there is something to focus: the card's Play (or Try again, or the blocked
     // card's action, or Add a source), else the first row.
     val target =
@@ -162,7 +164,7 @@ fun TvVersions(
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
             Pick(snapshot, failure, { versions?.retry() }, onAddSource, focus, onPlay) {
                 if (blocked != null) {
-                    Blocked(snapshot, blocked, showBlocked, { showBlocked = !showBlocked }, onAddAccount, focus)
+                    Blocked(snapshot, blocked, showBlocked, { showBlocked = !showBlocked }, onAddAccount, focus, list)
                 }
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
@@ -171,6 +173,7 @@ fun TvVersions(
                     snapshot,
                     if (showBlocked && blocked != null) blocked.rows else snapshot?.rows.orEmpty(),
                     focus,
+                    list,
                     onPlay,
                     Modifier.weight(1f),
                 )
@@ -383,6 +386,7 @@ private fun Blocked(
     onShow: () -> Unit,
     onAddAccount: () -> Unit,
     focus: FocusMemory,
+    list: FocusRequester,
 ) {
     val (text, action) = StreamChoiceCopy.blocked(blocked.reason, blocked.count) ?: (null to StreamChoiceCopy.SHOW_ROWS)
     val account = blocked.reason == BlockedReason.NeedsAccount
@@ -403,6 +407,7 @@ private fun Blocked(
             },
         secondaryLabel = StreamChoiceCopy.SHOW_ROWS.takeIf { account },
         onSecondary = onShow.takeIf { account },
+        secondaryModifier = Modifier.focusProperties { if (shown) right = list },
         secondaryIcon = if (shown) Icons.EyeOff else Icons.Eye,
         modifier = Modifier.padding(0.dp),
     )
@@ -437,6 +442,7 @@ private fun Sources(
     snapshot: VersionsSnapshot?,
     rows: List<VersionRow>,
     focus: FocusMemory,
+    list: FocusRequester,
     onPlay: (VersionRow) -> Unit,
     modifier: Modifier,
 ) {
@@ -462,6 +468,7 @@ private fun Sources(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .focusRequester(list)
                     .focusProperties { enter = { focus.rowEntry(ROWS) ?: FocusRequester.Default } }
                     .focusGroup(),
             contentPadding = PaddingValues(vertical = Marquee.space.xs),
