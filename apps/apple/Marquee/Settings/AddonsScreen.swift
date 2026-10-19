@@ -112,11 +112,14 @@ extension AddonInfo {
 struct InstallField: View {
     /// Bump to move focus into the field ("Add a source" does).
     var focusRequest = 0
+    /// False where the page has its own primary (Continue on the recommended addons step).
+    var primary = true
     @State private var install: LinkInstall
     @FocusState private var fieldFocused: Bool
 
-    init(core: CoreClient, focusRequest: Int = 0) {
+    init(core: CoreClient, focusRequest: Int = 0, primary: Bool = true) {
         self.focusRequest = focusRequest
+        self.primary = primary
         _install = State(initialValue: LinkInstall(core: core))
     }
 
@@ -145,7 +148,7 @@ struct InstallField: View {
                     Label(install.installing ? "Installing" : "Install", glyph: "plus")
                 }
                 // The primary only once there is a link to install.
-                .buttonStyle(PillButtonStyle(prominent: !install.trimmed.isEmpty))
+                .buttonStyle(PillButtonStyle(prominent: primary && !install.trimmed.isEmpty))
                 .disabled(install.trimmed.isEmpty || install.installing)
             }
             if install.refused != nil {

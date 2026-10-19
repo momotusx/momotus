@@ -79,6 +79,12 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     #expect(!SwitchLook.showsWord(wide: false))
 }
 
+@Test func theStepsAreOneCenteredColumnOnWideScreens() {
+    #expect(DefaultsRules.column(wide: false, tv: false) == nil)
+    #expect(DefaultsRules.column(wide: true, tv: false) == 880)
+    #expect(DefaultsRules.column(wide: true, tv: true) == 1400)
+}
+
 @Test func newFieldsDecode() throws {
     let snapshot = try JSONDecoder().decode(AddonsSnapshot.self, from: Data(#"{"addons": [], "fresh": true}"#.utf8))
     #expect(snapshot.fresh)

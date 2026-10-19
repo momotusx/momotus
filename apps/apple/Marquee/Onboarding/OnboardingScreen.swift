@@ -56,7 +56,7 @@ struct OnboardingScreen: View {
                 case .check: checkStep
                 }
             }
-            .frame(maxWidth: metrics.wide ? 760 : .infinity, alignment: .leading)
+            .frame(maxWidth: DefaultsRules.column(wide: metrics.wide, tv: onTV) ?? .infinity, alignment: .leading)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, metrics.gutter)
             .padding(.vertical, Theme.Space.l)
@@ -145,7 +145,8 @@ struct OnboardingScreen: View {
                     .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                     .foregroundStyle(Theme.Palette.text)
                     .accessibilityAddTraits(.isHeader)
-                InstallField(core: core)
+                // Continue stays the one white action, also with a link typed.
+                InstallField(core: core, primary: false)
                 FindAddonsLink(core: core)
             }
             .padding(.top, Theme.Space.s)
@@ -321,7 +322,8 @@ struct RecommendedAddons: View {
     var settings = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
+        // More air between groups than between rows, so each group reads as one.
+        VStack(alignment: .leading, spacing: Theme.Space.m + Theme.Space.xs) {
             if model.list == nil {
                 if let failure = model.failure {
                     StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { Task { await model.load() } }))
@@ -334,12 +336,15 @@ struct RecommendedAddons: View {
             ForEach(DefaultsRules.groups, id: \.id) { group in
                 let rows = model.rows.filter { $0.group == group.id }
                 if !rows.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                        // Over the marks: the rows' own inset.
                         Text(caps: group.title)
                             .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                             .tracking(1.6)
                             .foregroundStyle(Theme.Palette.muted)
                             .accessibilityAddTraits(.isHeader)
+                            .padding(.leading, Theme.Space.s)
+                            .padding(.bottom, 2)
                         ForEach(rows) { row($0) }
                         // Under the catalogs, where their switches are.
                         if group.id == "catalogs", !settings,
@@ -402,7 +407,9 @@ private struct DefaultRow<End: View>: View {
         }
         .multilineTextAlignment(.leading)
         .foregroundStyle(Theme.Palette.text)
-        .padding(Theme.Space.s)
+        // The mark sets the height: a little air above and below it.
+        .padding(.horizontal, Theme.Space.s)
+        .padding(.vertical, Theme.Space.xs + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
@@ -461,8 +468,8 @@ struct RecommendedAddonsPage: View {
                     .padding(.top, Theme.Space.s)
                 }
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: DefaultsRules.column(wide: metrics.wide, tv: onTV) ?? .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, metrics.gutter)
             .padding(.vertical, Theme.Space.l)
         }
@@ -547,3 +554,10 @@ struct StatusDot: View {
         }
     }
 }
+
+/// The tvOS build: the steps take the TV column.
+#if os(tvOS)
+private let onTV = true
+#else
+private let onTV = false
+#endif

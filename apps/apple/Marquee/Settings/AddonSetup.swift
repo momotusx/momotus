@@ -65,6 +65,14 @@ enum DefaultsRules {
         list?.addons.first { $0.key == key && $0.installed != .on }
     }
 
+    /// The width of the onboarding steps and the recommended addons pages:
+    /// one centered column on TV and wide windows, as the web's (its TV
+    /// column and its desktop one), the full width on a phone.
+    static func column(wide: Bool, tv: Bool) -> CGFloat? {
+        guard wide else { return nil }
+        return tv ? 1400 : 880
+    }
+
     /// The mark's letter when there is no logo or it does not load: the
     /// name's first letter or digit, as Find addons marks its cards.
     static func initial(_ name: String) -> String {
