@@ -3,7 +3,7 @@
  * from before its request goes, a second one is refused, and an answer that
  * no longer owns the slot is dropped. */
 
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterEach, expect, jest, mock, test } from "bun:test";
 import type { SyncRecord } from "../lib/sync";
 import { clientMock, fake } from "./fake-client";
 
@@ -99,4 +99,54 @@ test("a failed start frees the slot", async () => {
   const claim = sync.claimPairing();
   expect(claim).not.toBeNull();
   sync.endPairing(claim as symbol);
+});
+
+test("while an account is joined a round runs each minute the tab is visible, and none after it leaves", async () => {
+  /** Settles promises only: the clock is fake here. */
+  const flush = async () => {
+    for (let i = 0; i < 50; i++) await Promise.resolve();
+  };
+  const rounds = () => calls.filter((c) => c.name === "syncNow").length;
+  const page = g.document as { hidden: boolean };
+  jest.useFakeTimers();
+  try {
+    const creating = sync.createAccount("https://sync.example", "Desk", "");
+    await flush();
+    calls.find((c) => c.name === "createSyncAccount")?.answer(account("timed"));
+    await creating;
+    await flush();
+    const joined = rounds();
+    jest.advanceTimersByTime(59_000);
+    await flush();
+    expect(rounds()).toBe(joined);
+    jest.advanceTimersByTime(1_000);
+    await flush();
+    expect(rounds()).toBe(joined + 1);
+    // Hidden, the minute passes without a round.
+    page.hidden = true;
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(rounds()).toBe(joined + 1);
+    page.hidden = false;
+    // Left: no more rounds, minute after minute.
+    await sync.signOut(true, true);
+    await flush();
+    const left = rounds();
+    jest.advanceTimersByTime(180_000);
+    await flush();
+    expect(rounds()).toBe(left);
+    // Joined again: still one round a minute, not one per account this page ever held.
+    const again = sync.createAccount("https://sync.example", "Desk", "");
+    await flush();
+    calls.filter((c) => c.name === "createSyncAccount").at(-1)?.answer(account("again"));
+    await again;
+    await flush();
+    const rejoined = rounds();
+    jest.advanceTimersByTime(60_000);
+    await flush();
+    expect(rounds()).toBe(rejoined + 1);
+  } finally {
+    page.hidden = false;
+    jest.useRealTimers();
+  }
 });

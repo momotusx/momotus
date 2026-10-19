@@ -116,6 +116,7 @@ function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: 
 function reset() {
   account++;
   record = null;
+  clearInterval(minute);
   setJoined(false);
   setReport(null);
   setSyncedAt(null);
@@ -181,9 +182,14 @@ export function join(next: SyncRecord, recoveredWithKit = false) {
   setJoined(true);
   setProblem(null);
   setRecovered(recoveredWithKit);
+  // ponytail: a round a minute while the tab is visible (and on coming back to it, below); the
+  // apps sync a few seconds after each edit, add that here when the web gets an edit signal.
+  minute = setInterval(() => !document.hidden && void syncNow(), 60_000);
   void syncNow();
 }
 
+/** The once-a-minute round, for as long as an account is joined here. */
+let minute: ReturnType<typeof setInterval> | undefined;
 let running: Promise<void> | null = null;
 let more = false;
 
@@ -230,9 +236,6 @@ async function roundsOnce() {
   }
 }
 
-// ponytail: a round a minute while the tab is visible and on coming back to it; the apps
-// sync a few seconds after each edit, add that here when the web gets an edit signal.
-setInterval(() => joined() && !document.hidden && void syncNow(), 60_000);
 document.addEventListener("visibilitychange", () => joined() && !document.hidden && void syncNow());
 
 /** The device list, always read again from the sync server. */
