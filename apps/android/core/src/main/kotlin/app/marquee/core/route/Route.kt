@@ -35,6 +35,12 @@ sealed interface Route : NavKey {
     @Serializable
     data object Import : Route
 
+    /** The recommended addons step (plans/m13-default-addons.md 6), opened as [mode] says. */
+    @Serializable
+    data class Defaults(
+        val mode: DefaultsMode,
+    ) : Route
+
     /** Join a sync account: this device shows a code another device approves. */
     @Serializable
     data object Pairing : Route
@@ -157,4 +163,20 @@ fun switchedTo(
 ): List<Route> {
     val root = stack.firstOrNull() ?: Route.Home
     return if (destination == root) listOf(root) else listOf(root, destination)
+}
+
+/** Where the recommended addons step was opened from, which decides its rows and where it goes next. */
+@Serializable
+enum class DefaultsMode {
+    /** First run (Start fresh, Browse first) or setup from an empty Home: every row, then Home. */
+    FirstRun,
+
+    /** After a Stremio import: the ones it brought say so instead of a switch, then Home. */
+    AfterImport,
+
+    /** The Home card's Review: the missing ones only, then back. */
+    Review,
+
+    /** Settings: every row with its current switch, then back. */
+    Settings,
 }

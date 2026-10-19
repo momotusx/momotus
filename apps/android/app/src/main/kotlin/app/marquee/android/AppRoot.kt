@@ -15,11 +15,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -30,9 +32,11 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.marquee.core.Format
+import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
+import app.marquee.core.route.DefaultsMode
 import app.marquee.core.route.Route
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.switchedTo
@@ -49,6 +53,8 @@ import app.marquee.ui.tv.firstTarget
 import app.marquee.ui.tv.focusFirstRow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** The whole app below the theme: the start decision, the frame, the pages, and the core-stopped cover. */
 @Composable
@@ -230,13 +236,36 @@ private fun AppNav(
                 entryProvider {
                     entry<Route.Onboarding> {
                         OnboardingScreen(
-                            session,
-                            onDone = ::arrive,
+                            onDefaults = { backStack.add(Route.Defaults(DefaultsMode.FirstRun)) },
                             onImport = { backStack.add(Route.Import) },
                             onPair = { backStack.add(Route.Pairing) },
                         )
                     }
-                    entry<Route.Import> { ImportScreen(session, onDone = ::arrive) }
+                    entry<Route.Import> {
+                        // From the first screen a finished import goes on to the recommended addons.
+                        val firstRun = Route.Onboarding in routes
+                        ImportScreen(
+                            session,
+                            onDone = {
+                                if (firstRun) {
+                                    backStack.add(
+                                        Route.Defaults(DefaultsMode.AfterImport),
+                                    )
+                                } else {
+                                    arrive()
+                                }
+                            },
+                            toDefaults = firstRun,
+                        )
+                    }
+                    entry<Route.Defaults> { route ->
+                        DefaultsScreen(session, route.mode, onDone = {
+                            when (route.mode) {
+                                DefaultsMode.FirstRun, DefaultsMode.AfterImport -> arrive()
+                                DefaultsMode.Review, DefaultsMode.Settings -> pop()
+                            }
+                        })
+                    }
                     entry<Route.Home> {
                         // An empty Home asks once whether catalogs exist and are all hidden.
                         val empty = app.home.status == ViewStatus.Open && app.home.rows.isEmpty()
@@ -247,6 +276,36 @@ private fun AppNav(
                                     ?.let { it.isNotEmpty() && it.all(HomeCatalog::hidden) } == true
                         }
                         val onHomeRows: () -> Unit = { backStack.add(Route.HomeRows) }
+                        // New recommended addons, once per list version (plans/m13-default-addons.md 7).
+                        val profile = gate.snapshot
+                        val offer by produceState<DefaultAddons?>(null, profile?.active) {
+                            value = defaultsOffer(session, kids = profile?.kids != false)
+                        }
+                        var answered by rememberSaveable(profile?.active) { mutableStateOf(false) }
+                        val card: (@Composable () -> Unit)? =
+                            offer?.takeUnless { answered }?.let { answer ->
+                                {
+                                    // Either answer writes the version as seen, synced: the card shows once per profile.
+                                    fun seen() {
+                                        answered = true
+                                        app.viewModelScope.launch {
+                                            runCatching {
+                                                session.ops.setPrefs(
+                                                    JsonObject(mapOf("defaultsSeen" to JsonPrimitive(answer.version))),
+                                                )
+                                            }
+                                        }
+                                    }
+                                    DefaultsCard(
+                                        answer,
+                                        onReview = {
+                                            seen()
+                                            backStack.add(Route.Defaults(DefaultsMode.Review))
+                                        },
+                                        onNotNow = ::seen,
+                                    )
+                                }
+                            }
                         if (tv) {
                             TvHome(
                                 app.home,
@@ -257,6 +316,7 @@ private fun AppNav(
                                 onAddons = { choose(Route.Settings) },
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
+                                card = card,
                             )
                         } else {
                             PhoneHome(
@@ -267,6 +327,7 @@ private fun AppNav(
                                 onAddons = { choose(Route.Settings) },
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
+                                card = card,
                             )
                         }
                     }
@@ -319,6 +380,7 @@ private fun AppNav(
                             onTrakt = { backStack.add(Route.Trakt) },
                             onHomeRows = { backStack.add(Route.HomeRows) },
                             onFindAddons = { backStack.add(Route.FindAddons) },
+                            onDefaults = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
                             link = app.linkInstall,
                         )
                     }

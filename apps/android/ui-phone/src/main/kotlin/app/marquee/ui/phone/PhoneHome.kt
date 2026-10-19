@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,6 +85,8 @@ fun PhoneHome(
     /** Catalogs exist and every one is hidden: the empty state points to Home rows, not setup. */
     rowsHidden: Boolean = false,
     onHomeRows: () -> Unit = {},
+    /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
+    card: (@Composable () -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     val hasHero = home.hero != null
@@ -106,7 +109,11 @@ fun PhoneHome(
         if (hero == null && home.rows.toList().allFailed()) {
             item(key = "failed") { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }
         } else {
-            itemsIndexed(home.rows, key = { _, row -> row.rowId }) { _, row -> PhoneRow(row, onOpen) }
+            val rows = home.rows.toList()
+            val split = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
+            items(rows.subList(0, split), key = { it.rowId }) { row -> PhoneRow(row, onOpen) }
+            if (card != null) item(key = "card") { card() }
+            items(rows.subList(split, rows.size), key = { it.rowId }) { row -> PhoneRow(row, onOpen) }
         }
     }
 }
@@ -155,7 +162,7 @@ private fun HomeState(
                 title = "Home fills up from your addons",
                 body =
                     "None of the addons you have on shows a catalog here. " +
-                        "Set up Marquee adds the standard catalog in one step, or add an addon yourself.",
+                        "Set up Marquee offers the recommended addons in one step, or add an addon yourself.",
                 actionLabel = "Set up Marquee",
                 onAction = onSetup,
                 secondaryLabel = "Add an addon",

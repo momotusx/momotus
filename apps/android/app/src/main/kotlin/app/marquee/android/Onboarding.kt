@@ -3,6 +3,7 @@ package app.marquee.android
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -17,89 +18,77 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.marquee.core.client.CoreError
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.DefaultsCopy
+import app.marquee.core.InstallCards
+import app.marquee.core.model.DefaultAddonInfo
+import app.marquee.core.model.DefaultAddons
+import app.marquee.core.model.DefaultInstalled
+import app.marquee.core.route.DefaultsMode
 import app.marquee.core.session.CoreSession
+import app.marquee.design.Chip
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.PrimaryButton
 import app.marquee.design.StateMessage
+import app.marquee.design.Status
+import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-
-private const val CINEMETA = "https://v3-cinemeta.strem.io/manifest.json"
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A new user's first screen, one decision: how to begin. "I use Stremio" brings a library over (only
- * offered when [onImport] is given), "Start fresh" installs the standard catalog, and "I already use
- * Marquee" joins that device's sync account (only offered when [onPair] is given). "Browse
- * first" skips them. Nothing is typed here: adding a source is a later step, and on TV it never asks
- * for a keyboard.
+ * offered when [onImport] is given), "Start fresh" and "Browse first" open the recommended addons
+ * ([onDefaults]), and "I already use Marquee" joins that device's sync account (only offered when
+ * [onPair] is given). Nothing is typed here, and nothing is installed before the addons step.
  */
 @Composable
 fun OnboardingScreen(
-    session: CoreSession,
-    onDone: () -> Unit,
+    onDefaults: () -> Unit,
     onImport: (() -> Unit)? = null,
     onPair: (() -> Unit)? = null,
 ) {
     val tv = Marquee.form == Form.Tv
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
     val first = remember { FocusRequester() }
     AutoFocus(first)
-
-    fun startFresh() {
-        if (busy) return
-        busy = true
-        error = null
-        scope.launch {
-            try {
-                // Installed and turned off (an empty Home sends people here): turning it on needs no
-                // network, so it is tried first; an addon that is not installed refuses it.
-                val turnedOn =
-                    try {
-                        session.ops.setAddonEnabled(CINEMETA, true)
-                        true
-                    } catch (e: CoreError) {
-                        false
-                    }
-                if (!turnedOn) session.ops.installAddon(CINEMETA)
-                onDone()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: CoreError) {
-                error = e.message
-                busy = false
-            } catch (e: Exception) {
-                error = "The answer could not be read"
-                busy = false
-            }
-        }
-    }
 
     Column(
         Modifier
@@ -110,7 +99,7 @@ fun OnboardingScreen(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
-            SkipLink("Browse first", onDone)
+            SkipLink("Browse first", onDefaults)
         }
         // Scrolls when it does not fit (a small phone at a large font scale); centered when it does.
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -137,10 +126,10 @@ fun OnboardingScreen(
                         )
                     }
                     Door(
-                        if (busy) "Installing" else "Start fresh",
-                        "Add the standard catalog, then add a source to play.",
+                        "Start fresh",
+                        "Choose from the recommended addons, then start watching.",
                         Icons.Plus,
-                        ::startFresh,
+                        onDefaults,
                         door,
                         first.takeIf { onImport == null },
                     )
@@ -169,20 +158,254 @@ fun OnboardingScreen(
                         doors(Modifier.fillMaxWidth())
                     }
                 }
-                MqText(
-                    "A source is an addon that finds a playable stream for a title. Marquee does not include any.",
-                    role = TextRole.Callout,
-                    color = Marquee.colors.muted,
-                    modifier = Modifier.widthIn(max = 720.dp),
+            }
+        }
+    }
+}
+
+/** The defaults step's state: the core's list, the switches the user touched, and the install. */
+class DefaultsHolder(
+    private val session: CoreSession,
+) : ViewModel() {
+    var answer by mutableStateOf<DefaultAddons?>(null)
+        private set
+    var problem by mutableStateOf<String?>(null)
+        private set
+    var failed by mutableStateOf<String?>(null)
+        private set
+    var busy by mutableStateOf(false)
+        private set
+
+    /** Only the rows the user touched; the others follow [DefaultsCopy.initial]. */
+    val switches = mutableStateMapOf<String, Boolean>()
+
+    init {
+        load()
+    }
+
+    fun load() {
+        problem = null
+        viewModelScope.launch {
+            try {
+                answer = session.ops.defaultAddons()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                problem = InstallCards.wordsOf(e)
+            }
+        }
+    }
+
+    /** One `installDefaults` with the switches [mode] shows; [then] runs once it is written. */
+    fun save(
+        mode: DefaultsMode,
+        then: () -> Unit,
+    ) {
+        val list = answer?.addons ?: return
+        if (busy) return
+        busy = true
+        failed = null
+        viewModelScope.launch {
+            try {
+                session.ops.installDefaults(DefaultsCopy.choices(list, mode, switches))
+                then()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failed = InstallCards.wordsOf(e)
+            } finally {
+                busy = false
+            }
+        }
+    }
+}
+
+/**
+ * The recommended addons (plans/m13-default-addons.md 6): the core's list grouped, a switch per row,
+ * on unless the profile has it off, and one Continue that installs them in one write. Continue stays
+ * in sight under the list; on TV it has focus first, so one press accepts them all, and down from the
+ * last row reaches it.
+ */
+@Composable
+fun DefaultsScreen(
+    session: CoreSession,
+    mode: DefaultsMode,
+    onDone: () -> Unit,
+) {
+    val holder =
+        viewModel<DefaultsHolder>(
+            key = "defaults",
+            factory = viewModelFactory { initializer { DefaultsHolder(session) } },
+        )
+    val tv = Marquee.form == Form.Tv
+    val go = remember { FocusRequester() }
+    val answer = holder.answer
+    if (answer != null) AutoFocus(go)
+    val rows = DefaultsCopy.rows(answer?.addons.orEmpty(), mode)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val width = Modifier.widthIn(max = 900.dp).fillMaxWidth()
+        Column(
+            width.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        ) {
+            MqText(
+                if (mode == DefaultsMode.Review) DefaultsCopy.REVIEW_TITLE else DefaultsCopy.TITLE,
+                role = if (tv) TextRole.Title1 else TextRole.Title2,
+            )
+            MqText(
+                when (mode) {
+                    DefaultsMode.Review -> DefaultsCopy.REVIEW_LEAD
+                    DefaultsMode.Settings -> DefaultsCopy.SETTINGS_LEAD
+                    else -> DefaultsCopy.LEAD
+                },
+                role = TextRole.Body,
+                color = Marquee.colors.muted,
+            )
+            holder.problem?.let {
+                StateMessage(
+                    DefaultsCopy.NOT_LOADED,
+                    it,
+                    icon = Icons.CircleAlert,
+                    actionLabel = "Try again",
+                    onAction = holder::load,
                 )
-                error?.let {
-                    StateMessage(
-                        title = "Cinemeta could not be installed",
-                        body = "$it. Check the network and try again.",
-                        icon = Icons.CircleAlert,
+            }
+            if (answer == null && holder.problem == null) StatusWord("Loading", Status.Warn)
+            for ((group, addons) in rows.groupBy { it.group }) {
+                Kicker(DefaultsCopy.group(group), side = 0.dp)
+                for (addon in addons) {
+                    // After an import, the ones it brought keep how they are and say where they came from.
+                    val on = holder.switches[addon.key] ?: DefaultsCopy.initial(addon, mode)
+                    DefaultRow(addon, on.takeIf { DefaultsCopy.hasSwitch(addon, mode) }) {
+                        if (!holder.busy) holder.switches[addon.key] = !on
+                    }
+                }
+            }
+            holder.failed?.let {
+                StateMessage(DefaultsCopy.FAILED, "$it. Try again.", icon = Icons.CircleAlert)
+            }
+            if (tv && (mode == DefaultsMode.FirstRun || mode == DefaultsMode.AfterImport)) {
+                Note(DefaultsCopy.TV_MORE, side = 0.dp)
+            }
+        }
+        Row(width) {
+            PrimaryButton(
+                when {
+                    holder.busy -> DefaultsCopy.WORKING
+                    mode == DefaultsMode.Settings -> DefaultsCopy.SAVE
+                    else -> DefaultsCopy.CONTINUE
+                },
+                { holder.save(mode, onDone) },
+                icon = Icons.Check,
+                enabled = answer != null && !holder.busy,
+                focusRequester = go,
+            )
+        }
+    }
+}
+
+/** One default: its name and line from the core, and its switch ([on] null: no switch, it came from Stremio). */
+@Composable
+private fun DefaultRow(
+    addon: DefaultAddonInfo,
+    on: Boolean?,
+    onToggle: () -> Unit,
+) {
+    val colors = Marquee.colors
+    Section(side = 0.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+                    MqText(addon.line, role = TextRole.Caption, color = colors.muted)
+                }
+                if (on == null) {
+                    MqText(DefaultsCopy.FROM_STREMIO, role = TextRole.Caption, color = colors.muted)
+                } else {
+                    // Named for its addon, so TalkBack moving between switches says which one it is.
+                    Chip(
+                        if (on) "On" else "Off",
+                        selected = on,
+                        onClick = onToggle,
+                        modifier = Modifier.semantics { contentDescription = addon.name },
+                        switch = true,
                     )
                 }
             }
+            if (addon.key == DefaultsCopy.CATALOG_KEY &&
+                on == false
+            ) {
+                Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp)
+            }
+        }
+    }
+}
+
+/**
+ * What the Home card offers (plans/m13-default-addons.md 7): the list when this profile misses a
+ * default and has not been offered this version, else null. Never for a kids profile.
+ */
+internal suspend fun defaultsOffer(
+    session: CoreSession,
+    kids: Boolean,
+): DefaultAddons? {
+    if (kids) return null
+    val answer =
+        try {
+            session.ops.defaultAddons()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+    if (answer.addons.none { it.installed == DefaultInstalled.Absent }) return null
+    val view = session.settings()
+    val seen =
+        try {
+            withTimeoutOrNull(OFFER_WAIT_MS) { snapshotFlow { view.snapshot }.filterNotNull().first().defaultsSeen }
+        } finally {
+            view.close()
+        }
+    return answer.takeIf { seen != null && DefaultsCopy.offer(it, seen, kids) }
+}
+
+private const val OFFER_WAIT_MS = 5_000L
+
+/** The one-time Home card: the defaults this profile does not have, Review or Not now. */
+@Composable
+internal fun DefaultsCard(
+    answer: DefaultAddons,
+    onReview: () -> Unit,
+    onNotNow: () -> Unit,
+) {
+    val missing = answer.addons.filter { it.installed == DefaultInstalled.Absent }.map { it.name }
+    // A remote landing on a button brings the whole card into view, so its words are read first.
+    val whole = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    Box(
+        Modifier
+            .bringIntoViewRequester(whole)
+            .onFocusChanged { if (it.hasFocus) scope.launch { whole.bringIntoView() } },
+    ) {
+        Section {
+            StateMessage(
+                DefaultsCopy.REVIEW_TITLE,
+                DefaultsCopy.cardLine(missing),
+                actionLabel = DefaultsCopy.REVIEW,
+                onAction = onReview,
+                secondaryLabel = DefaultsCopy.NOT_NOW,
+                onSecondary = onNotNow,
+            )
         }
     }
 }

@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Where the app starts: a new user installs a catalog first, everyone else lands on Home. */
+/** Where the app starts: a new user chooses addons first, everyone else lands on Home. */
 enum class Start { Loading, Onboarding, Home }
 
 /**
@@ -113,7 +113,10 @@ class AppState(
         }
     }
 
-    /** Looks at the installed addons once the core runs: none means this is a new user. */
+    /**
+     * Asks the addons view once the core runs: `fresh` (no list ever, no sync account, not a kids
+     * profile) means a new user, who starts at onboarding until the defaults step is done.
+     */
     private suspend fun decide(): Start {
         snapshotFlow { session.health }.first { it == CoreHealth.Running }
         step = "opening the addons view"
@@ -124,7 +127,7 @@ class AppState(
             step = "waiting for the addons"
             CoreLog.d("start: addons view opened")
             snapshotFlow { addons.status }.first { it !is ViewStatus.Opening }
-            val start = if (addons.snapshot?.addons?.isEmpty() == true) Start.Onboarding else Start.Home
+            val start = if (addons.snapshot?.fresh == true) Start.Onboarding else Start.Home
             CoreLog.d("start: $start")
             start
         } catch (e: CancellationException) {

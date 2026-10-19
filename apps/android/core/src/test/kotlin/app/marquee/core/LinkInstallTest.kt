@@ -45,6 +45,53 @@ class LinkInstallTest {
         }
 
     @Test
+    fun `a link with a sign-in warns first and goes in only once the user confirms it`() =
+        runTest {
+            val link = LinkInstall(backgroundScope)
+            val sent = mutableListOf<Boolean>()
+            var cleared = 0
+            link.run({ ack ->
+                sent += ack
+                if (!ack) throw CoreError("this link carries a sign-in", code = LinkInstall.TOKEN_IN_LINK)
+                "Trakt Tv"
+            }, added = { cleared++ })
+            runCurrent()
+            assertEquals(LinkInstall.Said(LinkInstall.TOKEN_WARNING, failed = true, token = true), link.said)
+            assertEquals(0, cleared)
+            link.confirm()
+            runCurrent()
+            assertEquals(listOf(false, true), sent)
+            assertEquals(LinkInstall.Said("Added Trakt Tv", failed = false), link.said)
+            assertEquals(1, cleared)
+            // Confirmed once: nothing is left to confirm.
+            assertNull(link.confirm())
+        }
+
+    @Test
+    fun `another add or a profile switch drops the warning's confirm`() =
+        runTest {
+            val link = LinkInstall(backgroundScope)
+            val sent = mutableListOf<String>()
+            val refuse: suspend (Boolean) -> String = { ack ->
+                sent += "token $ack"
+                throw CoreError("this link carries a sign-in", code = LinkInstall.TOKEN_IN_LINK)
+            }
+            link.run(refuse)
+            runCurrent()
+            link.run({
+                sent += "plain $it"
+                "Cinemeta"
+            })
+            runCurrent()
+            assertNull(link.confirm())
+            link.run(refuse)
+            runCurrent()
+            link.forget()
+            assertNull(link.confirm())
+            assertEquals(listOf("token false", "plain false", "token false"), sent)
+        }
+
+    @Test
     fun `an add from before a profile switch lands nowhere`() =
         runTest {
             val link = LinkInstall(backgroundScope)

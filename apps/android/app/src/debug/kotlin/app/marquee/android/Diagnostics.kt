@@ -10,6 +10,7 @@ import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.RepeatingReplay
 import app.marquee.core.client.Trace
+import app.marquee.core.model.DefaultChoice
 import app.marquee.core.model.RowState
 import app.marquee.core.secrets.KeystoreKeySource
 import app.marquee.core.secrets.SecretStore
@@ -71,9 +72,16 @@ class Diagnostics(
             session.ready.await()
             add("core ${session.version()} open in ${session.openMillis} ms")
             val started = System.nanoTime()
-            runCatching { session.ops.installAddon(CINEMETA) }
-                .onSuccess { add("installAddon ${it.name}: ${ms(started)} ms") }
-                .onFailure { add("installAddon: ${it.message}") }
+            // The core's default addons, all on, from their bundled manifests: no link lives here.
+            runCatching {
+                val all =
+                    session.ops
+                        .defaultAddons()
+                        .addons
+                        .map { DefaultChoice(it.key, true) }
+                session.ops.installDefaults(all)
+            }.onSuccess { add("installDefaults: ${ms(started)} ms") }
+                .onFailure { add("installDefaults: ${it.message}") }
             home = session.home()
             delay(8_000)
             add("bridge, live Home: emit to applied ${session.metrics.emitToApplied().toJson()}")
@@ -150,10 +158,6 @@ class Diagnostics(
     }
 
     private fun ms(from: Long) = (System.nanoTime() - from) / 1_000_000
-
-    private companion object {
-        const val CINEMETA = "https://v3-cinemeta.strem.io/manifest.json"
-    }
 }
 
 /** The benchmark needs the recorded trace, which only debug builds ship as an asset. */

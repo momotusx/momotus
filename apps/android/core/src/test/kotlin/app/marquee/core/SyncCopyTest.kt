@@ -3,6 +3,8 @@ package app.marquee.core
 import app.marquee.core.SyncCopy.Action
 import app.marquee.core.model.Blocked
 import app.marquee.core.model.SyncReport
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.test.Test
@@ -211,10 +213,15 @@ class SyncCopyTest {
             "Made Oct 19, 2026, 12:00 PM on Phone",
             plain(SyncCopy.addedLine(true, day, "Phone", utc, Locale.US)),
         )
-        assertEquals(
-            "Added 19 okt 2026 12:00 through Phone",
-            SyncCopy.addedLine(false, day, "Phone", utc, Locale("nl")),
-        )
+        // The device's locale decides the words; JDKs differ in the short month ("okt" in 21, "okt." in 17).
+        val dutch = SyncCopy.addedLine(false, day, "Phone", utc, Locale("nl"))
+        val dutchDay =
+            DateFormat
+                .getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale("nl"))
+                .apply { timeZone = utc }
+                .format(Date(day))
+        assertEquals("Added $dutchDay through Phone", dutch)
+        assertTrue(dutch.startsWith("Added 19 okt") && dutch.endsWith(" 2026 12:00 through Phone"), dutch)
         assertEquals("Remove 1 device", SyncCopy.lostButton(1))
         assertEquals("Remove 3 devices", SyncCopy.lostButton(3))
         assertEquals(

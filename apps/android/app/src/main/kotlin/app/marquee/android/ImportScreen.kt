@@ -28,6 +28,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.DefaultsCopy
 import app.marquee.core.model.ImportSnapshot
 import app.marquee.core.model.ImportSummary
 import app.marquee.core.session.CoreSession
@@ -71,6 +72,8 @@ class ImportHolder(
 fun ImportScreen(
     session: CoreSession,
     onDone: () -> Unit,
+    /** First run goes on to the recommended addons, not straight Home. */
+    toDefaults: Boolean = false,
 ) {
     val holder =
         viewModel<ImportHolder>(
@@ -98,7 +101,7 @@ fun ImportScreen(
         }
         item(key = "state") {
             Column(Modifier.padding(horizontal = Marquee.safe.side)) {
-                Attempt(view, holder::retry, onDone)
+                Attempt(view, holder::retry, onDone, toDefaults)
             }
         }
     }
@@ -109,6 +112,7 @@ private fun Attempt(
     view: ImportView,
     onRetry: () -> Unit,
     onDone: () -> Unit,
+    toDefaults: Boolean,
 ) {
     val status = view.status
     if (status is ViewStatus.Failed) {
@@ -135,7 +139,7 @@ private fun Attempt(
         }
 
         is ImportSnapshot.Done -> {
-            Done(s.summary, onDone)
+            Done(s.summary, onDone, toDefaults)
         }
 
         ImportSnapshot.Expired -> {
@@ -229,9 +233,10 @@ private fun Step(
 private fun Done(
     summary: ImportSummary,
     onDone: () -> Unit,
+    toDefaults: Boolean,
 ) {
     val colors = Marquee.colors
-    // On a TV the remote lands on the way home as soon as the import is done.
+    // On a TV the remote lands on the way on as soon as the import is done.
     val home = remember { FocusRequester() }
     val tv = Marquee.form == Form.Tv
     LaunchedEffect(Unit) {
@@ -270,6 +275,10 @@ private fun Done(
                 color = colors.muted,
             )
         }
-        PrimaryButton("Go to Home", onDone, icon = Icons.House, focusRequester = home)
+        if (toDefaults) {
+            PrimaryButton(DefaultsCopy.CONTINUE, onDone, icon = Icons.ChevronRight, focusRequester = home)
+        } else {
+            PrimaryButton("Go to Home", onDone, icon = Icons.House, focusRequester = home)
+        }
     }
 }

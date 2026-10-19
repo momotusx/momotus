@@ -4,6 +4,8 @@ import app.marquee.core.client.CoreClient
 import app.marquee.core.model.ApprovedPairing
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridTombstone
+import app.marquee.core.model.DefaultAddons
+import app.marquee.core.model.DefaultChoice
 import app.marquee.core.model.Devices
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
@@ -68,8 +70,36 @@ class CoreOps(
      */
     fun lifecycle(event: LifecycleEvent) = client.post("lifecycle", mapOf("event" to text(event.wire)))
 
-    suspend fun installAddon(url: String): InstalledAddon =
-        call("installAddon", mapOf("url" to text(url)), InstalledAddon.serializer())
+    /**
+     * A link whose settings carry a sign-in is refused with code `tokenInLink` before anything is
+     * fetched; sent again with [acknowledgeToken] once the user said it is theirs.
+     */
+    suspend fun installAddon(
+        url: String,
+        acknowledgeToken: Boolean = false,
+    ): InstalledAddon =
+        call(
+            "installAddon",
+            buildMap {
+                put("url", text(url))
+                if (acknowledgeToken) put("acknowledgeToken", JsonPrimitive(true))
+            },
+            InstalledAddon.serializer(),
+        )
+
+    /** The default addons in order, each with whether the profile has it (plans/m13-default-addons.md). */
+    suspend fun defaultAddons(): DefaultAddons = call("defaultAddons", emptyMap(), DefaultAddons.serializer())
+
+    /**
+     * Installs the defaults in one write, no network: absent ones on or off as chosen, present ones
+     * take their switch. A key left out is on. Refused for a kids profile.
+     */
+    suspend fun installDefaults(choices: List<DefaultChoice>) {
+        client.request(
+            "installDefaults",
+            mapOf("choices" to client.json.encodeToJsonElement(ListSerializer(DefaultChoice.serializer()), choices)),
+        )
+    }
 
     /**
      * Installs an entry of an open `addonCatalog` view by its `key`. A refusal is a [CoreError] whose

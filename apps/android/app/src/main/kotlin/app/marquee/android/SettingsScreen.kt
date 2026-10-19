@@ -54,6 +54,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DebridCopy
+import app.marquee.core.DefaultsCopy
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.LinkInstall
 import app.marquee.core.SyncCopy
@@ -77,6 +78,7 @@ import app.marquee.design.MqText
 import app.marquee.design.MqTextField
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RoundButton
+import app.marquee.design.SecondaryButton
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
@@ -144,6 +146,8 @@ fun SettingsScreen(
     onTrakt: () -> Unit,
     onHomeRows: () -> Unit,
     onFindAddons: () -> Unit,
+    /** The recommended addons step with every switch; null where it is not offered (the sources page). */
+    onDefaults: (() -> Unit)? = null,
     /** Opened from "Add a source": the link field first and only the source addons, as on Apple. */
     sourcesOnly: Boolean = false,
     link: LinkInstall,
@@ -215,8 +219,8 @@ fun SettingsScreen(
             item(key = "head") { BrowseHeader("Addons", "Add a source") }
             item(key = "sources-why") {
                 Note(
-                    "A source is an addon that finds a playable stream for a title. Marquee does not " +
-                        "include any: ${linkVerb.lowercase()} a source addon's link to add one.",
+                    "A source is an addon that finds a playable stream for a title. " +
+                        "$linkVerb a source addon's link to add one.",
                 )
             }
             item(key = "install") {
@@ -280,6 +284,12 @@ fun SettingsScreen(
                     onFindAddons,
                     lines = Int.MAX_VALUE,
                 )
+            }
+            // A kids profile reads the owner's addons: the defaults are not its to change.
+            if (onDefaults != null && gate.snapshot?.kids == false) {
+                item(key = "defaults") {
+                    LinkRow(Icons.ListChecks, DefaultsCopy.SETTINGS_ROW, DefaultsCopy.SETTINGS_ROW_LINE, onDefaults)
+                }
             }
         }
         when {
@@ -604,8 +614,10 @@ internal fun LinkField(
     compact: Boolean = false,
 ) {
     val said = link.said?.let { Said(Place.Install, it.words, it.failed, it.pending) }
-    InstallField(link.busy, focus, said, side, compact) { url, clear ->
-        link.run({ session.ops.installAddon(url).name }, added = clear)
+    // A link whose settings carry a sign-in is refused first: the user says it is theirs to add it.
+    val confirm: (() -> Unit)? = if (link.said?.token == true) ({ link.confirm() }) else null
+    InstallField(link.busy, focus, said, side, compact, confirm) { url, clear ->
+        link.run({ ack -> session.ops.installAddon(url, acknowledgeToken = ack).name }, added = clear)
     }
 }
 
@@ -619,6 +631,8 @@ internal fun InstallField(
     side: Dp = Marquee.safe.side,
     /** Find addons' phone page: no heading and the button beside the field, so the cards start higher. */
     compact: Boolean = false,
+    /** Adds the refused link anyway, after the warning that it carries a sign-in. */
+    onConfirm: (() -> Unit)? = null,
     /** The link, and what clears the field once it is added. */
     onInstall: (String, () -> Unit) -> Unit,
 ) {
@@ -670,6 +684,7 @@ internal fun InstallField(
                 button()
             }
             if (status != null) SaidLine(status, side = 0.dp)
+            if (onConfirm != null) SecondaryButton(LinkInstall.TOKEN_CONFIRM, onConfirm, icon = Icons.ShieldAlert)
         }
     }
 }
