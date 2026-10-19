@@ -84,7 +84,7 @@ pub fn pick(archive: &[u8], want: Want, group: Option<&str>) -> Result<Vec<u8>, 
         .into_iter()
         .min_by_key(|e| {
             (
-                !same_group(&e.name, group),
+                !crate::rank::same_group(base(&e.name), group),
                 preference(&e.name),
                 e.name.clone(),
             )
@@ -225,13 +225,4 @@ fn base(name: &str) -> &str {
 fn preference(name: &str) -> Option<usize> {
     let lower = name.to_lowercase();
     EXTENSIONS.iter().position(|ext| lower.ends_with(ext))
-}
-
-/// Whether the file name carries the playing release's group as a word.
-fn same_group(name: &str, group: Option<&str>) -> bool {
-    group.is_some_and(|group| {
-        base(name)
-            .split(|c: char| !c.is_alphanumeric())
-            .any(|word| word.eq_ignore_ascii_case(group))
-    })
 }

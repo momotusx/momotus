@@ -5,7 +5,11 @@
 //! or where the list is gone, means the site changed, never "nothing found".
 
 mod archive;
+mod form;
 mod page;
+mod rank;
 
 pub use archive::{ArchiveFault, MAX_ARCHIVE, MAX_ENTRY, Want, pick};
+pub use form::{Form, download_form};
 pub use page::{Changed, Kind, Lang, Row, TitlePage, title_page};
+pub use rank::{MAX_TRACKS, Playing, Target, Track, tracks};
