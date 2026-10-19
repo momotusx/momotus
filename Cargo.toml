@@ -60,5 +60,6 @@ opt-level = 3
 [patch.crates-io]
 # Marquee fork of the SHA-1 wrapper: ring instead of aws-lc (plans/provenance.md).
 librqbit-sha1-wrapper = { path = "vendor/librqbit-sha1-wrapper" }
-# Marquee forks for C27 (plans/c27-torrent-policy.md): tracker address checks.
+# Marquee forks for C27 (plans/c27-torrent-policy.md): tracker and DHT address checks.
 librqbit-tracker-comms = { path = "vendor/librqbit-tracker-comms" }
+librqbit-dht = { path = "vendor/librqbit-dht" }

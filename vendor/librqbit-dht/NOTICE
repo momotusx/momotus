@@ -1,0 +1,15 @@
+librqbit-dht, vendored for Marquee
+
+Upstream: https://github.com/ikatson/rqbit, tag v9.0.1,
+commit a499d2f243d124e144aef137afe7cb304a6e3f36, directory crates/dht,
+published to crates.io as librqbit-dht 9.0.1. Copyright 2021 Igor Katson.
+Licensed under the Apache License, Version 2.0: LICENSE is upstream's header,
+LICENSE-APACHE-2.0 the full text (both copied from vendor/librqbit; the
+registry package ships neither). Upstream ships no NOTICE file of its own.
+
+What was taken: src/, resources/, examples/, README.md, Cargo.toml.orig and
+the Cargo.toml published to crates.io for 9.0.1, plus an empty [workspace]
+table.
+
+Marquee changes (each changed spot carries a "Marquee fork" comment): none
+yet.
