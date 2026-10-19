@@ -97,7 +97,8 @@ Object.defineProperty(navigator, "credentials", {
 
 const vault = await import("./vault");
 const trakt = await import("./trakt");
-const settled = () => new Promise((done) => setTimeout(done, 10));
+/** Long enough for a seal (real WebCrypto) and the writes after it. */
+const settled = () => new Promise((done) => setTimeout(done, 40));
 const live = () => views.filter((v) => !v.closed);
 let revision = 0;
 /** A record as the core offers one: each a new rotation. */
@@ -272,4 +273,63 @@ test("a profile the core says is gone loses its sealed sign-in and its record he
   // Nothing of it is sent again: switching to it finds no record.
   await reset({ active: "p3", locked: false });
   expect(told()).toEqual(["close trakt", "subscribe trakt"]);
+});
+
+test("a store that failed never brings back a record signed out since", async () => {
+  await vault.unlock();
+  await reset({ active: "p1", locked: false });
+  idb.failWrites = true;
+  await offer("t7");
+  const saveAgain = trakt.traktStorage()?.retry;
+  expect(saveAgain).toBeDefined();
+  idb.failWrites = false;
+  told();
+  expect(await trakt.traktSignOut()).toBe(true);
+  expect(trakt.traktStorage()).toBeNull();
+  // The Save again from before the sign-out seals and sends nothing.
+  await saveAgain?.();
+  await settled();
+  expect(sealed("p1")).toBeUndefined();
+  expect(told()).toEqual(["traktSignOut"]);
+});
+
+/** An entry in the earlier layout: every profile's record in one, sealed as the sync record is. */
+async function earlierEntry(records: Record<string, unknown>) {
+  const info = new TextEncoder().encode("marquee/web-record/v1");
+  const base = await crypto.subtle.importKey("raw", new Uint8Array(32).fill(3), "HKDF", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: info }, key, new TextEncoder().encode(JSON.stringify(records)));
+  return { credential: new Uint8Array([9, 9, 9]).buffer, salt: new Uint8Array(32), iv, data };
+}
+
+test("the earlier single Trakt entry moves to one entry per profile at the next unlock", async () => {
+  disk.set("trakt", await earlierEntry({ p6: record("old6") }));
+  vault.drop();
+  await reset({ active: "p6", locked: false });
+  // Before the unlock it already counts as a sign-in kept here.
+  expect(trakt.traktLockedHere()).toBe(true);
+  await vault.unlock();
+  await settled();
+  expect(disk.has("trakt")).toBe(false);
+  expect(sealed("p6")).toBeDefined();
+  told();
+  await reset({ active: "p1", locked: false });
+  await reset({ active: "p6", locked: false });
+  expect(told()).toEqual(["close trakt", "subscribe trakt", "close trakt", "setTrakt old6", "subscribe trakt"]);
+});
+
+test("an earlier entry that does not open goes at the unlock, and a sign-out deletes one too", async () => {
+  const unreadable = { credential: new Uint8Array([9, 9, 9]).buffer, salt: new Uint8Array(32), iv: new Uint8Array(12), data: new Uint8Array(48).buffer };
+  disk.set("trakt", unreadable);
+  vault.drop();
+  await vault.unlock();
+  await settled();
+  expect(disk.has("trakt")).toBe(false);
+  // Locked again, an earlier entry left: signing out deletes it with the profile's own.
+  disk.set("trakt", unreadable);
+  vault.drop();
+  expect(await trakt.traktSignOut()).toBe(true);
+  expect(disk.has("trakt")).toBe(false);
+  expect(sealed("p6")).toBeUndefined();
 });

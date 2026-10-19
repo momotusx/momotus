@@ -51,6 +51,14 @@ const records = new TraktRecords({
 /** An offered record whose store failed: stored and acknowledged once the storage works again. */
 let pending: { session: Session; record: TraktRecord } | null = null;
 
+/** The profile's record is deleted (signed out, or the profile is gone): a store still waiting for
+ * it must never bring it back, and its note goes with it. */
+function dropPending(profile: string) {
+  if (pending?.session.profile !== profile) return;
+  pending = null;
+  if (storage()?.words === traktWords.saveFailed) setStorage(null);
+}
+
 /** Stores an offered record and acknowledges it within its session. A store that failed is said
  * (a sealed copy that could not be read first, as the cause) and nothing is acknowledged. */
 async function store(session: Session, record: TraktRecord) {
@@ -170,7 +178,10 @@ vault.onOpened(() => void meetSealed());
 // A profile removed here or by sync: its record goes from memory and its sealed copy from this
 // browser (no key needed). A delete that fails is tried again: the core names removed profiles
 // again when the next session starts.
-bridge.onProfileGone((profile) => void records.signedOut(profile).catch(() => undefined));
+bridge.onProfileGone((profile) => {
+  dropPending(profile);
+  void records.signedOut(profile).catch(() => undefined);
+});
 
 /** Stores what memory holds again, then acknowledges a record still waiting; the note goes once
  * it worked. */
@@ -189,6 +200,7 @@ export async function traktSignOut(): Promise<boolean> {
   const profile = current?.profile;
   if (!profile) return false;
   await op("traktSignOut");
+  dropPending(profile);
   // Gone from this browser too, its lock open or not: never "signed out" with a sealed copy left.
   const forget = async () => {
     await records.signedOut(profile);

@@ -16,6 +16,9 @@ const STORE = "sealed";
 const ENTRY = "sync";
 /** One sealed entry per profile, "trakt:<profile id>", so one profile's can go without the key. */
 const TRAKT = "trakt:";
+/** The earlier layout: every profile's record in one entry, under the sync record's additional
+ * data. Moved to one entry per profile at the next unlock; any sign-out deletes it. */
+const LEGACY = "trakt";
 const INFO = new TextEncoder().encode("marquee/web-record/v1");
 /** The Trakt entries' own additional data: a sync record's ciphertext never opens as one. */
 const TRAKT_INFO = new TextEncoder().encode("marquee/web-trakt/v1");
@@ -326,14 +329,16 @@ export function saveTrakt(records: Record<string, unknown>): Promise<void> {
 /** Deletes one profile's sealed Trakt record. A delete needs no key: it works while this browser
  * remembers an account it has not opened yet (rejects when the storage failed). */
 export function forgetTrakt(profile: string): Promise<void> {
-  const run = saving.then(() => tx("readwrite", (s) => s.delete(TRAKT + profile)).then(() => undefined));
+  // The earlier single entry may hold this profile's record too, and cannot be opened here.
+  const run = saving.then(() => tx("readwrite", (s) => (s.delete(LEGACY), s.delete(TRAKT + profile))).then(() => undefined));
   saving = run.catch(() => undefined);
   return run;
 }
 
 /** Whether a Trakt record for `profile` is sealed here (readable without the key). */
 export async function holdsTrakt(profile: string): Promise<boolean> {
-  return (await tx<IDBValidKey | undefined>("readonly", (s) => s.getKey(TRAKT + profile))) !== undefined;
+  const held = async (id: string) => (await tx<IDBValidKey | undefined>("readonly", (s) => s.getKey(id))) !== undefined;
+  return (await held(TRAKT + profile)) || held(LEGACY);
 }
 
 /** The Trakt records sealed here, by profile, once remembering is on (none before). */
@@ -345,6 +350,16 @@ export async function openTrakt(): Promise<Record<string, unknown>> {
     if (!id.startsWith(TRAKT)) continue;
     const sealed = await tx<Sealed | undefined>("readonly", (s) => s.get(id));
     if (sealed) out[id.slice(TRAKT.length)] = await open(sealed, k, TRAKT_INFO);
+  }
+  // The earlier single entry: its records (each under its profile's id) move to their own
+  // entries, then it goes. One that does not open names no profile: it goes as it is.
+  const legacy = await tx<Sealed | undefined>("readonly", (s) => s.get(LEGACY));
+  if (legacy) {
+    const moved = await open<Record<string, unknown>>(legacy, k).catch(() => ({}));
+    const fresh = Object.fromEntries(Object.entries(moved).filter(([profile]) => !(profile in out)));
+    await saveTrakt(fresh);
+    await tx("readwrite", (s) => s.delete(LEGACY));
+    Object.assign(out, fresh);
   }
   return out;
 }
