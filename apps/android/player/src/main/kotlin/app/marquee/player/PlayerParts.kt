@@ -260,12 +260,13 @@ fun TrackPanel(
 
 /**
  * What is happening before anything plays, or why nothing does: a turning mark and one line, or the
- * problem with one plain reason per source that failed, and the way on.
+ * problem with one plain reason per source that failed, and the way on. A [notice] is said without the mark.
  */
 @Composable
 fun PlayerStatus(
     stage: PlaybackController.Stage,
     status: String?,
+    notice: String?,
     problem: String?,
     attempts: List<Attempt>,
     onVersions: () -> Unit,
@@ -324,14 +325,17 @@ fun PlayerStatus(
                 PrimaryButton("Choose a version", onVersions, icon = Icons.Layers, focusRequester = focus)
                 SecondaryButton("Back", onBack)
             }
-        } else if (status != null) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Spinner()
-                MqText(status, role = TextRole.Headline, weight = FontWeight.Medium)
+        } else {
+            if (status != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spinner()
+                    MqText(status, role = TextRole.Headline, weight = FontWeight.Medium)
+                }
             }
+            if (notice != null) MqText(notice, role = TextRole.Headline, weight = FontWeight.Medium)
         }
     }
 }

@@ -352,10 +352,12 @@ fun TvPlayer(
             Modifier.align(Alignment.TopStart).padding(start = safe.side, top = safe.top + 150.dp),
         )
 
-        if (stage == Stage.Opening || stage == Stage.Failed || controller.status != null) {
+        val said = controller.status != null || controller.notice != null
+        if (stage == Stage.Opening || stage == Stage.Failed || said) {
             PlayerStatus(
                 stage = stage,
                 status = controller.status,
+                notice = controller.notice,
                 problem = controller.problem,
                 attempts = controller.attempts,
                 onVersions = onVersions,
@@ -363,9 +365,9 @@ fun TvPlayer(
                 focus = failFocus,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = 360.dp),
             )
-        } else if (stage == Stage.Buffering) {
-            Spinner(Modifier.align(Alignment.Center))
         }
+        // A notice while the buffer fills keeps the mark in the middle.
+        if (stage == Stage.Buffering && controller.status == null) Spinner(Modifier.align(Alignment.Center))
 
         AnimatedVisibility(
             visible = showControls,

@@ -70,6 +70,10 @@ class PlaybackController(
     var status: String? by mutableStateOf(null)
         private set
 
+    /** A line said for a few seconds over the picture (a subtitle note, a source change): nothing is waited for. */
+    var notice: String? by mutableStateOf(null)
+        private set
+
     /** Why nothing plays, when [stage] is [Stage.Failed]. */
     var problem: String? by mutableStateOf(null)
         private set
@@ -359,12 +363,12 @@ class PlaybackController(
 
     /** A line for a few seconds (a source change), shown over the picture. */
     private fun announce(line: String) {
-        status = line
+        notice = line
         noticeJob?.cancel()
         noticeJob =
             scope.launch {
                 delay(NOTICE_MS)
-                status = null
+                notice = null
             }
     }
 
@@ -417,9 +421,7 @@ class PlaybackController(
 
     private fun renderedFirstFrame() {
         firstFrame = true
-        // A line said for a few seconds (a subtitle note, a source change) keeps them: the item set
-        // again with one subtitle fewer shows a first frame at once.
-        if (noticeJob?.isActive != true) status = null
+        status = null
         if (firstFrameMs == null) {
             mark("first frame")
             firstFrameMs = marks["first frame"]

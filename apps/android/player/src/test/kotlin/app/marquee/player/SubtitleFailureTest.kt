@@ -192,7 +192,8 @@ class SubtitleFailureTest {
         assertEquals(0, player.stops, "the video was stopped")
         assertTrue(failOvers().isEmpty(), "a subtitle failed the video over")
         assertNotEquals(PlaybackController.Stage.Failed, controller.stage)
-        assertEquals("Subtitles from SubSense did not load", controller.status)
+        assertEquals("Subtitles from SubSense did not load", controller.notice)
+        assertEquals(null, controller.status, "the note came with the waiting mark")
 
         // The video's own failure still fails over.
         player.fail(httpError(video, 404))
@@ -208,10 +209,15 @@ class SubtitleFailureTest {
         push(snapshot(notes = """[{"source":"SubSense","problem":"unreachable"}]"""))
         until(
             "the note is said",
-        ) { controller.status == "SubSense did not answer. Try its subtitles again in a moment." }
+        ) { controller.notice == "SubSense did not answer. Try its subtitles again in a moment." }
+        assertEquals(null, controller.status, "the note came with the waiting mark")
         assertEquals(2, player.items.size, "the item was set again")
         assertEquals("SubSense did not answer. Try its subtitles again in a moment.", controller.subtitlePanelNote)
         assertTrue(failOvers().isEmpty())
+        // After its few seconds (four, timed on the real clock here) the line goes; the panel keeps the note.
+        Thread.sleep(4_200)
+        until("the line goes after a few seconds") { controller.notice == null }
+        assertEquals("SubSense did not answer. Try its subtitles again in a moment.", controller.subtitlePanelNote)
         controller.release()
     }
 
@@ -220,6 +226,7 @@ class SubtitleFailureTest {
         val (_, controller) = open()
         push(snapshot(notes = """[{"source":"SubSense","problem":"blocked"}]"""))
         until("the note is listed") { controller.subtitlePanelNote != null }
+        assertEquals(null, controller.notice)
         assertEquals(null, controller.status)
         controller.release()
     }
@@ -243,7 +250,8 @@ class SubtitleFailureTest {
             "subtitles stayed on",
         )
         // One message, the note's: no "did not load" on top.
-        assertEquals("A subtitle file from SubSense could not be read. Pick another one.", controller.status)
+        assertEquals("A subtitle file from SubSense could not be read. Pick another one.", controller.notice)
+        assertEquals(null, controller.status, "the note came with the waiting mark")
         assertEquals(0, player.stops)
         assertTrue(failOvers().isEmpty())
         assertTrue(controller.text.none { it.id == "late:$subtitle" }, "the file is still offered")
