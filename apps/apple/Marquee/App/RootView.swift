@@ -192,7 +192,7 @@ struct MainShell: View {
         #else
         screen(tab).safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
-            if !immersion.active && !covered.contains(tab) {
+            if !immersion.active && !pageOver {
                 TopNav(selection: tab, select: select, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
             }
         }
@@ -207,10 +207,14 @@ struct MainShell: View {
     }
 
     #if os(tvOS)
+    /// A page is over this place's root. Home's path counts too: a page put
+    /// there before Home's root appeared never marked it covered.
+    private var pageOver: Bool { covered.contains(tab) || (tab == .home && !homePath.isEmpty) }
+
     /// Menu on a place's root page: another place goes Home, Home scrolled down
     /// goes to its top row, else nothing here and the app exits.
     private var back: (() -> Void)? {
-        guard !covered.contains(tab) else { return nil }
+        guard !pageOver else { return nil }
         switch TVBack.step(atHome: tab == .home, scrolledDown: homeScrolled) {
         case .goHome: return { select(.home) }
         case .toTop: return { homeTop += 1 }
