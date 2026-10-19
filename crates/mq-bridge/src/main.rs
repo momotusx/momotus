@@ -4,12 +4,13 @@
 use axum::Router;
 use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use futures_util::{SinkExt, StreamExt};
 use mq_bridge::{Outgoing, Output, Session};
 use mq_runtime::{Core, CoreConfig, StoreId};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -38,8 +39,44 @@ async fn main() {
     axum::serve(listener, app).await.expect("serve");
 }
 
-async fn ws(upgrade: WebSocketUpgrade, State(core): State<Core>) -> impl IntoResponse {
-    upgrade.on_upgrade(move |socket| serve_socket(socket, core))
+async fn ws(
+    upgrade: WebSocketUpgrade,
+    headers: HeaderMap,
+    State(core): State<Core>,
+) -> axum::response::Response {
+    let header = |name| headers.get(name).and_then(|v| v.to_str().ok());
+    if !origin_allowed(header(header::ORIGIN), header(header::HOST)) {
+        // Another site's page in the user's browser: no session for it.
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    upgrade
+        .on_upgrade(move |socket| serve_socket(socket, core))
+        .into_response()
+}
+
+/// A browser page may open the socket only from this server (same origin)
+/// or from a loopback origin (the web UI's dev server). A request with no
+/// `Origin` does not come from a page.
+fn origin_allowed(origin: Option<&str>, host: Option<&str>) -> bool {
+    let Some(origin) = origin else {
+        return true;
+    };
+    let Some(authority) = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+    else {
+        // `null` (a file or a sandboxed frame) and anything else.
+        return false;
+    };
+    if host.is_some_and(|host| host.eq_ignore_ascii_case(authority)) {
+        return true;
+    }
+    let name = match authority.strip_prefix('[') {
+        Some(rest) => rest.split(']').next().unwrap_or_default(),
+        None => authority.split(':').next().unwrap_or_default(),
+    };
+    name.eq_ignore_ascii_case("localhost")
+        || name.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
 async fn serve_socket(socket: WebSocket, core: Core) {
@@ -72,4 +109,38 @@ async fn serve_socket(socket: WebSocket, core: Core) {
     }
     drop(session);
     writer.abort();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::origin_allowed;
+
+    #[test]
+    fn only_this_server_and_loopback_pages_open_the_socket() {
+        let host = Some("127.0.0.1:7777");
+        for ok in [
+            None,
+            Some("http://127.0.0.1:7777"),
+            Some("http://localhost:5173"),
+            Some("http://[::1]:5173"),
+            Some("http://127.0.0.2"),
+        ] {
+            assert!(origin_allowed(ok, host), "{ok:?}");
+        }
+        // Same origin by name when the page was served from it.
+        assert!(origin_allowed(
+            Some("http://mq.test:7777"),
+            Some("mq.test:7777")
+        ));
+        for refused in [
+            "https://evil.example",
+            "http://192.168.1.5:7777",
+            "http://localhost.evil.example",
+            "http://127.0.0.1.evil.example",
+            "null",
+            "file://",
+        ] {
+            assert!(!origin_allowed(Some(refused), host), "{refused}");
+        }
+    }
 }
