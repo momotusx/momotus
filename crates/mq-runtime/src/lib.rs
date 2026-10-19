@@ -12,6 +12,7 @@ mod profiles;
 pub mod segments;
 pub mod speed;
 mod trakt;
+mod turkcealtyazi;
 pub mod views;
 
 pub use crate::core::{Core, CoreConfig, CoreError, TvdbMiss};

@@ -2714,6 +2714,7 @@ dependencies = [
  "mq-streams",
  "mq-sync",
  "mq-tracking",
+ "mq-turkcealtyazi",
  "percent-encoding",
  "rusqlite",
  "serde",

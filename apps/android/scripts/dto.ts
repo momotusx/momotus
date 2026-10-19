@@ -49,6 +49,7 @@ const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps"
  * leaves a field at its default out when encoding, and the core then fills in its own. */
 const DEFAULTED = new Map([
   ["AddonsSnapshot.fresh", "false"],
+  ["AddonInfo.builtIn", "false"],
   ["Prefs.defaultsSeen", "0"],
 ]);
 const INT = new Set([

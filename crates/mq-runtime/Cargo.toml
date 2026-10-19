@@ -27,6 +27,7 @@ mq-import = { path = "../mq-import" }
 mq-media = { path = "../mq-media" }
 mq-sync = { path = "../mq-sync" }
 mq-tracking = { path = "../mq-tracking" }
+mq-turkcealtyazi = { path = "../mq-turkcealtyazi" }
 mq-engine = { path = "../mq-engine", optional = true }
 # Free space where torrents are kept (statvfs), in builds with the engine.
 libc = { version = "0.2", optional = true }

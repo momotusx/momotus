@@ -8,17 +8,19 @@
 use crate::Core;
 use crate::live::{FRAME, coalesce};
 use crate::segments::{self, Segment, Target};
+use crate::turkcealtyazi::{self, NAME as BUILT_IN};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
-use mq_addons::{AddonEvent, Deadlines};
+use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
 use mq_server::{Format, Lease, SubtitleSlot, SubtitleTrouble, Upstream};
 use mq_streams::ParsedStream;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::{Duration, Instant};
 use stremio_core::types::addon::ExtraValue;
 use tokio::task::JoinHandle;
@@ -235,6 +237,10 @@ struct State {
     /// The running skip lookup; started and replaced under the state lock,
     /// so an older report can never abort a newer lookup.
     segments_task: Option<JoinHandle<()>>,
+    /// Each subtitle track's place, by URL: its source's position in the
+    /// installed list (the stream's own first), then its rank there. Off
+    /// the wire; `subtitles` is sorted by it within a language.
+    order: HashMap<String, (usize, usize)>,
     /// Every torrent this view started, from the moment `add_magnet`
     /// answered: a policy closure pauses them all, a lease adopted or not.
     #[cfg(feature = "torrent")]
@@ -290,6 +296,7 @@ impl State {
             source: 0,
             lookup: None,
             segments_task: None,
+            order: HashMap::new(),
             #[cfg(feature = "torrent")]
             torrents: Vec::new(),
         }
@@ -732,6 +739,7 @@ fn release_all(s: &mut State) {
     s.snapshot.manifest = false;
     s.snapshot.subtitles.clear();
     s.snapshot.subtitle_notes.clear();
+    s.order.clear();
     s.lease = None;
 }
 
@@ -899,15 +907,37 @@ async fn resolve_next(
                         .iter()
                         .filter_map(|w| track(w, &stream.addon_name, &slot, addon_url))
                         .collect();
-                    order_subtitles(&mut s.snapshot.subtitles, &wanted);
+                    let own: Vec<String> =
+                        s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect();
+                    for (rank, url) in own.into_iter().enumerate() {
+                        s.order.insert(url, (0, rank));
+                    }
+                    reorder(&mut s, &wanted);
                     s.snapshot.subtitles_pending = true;
                     s.snapshot.binge_group = stream.binge_group.clone();
                     snapshot.set(s.snapshot.clone());
                 }
                 remember_stream(&core, &target, &stream);
+                // The addons ask with the hash; the built-in source lists at
+                // once and ranks with the frame rate. Pending ends with both.
                 let subtitles = async {
-                    let extra = video_extra(&upstream, reader, filename.as_deref()).await;
-                    find_subtitles(&core, &target, extra, &slot, run, &state, &snapshot).await
+                    let installed = core.installed_addons().unwrap_or_default();
+                    let reader = video_reader(&upstream, reader).await;
+                    let reader = reader.as_deref();
+                    let addons = async {
+                        let extra = video_extra(reader, filename.as_deref()).await;
+                        let found = (&slot, run, &*state, &snapshot);
+                        find_subtitles(&core, &target, &installed, extra, found).await
+                    };
+                    let built_in = built_in_tracks(
+                        &core, &target, &stream, &installed, reader, &slot, run, &state, &snapshot,
+                    );
+                    tokio::join!(addons, built_in);
+                    let mut s = lock(&state);
+                    if current(&s, run) && s.snapshot.subtitles_pending {
+                        s.snapshot.subtitles_pending = false;
+                        snapshot.set(s.snapshot.clone());
+                    }
                 };
                 let next = async {
                     if let Some(next) = next_episode(&core, &target).await {
@@ -1404,22 +1434,221 @@ fn note_trouble(snapshot: &mut PlaybackSnapshot, url: &str, trouble: SubtitleTro
     let Some(at) = snapshot.subtitles.iter().position(|t| t.url == url) else {
         return false;
     };
-    let note = match trouble {
-        SubtitleTrouble::Unreachable => SubtitleNote {
-            source: snapshot.subtitles[at].source.clone(),
-            problem: SubtitleProblem::Unreachable,
-        },
-        SubtitleTrouble::Unreadable => SubtitleNote {
-            source: snapshot.subtitles.remove(at).source,
-            problem: SubtitleProblem::TrackFailed,
-        },
+    let (source, problem) = match trouble {
+        SubtitleTrouble::Unreachable => (
+            snapshot.subtitles[at].source.clone(),
+            SubtitleProblem::Unreachable,
+        ),
+        SubtitleTrouble::Unreadable => (
+            snapshot.subtitles.remove(at).source,
+            SubtitleProblem::TrackFailed,
+        ),
     };
     let removed = trouble == SubtitleTrouble::Unreadable;
+    add_note(snapshot, source, problem) || removed
+}
+
+/// Adds the note once; false when it was there.
+fn add_note(snapshot: &mut PlaybackSnapshot, source: String, problem: SubtitleProblem) -> bool {
+    let note = SubtitleNote { source, problem };
     let new = !snapshot.subtitle_notes.contains(&note);
     if new {
         snapshot.subtitle_notes.push(note);
     }
-    new || removed
+    new
+}
+
+fn is_built_in(addon: &InstalledAddon) -> bool {
+    turkcealtyazi::is_builtin(addon.transport_url.as_str(), Some(&addon.manifest.id))
+}
+
+/// The built-in TurkceAltyazi.org tracks (plans/m13-turkcealtyazi.md 3.8):
+/// listed at once, ranked when the frame rate is read (the probe waits at
+/// most 1.5 s), placed where its row sits among the addons. Once, however
+/// many rows stand for it.
+#[allow(clippy::too_many_arguments)]
+async fn built_in_tracks(
+    core: &Core,
+    target: &PlayTarget,
+    stream: &ParsedStream,
+    installed: &[InstalledAddon],
+    reader: Option<&dyn mq_media::RangeReader>,
+    slot: &SubtitleSlot,
+    run: u64,
+    state: &Arc<Mutex<State>>,
+    snapshot: &SharedObservable<PlaybackSnapshot>,
+) {
+    let Some(position) = installed.iter().position(is_built_in) else {
+        return;
+    };
+    let (Some(digits), Some(want)) = (
+        turkcealtyazi::digits(&target.item_id),
+        turkcealtyazi::target(target),
+    ) else {
+        return;
+    };
+    let site = core.turkcealtyazi();
+    let release = &stream.release;
+    let mut playing = mq_turkcealtyazi::Playing {
+        group: release.group.as_deref(),
+        source: release.quality,
+        cut: release.cut,
+        fps: None,
+    };
+    let probe = async {
+        let budget = mq_media::ProbeBudget::default();
+        let found = mq_media::probe(reader?, budget, &mq_media::CancellationToken::new()).await;
+        found.video?.fps.value
+    };
+    let listed = tokio::time::timeout(Deadlines::default().hard, async {
+        // The request goes now; the ranking, from the cache, waits for the
+        // frame rate.
+        let (fps, _) = tokio::join!(probe, site.list(digits, want, &playing));
+        playing.fps = fps.map(|fps| fps as f32);
+        site.list(digits, want, &playing).await
+    })
+    .await;
+    let listing = listed.unwrap_or(mq_turkcealtyazi::Listing::Problem(
+        mq_turkcealtyazi::Problem::Unreachable,
+    ));
+    let wanted = core.prefs().subtitle_languages;
+    let owned = OwnedPlaying {
+        group: playing.group.map(str::to_owned),
+        source: playing.source,
+        cut: playing.cut,
+        fps: playing.fps,
+    };
+    let mut s = lock(state);
+    if !current(&s, run) {
+        return;
+    }
+    match listing {
+        mq_turkcealtyazi::Listing::Tracks(tracks) => {
+            for (rank, found) in tracks.into_iter().enumerate() {
+                let url_cell = Arc::new(OnceLock::new());
+                let fetch = BuiltInFetch {
+                    site: site.clone(),
+                    row: found.row.clone(),
+                    target: want,
+                    playing: owned.clone(),
+                    url: url_cell.clone(),
+                    state: Arc::downgrade(state),
+                    snapshot: snapshot.clone(),
+                    run,
+                };
+                let key = format!("turkcealtyazi:{}", found.row.altid);
+                let Some(url) = slot.add_fetched(&key, "tur", fetch.into_fetch()) else {
+                    return;
+                };
+                let _ = url_cell.set(url.clone());
+                s.order.insert(url.clone(), (position + 1, rank));
+                if !s.snapshot.subtitles.iter().any(|known| known.url == url) {
+                    s.snapshot.subtitles.push(SubtitleTrack {
+                        url,
+                        lang: "tur".into(),
+                        label: Some(found.label),
+                        source: BUILT_IN.into(),
+                        forced: false,
+                        hearing_impaired: found.row.hearing_impaired,
+                    });
+                }
+            }
+        }
+        mq_turkcealtyazi::Listing::Nothing => return,
+        mq_turkcealtyazi::Listing::Problem(p) => {
+            add_note(&mut s.snapshot, BUILT_IN.into(), problem(p));
+        }
+    }
+    reorder(&mut s, &wanted);
+    snapshot.set(s.snapshot.clone());
+}
+
+/// What the playing release says, owned by a track's fetch.
+#[derive(Clone)]
+struct OwnedPlaying {
+    group: Option<String>,
+    source: mq_relparse::Quality,
+    cut: Option<mq_relparse::Cut>,
+    fps: Option<f32>,
+}
+
+/// One built-in track's fetch, run by the subtitle route each time the
+/// track loads. `state` is weak: the state owns the lease, which owns this.
+#[derive(Clone)]
+struct BuiltInFetch {
+    site: Arc<mq_turkcealtyazi::Site>,
+    row: mq_turkcealtyazi::Row,
+    target: mq_turkcealtyazi::Target,
+    playing: OwnedPlaying,
+    /// The track's URL, known once the slot gave it.
+    url: Arc<OnceLock<String>>,
+    state: Weak<Mutex<State>>,
+    snapshot: SharedObservable<PlaybackSnapshot>,
+    run: u64,
+}
+
+impl BuiltInFetch {
+    fn into_fetch(self) -> mq_server::Fetch {
+        let this = Arc::new(self);
+        Arc::new(move || {
+            let this = this.clone();
+            Box::pin(async move { this.fetch().await })
+        })
+    }
+
+    /// The file's bytes; else the note (and a faulty file leaves the list,
+    /// for 6 h) and nothing.
+    async fn fetch(&self) -> Option<Vec<u8>> {
+        let playing = mq_turkcealtyazi::Playing {
+            group: self.playing.group.as_deref(),
+            source: self.playing.source,
+            cut: self.playing.cut,
+            fps: self.playing.fps,
+        };
+        let fetched = self.site.fetch(&self.row, self.target, &playing).await;
+        if let mq_turkcealtyazi::Fetched::File(bytes) = fetched {
+            return Some(bytes);
+        }
+        let state = self.state.upgrade()?;
+        let mut s = lock(&state);
+        if current(&s, self.run) && note_fetched(&mut s.snapshot, self.url.get(), &fetched) {
+            self.snapshot.set(s.snapshot.clone());
+        }
+        None
+    }
+}
+
+/// The note for a built-in fetch that gave no file: the site's problem
+/// keeps the track; a fault of the file takes it off the list.
+fn note_fetched(
+    snapshot: &mut PlaybackSnapshot,
+    url: Option<&String>,
+    fetched: &mq_turkcealtyazi::Fetched,
+) -> bool {
+    use mq_turkcealtyazi::Fetched;
+    let note = match fetched {
+        Fetched::File(_) => return false,
+        Fetched::Problem(p) => problem(*p),
+        Fetched::Fault {
+            downloads_changed: true,
+            ..
+        } => SubtitleProblem::Changed,
+        Fetched::Fault { .. } => SubtitleProblem::TrackFailed,
+    };
+    let before = snapshot.subtitles.len();
+    if let (Fetched::Fault { .. }, Some(url)) = (fetched, url) {
+        snapshot.subtitles.retain(|t| &t.url != url);
+    }
+    let removed = snapshot.subtitles.len() != before;
+    add_note(snapshot, BUILT_IN.into(), note) || removed
+}
+
+fn problem(p: mq_turkcealtyazi::Problem) -> SubtitleProblem {
+    match p {
+        mq_turkcealtyazi::Problem::Unreachable => SubtitleProblem::Unreachable,
+        mq_turkcealtyazi::Problem::Blocked => SubtitleProblem::Blocked,
+        mq_turkcealtyazi::Problem::Changed => SubtitleProblem::Changed,
+    }
 }
 
 /// A track served through the loopback server as UTF-8 WebVTT, whatever
@@ -1441,15 +1670,13 @@ fn track(
     })
 }
 
-/// The OpenSubtitles hash and size when they can be had (first and last
-/// 64 KiB, read in process for files), and the filename.
-async fn video_extra(
+/// The video's bytes in process, for the subtitle hash and the frame rate:
+/// over the playback's own cache and cursors; none for passthrough.
+async fn video_reader(
     upstream: &Upstream,
     reader: Option<Box<dyn mq_media::RangeReader>>,
-    filename: Option<&str>,
-) -> Vec<ExtraValue> {
-    let reader = match upstream {
-        // Over the playback's own cache and cursors; none for passthrough.
+) -> Option<Box<dyn mq_media::RangeReader>> {
+    match upstream {
         Upstream::Http { .. } => reader,
         #[cfg(feature = "torrent")]
         Upstream::Torrent { claim, file } => match claim.open_reader(*file).await {
@@ -1459,12 +1686,20 @@ async fn video_extra(
                 None
             }
         },
-    };
+    }
+}
+
+/// The OpenSubtitles hash and size when they can be had (first and last
+/// 64 KiB, read in process for files), and the filename.
+async fn video_extra(
+    reader: Option<&dyn mq_media::RangeReader>,
+    filename: Option<&str>,
+) -> Vec<ExtraValue> {
     let mut extra = Vec::new();
     // Origins that ignore Range give no hash; filename and id still match.
     if let Some(reader) = reader
         && let Ok(Ok((hash, size))) =
-            tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(&*reader)).await
+            tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(reader)).await
     {
         extra.push(extra_value("videoHash", hash));
         extra.push(extra_value("videoSize", size.to_string()));
@@ -1477,14 +1712,18 @@ async fn video_extra(
 
 /// Asks every subtitles addon for this video with `extra`, and adds tracks
 /// to the snapshot as each addon answers, while `run` is still the view's.
+/// The built-in source's rows are never asked (`built_in_tracks`).
 async fn find_subtitles(
     core: &Core,
     target: &PlayTarget,
+    installed: &[InstalledAddon],
     extra: Vec<ExtraValue>,
-    slot: &SubtitleSlot,
-    run: u64,
-    state: &Mutex<State>,
-    snapshot: &SharedObservable<PlaybackSnapshot>,
+    (slot, run, state, snapshot): (
+        &SubtitleSlot,
+        u64,
+        &Mutex<State>,
+        &SharedObservable<PlaybackSnapshot>,
+    ),
 ) {
     let path = ResourcePath {
         resource: "subtitles".into(),
@@ -1492,11 +1731,10 @@ async fn find_subtitles(
         id: target.video_id.clone(),
         extra,
     };
-    let addons: Vec<_> = core
-        .installed_addons()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|a| a.supports(&path))
+    let addons: Vec<_> = installed
+        .iter()
+        .filter(|a| a.supports(&path) && !is_built_in(a))
+        .cloned()
         .collect();
     let wanted = core.prefs().subtitle_languages;
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
@@ -1514,29 +1752,28 @@ async fn find_subtitles(
             } => {
                 let addon = addons.iter().find(|a| a.transport_url == transport_url);
                 let source = addon.map_or(addon_id.clone(), |a| a.manifest.name.clone());
+                let position = installed
+                    .iter()
+                    .position(|a| a.transport_url == transport_url)
+                    .map_or(usize::MAX, |at| at + 1);
                 let found = decode_subtitles(&body)
                     .map(|r| r.subtitles)
                     .unwrap_or_default();
-                for w in &found {
+                for (rank, w) in found.iter().enumerate() {
                     // One file, one loopback address: compare by it. The
                     // fetch has the scope of the install that answered.
                     let Some(t) = track(w, &source, slot, Some(&transport_url)) else {
                         return;
                     };
+                    s.order.entry(t.url.clone()).or_insert((position, rank));
                     if !s.snapshot.subtitles.iter().any(|known| known.url == t.url) {
                         s.snapshot.subtitles.push(t);
                     }
                 }
-                order_subtitles(&mut s.snapshot.subtitles, &wanted);
+                reorder(&mut s, &wanted);
             }
-            AddonEvent::Done => s.snapshot.subtitles_pending = false,
             _ => continue,
         }
-        snapshot.set(s.snapshot.clone());
-    }
-    let mut s = lock(state);
-    if current(&s, run) && s.snapshot.subtitles_pending {
-        s.snapshot.subtitles_pending = false;
         snapshot.set(s.snapshot.clone());
     }
 }
@@ -1548,13 +1785,22 @@ fn extra_value(name: &str, value: String) -> ExtraValue {
     }
 }
 
-/// Preferred languages first, in preference order; the rest keep their order.
-fn order_subtitles(tracks: &mut [SubtitleTrack], wanted: &[String]) {
-    tracks.sort_by_key(|t| {
-        wanted
+/// Preferred languages first, in preference order; within a language, by
+/// the source's place in the installed list (the stream's own first), then
+/// the source's own rank, whenever each answered.
+fn reorder(s: &mut State, wanted: &[String]) {
+    let State {
+        snapshot, order, ..
+    } = s;
+    snapshot.subtitles.sort_by_key(|t| {
+        let language = wanted
             .iter()
             .position(|w| w.eq_ignore_ascii_case(&t.lang))
-            .unwrap_or(wanted.len())
+            .unwrap_or(wanted.len());
+        (
+            language,
+            order.get(&t.url).copied().unwrap_or((usize::MAX, 0)),
+        )
     });
 }
 

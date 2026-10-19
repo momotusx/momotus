@@ -126,6 +126,9 @@ struct Inner {
     /// The network type the app last reported (`versions`, `networkChanged`):
     /// speed is measured and read per type.
     network: std::sync::Mutex<crate::speed::Network>,
+    /// TurkceAltyazi.org, read on this device: its caches and its one
+    /// request at a time.
+    turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
 }
 
 /// What is one per data directory however often it is opened: the library
@@ -243,6 +246,7 @@ impl Core {
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
                 network: std::sync::Mutex::default(),
+                turkcealtyazi: std::sync::OnceLock::new(),
             }),
             profile: profile.into(),
         })
@@ -265,6 +269,22 @@ impl Core {
 
     pub fn http(&self) -> &HttpClient {
         &self.inner.http
+    }
+
+    /// The built-in TurkceAltyazi.org source.
+    pub(crate) fn turkcealtyazi(&self) -> Arc<mq_turkcealtyazi::Site> {
+        self.inner
+            .turkcealtyazi
+            .get_or_init(|| Arc::new(mq_turkcealtyazi::Site::new(self.http().clone())))
+            .clone()
+    }
+
+    /// Tests: the built-in source at a fixture `origin`; only before its
+    /// first use.
+    #[doc(hidden)]
+    pub fn use_turkcealtyazi_at(&self, origin: url::Url, limits: mq_turkcealtyazi::Limits) {
+        let site = mq_turkcealtyazi::Site::with(self.http().clone(), origin, limits);
+        let _ = self.inner.turkcealtyazi.set(Arc::new(site));
     }
 
     pub fn segments(&self) -> &crate::segments::Finder {
@@ -671,7 +691,12 @@ impl Core {
         let mut links: Vec<String> = Vec::new();
         for profile in &profiles {
             for row in library.addons(profile)? {
-                if !links.contains(&row.transport_url) {
+                // The built-in source runs here: its old host is never asked.
+                let builtin = crate::turkcealtyazi::is_builtin(
+                    &row.transport_url,
+                    manifest_id(&row.manifest_json).as_deref(),
+                );
+                if !builtin && !links.contains(&row.transport_url) {
                     links.push(row.transport_url);
                 }
             }
@@ -724,10 +749,15 @@ impl Core {
         Ok(changed)
     }
 
+    /// Removes the addon; the built-in source's rows all go together.
     pub fn remove_addon(&self, transport_url: &str) -> Result<(), CoreError> {
         self.edit_addons(|rows| {
-            let at = position(rows, transport_url)?;
-            rows.remove(at);
+            for at in together(rows, position(rows, transport_url)?)
+                .into_iter()
+                .rev()
+            {
+                rows.remove(at);
+            }
             Ok(())
         })
     }
@@ -885,10 +915,13 @@ impl Core {
             && !self.policy().kids()
     }
 
+    /// Turns the addon on or off; the built-in source's rows switch
+    /// together, so they never disagree.
     pub fn set_addon_enabled(&self, transport_url: &str, enabled: bool) -> Result<(), CoreError> {
         self.edit_addons(|rows| {
-            let at = position(rows, transport_url)?;
-            rows[at].enabled = enabled;
+            for at in together(rows, position(rows, transport_url)?) {
+                rows[at].enabled = enabled;
+            }
             Ok(())
         })
     }
@@ -919,6 +952,20 @@ fn error_kind(e: &CoreError) -> &'static str {
         CoreError::Library(_) => "library",
         _ => "other",
     }
+}
+
+/// Row `at`, or every row of the built-in source when it is one of them.
+fn together(rows: &[AddonRow], at: usize) -> Vec<usize> {
+    let builtin = |row: &AddonRow| {
+        crate::turkcealtyazi::is_builtin(
+            &row.transport_url,
+            manifest_id(&row.manifest_json).as_deref(),
+        )
+    };
+    if !builtin(&rows[at]) {
+        return vec![at];
+    }
+    (0..rows.len()).filter(|&i| builtin(&rows[i])).collect()
 }
 
 /// The rows of a default: by manifest id, or still on the default's own

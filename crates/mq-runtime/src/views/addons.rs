@@ -37,6 +37,10 @@ pub struct AddonInfo {
     /// (`configurable` or `configurationRequired`). Built from the installed
     /// link, so it may hold keys: never show or log it.
     pub configure_url: Option<String>,
+    /// The core reads this source itself on this device
+    /// (TurkceAltyazi.org): show "Built into Marquee, runs on this device"
+    /// instead of the host. Never configurable.
+    pub built_in: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -113,7 +117,11 @@ fn list(core: &Core) -> AddonsSnapshot {
         .filter_map(|row| {
             let manifest: Manifest = serde_json::from_str(&row.manifest_json).ok()?;
             let url = url::Url::parse(&row.transport_url).ok()?;
-            let configure_url = crate::views::addon_catalog::configure_page(&url, &manifest);
+            let built_in =
+                crate::turkcealtyazi::is_builtin(&row.transport_url, Some(manifest.id.as_str()));
+            // Its old host is never opened: not even to configure it.
+            let configure_url =
+                crate::views::addon_catalog::configure_page(&url, &manifest).filter(|_| !built_in);
             Some(AddonInfo {
                 host: url.host_str().unwrap_or_default().to_owned(),
                 url: row.transport_url,
@@ -132,7 +140,8 @@ fn list(core: &Core) -> AddonsSnapshot {
                     .collect(),
                 configure_url,
                 types: manifest.types,
-                configurable: manifest.behavior_hints.configurable,
+                configurable: manifest.behavior_hints.configurable && !built_in,
+                built_in,
             })
         })
         .collect();

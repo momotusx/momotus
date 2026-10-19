@@ -18,4 +18,10 @@ provides: Array<string>, types: Array<string>, configurable: boolean,
  * (`configurable` or `configurationRequired`). Built from the installed
  * link, so it may hold keys: never show or log it.
  */
-configureUrl: string | null, };
+configureUrl: string | null, 
+/**
+ * The core reads this source itself on this device
+ * (TurkceAltyazi.org): show "Built into Marquee, runs on this device"
+ * instead of the host. Never configurable.
+ */
+builtIn: boolean, };

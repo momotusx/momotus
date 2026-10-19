@@ -44,6 +44,8 @@ data class AddonInfo(
     val configurable: Boolean,
     /** The addon's configure page, when its manifest says it has one (`configurable` or `configurationRequired`). Built from the installed link, so it may hold keys: never show or log it. */
     val configureUrl: String? = null,
+    /** The core reads this source itself on this device (TurkceAltyazi.org): show "Built into Marquee, runs on this device" instead of the host. Never configurable. */
+    val builtIn: Boolean = false,
 )
 
 @Serializable
