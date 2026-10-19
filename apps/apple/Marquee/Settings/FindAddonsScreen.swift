@@ -273,6 +273,11 @@ struct FindAddonsScreen: View {
 /// Says something to VoiceOver now (an install's result, a list that came in).
 func announce(_ words: String) {
     AccessibilityNotification.Announcement(words).post()
+    #if DEBUG
+    // Every announcement goes through here: a walk reads them from the log
+    // where no screen reader runs (the simulator has none).
+    coreLog.notice("debug: announce \(words, privacy: .public)")
+    #endif
 }
 
 /// A link to Find addons as a secondary pill (Addons, Add a source, onboarding).
@@ -385,29 +390,30 @@ private struct FindAddonCard: View {
     }
 
     private var text: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(entry.name)
-                .font(.text(Theme.type.headline, weight: .bold, relativeTo: .headline))
-                .natural(entry.name)
-            // Two lines at most, the end kept: it tells same-name entries apart.
-            Text(entry.host)
-                .font(.mono(Theme.type.caption))
-                .foregroundStyle(Theme.Palette.dim)
-                .lineLimit(2)
-                .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            // The name and its host read as one pair: the host's own leading is their gap.
+            VStack(alignment: .leading, spacing: 0) {
+                Text(entry.name)
+                    .font(.text(Theme.type.headline, weight: .bold, relativeTo: .headline))
+                    .natural(entry.name)
+                // Two lines at most, the end kept: it tells same-name entries apart.
+                Text(entry.host)
+                    .font(.mono(Theme.type.caption))
+                    .foregroundStyle(Theme.Palette.dim)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
             if let description = entry.description, !description.isEmpty {
                 Text(description)
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                     .lineLimit(2)
                     .natural(description)
-                    .padding(.top, 4)
             }
             Text(entry.providesLine)
                 .font(.text(Theme.type.caption, relativeTo: .caption))
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
             if act == .configure {
                 Text(isTV ? W.configureTv : W.configureHelp)
                     .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
@@ -500,6 +506,8 @@ private struct FindAddonCard: View {
         case .none:
             return
         }
+        // The press is said at once: the card's state line changes under the finger, not where VoiceOver reads.
+        announce("\(name), \(busyWord)")
         Task {
             guard let result = await cards.run(key, request) else { return }
             announce(result.words ?? "\(name), \(done)")
