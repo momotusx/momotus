@@ -167,6 +167,11 @@ async function meetSealed() {
 }
 vault.onOpened(() => void meetSealed());
 
+// A profile removed here or by sync: its record goes from memory and its sealed copy from this
+// browser (no key needed). A delete that fails is tried again: the core names removed profiles
+// again when the next session starts.
+bridge.onProfileGone((profile) => void records.signedOut(profile).catch(() => undefined));
+
 /** Stores what memory holds again, then acknowledges a record still waiting; the note goes once
  * it worked. */
 async function saveAgain() {

@@ -8,7 +8,7 @@
 
 import { afterAll, expect, mock, test } from "bun:test";
 import { createSignal } from "solid-js";
-import { clientMock, fake } from "./fake-client";
+import { clientMock, fake, gone } from "./fake-client";
 
 const g = globalThis as unknown as Record<string, unknown>;
 type Sent = { name: string; fields: Record<string, unknown> };
@@ -258,4 +258,18 @@ test("signing out while this browser's lock is closed deletes the sealed copy, a
   await vault.unlock();
   await settled();
   expect(Object.keys(await vault.openTrakt()).sort()).toEqual(["p2", "p3"]);
+});
+
+test("a profile the core says is gone loses its sealed sign-in and its record here, no key needed", async () => {
+  // p3 holds a sealed sign-in (from the switches above); this browser's lock is closed.
+  expect(sealed("p3")).toBeDefined();
+  told();
+  vault.drop();
+  for (const fn of gone) fn("p3");
+  await settled();
+  expect(sealed("p3")).toBeUndefined();
+  expect(sealed("p2")).toBeDefined();
+  // Nothing of it is sent again: switching to it finds no record.
+  await reset({ active: "p3", locked: false });
+  expect(told()).toEqual(["close trakt", "subscribe trakt"]);
 });

@@ -10,8 +10,14 @@ export const fake = {
   subscribe: async (_view: string, _params: unknown, _handlers: Handlers): Promise<Sub> => ({ sub: 0, command: async () => undefined, close: async () => undefined }),
 };
 
+/** Who listens for profiles the core says are gone; a test calls them as the core would. */
+export const gone = new Set<(profile: string) => void>();
+
 export const clientMock = () => ({
   privateLink: true,
   op: (name: string, fields: Record<string, unknown> = {}) => fake.op(name, fields),
-  bridge: { subscribe: (view: string, params: unknown, handlers: Handlers) => fake.subscribe(view, params, handlers) },
+  bridge: {
+    subscribe: (view: string, params: unknown, handlers: Handlers) => fake.subscribe(view, params, handlers),
+    onProfileGone: (fn: (profile: string) => void) => (gone.add(fn), () => gone.delete(fn)),
+  },
 });

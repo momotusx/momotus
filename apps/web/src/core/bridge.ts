@@ -54,6 +54,9 @@ export class Bridge {
   // with no listener belongs to a closed view and is dropped.
   private early = new Map<number, unknown[][]>();
   private opening = 0;
+  /** Who hears `{"profile": "gone", "id"}`: a profile removed here or by sync, whose keystore
+   * entries the app drops. */
+  private gone = new Set<(profile: string) => void>();
   /** The transport closed for good: every later request fails at once instead of waiting forever. */
   private closed = false;
 
@@ -75,6 +78,11 @@ export class Bridge {
     } catch {
       return;
     }
+    if ((message as { profile?: unknown }).profile === "gone") {
+      const { id } = message as unknown as { id: string };
+      for (const fn of this.gone) fn(id);
+      return;
+    }
     if ("sub" in message && "updates" in message) {
       const listener = this.listeners.get(message.sub);
       if (listener) listener(message.updates);
@@ -94,6 +102,12 @@ export class Bridge {
     } else waiter.reject(new BridgeError(message.error, message.code, message.retryAfterMs, message.views));
     // The last open settled: what still waits has no view to go to.
     if (waiter.opens && --this.opening === 0) this.early.clear();
+  }
+
+  /** Runs `fn` with each profile the core says is gone. Returns the way to stop listening. */
+  onProfileGone(fn: (profile: string) => void): () => void {
+    this.gone.add(fn);
+    return () => this.gone.delete(fn);
   }
 
   /** Pushes on a subscription the host owns rather than the core (a desktop
