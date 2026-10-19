@@ -462,10 +462,11 @@ fun ToneWord(
     maxLines: Int = 2,
 ) {
     val tv = Marquee.form == Form.Tv
+    // The icon stays by the first line when the words take two.
     Row(
         modifier,
         horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         MqIcon(
             when (tone) {

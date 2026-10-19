@@ -207,38 +207,44 @@ fun StreamQuestionScreen(
             MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
             SkipLink(StreamChoiceCopy.SKIP, onDone)
         }
-        Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
-        ) {
-            MqText(StreamChoiceCopy.QUESTION_TITLE, role = if (tv) TextRole.Title1 else TextRole.Title2)
-            MqText(StreamChoiceCopy.QUESTION_LEAD, role = TextRole.Body, color = Marquee.colors.muted)
-            val doors: @Composable (Modifier) -> Unit = { door ->
-                Door(
-                    StreamChoiceCopy.FAST.label,
-                    StreamChoiceCopy.FAST.text,
-                    Icons.Zap,
-                    { page.answer(StreamChoiceCopy.FAST, onDone) },
-                    door,
-                    fast,
-                )
-                Door(
-                    StreamChoiceCopy.BEST.label,
-                    StreamChoiceCopy.BEST.text,
-                    Icons.Gem,
-                    { page.answer(StreamChoiceCopy.BEST, onDone) },
-                    door,
-                    null,
-                )
-            }
-            if (tv) {
-                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
-                    doors(Modifier.weight(1f).fillMaxHeight())
+        // In the middle of the screen when it fits, as the first step; it scrolls when it does not.
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.m, Alignment.CenterVertically),
+            ) {
+                MqText(StreamChoiceCopy.QUESTION_TITLE, role = if (tv) TextRole.Title1 else TextRole.Title2)
+                MqText(StreamChoiceCopy.QUESTION_LEAD, role = TextRole.Body, color = Marquee.colors.muted)
+                val doors: @Composable (Modifier) -> Unit = { door ->
+                    Door(
+                        StreamChoiceCopy.FAST.label,
+                        StreamChoiceCopy.FAST.text,
+                        Icons.Zap,
+                        { page.answer(StreamChoiceCopy.FAST, onDone) },
+                        door,
+                        fast,
+                    )
+                    Door(
+                        StreamChoiceCopy.BEST.label,
+                        StreamChoiceCopy.BEST.text,
+                        Icons.Gem,
+                        { page.answer(StreamChoiceCopy.BEST, onDone) },
+                        door,
+                        null,
+                    )
                 }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) { doors(Modifier.fillMaxWidth()) }
+                if (tv) {
+                    Row(
+                        Modifier.height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.l),
+                    ) { doors(Modifier.weight(1f).fillMaxHeight()) }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        doors(Modifier.fillMaxWidth())
+                    }
+                }
+                page.problem?.let { StatusWord("Could not save the choice: $it", Status.Bad) }
             }
-            page.problem?.let { StatusWord("Could not save the choice: $it", Status.Bad) }
         }
     }
 }

@@ -581,7 +581,8 @@ private fun SourceRow(
                 role = TextRole.Callout,
                 maxLines = 1,
             )
-            ToneWord(line.text, tone(line.tone), Modifier.width(STATUS), maxLines = 1)
+            // A long line ("Colors may look washed out on this screen") takes a second line, as on the web.
+            ToneWord(line.text, tone(line.tone), Modifier.width(STATUS))
             MqText(row.via, Modifier.width(VIA), role = TextRole.Callout, maxLines = 1)
         }
         if (focused) {
