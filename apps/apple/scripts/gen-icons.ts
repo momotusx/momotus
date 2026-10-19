@@ -11,12 +11,12 @@ const ICONS = [
   "arrow-down", "arrow-up", "bookmark-check", "bookmark-plus", "calendar", "calendar-x", "camera", "captions", "cat",
   "check", "chevron-down", "chevron-left", "chevron-right", "circle-alert", "circle-check", "circle-dashed",
   "circle-minus", "circle-slash", "circle-x", "clapperboard", "clock", "clock-alert", "compass", "copy", "delete",
-  "dog", "door-open", "download", "external-link", "eye", "eye-off", "film", "flame", "gamepad-2", "gauge",
+  "dog", "door-open", "download", "external-link", "eye", "eye-off", "film", "flame", "gamepad-2", "gauge", "gem",
   "ghost", "headphones", "history", "house", "inbox", "info", "key-round", "layers", "leaf", "library-big", "life-buoy", "link-2",
   "list-checks", "list-filter", "list-video", "loader-circle", "lock", "log-out", "monitor-check",
   "monitor-smartphone", "moon", "package-search", "pause", "pause-fill", "pencil", "play", "play-fill", "plus", "popcorn",
   "power", "puzzle", "qr-code", "refresh-cw", "rocket", "rotate-ccw", "rotate-cw", "search", "settings",
-  "shield-alert", "skip-forward", "sparkle", "star-fill", "text-align-start", "trash", "triangle-alert", "tv", "users",
+  "shield-alert", "skip-forward", "sparkle", "star-fill", "text-align-start", "trash", "triangle-alert", "tv", "undo-2", "users",
   "volume-2", "wrench", "x", "zap",
 ];
 

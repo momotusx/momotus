@@ -9,7 +9,8 @@ private func row(
 ) -> VersionRow {
     VersionRow(
         key: "k", quality: quality, features: features, sizeBytes: size, status: status, via: "Torrentio",
-        releaseName: "Name.mp4", languages: languages, reasons: reasons, group: "best", failoverCount: failover)
+        releaseName: "Name.mp4", languages: languages, reasons: reasons, group: "best", failoverCount: failover,
+        line: nil, sourceClass: nil, bitrateMbps: nil)
 }
 
 private func snapshot(
@@ -18,7 +19,7 @@ private func snapshot(
 ) -> VersionsSnapshot {
     VersionsSnapshot(
         recommended: pick, rows: rows, hidden: hidden, pendingAddons: pending, slowAddons: slow,
-        failedAddons: failed, done: done, frozen: false)
+        failedAddons: failed, done: done, frozen: false, conditions: nil, blocked: nil, note: nil)
 }
 
 @Test func theHeaderSaysWhoIsAskedSlowOrSilentBeforeTheCount() {

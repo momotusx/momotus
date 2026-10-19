@@ -228,18 +228,58 @@ struct Prefs: Decodable, Hashable, Sendable {
     let autoplayNext: Bool
     /// The default addons version this profile was last offered.
     let defaultsSeen: Int
+    /// What the picks taught, by screen class (plans/m13-stream-choice.md 3.9).
+    let learned: LearnedByClass
+    /// Counters stamped below it read as zero: "Forget what was learned".
+    let learnedEpoch: Int
+}
+
+struct LearnedByClass: Decodable, Hashable, Sendable {
+    let uhd: Learned
+    let fhd: Learned
+    let hd: Learned
+    let sd: Learned
+}
+
+/// One screen class's counters, -5 to 5 each; at 3 or more either way a choice is learned.
+struct Learned: Decodable, Hashable, Sendable {
+    let ready: Int
+    let height: Int
+    let hdr: Int
+    let size: Int
+    let picks: Int
+    let epoch: Int
+    let atMs: Int64
+    /// Choices undone here: they no longer learn.
+    let muted: [String]
+}
+
+/// This device's connection and space for Settings ("This device").
+struct StreamConditions: Decodable, Hashable, Sendable {
+    let network: String
+    let http: Speed
+    let p2p: Speed
+    let freeBytes: Int64?
+    let engine: Bool
 }
 
 struct StreamPrefs: Decodable, Hashable, Sendable {
-    /// "best", "balanced" or "dataSaver".
+    /// "best", "balanced" or "dataSaver"; read once by the core and mapped, then ignored.
     let quality: String
-    /// Never pick above this many lines (720, 1080, 2160), whatever the screen.
+    /// Never pick above this many lines (720, 1080, 2160), whatever the screen; nil is the screen's.
     let maxHeight: Int?
     let maxSizeBytes: Int64?
     /// ISO 639-1 audio language preferences, most wanted first.
     let languages: [String]
     /// Lowercase terms that hide a stream when its name contains them.
     let avoid: [String]
+    /// The soft size limit (5 GiB by default); nil is no limit.
+    let sizeLimitBytes: Int64?
+    /// Seeders wanted (50 by default).
+    let minSeeders: Int
+    let hdr: Bool
+    let preferReady: Bool
+    let learn: Bool
 }
 
 /// Episodes of library series from a week before to a month after `today`, by date.

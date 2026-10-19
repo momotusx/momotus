@@ -1,12 +1,28 @@
 {
  "autoplayNext": true,
  "defaultsSeen": 0,
+ "homeRows": {
+  "hidden": [],
+  "order": []
+ },
+ "learned": {
+  "fhd": {"atMs": 0, "epoch": 0, "hdr": 0, "height": 0, "muted": [], "picks": 0, "ready": 0, "size": 0},
+  "hd": {"atMs": 0, "epoch": 0, "hdr": 0, "height": 0, "muted": [], "picks": 0, "ready": 0, "size": 0},
+  "sd": {"atMs": 0, "epoch": 0, "hdr": 0, "height": 0, "muted": [], "picks": 0, "ready": 0, "size": 0},
+  "uhd": {"atMs": 0, "epoch": 0, "hdr": 0, "height": 0, "muted": [], "picks": 0, "ready": 0, "size": 0}
+ },
+ "learnedEpoch": 0,
  "streams": {
   "avoid": [],
+  "hdr": true,
   "languages": [],
+  "learn": true,
   "maxHeight": null,
   "maxSizeBytes": null,
-  "quality": "best"
+  "minSeeders": 50,
+  "preferReady": true,
+  "quality": "best",
+  "sizeLimitBytes": 5368709120
  },
  "subtitleLanguages": []
 }

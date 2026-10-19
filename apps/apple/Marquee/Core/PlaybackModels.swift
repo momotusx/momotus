@@ -15,6 +15,73 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     let failedAddons: [String]
     let done: Bool
     let frozen: Bool
+    /// What the ranking read about this device and title (optional for older cores).
+    let conditions: VersionsConditions?
+    /// Every addon answered, nothing is listed, and the hidden rows say why.
+    let blocked: BlockedVersions?
+    /// The one-time learning note, shown with Undo.
+    let note: LearnedNote?
+}
+
+/// What the ranking read (plans/m13-stream-choice.md 4.2): "This TV: 4K HDR,
+/// about 42 Mbit/s on Wi-Fi, 61 GB free".
+struct VersionsConditions: Decodable, Hashable, Sendable {
+    /// 2160, 1080, 720 or 480.
+    let screenClass: Int
+    let hdr: Bool
+    /// "wifi", "ethernet", "cellular" or "other".
+    let network: String
+    let http: Speed
+    let p2p: Speed
+    let freeBytes: Int64?
+    let runtimeMin: Int?
+    let sizeLimitBytes: Int64?
+    let minSeeders: Int
+    /// The built-in torrent engine runs here.
+    let engine: Bool
+    /// A streaming service account is connected.
+    let account: Bool
+}
+
+/// A measured speed; 0 samples is the estimate.
+struct Speed: Decodable, Hashable, Sendable {
+    let mbps: Double
+    let samples: Int
+}
+
+/// Why no version is listed, with the versions as they would rank once fixed.
+struct BlockedVersions: Decodable, Hashable, Sendable {
+    /// "needsAccount", "noSpace" or "nothingPlaysHere".
+    let reason: String
+    let count: Int
+    let rows: [VersionRow]
+}
+
+/// A choice the picks taught, on one screen class.
+struct LearnedNote: Decodable, Hashable, Sendable {
+    let screenClass: Int
+    /// "ready", "height", "hdr" or "size".
+    let choice: String
+    let up: Bool
+    /// The preferences now in effect, for the note's numbers.
+    let prefs: StreamPrefs
+}
+
+/// The one thing to say about a version (plans/m13-stream-choice.md 3.7),
+/// with its numbers; the words live in apps/shared/stream-choice-words.json.
+struct ReasonLine: Decodable, Hashable, Sendable {
+    /// "copy", "fetch", "stalled", "veryFew", "otherYear", "mayPause",
+    /// "washedOut", "large", "few", "ready", "quick" or "should".
+    let kind: String
+    var quality: String?
+    var service: String?
+    var seeders: Int?
+    var year: Int?
+    var needMbps: Double?
+    var haveMbps: Double?
+    var samples: Int?
+    var sizeBytes: Int64?
+    var limitBytes: Int64?
 }
 
 struct VersionRow: Decodable, Hashable, Sendable, Identifiable {
@@ -35,6 +102,11 @@ struct VersionRow: Decodable, Hashable, Sendable, Identifiable {
     /// "best", "smallerFaster", "otherLanguages" or "needsDownload".
     let group: String
     let failoverCount: Int
+    /// What to tell the user about it (optional for older cores).
+    let line: ReasonLine?
+    /// "ready", "unknown", "swarm" or "fetch".
+    let sourceClass: String?
+    let bitrateMbps: Double?
 
     var id: String { key }
 }

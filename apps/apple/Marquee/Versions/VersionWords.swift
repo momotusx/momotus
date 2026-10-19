@@ -82,6 +82,11 @@ enum VersionWords {
             case "tooLarge": what = one ? "is over your size limit" : "are over your size limit"
             case "unplayable": what = "cannot play on this device"
             case "unsupportedSource": what = one ? "uses a source this app cannot open yet" : "use a source this app cannot open yet"
+            // Kids profiles only.
+            case "leavesApp": what = "would open outside Marquee"
+            case "notForKids": what = one ? "is not for kids" : "are not for kids"
+            case "needsDebrid": what = one ? "needs a paid streaming service account" : "need a paid streaming service account"
+            case "noSpace": what = one ? "is larger than the free space" : "are larger than the free space"
             default: what = item.reason
             }
             return "\(item.count) \(what)"
