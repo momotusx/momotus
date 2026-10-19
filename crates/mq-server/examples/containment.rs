@@ -713,8 +713,9 @@ async fn main() {
         gate.check("control", name, reached, "its probe reaches the canary");
     }
     // Control, nested: top level, then as an HLS segment, no protection.
-    // N3's http entries reach the canary through mpv's playlist fallback;
-    // FFmpeg and mpv refuse every other one first.
+    // N3's http entries reach the canary through mpv's playlist fallback,
+    // and N1's where FFmpeg has a dash demuxer (the fallback opens the MPD
+    // as a file of its own); FFmpeg and mpv refuse every other one first.
     for (name, _, _) in &nested {
         for (run_name, url) in [
             ("control nested top-level", format!("{base}/{name}.top")),
@@ -725,7 +726,7 @@ async fn main() {
         ] {
             let seen = run(run_name, name, &url, &refs, Env::User);
             gate.record(run_name, name, &seen, untested(name));
-            if untested(name).is_none() {
+            if untested(name).is_none() && !name.starts_with("n1-http") {
                 let fallback = name.starts_with("n3-http");
                 let rule = if fallback {
                     "reaches the canary"
