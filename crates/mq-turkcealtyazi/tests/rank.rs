@@ -1,7 +1,9 @@
 //! Ranking the recorded rows against a playing release, and the labels.
 
-use mq_relparse::Cut;
-use mq_turkcealtyazi::{Kind, Lang, Playing, Row, Target, TitlePage, Track, title_page, tracks};
+use mq_relparse::{Cut, Quality};
+use mq_turkcealtyazi::{
+    Kind, Lang, Playing, Row, Source, Target, TitlePage, Track, title_page, tracks,
+};
 
 fn rows(file: &str, url: &str, digits: &str) -> Vec<Row> {
     let path = format!("{}/tests/corpus/{file}", env!("CARGO_MANIFEST_DIR"));
@@ -30,14 +32,30 @@ const S01E01: Target = Target::Episode {
 
 #[test]
 fn an_episode_gets_its_own_file_then_the_season_packs_by_downloads() {
-    let got = tracks(&breaking_bad(), S01E01, &Playing::default());
+    // At 23.976 fps every file but the episode's own (25 fps) and one pack
+    // fits; with the frame rate unknown, the usual one among the rows (5 of
+    // 7) stands in, so the 25 fps files never lead on downloads alone.
+    let at = |fps| {
+        tracks(
+            &breaking_bad(),
+            S01E01,
+            &Playing {
+                fps,
+                ..Playing::default()
+            },
+        )
+    };
+    let got = at(None);
     assert_eq!(
         ids(&got),
-        [108735, 373225, 345388, 250740, 84404, 134774, 725317]
+        [373225, 345388, 250740, 84404, 725317, 108735, 134774]
     );
-    assert_eq!(got[0].label, "BiA, 25 fps, by F471H");
-    assert_eq!(got[1].label, "ORPHEUS, 23.976 fps, season 1 pack");
+    assert_eq!(ids(&got), ids(&at(Some(23.976))));
+    assert_eq!(got[0].label, "ORPHEUS DVDRip, 23.976 fps, season 1 pack");
+    assert_eq!(got[5].label, "BiA, 25 fps, by F471H");
     assert!(got.iter().all(|t| t.row.lang == Lang::Turkish));
+    // At 25 fps the episode's own file leads again.
+    assert_eq!(ids(&at(Some(25.0)))[..2], [108735, 134774]);
 }
 
 #[test]
@@ -117,7 +135,8 @@ fn a_movie_gets_one_part_files_only() {
         "0133093",
     );
     let got = tracks(&matrix, Target::Movie, &Playing::default());
-    assert_eq!(ids(&got), [152408, 120471, 762312]);
+    // PRoDJi is 25 fps, the other two 23.976: the usual rate goes first.
+    assert_eq!(ids(&got), [152408, 762312, 120471]);
     // RARBG has the fewest downloads; playing it, its row leads.
     let rarbg = tracks(
         &matrix,
@@ -147,6 +166,7 @@ fn the_same_cut_comes_first_and_no_cut_matches_no_cut() {
         lang: Lang::Turkish,
         kind: Kind::Movie { discs: 1 },
         release: release.into(),
+        source: None,
         fps: None,
         downloads,
         translator: None,
@@ -174,7 +194,8 @@ fn the_same_cut_comes_first_and_no_cut_matches_no_cut() {
             ..Playing::default()
         },
     );
-    assert_eq!(ids(&theatrical)[0], 3);
+    // Most releases are the theatrical cut without saying so.
+    assert_eq!(ids(&theatrical), [1, 3, 2]);
     assert_eq!(
         ids(&tracks(&rows, Target::Movie, &Playing::default())),
         [1, 3, 2]
@@ -189,6 +210,7 @@ fn a_group_with_a_dash_or_an_underscore_matches_whole() {
         lang: Lang::Turkish,
         kind: Kind::Movie { discs: 1 },
         release: release.into(),
+        source: None,
         fps: None,
         downloads,
         translator: None,
@@ -236,4 +258,65 @@ fn at_most_eight_tracks_and_never_a_special_or_english() {
         [725388],
         "the season 5 pack, never the specials"
     );
+}
+
+#[test]
+fn the_playing_source_family_comes_right_after_the_group() {
+    let rows = breaking_bad();
+    let from = |source, group| {
+        tracks(
+            &rows,
+            S01E01,
+            &Playing {
+                group,
+                source,
+                ..Playing::default()
+            },
+        )
+    };
+    // A WEB-DL plays: the NETFLiX WEB-DL pack leads the DVDRip pack with
+    // five times its downloads; a WEBRip's timing is the same family.
+    let web = from(Quality::WebDl, None);
+    assert_eq!(web[0].row.altid, 725317);
+    assert!(
+        web[0].label.starts_with("NETFLiX WEB-DL, "),
+        "{}",
+        web[0].label
+    );
+    assert_eq!(from(Quality::WebRip, None)[0].row.altid, 725317);
+    // No BluRay or BDRip row here, and HD says nothing: the order stays.
+    assert_eq!(
+        ids(&from(Quality::BluRay, None)),
+        ids(&from(Quality::Unknown, None))
+    );
+    // The group still comes first.
+    assert_eq!(from(Quality::WebDl, Some("ORPHEUS"))[0].row.altid, 373225);
+}
+
+#[test]
+fn a_label_names_the_source_once() {
+    let row = |release: &str, source| Row {
+        altid: 1,
+        path: "/sub/1/x.html".into(),
+        lang: Lang::Turkish,
+        kind: Kind::Movie { discs: 1 },
+        release: release.into(),
+        source,
+        fps: None,
+        downloads: 0,
+        translator: None,
+        hearing_impaired: false,
+    };
+    let label = |r: Row| {
+        tracks(&[r], Target::Movie, &Playing::default())[0]
+            .label
+            .clone()
+    };
+    assert_eq!(label(row("TOPAZ", Some(Source::DvdRip))), "TOPAZ DVDRip");
+    assert_eq!(
+        label(row("x264 BluRay", Some(Source::BluRay))),
+        "x264 BluRay"
+    );
+    assert_eq!(label(row("", Some(Source::WebDl))), "WEB-DL");
+    assert_eq!(label(row("TOPAZ", None)), "TOPAZ");
 }

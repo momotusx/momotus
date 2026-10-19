@@ -1,8 +1,8 @@
 //! Which Turkish rows fit the playing video, best first, and the label each
 //! shows (plans/m13-turkcealtyazi.md 3.4).
 
-use crate::page::{Kind, Lang, Row};
-use mq_relparse::Cut;
+use crate::page::{Kind, Lang, Row, Source};
+use mq_relparse::{Cut, Quality};
 use std::cmp::Reverse;
 
 /// The most tracks one title offers.
@@ -20,6 +20,8 @@ pub enum Target {
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Playing<'a> {
     pub group: Option<&'a str>,
+    /// Its source (`Quality::Unknown` when the name gives none).
+    pub source: Quality,
     pub cut: Option<Cut>,
     pub fps: Option<f32>,
 }
@@ -33,19 +35,24 @@ pub struct Track {
 }
 
 /// The Turkish rows that fit `target`, ranked against `playing`: the
-/// playing group first, then the same cut, then the same frame rate, then
-/// an episode's own file before a few episodes before a season pack, then
-/// the more downloaded, then the newer.
+/// playing group first, then the same source family (a WEB-DL's timing is
+/// a WEBRip's, a BluRay's a BDRip's), then the same cut, then the same
+/// frame rate, then an episode's own file before a few episodes before a
+/// season pack, then the more downloaded, then the newer. With the frame
+/// rate unknown, the most common one among the fitting rows stands in.
 pub fn tracks(rows: &[Row], target: Target, playing: &Playing) -> Vec<Track> {
     let mut fit: Vec<&Row> = rows
         .iter()
         .filter(|r| r.lang == Lang::Turkish && fits(&r.kind, target))
         .collect();
+    let fps = playing.fps.or_else(|| usual_fps(&fit));
+    let source = family(playing.source);
     fit.sort_by_key(|r| {
         (
             !same_group(&r.release, playing.group),
-            mq_relparse::parse(&r.release).cut != playing.cut,
-            !same_fps(r.fps, playing.fps),
+            source.is_none() || r.source.and_then(source_family) != source,
+            !same_cut(mq_relparse::parse(&r.release).cut, playing.cut),
+            !same_fps(r.fps, fps),
             spread(&r.kind),
             Reverse(r.downloads),
             Reverse(r.altid),
@@ -109,9 +116,77 @@ fn same_fps(row: Option<f32>, playing: Option<f32>) -> bool {
     matches!((row, playing), (Some(a), Some(b)) if (a - b).abs() < 0.01)
 }
 
-/// "TOPAZ, 23.976 fps, episodes 3 to 6, by Iverson".
+/// The frame rate most fitting rows have; the first seen on a tie.
+fn usual_fps(rows: &[&Row]) -> Option<f32> {
+    let mut counts: Vec<(f32, usize)> = Vec::new();
+    for fps in rows.iter().filter_map(|r| r.fps) {
+        match counts
+            .iter_mut()
+            .find(|(seen, _)| same_fps(Some(*seen), Some(fps)))
+        {
+            Some((_, n)) => *n += 1,
+            None => counts.push((fps, 1)),
+        }
+    }
+    // `max_by_key` keeps the last of equals: reversed, the first seen wins.
+    counts
+        .into_iter()
+        .rev()
+        .max_by_key(|(_, n)| *n)
+        .map(|(fps, _)| fps)
+}
+
+/// Most releases are the theatrical cut without saying so.
+pub(crate) fn same_cut(a: Option<Cut>, b: Option<Cut>) -> bool {
+    let plain = |c: Option<Cut>| c.filter(|c| *c != Cut::Theatrical);
+    plain(a) == plain(b)
+}
+
+/// Sources whose files share their timing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Family {
+    Web,
+    Disc,
+    Dvd,
+    Screener,
+    Cam,
+    Telesync,
+}
+
+fn family(quality: Quality) -> Option<Family> {
+    Some(match quality {
+        Quality::WebRip | Quality::WebDl => Family::Web,
+        Quality::BluRay | Quality::Remux => Family::Disc,
+        Quality::Dvd => Family::Dvd,
+        Quality::Screener => Family::Screener,
+        Quality::Cam => Family::Cam,
+        Quality::Telesync => Family::Telesync,
+        Quality::Hdtv | Quality::Unknown => return None,
+    })
+}
+
+/// `HD` and `HDRip` say nothing of where a file came from.
+fn source_family(source: Source) -> Option<Family> {
+    Some(match source {
+        Source::WebRip | Source::WebDl => Family::Web,
+        Source::BdRip | Source::BluRay => Family::Disc,
+        Source::DvdRip => Family::Dvd,
+        Source::DvdScr | Source::R5 => Family::Screener,
+        Source::Cam => Family::Cam,
+        Source::Hdts => Family::Telesync,
+        Source::Hd | Source::HdRip => return None,
+    })
+}
+
+/// "TOPAZ DVDRip, 23.976 fps, episodes 3 to 6, by Iverson".
 fn label(row: &Row) -> String {
-    let mut parts = vec![row.release.clone()];
+    let mut release = row.release.clone();
+    if let Some(source) = row.source.map(Source::name)
+        && !release.to_lowercase().contains(&source.to_lowercase())
+    {
+        release = format!("{release} {source}").trim().to_owned();
+    }
+    let mut parts = vec![release];
     if let Some(fps) = row.fps {
         let fps = format!("{fps:.3}");
         parts.push(format!(

@@ -20,4 +20,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 mq-http = { path = "../mq-http", features = ["test-dns"] }
+# The recorded files through the converter the playback uses (plan 5.2).
+mq-server = { path = "../mq-server" }
 tokio = { workspace = true, features = ["test-util"] }

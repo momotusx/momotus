@@ -2829,6 +2829,7 @@ dependencies = [
  "flate2",
  "mq-http",
  "mq-relparse",
+ "mq-server",
  "regex",
  "thiserror 2.0.21",
  "tokio",

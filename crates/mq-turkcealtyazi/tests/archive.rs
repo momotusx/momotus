@@ -7,7 +7,8 @@
 mod common;
 
 use common::{Options, corpus, find, zip, zip_with};
-use mq_turkcealtyazi::{ArchiveFault, MAX_ARCHIVE, MAX_ENTRY, Want, pick};
+use mq_relparse::Cut;
+use mq_turkcealtyazi::{ArchiveFault, MAX_ARCHIVE, MAX_ENTRY, Playing, Want, pick};
 
 /// The first cue's start in each recorded pack entry (from `unzip -p`).
 const PACK_STARTS: [&str; 7] = [
@@ -32,7 +33,7 @@ fn starts(bytes: &[u8], cue: &str) -> bool {
 }
 
 fn single(archive: &[u8]) -> Result<Vec<u8>, ArchiveFault> {
-    pick(archive, Want::Single, None)
+    pick(archive, Want::Single, &Playing::default())
 }
 
 #[test]
@@ -50,7 +51,12 @@ fn the_episode_is_picked_out_of_a_season_pack() {
     let pack = corpus("pack.zip");
     for (i, cue) in PACK_STARTS.iter().enumerate() {
         let episode = i as u32 + 1;
-        let got = pick(&pack, Want::Episode { season: 1, episode }, None).unwrap();
+        let got = pick(
+            &pack,
+            Want::FromSeveral { season: 1, episode },
+            &Playing::default(),
+        )
+        .unwrap();
         assert!(
             got.starts_with(b"\xef\xbb\xbf"),
             "UTF-8 with BOM, kept for to_vtt"
@@ -59,7 +65,11 @@ fn the_episode_is_picked_out_of_a_season_pack() {
     }
     for (season, episode) in [(1, 8), (2, 5)] {
         assert_eq!(
-            pick(&pack, Want::Episode { season, episode }, None),
+            pick(
+                &pack,
+                Want::FromSeveral { season, episode },
+                &Playing::default()
+            ),
             Err(ArchiveFault::NoEpisode { season, episode })
         );
     }
@@ -76,17 +86,22 @@ fn a_few_episodes_with_translator_notes_beside_them() {
         (5, "00:00:50,821"),
         (6, "00:00:48,281"),
     ] {
-        let got = pick(&multi, Want::Episode { season: 9, episode }, None).unwrap();
+        let got = pick(
+            &multi,
+            Want::FromSeveral { season: 9, episode },
+            &Playing::default(),
+        )
+        .unwrap();
         assert!(starts(&got, cue), "S09E{episode:02}");
     }
     assert_eq!(
         pick(
             &multi,
-            Want::Episode {
+            Want::FromSeveral {
                 season: 9,
                 episode: 7
             },
-            None
+            &Playing::default()
         ),
         Err(ArchiveFault::NoEpisode {
             season: 9,
@@ -109,9 +124,16 @@ fn among_fitting_files_the_playing_group_then_srt_wins() {
         ("Movie.2008.1080p.WEB-BETA.ass", b"[Events]\n"),
     ]);
     assert!(
-        pick(&two, Want::Single, Some("beta"))
-            .unwrap()
-            .ends_with(b"beta\n")
+        pick(
+            &two,
+            Want::Single,
+            &Playing {
+                group: Some("beta"),
+                ..Playing::default()
+            }
+        )
+        .unwrap()
+        .ends_with(b"beta\n")
     );
     assert!(single(&two).unwrap().ends_with(b"alpha\n"));
     let notes = zip(&[("notu.txt", b"x"), ("film.sub", b"{0}{25}microdvd")]);
@@ -160,22 +182,25 @@ fn every_truncation_of_a_real_archive_is_refused() {
     for name in ["episode.zip", "pack.zip", "multi.zip", "movie.zip"] {
         let whole = corpus(name);
         let want = if name == "pack.zip" {
-            Want::Episode {
+            Want::FromSeveral {
                 season: 1,
                 episode: 1,
             }
         } else if name == "multi.zip" {
-            Want::Episode {
+            Want::FromSeveral {
                 season: 9,
                 episode: 5,
             }
         } else {
             Want::Single
         };
-        assert!(pick(&whole, want, None).is_ok(), "{name} whole");
+        assert!(
+            pick(&whole, want, &Playing::default()).is_ok(),
+            "{name} whole"
+        );
         for len in 0..whole.len() {
             assert!(
-                pick(&whole[..len], want, None).is_err(),
+                pick(&whole[..len], want, &Playing::default()).is_err(),
                 "{name} cut at {len}"
             );
         }
@@ -309,12 +334,172 @@ fn names_are_only_matched_never_used_as_paths() {
         let archive = zip_with(&[(name, CUE)], Options::default());
         let got = pick(
             &archive,
-            Want::Episode {
+            Want::FromSeveral {
                 season: 1,
                 episode: 2,
             },
-            None,
+            &Playing::default(),
         );
         assert_eq!(got.unwrap(), CUE, "{}", String::from_utf8_lossy(name));
     }
+}
+
+/// A one-cue file whose text is `says`.
+fn says(says: &str) -> Vec<u8> {
+    format!("1\n00:00:01,000 --> 00:00:02,000\n{says}\n").into_bytes()
+}
+
+fn from_several(archive: &[u8], season: u32, episode: u32) -> Result<Vec<u8>, ArchiveFault> {
+    pick(
+        archive,
+        Want::FromSeveral { season, episode },
+        &Playing::default(),
+    )
+}
+
+#[test]
+fn turkish_names_say_the_season_and_the_episode() {
+    let (e1, e2, e7) = (says("e1"), says("e2"), says("e7"));
+    let pack = zip(&[
+        ("2. Sezon 1. Bölüm.srt", &e1),
+        ("2. Sezon 7. Bölüm.srt", &e7),
+        ("2. Sezon 2. Bölüm.srt", &e2),
+    ]);
+    // The release parser alone reads "2. Sezon 7" as episode 2 of no season.
+    assert_eq!(from_several(&pack, 2, 7), Ok(e7.clone()));
+    assert_eq!(from_several(&pack, 2, 2), Ok(e2.clone()));
+    assert_eq!(
+        from_several(&pack, 3, 7),
+        Err(ArchiveFault::NoEpisode {
+            season: 3,
+            episode: 7
+        })
+    );
+    let numbered = zip(&[("Bölüm 04.srt", &e1), ("Bölüm 05.srt", &e7)]);
+    assert_eq!(from_several(&numbered, 1, 5), Ok(e7.clone()));
+    // The same names in Windows-1254 bytes, as the site's archives keep them.
+    let legacy = zip_with(
+        &[
+            (b"2. Sezon 1. B\xf6l\xfcm.srt", &e1),
+            (b"2. Sezon 7. B\xf6l\xfcm.srt", &e7),
+        ],
+        Options::default(),
+    );
+    assert_eq!(from_several(&legacy, 2, 7), Ok(e7));
+    assert_eq!(from_several(&legacy, 2, 1), Ok(e1));
+}
+
+#[test]
+fn a_pack_whose_names_all_read_as_one_episode_is_refused() {
+    let names = [("Dizi.E01.TOPAZ.srt", CUE), ("Dizi.E01.DIMENSION.srt", CUE)];
+    assert_eq!(from_several(&zip(&names), 1, 1), Err(ArchiveFault::Unclear));
+    // A single episode's row may hold its episode twice: the group picks.
+    let two = zip(&[
+        ("Dizi.E01.TOPAZ.srt", &says("topaz")[..]),
+        ("Dizi.E01.DIMENSION.srt", &says("dimension")[..]),
+    ]);
+    let topaz = Playing {
+        group: Some("TOPAZ"),
+        ..Playing::default()
+    };
+    let episode = Want::Episode {
+        season: 1,
+        episode: 1,
+    };
+    assert_eq!(pick(&two, episode, &topaz), Ok(says("topaz")));
+}
+
+#[test]
+fn a_single_episode_row_takes_its_own_episode_from_the_archive() {
+    let e6 = Want::Episode {
+        season: 1,
+        episode: 6,
+    };
+    let none = Playing::default();
+    let both = zip(&[
+        ("Show.S01E05.srt", &says("e5")[..]),
+        ("Show.S01E06.srt", &says("e6")[..]),
+    ]);
+    assert_eq!(pick(&both, e6, &none), Ok(says("e6")));
+    // No name says an episode: the file is the row's.
+    let plain = zip(&[("altyazi.srt", CUE)]);
+    assert_eq!(pick(&plain, e6, &none), Ok(CUE.to_vec()));
+    // Names that say only other episodes: none of them.
+    let other = zip(&[("Show.S01E05.srt", CUE)]);
+    assert_eq!(
+        pick(&other, e6, &none),
+        Err(ArchiveFault::NoEpisode {
+            season: 1,
+            episode: 6
+        })
+    );
+}
+
+#[test]
+fn the_playing_cut_picks_among_the_files() {
+    let cuts = zip(&[
+        (
+            "Movie.2008.Extended.1080p.BluRay.srt",
+            &says("extended")[..],
+        ),
+        (
+            "Movie.2008.Theatrical.1080p.BluRay.srt",
+            &says("theatrical")[..],
+        ),
+    ]);
+    let with = |cut| {
+        pick(
+            &cuts,
+            Want::Single,
+            &Playing {
+                cut,
+                ..Playing::default()
+            },
+        )
+    };
+    assert_eq!(with(Some(Cut::Extended)), Ok(says("extended")));
+    assert_eq!(with(Some(Cut::Theatrical)), Ok(says("theatrical")));
+    // A release that names no cut is the theatrical one.
+    assert_eq!(with(None), Ok(says("theatrical")));
+}
+
+#[test]
+fn mac_shadows_are_skipped_and_subrip_saved_as_text_is_read() {
+    let shadow = zip(&[
+        ("._Show.S01E05.srt", &b"\x00\x05\x16\x07 Mac metadata"[..]),
+        ("Show.S01E05.srt", CUE),
+    ]);
+    assert_eq!(single(&shadow), Ok(CUE.to_vec()));
+    let text = zip(&[
+        ("9x5 çeviri notu.txt", &b"Iyi seyirler"[..]),
+        ("Show.S01E05.txt", CUE),
+    ]);
+    assert_eq!(single(&text), Ok(CUE.to_vec()));
+    let notes = zip(&[("notu.txt", &b"Iyi seyirler"[..])]);
+    assert_eq!(single(&notes), Err(ArchiveFault::NoSubtitle));
+    // A real subtitle always wins over a text file.
+    let both = zip(&[
+        ("Show.S01E05.txt", &says("text")[..]),
+        ("Show.S01E05.srt", CUE),
+    ]);
+    assert_eq!(single(&both), Ok(CUE.to_vec()));
+}
+
+#[test]
+fn an_archive_must_start_as_a_zip() {
+    // A whole archive behind a stub, its offsets moved to match (as a
+    // self-extractor writes it): readable, and still not taken.
+    let plain = zip(&[("Show.S01E05.srt", CUE)]);
+    let stub = b"<html>";
+    let mut shifted = stub.to_vec();
+    shifted.extend(&plain);
+    let shift = |bytes: &mut Vec<u8>, at: usize| {
+        let value = u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        bytes[at..at + 4].copy_from_slice(&(value + stub.len() as u32).to_le_bytes());
+    };
+    let central = find(&shifted, b"PK\x01\x02");
+    shift(&mut shifted, central + 42);
+    let end = find(&shifted, b"PK\x05\x06");
+    shift(&mut shifted, end + 16);
+    assert_eq!(single(&shifted), Err(ArchiveFault::NotZip));
 }

@@ -4,7 +4,7 @@
 mod common;
 
 use common::{Options, Rng, corpus, zip_with};
-use mq_turkcealtyazi::{MAX_ENTRY, Want, pick};
+use mq_turkcealtyazi::{MAX_ENTRY, Playing, Want, pick};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -50,7 +50,7 @@ fn bombs_and_random_bytes_stay_within_the_cap() {
     let bomb = zip_with(&[(b"bomb.srt", &zeros)], Options::default());
     drop(zeros);
     assert!(bomb.len() < 200 * 1024, "{}", bomb.len());
-    let (result, held) = peak(|| pick(&bomb, Want::Single, None));
+    let (result, held) = peak(|| pick(&bomb, Want::Single, &Playing::default()));
     assert!(result.is_err());
     assert!(held < BOUND, "the bomb held {held} bytes");
 
@@ -68,7 +68,7 @@ fn bombs_and_random_bytes_stay_within_the_cap() {
             bytes.extend(b"PK\x05\x06");
             bytes.extend((0..18).map(|_| rng.next() as u8));
         }
-        let (result, held) = peak(|| pick(&bytes, Want::Single, None));
+        let (result, held) = peak(|| pick(&bytes, Want::Single, &Playing::default()));
         assert!(result.is_err(), "case {case} read as a subtitle");
         assert!(held < BOUND, "case {case} held {held} bytes");
     }
@@ -86,12 +86,12 @@ fn bombs_and_random_bytes_stay_within_the_cap() {
             let want = if case % 2 == 0 {
                 Want::Single
             } else {
-                Want::Episode {
+                Want::FromSeveral {
                     season: 1,
                     episode: 1,
                 }
             };
-            let (_, held) = peak(|| pick(&bent, want, None));
+            let (_, held) = peak(|| pick(&bent, want, &Playing::default()));
             assert!(held < BOUND, "{name} case {case} held {held} bytes");
         }
     }

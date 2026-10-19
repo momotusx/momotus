@@ -11,6 +11,7 @@ use crate::page::{Kind, Row, TitlePage, title_page};
 use crate::rank::{Playing, Target, Track, tracks};
 use mq_http::{Body, HttpClient, HttpError, Method, Priority, RequestOptions, Response, Url};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
@@ -26,6 +27,11 @@ const BAD_KEPT: Duration = Duration::from_secs(6 * 3600);
 const TITLES: usize = 64;
 const ARCHIVE_BYTES: usize = 8 * 1024 * 1024;
 const BAD_TRACKS: usize = 256;
+/// Failed download steps kept for the `ALIKE` count (plan 4.4).
+const STEPS: usize = 32;
+/// The shortest wait a turned-away device keeps, whatever `Retry-After`
+/// says (0 included).
+const SHORTEST: Duration = Duration::from_secs(30);
 /// Different files failing one download step the same way, within an hour,
 /// before the downloads count as changed.
 const ALIKE: usize = 3;
@@ -154,6 +160,9 @@ impl Site {
     /// The Turkish tracks for `target` of IMDb `digits` (`0903747`), ranked
     /// against `playing`; files that failed lately are left out.
     pub async fn list(&self, digits: &str, target: Target, playing: &Playing<'_>) -> Listing {
+        if digits.is_empty() || digits.len() > 9 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Listing::Nothing;
+        }
         let flight = self.flight(format!("title {digits}"));
         let _one = flight.lock().await;
         let rows = match self.cached_title(digits) {
@@ -170,10 +179,13 @@ impl Site {
                 }
             }
         };
-        let found: Vec<Track> = tracks(&rows, target, playing)
-            .into_iter()
-            .filter(|t| !self.is_bad(&t.row, target))
+        // Before the cap, so a failed file never hides one that works.
+        let open: Vec<Row> = rows
+            .iter()
+            .filter(|r| !self.is_bad(r, target))
+            .cloned()
             .collect();
+        let found: Vec<Track> = tracks(&open, target, playing);
         if found.is_empty() {
             // New uploads come: ask again sooner than in 6 hours.
             self.shorten(digits, 10 * MINUTE);
@@ -183,11 +195,16 @@ impl Site {
     }
 
     async fn fetch_title(&self, digits: &str) -> Result<Arc<Vec<Row>>, Listing> {
-        let url = self.at(&format!("/mov/{digits}/x.html"));
-        let answer = self.send(Method::GET, url, None, None, PAGE_MAX).await;
+        let Some(url) = self.at(&format!("/mov/{digits}/x.html")) else {
+            return Err(Listing::Nothing);
+        };
+        let answer = self
+            .send(Method::GET, url, None, None, PAGE_MAX, None)
+            .await;
         let response = match answer {
             Ok(response) => response,
-            Err(e) => {
+            Err(Failed::Waiting(problem)) => return Err(Listing::Problem(problem)),
+            Err(Failed::Http(e)) => {
                 let problem = match (classify(&e), &e) {
                     (Class::Site(problem), _) => problem,
                     // A title page is never one file's fault: a 403 turns
@@ -243,32 +260,51 @@ impl Site {
     }
 
     /// The subtitle file of `track` for `target`, within the fetch limit;
-    /// `group` is the playing release's, for picking among a pack's files.
-    pub async fn fetch(&self, track: &Row, target: Target, group: Option<&str>) -> Fetched {
-        match tokio::time::timeout(self.limits.fetch, self.fetch_file(track, target, group)).await {
+    /// `playing` picks among an archive's files.
+    pub async fn fetch(&self, track: &Row, target: Target, playing: &Playing<'_>) -> Fetched {
+        let flying = AtomicBool::new(false);
+        let fetched = self.fetch_file(track, target, playing, &flying);
+        match tokio::time::timeout(self.limits.fetch, fetched).await {
             Ok(fetched) => fetched,
             Err(_) => {
-                self.back_off_for(Problem::Unreachable, 2 * MINUTE);
+                // Only a request of its own that the site left unanswered
+                // backs the site off; waiting behind another play's
+                // requests says nothing about the site.
+                if flying.load(Ordering::SeqCst) {
+                    self.back_off_for(Problem::Unreachable, 2 * MINUTE);
+                }
                 Fetched::Problem(Problem::Unreachable)
             }
         }
     }
 
-    async fn fetch_file(&self, track: &Row, target: Target, group: Option<&str>) -> Fetched {
+    async fn fetch_file(
+        &self,
+        track: &Row,
+        target: Target,
+        playing: &Playing<'_>,
+        flying: &AtomicBool,
+    ) -> Fetched {
         if self.is_bad(track, target) {
             return fault(Fault::KnownBad, false);
         }
+        // A row is public: a path that is not its own subtitle page is the
+        // caller's mistake, never a sign about the site or the file.
+        if self.page_of(track).is_none() {
+            return fault(Fault::NoForm, false);
+        }
         let want = match (target, &track.kind) {
             (Target::Episode { season, episode }, Kind::Pack { .. } | Kind::Episodes { .. }) => {
-                Want::Episode { season, episode }
+                Want::FromSeveral { season, episode }
             }
-            _ => Want::Single,
+            (Target::Episode { season, episode }, _) => Want::Episode { season, episode },
+            (Target::Movie, _) => Want::Single,
         };
         let flight = self.flight(format!("archive {}", track.altid));
         let _one = flight.lock().await;
         let archive = match self.cached_archive(track.altid) {
             Some(archive) => archive,
-            None => match self.download(track).await {
+            None => match self.download(track, flying).await {
                 Ok(archive) => archive,
                 Err(Ok(problem)) => return Fetched::Problem(problem),
                 Err(Err(step)) => {
@@ -286,7 +322,7 @@ impl Site {
                 }
             },
         };
-        match archive::pick(&archive, want, group) {
+        match archive::pick(&archive, want, playing) {
             Ok(file) => Fetched::File(file),
             Err(e) => {
                 self.mark_bad(track, target);
@@ -297,11 +333,17 @@ impl Site {
 
     /// The archive of `track`: its page's form, then the download. A site
     /// problem is `Err(Ok(_))`; a fault of this file's step `Err(Err(_))`.
-    async fn download(&self, track: &Row) -> Result<Arc<Vec<u8>>, Result<Problem, Step>> {
+    async fn download(
+        &self,
+        track: &Row,
+        flying: &AtomicBool,
+    ) -> Result<Arc<Vec<u8>>, Result<Problem, Step>> {
         if let Some(problem) = self.backing_off() {
             return Err(Ok(problem));
         }
-        let page_url = self.at(&track.path);
+        let Some(page_url) = self.page_of(track) else {
+            return Err(Err(Step::PageForm));
+        };
         let page = self
             .step(
                 Method::GET,
@@ -310,6 +352,7 @@ impl Site {
                 None,
                 PAGE_MAX,
                 Step::PageGone,
+                flying,
             )
             .await?;
         if page.final_url != page_url {
@@ -324,7 +367,7 @@ impl Site {
             ("altid".into(), form.altid),
             ("sidid".into(), form.sidid),
         ]);
-        let ind = self.at("/ind");
+        let ind = self.at("/ind").expect("a path on the origin");
         let answer = self
             .step(
                 Method::POST,
@@ -333,6 +376,7 @@ impl Site {
                 Some(&page_url),
                 MAX_ARCHIVE,
                 Step::DownloadGone,
+                flying,
             )
             .await?;
         if answer.final_url != ind || !answer.body.starts_with(b"PK\x03\x04") {
@@ -344,7 +388,9 @@ impl Site {
     }
 
     /// One request of a download, classed: the site's problems back off,
-    /// a 403, 404 or 410 (no challenge) is this file's `gone` step.
+    /// a 403, 404 or 410 (no challenge) is this file's `gone` step, and an
+    /// answer from elsewhere is a change of the site, not of this file.
+    #[allow(clippy::too_many_arguments)]
     async fn step(
         &self,
         method: Method,
@@ -353,15 +399,23 @@ impl Site {
         referer: Option<&Url>,
         max_bytes: usize,
         gone: Step,
+        flying: &AtomicBool,
     ) -> Result<Response, Result<Problem, Step>> {
-        match self.send(method, url, body, referer, max_bytes).await {
+        let answer = self
+            .send(method, url, body, referer, max_bytes, Some(flying))
+            .await;
+        match answer {
             Ok(response) if challenged(&response) => {
                 self.back_off_for(Problem::Blocked, 10 * MINUTE);
                 Err(Ok(Problem::Blocked))
             }
-            Ok(response) if !self.on_site(&response.final_url) => Err(Err(Step::PageForm)),
+            Ok(response) if !self.on_site(&response.final_url) => {
+                tracing::error!("turkcealtyazi: a download answered from another origin");
+                Err(Ok(Problem::Changed))
+            }
             Ok(response) => Ok(response),
-            Err(e) => match classify(&e) {
+            Err(Failed::Waiting(problem)) => Err(Ok(problem)),
+            Err(Failed::Http(e)) => match classify(&e) {
                 Class::Site(problem) => {
                     self.back_off(problem, &e);
                     Err(Ok(problem))
@@ -372,7 +426,10 @@ impl Site {
         }
     }
 
-    /// One request, after the one before it ended plus the spacing.
+    /// One request, after the one before it ended plus the spacing, unless
+    /// a backoff began while it waited its turn. `flying` is true while the
+    /// request is out, so a fetch cut short knows whether the site kept it
+    /// waiting.
     async fn send(
         &self,
         method: Method,
@@ -380,10 +437,14 @@ impl Site {
         body: Option<Body>,
         referer: Option<&Url>,
         max_bytes: usize,
-    ) -> Result<Response, HttpError> {
+        flying: Option<&AtomicBool>,
+    ) -> Result<Response, Failed> {
         let mut last = self.gate.lock().await;
         if let Some(at) = *last {
             tokio::time::sleep_until(at + self.limits.spacing).await;
+        }
+        if let Some(problem) = self.backing_off() {
+            return Err(Failed::Waiting(problem));
         }
         let mut headers = vec![("Accept-Language".into(), "tr,en;q=0.8".into())];
         if let Some(referer) = referer {
@@ -398,13 +459,27 @@ impl Site {
             headers,
             ..Default::default()
         };
-        let answer = self.http.request(method, url.as_str(), body, &opts).await;
+        // Set before it goes too: a request cut short still spaces the next.
         *last = Some(Instant::now());
-        answer
+        let flag = |on| flying.inspect(|f| f.store(on, Ordering::SeqCst));
+        flag(true);
+        let answer = self.http.request(method, url.as_str(), body, &opts).await;
+        flag(false);
+        *last = Some(Instant::now());
+        answer.map_err(Failed::Http)
     }
 
-    fn at(&self, path: &str) -> Url {
-        self.origin.join(path).expect("a path on the origin")
+    /// The subtitle page of `track`: `/sub/<its altid>/<slug>.html` only.
+    fn page_of(&self, track: &Row) -> Option<Url> {
+        SUB_PATH
+            .captures(&track.path)
+            .filter(|c| c[1] == track.altid.to_string())
+            .and_then(|_| self.at(&track.path))
+    }
+
+    /// `path` on the site's own origin; `None` for anything that leaves it.
+    fn at(&self, path: &str) -> Option<Url> {
+        self.origin.join(path).ok().filter(|url| self.on_site(url))
     }
 
     /// Whether a response came from the site's own origin over https.
@@ -437,7 +512,7 @@ impl Site {
                     retry_after: Some(after),
                     ..
                 },
-            ) => (*after).min(HOUR),
+            ) => (*after).clamp(SHORTEST, HOUR),
             (Problem::Blocked, _) => 10 * MINUTE,
             _ => 2 * MINUTE,
         };
@@ -450,8 +525,23 @@ impl Site {
         self.back_off_for(problem, wait);
     }
 
+    /// A backoff only grows: the later end wins, and `Blocked` stays
+    /// `Blocked` until it ends, whatever comes after.
     fn back_off_for(&self, problem: Problem, wait: Duration) {
-        lock(&self.state).backoff = Some((Instant::now() + wait, problem));
+        let mut state = lock(&self.state);
+        let now = Instant::now();
+        let until = now + wait;
+        state.backoff = Some(match state.backoff {
+            Some((old, was)) if old > now => {
+                let problem = if was == Problem::Blocked {
+                    was
+                } else {
+                    problem
+                };
+                (old.max(until), problem)
+            }
+            _ => (until, problem),
+        });
     }
 
     fn cached_title(&self, digits: &str) -> Option<Title> {
@@ -559,6 +649,9 @@ impl Site {
             .steps
             .retain(|(at, _, _)| now.duration_since(*at) < HOUR);
         state.steps.push((now, altid, step));
+        if state.steps.len() > STEPS {
+            state.steps.remove(0);
+        }
         let mut files: Vec<u32> = state
             .steps
             .iter()
@@ -585,6 +678,18 @@ fn fault(fault: Fault, downloads_changed: bool) -> Fetched {
         downloads_changed,
     }
 }
+
+/// Why `send` gave no answer.
+enum Failed {
+    /// A backoff began while the request waited its turn: never sent.
+    Waiting(Problem),
+    Http(HttpError),
+}
+
+/// A subtitle page: `/sub/<altid>/<slug>.html`.
+static SUB_PATH: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(r"^/sub/(\d{1,9})/[a-z0-9-]{1,120}\.html$").expect("pattern")
+});
 
 enum Class {
     Site(Problem),
@@ -633,4 +738,40 @@ fn challenge_body(body: &[u8]) -> bool {
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn site() -> Site {
+        Site::new(HttpClient::new(mq_http::ClientConfig::default()).expect("a client"))
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_backoff_only_grows_and_blocked_stays_blocked() {
+        let site = site();
+        site.back_off_for(Problem::Blocked, 10 * MINUTE);
+        site.back_off_for(Problem::Unreachable, 2 * MINUTE);
+        tokio::time::advance(3 * MINUTE).await;
+        assert_eq!(site.backing_off(), Some(Problem::Blocked));
+        tokio::time::advance(8 * MINUTE).await;
+        assert_eq!(site.backing_off(), None);
+        // A shorter wait never cuts a longer one.
+        site.back_off_for(Problem::Unreachable, 2 * MINUTE);
+        site.back_off_for(Problem::Unreachable, MINUTE);
+        tokio::time::advance(MINUTE + MINUTE / 2).await;
+        assert_eq!(site.backing_off(), Some(Problem::Unreachable));
+        site.back_off_for(Problem::Blocked, 10 * MINUTE);
+        assert_eq!(site.backing_off(), Some(Problem::Blocked));
+    }
+
+    #[tokio::test]
+    async fn the_failed_step_list_is_bounded() {
+        let site = site();
+        for altid in 0..100 {
+            site.step_failed(altid, Step::PageForm);
+        }
+        assert_eq!(lock(&site.state).steps.len(), STEPS);
+    }
 }

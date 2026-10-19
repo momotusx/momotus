@@ -13,6 +13,6 @@ mod site;
 
 pub use archive::{ArchiveFault, MAX_ARCHIVE, MAX_ENTRY, Want, pick};
 pub use form::{Form, download_form};
-pub use page::{Changed, Kind, Lang, Row, TitlePage, title_page};
+pub use page::{Changed, Kind, Lang, Row, Source, TitlePage, title_page};
 pub use rank::{MAX_TRACKS, Playing, Target, Track, tracks};
 pub use site::{Fault, Fetched, Limits, Listing, ORIGIN, Problem, Site};

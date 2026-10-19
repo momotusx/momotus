@@ -1,7 +1,7 @@
 //! The title page parser on pages recorded from TurkceAltyazi.org on
 //! 2026-10-19 (tests/corpus, bench/m13/turkcealtyazi-research.jsonl).
 
-use mq_turkcealtyazi::{Changed, Kind, Lang, Row, TitlePage, title_page};
+use mq_turkcealtyazi::{Changed, Kind, Lang, Row, Source, TitlePage, title_page};
 
 const BREAKING_BAD: (&str, &str, &str) = (
     "title-breaking-bad.html",
@@ -120,7 +120,7 @@ fn lists_and_ranges_of_episodes_and_the_hearing_impaired_section() {
         find(&rows, 238276).translator.as_deref(),
         Some("Iverson & HaNCeR")
     );
-    // The section's rows, marked by the section and by the row's own image.
+    // Marked by the row's own image (this recording has English ones only).
     let hearing: Vec<_> = rows
         .iter()
         .filter(|r| r.hearing_impaired)
@@ -283,4 +283,44 @@ fn one_unreadable_row_is_counted_and_the_rest_still_list() {
     };
     assert_eq!((rows.len(), unparsed), (16, 1));
     assert!(rows.iter().all(|r| r.altid != 108735));
+}
+
+#[test]
+fn the_source_mark_is_read_from_its_image() {
+    let breaking_bad = rows(BREAKING_BAD);
+    let source = |rows: &[Row], altid| find(rows, altid).source;
+    assert_eq!(source(&breaking_bad, 373225), Some(Source::DvdRip));
+    assert_eq!(source(&breaking_bad, 725317), Some(Source::WebDl));
+    assert_eq!(source(&breaking_bad, 345388), Some(Source::Hd));
+    assert_eq!(source(&breaking_bad, 108735), None);
+    assert_eq!(source(&rows(SIMPSONS), 793639), Some(Source::WebRip));
+    assert_eq!(source(&rows(MATRIX), 152408), Some(Source::BdRip));
+    // The mark is an image: the release line stays the group's words.
+    assert_eq!(find(&breaking_bad, 725317).release, "NETFLiX");
+    // A code the sprite has no image for is no source; the row still lists.
+    let (file, url, digits) = BREAKING_BAD;
+    let html = corpus(file).replacen(r#"class="rps r2""#, r#"class="rps r99""#, 1);
+    let Ok(TitlePage::Rows { rows, unparsed: 0 }) = title_page(url, digits, &html) else {
+        panic!("a list");
+    };
+    assert_eq!(find(&rows, 373225).source, None);
+}
+
+#[test]
+fn translators_are_capped_and_a_page_of_too_many_rows_is_a_change() {
+    let (file, url, digits) = BREAKING_BAD;
+    let html = corpus(file).replace("F471H", &"y".repeat(120));
+    let Ok(TitlePage::Rows { rows, .. }) = title_page(url, digits, &html) else {
+        panic!("a list");
+    };
+    let by = find(&rows, 108735).translator.clone().unwrap();
+    assert_eq!(by.chars().count(), 80, "{by}");
+    // More rows than any title has is not the site's list.
+    let opener = r#"<div class="altsonsez"#;
+    let flood = format!("{}{opener}", format!("{opener}\"></div>").repeat(2001));
+    let html = corpus(file).replacen(opener, &flood, 1);
+    assert_eq!(
+        title_page(url, digits, &html),
+        Err(Changed("the list has more rows than any title"))
+    );
 }

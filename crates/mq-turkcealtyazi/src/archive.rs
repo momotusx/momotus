@@ -9,8 +9,11 @@
 //! 1.1, which stremio-core's pin on flate2 1.0 rules out, and every zip
 //! below 9.0.0 carries advisories that deny.toml fails on.
 
+use crate::rank::{Playing, same_cut, same_group};
 use flate2::read::DeflateDecoder;
+use regex::Regex;
 use std::io::Read;
+use std::sync::LazyLock;
 
 /// The largest archive taken (the largest seen is 113 KB).
 pub const MAX_ARCHIVE: usize = 4 * 1024 * 1024;
@@ -19,14 +22,32 @@ pub const MAX_ENTRY: usize = 4 * 1024 * 1024;
 const MAX_ENTRIES: usize = 200;
 /// Subtitle formats `to_vtt` reads, in order of preference.
 const EXTENSIONS: [&str; 4] = [".srt", ".vtt", ".ass", ".ssa"];
+/// `.txt` files opened to look for SubRip timings when nothing else is a
+/// subtitle; translator notes are `.txt` too.
+const TXT_TRIES: usize = 4;
+
+/// Turkish names: `2. Sezon 7. Bölüm`, `Bölüm 05`, `Sezon 2`. The vowels
+/// may be another code page's bytes, read as U+FFFD.
+static TR_SEASON: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:(\d{1,2})\s*\.\s*sezon|sezon\s*(\d{1,2}))").expect("pattern")
+});
+static TR_EPISODE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)(?:(\d{1,3})\s*\.\s*b[oö\x{FFFD}]l[uü\x{FFFD}]m|b[oö\x{FFFD}]l[uü\x{FFFD}]m\s*(\d{1,3}))",
+    )
+    .expect("pattern")
+});
 
 /// Which file of the archive is wanted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Want {
-    /// A movie or a single episode: the archive's only subtitle, or its best.
+    /// A movie: the archive's only subtitle, or its best.
     Single,
-    /// One episode out of a pack, a list or a range.
+    /// A single episode's row: the file naming that episode, or, when no
+    /// name carries an episode, the best.
     Episode { season: u32, episode: u32 },
+    /// One episode out of a pack, a list or a range: only a file naming it.
+    FromSeveral { season: u32, episode: u32 },
 }
 
 /// Why an archive gave no subtitle: a fault of this file, not of the site.
@@ -40,57 +61,117 @@ pub enum ArchiveFault {
     NoSubtitle,
     #[error("no file for S{season:02}E{episode:02} inside")]
     NoEpisode { season: u32, episode: u32 },
+    /// Every file reads as the same episode: the names cannot tell which
+    /// file is which, so none is guessed.
+    #[error("the names inside do not say which episode each file is")]
+    Unclear,
     #[error("over the size limit")]
     TooLarge,
     #[error("the archive cannot be read")]
     Unreadable,
 }
 
-/// The raw bytes of the subtitle `want` names in `archive`. `group` is the
-/// playing release's group: among several fitting files, its own wins.
-pub fn pick(archive: &[u8], want: Want, group: Option<&str>) -> Result<Vec<u8>, ArchiveFault> {
+/// The raw bytes of the subtitle `want` names in `archive`. Among several
+/// fitting files, the playing release's group wins, then its cut.
+pub fn pick(archive: &[u8], want: Want, playing: &Playing) -> Result<Vec<u8>, ArchiveFault> {
     if archive.len() > MAX_ARCHIVE {
         return Err(ArchiveFault::TooLarge);
     }
     if !archive.starts_with(b"PK\x03\x04") {
         return Err(ArchiveFault::NotZip);
     }
-    let subtitles: Vec<Entry> = entries(archive)?
+    let files: Vec<Entry> = entries(archive)?
         .into_iter()
+        // Folders, and the AppleDouble shadows a Mac adds (`._name`).
         .filter(|e| !e.name.ends_with('/') && !e.name.contains("__MACOSX"))
+        .filter(|e| !base(&e.name).starts_with("._"))
+        .collect();
+    let mut subtitles: Vec<&Entry> = files
+        .iter()
         .filter(|e| preference(&e.name).is_some())
         .collect();
+    // SubRip saved as text: only when nothing else is a subtitle, and only
+    // a file that holds its timings.
+    let as_text = subtitles.is_empty();
+    if as_text {
+        subtitles = files
+            .iter()
+            .filter(|e| e.name.to_lowercase().ends_with(".txt"))
+            .collect();
+    }
     if subtitles.is_empty() {
         return Err(ArchiveFault::NoSubtitle);
     }
-    let fitting: Vec<&Entry> = match want {
-        Want::Single => subtitles.iter().collect(),
-        Want::Episode { season, episode } => {
-            let fit: Vec<_> = subtitles
-                .iter()
-                .filter(|e| {
-                    let release = mq_relparse::parse(base(&e.name));
-                    release.episodes.contains(&episode)
-                        && (release.seasons.is_empty() || release.seasons.contains(&season))
-                })
-                .collect();
-            if fit.is_empty() {
-                return Err(ArchiveFault::NoEpisode { season, episode });
-            }
-            fit
+    let mut fitting = fitting(subtitles, want)?;
+    fitting.sort_by_key(|e| {
+        (
+            !same_group(base(&e.name), playing.group),
+            !same_cut(mq_relparse::parse(base(&e.name)).cut, playing.cut),
+            preference(&e.name),
+            e.name.clone(),
+        )
+    });
+    if !as_text {
+        return inflate(fitting[0]);
+    }
+    for entry in fitting.into_iter().take(TXT_TRIES) {
+        let bytes = inflate(entry)?;
+        if bytes.windows(3).any(|w| w == b"-->") {
+            return Ok(bytes);
         }
+    }
+    Err(ArchiveFault::NoSubtitle)
+}
+
+/// The files `want` may take, never empty.
+fn fitting<'e, 'a>(
+    subtitles: Vec<&'e Entry<'a>>,
+    want: Want,
+) -> Result<Vec<&'e Entry<'a>>, ArchiveFault> {
+    let (season, episode, several) = match want {
+        Want::Single => return Ok(subtitles),
+        Want::Episode { season, episode } => (season, episode, false),
+        Want::FromSeveral { season, episode } => (season, episode, true),
     };
-    let entry = fitting
+    let named: Vec<(Vec<u32>, Vec<u32>)> = subtitles.iter().map(|e| named(base(&e.name))).collect();
+    if several
+        && subtitles.len() > 1
+        && !named[0].1.is_empty()
+        && named.iter().all(|n| n.1 == named[0].1)
+    {
+        return Err(ArchiveFault::Unclear);
+    }
+    if !several && named.iter().all(|(_, episodes)| episodes.is_empty()) {
+        return Ok(subtitles);
+    }
+    let fit: Vec<_> = subtitles
         .into_iter()
-        .min_by_key(|e| {
-            (
-                !crate::rank::same_group(base(&e.name), group),
-                preference(&e.name),
-                e.name.clone(),
-            )
+        .zip(&named)
+        .filter(|(_, (seasons, episodes))| {
+            episodes.contains(&episode) && (seasons.is_empty() || seasons.contains(&season))
         })
-        .ok_or(ArchiveFault::NoSubtitle)?;
-    inflate(entry)
+        .map(|(e, _)| e)
+        .collect();
+    if fit.is_empty() {
+        return Err(ArchiveFault::NoEpisode { season, episode });
+    }
+    Ok(fit)
+}
+
+/// The seasons and episodes a file name gives: Turkish words first, then
+/// the release parser.
+fn named(name: &str) -> (Vec<u32>, Vec<u32>) {
+    let number = |c: regex::Captures| c.iter().skip(1).flatten().next()?.as_str().parse().ok();
+    if let Some(episode) = TR_EPISODE.captures(name).and_then(number) {
+        let seasons = TR_SEASON
+            .captures(name)
+            .and_then(number)
+            .into_iter()
+            .collect();
+        return (seasons, vec![episode]);
+    }
+    let release = mq_relparse::parse(name);
+    (release.seasons, release.episodes)
 }
 
 /// One file of the archive, as the central directory and its local header

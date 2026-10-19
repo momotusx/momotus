@@ -35,11 +35,66 @@ pub struct Row {
     /// The row's release line (`.ripdiv`): a release, a group or, for a
     /// special, its title. Plain text, at most 80 characters.
     pub release: String,
+    /// The source mark the site draws before the release line.
+    pub source: Option<Source>,
     pub fps: Option<f32>,
     pub downloads: u32,
-    /// The translators, joined with " & ".
+    /// The translators, joined with " & ", at most 80 characters.
     pub translator: Option<String>,
     pub hearing_impaired: bool,
+}
+
+/// The source mark (`<span class="rps rN">`), one image each in the site's
+/// sprite `/images/rps.png`, placed by `ada.css` (read 2026-10-19).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    DvdRip,
+    HdRip,
+    DvdScr,
+    R5,
+    Cam,
+    WebRip,
+    BdRip,
+    WebDl,
+    Hd,
+    Hdts,
+    BluRay,
+}
+
+impl Source {
+    fn from_code(code: &str) -> Option<Self> {
+        Some(match code {
+            "1" => Self::Hd,
+            "2" => Self::DvdRip,
+            "3" => Self::DvdScr,
+            "4" => Self::R5,
+            "5" => Self::Cam,
+            "6" => Self::WebRip,
+            "7" => Self::BdRip,
+            "8" => Self::WebDl,
+            "9" => Self::HdRip,
+            "10" => Self::Hdts,
+            "12" => Self::BluRay,
+            _ => return None,
+        })
+    }
+
+    /// As the site's image writes it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::DvdRip => "DVDRip",
+            Self::HdRip => "HDRip",
+            Self::DvdScr => "DVDScr",
+            Self::R5 => "R5",
+            Self::Cam => "CAM",
+            Self::WebRip => "WEBRip",
+            Self::BdRip => "BDRip",
+            Self::WebDl => "WEB-DL",
+            Self::Hd => "HD",
+            Self::Hdts => "HDTS",
+            Self::BluRay => "BluRay",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +133,10 @@ const WRAPPER: &str = r#"<div class="altyazi-list-wrapper">"#;
 /// "Forumdan Benzer Başlıklar").
 const AFTER_LIST: &str = r#"<div class="nm-block"#;
 const ROW: &str = r#"<div class="altsonsez"#;
-const RELEASE_MAX: usize = 80;
+const TEXT_MAX: usize = 80;
+/// More rows than any title has (The Simpsons has 293): a page past this
+/// is not the site's list.
+const ROWS_MAX: usize = 2000;
 
 macro_rules! re {
     ($name:ident, $pattern:expr) => {
@@ -107,6 +165,7 @@ re!(
 re!(TRANSLATORS, r#"(?s)<div class="alcevirmen">(.*?)</div>"#);
 re!(STRONG, r"<strong>([^<]*)</strong>");
 re!(RIPDIV, r#"(?s)<div class="ripdiv">(.*?)</div>"#);
+re!(SOURCE, r#"<span class="rps r(\d{1,2})">"#);
 re!(TAG, r"(?s)<[^>]*>");
 re!(MOVIE, r"^(\d{1,2})$");
 re!(PACK, r"^S<b>(\d{1,3})</b> <b>(?i:paket)</b>$");
@@ -149,6 +208,9 @@ pub fn title_page(path: &str, digits: &str, html: &str) -> Result<TitlePage, Cha
         .max(starts.len());
     if total == 0 {
         return Ok(TitlePage::Nothing);
+    }
+    if total > ROWS_MAX {
+        return Err(Changed("the list has more rows than any title"));
     }
     let rows: Vec<Row> = starts
         .iter()
@@ -194,19 +256,18 @@ fn row(own: &str) -> Option<Row> {
         .captures(own)
         .map(|c| c[1].to_owned())
         .unwrap_or_default();
-    let mut release = text(&TAG.replace_all(&ripdiv, " "));
-    if let Some((cut, _)) = release.char_indices().nth(RELEASE_MAX) {
-        release.truncate(cut);
-    }
     Some(Row {
         altid: link[2].parse().ok()?,
         path: link[1].to_owned(),
         lang,
         kind,
-        release,
+        release: capped(text(&TAG.replace_all(&ripdiv, " "))),
+        source: SOURCE
+            .captures(&ripdiv)
+            .and_then(|c| Source::from_code(&c[1])),
         fps,
         downloads,
-        translator: (!translators.is_empty()).then(|| translators.join(" & ")),
+        translator: (!translators.is_empty()).then(|| capped(translators.join(" & "))),
         // The site marks each such row with this image, in its own
         // section ("İşitme Engelliler İçin") too.
         hearing_impaired: ripdiv.contains("isitme.png"),
@@ -262,17 +323,28 @@ fn collapse(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// HTML text as plain text: the common entities decoded, whitespace
-/// collapsed.
+/// At most `TEXT_MAX` characters.
+fn capped(mut text: String) -> String {
+    if let Some((cut, _)) = text.char_indices().nth(TEXT_MAX) {
+        text.truncate(cut);
+    }
+    text
+}
+
+/// HTML text as plain text: the common entities decoded, control and
+/// direction characters dropped, whitespace collapsed. Linear: an entity's
+/// `;` is looked for in the next 10 bytes only.
 fn text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while let Some(at) = rest.find('&') {
         out.push_str(&rest[..at]);
         rest = &rest[at..];
+        // By bytes: `;` and `&` are ASCII, so both ends are char boundaries.
         let entity = rest
-            .find(';')
-            .filter(|&end| end <= 10)
+            .bytes()
+            .take(11)
+            .position(|b| b == b';')
             .map(|end| &rest[1..end]);
         let decoded = entity.and_then(|e| match e {
             "amp" => Some('&'),
@@ -298,7 +370,14 @@ fn text(s: &str) -> String {
         }
     }
     out.push_str(rest);
+    // A label must not reorder or hide what follows it.
+    out.retain(|c| !(c.is_control() && !c.is_whitespace()) && !is_bidi(c));
     collapse(&out)
+}
+
+/// The Unicode direction marks, embeddings, overrides and isolates.
+fn is_bidi(c: char) -> bool {
+    matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
 #[cfg(test)]
@@ -356,5 +435,26 @@ mod tests {
             "A & B 'x' <1> R&D"
         );
         assert_eq!(text("&nosuchentity; &#xZZ;"), "&nosuchentity; &#xZZ;");
+        assert_eq!(text("&#287;&#351;"), "ğş");
+    }
+
+    #[test]
+    fn text_drops_control_and_direction_characters() {
+        assert_eq!(text("a&#0;b &#8238;evil&#8236; c\u{200F}d"), "ab evil cd");
+        assert_eq!(text("line\none"), "line one");
+    }
+
+    #[test]
+    fn text_is_linear_in_its_ampersands() {
+        // Each `&` once looked for `;` to the end of the text: tens of
+        // seconds for a 1 MB run of them, and minutes for a 4 MB page.
+        let many = "&".repeat(1_000_000);
+        let started = std::time::Instant::now();
+        assert_eq!(text(&many).len(), 1_000_000);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
     }
 }
