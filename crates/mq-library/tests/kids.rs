@@ -43,6 +43,7 @@ fn removal(id: &str) -> AllowedRow {
 /// A kids profile with `titles` allowed, on a fresh library.
 fn kid(titles: &[(&str, &str)]) -> Library {
     let lib = Library::temporary().unwrap();
+    lib.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
     lib.create_kids_profile("kid", "Kid", "fox", &hlc(10, 1))
         .unwrap();
     for (i, (id, kind)) in titles.iter().enumerate() {
@@ -162,6 +163,7 @@ fn permutations<T: Clone>(items: &[T]) -> Vec<Vec<T>> {
 /// The profile, lock, access, allow and gone records of kids profile `x`.
 fn source_records() -> [SyncRecord; 5] {
     let a = Library::temporary().unwrap();
+    a.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
     a.create_kids_profile("x", "Kid", "fox", &hlc(10, 1))
         .unwrap();
     a.write_allowed("x", &entry("tt1", "movie", 1), &hlc(11, 1))
@@ -575,6 +577,7 @@ fn kids_profiles_start_empty_and_read_no_addons_of_their_own() {
         allow_private: false,
     };
     lib.set_addons(OWNER, &[addon], &hlc(1, 1)).unwrap();
+    lib.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
     lib.create_kids_profile("kid", "Kid", "", &hlc(2, 1))
         .unwrap();
     let row = lib.profile("kid").unwrap().unwrap();
@@ -611,16 +614,18 @@ fn the_cap_counts_the_first_thousand_by_allow_time_on_every_device() {
     // 1,001 titles whose ids run against their allow times (the oldest
     // allow has the highest id), and the last two allows share one
     // millisecond across the cap: the id decides, never the order of
-    // writing (the tie is written with the higher id first).
+    // writing (the tie is written with the higher id first). This device
+    // admits 1,000; the last comes from another device.
     let id = |i: usize| format!("tt{:04}", 1000 - i);
     let added = |i: usize| if i == 1000 { 999 } else { i as i64 };
-    let mut order: Vec<usize> = (0..999).collect();
-    order.extend([999, 1000]);
-    for i in order {
+    for i in 0..1000 {
         let row = entry(&id(i), "movie", added(i));
         lib.write_allowed("kid", &row, &hlc(100 + i as u64, 1))
             .unwrap();
     }
+    let last = json!({"profile": "kid", "itemId": id(1000), "kind": "movie",
+                      "name": "T", "allowed": true, "addedMs": added(1000)});
+    lib.apply(&[allow_record("kid", last, 1100)]).unwrap();
     let list = lib.allowed_list("kid").unwrap();
     assert_eq!((list.counted.len(), list.over_count), (1000, 1));
     // tt0001 (written first) and tt0000 share the time: tt0000 counts.
@@ -639,8 +644,9 @@ fn the_cap_counts_the_first_thousand_by_allow_time_on_every_device() {
     assert_eq!(other.policy("kid"), policy);
     // An older allow arriving late takes its place: the newest counted one
     // goes over (3.4, the price of agreeing without coordination).
-    let late = entry("tt9999", "movie", 0);
-    lib.write_allowed("kid", &late, &hlc(5000, 1)).unwrap();
+    let late = json!({"profile": "kid", "itemId": "tt9999", "kind": "movie",
+                      "name": "T", "allowed": true, "addedMs": 0});
+    lib.apply(&[allow_record("kid", late, 5000)]).unwrap();
     let policy = lib.policy("kid");
     assert!(policy.allows("movie", "tt9999"));
     assert!(!policy.allows("movie", "tt0000"), "pushed over");
@@ -684,6 +690,7 @@ fn on_disk(name: &str) -> (Library, std::path::PathBuf, std::path::PathBuf) {
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("library.sqlite");
     let lib = Library::open(&path).unwrap();
+    lib.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
     lib.create_kids_profile("kid", "Kid", "", &hlc(1, 1))
         .unwrap();
     lib.write_allowed("kid", &entry("tt1", "movie", 1), &hlc(2, 1))
@@ -764,6 +771,7 @@ fn each_kind_of_access_change_raises_the_generation() {
         assert!(now > last, "{what}: {now} after {last}");
         last = now;
     };
+    lib.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
     lib.create_kids_profile("k2", "K2", "", &hlc(10, 1))
         .unwrap();
     raised("an access row inserted");
@@ -834,6 +842,7 @@ fn kids_edits_read_the_state_they_change() {
     assert!(!std.kids() && std.pin_hash() == Some("h"));
     // Made standard twice: the second time changes nothing, so the
     // profile's own addon edits stay.
+    lib.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
     lib.create_kids_profile("kid", "Kid", "", &hlc(4, 1))
         .unwrap();
     assert!(lib.make_standard("kid", &hlc(5, 1)).unwrap());
@@ -866,6 +875,7 @@ fn make_standard_reports_a_write_its_stamp_kept_out() {
     };
     lib.set_addons(OWNER, std::slice::from_ref(&owners), &hlc(1, 1))
         .unwrap();
+    lib.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
     lib.create_kids_profile("kid", "Kid", "", &hlc(4, 1))
         .unwrap();
     assert!(!lib.make_standard("kid", &hlc(4, 1)).unwrap());
@@ -874,4 +884,76 @@ fn make_standard_reports_a_write_its_stamp_kept_out() {
     assert!(lib.make_standard("kid", &hlc(5, 1)).unwrap());
     assert!(!lib.profile("kid").unwrap().unwrap().kids());
     assert_eq!(lib.addons("kid").unwrap().len(), 1);
+}
+
+/// Removing the owner's PIN and creating a kids profile race: each was
+/// checked before the other wrote (the runtime's checks both passed), and
+/// the write that comes second is refused, in either order.
+#[test]
+fn kids_and_no_owner_pin_never_stand_together() {
+    let owner = || {
+        let lib = Library::temporary().unwrap();
+        lib.ensure_profile(OWNER, "Main", &hlc(0, 1)).unwrap();
+        lib.set_pin_hash(OWNER, Some("h"), &hlc(1, 1)).unwrap();
+        lib
+    };
+    // The kids profile first: the PIN stays.
+    let lib = owner();
+    lib.create_kids_profile("kid", "Kid", "", &hlc(2, 1))
+        .unwrap();
+    assert!(matches!(
+        lib.clear_owner_pin(&hlc(3, 1)),
+        Err(LibraryError::KidsNeedPin)
+    ));
+    assert_eq!(lib.profile(OWNER).unwrap().unwrap().pin_hash(), Some("h"));
+    // The removal first: no kids profile.
+    let lib = owner();
+    lib.clear_owner_pin(&hlc(2, 1)).unwrap();
+    assert!(matches!(
+        lib.create_kids_profile("kid", "Kid", "", &hlc(3, 1)),
+        Err(LibraryError::KidsNeedPin)
+    ));
+    assert!(lib.profile("kid").unwrap().is_none());
+    // A profile whose access has not arrived may be kids: the PIN stays.
+    let lib = owner();
+    let arriving = record(coll::PROFILES, "y", json!({"profile": "y", "name": "y"}), 9);
+    lib.apply(&[arriving]).unwrap();
+    assert!(matches!(
+        lib.clear_owner_pin(&hlc(3, 1)),
+        Err(LibraryError::KidsNeedPin)
+    ));
+    // With none left, it goes.
+    let lib = owner();
+    lib.create_profile("std", "Std", "", &hlc(2, 1)).unwrap();
+    lib.clear_owner_pin(&hlc(3, 1)).unwrap();
+    assert_eq!(lib.profile(OWNER).unwrap().unwrap().pin_hash(), None);
+}
+
+/// Two Allows that both passed the runtime's check at 999: the write that
+/// comes second is refused, and a title already on the list is allowed
+/// again with its allow time.
+#[test]
+fn two_allows_at_nine_hundred_ninety_nine_admit_one() {
+    let lib = kid(&[]);
+    for i in 0..999 {
+        let row = entry(&format!("tt{i:04}"), "movie", i);
+        lib.write_allowed("kid", &row, &hlc(100 + i as u64, 1))
+            .unwrap();
+    }
+    assert!(
+        lib.write_allowed("kid", &entry("tta", "movie", 2000), &hlc(3000, 1))
+            .unwrap()
+    );
+    assert!(matches!(
+        lib.write_allowed("kid", &entry("ttb", "movie", 2001), &hlc(3001, 1)),
+        Err(LibraryError::ListFull)
+    ));
+    let list = lib.allowed_list("kid").unwrap();
+    assert_eq!((list.counted.len(), list.over_count), (1000, 0));
+    assert!(!lib.policy("kid").allows("movie", "ttb"));
+    assert!(
+        lib.write_allowed("kid", &entry("tta", "movie", 9000), &hlc(3002, 1))
+            .unwrap()
+    );
+    assert_eq!(lib.allowed_list("kid").unwrap().counted[999].added_ms, 2000);
 }

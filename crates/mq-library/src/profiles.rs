@@ -131,12 +131,18 @@ impl Library {
         kids: bool,
         stamp: Stamp<'_>,
     ) -> Result<(), LibraryError> {
-        let mut taken = false;
+        let (mut taken, mut no_pin) = (false, false);
         self.write(|c| {
             // A kids profile is new: never an existing one made kids (its
             // PIN cleared, its kind changed).
             if kids && Self::exists(c, id)? {
                 taken = true;
+                return Ok(());
+            }
+            // Read in the write, so a removal of the owner's PIN racing
+            // this one ends with one of the two refused.
+            if kids && !owner_has_pin(c)? {
+                no_pin = true;
                 return Ok(());
             }
             let position: i64 = c.query_row(
@@ -160,6 +166,37 @@ impl Library {
         })?;
         if taken {
             return Err(LibraryError::ProfileExists(id.to_owned()));
+        }
+        if no_pin {
+            return Err(LibraryError::KidsNeedPin);
+        }
+        Ok(())
+    }
+
+    /// Clears the owner's PIN unless a kids profile is here (one whose
+    /// access is not known yet counts), read in the same write as the
+    /// clear (plans/m11-kids.md 6.1). `resetOwnerPin` goes around it.
+    pub fn clear_owner_pin<'a>(&self, stamp: impl Into<Stamp<'a>>) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
+        let mut kids = false;
+        self.write(|c| {
+            kids = c.query_row(
+                "SELECT EXISTS (SELECT 1 FROM profiles p
+                   LEFT JOIN profile_access a ON a.profile_id = p.id
+                   WHERE p.id != ?1 AND COALESCE(a.kids, 1) = 1
+                     AND p.id NOT IN (SELECT profile_id FROM profile_gone))",
+                params![OWNER],
+                |r| r.get(0),
+            )?;
+            if kids {
+                return Ok(());
+            }
+            local(c, coll::PROFILE_LOCK, &[OWNER], &stamp, |h| {
+                sql::set_lock(c, OWNER, None, h)
+            })
+        })?;
+        if kids {
+            return Err(LibraryError::KidsNeedPin);
         }
         Ok(())
     }
@@ -323,6 +360,16 @@ impl Library {
             .map(drop)
         })
     }
+}
+
+/// Whether the owner's lock register holds a PIN.
+fn owner_has_pin(c: &rusqlite::Connection) -> rusqlite::Result<bool> {
+    c.query_row(
+        "SELECT EXISTS (SELECT 1 FROM profile_lock
+           WHERE profile_id = ?1 AND pin_hash IS NOT NULL)",
+        params![OWNER],
+        |r| r.get(0),
+    )
 }
 
 /// Writes a copy of the owner's addon list as `id`'s list.

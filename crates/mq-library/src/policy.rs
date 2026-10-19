@@ -199,8 +199,10 @@ impl Library {
     /// again above the stored one, so a slow Allow can never overtake a
     /// later Remove (3.1). Allowing a title that is allowed already keeps
     /// its allow time, so pressing Allow again never moves it past the cap.
-    /// Returns whether it was written. Refused for the owner, and for an
-    /// entry outside its bounds.
+    /// A new allow is admitted only while fewer than `MAX_ALLOWED` titles
+    /// are allowed, read in the same write, so two Allows racing at 999
+    /// cannot both land (`ListFull`). Returns whether it was written.
+    /// Refused for the owner, and for an entry outside its bounds.
     pub fn write_allowed(
         &self,
         profile: &str,
@@ -211,7 +213,8 @@ impl Library {
             return Err(LibraryError::OwnerKids);
         }
         let mut row = row.clone().bounded().map_err(LibraryError::BadEntry)?;
-        self.write(|c| {
+        let mut full = false;
+        let written = self.write(|c| {
             refuse_gone(c, profile)?;
             if row.allowed {
                 let kept: Option<i64> = c
@@ -222,12 +225,27 @@ impl Library {
                         |r| r.get(0),
                     )
                     .optional()?;
+                if kept.is_none() {
+                    let total: i64 = c.query_row(
+                        "SELECT COUNT(*) FROM allowed WHERE profile_id = ?1 AND allowed = 1",
+                        params![profile],
+                        |r| r.get(0),
+                    )?;
+                    if total as usize >= MAX_ALLOWED {
+                        full = true;
+                        return Ok(false);
+                    }
+                }
                 row.added_ms = kept.unwrap_or(row.added_ms);
             }
             let changed = sql::set_allowed(c, profile, &row, hlc)?;
             queue(c, changed, coll::ALLOWED, &[profile, &row.item_id])?;
             Ok(changed > 0)
-        })
+        })?;
+        if full {
+            return Err(LibraryError::ListFull);
+        }
+        Ok(written)
     }
 
     /// The profile's allowlist: the counted titles and the extras past the
@@ -403,6 +421,14 @@ mod tests {
         .encode()
     }
 
+    /// A kids profile, made under an owner PIN.
+    fn kid() -> Library {
+        let lib = Library::temporary().unwrap();
+        lib.set_pin_hash(OWNER, Some("h"), &hlc(1)).unwrap();
+        lib.create_kids_profile("kid", "Kid", "", &hlc(1)).unwrap();
+        lib
+    }
+
     fn entry(id: &str, allowed: bool) -> AllowedRow {
         AllowedRow {
             item_id: id.into(),
@@ -420,8 +446,7 @@ mod tests {
     /// authorization names the generation before the removal.
     #[test]
     fn a_decision_and_its_generation_are_one_snapshot() {
-        let lib = Library::temporary().unwrap();
-        lib.create_kids_profile("kid", "Kid", "", &hlc(1)).unwrap();
+        let lib = kid();
         lib.write_allowed("kid", &entry("tt1", true), &hlc(2))
             .unwrap();
         let (_, before) = lib.policy_checked("kid").unwrap();
@@ -445,8 +470,7 @@ mod tests {
     /// between the policy and the generation leaves both as they were.
     #[test]
     fn a_policy_and_its_generation_are_one_snapshot() {
-        let lib = Library::temporary().unwrap();
-        lib.create_kids_profile("kid", "Kid", "", &hlc(1)).unwrap();
+        let lib = kid();
         lib.write_allowed("kid", &entry("tt1", true), &hlc(2))
             .unwrap();
         let (_, before) = lib.policy_checked("kid").unwrap();
@@ -464,8 +488,7 @@ mod tests {
     /// committed between the two reads shows in neither.
     #[test]
     fn a_list_and_its_extras_are_one_snapshot() {
-        let lib = Library::temporary().unwrap();
-        lib.create_kids_profile("kid", "Kid", "", &hlc(1)).unwrap();
+        let lib = kid();
         for i in 0..MAX_ALLOWED {
             let row = AllowedRow {
                 added_ms: i as i64,
@@ -475,11 +498,15 @@ mod tests {
         }
         let list = lib
             .allowed_list_with("kid", || {
-                let late = AllowedRow {
-                    added_ms: 5000,
-                    ..entry("tt9999", true)
+                // Past the cap only from another device.
+                let late = crate::sync::SyncRecord {
+                    coll: coll::ALLOWED,
+                    key: "kid\u{1f}tt9999".into(),
+                    value: serde_json::json!({"profile": "kid", "itemId": "tt9999",
+                        "kind": "movie", "name": "Up", "allowed": true, "addedMs": 5000}),
+                    hlc: hlc(5000),
                 };
-                lib.write_allowed("kid", &late, &hlc(5000)).unwrap();
+                lib.apply(&[late]).unwrap();
             })
             .unwrap();
         assert_eq!(list.counted.len(), MAX_ALLOWED);

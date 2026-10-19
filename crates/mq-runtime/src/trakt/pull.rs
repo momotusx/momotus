@@ -540,6 +540,9 @@ impl<'a> Round<'a> {
         // Scrobbles first: a running pause or stop finishes before this
         // write, and the worker never waits for the outbox.
         drop(self.conn.lane.lock().await);
+        if self.live().is_err() {
+            return false;
+        }
         let answer = call::post(
             self.api,
             self.gate,
@@ -646,14 +649,26 @@ impl<'a> Round<'a> {
     /// The connection this round started under is still the one in use,
     /// and stays so while the guard is held (a sign-out waits for it).
     fn fence(&self) -> Result<std::sync::MutexGuard<'a, ()>, CallError> {
-        self.at().fence().ok_or(CallError::Auth(AuthError::Off))
+        self.at()
+            .fence(self.core)
+            .ok_or(CallError::Auth(AuthError::Off))
+    }
+
+    /// No call goes for a profile that turned kids while the round ran.
+    fn live(&self) -> Result<(), CallError> {
+        if super::kids(self.core) {
+            return Err(CallError::Auth(AuthError::Off));
+        }
+        Ok(())
     }
 
     async fn get(&self, path: &str) -> Result<Value, CallError> {
+        self.live()?;
         call::body(call::get(self.api, self.gate, &self.conn.auth, self.bound, path).await)
     }
 
     async fn get_all(&self, path: &str) -> Result<Vec<Value>, CallError> {
+        self.live()?;
         call::get_all(self.api, self.gate, &self.conn.auth, self.bound, path, PAGE).await
     }
 

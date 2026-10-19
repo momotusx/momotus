@@ -108,7 +108,8 @@ async fn watch(
     loop {
         tokio::select! {
             tables = crate::views::next_change(&mut changes) => match tables {
-                Some(tables) if tables.contains(&Table::Profiles) => {}
+                // Access too: `kids` and `syncing` read the access register.
+                Some(tables) if tables.iter().any(|t| matches!(t, Table::Profiles | Table::Access)) => {}
                 Some(_) => continue,
                 None => return,
             },

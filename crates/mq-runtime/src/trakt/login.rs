@@ -64,6 +64,10 @@ impl TraktLoginView {
         let trakt = core.trakt();
         if trakt.config().is_none() {
             snapshot.set(TraktLoginSnapshot::NotConfigured);
+        } else if super::kids(core) {
+            snapshot.set(TraktLoginSnapshot::Failed {
+                reason: super::KIDS.into(),
+            });
         } else {
             let conn = core.trakt_conn();
             // Owned until overtaken, and never past the profile's end.
@@ -200,6 +204,13 @@ impl Login {
         let Some(core) = self.core.upgrade() else {
             return;
         };
+        if super::kids(&core) {
+            // Turned kids while it polled: approved, never taken.
+            self.set(TraktLoginSnapshot::Failed {
+                reason: super::KIDS.into(),
+            });
+            return auth::revoke(&api, &tokens.access_token).await;
+        }
         let conn = core.trakt_conn();
         // The ticket is checked and the record written under one lock: a
         // newer sign-in, a sign-out or a record from the app meanwhile wins.

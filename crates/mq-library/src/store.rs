@@ -29,6 +29,12 @@ pub enum LibraryError {
     /// A kids profile is always a new one.
     #[error("profile {0} already exists")]
     ProfileExists(String),
+    /// Kids profiles and no owner PIN never stand together (plans/m11-kids.md 6.1).
+    #[error("kids profiles need the owner's PIN")]
+    KidsNeedPin,
+    /// A new allow past the cap, on this device (plans/m11-kids.md 3.4).
+    #[error("the kids list is full")]
+    ListFull,
 }
 
 impl From<rusqlite::Error> for LibraryError {
@@ -299,12 +305,12 @@ impl Library {
 
     /// Creates the profile and its lock register (no PIN), each only when
     /// missing, and its access register (standard) for the owner or a
-    /// profile this call creates. Called with the zero hlc, so versions
-    /// synced from another device win. A profile already here waits for
-    /// its creator's access record: guessed, a kids profile whose record is
-    /// still on its way would open as standard. Only test cores and the
-    /// importer's tests create a profile other than the owner here
-    /// (plans/m11-kids.md 3.5).
+    /// profile this call creates. The core and test cores pass the zero
+    /// hlc, so versions synced from another device win; the importer passes
+    /// its import hlc. A profile already here waits for its creator's
+    /// access record: guessed, a kids profile whose record is still on its
+    /// way would open as standard. Only test cores and the importer's tests
+    /// create a profile other than the owner here (plans/m11-kids.md 3.5).
     pub fn ensure_profile(&self, id: &str, name: &str, hlc: &str) -> Result<(), LibraryError> {
         self.write(|c| {
             refuse_gone(c, id)?;

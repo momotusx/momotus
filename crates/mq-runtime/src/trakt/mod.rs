@@ -315,17 +315,19 @@ impl<'a> Bind<'a> {
         self.conn.key(&self.bound.account)
     }
 
-    /// Whether this is still the connection in use. It stays so while the
-    /// guard is held: a sign-out takes the same lock to move the generation.
-    pub(super) fn fence(self) -> Option<MutexGuard<'a, ()>> {
+    /// Whether this is still the connection in use, for a profile that is
+    /// not kids (one turned kids while work ran writes nothing more). It
+    /// stays so while the guard is held: a sign-out takes the same lock to
+    /// move the generation.
+    pub(super) fn fence(self, core: &Core) -> Option<MutexGuard<'a, ()>> {
         let fence = lock(&self.conn.fence);
         let now = futures_util::FutureExt::now_or_never(self.conn.auth.bound()).flatten();
-        (now.as_ref() == Some(self.bound)).then_some(fence)
+        (now.as_ref() == Some(self.bound) && !kids(core)).then_some(fence)
     }
 
     /// Writes one of the account's state rows, behind the fence.
     pub(super) fn set_state(self, core: &Core, name: &str, value: &str) {
-        if let Some(_fence) = self.fence()
+        if let Some(_fence) = self.fence(core)
             && let Err(e) = core.library().set_tracker_state(self.key(), name, value)
         {
             tracing::debug!("trakt: state not written: {e}");
@@ -334,7 +336,7 @@ impl<'a> Bind<'a> {
 
     /// Deletes one of the account's state rows, behind the fence.
     pub(super) fn delete_state(self, core: &Core, name: &str) {
-        if let Some(_fence) = self.fence() {
+        if let Some(_fence) = self.fence(core) {
             let _ = core.library().delete_tracker_state(self.key(), name);
         }
     }
@@ -429,6 +431,11 @@ impl Core {
         account: &str,
         generation: u64,
     ) -> Result<(), CoreError> {
+        if kids(self) {
+            // Turned kids while a sign-in ran: its tokens go too.
+            self.trakt().forget(self.profile());
+            return Err(CoreError::Trakt(KIDS.into()));
+        }
         let library = self.library();
         let profile = self.profile();
         let known = library.tracker_account(profile, TRACKER)?;
@@ -652,13 +659,41 @@ fn unmapped(core: &Core, key: TrackerKey<'_>) -> Vec<TraktUnmapped> {
 }
 
 /// Kids profiles have no Trakt (plans/m11-kids.md 4.5): no record, no
-/// round, no scheduler, no scrobble. A profile whose access is not known
-/// counts as kids (the policy fails closed).
+/// sign-in, no round, no scheduler, no scrobble, no call and no write. A
+/// profile whose access is not known, or cannot be read, counts as kids
+/// here (the policy fails closed): this refuses, it never drops tokens.
 pub(super) fn kids(core: &Core) -> bool {
     core.library().policy(core.profile()).kids()
 }
 
-const KIDS: &str = "Trakt is off for kids profiles";
+/// Whether the profile reads as kids, `None` when that could not be read:
+/// what drops a profile's tokens asks this, and asks again later on `None`.
+pub(super) fn kids_now(core: &Core) -> Option<bool> {
+    match core.library().policy_checked(core.profile()) {
+        Ok((policy, _)) => Some(policy.kids()),
+        Err(e) => {
+            tracing::debug!("trakt: profile check failed: {e}");
+            None
+        }
+    }
+}
+
+/// Ends once an `Access` change (or a missed one) leaves the profile kids.
+async fn turned_kids(
+    core: &crate::core::WeakCore,
+    changes: &mut tokio::sync::broadcast::Receiver<Vec<mq_library::Table>>,
+) {
+    while let Some(tables) = crate::views::next_change(changes).await {
+        if tables.contains(&mq_library::Table::Access)
+            && core.upgrade().is_some_and(|c| kids_now(&c) == Some(true))
+        {
+            return;
+        }
+    }
+    std::future::pending().await
+}
+
+pub(super) const KIDS: &str = "Trakt is off for kids profiles";
 
 /// Whether the library says the profile was deleted, here or by sync. A
 /// read that fails is not a deletion: the next look asks again.
@@ -672,10 +707,15 @@ fn gone(core: &Core) -> bool {
 /// Rounds for one profile: when woken (a record, the foreground, a closed
 /// playback, a sign-in), every 5 minutes in the foreground, and when an
 /// outbox retry is due while the sign-in is usable. It holds the core
-/// weakly: once every handle is gone, or the profile is, it ends.
-async fn schedule(core: crate::core::WeakCore, conn: Arc<Conn>) {
+/// weakly: once every handle is gone, or the profile is, it ends. A profile
+/// that turns kids (an `Access` change) ends it at once, a round in flight
+/// included, and its tokens leave memory.
+async fn schedule(weak: crate::core::WeakCore, conn: Arc<Conn>) {
+    let Some(mut changes) = weak.upgrade().map(|c| c.library().subscribe()) else {
+        return;
+    };
     loop {
-        let Some(trakt) = core.upgrade().map(|c| c.trakt()) else {
+        let Some(trakt) = weak.upgrade().map(|c| c.trakt()) else {
             return;
         };
         // A retry cannot go while the sign-in is unusable: a new record
@@ -699,24 +739,36 @@ async fn schedule(core: crate::core::WeakCore, conn: Arc<Conn>) {
             () = conn.stop.cancelled() => return,
             () = conn.wake.notified() => {}
             () = tokio::time::sleep(wait) => {}
+            () = turned_kids(&weak, &mut changes) => {}
         }
-        let Some(core) = core.upgrade() else { return };
+        let Some(core) = weak.upgrade() else { return };
         let trakt = core.trakt();
         if gone(&core) {
             trakt.forget(core.profile());
             return;
         }
-        if kids(&core) {
-            // A record held from before (never taken for kids): its rounds
-            // stop and its tokens leave memory.
-            trakt.forget(core.profile());
-            return;
+        match kids_now(&core) {
+            // A record held from before (never taken for kids), or the
+            // profile turned kids: its work stops, its tokens leave memory.
+            Some(true) => {
+                trakt.forget(core.profile());
+                return;
+            }
+            Some(false) => {}
+            // Not read: asked again at the next wake, the tokens kept.
+            None => continue,
         }
         if conn.auth.account().await.is_none() || trakt.config().is_none() {
             continue;
         }
-        if let Err(e) = pull::round(&core, &trakt, &conn).await {
-            tracing::debug!("trakt round: {}", reason(&e));
+        tokio::select! {
+            result = pull::round(&core, &trakt, &conn) => if let Err(e) = result {
+                tracing::debug!("trakt round: {}", reason(&e));
+            },
+            () = turned_kids(&weak, &mut changes) => {
+                trakt.forget(core.profile());
+                return;
+            }
         }
         core.trakt_refresh(&conn);
     }
@@ -751,5 +803,30 @@ impl TraktView {
             self.snapshot.get(),
             Box::pin(coalesce(Box::pin(updates), FRAME)),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tokens adopted for a profile that turned kids meanwhile (between a
+    /// sign-in's own check and its write) are not recorded, start no
+    /// rounds, and leave memory.
+    #[tokio::test]
+    async fn a_connection_for_a_kids_profile_is_refused() {
+        let core = Core::temporary("p").unwrap();
+        let access = mq_library::SyncRecord {
+            coll: mq_library::coll::PROFILE_ACCESS,
+            key: "p".into(),
+            value: serde_json::json!({"profile": "p", "kids": true}),
+            hlc: core.hlc(),
+        };
+        core.library().apply(&[access]).unwrap();
+        let conn = core.trakt_conn();
+        assert!(core.trakt_connected(&conn, "acct", 1).is_err());
+        assert_eq!(core.library().tracker_account("p", TRACKER).unwrap(), None);
+        assert!(!conn.scheduler.load(Ordering::SeqCst), "no rounds");
+        assert!(conn.stop.is_cancelled(), "forgotten");
     }
 }

@@ -2810,3 +2810,301 @@ async fn a_runtime_no_addon_answers_is_not_a_look() {
         state(&core, "a-resume-off", "activities").map(|s| serde_json::from_str(&s).unwrap());
     assert_ne!(stored, Some(moved), "read again next round");
 }
+
+// Kids (plans/m11-kids.md 4.5): a profile that turns kids while Trakt work
+// runs takes nothing more from it and sends nothing more to it.
+
+/// Profile `p` turns kids, as a synced access record would make it.
+fn turn_kids(core: &Core) {
+    let access = mq_library::SyncRecord {
+        coll: mq_library::coll::PROFILE_ACCESS,
+        key: "p".into(),
+        value: json!({"profile": "p", "kids": true}),
+        hlc: core.hlc(),
+    };
+    core.library().apply(&[access]).unwrap();
+}
+
+fn held(status: u16, body: Value, delay: Duration) -> Reply {
+    Reply {
+        delay,
+        ..reply(status, body)
+    }
+}
+
+#[tokio::test]
+async fn a_round_running_when_the_profile_turns_kids_imports_nothing() {
+    let (core, fake) = signed_in("a-kids-round").await;
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    // The history page is held: the round waits on it.
+    let rows = json!([
+        episode_row(1, now() - 3_600_000),
+        movie_row(MOVIE, now() - 7_200_000)
+    ]);
+    fake.queue(
+        "GET /sync/history",
+        vec![held(200, rows, Duration::from_millis(1500))],
+    );
+    let round = {
+        let core = core.clone();
+        tokio::spawn(async move { core.trakt_sync().await })
+    };
+    fake.wait_for("the held page", |f| {
+        !f.seen("GET", "/sync/history").is_empty()
+    })
+    .await;
+    turn_kids(&core);
+    let sent = fake.seen.lock().unwrap().len();
+    let _ = round.await.unwrap();
+    core.trakt_foreground();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(
+        !watched(&core, "tt100:1:1") && !watched(&core, MOVIE),
+        "nothing imported"
+    );
+    assert_eq!(fake.seen.lock().unwrap().len(), sent, "nothing sent");
+    assert_eq!(status(&core).user, None, "its tokens left memory");
+}
+
+#[tokio::test]
+async fn a_scrobble_running_when_the_profile_turns_kids_sends_nothing_more() {
+    let (core, fake) = signed_in("a-kids-scrobble").await;
+    let answer = json!({"id": 1, "action": "start", "progress": 10.0,
+        "episode": {"season": 1, "number": 1, "ids": {"tvdb": 1001}},
+        "show": {"title": "Show", "ids": {"imdb": SHOW}}});
+    fake.queue(
+        "POST /scrobble/start",
+        vec![held(201, answer, Duration::from_millis(1500))],
+    );
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(10), MINUTES, false);
+    fake.wait_for("the held start", |f| f.scrobbles().len() == 1)
+        .await;
+    turn_kids(&core);
+    view.report_progress(at(20), MINUTES, true);
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+    drop(view);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let actions: Vec<String> = fake.scrobbles().into_iter().map(|(a, _)| a).collect();
+    assert_eq!(actions, ["start"], "no pause and no stop after the turn");
+}
+
+#[tokio::test]
+async fn a_kids_profile_starts_no_sign_in_and_one_turned_kids_takes_no_tokens() {
+    let (core, fake) = setup("a-kids-login").await;
+    fake.queue(
+        "POST /oauth/device/code",
+        vec![reply(
+            200,
+            json!({"device_code": "dev", "user_code": "ABCD1234",
+                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+        )],
+    );
+    let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
+                        "created_at": now() / 1000, "scope": "public", "token_type": "bearer"});
+    fake.queue(
+        "POST /oauth/device/token",
+        vec![reply(400, json!({})), reply(200, tokens)],
+    );
+    // Turned kids while it polls: approved, revoked, never held.
+    let login = TraktLoginView::open(&core);
+    until("the code", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Code { .. })
+    })
+    .await;
+    turn_kids(&core);
+    until("the sign-in refused", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Failed { .. })
+    })
+    .await;
+    fake.wait_for("the tokens revoked", |f| {
+        !f.seen("POST", "/oauth/revoke").is_empty()
+    })
+    .await;
+    assert_eq!(status(&core).user, None);
+    assert_eq!(state(&core, "a-kids-login", "history_day"), None);
+    // A kids profile asks for no code at all.
+    let again = TraktLoginView::open(&core);
+    assert!(matches!(
+        again.snapshot(),
+        TraktLoginSnapshot::Failed { .. }
+    ));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(fake.seen("POST", "/oauth/device/code").len(), 1);
+}
+
+/// The owner's access register cannot be read for a moment: the scheduler
+/// asks again later and keeps the tokens, then runs rounds again.
+#[tokio::test]
+async fn a_failed_access_read_keeps_the_tokens_and_the_rounds() {
+    let fake = Fake::new("a-kids-read");
+    let base = fake.start().await;
+    let dir = std::env::temp_dir().join(format!("mq-kids-read-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let core = Core::open(mq_runtime::CoreConfig {
+        data_dir: dir.clone(),
+        profile_id: mq_library::OWNER.into(),
+        device_id: 0,
+    })
+    .unwrap();
+    core.set_trakt_config(Some(config(&base)));
+    core.set_trakt(Some(record("a-kids-read"))).await.unwrap();
+    fake.wait_for("the first round", |f| {
+        !f.seen("GET", "/sync/last_activities").is_empty()
+    })
+    .await;
+    // Waits for the scheduler's round, so the scheduler is idle after.
+    core.trakt_sync().await.unwrap();
+    let side = rusqlite::Connection::open(dir.join("library.sqlite")).unwrap();
+    let set = |kids: &str| {
+        side.execute(
+            &format!("UPDATE profile_access SET kids = {kids} WHERE profile_id = 'default'"),
+            [],
+        )
+        .unwrap();
+    };
+    set("'unreadable'");
+    let rounds = fake.seen("GET", "/sync/last_activities").len();
+    core.trakt_foreground();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(status(&core).user.as_deref(), Some("tester"), "tokens kept");
+    assert_eq!(fake.seen("GET", "/sync/last_activities").len(), rounds);
+    set("0");
+    core.trakt_foreground();
+    fake.wait_for("a round again", |f| {
+        f.seen("GET", "/sync/last_activities").len() > rounds
+    })
+    .await;
+    drop((side, core));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// As `signed_in`, over a data directory a test can write behind the
+/// library's back: a turn to kids that no `Access` notice announces, so
+/// only the checks before each call and each write can see it.
+async fn signed_in_on_disk(account: &str) -> (Core, Fake, std::path::PathBuf) {
+    let fake = Fake::new(account);
+    let base = fake.start().await;
+    let dir = std::env::temp_dir().join(format!("mq-{account}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let owner = Core::open(mq_runtime::CoreConfig {
+        data_dir: dir.clone(),
+        profile_id: mq_library::OWNER.into(),
+        device_id: 0,
+    })
+    .unwrap();
+    owner
+        .library()
+        .ensure_profile("p", "p", &mq_library::Hlc::zero(1).encode())
+        .unwrap();
+    let core = owner.for_profile("p");
+    core.set_trakt_config(Some(config(&base)));
+    core.install_addon(&format!("{base}/manifest.json"))
+        .await
+        .unwrap();
+    core.set_trakt(Some(record(account))).await.unwrap();
+    core.trakt_sync().await.unwrap();
+    fake.wait_for("the scheduler's round", |f| {
+        f.seen("GET", "/sync/last_activities").len() >= 2
+    })
+    .await;
+    core.trakt_sync().await.unwrap();
+    (core, fake, dir)
+}
+
+fn turn_kids_quietly(dir: &std::path::Path) {
+    rusqlite::Connection::open(dir.join("library.sqlite"))
+        .unwrap()
+        .execute(
+            "UPDATE profile_access SET kids = 1 WHERE profile_id = 'p'",
+            [],
+        )
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_call_after_an_unannounced_turn_to_kids_is_not_made() {
+    let (core, fake, dir) = signed_in_on_disk("a-quiet-call").await;
+    fake.list("/sync/history", vec![episode_row(1, now() - 3_600_000)]);
+    // Activities moved, so history comes next; their answer is held.
+    fake.queue(
+        "GET /sync/last_activities",
+        vec![held(
+            200,
+            activities(&iso(now())),
+            Duration::from_millis(1000),
+        )],
+    );
+    let round = {
+        let core = core.clone();
+        tokio::spawn(async move { core.trakt_sync().await })
+    };
+    fake.wait_for("the held activities", |f| {
+        f.seen("GET", "/sync/last_activities").len() >= 4
+    })
+    .await;
+    turn_kids_quietly(&dir);
+    let sent = fake.seen.lock().unwrap().len();
+    let _ = round.await.unwrap();
+    assert_eq!(fake.seen.lock().unwrap().len(), sent, "no history read");
+    assert!(!watched(&core, "tt100:1:1"));
+    drop(core);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_write_after_an_unannounced_turn_to_kids_is_not_made() {
+    let (core, fake, dir) = signed_in_on_disk("a-quiet-write").await;
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    let rows = json!([
+        episode_row(1, now() - 3_600_000),
+        movie_row(MOVIE, now() - 7_200_000)
+    ]);
+    fake.queue(
+        "GET /sync/history",
+        vec![held(200, rows, Duration::from_millis(1000))],
+    );
+    let round = {
+        let core = core.clone();
+        tokio::spawn(async move { core.trakt_sync().await })
+    };
+    fake.wait_for("the held page", |f| {
+        !f.seen("GET", "/sync/history").is_empty()
+    })
+    .await;
+    turn_kids_quietly(&dir);
+    let _ = round.await.unwrap();
+    assert!(
+        !watched(&core, "tt100:1:1") && !watched(&core, MOVIE),
+        "nothing imported"
+    );
+    drop(core);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn a_scrobble_after_an_unannounced_turn_to_kids_is_not_sent() {
+    let (core, fake, dir) = signed_in_on_disk("a-quiet-scrobble").await;
+    let answer = json!({"id": 1, "action": "start", "progress": 10.0,
+        "episode": {"season": 1, "number": 1, "ids": {"tvdb": 1001}},
+        "show": {"title": "Show", "ids": {"imdb": SHOW}}});
+    fake.queue(
+        "POST /scrobble/start",
+        vec![held(201, answer, Duration::from_millis(1000))],
+    );
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(10), MINUTES, false);
+    fake.wait_for("the held start", |f| f.scrobbles().len() == 1)
+        .await;
+    turn_kids_quietly(&dir);
+    view.report_progress(at(20), MINUTES, true);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    drop(view);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let actions: Vec<String> = fake.scrobbles().into_iter().map(|(a, _)| a).collect();
+    assert_eq!(actions, ["start"], "no pause and no stop after the turn");
+    drop(core);
+    let _ = std::fs::remove_dir_all(dir);
+}

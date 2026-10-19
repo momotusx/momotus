@@ -241,6 +241,7 @@ async fn the_reader_bump_alone_brings_the_kids_registers() {
 async fn upgraded_device(v10_queued: bool) {
     let (_relay, _server, config) = relay().await;
     let a = Device::new(1);
+    a.lib.set_pin_hash(OWNER, Some("h"), &a.hlc()).unwrap();
     a.lib
         .create_kids_profile("kid", "Kid", "fox", &a.hlc())
         .unwrap();

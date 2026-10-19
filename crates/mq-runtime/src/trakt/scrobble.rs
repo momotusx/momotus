@@ -420,6 +420,14 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
     let ids: Vec<u64> = sessions.keys().copied().collect();
     let mut stopped_any = false;
     for id in ids {
+        if super::kids(core) {
+            // Turned kids while it played: nothing more goes out, and once
+            // that is read for sure its work stops and its tokens go.
+            if super::kids_now(core) == Some(true) {
+                trakt.forget(core.profile());
+            }
+            return None;
+        }
         let s = sessions.get_mut(&id).expect("listed");
         if s.bound.is_none() && current.is_some() {
             s.bound = current.clone();

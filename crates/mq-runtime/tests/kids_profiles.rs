@@ -125,6 +125,24 @@ async fn the_owner_pin_stays_while_kids_exist() {
     assert!(!core.has_pin());
 }
 
+/// The removal checks for kids profiles, then verifies the PIN (a hash
+/// that takes a while): a kids profile made in between keeps the PIN.
+/// Whichever writes second is refused; never both pass.
+#[tokio::test]
+async fn a_kids_profile_made_while_the_owner_pin_goes_keeps_it() {
+    let core = owner().await;
+    let removal = {
+        let core = core.clone();
+        tokio::spawn(async move { core.set_pin(OWNER, None, Some(PIN)).await })
+    };
+    // The removal's early check runs before this profile exists.
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    let kid = core.create_kids_profile("Kid", "fox");
+    let removed = removal.await.unwrap();
+    assert!(kid.is_ok() != removed.is_ok(), "{kid:?} {removed:?}");
+    assert_eq!(core.has_pin(), kid.is_ok());
+}
+
 #[tokio::test]
 async fn an_allow_keeps_every_verified_name_that_arrives_in_time() {
     let core = owner().await;
@@ -263,6 +281,98 @@ async fn the_list_is_capped_on_this_device() {
     core.allow_title(&kid, "movie", "tt0001").await.unwrap();
 }
 
+/// Two Allows at 999 both pass the early check, then wait on their metas
+/// together: the write decides, so one lands and one is `listFull`.
+#[tokio::test]
+async fn two_allows_racing_at_nine_hundred_ninety_nine_admit_one() {
+    let core = owner().await;
+    let kid = core.create_kids_profile("Kid", "fox").unwrap();
+    for i in 0..999 {
+        let row = AllowedRow {
+            item_id: format!("tt{i:04}"),
+            kind: "movie".into(),
+            name: "T".into(),
+            names: vec![],
+            poster: None,
+            allowed: true,
+            added_ms: i,
+        };
+        core.library()
+            .write_allowed(&kid, &row, &core.hlc())
+            .unwrap();
+    }
+    let wait = Duration::from_millis(800);
+    install(
+        &core,
+        vec![
+            meta_addon(1, meta("movie", "tta", "A"), wait).await,
+            meta_addon(2, meta("movie", "ttb", "B"), wait).await,
+        ],
+    )
+    .await;
+    let allow = |id: &'static str| {
+        let (core, kid) = (core.clone(), kid.clone());
+        tokio::spawn(async move { core.allow_title(&kid, "movie", id).await })
+    };
+    let (a, b) = (allow("tta"), allow("ttb"));
+    let codes = [code(a.await.unwrap()), code(b.await.unwrap())];
+    assert_eq!(
+        codes.iter().filter(|c| **c == Some("listFull")).count(),
+        1,
+        "{codes:?}"
+    );
+    assert!(codes.contains(&None));
+    let list = core.library().allowed_list(&kid).unwrap();
+    assert_eq!((list.counted.len(), list.over_count), (1000, 0));
+}
+
+/// The picker reads `kids` and `syncing` from the access register, so it
+/// follows a make-standard and an access record that arrives on its own.
+#[tokio::test]
+async fn the_picker_follows_the_access_register() {
+    let core = owner().await;
+    let kid = core.create_kids_profile("Kid", "fox").unwrap();
+    let (_session, state) = tokio::sync::watch::channel((OWNER.to_owned(), false));
+    let view = mq_runtime::ProfilesView::open(&core, state);
+    let info = |id: &str| view.subscribe().0.profiles.into_iter().find(|p| p.id == id);
+    assert!(info(&kid).unwrap().kids);
+    core.make_standard(&kid).unwrap();
+    until("the picker reads it standard", || !info(&kid).unwrap().kids).await;
+    // A profile and its lock first, its access record later on its own.
+    let record = |coll, value: serde_json::Value| SyncRecord {
+        coll,
+        key: "y".into(),
+        value,
+        hlc: core.hlc(),
+    };
+    core.library()
+        .apply(&[
+            record(
+                coll::PROFILES,
+                serde_json::json!({"profile": "y", "name": "Y"}),
+            ),
+            record(
+                coll::PROFILE_LOCK,
+                serde_json::json!({"profile": "y", "pinHash": null}),
+            ),
+        ])
+        .unwrap();
+    until("the profile listed as syncing", || {
+        info("y").is_some_and(|p| p.syncing)
+    })
+    .await;
+    core.library()
+        .apply(&[record(
+            coll::PROFILE_ACCESS,
+            serde_json::json!({"profile": "y", "kids": false}),
+        )])
+        .unwrap();
+    until("the profile ready", || {
+        info("y").is_some_and(|p| !p.syncing && !p.kids)
+    })
+    .await;
+}
+
 #[tokio::test]
 async fn remove_and_make_standard() {
     let core = owner().await;
@@ -316,8 +426,8 @@ async fn the_owners_kids_views_are_live_and_count_the_cap() {
     let titles = KidsTitlesView::open(&core, &kid).unwrap();
     let keys = KidsKeysView::open(&core).unwrap();
     assert!(titles.snapshot().titles.is_empty());
-    // 1,001 allowed, by two devices past the cap.
-    for i in 0..1001 {
+    // 1,001 allowed, by two devices past the cap: this one admits 1,000.
+    for i in 0..1000 {
         let row = AllowedRow {
             item_id: format!("tt{i:04}"),
             kind: "movie".into(),
@@ -331,6 +441,14 @@ async fn the_owners_kids_views_are_live_and_count_the_cap() {
             .write_allowed(&kid, &row, &core.hlc())
             .unwrap();
     }
+    let other = SyncRecord {
+        coll: coll::ALLOWED,
+        key: format!("{kid}\u{1f}tt1000"),
+        value: serde_json::json!({"profile": kid, "itemId": "tt1000", "kind": "movie",
+                                  "name": "T1000", "allowed": true, "addedMs": 1000}),
+        hlc: core.hlc(),
+    };
+    core.library().apply(&[other]).unwrap();
     until("the titles", || titles.snapshot().titles.len() == 1001).await;
     let snapshot = titles.snapshot();
     assert_eq!((snapshot.over_count, snapshot.max), (1, 1000));

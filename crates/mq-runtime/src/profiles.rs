@@ -85,11 +85,12 @@ impl ProfileError {
             // Removed while the request ran.
             Self::Library(LibraryError::ProfileGone(_)) => "unknownProfile",
             Self::Unreadable => "pinUnreadable",
-            Self::KidsNeedPin => "kidsNeedPin",
+            // The library's own checks, made in the write.
+            Self::KidsNeedPin | Self::Library(LibraryError::KidsNeedPin) => "kidsNeedPin",
             Self::NotKids => "notKids",
             Self::Mismatch => "mismatch",
             Self::NoDetails => "noDetails",
-            Self::ListFull => "listFull",
+            Self::ListFull | Self::Library(LibraryError::ListFull) => "listFull",
             Self::Library(_) | Self::Internal(_) => return None,
         })
     }
@@ -293,8 +294,14 @@ impl Core {
             }
             None => None,
         };
-        self.library()
-            .set_pin_hash(id, hash.as_deref(), self.clock())?;
+        if id == OWNER && hash.is_none() {
+            // Checked again in the write: a kids profile created meanwhile
+            // keeps the PIN.
+            self.library().clear_owner_pin(self.clock())?;
+        } else {
+            self.library()
+                .set_pin_hash(id, hash.as_deref(), self.clock())?;
+        }
         self.forgive(id)
     }
 
