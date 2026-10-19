@@ -220,3 +220,81 @@ async fn a_restored_relay_and_a_new_device_get_the_profile_registers() {
     assert!(c.lib.is_gone("y").unwrap());
     assert!(c.lib.profile("y").unwrap().is_none());
 }
+
+/// A device that pulled a kids profile with a build that skipped its kids
+/// registers (reader 3), then upgraded (V10 made the profile standard at the
+/// zero hlc and queued that), pulls everything again once (reader 4) and
+/// ends with the profile kids. Other devices never see it standard.
+#[tokio::test]
+async fn an_upgraded_device_pulls_the_kids_registers_it_skipped() {
+    upgraded_device(true).await;
+}
+
+/// The same with nothing pushed first (V10's queued register not sent yet,
+/// or refused): the stale answer to that push would also move the cursor
+/// back, so here only the reader bump brings the registers.
+#[tokio::test]
+async fn the_reader_bump_alone_brings_the_kids_registers() {
+    upgraded_device(false).await;
+}
+
+async fn upgraded_device(v10_queued: bool) {
+    let (_relay, _server, config) = relay().await;
+    let a = Device::new(1);
+    a.lib
+        .create_kids_profile("kid", "Kid", "fox", &a.hlc())
+        .unwrap();
+    let allowed = mq_library::AllowedRow {
+        item_id: "tt1".into(),
+        kind: "movie".into(),
+        name: "Up".into(),
+        names: vec![],
+        poster: None,
+        allowed: true,
+        added_ms: 1,
+    };
+    a.lib.write_allowed("kid", &allowed, &a.hlc()).unwrap();
+    a.sync(&config).await;
+
+    let dir = dir();
+    let path = dir.0.join("b.sqlite");
+    let b = Device {
+        lib: Library::open(&path).unwrap(),
+        clock: HlcClock::new(2),
+    };
+    b.lib
+        .ensure_profile(OWNER, OWNER, &mq_library::Hlc::zero(2).encode())
+        .unwrap();
+    b.sync(&config).await;
+    assert!(b.lib.profile("kid").unwrap().unwrap().kids());
+    // What the older build kept, and what V10 then did: no allow rows, a
+    // standard access register at the zero hlc (queued, or not); the pull
+    // cursor at the head under reader 3.
+    let side = rusqlite::Connection::open(&path).unwrap();
+    side.execute_batch(
+        "DELETE FROM allowed;
+         DELETE FROM profile_access WHERE profile_id = 'kid';
+         INSERT INTO profile_access (profile_id, kids, hlc)
+             VALUES ('kid', 0, '00000000000000000000000000000000');
+         UPDATE sync_state SET value = '3.1' WHERE key = 'pull_reader';",
+    )
+    .unwrap();
+    if v10_queued {
+        side.execute("INSERT INTO sync_outbox (coll, key) VALUES (9, 'kid')", [])
+            .unwrap();
+    }
+    drop(side);
+    assert!(
+        !b.lib.profile("kid").unwrap().unwrap().kids(),
+        "standard until the pull completes"
+    );
+    b.sync(&config).await;
+    let kid = b.lib.profile("kid").unwrap().unwrap();
+    assert!(kid.ready() && kid.kids(), "kids once the pull completes");
+    assert!(b.lib.policy("kid").allows("movie", "tt1"));
+    let reader = b.lib.sync_state("pull_reader").unwrap().unwrap();
+    assert!(reader.starts_with("4."), "{reader}");
+    // The zero-hlc standard version B may have pushed never wins anywhere.
+    a.sync(&config).await;
+    assert!(a.lib.profile("kid").unwrap().unwrap().kids());
+}
