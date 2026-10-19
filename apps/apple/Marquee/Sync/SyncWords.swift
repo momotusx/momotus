@@ -92,6 +92,13 @@ enum SyncWords {
     static let wrongRecord = "This device does not hold this sync account any more, so there is nothing to stop syncing here. Forget it on this device to clear it."
     static let forgetHere = "Forget it on this device"
     static let forgetHereText = "This device deletes the account's key from its Keychain. Your library stays here."
+    static let keyUnreadable = "This device cannot read its sync key from the Keychain right now, so it cannot tell whether it syncs. Try again in a moment; if it keeps failing, restart the device."
+    static let keyLeft = "This device stopped syncing, but its sync key is still in the Keychain: Marquee could not delete it. Try again."
+    static let listStale = "This list and the 12 characters may be out of date: this device could not read the list again."
+    static let removeStale = "The list could not be read again, so the recovery kits named here may be out of date. Try again before you remove."
+    static let dismiss = "Dismiss"
+    static let offLine = "Keep your library, progress and addons the same on every device. Pair, start an account or use a recovery kit."
+    static let onLine = "Devices, recovery kit, stopping."
     // Add a device
     static let addLede = "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code."
     static let addWarning = "Approve only a code on a screen in front of you. Whoever controls that screen gets your account."
@@ -126,6 +133,15 @@ enum SyncWords {
     static let copyKitHelp = "Copying puts it on this device's clipboard for 1 minute, never on your other devices. Paste it into your password manager right away."
     static let kitCopied = "Copied for 1 minute. Paste it into your password manager now."
     static let savedKit = "I saved it"
+    static let kitWaiting = "Your new recovery kit is not saved yet. Show it again and save it."
+    static let showKitAgain = "Show the kit"
+    static let kitAskShow = "The kit is shown again only after your passcode, Face ID or Touch ID."
+    static let kitUnseen = "A recovery kit was made here and not said saved before Marquee let go of it (when the app closed, or five minutes after you left its page), so it cannot be shown again. Make a new one: Marquee removes the unseen one."
+    static let kitExpired = "A recovery kit was made here and left unsaved for five minutes after you left its page, so Marquee let go of it and cannot show it again. Make a new one: Marquee removes the unseen one."
+    static let makeNewKit = "Make a new kit"
+    static let kitIdUnknown = "Marquee could not tell which recovery kit in the device list is this one. If you do not save it, check the recovery kits in the list."
+    static let kitUnseenUnknown = "A recovery kit was made here and never said saved, and Marquee cannot tell which one it is. Check the recovery kits in the list and remove those you do not hold."
+    static let checked = "I checked"
     // Remove and report lost
     static let removeKitAsk = "Remove this recovery kit? It stops working."
     static let lostLede = "{name} is removed from your account and cannot read anything you change from now on."
@@ -138,6 +154,7 @@ enum SyncWords {
     static let authRemove = "remove a device from your sync account"
     static let authLost = "report a device lost"
     static let authKit = "make a recovery kit"
+    static let authShowKit = "show your recovery kit again"
     static let authApprove = "approve a new device"
     static let authDiffer = "end the approval of a device"
     static let authServerList = "keep syncing with the sync server's device list"
@@ -153,12 +170,37 @@ enum SyncWords {
         "\(n) \(n == 1 ? one : many)"
     }
 
-    /// The confirm line for removing another device.
-    static func removeDeviceAsk(_ name: String) -> String {
+    /// The confirm line for removing another device, with the recovery kits made on it, which go with it.
+    static func removeDeviceAsk(_ name: String, kits: Int = 0) -> String {
         "Remove \(name)? It stops syncing and cannot read anything you change from now on. Devices it added stay."
+            + (kits == 0 ? "" : kits == 1 ? " The recovery kit made on it stops working too." : " The \(kits) recovery kits made on it stop working too.")
     }
 
-    /// The step before approving a code: which sync server it joins through.
+    /// Kits of a lost report the device list does not have yet: who made them is not known here.
+    static func lostKitsUnsure(_ kits: Int) -> String {
+        "\(count(kits, "recovery kit", "recovery kits")) this device does not list yet may stop working too, if the device that made \(kits == 1 ? "it" : "them") goes. Check the list afterwards."
+    }
+
+    /// Failures since this device joined, kept until the user dismisses them.
+    static func failedSince(_ failed: SyncFailed) -> String? {
+        let parts = [
+            failed.refused > 0 ? "\(count(failed.refused, "edit", "edits")) from this device could not be sent and \(failed.refused == 1 ? "stays" : "stay") here only" : nil,
+            failed.unreadable > 0 ? "\(count(failed.unreadable, "change", "changes")) from other devices could not be read" : nil,
+            failed.newer > 0 ? "\(count(failed.newer, "change", "changes")) from a newer version of Marquee \(failed.newer == 1 ? "waits" : "wait") for an update here" : nil,
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : "Since this device joined, \(parts.joined(separator: ", and "))."
+    }
+
+    /// The Settings row under Devices and sync: what is wrong or waits
+    /// first, then the time; never "Synced" over a warning.
+    static func summary(joined: Bool, problem: String?, failed: String?, notes: [String], at: Date?) -> String {
+        if let problem { return problem }
+        guard joined else { return offLine }
+        if let warning = failed ?? notes.first { return warning }
+        guard let at else { return onLine }
+        return "Synced \(at.formatted(date: .omitted, time: .shortened)). \(onLine)"
+    }
+
     /// The button that continues with the server's list, naming what goes.
     static func forkButton(devices: Int, kits: Int) -> String {
         let parts = [devices > 0 ? count(devices, "device", "devices") : nil, kits > 0 ? count(kits, "recovery kit", "recovery kits") : nil].compactMap { $0 }
@@ -231,6 +273,7 @@ struct SyncProblem: Equatable {
         case "unconfirmed":
             return action == .differ ? "The approval is still open: this device did not confirm it is you." : "Nothing changed: this device did not confirm it is you."
         case "noPasscode": return "Set a device passcode first: Marquee asks for it before changing your devices or making a kit."
+        case "keyUnreadable": return SyncWords.keyUnreadable
         default: break
         }
         if action == .start, message == "http status 403" { return "This sync server needs an invite code, or the one entered is wrong." }
@@ -257,6 +300,18 @@ struct SyncProblem: Equatable {
         case .start, .recover: "This device did not join."
         }
         return "\(notDone) The sync server did not answer. Try again in a moment."
+    }
+}
+
+/// Changes that failed since this device joined: a clean round does not
+/// clear them, only the user (Dismiss), a join or a leave.
+struct SyncFailed: Equatable {
+    var refused = 0
+    var unreadable = 0
+    var newer = 0
+
+    func adding(_ report: SyncReport) -> SyncFailed {
+        SyncFailed(refused: refused + report.refused, unreadable: unreadable + report.unreadable, newer: newer + report.newer)
     }
 }
 
@@ -359,6 +414,11 @@ enum SyncRules {
         return members.first { $0.id == sponsor }.map(memberName) ?? "a removed device"
     }
 
+    /// The account has no kit the user holds: none in the list but those that went unseen here.
+    static func noKit(_ members: [MemberInfo], unseen: [String]) -> Bool {
+        !members.contains { $0.kit && !unseen.contains($0.id) }
+    }
+
     /// What a lost report drops: the lost device and what it added that the user did not untick.
     static func lostDrop(lost: String, added: [String], keep: Set<String>) -> [String] {
         [lost] + added.filter { !keep.contains($0) }
@@ -366,13 +426,43 @@ enum SyncRules {
 
     /// The kits that go with a lost report, as the core works them out: every
     /// kit of the preview whose maker does not stay (a device the user unticked
-    /// keeps its kits).
-    static func kitsGoing(previewKits: [String], members: [MemberInfo], drop: [String]) -> [String] {
-        let ids = Set(members.map(\.id))
-        return previewKits.filter { kit in
-            guard let maker = members.first(where: { $0.id == kit })?.sponsor else { return true }
-            return !ids.contains(maker) || drop.contains(maker)
+    /// keeps its kits). A kit the device list does not have yet has no known
+    /// maker: it is said to go only while the user keeps nothing, else it is
+    /// `unsure`, never claimed gone.
+    static func kitsGoing(previewKits: [String], members: [MemberInfo], keep: Set<String>) -> (going: [String], unsure: [String]) {
+        var going: [String] = [], unsure: [String] = []
+        for kit in previewKits {
+            guard let member = members.first(where: { $0.id == kit }) else {
+                if keep.isEmpty { going.append(kit) } else { unsure.append(kit) }
+                continue
+            }
+            if let maker = member.sponsor, keep.contains(maker) { continue }
+            going.append(kit)
         }
+        return (going, unsure)
+    }
+
+    /// The recovery kits made on `device`: removing it stops them too.
+    static func kitsMade(by device: String, in members: [MemberInfo]) -> Int {
+        members.filter { $0.kit && $0.sponsor == device }.count
+    }
+
+    /// A row VoiceOver reads: its name and its line, so two "Recovery kit" rows differ.
+    static func spokenRow(_ name: String, _ detail: String) -> String {
+        "\(name), \(detail)"
+    }
+
+    /// What the hub warns about, in order: the round's problem, failures
+    /// since joining, the round's notes, and a list that may be out of date.
+    static func warnings(problem: String?, failed: String?, notes: [String], listStale: Bool) -> [String] {
+        [problem, failed].compactMap { $0 } + notes + (listStale ? [SyncWords.listStale] : [])
+    }
+
+    /// What VoiceOver hears when the warnings change: only those that are
+    /// new, once; a round that repeats them says nothing.
+    static func announcement(old: [String], new: [String]) -> String? {
+        let fresh = new.filter { !old.contains($0) }
+        return fresh.isEmpty ? nil : fresh.joined(separator: " ")
     }
 
     /// One device a lost report would drop, as the page lists it.

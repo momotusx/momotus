@@ -55,12 +55,12 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         // Ticked: the tablet and the phone go, and the tablet's kit with them.
         let drop = SyncRules.lostDrop(lost: tablet.id, added: preview.devices, keep: [])
         #expect(drop.count == 2)
-        #expect(SyncRules.kitsGoing(previewKits: preview.kits, members: devices.members, drop: drop) == preview.kits)
+        #expect(SyncRules.kitsGoing(previewKits: preview.kits, members: devices.members, keep: []).going == preview.kits)
         #expect(W.lostButton(drop.count) == "Remove 2 devices")
         // The phone unticked: only the tablet goes; its kit still does.
         let kept = SyncRules.lostDrop(lost: tablet.id, added: preview.devices, keep: Set(preview.devices))
         #expect(kept == [tablet.id])
-        #expect(SyncRules.kitsGoing(previewKits: preview.kits, members: devices.members, drop: kept) == preview.kits)
+        #expect(SyncRules.kitsGoing(previewKits: preview.kits, members: devices.members, keep: Set(preview.devices)).going == preview.kits)
     }
 
     @Test func aDeviceTheListDoesNotHaveYetIsStillShown() {
@@ -73,11 +73,15 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
     }
 
     @Test func kitsGoUnlessTheirMakerStays() {
-        let members = [member("a", this: true), member("k1", kit: true, sponsor: "a"), member("t"), member("k2", kit: true, sponsor: "t")]
-        // A kit whose maker is dropped goes; one whose maker stays (unticked) stays; one nobody knows goes.
-        #expect(SyncRules.kitsGoing(previewKits: ["k2"], members: members, drop: ["t"]) == ["k2"])
-        #expect(SyncRules.kitsGoing(previewKits: ["k1"], members: members, drop: ["t"]).isEmpty)
-        #expect(SyncRules.kitsGoing(previewKits: ["k9"], members: members, drop: ["t"]) == ["k9"])
+        // The lost device "l" added "t"; "l" made k1 and "t" made k2.
+        let members = [member("a", this: true), member("l"), member("t", sponsor: "l"), member("k1", kit: true, sponsor: "l"), member("k2", kit: true, sponsor: "t")]
+        // A kit whose maker goes goes too; one whose maker the user unticked stays.
+        #expect(SyncRules.kitsGoing(previewKits: ["k1", "k2"], members: members, keep: []).going == ["k1", "k2"])
+        #expect(SyncRules.kitsGoing(previewKits: ["k1", "k2"], members: members, keep: ["t"]) == (["k1"], []))
+        // A kit the list does not have yet: going while nothing is kept, else nobody can say.
+        #expect(SyncRules.kitsGoing(previewKits: ["k9"], members: members, keep: []) == (["k9"], []))
+        #expect(SyncRules.kitsGoing(previewKits: ["k9"], members: members, keep: ["t"]) == ([], ["k9"]))
+        #expect(W.lostKitsUnsure(1) == "1 recovery kit this device does not list yet may stop working too, if the device that made it goes. Check the list afterwards.")
         #expect(W.lostKits(1) == "1 recovery kit made on these devices stops working. Make a new one afterwards.")
         #expect(W.lostKits(2).hasPrefix("2 recovery kits made on these devices stop working."))
     }
@@ -192,5 +196,53 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         #expect(W.removeDeviceAsk("Tablet").hasPrefix("Remove Tablet? It stops syncing"))
         #expect(W.count(1, "device", "devices") == "1 device")
         #expect(W.lostButton(1) == "Remove 1 device")
+    }
+
+    @Test func failuresStayPastACleanRoundUntilDismissed() throws {
+        var failed = SyncFailed()
+        failed = failed.adding(try report(["refused": 2, "unreadable": 1]))
+        failed = failed.adding(try report())
+        #expect(failed == SyncFailed(refused: 2, unreadable: 1, newer: 0))
+        failed = failed.adding(try report(["newer": 1]))
+        #expect(W.failedSince(failed) == "Since this device joined, 2 edits from this device could not be sent and stay here only, and 1 change from other devices could not be read, and 1 change from a newer version of Marquee waits for an update here.")
+        #expect(W.failedSince(SyncFailed()) == nil)
+    }
+
+    @Test func settingsNeverSaysSyncedOverAWarning() throws {
+        let at = Date(timeIntervalSince1970: 1_700_000_000)
+        let notes = try report(["waiting": 1]).notes
+        #expect(W.summary(joined: true, problem: nil, failed: nil, notes: [], at: at).hasPrefix("Synced "))
+        #expect(W.summary(joined: true, problem: nil, failed: nil, notes: notes, at: at) == notes[0])
+        #expect(W.summary(joined: true, problem: nil, failed: "Since this device joined, 1 edit", notes: notes, at: at) == "Since this device joined, 1 edit")
+        #expect(W.summary(joined: true, problem: "The sync server did not answer.", failed: "x", notes: notes, at: at) == "The sync server did not answer.")
+        #expect(W.summary(joined: false, problem: nil, failed: nil, notes: [], at: nil) == W.offLine)
+        #expect(W.summary(joined: true, problem: nil, failed: nil, notes: [], at: nil) == W.onLine)
+    }
+
+    @Test func aNewWarningIsSaidOnceAndARepeatSaysNothing() {
+        let stale = SyncRules.warnings(problem: nil, failed: nil, notes: ["1 edit waits."], listStale: true)
+        #expect(stale == ["1 edit waits.", W.listStale])
+        #expect(SyncRules.warnings(problem: "No answer.", failed: "Since", notes: [], listStale: false) == ["No answer.", "Since"])
+        #expect(SyncRules.announcement(old: [], new: stale) == "1 edit waits. \(W.listStale)")
+        // The next round says the same: nothing new is said.
+        #expect(SyncRules.announcement(old: stale, new: stale) == nil)
+        #expect(SyncRules.announcement(old: stale, new: ["1 edit waits."]) == nil)
+        #expect(SyncRules.announcement(old: ["1 edit waits."], new: stale) == W.listStale)
+    }
+
+    @Test func removeNamesTheKitsThatGoAndTickRowsReadApart() {
+        let members = [member("a", this: true), member("t", name: "Tablet", sponsor: "a"),
+                       member("k1", kit: true, sponsor: "t", addedMs: 1_700_000_000_000), member("k2", kit: true, sponsor: "t", addedMs: 1_710_000_000_000)]
+        #expect(SyncRules.kitsMade(by: "t", in: members) == 2)
+        #expect(SyncRules.kitsMade(by: "a", in: members) == 0)
+        #expect(W.removeDeviceAsk("Tablet", kits: 2).hasSuffix("Devices it added stay. The 2 recovery kits made on it stop working too."))
+        #expect(W.removeDeviceAsk("Tablet", kits: 1).hasSuffix(" The recovery kit made on it stops working too."))
+        #expect(W.removeDeviceAsk("Tablet").hasSuffix("Devices it added stay."))
+        // Two "Recovery kit" rows: VoiceOver reads their lines too, so they differ.
+        let spoken = members.filter(\.kit).map {
+            SyncRules.spokenRow(SyncRules.memberName($0), W.addedLine(kit: true, addedMs: $0.addedMs, by: SyncRules.sponsorName($0, in: members)))
+        }
+        #expect(spoken[0] != spoken[1])
+        #expect(spoken[0].hasPrefix("Recovery kit, Made "))
     }
 }

@@ -13,7 +13,14 @@ struct MarqueeApp: App {
 
     init() {
         Fonts.register()
+        #if os(macOS)
+        // A kit copied before the app last stopped, if nothing was copied since.
+        Clipboard.clearLeftover()
+        #endif
         URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 512 << 20)
+        // A sync key left by a deleted install goes before the core opens an empty library.
+        let library = CoreClient.dataDirectory().appending(path: "library.sqlite").path(percentEncoded: false)
+        SyncRecord.keychain.forgetLeftover(libraryExists: FileManager.default.fileExists(atPath: library))
         let core = CoreClient()
         _core = State(initialValue: core)
         _system = State(initialValue: SystemEvents(core: core))

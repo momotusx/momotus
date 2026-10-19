@@ -18,7 +18,7 @@ struct SyncScreen: View {
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                if sync.joined { JoinedSync() } else { NotJoined() }
+                if sync.keyUnreadable { KeyUnreadable() } else if sync.joined { JoinedSync() } else { NotJoined() }
             }
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -43,6 +43,11 @@ private struct NotJoined: View {
             } else if let notice = sync.notice {
                 Said(tone: .ok, text: notice)
             }
+            if sync.keyLeft {
+                Said(tone: .bad, text: W.keyLeft)
+                Button { sync.deleteKeyAgain() } label: { Label(W.retry, glyph: "refresh-cw") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+            }
             NavigationLink { PairingScreen(core: core) } label: {
                 SettingsRow(symbol: "qr-code", title: W.pairTitle, detail: W.pairText)
             }
@@ -55,6 +60,20 @@ private struct NotJoined: View {
                 SettingsRow(symbol: "life-buoy", title: W.recoverTitle, detail: W.recoverText)
             }
             .buttonStyle(.row)
+        }
+    }
+}
+
+/// The Keychain did not answer: this device may be in an account, so none
+/// of the ways in shows (each would replace it unseen), only Try again.
+struct KeyUnreadable: View {
+    @Environment(SyncModel.self) private var sync
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Said(tone: .bad, text: W.keyUnreadable)
+            Button { sync.readKeyAgain() } label: { Label(W.retry, glyph: "refresh-cw") }
+                .buttonStyle(PillButtonStyle(prominent: true))
         }
     }
 }
@@ -73,14 +92,16 @@ private struct JoinedSync: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             state
-            if sync.recovered || noKit {
-                Callout(glyph: "key-round", text: sync.recovered ? (isTV ? W.tvAfterRecover : W.afterRecover) : W.noKit)
-            }
+            kitCallouts
             devices
             links
             LeaveSync()
         }
         .task { await load() }
+        // A new warning is said once; a round that repeats it says nothing.
+        .onChange(of: warnings) { old, new in
+            if let words = SyncRules.announcement(old: old, new: new) { announce(words) }
+        }
         .confirmationDialog(
             removing.map { "\(W.remove) \(SyncRules.memberName($0))?" } ?? "",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
@@ -89,8 +110,17 @@ private struct JoinedSync: View {
             Button("\(W.remove) \(SyncRules.memberName(member))", role: .destructive) { Task { await remove(member) } }
             Button(W.cancel, role: .cancel) {}
         } message: { member in
-            Text(member.kit ? W.removeKitAsk : W.removeDeviceAsk(SyncRules.memberName(member)))
+            Text(member.kit ? W.removeKitAsk : W.removeDeviceAsk(SyncRules.memberName(member), kits: SyncRules.kitsMade(by: member.id, in: members)))
         }
+    }
+
+    private var failedSince: String? { W.failedSince(sync.failed) }
+
+    /// The list may be out of date: a read after a round failed (the page's own read says why itself).
+    private var listStale: Bool { sync.listFailed && listError == nil && sync.devices != nil }
+
+    private var warnings: [String] {
+        SyncRules.warnings(problem: sync.problem?.words, failed: failedSince, notes: sync.lastReport?.notes ?? [], listStale: listStale)
     }
 
     private var isTV: Bool {
@@ -102,7 +132,47 @@ private struct JoinedSync: View {
     }
 
     private var members: [MemberInfo] { SyncRules.sortMembers(sync.devices?.members ?? []) }
-    private var noKit: Bool { sync.devices != nil && !members.contains(where: \.kit) }
+    /// No kit the user holds: none in the list but those that went unseen here.
+    private var noKit: Bool { sync.devices != nil && SyncRules.noKit(members, unseen: sync.kits.unseen) }
+
+    /// A kit made here waits to be saved, one went unseen, or the account has none.
+    @ViewBuilder private var kitCallouts: some View {
+        #if !os(tvOS)
+        if sync.kits.held != nil {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Callout(glyph: "key-round", text: W.kitWaiting)
+                NavigationLink { RecoveryKitScreen() } label: { Label(W.showKitAgain, glyph: "key-round") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+            }
+        }
+        #endif
+        if sync.recovered || noKit || !sync.kits.unseen.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Callout(glyph: sync.kits.unseen.isEmpty ? "key-round" : "triangle-alert", text: kitLine)
+                #if !os(tvOS)
+                if sync.kits.held == nil {
+                    NavigationLink { RecoveryKitScreen() } label: {
+                        Label(sync.kits.unseen.isEmpty ? W.kitTitle : W.makeNewKit, glyph: "key-round")
+                    }
+                    .buttonStyle(PillButtonStyle())
+                }
+                #endif
+            }
+        }
+        if sync.kits.unknownUnseen {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Callout(glyph: "triangle-alert", text: W.kitUnseenUnknown)
+                Button { sync.checkedUnknownKit() } label: { Label(W.checked, glyph: "check") }
+                    .buttonStyle(PillButtonStyle())
+            }
+        }
+    }
+
+    private var kitLine: String {
+        if !sync.kits.unseen.isEmpty { return sync.kits.expired ? W.kitExpired : W.kitUnseen }
+        if sync.recovered { return isTV ? W.tvAfterRecover : W.afterRecover }
+        return W.noKit
+    }
 
     /// The latest device list's 12 characters: a round's own value can be a step behind it.
     private var fingerprint: String? { sync.devices?.fingerprint ?? sync.lastReport?.fingerprint }
@@ -127,6 +197,14 @@ private struct JoinedSync: View {
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Kept past clean rounds until dismissed: a refused edit stays here only.
+            if let failedSince {
+                Label(failedSince, glyph: "triangle-alert")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(W.dismiss) { sync.dismissFailed() }.buttonStyle(PillButtonStyle())
+            }
             FlowRow(spacing: Theme.Space.xs) {
                 Button { sync.request() } label: { Label(sync.syncing ? W.syncing : W.syncNow, glyph: "refresh-cw") }
                     .buttonStyle(PillButtonStyle(prominent: true))
@@ -150,6 +228,7 @@ private struct JoinedSync: View {
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
+                    if listStale { Said(tone: .warn, text: W.listStale) }
                 }
                 .padding(.top, Theme.Space.xs)
             }
@@ -225,7 +304,7 @@ private struct JoinedSync: View {
             if let said, said.id == member.id { Said(tone: said.tone, text: said.text) }
             if !member.thisDevice {
                 FlowRow(spacing: Theme.Space.xs) {
-                    Button { removing = member } label: { Label(W.remove, glyph: "trash") }
+                    Button { Task { await askRemove(member) } } label: { Label(W.remove, glyph: "trash") }
                         .buttonStyle(PillButtonStyle())
                         .accessibilityLabel("\(W.remove) \(SyncRules.memberName(member))")
                         .disabled(busy)
@@ -242,6 +321,21 @@ private struct JoinedSync: View {
         .padding(Theme.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+    }
+
+    /// Remove asks only on a list read now: the kits it names are the ones that go.
+    private func askRemove(_ member: MemberInfo) async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let list = try await sync.loadDevices()
+            listError = nil
+            // Gone from the fresh list already: its row goes with it, nothing to ask.
+            removing = list.members.first { $0.id == member.id }
+        } catch {
+            said = (member.id, .bad, W.removeStale)
+        }
     }
 
     private func remove(_ member: MemberInfo) async {

@@ -17,12 +17,23 @@ import Observation
 @MainActor @Observable
 final class SyncModel {
     /// A record is stored, or held for this session: this device is in a sync account.
-    private(set) var joined = SyncRecord.load() != nil
+    private(set) var joined: Bool
+    /// This device left the account but the Keychain kept its record: the
+    /// page says so with Try again (`deleteKeyAgain`).
+    private(set) var keyLeft = false
+    /// The Keychain did not answer when asked for the record: this device may
+    /// be in an account, so the page says so with Try again, never the ways in.
+    private(set) var keyUnreadable = false
     /// A round runs or is asked for.
     private(set) var syncing = false
     private(set) var lastReport: SyncReport?
     private(set) var lastSynced: Date?
     private(set) var devices: SyncDevices?
+    /// The last read of the device list failed: the list, and the 12
+    /// characters with it, may be out of date until a read works again.
+    private(set) var listFailed = false
+    /// Changes that failed since this device joined, until the user dismisses them.
+    private(set) var failed = SyncFailed()
     /// What went wrong in the last round, in words, and what the user can do about it.
     private(set) var problem: SyncProblem?
     /// What the last leave did, for the page that follows it.
@@ -33,11 +44,25 @@ final class SyncModel {
     /// The last join: in the Keychain (true), for this session only (false), or none yet.
     private(set) var joinStored: Bool?
     /// Joined with a recovery kit and no new kit made since: the page asks for one.
-    private(set) var recovered = UserDefaults.standard.bool(forKey: "syncRecovered") {
-        didSet { UserDefaults.standard.set(recovered, forKey: "syncRecovered") }
+    private(set) var recovered: Bool {
+        didSet { defaults.set(recovered, forKey: "syncRecovered") }
     }
 
+    /// Kits made here and not yet said saved: the one whose letters are held,
+    /// and the ids of the pending ones (kept across launches, never a kit).
+    /// Only this model changes it (tests seed it).
+    var kits: KitLedger {
+        didSet { if kits.pending != oldValue.pending { defaults.set(kits.pending, forKey: "syncPendingKits") } }
+    }
+    /// A kit is being made, in this model's own task: a page left meanwhile still gets it held.
+    private(set) var makingKit = false
+
     @ObservationIgnored private let core: CoreClient
+    @ObservationIgnored private let records: SyncRecord
+    @ObservationIgnored private let defaults: UserDefaults
+    /// How long a made kit's letters stay once its page is left.
+    @ObservationIgnored var kitHold = KitLedger.hold
+    @ObservationIgnored private var holdTimer: Task<Void, Never>?
     @ObservationIgnored private var scheduled: Task<Void, Never>?
     @ObservationIgnored private var worker: Task<Void, Never>?
     @ObservationIgnored private var pending = false
@@ -50,8 +75,35 @@ final class SyncModel {
     /// A record the Keychain refused, held in memory: nothing is sent until it is stored.
     @ObservationIgnored private var unstored: JSONValue?
 
-    init(core: CoreClient) {
+    init(core: CoreClient, records: SyncRecord = .keychain, defaults: UserDefaults = .standard) {
         self.core = core
+        self.records = records
+        self.defaults = defaults
+        recovered = defaults.bool(forKey: "syncRecovered")
+        kits = KitLedger(pending: defaults.stringArray(forKey: "syncPendingKits") ?? [])
+        do {
+            joined = try records.load() != nil
+        } catch {
+            // Fails closed: a Keychain that did not answer is not "no account".
+            joined = false
+            keyUnreadable = true
+            coreLog.error("sync: the Keychain did not give the record: \(error, privacy: .public)")
+        }
+    }
+
+    private func refuseUnreadableKey() throws {
+        if keyUnreadable { throw CoreError("the Keychain did not give the record", code: "keyUnreadable") }
+    }
+
+    /// Asks the Keychain for the record again (the page's Try again).
+    func readKeyAgain() {
+        do {
+            joined = try records.load() != nil
+            keyUnreadable = false
+            if joined { request() }
+        } catch {
+            keyUnreadable = true
+        }
     }
 
     // MARK: Rounds
@@ -96,6 +148,7 @@ final class SyncModel {
                 lastReport = report
                 lastSynced = .now
                 problem = nil
+                failed = failed.adding(report)
                 // The 12 characters to compare come from the device list: keep it as fresh as the round.
                 if report.fingerprint != devices?.fingerprint { try? await loadDevices() }
                 if !report.again { return }
@@ -111,6 +164,8 @@ final class SyncModel {
 
     /// Starts pairing with a device that already syncs; a new attempt replaces the last.
     func startPairing(server: String, name: String) {
+        // A Keychain that did not answer may hold an account: nothing replaces it unseen.
+        guard !keyUnreadable else { return }
         let attempt = LiveRecord<PairingSnapshot>("pairing", params: ["server": server, "name": name], core: core)
         attempt.onSnapshot = { [weak self, weak attempt] snapshot in
             guard case .joined(let record) = snapshot, let self, let attempt, self.pairing === attempt, self.joinStored == nil else { return }
@@ -128,6 +183,7 @@ final class SyncModel {
 
     /// The first device of a new account.
     func createAccount(server: String, invite: String, name: String) async throws {
+        try refuseUnreadableKey()
         var fields: [String: any Sendable] = ["server": server, "name": name]
         if !invite.isEmpty { fields["invite"] = invite }
         let record: JSONValue = try await core.call("createSyncAccount", fields, as: JSONValue.self)
@@ -136,6 +192,7 @@ final class SyncModel {
 
     /// A new device joining with a recovery kit; the page then asks for a new kit.
     func recover(server: String, kit: String, name: String) async throws {
+        try refuseUnreadableKey()
         let record: JSONValue = try await core.call("recover", ["server": server, "kit": kit, "name": name], as: JSONValue.self)
         join(record, recovered: true)
     }
@@ -145,8 +202,9 @@ final class SyncModel {
     /// for this session and sync waits until the record is stored.
     private func join(_ record: JSONValue, recovered: Bool = false) {
         account += 1
+        dropKits()
         // A new account's record is stored as it is: revisions compare only within an account.
-        let stored = SyncRecord.store(record)
+        let stored = records.store(record)
         unstored = stored ? nil : record
         joinStored = stored
         joined = true
@@ -155,6 +213,8 @@ final class SyncModel {
         lastReport = nil
         lastSynced = nil
         devices = nil
+        listFailed = false
+        failed = SyncFailed()
         problem = stored ? nil : SyncProblem(code: "storage", message: "")
         request()
     }
@@ -165,8 +225,18 @@ final class SyncModel {
     @discardableResult
     func loadDevices() async throws -> SyncDevices {
         let mine = account
-        let list: SyncDevices = try await withRecord("syncDevices") { $0.record }
-        if account == mine { devices = list }
+        let list: SyncDevices
+        do {
+            list = try await withRecord("syncDevices") { $0.record }
+        } catch {
+            if account == mine, !(error is CancellationError) { listFailed = true }
+            throw error
+        }
+        if account == mine {
+            devices = list
+            listFailed = false
+            kits.follow(list.members)
+        }
         return list
     }
 
@@ -196,19 +266,73 @@ final class SyncModel {
         try await withRecord("forkPreview") { (_: ForkPreview) in nil }
     }
 
-    /// A recovery kit, to show once: nothing here keeps it. Behind the OS
-    /// authentication prompt, as the protocol asks; never on a TV.
-    func createRecoveryKit() async throws -> String {
+    /// Makes a recovery kit and holds its letters here until "I saved it"
+    /// (`kits`). Behind the OS prompt, as the protocol asks; never on a TV.
+    /// The work runs in this model's own task: Cancel or Back while it runs
+    /// still gets the kit held, and the hub says it waits. Unseen kits go
+    /// first when the list shows them; one the list could not show stays.
+    func createRecoveryKit() async throws {
         #if os(tvOS)
         throw CoreError("A TV does not make recovery kits.", code: "unconfirmed")
         #else
+        guard !makingKit else { return }
         try await confirmOwner(SyncWords.authKit)
-        struct Made: Decodable, Sendable { let kit: String; let record: JSONValue }
-        let made: Made = try await withRecord("createRecoveryKit") { $0.record }
-        recovered = false
-        try? await loadDevices()
-        return made.kit
+        makingKit = true
+        try await Task { @MainActor in
+            defer { makingKit = false }
+            let mine = account
+            let before = try? await loadDevices()
+            if let kitsBefore = before.map({ Set($0.members.filter(\.kit).map(\.id)) }) {
+                for id in kits.unseen {
+                    if kitsBefore.contains(id) {
+                        let _: JSONValue = try await withRecord("removeDevice", ["device": id]) { $0 }
+                    }
+                    kits.settle(id)
+                }
+            }
+            struct Made: Decodable, Sendable { let kit: String; let record: JSONValue }
+            let made: Made = try await withRecord("createRecoveryKit") { $0.record }
+            guard mine == account else { return }
+            recovered = false
+            let after = try? await loadDevices()
+            guard mine == account else { return }
+            kits.hold(HeldKit(id: KitLedger.newKitId(before: before, after: after), kit: made.kit))
+        }.value
         #endif
+    }
+
+    /// Shows the held kit again: only after the OS prompt.
+    func confirmShowKit() async throws {
+        try await confirmOwner(SyncWords.authShowKit)
+    }
+
+    /// The kit page is open, or was left: the letters never go while the
+    /// page can show them, and go `kitHold` after it is left.
+    func kitPage(open: Bool) {
+        holdTimer?.cancel()
+        guard !open, let kit = kits.held else { return }
+        // ponytail: a fixed hold after the page; the letters never outlive it, and the kit then counts as unseen.
+        holdTimer = Task { [weak self, kitHold] in
+            try? await Task.sleep(for: kitHold)
+            guard !Task.isCancelled else { return }
+            self?.kits.expire(kit)
+        }
+    }
+
+    /// "I saved it": the letters leave memory and the kit is no longer pending.
+    func kitSaved() {
+        holdTimer?.cancel()
+        kits.saved()
+    }
+
+    /// The user checked the list for a kit nobody could name.
+    func checkedUnknownKit() {
+        kits.checkedUnknown()
+    }
+
+    private func dropKits() {
+        holdTimer?.cancel()
+        kits.drop()
     }
 
     /// What reporting `lost` would drop: its devices (ticked) and its kits (always).
@@ -221,6 +345,8 @@ final class SyncModel {
     func removeDevice(_ device: String) async throws {
         try await confirmOwner(SyncWords.authRemove)
         let _: JSONValue = try await withRecord("removeDevice", ["device": device]) { $0 }
+        // A pending kit just removed needs no saving and no removing, list or no list.
+        kits.settle(device)
         try? await loadDevices()
     }
 
@@ -260,6 +386,16 @@ final class SyncModel {
         problem = nil
         request()
         try? await loadDevices()
+    }
+
+    /// Forgets the failures listed since joining.
+    func dismissFailed() {
+        failed = SyncFailed()
+    }
+
+    /// Deletes a record the Keychain kept after leaving (`keyLeft`).
+    func deleteKeyAgain() {
+        keyLeft = !records.delete()
     }
 
     /// Drops the account record here only, when the relay cannot take this
@@ -312,20 +448,33 @@ final class SyncModel {
     /// first, and while the Keychain refuses it nothing is sent.
     private func storedRecord() throws -> JSONValue? {
         if let held = unstored {
-            guard SyncRecord.store(held) else {
+            guard records.store(held) else {
                 problem = SyncProblem(code: "storage", message: "")
                 throw CoreError("the record was not stored", code: "storage")
             }
             unstored = nil
         }
-        return SyncRecord.load()
+        do {
+            return try records.load()
+        } catch {
+            throw CoreError("the Keychain did not give the record", code: "keyUnreadable")
+        }
     }
 
     /// Stores a record the core handed back, unless the stored one is newer.
     /// When the Keychain refuses it, it is held here and sync pauses until it is stored.
     private func keep(_ next: JSONValue) -> Bool {
-        let record = SyncRules.newer(SyncRecord.load(), next)
-        guard SyncRecord.store(record) else {
+        // A stored record that does not read is never overwritten blind: the new one waits here.
+        let stored: JSONValue?
+        do {
+            stored = try records.load()
+        } catch {
+            unstored = next
+            problem = SyncProblem(code: "storage", message: "")
+            return false
+        }
+        let record = SyncRules.newer(stored, next)
+        guard records.store(record) else {
             unstored = record
             problem = SyncProblem(code: "storage", message: "")
             return false
@@ -334,17 +483,23 @@ final class SyncModel {
         return true
     }
 
+    /// Forgets the account here. When the Keychain refuses to delete the
+    /// record, `keyLeft` says so: the next launch would otherwise find it.
     private func forget() {
         account += 1
-        SyncRecord.delete()
+        keyLeft = !records.delete()
+        if keyLeft { coreLog.error("sync: the Keychain kept the record after leaving") }
         unstored = nil
         joined = false
         joinStored = nil
         pairing = nil
         devices = nil
+        listFailed = false
+        failed = SyncFailed()
         lastReport = nil
         lastSynced = nil
         recovered = false
+        dropKits()
     }
 
     /// The OS prompt (passcode, Face ID or Touch ID) before changing the

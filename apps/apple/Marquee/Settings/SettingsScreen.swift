@@ -141,12 +141,11 @@ struct SettingsScreen: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// "Synced 14:02" or the problem in words.
+    /// "Synced 14:02", or what is wrong or waits first.
     private var syncSummary: String {
-        if let problem = sync.problem { return problem.words }
-        guard sync.joined else { return "Keep your library, progress and addons the same on every device. Pair, start an account or use a recovery kit." }
-        if let at = sync.lastSynced { return "Synced \(at.formatted(date: .omitted, time: .shortened)). Devices, recovery kit, stopping." }
-        return "Devices, recovery kit, stopping."
+        let problem = sync.keyUnreadable ? SyncWords.keyUnreadable : sync.keyLeft ? SyncWords.keyLeft : sync.problem?.words
+        return SyncWords.summary(joined: sync.joined, problem: problem, failed: SyncWords.failedSince(sync.failed),
+                                 notes: sync.lastReport?.notes ?? [], at: sync.lastSynced)
     }
 
     /// "4 installed. Streams from Torrentio, Sample Source."

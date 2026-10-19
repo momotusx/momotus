@@ -1,0 +1,120 @@
+import Foundation
+import SwiftUI
+
+/// A recovery kit made here and not yet said saved: its id in the device
+/// list ("" when the list did not tell) and its letters, in memory only.
+struct HeldKit: Equatable, CustomStringConvertible {
+    let id: String
+    let kit: String
+
+    /// Never the letters, wherever a value is printed or logged.
+    var description: String { "HeldKit(id: \(id))" }
+}
+
+/// The kits made here and not yet said saved (Android's SyncAccount): the
+/// one whose letters are held in memory, and the ids of every one still
+/// pending, which `SyncModel` keeps across launches (never a kit). A kit
+/// whose letters went before "I saved it" is unseen: nobody holds it, and
+/// the next kit made here removes it.
+struct KitLedger: Equatable {
+    /// A pending kit whose id could not be read.
+    static let unknown = "?"
+    /// How long the letters stay once the kit's page is left.
+    static let hold: Duration = .seconds(300)
+
+    private(set) var held: HeldKit?
+    private(set) var pending: [String]
+    /// The last kit to go unseen did so because its hold ran out (not because the app closed).
+    private(set) var expired = false
+
+    init(pending: [String] = []) {
+        self.pending = pending
+    }
+
+    private var heldEntry: String? { held.map { $0.id.isEmpty ? Self.unknown : $0.id } }
+
+    private var others: [String] {
+        var rest = pending
+        if let entry = heldEntry, let i = rest.firstIndex(of: entry) { rest.remove(at: i) }
+        return rest
+    }
+
+    /// Unseen kits with a known id: the next kit made here removes them.
+    var unseen: [String] { others.filter { $0 != Self.unknown } }
+
+    /// An unseen kit nobody could name: the page asks the user to check the list, never claims it gone.
+    var unknownUnseen: Bool { others.contains(Self.unknown) }
+
+    mutating func hold(_ kit: HeldKit) {
+        held = kit
+        expired = false
+        pending.append(kit.id.isEmpty ? Self.unknown : kit.id)
+    }
+
+    /// "I saved it": the letters leave memory and nothing marks the kit pending.
+    mutating func saved() {
+        if let entry = heldEntry, let i = pending.firstIndex(of: entry) { pending.remove(at: i) }
+        held = nil
+    }
+
+    /// The hold ran out for `kit`; a newer kit held since stays.
+    mutating func expire(_ kit: HeldKit) {
+        guard held == kit else { return }
+        held = nil
+        expired = true
+    }
+
+    /// A pending kit is removed, or gone from the list: it leaves the ledger, and memory if held.
+    mutating func settle(_ id: String) {
+        if held?.id == id { held = nil }
+        pending.removeAll { $0 == id }
+    }
+
+    /// A pending kit whose row left the list needs no saving and no removing.
+    mutating func follow(_ members: [MemberInfo]) {
+        let ids = Set(members.map(\.id))
+        for id in pending where id != Self.unknown && !ids.contains(id) { settle(id) }
+    }
+
+    /// The user checked the list for a kit nobody could name.
+    mutating func checkedUnknown() {
+        let keep = heldEntry == Self.unknown
+        pending.removeAll { $0 == Self.unknown }
+        if keep { pending.append(Self.unknown) }
+    }
+
+    /// A join or a leave: kits of the old account mean nothing now.
+    mutating func drop() {
+        self = KitLedger()
+    }
+
+    /// The id of the kit just made. The core answers the kit without it, so it
+    /// comes from the lists read before and after, and only when it cannot be
+    /// another's: a kit this device made that the list before did not have,
+    /// and only one such. Anything else stays unknown ("").
+    static func newKitId(before: SyncDevices?, after: SyncDevices?) -> String {
+        guard let before, let after, let me = after.members.first(where: \.thisDevice)?.id else { return "" }
+        let known = Set(before.members.map(\.id))
+        let made = after.members.filter { $0.kit && $0.sponsor == me && !known.contains($0.id) }
+        return made.count == 1 ? made[0].id : ""
+    }
+}
+
+/// When a kit on screen is covered (the OS prompt shows it again).
+enum KitRules {
+    static let mac: Bool = {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }()
+
+    /// Phone and tablet: whenever the app is not in front, as the app switcher
+    /// takes its picture then and another app or the lock screen is up. Mac:
+    /// when the window is hidden or minimized; a window that is only not the
+    /// key one stays readable beside the password manager it is typed into.
+    static func covers(_ phase: ScenePhase, mac: Bool = mac) -> Bool {
+        mac ? phase == .background : phase != .active
+    }
+}

@@ -40,6 +40,8 @@ struct PairingScreen: View {
                     }
                 } else if Self.previewJoined {
                     JoinedState(core: core, stored: true, done: done)
+                } else if sync.keyUnreadable {
+                    KeyUnreadable()
                 } else {
                     form
                 }

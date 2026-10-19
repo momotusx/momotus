@@ -90,10 +90,16 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
     scheme: {}
-  # Pure model tests: decoding of recorded core JSON and applyDiffs. No host app.
+  # Model tests: decoding of recorded core JSON, applyDiffs, the rules, and
+  # the models that run on a real core opened in a temporary directory. No host app.
   MarqueeTests:
     type: bundle.unit-test
     platform: macOS
+    dependencies:
+      - framework: Core/MarqueeCore.xcframework
+        embed: false
+      - sdk: Security.framework
+      - sdk: SystemConfiguration.framework
     sources:
       - path: Tests
         excludes: ["Fixtures/**"]
@@ -117,6 +123,16 @@ targets:
       - path: Marquee/Settings/FindAddonsRules.swift
       - path: Marquee/Core/CoreError.swift
       - path: Marquee/Theme/ArtLoader.swift
+      - path: Core/marquee_core.swift
+      - path: Marquee/Core/CoreClient.swift
+      - path: Marquee/Core/CoreRouter.swift
+      - path: Marquee/Core/DeviceId.swift
+      - path: Marquee/Core/LiveRecord.swift
+      - path: Marquee/App/Launch.swift
+      - path: Marquee/Sync/SyncModel.swift
+      - path: Marquee/Sync/SyncRecord.swift
+      - path: Marquee/Sync/KitLedger.swift
+      - path: Marquee/Sync/Clipboard.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests

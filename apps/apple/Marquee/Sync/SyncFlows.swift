@@ -343,17 +343,24 @@ struct AddDeviceScreen: View {
     }
 }
 
-/// Make a recovery kit, behind the OS prompt: shown once, kept nowhere, and
-/// copied only to this device's clipboard for a minute. Not on a TV.
+/// Make a recovery kit, behind the OS prompt. The model holds its letters
+/// in memory until "I saved it" (five minutes at most once this page is
+/// left); they show right after the kit is made, and again only after the
+/// OS prompt: leaving the app covers them. On screen they are left out of
+/// screenshots, recordings and mirroring. Copied only to this device's
+/// clipboard, for a minute. Not on a TV.
 struct RecoveryKitScreen: View {
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
-    /// The kit lives here only, for as long as the page is open.
-    @State private var kit: String?
-    @State private var busy = false
+    @Environment(\.scenePhase) private var phase
+    /// The held kit may show: just made here, or the OS prompt said it is the owner.
+    @State private var revealed = false
+    @State private var asking = false
     @State private var error: String?
     @State private var copied = false
+
+    private var shown: HeldKit? { revealed ? sync.kits.held : nil }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -362,7 +369,13 @@ struct RecoveryKitScreen: View {
                 #if os(tvOS)
                 Elsewhere(glyph: "key-round", title: W.tvOnly, text: W.tvKit)
                 #else
-                if let kit { shown(kit) } else { ask }
+                if let shown {
+                    kit(shown)
+                } else if sync.kits.held != nil {
+                    waiting
+                } else {
+                    ask
+                }
                 #endif
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -373,10 +386,18 @@ struct RecoveryKitScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
-        .onDisappear { kit = nil }
-        // The kit is not lost on Back: the only way out while it shows (or is being made) is I saved it.
+        .onAppear { sync.kitPage(open: true) }
+        .onDisappear {
+            revealed = false
+            sync.kitPage(open: false)
+        }
+        // Back to the app (from the switcher, another app or the lock screen): the OS prompt again.
+        .onChange(of: phase) { _, now in
+            if KitRules.covers(now) { revealed = false }
+        }
+        // Leaving keeps the kit (the model holds it), but while it shows the way out is I saved it.
         #if !os(macOS)
-        .navigationBarBackButtonHidden(kit != nil || busy)
+        .navigationBarBackButtonHidden(shown != nil)
         #endif
     }
 
@@ -389,64 +410,199 @@ struct RecoveryKitScreen: View {
             Text(W.kitOnce)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
+            if !sync.kits.unseen.isEmpty { Callout(glyph: "triangle-alert", text: sync.kits.expired ? W.kitExpired : W.kitUnseen) }
+            if sync.kits.unknownUnseen { Callout(glyph: "triangle-alert", text: W.kitUnseenUnknown) }
             if let error { Said(tone: .bad, text: error) }
             FlowRow(spacing: Theme.Space.xs) {
-                Button { make() } label: { Label(busy ? W.makingKit : W.makeKit, glyph: "key-round") }
+                Button { make() } label: {
+                    Label(sync.makingKit ? W.makingKit : sync.kits.unseen.isEmpty ? W.makeKit : W.makeNewKit, glyph: "key-round")
+                }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .disabled(sync.makingKit)
+                // Leaving while it is made keeps the kit: the hub then says it waits.
+                Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())
+            }
+        }
+    }
+
+    /// A kit held and not on screen: shown again only after the OS prompt.
+    private var waiting: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Callout(glyph: "key-round", text: W.kitWaiting)
+            Text(W.kitAskShow)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let error { Said(tone: .bad, text: error) }
+            FlowRow(spacing: Theme.Space.xs) {
+                Button { reveal() } label: { Label(W.showKitAgain, glyph: "key-round") }
                     .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled(busy)
+                    .disabled(asking)
                 Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())
             }
         }
     }
 
     private func make() {
-        guard !busy else { return }
-        busy = true
+        guard !sync.makingKit else { return }
         error = nil
+        copied = false
         Task {
-            defer { busy = false }
             do {
-                kit = try await sync.createRecoveryKit()
+                try await sync.createRecoveryKit()
+                // Just confirmed by the prompt that made it; not while the app is away.
+                if !KitRules.covers(phase) { revealed = true }
             } catch {
                 self.error = SyncProblem(error, action: .kit).words
             }
         }
     }
 
-    private func shown(_ kit: String) -> some View {
+    private func reveal() {
+        guard !asking else { return }
+        asking = true
+        error = nil
+        Task {
+            defer { asking = false }
+            do {
+                try await sync.confirmShowKit()
+                if !KitRules.covers(phase) { revealed = true }
+            } catch {
+                self.error = SyncProblem(error, action: .kit).words
+            }
+        }
+    }
+
+    private func kit(_ held: HeldKit) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             Text(caps: W.kitShown)
                 .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
-            Text(kit)
-                .font(.mono(Theme.type.title3))
-                .foregroundStyle(Theme.Palette.text)
-                .selectableText()
-                .padding(Theme.Space.s)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: Theme.Radius.s).fill(Theme.Palette.surface))
-                // The app switcher's picture of this page shows no kit.
-                .hiddenWhenWatched()
-                .accessibilityLabel("\(W.kitShown): \(kit.map(String.init).joined(separator: " "))")
+            if held.id.isEmpty { Said(tone: .warn, text: W.kitIdUnknown) }
+            // Not selectable: the system's Copy would put it on every device of the Apple
+            // account with no expiry. The page's own Copy is the only way out.
+            CaptureProof {
+                Text(held.kit)
+                    .font(.mono(Theme.type.title3))
+                    .foregroundStyle(Theme.Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(Theme.Space.s)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.s).fill(Theme.Palette.surface))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(W.kitShown): \(held.kit.map(String.init).joined(separator: " "))")
             Callout(glyph: "triangle-alert", text: W.kitWarning)
             Text(copied ? W.kitCopied : W.copyKitHelp)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             FlowRow(spacing: Theme.Space.xs) {
-                Button { copied = Clipboard.copySecret(kit) } label: { Label(copied ? W.copied : W.copyKit, glyph: copied ? "check" : "copy") }
+                Button { copied = Clipboard.copySecret(held.kit) } label: { Label(copied ? W.copied : W.copyKit, glyph: copied ? "check" : "copy") }
                     .buttonStyle(PillButtonStyle())
-                Button { dismiss() } label: { Label(W.savedKit, glyph: "check") }
+                Button {
+                    sync.kitSaved()
+                    dismiss()
+                } label: { Label(W.savedKit, glyph: "check") }
                     .buttonStyle(PillButtonStyle(prominent: true))
             }
         }
     }
 }
 
+/// Content left out of screenshots, screen recordings and mirroring.
+///
+/// iOS: drawn inside the layer a secure text field draws its text in, which
+/// the system blanks in every capture. If this iOS has no such layer the
+/// content does not show at all (the kit's Copy still works).
+/// macOS: while it is on screen its window is left out of screen capture and
+/// recording (`sharingType` none).
+struct CaptureProof<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        #if os(iOS)
+        SecureLayer(content: content)
+        #elseif os(macOS)
+        content.background(UnsharedWindow())
+        #else
+        content
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct SecureLayer<Content: View>: UIViewRepresentable {
+    let content: Content
+
+    final class Coordinator {
+        var host: UIHostingController<Content>?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UIView {
+        let field = UITextField()
+        field.isSecureTextEntry = true
+        // The field's own canvas: the layer the system leaves out of captures.
+        guard let canvas = field.subviews.first else {
+            coreLog.error("kit: no secure layer on this system; the kit stays hidden")
+            return UIView()
+        }
+        canvas.removeFromSuperview()
+        canvas.subviews.forEach { $0.removeFromSuperview() }
+        canvas.isUserInteractionEnabled = false
+        let host = UIHostingController(rootView: content)
+        host.view.backgroundColor = .clear
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        canvas.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: canvas.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: canvas.trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: canvas.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: canvas.bottomAnchor),
+        ])
+        context.coordinator.host = host
+        return canvas
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.host?.rootView = content
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIView, context: Context) -> CGSize? {
+        guard let host = context.coordinator.host else { return .zero }
+        let width = proposal.width ?? UIView.layoutFittingExpandedSize.width
+        return CGSize(width: width, height: host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+    }
+}
+#endif
+
+#if os(macOS)
+/// Leaves its window out of screen capture and recording while it is in it.
+private struct UnsharedWindow: NSViewRepresentable {
+    final class Probe: NSView {
+        private weak var held: NSWindow?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            held?.sharingType = .readOnly
+            held = window
+            window?.sharingType = .none
+        }
+    }
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ view: Probe, context: Context) {}
+}
+#endif
+
 extension View {
-    /// A recovery kit on screen: blurred while the app is not in front (its
-    /// picture in the app switcher) and while the screen is recorded or mirrored.
+    /// A kit typed in and shown: blurred while the app is not in front (its
+    /// picture in the app switcher; on a Mac, a hidden window) and while the
+    /// screen is recorded or mirrored.
     func hiddenWhenWatched(_ secret: Bool = true) -> some View {
         modifier(HiddenWhenWatched(secret: secret))
     }
@@ -463,52 +619,12 @@ private struct HiddenWhenWatched: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .blur(radius: secret && (phase != .active || captured) ? 16 : 0)
+            .blur(radius: secret && (KitRules.covers(phase) || captured) ? 16 : 0)
             #if os(iOS)
             .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
                 captured = UIScreen.main.isCaptured
             }
             #endif
-    }
-}
-
-/// The clipboard for a secret (a recovery kit) or a pairing code: this device
-/// only, and gone after a while.
-enum Clipboard {
-    /// How long a copied kit stays.
-    static let secretLifetime: TimeInterval = 60
-
-    /// Copies a kit for a minute, this device only (no Universal
-    /// Clipboard). True when it was copied.
-    @MainActor @discardableResult
-    static func copySecret(_ text: String) -> Bool {
-        copy(text, lifetime: secretLifetime, localOnly: true)
-    }
-
-    /// A pairing code may cross to the user's other device (Universal
-    /// Clipboard): it holds public keys only and expires with the code.
-    @MainActor @discardableResult
-    static func copy(_ text: String, lifetime: TimeInterval, localOnly: Bool) -> Bool {
-        #if os(iOS)
-        UIPasteboard.general.setItems([[UTType.plainText.identifier: text]], options: [
-            .localOnly: localOnly, .expirationDate: Date().addingTimeInterval(lifetime),
-        ])
-        return true
-        #elseif os(macOS)
-        let board = NSPasteboard.general
-        board.clearContents()
-        // Marked transient and concealed, which clipboard managers that honour it skip; cleared after the lifetime.
-        board.declareTypes([.string, NSPasteboard.PasteboardType("org.nspasteboard.TransientType"), NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")], owner: nil)
-        board.setString(text, forType: .string)
-        let change = board.changeCount
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(lifetime))
-            if board.changeCount == change { board.clearContents() }
-        }
-        return true
-        #else
-        return false
-        #endif
     }
 }
 
@@ -593,8 +709,9 @@ struct ReportLostScreen: View {
                 ForEach(rows) { row in tick(row) }
             }
         }
-        let kits = SyncRules.kitsGoing(previewKits: preview.kits, members: members, drop: drop)
-        if !kits.isEmpty { Callout(glyph: "key-round", text: W.lostKits(kits.count)) }
+        let kits = SyncRules.kitsGoing(previewKits: preview.kits, members: members, keep: keep)
+        if !kits.going.isEmpty { Callout(glyph: "key-round", text: W.lostKits(kits.going.count)) }
+        if !kits.unsure.isEmpty { Callout(glyph: "triangle-alert", text: W.lostKitsUnsure(kits.unsure.count)) }
         if let error { Said(tone: .bad, text: error) }
         FlowRow(spacing: Theme.Space.xs) {
             Button {
@@ -631,7 +748,7 @@ struct ReportLostScreen: View {
             .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         }
         .buttonStyle(.row)
-        .accessibilityLabel(row.name)
+        .accessibilityLabel(SyncRules.spokenRow(row.name, row.detail))
         .accessibilityValue(going ? "Removed with it" : "Kept")
         .accessibilityAddTraits(going ? .isSelected : [])
     }
@@ -911,7 +1028,7 @@ struct ForkReviewScreen: View {
                 .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
             }
             .buttonStyle(.row)
-            .accessibilityLabel(name)
+            .accessibilityLabel(SyncRules.spokenRow(name, detail))
             .accessibilityValue(on ? (kits > 0 ? "Removed when you continue. \(W.goesWith(kits))" : "Removed when you continue") : "Kept")
             .accessibilityAddTraits(on ? .isSelected : [])
         }
