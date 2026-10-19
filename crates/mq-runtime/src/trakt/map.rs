@@ -2,7 +2,7 @@
 //! movies by IMDb id, episodes by the TVDB id the show's meta gives each
 //! video. Anything else is listed as unmapped, with the reason.
 
-use crate::Core;
+use crate::{Core, TvdbMiss};
 use mq_library::TrackerKey;
 use mq_library::hlc::now_ms;
 use serde_json::{Value, json};
@@ -10,6 +10,18 @@ use std::collections::HashMap;
 
 /// Tracker state names of unmapped items start with this.
 pub(super) const UNMAPPED: &str = "unmapped:";
+/// Tracker state names of items whose details failed start with this.
+const FAILING: &str = "failing:";
+/// A failure that lasts gives up: after this many failed looks (looks
+/// closer than `LOOK_GAP_MS` count once) spread over at least a day. Rounds
+/// run every 5 minutes in the foreground, so a count alone would give up
+/// within half an hour of an addon outage; the day keeps any outage shorter
+/// than that from dropping a write, and four separate failures across it
+/// say the details are not coming, even for an app opened only now and
+/// then.
+const FAILED_LOOKS: u64 = 4;
+const FAILING_FOR_MS: i64 = 24 * 60 * 60 * 1000;
+const LOOK_GAP_MS: i64 = 60 * 1000;
 
 /// What Trakt calls a video.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,12 +73,72 @@ impl TraktIds {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Miss {
     /// Trakt cannot name it: no IMDb id, a special, no TVDB id in the
-    /// show's details, or a show Trakt matched to another title. Listed as
-    /// unmapped; its writes are dropped.
+    /// show's details, no addon with the show, details failing for a day,
+    /// or a show Trakt matched to another title. Listed as unmapped; its
+    /// writes are dropped.
     Permanent(String),
     /// The show's details could not be read now: tried again later, never
-    /// listed and never remembered.
+    /// listed.
     Transient(String),
+}
+
+/// The show's TVDB ids, or why not. A failure is transient until it has
+/// lasted (`FAILED_LOOKS` over a day); an addon saying it has no such
+/// show is permanent at once.
+pub(super) async fn show_ids(
+    core: &Core,
+    key: TrackerKey<'_>,
+    show: &str,
+) -> Result<HashMap<String, u64>, Miss> {
+    match core.episode_tvdb_ids(show).await {
+        Ok(ids) => {
+            succeeded(core, key, show);
+            Ok(ids)
+        }
+        Err(TvdbMiss::Unknown(reason)) => Err(Miss::Permanent(reason)),
+        Err(TvdbMiss::Unavailable(reason)) => Err(failed(core, key, show, reason)),
+    }
+}
+
+/// A read for `item` (a show's details, a title's runtime) worked.
+pub(super) fn succeeded(core: &Core, key: TrackerKey<'_>, item: &str) {
+    let name = format!("{FAILING}{item}");
+    if core
+        .library()
+        .tracker_state(key, &name)
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        let _ = core.library().delete_tracker_state(key, &name);
+    }
+}
+
+/// A read for `item` failed: counted, and permanent once it has lasted.
+pub(super) fn failed(core: &Core, key: TrackerKey<'_>, item: &str, reason: String) -> Miss {
+    let name = format!("{FAILING}{item}");
+    let name = name.as_str();
+    let library = core.library();
+    let now = now_ms() as i64;
+    let stored: Value = library
+        .tracker_state(key, name)
+        .ok()
+        .flatten()
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default();
+    let first = stored["first"].as_i64().unwrap_or(now);
+    let last = stored["last"].as_i64().unwrap_or(i64::MIN / 2);
+    let mut looks = stored["looks"].as_u64().unwrap_or(0);
+    if now - last >= LOOK_GAP_MS {
+        looks += 1;
+        let value = json!({"first": first, "last": now, "looks": looks}).to_string();
+        let _ = library.set_tracker_state(key, name, &value);
+    }
+    if looks >= FAILED_LOOKS && now - first >= FAILING_FOR_MS {
+        Miss::Permanent(format!("{reason}, for a day"))
+    } else {
+        Miss::Transient(reason)
+    }
 }
 
 /// The Trakt ids of one of the library's videos, for this account.
@@ -91,10 +163,7 @@ pub(super) async fn ids(
     if video_id.split(':').nth(1) == Some("0") {
         return Err(Miss::Permanent("a special (season 0)".into()));
     }
-    let tvdb = core
-        .episode_tvdb_ids(item_id)
-        .await
-        .map_err(|_| Miss::Transient("the show's details are not available".into()))?;
+    let tvdb = show_ids(core, key, item_id).await?;
     match tvdb.get(video_id) {
         Some(&tvdb) => Ok(TraktIds::Episode {
             tvdb,
@@ -126,22 +195,24 @@ pub(super) struct Unplaced {
 pub(super) enum PlaceMiss {
     /// Listed as unmapped.
     Permanent(Unplaced),
-    /// The show's details could not be read: the round stops before any
-    /// cursor or checkpoint moves.
+    /// The show's details could not be read: the row is left for a later
+    /// round, and nothing that would pass it (a cursor, the show's
+    /// checkpoint) moves; other rows go on.
     Transient(String),
 }
 
-/// Places pulled rows, reading each show's details once per round (only
-/// details that were read are kept).
+/// Places pulled rows, looking at each show's details once per round.
 pub(super) struct Mapper<'a> {
     core: &'a Core,
-    shows: HashMap<String, HashMap<u64, String>>,
+    key: TrackerKey<'a>,
+    shows: HashMap<String, Result<HashMap<u64, String>, Miss>>,
 }
 
 impl<'a> Mapper<'a> {
-    pub(super) fn new(core: &'a Core) -> Self {
+    pub(super) fn new(core: &'a Core, key: TrackerKey<'a>) -> Self {
         Self {
             core,
+            key,
             shows: HashMap::new(),
         }
     }
@@ -163,7 +234,7 @@ impl<'a> Mapper<'a> {
         }
         let (show, episode) = (&row["show"], &row["episode"]);
         let name = show["title"].as_str().unwrap_or_default().to_owned();
-        let permanent = |reason| Err(PlaceMiss::Permanent(unplaced(show, &name, reason)));
+        let permanent = |reason: &str| Err(PlaceMiss::Permanent(unplaced(show, &name, reason)));
         let Some(imdb) = show["ids"]["imdb"].as_str().filter(|i| i.starts_with("tt")) else {
             return permanent("no IMDb id");
         };
@@ -174,17 +245,19 @@ impl<'a> Mapper<'a> {
             return permanent("no TVDB episode id");
         };
         if !self.shows.contains_key(imdb) {
-            // Paced: one show's details at a time, then from the cache. A
-            // failed read is not kept: the round stops, and tries again.
-            let Ok(ids) = self.core.episode_tvdb_ids(imdb).await else {
-                return Err(PlaceMiss::Transient(
-                    "the show's details are not available".into(),
-                ));
-            };
-            let by_tvdb = ids.into_iter().map(|(video, tvdb)| (tvdb, video)).collect();
+            // Paced: one show's details at a time, then from this round's
+            // memory (a failure too, so its other rows skip it).
+            let ids = show_ids(self.core, self.key, imdb).await;
+            let by_tvdb =
+                ids.map(|ids| ids.into_iter().map(|(video, tvdb)| (tvdb, video)).collect());
             self.shows.insert(imdb.to_owned(), by_tvdb);
         }
-        match self.shows[imdb].get(&tvdb) {
+        let by_tvdb = match &self.shows[imdb] {
+            Ok(by_tvdb) => by_tvdb,
+            Err(Miss::Permanent(reason)) => return permanent(reason.as_str()),
+            Err(Miss::Transient(reason)) => return Err(PlaceMiss::Transient(reason.clone())),
+        };
+        match by_tvdb.get(&tvdb) {
             Some(video) => Ok(Mapped {
                 item_id: imdb.to_owned(),
                 video_id: video.clone(),

@@ -11,7 +11,7 @@ pub mod segments;
 mod trakt;
 pub mod views;
 
-pub use crate::core::{Core, CoreConfig, CoreError};
+pub use crate::core::{Core, CoreConfig, CoreError, TvdbMiss};
 pub use crate::debrid::{
     AccountState, DebridAccount, DebridCredential, DebridLoginSnapshot, DebridLoginView,
     DebridRecord, DebridSnapshot, DebridTombstone, DebridView, RestoreAnswer,

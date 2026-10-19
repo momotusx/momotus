@@ -63,6 +63,10 @@ struct Fake {
     stop_action: Arc<Mutex<Option<String>>>,
     /// The meta addon answers 503.
     meta_down: Arc<std::sync::atomic::AtomicBool>,
+    /// The meta addon's status for one title, by id.
+    meta_status: Arc<Mutex<HashMap<String, u16>>>,
+    /// The meta addon's videos carry no TVDB ids.
+    meta_no_tvdb: Arc<std::sync::atomic::AtomicBool>,
     seen: Arc<Mutex<Vec<Req>>>,
 }
 
@@ -78,6 +82,8 @@ impl Fake {
             shows: Arc::new(Mutex::new(shows)),
             stop_action: Arc::default(),
             meta_down: Arc::default(),
+            meta_status: Arc::default(),
+            meta_no_tvdb: Arc::default(),
             seen: Arc::default(),
         }
     }
@@ -148,6 +154,29 @@ impl Fake {
         drop(queued);
         if req.path.starts_with("/meta/") && self.meta_down.load(Ordering::SeqCst) {
             return reply(503, json!({}));
+        }
+        let status = self
+            .meta_status
+            .lock()
+            .unwrap()
+            .iter()
+            .find_map(|(id, status)| {
+                (req.path.starts_with("/meta/") && req.path.contains(&format!("/{id}.json")))
+                    .then_some(*status)
+            });
+        if let Some(status) = status {
+            return reply(status, json!({}));
+        }
+        if req.path.starts_with("/meta/") && self.meta_no_tvdb.load(Ordering::SeqCst) {
+            let mut answer = meta(&req.path);
+            for video in answer["meta"]["videos"]
+                .as_array_mut()
+                .into_iter()
+                .flatten()
+            {
+                video.as_object_mut().unwrap().remove("tvdb_id");
+            }
+            return reply(200, answer);
         }
         match (req.method.as_str(), req.path.as_str()) {
             ("GET", "/manifest.json") => reply(
@@ -1431,7 +1460,9 @@ async fn a_first_import_waits_while_the_shows_details_are_down() {
         vec![episode_row(1, t), episode_row(2, t)],
     );
     core.set_trakt(Some(record("a-meta-first"))).await.unwrap();
-    assert!(core.trakt_sync().await.is_err());
+    // The round goes on past the show and says why it waits.
+    core.trakt_sync().await.unwrap();
+    assert!(status(&core).last_error.is_some());
     assert_eq!(
         state(&core, "a-meta-first", "show:77"),
         None,
@@ -2019,4 +2050,254 @@ async fn a_profile_deleted_elsewhere_stops_its_rounds() {
         .filter(|r| r.token == "kid2-access" && r.at > deleted)
         .count();
     assert_eq!(late, 0, "no call for a profile removed elsewhere");
+}
+
+#[tokio::test]
+async fn a_session_started_under_another_account_holds_nothing_for_the_new_one() {
+    let (core, fake) = signed_in("a-held-a").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(50), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    // B signs in on this device while A's session plays to its end.
+    core.set_trakt(Some(record_as("a-held-b", "b-access", 2)))
+        .await
+        .unwrap();
+    view.report_progress(at(95), MINUTES, false);
+    // Closing saves the last position: the end mark, and A's stop.
+    drop(view);
+    until("the end mark", || watched(&core, "tt100:1:1")).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    core.trakt_sync().await.unwrap();
+    assert!(
+        fake.seen("POST", "/scrobble/stop").is_empty(),
+        "A's stop is refused before it goes"
+    );
+    assert_eq!(
+        pending(&core, "a-held-b"),
+        0,
+        "nothing of A's in B's outbox"
+    );
+    assert!(
+        history_writes(&fake).is_empty(),
+        "B gets nothing: {:?}",
+        history_writes(&fake)
+    );
+}
+
+/// A watched show of `id` (Trakt id `trakt`) and one row of its history.
+fn other_show(id: &str, trakt: u64, at_ms: i64) -> (Value, Value) {
+    let ids = json!({"imdb": id, "trakt": trakt});
+    (
+        json!({"last_updated_at": "2026-10-01T00:00:00.000Z",
+               "show": {"title": id, "ids": ids}}),
+        json!({"watched_at": iso(at_ms), "type": "episode",
+               "episode": {"season": 1, "number": 1, "ids": {"tvdb": 1001}},
+               "show": {"title": id, "ids": ids}}),
+    )
+}
+
+fn unmapped_ids(core: &Core) -> Vec<String> {
+    status(core)
+        .unmapped
+        .into_iter()
+        .map(|u| u.item_id)
+        .collect()
+}
+
+#[tokio::test]
+async fn a_show_whose_details_never_load_never_holds_the_others() {
+    let (core, fake) = setup("a-stuck").await;
+    // tt300's details fail every time; no addon has tt400.
+    fake.meta_status
+        .lock()
+        .unwrap()
+        .extend([("tt300".to_owned(), 503), ("tt400".to_owned(), 404)]);
+    let t = now() - 86_400_000;
+    let (stuck, stuck_row) = other_show("tt300", 76, t);
+    let (unknown, unknown_row) = other_show("tt400", 78, t);
+    let show = json!({"last_updated_at": "2026-10-01T00:00:00.000Z",
+                      "show": {"title": "Show", "ids": {"trakt": 77, "imdb": SHOW}}});
+    fake.list("/sync/watched/shows", vec![stuck, show, unknown]);
+    fake.list("/sync/history/shows/76", vec![stuck_row]);
+    fake.list(
+        "/sync/history/shows/77",
+        vec![episode_row(1, t), episode_row(2, t)],
+    );
+    fake.list("/sync/history/shows/78", vec![unknown_row]);
+    core.set_trakt(Some(record("a-stuck"))).await.unwrap();
+    core.trakt_sync().await.unwrap();
+    // The shows after the stuck one came in.
+    assert!(watched(&core, "tt100:1:1") && watched(&core, "tt100:1:2"));
+    assert!(state(&core, "a-stuck", "show:77").is_some());
+    // A show no addon has is listed at once.
+    assert!(state(&core, "a-stuck", "show:78").is_some());
+    assert_eq!(unmapped_ids(&core), ["tt400"]);
+    // The stuck one waits: not listed, its checkpoint where it was.
+    assert_eq!(state(&core, "a-stuck", "show:76"), None);
+    // Failing on separate looks for a day, it is given up and listed.
+    let failing = json!({"first": now() - 2 * 86_400_000, "last": now() - 3_600_000,
+                         "looks": 3});
+    core.library()
+        .set_tracker_state(key("a-stuck"), "failing:tt300", &failing.to_string())
+        .unwrap();
+    core.trakt_sync().await.unwrap();
+    assert!(
+        state(&core, "a-stuck", "show:76").is_some(),
+        "checkpointed once given up"
+    );
+    assert!(unmapped_ids(&core).contains(&"tt300".to_owned()));
+}
+
+#[tokio::test]
+async fn a_history_row_left_for_later_holds_the_cursor_before_it() {
+    let (core, fake) = signed_in("a-left").await;
+    fake.meta_status.lock().unwrap().insert("tt300".into(), 503);
+    let (old, newer) = (now() - 3 * 86_400_000, now() - 86_400_000);
+    let (_, stuck_row) = other_show("tt300", 76, old);
+    let start = iso(now() - 5 * 86_400_000)[..10].to_owned();
+    core.library()
+        .set_tracker_state(key("a-left"), "history_day", &start)
+        .unwrap();
+    fake.list("/sync/history", vec![stuck_row, episode_row(2, newer)]);
+    *fake.activities.lock().unwrap() = activities(&iso(now()));
+    core.trakt_sync().await.unwrap();
+    assert!(watched(&core, "tt100:1:2"), "the other row came in");
+    assert_eq!(
+        state(&core, "a-left", "history_day").as_deref(),
+        Some(&iso(old)[..10]),
+        "not past the row left for later"
+    );
+}
+
+#[tokio::test]
+async fn details_without_tvdb_ids_from_a_fallback_wait_for_the_first_addon() {
+    let (core, fake) = signed_in("a-partial").await;
+    let fallback = Fake::new("a-partial");
+    fallback.meta_no_tvdb.store(true, Ordering::SeqCst);
+    let base = fallback.start().await;
+    core.install_addon(&format!("{base}/manifest.json"))
+        .await
+        .unwrap();
+    fake.meta_down.store(true, Ordering::SeqCst);
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    core.trakt_sync().await.unwrap();
+    assert!(history_writes(&fake).is_empty());
+    assert_eq!(pending(&core, "a-partial"), 1, "kept, not dropped");
+    assert!(status(&core).unmapped.is_empty(), "never listed");
+    fake.meta_down.store(false, Ordering::SeqCst);
+    due(&core, "a-partial");
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        history_writes(&fake),
+        [("/sync/history".to_owned(), vec![1001])]
+    );
+}
+
+#[tokio::test]
+async fn a_failed_profile_read_is_not_a_deletion() {
+    let fake = Fake::new("a-read");
+    let base = fake.start().await;
+    let dir = Dir::new("read");
+    let core = dir.core();
+    core.set_trakt_config(Some(config(&base)));
+    core.set_trakt(Some(record("a-read"))).await.unwrap();
+    core.trakt_sync().await.unwrap();
+    let db = rusqlite::Connection::open(dir.0.join("library.sqlite")).unwrap();
+    db.execute_batch(
+        "ALTER TABLE profiles RENAME TO profiles_off;
+         ALTER TABLE profile_gone RENAME TO profile_gone_off;",
+    )
+    .unwrap();
+    core.trakt_foreground();
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let user = status(&core).user;
+    db.execute_batch(
+        "ALTER TABLE profiles_off RENAME TO profiles;
+         ALTER TABLE profile_gone_off RENAME TO profile_gone;",
+    )
+    .unwrap();
+    assert_eq!(user.as_deref(), Some("tester"), "the tokens stayed");
+    // And the rounds go on once the library reads again.
+    let before = fake.seen("GET", "/sync/last_activities").len();
+    core.trakt_sync().await.unwrap();
+    assert!(fake.seen("GET", "/sync/last_activities").len() > before);
+}
+
+#[tokio::test]
+async fn a_resume_point_whose_runtime_fails_is_read_again() {
+    let (core, fake) = signed_in("a-resume").await;
+    fake.meta_status.lock().unwrap().insert(MOVIE.into(), 503);
+    let mut item = movie_row(MOVIE, now());
+    item["progress"] = json!(40.0);
+    item["paused_at"] = json!(iso(now()));
+    fake.list("/sync/playback", vec![item]);
+    let moved = activities(&iso(now()));
+    *fake.activities.lock().unwrap() = moved.clone();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(core.library().progress("p", MOVIE).unwrap(), None);
+    let stored: Option<Value> =
+        state(&core, "a-resume", "activities").map(|s| serde_json::from_str(&s).unwrap());
+    assert_ne!(stored, Some(moved), "the activities did not pass it");
+    fake.meta_status.lock().unwrap().clear();
+    core.trakt_sync().await.unwrap();
+    // 97 percent of the meta's 100 minutes, at 40 percent.
+    assert_eq!(
+        core.library().progress("p", MOVIE).unwrap(),
+        Some((2_328_000, 6_000_000))
+    );
+}
+
+#[tokio::test]
+async fn a_profile_deleted_elsewhere_stops_its_scrobbles() {
+    let (core, fake) = signed_in("a-owner4").await;
+    let owner = core.for_profile("default");
+    let kid = owner.create_profile("Kid", "fox").unwrap();
+    let kid_core = core.for_profile(&kid);
+    kid_core
+        .set_trakt(Some(record_as("a-kid4", "kid4-access", 1)))
+        .await
+        .unwrap();
+    fake.wait_for("the kid's round", |f| {
+        f.seen("GET", "/sync/last_activities")
+            .iter()
+            .any(|r| r.token == "kid4-access")
+    })
+    .await;
+    kid_core.trakt_sync().await.unwrap();
+    let movie = PlayTarget {
+        kind: "movie".into(),
+        item_id: MOVIE.into(),
+        video_id: MOVIE.into(),
+        name: Some("Film".into()),
+        poster: None,
+        season: None,
+        episode: None,
+    };
+    let view = PlaybackView::open(&kid_core, Vec::new(), movie);
+    view.report_progress(at(10), MINUTES, false);
+    fake.wait_for("the kid's start", |f| {
+        f.seen("POST", "/scrobble/start")
+            .iter()
+            .any(|r| r.token == "kid4-access")
+    })
+    .await;
+    // Sync removes the profile while it plays; the player goes on.
+    core.library().delete_profile(&kid, core.clock()).unwrap();
+    let deleted = std::time::Instant::now();
+    view.report_progress(at(11), MINUTES, true);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let late: Vec<String> = fake
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|r| r.token == "kid4-access" && r.at > deleted)
+        .map(|r| r.path.clone())
+        .collect();
+    assert!(
+        late.is_empty(),
+        "no call for a profile removed elsewhere: {late:?}"
+    );
+    drop(view);
 }

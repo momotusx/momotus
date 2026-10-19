@@ -6,7 +6,7 @@
 //! account's tokens.
 
 use super::map::{self, Miss, TraktIds};
-use super::{ACCOUNT_SETTING, Conn, TRACKER};
+use super::{ACCOUNT_SETTING, Conn, TRACKER, lock};
 use crate::Core;
 use crate::core::WeakCore;
 use mq_library::hlc::now_ms;
@@ -16,8 +16,8 @@ use mq_tracking::trakt::{Answer, AuthError, Bound};
 use serde::Serialize;
 use serde_json::json;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
@@ -33,6 +33,9 @@ const STOP_TRIES: u32 = 4;
 const PLAY_PERCENT: f64 = 80.0;
 /// Under this percent a closed session sends nothing.
 const MIN_PERCENT: f64 = 1.0;
+/// Trakt's `Retry-After` is honored up to this, and a failing stop holds
+/// newer sessions no longer than this before it is given up.
+const RETRY_AFTER_CAP: Duration = Duration::from_secs(60 * 60);
 
 /// Trakt's side of a playback (`PlaybackSnapshot.trakt`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -74,6 +77,7 @@ pub(crate) enum Event {
         since: String,
         /// The connection held when the view opened, if any.
         bound: Option<Bound>,
+        owner: Owner,
         held: Arc<AtomicBool>,
         report: Report,
     },
@@ -89,11 +93,15 @@ pub(crate) enum Event {
     Background(oneshot::Sender<()>),
 }
 
+/// The account a session is bound to, shared by the view and the worker.
+type Owner = Arc<Mutex<Option<String>>>;
+
 /// A playback view's end of its session. Dropping it closes the session:
 /// the worker sends the stop.
 pub(crate) struct Scrobble {
     id: u64,
     session: String,
+    owner: Owner,
     held: Arc<AtomicBool>,
     events: UnboundedSender<Event>,
 }
@@ -113,15 +121,19 @@ impl Scrobble {
     }
 
     /// The playback reached its end: the account its session holds one
-    /// write for, when it holds none yet and Trakt is connected. The caller
+    /// write for, when it holds none yet. That is the session's own
+    /// account, and only while the library still keeps that account's work:
+    /// a session started under another account holds nothing. The caller
     /// writes it with the mark, in one transaction (`set_watched_holding`),
     /// then calls `held`.
     pub(crate) fn to_hold(&self, core: &Core) -> Option<String> {
         if self.held.load(Ordering::SeqCst) {
             return None;
         }
-        let account = core.library().tracker_account(core.profile(), TRACKER);
-        account.ok().flatten().map(|(account, _)| account)
+        let owner = lock(&self.owner).clone()?;
+        let current = core.library().tracker_account(core.profile(), TRACKER);
+        let current = current.ok().flatten().map(|(account, _)| account);
+        (current.as_deref() == Some(owner.as_str())).then_some(owner)
     }
 
     /// The write `to_hold` named, for `set_watched_holding`.
@@ -174,18 +186,21 @@ impl Core {
         let id = trakt.sessions.fetch_add(1, Ordering::SeqCst) + 1;
         let session = format!("{}-{id}", trakt.boot);
         let held = Arc::new(AtomicBool::new(false));
+        let owner: Owner = Arc::new(Mutex::new(bound.as_ref().map(|b| b.account.clone())));
         let _ = events.send(Event::Open {
             id,
             target,
             session: session.clone(),
             since: self.hlc(),
             bound,
+            owner: owner.clone(),
             held: held.clone(),
             report,
         });
         Some(Scrobble {
             id,
             session,
+            owner,
             held,
             events,
         })
@@ -216,6 +231,8 @@ struct Sess {
     /// The connection its calls use: the one at open, else the first one
     /// seen. Never another.
     bound: Option<Bound>,
+    /// `bound`'s account, for the view's held write.
+    owner: Owner,
     percent: f64,
     want: Want,
     sent: Sent,
@@ -226,6 +243,8 @@ struct Sess {
     /// After a failed send, nothing goes before this (backoff, or Trakt's
     /// `Retry-After`).
     not_before: Option<Instant>,
+    /// When its stop first failed.
+    stop_failing_since: Option<Instant>,
 }
 
 /// The profile's worker: folds every queued event, then sends what the
@@ -277,6 +296,7 @@ fn fold(sessions: &mut BTreeMap<u64, Sess>, waiting: &mut Vec<oneshot::Sender<()
             session,
             since,
             bound,
+            owner,
             held,
             report,
         } => {
@@ -289,6 +309,7 @@ fn fold(sessions: &mut BTreeMap<u64, Sess>, waiting: &mut Vec<oneshot::Sender<()
                     held,
                     since,
                     bound,
+                    owner,
                     percent: 0.0,
                     want: Want::Nothing,
                     sent: Sent::Nothing,
@@ -296,6 +317,7 @@ fn fold(sessions: &mut BTreeMap<u64, Sess>, waiting: &mut Vec<oneshot::Sender<()
                     ids: None,
                     tries: 0,
                     not_before: None,
+                    stop_failing_since: None,
                 },
             );
         }
@@ -361,7 +383,7 @@ fn read(answer: Result<Answer, AuthError>) -> Reply {
         Ok(Answer::Transient {
             reason,
             retry_after,
-        }) => Reply::Transient(reason, retry_after),
+        }) => Reply::Transient(reason, retry_after.map(|after| after.min(RETRY_AFTER_CAP))),
         Err(AuthError::Transient(reason)) => Reply::Transient(reason, None),
         Err(_) => Reply::Off,
     }
@@ -372,6 +394,11 @@ fn read(answer: Result<Answer, AuthError>) -> Reply {
 /// retry, newer sessions send nothing.
 async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) -> Option<Instant> {
     let trakt = core.trakt();
+    if super::gone(core) {
+        // Deleted by sync while it played: nothing more goes out for it.
+        trakt.forget(core.profile());
+        return None;
+    }
     wait_for_record(core, conn).await;
     let current = conn.auth.bound().await;
     let (api, _) = trakt.api()?;
@@ -388,8 +415,9 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
     let mut stopped_any = false;
     for id in ids {
         let s = sessions.get_mut(&id).expect("listed");
-        if s.bound.is_none() {
+        if s.bound.is_none() && current.is_some() {
             s.bound = current.clone();
+            *lock(&s.owner) = s.bound.as_ref().map(|b| b.account.clone());
         }
         let Some(bound) = s.bound.clone() else {
             // Never connected: nothing to send; a close ends it.
@@ -594,8 +622,8 @@ fn stopped(
         Reply::Transient(reason, after) => {
             conn.failed(&reason);
             s.tries += 1;
-            if s.tries < STOP_TRIES {
-                let wait = backoff(s.tries).max(after.unwrap_or_default());
+            let failing_since = *s.stop_failing_since.get_or_insert_with(Instant::now);
+            if let Some(wait) = stop_wait(s.tries, after, failing_since.elapsed()) {
                 s.not_before = Some(Instant::now() + wait);
                 return false;
             }
@@ -610,6 +638,17 @@ fn stopped(
             true
         }
     }
+}
+
+/// When a failed stop is tried again (`None`: given up as unanswered):
+/// after its backoff or Trakt's `Retry-After`, and never later than
+/// `RETRY_AFTER_CAP` after its first failure, since newer sessions wait
+/// for it.
+fn stop_wait(tries: u32, after: Option<Duration>, failing_for: Duration) -> Option<Duration> {
+    let left = RETRY_AFTER_CAP
+        .checked_sub(failing_for)
+        .filter(|left| !left.is_zero())?;
+    (tries < STOP_TRIES).then(|| backoff(tries).max(after.unwrap_or_default()).min(left))
 }
 
 /// The session is over: its held write goes (`delivered`: Trakt has the
@@ -663,4 +702,33 @@ fn backoff(tries: u32) -> Duration {
 fn earliest(current: Option<Instant>, wait: Duration) -> Option<Instant> {
     let at = Instant::now() + wait;
     Some(current.map_or(at, |c| c.min(at)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_after_is_capped_and_a_stuck_stop_gives_up() {
+        let hours = |h: u64| Duration::from_secs(h * 60 * 60);
+        let answer = Ok(Answer::Transient {
+            reason: "busy".into(),
+            retry_after: Some(hours(6)),
+        });
+        assert!(
+            matches!(read(answer), Reply::Transient(_, Some(after)) if after == RETRY_AFTER_CAP),
+            "Retry-After is honored up to the cap"
+        );
+        // A stop failing for 59 minutes waits at most the minute left.
+        let minute = Duration::from_secs(60);
+        assert_eq!(
+            stop_wait(1, Some(hours(1)), hours(1) - minute),
+            Some(minute)
+        );
+        // At the cap it is given up, whatever Trakt asks for.
+        assert_eq!(stop_wait(1, Some(minute), RETRY_AFTER_CAP), None);
+        // Before it: the backoff, and four tries at most.
+        assert_eq!(stop_wait(1, None, Duration::ZERO), Some(backoff(1)));
+        assert_eq!(stop_wait(STOP_TRIES, None, Duration::ZERO), None);
+    }
 }

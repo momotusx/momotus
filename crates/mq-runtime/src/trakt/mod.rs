@@ -598,6 +598,15 @@ fn unmapped(core: &Core, key: TrackerKey<'_>) -> Vec<TraktUnmapped> {
         .collect()
 }
 
+/// Whether the library says the profile was deleted, here or by sync. A
+/// read that fails is not a deletion: the next look asks again.
+fn gone(core: &Core) -> bool {
+    core.library().is_gone(core.profile()).unwrap_or_else(|e| {
+        tracing::debug!("trakt: profile check failed: {e}");
+        false
+    })
+}
+
 /// Rounds for one profile: when woken (a record, the foreground, a closed
 /// playback, a sign-in), every 5 minutes in the foreground, and when an
 /// outbox retry is due. It holds the core weakly: once every handle is
@@ -626,11 +635,7 @@ async fn schedule(core: crate::core::WeakCore, conn: Arc<Conn>) {
         }
         let Some(core) = core.upgrade() else { return };
         let trakt = core.trakt();
-        let gone = !core
-            .library()
-            .profile(core.profile())
-            .is_ok_and(|p| p.is_some());
-        if gone {
+        if gone(&core) {
             trakt.forget(core.profile());
             return;
         }

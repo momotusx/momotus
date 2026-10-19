@@ -14,6 +14,16 @@ use tokio::sync::{Mutex, OnceCell, OwnedMutexGuard};
 
 const META_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Why a series has no TVDB ids (`Core::episode_tvdb_ids`), with the words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TvdbMiss {
+    /// Every meta addon answered that it has no such title (404, 410, or
+    /// an answer without a meta).
+    Unknown(String),
+    /// None gave them now: an addon failed, or answered without TVDB ids.
+    Unavailable(String),
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
     #[error(transparent)]
@@ -356,29 +366,71 @@ impl Core {
         Ok((meta, name))
     }
 
-    /// Each episode's TVDB id by video id, from the same meta answer (served
-    /// from the addon cache after the first look). stremio-core's `Video`
-    /// has no such field, so it is read from the raw JSON. Metas that do not
-    /// carry it give an empty map. A number or a numeric string is read.
-    pub async fn episode_tvdb_ids(
-        &self,
-        id: &str,
-    ) -> Result<std::collections::HashMap<String, u64>, String> {
-        let (body, _, name) = self.fetch_meta_body("series", id).await?;
-        // The body already decoded as a meta, so this read cannot fail on a
-        // well-formed answer.
-        let raw: serde_json::Value = serde_json::from_slice(&body)
-            .map_err(|_| format!("{name} sent details Marquee cannot read"))?;
-        Ok(raw["meta"]["videos"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|v| {
-                let id = &v["tvdb_id"];
-                let tvdb = id.as_u64().or_else(|| id.as_str()?.trim().parse().ok())?;
-                Some((v["id"].as_str()?.to_owned(), tvdb))
-            })
-            .collect())
+    /// Each episode's TVDB id by video id, from the first meta answer in
+    /// addon order whose videos carry them (served from the addon cache after
+    /// the first look); a meta without any asks the next addon. stremio-core's
+    /// `Video` has no such field, so it is read from the raw JSON; a number
+    /// or a numeric string is read.
+    pub async fn episode_tvdb_ids(&self, id: &str) -> Result<HashMap<String, u64>, TvdbMiss> {
+        let path = ResourcePath {
+            resource: "meta".into(),
+            r#type: "series".into(),
+            id: id.to_owned(),
+            extra: vec![],
+        };
+        let addons = self
+            .installed_addons()
+            .map_err(|e| TvdbMiss::Unavailable(e.to_string()))?;
+        let mut reason = "None of your addons has details for this title".to_owned();
+        // Every addon asked answered that it has no such title.
+        let mut unknown = None;
+        for addon in addons.iter().filter(|a| a.supports(&path)) {
+            let name = &addon.manifest.name;
+            let raw = match self.addons().fetch(addon, &path, META_TIMEOUT).await {
+                Ok(fetched) => serde_json::from_slice::<serde_json::Value>(&fetched.body).ok(),
+                Err(AddonError::Http(mq_http::HttpError::Status {
+                    status: 404 | 410, ..
+                })) => {
+                    unknown.get_or_insert(true);
+                    reason = format!("{name} has no details for this title");
+                    continue;
+                }
+                Err(e) => {
+                    unknown = Some(false);
+                    reason = meta_failure(name, &e);
+                    continue;
+                }
+            };
+            let Some(raw) = raw else {
+                unknown = Some(false);
+                reason = format!("{name} sent details Marquee cannot read");
+                continue;
+            };
+            if !raw["meta"].is_object() {
+                unknown.get_or_insert(true);
+                reason = format!("{name} has no details for this title");
+                continue;
+            }
+            unknown = Some(false);
+            let ids: HashMap<String, u64> = raw["meta"]["videos"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| {
+                    let id = &v["tvdb_id"];
+                    let tvdb = id.as_u64().or_else(|| id.as_str()?.trim().parse().ok())?;
+                    Some((v["id"].as_str()?.to_owned(), tvdb))
+                })
+                .collect();
+            if !ids.is_empty() {
+                return Ok(ids);
+            }
+            reason = format!("{name} gave no TVDB ids for this title");
+        }
+        match unknown {
+            Some(true) => Err(TvdbMiss::Unknown(reason)),
+            _ => Err(TvdbMiss::Unavailable(reason)),
+        }
     }
 
     /// The first meta answer in addon order that decodes, as raw bytes and

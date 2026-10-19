@@ -73,16 +73,18 @@ pub(super) async fn round(
         .await
         .ok_or(CallError::Auth(AuthError::Off))?;
     let gate = trakt.gate(&bound.account);
+    let key = conn.key(&bound.account);
     let mut round = Round {
         core,
         conn,
         api: &api,
         gate: &gate,
-        key: conn.key(&bound.account),
+        key,
         bound: &bound,
-        mapper: Mapper::new(core),
+        mapper: Mapper::new(core, key),
         report: TraktReport::default(),
         now: now_ms() as i64,
+        left: None,
     };
     let result = round.run().await;
     match &result {
@@ -105,6 +107,15 @@ struct Round<'a> {
     mapper: Mapper<'a>,
     report: TraktReport,
     now: i64,
+    /// Why a row was left for a later round, if one was: the activities
+    /// stay as they were, so the next round reads it again.
+    left: Option<String>,
+}
+
+/// Rows placed, and the earliest date of a row left for later.
+struct Plays {
+    taken: Vec<ImportedPlay>,
+    left_at: Option<i64>,
 }
 
 impl Round<'_> {
@@ -144,6 +155,11 @@ impl Round<'_> {
             self.playback().await?;
         }
         self.fence()?;
+        if let Some(reason) = self.left.take() {
+            // Everything else is in; what waits is read again next round.
+            self.conn.failed(&reason);
+            return Ok(());
+        }
         self.core
             .library()
             .set_tracker_state(self.key, "activities", &acts.to_string())
@@ -163,19 +179,21 @@ impl Round<'_> {
         let reached = rows
             .iter()
             .any(|r| ms(&r["watched_at"]).is_some_and(|at| Some(at) > previous));
-        let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await?;
+        let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await;
         // The cursor moves to the newest day taken, never back, and never
-        // past a row left for later.
+        // past a row left for later (dated ahead, or its show's details
+        // failing).
         let taken = plays
+            .taken
             .iter()
             .map(|p| p.watched_ms)
             .filter(|&at| at <= self.now + FUTURE_SLACK_MS);
-        let new_day = taken
-            .max()
-            .map(day)
-            .filter(|d| *d > cursor)
-            .unwrap_or(cursor);
-        self.import(&plays, &[("history_day", new_day.as_str())])?;
+        let mut new_day = taken.max().map(day).unwrap_or_else(|| cursor.clone());
+        if let Some(at) = plays.left_at {
+            new_day = new_day.min(day(at));
+        }
+        let new_day = new_day.max(cursor);
+        self.import(&plays.taken, &[("history_day", new_day.as_str())])?;
         Ok(reached)
     }
 
@@ -185,8 +203,9 @@ impl Round<'_> {
     /// interrupted first import goes on where it stopped.
     async fn reconcile(&mut self) -> Result<(), CallError> {
         let movies = self.get_all("/sync/watched/movies").await?;
-        let plays = self.plays(&movies, |r| ms(&r["last_watched_at"])).await?;
-        self.import(&plays, &[])?;
+        let plays = self.plays(&movies, |r| ms(&r["last_watched_at"])).await;
+        self.import(&plays.taken, &[])?;
+        let mut left = false;
         let shows = self
             .get_all("/sync/watched/shows?extended=noseasons")
             .await?;
@@ -203,22 +222,30 @@ impl Round<'_> {
         for (done, (id, updated)) in todo.into_iter().enumerate() {
             self.importing(done as u32, total);
             let rows = self.get_all(&format!("/sync/history/shows/{id}")).await?;
-            let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await?;
+            let plays = self.plays(&rows, |r| ms(&r["watched_at"])).await;
             let later = plays
+                .taken
                 .iter()
                 .any(|p| p.watched_ms > self.now + FUTURE_SLACK_MS);
+            left |= plays.left_at.is_some();
             let checkpoint = format!("show:{id}");
-            // A play dated ahead keeps the show open, to be read again.
-            let state: &[(&str, &str)] = if later {
+            // A play dated ahead, or a row left for later, keeps the show
+            // open, to be read again; the shows after it go on.
+            let state: &[(&str, &str)] = if later || plays.left_at.is_some() {
                 &[]
             } else {
                 &[(checkpoint.as_str(), updated.as_str())]
             };
-            self.import(&plays, state)?;
+            self.import(&plays.taken, state)?;
         }
         let now = self.now.to_string();
         let today = day(self.now);
-        let mut state = vec![("reconciled_ms", now.as_str())];
+        // With a show left open, the reconcile runs again next round (only
+        // the shows without their checkpoint are read again).
+        let mut state = Vec::new();
+        if !left {
+            state.push(("reconciled_ms", now.as_str()));
+        }
         if self.state("history_day").is_none() {
             state.push(("history_day", today.as_str()));
         }
@@ -244,13 +271,25 @@ impl Round<'_> {
                     self.unplaced(&u);
                     continue;
                 }
-                Err(PlaceMiss::Transient(reason)) => return Err(CallError::Transient(reason)),
+                Err(PlaceMiss::Transient(reason)) => {
+                    self.left = Some(reason);
+                    continue;
+                }
             };
             if self.echo(&placed.video_id, percent, paused_ms) {
                 continue;
             }
-            let Some((position_ms, duration_ms)) = self.position(&placed, percent).await else {
-                continue;
+            let (position_ms, duration_ms) = match self.position(&placed, percent).await {
+                Ok(Some(position)) => position,
+                // No runtime anywhere: nothing to place it on.
+                Ok(None) => continue,
+                Err(reason) => {
+                    match map::failed(self.core, self.key, &placed.item_id, reason) {
+                        Miss::Transient(reason) => self.left = Some(reason),
+                        Miss::Permanent(_) => {}
+                    }
+                    continue;
+                }
             };
             points.push(ImportedResume {
                 item_id: placed.item_id,
@@ -302,8 +341,13 @@ impl Round<'_> {
     }
 
     /// Where a percent lands: on the local duration, else 97 percent of the
-    /// meta's runtime (players count credits differently).
-    async fn position(&self, placed: &map::Mapped, percent: f64) -> Option<(i64, i64)> {
+    /// meta's runtime (players count credits differently). `Err` when the
+    /// meta could not be read now.
+    async fn position(
+        &self,
+        placed: &map::Mapped,
+        percent: f64,
+    ) -> Result<Option<(i64, i64)>, String> {
         let local = self
             .core
             .library()
@@ -312,45 +356,48 @@ impl Round<'_> {
             .flatten()
             .filter(|&(_, duration)| duration > 0);
         if let Some((_, duration)) = local {
-            return Some(((percent / 100.0 * duration as f64) as i64, duration));
+            return Ok(Some(((percent / 100.0 * duration as f64) as i64, duration)));
         }
-        let (meta, _) = self
-            .core
-            .fetch_meta(&placed.kind, &placed.item_id)
-            .await
-            .ok()?;
-        let runtime = runtime_ms(meta.preview.runtime.as_deref()?)?;
-        Some((
-            (percent / 100.0 * runtime as f64 * 0.97).floor() as i64,
-            runtime,
-        ))
+        let (meta, _) = self.core.fetch_meta(&placed.kind, &placed.item_id).await?;
+        map::succeeded(self.core, self.key, &placed.item_id);
+        let runtime = meta.preview.runtime.as_deref().and_then(runtime_ms);
+        Ok(runtime.map(|runtime| {
+            (
+                (percent / 100.0 * runtime as f64 * 0.97).floor() as i64,
+                runtime,
+            )
+        }))
     }
 
     /// Places rows and turns them into plays; rows Trakt cannot name are
-    /// listed as unmapped. A show's details that cannot be read now stop
-    /// the round, before anything that depends on the rows is written.
-    async fn plays(
-        &mut self,
-        rows: &[Value],
-        at: impl Fn(&Value) -> Option<i64>,
-    ) -> Result<Vec<ImportedPlay>, CallError> {
+    /// listed as unmapped. A row whose show's details cannot be read now is
+    /// left for later (its date bounds what may move past it); the others
+    /// go on.
+    async fn plays(&mut self, rows: &[Value], at: impl Fn(&Value) -> Option<i64>) -> Plays {
         self.report.pulled += rows.len() as u32;
-        let mut plays = Vec::new();
+        let mut plays = Plays {
+            taken: Vec::new(),
+            left_at: None,
+        };
         for row in rows {
+            // Unknown dates sort before any real edit.
+            let when = at(row).unwrap_or(1);
             match self.mapper.place(row).await {
-                Ok(placed) => plays.push(ImportedPlay {
+                Ok(placed) => plays.taken.push(ImportedPlay {
                     item_id: placed.item_id,
                     video_id: placed.video_id,
                     kind: placed.kind,
                     name: placed.name,
-                    // Unknown dates sort before any real edit.
-                    watched_ms: at(row).unwrap_or(1),
+                    watched_ms: when,
                 }),
                 Err(PlaceMiss::Permanent(u)) => self.unplaced(&u),
-                Err(PlaceMiss::Transient(reason)) => return Err(CallError::Transient(reason)),
+                Err(PlaceMiss::Transient(reason)) => {
+                    self.left = Some(reason);
+                    plays.left_at = Some(plays.left_at.map_or(when, |l| l.min(when)));
+                }
             }
         }
-        Ok(plays)
+        plays
     }
 
     fn import(&mut self, plays: &[ImportedPlay], state: &[(&str, &str)]) -> Result<(), CallError> {
@@ -569,8 +616,9 @@ impl Round<'_> {
 }
 
 /// Whether a history answer acknowledges `sent`: its counts and its
-/// `not_found` lists are there, and for adds every item sent is either
-/// counted as added or listed as not found. Anything else keeps the batch.
+/// `not_found` lists are there, every item it lists as not found is one
+/// that was sent, and for adds every item sent is either counted as added
+/// or listed as not found. Anything else keeps the batch.
 fn acknowledged(answer: &Value, sent: &Value, removes: bool) -> Result<(), String> {
     let counts = &answer[if removes { "deleted" } else { "added" }];
     let missing = &answer["not_found"];
@@ -578,8 +626,12 @@ fn acknowledged(answer: &Value, sent: &Value, removes: bool) -> Result<(), Strin
         let (Some(counted), Some(lost)) = (counts[list].as_u64(), missing[list].as_array()) else {
             return Err("Trakt's answer did not acknowledge the writes".into());
         };
-        let sent = sent[list].as_array().map_or(0, Vec::len) as u64;
-        if !removes && counted + lost.len() as u64 != sent {
+        let sent = sent[list].as_array().map(Vec::as_slice).unwrap_or_default();
+        let named = |m: &Value| m["ids"].is_object() && sent.iter().any(|s| s["ids"] == m["ids"]);
+        if !lost.iter().all(named) {
+            return Err("Trakt's answer named an item that was not sent".into());
+        }
+        if !removes && counted + lost.len() as u64 != sent.len() as u64 {
             return Err("Trakt's answer did not count the writes".into());
         }
     }
@@ -661,5 +713,15 @@ mod tests {
             acknowledged(&full, &sent, true).is_err(),
             "no deleted counts"
         );
+    }
+
+    #[test]
+    fn a_not_found_entry_must_name_an_item_that_was_sent() {
+        let sent = json!({"movies": [], "episodes": [{"ids": {"tvdb": 1}}]});
+        for stranger in [json!({}), json!({"ids": {"tvdb": 9}}), json!("x")] {
+            let answer = json!({"added": {"movies": 0, "episodes": 0},
+                                "not_found": {"movies": [], "episodes": [stranger]}});
+            assert!(acknowledged(&answer, &sent, false).is_err(), "{answer}");
+        }
     }
 }
