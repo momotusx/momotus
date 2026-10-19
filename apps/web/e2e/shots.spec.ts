@@ -26,6 +26,11 @@ const visible = (sel: string, timeout = 30_000) => async (page: Page) => {
   await expect(page.locator(sel).first()).toBeVisible({ timeout });
 };
 
+/** Episode stills load lazily inside their list; a shot waits a moment for
+ * the first ones (a still that never comes keeps its stand-in, also valid). */
+const stills = (page: Page) =>
+  page.waitForFunction(() => document.querySelectorAll(".ep-still img.in").length >= 4, null, { timeout: 10_000 }).catch(() => undefined);
+
 const SCREENS: Screen[] = [
   {
     name: "home",
@@ -39,7 +44,14 @@ const SCREENS: Screen[] = [
       await expect.poll(() => page.locator(".row").first().locator(".tile img.fade:not(.in)").count()).toBe(0);
     },
   },
-  { name: "title", path: `/title/series/${GOT.id}`, ready: visible(".ep-t") },
+  {
+    name: "title",
+    path: `/title/series/${GOT.id}`,
+    ready: async (page) => {
+      await visible(".ep-t")(page);
+      await stills(page);
+    },
+  },
   {
     name: "title-trailer",
     path: `/title/movie/${BBB_ID}`,
@@ -79,6 +91,7 @@ const SCREENS: Screen[] = [
       await expect(row).toBeVisible({ timeout: 30_000 });
       if (form !== "phone") await row.focus();
       else await row.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await stills(page);
     },
   },
   // A movie whose metadata lists no trailer: no Trailer action at all.
