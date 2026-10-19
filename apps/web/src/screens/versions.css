@@ -38,7 +38,7 @@
 .thead, .vrow { display: grid; grid-template-columns: 128px minmax(0, 1fr) 124px 290px 150px; align-items: center; column-gap: 16px; }
 .thead { padding: 0 22px 12px; font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .08em; text-transform: uppercase;
   color: var(--muted); border-bottom: 2px solid var(--line); }
-.alist { flex: 1; min-height: 0; margin: 0 -36px; padding: 6px 36px 36px; }
+.alist { flex: 1; min-height: 0; margin: 0 -36px; padding: 6px 36px 64px; }
 .vgroup { scroll-margin-top: 12px; }
 /* Group headers stay pinned while their rows scroll, so every group always
  * shows its label. */
@@ -105,5 +105,7 @@
 [data-form="phone"] .hidden-row { flex-wrap: wrap; gap: 8px; padding: 12px; }
 
 .alist { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); }
-.alist [data-f] { scroll-margin-bottom: 64px; }
+/* A focused row (or a group that fits) stays clear of the 48 px fade; the
+ * trailing padding lets the last row get there. */
+.alist [data-f], .alist [data-row] { scroll-margin: 12px 0 64px; }
 [data-form="phone"] .alist { -webkit-mask-image: none; mask-image: none; }

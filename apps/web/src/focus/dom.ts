@@ -64,15 +64,25 @@ export function reveal(el: HTMLElement) {
     if (page.scrollTop > 0) page.scrollTo({ top: 0, behavior });
     return;
   }
-  const block = el.closest<HTMLElement>("[data-row]") ?? el;
-  const b = block.getBoundingClientRect();
+  // Scroll margins keep a target clear of the floating navigation, the TV
+  // safe area and a list's fade, and scrollIntoView honours them. They are
+  // canvas pixels while rects are scaled (desktop), so they scale too.
   const p = page.getBoundingClientRect();
-  // A row under the floating navigation is not visible, nor an element in
-  // the TV safe area or under a list's fade: scroll margins keep it clear of
-  // both, and scrollIntoView honours them.
-  const style = getComputedStyle(block);
-  const above = parseFloat(style.scrollMarginTop) || 0;
-  const below = parseFloat(style.scrollMarginBottom) || 0;
+  const k = p.height / page.offsetHeight || 1;
+  const margins = (x: HTMLElement) => {
+    const s = getComputedStyle(x);
+    return [(parseFloat(s.scrollMarginTop) || 0) * k, (parseFloat(s.scrollMarginBottom) || 0) * k] as const;
+  };
+  // A row brings its top into view when it fits; a taller one (a long group
+  // of versions) reveals the focused element itself.
+  const fits = (x: HTMLElement) => {
+    const [a, b] = margins(x);
+    return x.getBoundingClientRect().height <= p.height - a - b;
+  };
+  const row = el.closest<HTMLElement>("[data-row]");
+  const block = row && page.contains(row) && fits(row) ? row : el;
+  const [above, below] = margins(block);
+  const b = block.getBoundingClientRect();
   const visible = b.top >= p.top + above && b.bottom <= p.bottom - below;
   if (!visible) block.scrollIntoView({ block: block === el ? "nearest" : "start", behavior });
 }

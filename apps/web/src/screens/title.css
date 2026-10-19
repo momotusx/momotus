@@ -97,7 +97,7 @@
 /* Selected is a lighter fill and a bright edge; the ring is only ever focus. */
 .tab.on { color: var(--text); background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .55); font-weight: 700; }
 .tab:focus-visible, [data-form="tv"] .tab:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
-.toc { flex: 1; min-height: 0; margin: 0 -24px; padding: 14px 24px 24px; display: flex; flex-direction: column; gap: 14px; }
+.toc { flex: 1; min-height: 0; margin: 0 -24px; padding: 14px 24px 72px; display: flex; flex-direction: column; gap: 14px; }
 .ep { position: relative; display: flex; align-items: stretch; gap: 10px; }
 .ep-main { flex: 1; min-width: 0; display: flex; gap: 24px; padding: 14px; border-radius: var(--radius-card);
   background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); transform-origin: center; }
@@ -181,10 +181,12 @@
 [data-form="phone"] .ep-act { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 50%; }
 [data-form="phone"] .ep-act svg { width: 18px; height: 18px; }
 
-/* Long lists fade at the bottom so a cut card reads as "more below"; focus
- * scrolls a card clear of the fade. */
+/* Long lists fade at the bottom so a cut card reads as "more below". Focus
+ * keeps a card and its ring clear of the 56 px fade, and the 72 px of
+ * trailing padding lets the last card get there at the end of the list. */
 .toc { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 56px), transparent); }
-.toc [data-f] { scroll-margin-bottom: 72px; }
+/* No pill above this list: its own top margin, not the page's. */
+.toc [data-f] { scroll-margin: 14px 0 72px; }
 [data-form="phone"] .toc { -webkit-mask-image: none; mask-image: none; }
 
 /* Trailer over the page: the frame, then its title and our own controls. */
