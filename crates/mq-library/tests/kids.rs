@@ -957,3 +957,25 @@ fn two_allows_at_nine_hundred_ninety_nine_admit_one() {
     );
     assert_eq!(lib.allowed_list("kid").unwrap().counted[999].added_ms, 2000);
 }
+
+/// On a full list, an Allow older than the stored edit of its title loses
+/// quietly, as it would on any list; a newer one is refused for the cap.
+#[test]
+fn an_older_allow_on_a_full_list_loses_quietly() {
+    let lib = kid(&[]);
+    for i in 0..1000 {
+        let row = entry(&format!("tt{i:04}"), "movie", i);
+        lib.write_allowed("kid", &row, &hlc(100 + i as u64, 1))
+            .unwrap();
+    }
+    lib.write_allowed("kid", &removal("tt9999"), &hlc(5000, 1))
+        .unwrap();
+    assert!(
+        !lib.write_allowed("kid", &entry("tt9999", "movie", 1), &hlc(4000, 1))
+            .unwrap()
+    );
+    assert!(matches!(
+        lib.write_allowed("kid", &entry("tt9999", "movie", 1), &hlc(6000, 1)),
+        Err(LibraryError::ListFull)
+    ));
+}

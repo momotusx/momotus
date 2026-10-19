@@ -431,10 +431,16 @@ impl Core {
         account: &str,
         generation: u64,
     ) -> Result<(), CoreError> {
-        if kids(self) {
+        match kids_now(self) {
+            Some(false) => {}
             // Turned kids while a sign-in ran: its tokens go too.
-            self.trakt().forget(self.profile());
-            return Err(CoreError::Trakt(KIDS.into()));
+            Some(true) => {
+                self.trakt().forget(self.profile());
+                return Err(CoreError::Trakt(KIDS.into()));
+            }
+            // Not read: not connected now, the tokens kept; the app's next
+            // record (at start, after `open`) connects it.
+            None => return Err(CoreError::Trakt(READ_AGAIN.into())),
         }
         let library = self.library();
         let profile = self.profile();
@@ -695,6 +701,9 @@ async fn turned_kids(
 
 pub(super) const KIDS: &str = "Trakt is off for kids profiles";
 
+/// A profile check that failed: refused for now, nothing dropped.
+const READ_AGAIN: &str = "the profile could not be read; try again";
+
 /// Whether the library says the profile was deleted, here or by sync. A
 /// read that fails is not a deletion: the next look asks again.
 fn gone(core: &Core) -> bool {
@@ -828,5 +837,32 @@ mod tests {
         assert_eq!(core.library().tracker_account("p", TRACKER).unwrap(), None);
         assert!(!conn.scheduler.load(Ordering::SeqCst), "no rounds");
         assert!(conn.stop.is_cancelled(), "forgotten");
+    }
+
+    /// A profile that cannot be read is not connected now, and its tokens
+    /// stay: a read error is never a turn to kids.
+    #[tokio::test]
+    async fn a_connection_whose_profile_cannot_be_read_keeps_its_tokens() {
+        let dir = std::env::temp_dir().join(format!("mq-connect-read-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let core = Core::open(crate::CoreConfig {
+            data_dir: dir.clone(),
+            profile_id: mq_library::OWNER.into(),
+            device_id: 0,
+        })
+        .unwrap();
+        rusqlite::Connection::open(dir.join("library.sqlite"))
+            .unwrap()
+            .execute(
+                "UPDATE profile_access SET kids = 'unreadable' WHERE profile_id = 'default'",
+                [],
+            )
+            .unwrap();
+        let conn = core.trakt_conn();
+        assert!(core.trakt_connected(&conn, "acct", 1).is_err());
+        assert!(!conn.stop.is_cancelled(), "kept");
+        drop(core);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

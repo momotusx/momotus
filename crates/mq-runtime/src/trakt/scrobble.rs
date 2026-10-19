@@ -36,6 +36,8 @@ const MIN_PERCENT: f64 = 1.0;
 /// Trakt's `Retry-After` is honored up to this, and a failing stop holds
 /// newer sessions no longer than this before it is given up.
 const RETRY_AFTER_CAP: Duration = Duration::from_secs(60 * 60);
+/// After a profile check that failed, the next look.
+const READ_AGAIN: Duration = Duration::from_secs(1);
 
 /// Trakt's side of a playback (`PlaybackSnapshot.trakt`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -420,13 +422,16 @@ async fn act(core: &Core, conn: &Arc<Conn>, sessions: &mut BTreeMap<u64, Sess>) 
     let ids: Vec<u64> = sessions.keys().copied().collect();
     let mut stopped_any = false;
     for id in ids {
-        if super::kids(core) {
-            // Turned kids while it played: nothing more goes out, and once
-            // that is read for sure its work stops and its tokens go.
-            if super::kids_now(core) == Some(true) {
+        match super::kids_now(core) {
+            Some(false) => {}
+            // Turned kids while it played: nothing more goes out, its work
+            // stops and its tokens go.
+            Some(true) => {
                 trakt.forget(core.profile());
+                return None;
             }
-            return None;
+            // Not read: nothing goes now, and it looks again shortly.
+            None => return Some(Instant::now() + READ_AGAIN),
         }
         let s = sessions.get_mut(&id).expect("listed");
         if s.bound.is_none() && current.is_some() {

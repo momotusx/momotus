@@ -261,6 +261,18 @@ impl Core {
         pin: Option<&str>,
         current: Option<&str>,
     ) -> Result<(), ProfileError> {
+        self.set_pin_with(id, pin, current, || {}).await
+    }
+
+    /// `set_pin`, with `between` run after its checks and before its write
+    /// (tests make a kids profile there).
+    pub(crate) async fn set_pin_with(
+        &self,
+        id: &str,
+        pin: Option<&str>,
+        current: Option<&str>,
+        between: impl FnOnce(),
+    ) -> Result<(), ProfileError> {
         let row = self.library().profile(id)?.ok_or(ProfileError::Unknown)?;
         if id != self.profile() {
             if self.profile() != OWNER || pin.is_some() {
@@ -294,6 +306,7 @@ impl Core {
             }
             None => None,
         };
+        between();
         if id == OWNER && hash.is_none() {
             // Checked again in the write: a kids profile created meanwhile
             // keeps the PIN.
@@ -1195,5 +1208,23 @@ mod tests {
         let refused = exit_attempt(&lib, &throttle, Some(PIN), false, Instant::now, never);
         assert_eq!(refused.unwrap_err().code(), Some("kidsNeedPin"));
         exit_attempt(&lib, &throttle, None, true, Instant::now, never).unwrap();
+    }
+
+    /// The owner's PIN removal passed its own check (no kids then); a kids
+    /// profile is made before its write: the removal is refused and the
+    /// PIN stays.
+    #[tokio::test]
+    async fn a_kids_profile_made_while_the_owner_pin_goes_keeps_it() {
+        let core = Core::temporary(OWNER).unwrap();
+        core.set_pin(OWNER, Some(PIN), None).await.unwrap();
+        let mut made = None;
+        let removed = core
+            .set_pin_with(OWNER, None, Some(PIN), || {
+                made = Some(core.create_kids_profile("Kid", "fox"));
+            })
+            .await;
+        assert!(made.unwrap().is_ok(), "the PIN was there when it was made");
+        assert_eq!(removed.unwrap_err().code(), Some("kidsNeedPin"));
+        assert!(core.has_pin());
     }
 }

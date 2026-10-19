@@ -28,15 +28,29 @@ fn code(result: Result<impl std::fmt::Debug, ProfileError>) -> Option<&'static s
 
 /// A meta addon answering every request with `body` after `delay`.
 async fn meta_addon(n: u32, body: String, delay: Duration) -> AddonRow {
+    meta_addon_held(n, body, delay, None).await
+}
+
+/// As `meta_addon`; with `held`, no request is answered before every
+/// party of that barrier has asked.
+async fn meta_addon_held(
+    n: u32,
+    body: String,
+    delay: Duration,
+    held: Option<Arc<tokio::sync::Barrier>>,
+) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let body = Arc::new(body);
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
-            let body = body.clone();
+            let (body, held) = (body.clone(), held.clone());
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let _ = socket.read(&mut buf).await;
+                if let Some(held) = held {
+                    held.wait().await;
+                }
                 tokio::time::sleep(delay).await;
                 let (status, body) = if body.is_empty() {
                     ("500 Internal Server Error", "{}")
@@ -123,24 +137,6 @@ async fn the_owner_pin_stays_while_kids_exist() {
     core.delete_profile(&kid).unwrap();
     core.set_pin(OWNER, None, Some("2580")).await.unwrap();
     assert!(!core.has_pin());
-}
-
-/// The removal checks for kids profiles, then verifies the PIN (a hash
-/// that takes a while): a kids profile made in between keeps the PIN.
-/// Whichever writes second is refused; never both pass.
-#[tokio::test]
-async fn a_kids_profile_made_while_the_owner_pin_goes_keeps_it() {
-    let core = owner().await;
-    let removal = {
-        let core = core.clone();
-        tokio::spawn(async move { core.set_pin(OWNER, None, Some(PIN)).await })
-    };
-    // The removal's early check runs before this profile exists.
-    tokio::time::sleep(Duration::from_millis(5)).await;
-    let kid = core.create_kids_profile("Kid", "fox");
-    let removed = removal.await.unwrap();
-    assert!(kid.is_ok() != removed.is_ok(), "{kid:?} {removed:?}");
-    assert_eq!(core.has_pin(), kid.is_ok());
 }
 
 #[tokio::test]
@@ -301,12 +297,14 @@ async fn two_allows_racing_at_nine_hundred_ninety_nine_admit_one() {
             .write_allowed(&kid, &row, &core.hlc())
             .unwrap();
     }
-    let wait = Duration::from_millis(800);
+    // Each Allow asks both addons; none is answered before all four asks
+    // are in, so both Allows passed their early check before either writes.
+    let held = Some(Arc::new(tokio::sync::Barrier::new(4)));
     install(
         &core,
         vec![
-            meta_addon(1, meta("movie", "tta", "A"), wait).await,
-            meta_addon(2, meta("movie", "ttb", "B"), wait).await,
+            meta_addon_held(1, meta("movie", "tta", "A"), Duration::ZERO, held.clone()).await,
+            meta_addon_held(2, meta("movie", "ttb", "B"), Duration::ZERO, held).await,
         ],
     )
     .await;

@@ -3108,3 +3108,82 @@ async fn a_scrobble_after_an_unannounced_turn_to_kids_is_not_sent() {
     drop(core);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+fn set_kids_column(dir: &std::path::Path, profile: &str, value: &str) {
+    rusqlite::Connection::open(dir.join("library.sqlite"))
+        .unwrap()
+        .execute(
+            &format!("UPDATE profile_access SET kids = {value} WHERE profile_id = '{profile}'"),
+            [],
+        )
+        .unwrap();
+}
+
+/// A sign-in whose profile cannot be read when it ends still takes the
+/// tokens the user approved: a read error is never a turn to kids.
+#[tokio::test]
+async fn a_sign_in_whose_profile_cannot_be_read_keeps_its_tokens() {
+    let fake = Fake::new("a-read-login");
+    let base = fake.start().await;
+    let dir = std::env::temp_dir().join(format!("mq-read-login-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let core = Core::open(mq_runtime::CoreConfig {
+        data_dir: dir.clone(),
+        profile_id: mq_library::OWNER.into(),
+        device_id: 0,
+    })
+    .unwrap();
+    core.set_trakt_config(Some(config(&base)));
+    fake.queue(
+        "POST /oauth/device/code",
+        vec![reply(
+            200,
+            json!({"device_code": "dev", "user_code": "ABCD1234",
+                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+        )],
+    );
+    let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
+                        "created_at": now() / 1000, "scope": "public", "token_type": "bearer"});
+    fake.queue(
+        "POST /oauth/device/token",
+        vec![reply(400, json!({})), reply(200, tokens)],
+    );
+    let login = TraktLoginView::open(&core);
+    until("the code", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Code { .. })
+    })
+    .await;
+    set_kids_column(&dir, "default", "'unreadable'");
+    until("the sign-in done", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Done { .. })
+    })
+    .await;
+    assert!(fake.seen("POST", "/oauth/revoke").is_empty(), "not revoked");
+    assert_eq!(status(&core).user.as_deref(), Some("tester"), "held");
+    drop(core);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A scrobble worker that cannot read its profile sends nothing then, and
+/// looks again by itself: the pause goes once the row reads again, with no
+/// new event to wake it.
+#[tokio::test]
+async fn a_scrobble_that_cannot_read_its_profile_tries_again() {
+    let (core, fake, dir) = signed_in_on_disk("a-read-scrobble").await;
+    let view = PlaybackView::open(&core, Vec::new(), episode(1));
+    view.report_progress(at(10), MINUTES, false);
+    fake.wait_for("start", |f| f.scrobbles().len() == 1).await;
+    set_kids_column(&dir, "p", "'unreadable'");
+    view.report_progress(at(20), MINUTES, true);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(fake.scrobbles().len(), 1, "nothing while unreadable");
+    set_kids_column(&dir, "p", "0");
+    fake.wait_for("the pause", |f| {
+        f.scrobbles().last().is_some_and(|(a, _)| a == "pause")
+    })
+    .await;
+    drop(view);
+    drop(core);
+    let _ = std::fs::remove_dir_all(dir);
+}

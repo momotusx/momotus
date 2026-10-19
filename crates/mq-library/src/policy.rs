@@ -201,7 +201,9 @@ impl Library {
     /// its allow time, so pressing Allow again never moves it past the cap.
     /// A new allow is admitted only while fewer than `MAX_ALLOWED` titles
     /// are allowed, read in the same write, so two Allows racing at 999
-    /// cannot both land (`ListFull`). Returns whether it was written.
+    /// cannot both land (`ListFull`); an edit older than the stored one is
+    /// dropped quietly before that, full or not. Returns whether it was
+    /// written.
     /// Refused for the owner, and for an entry outside its bounds.
     pub fn write_allowed(
         &self,
@@ -216,6 +218,18 @@ impl Library {
         let mut full = false;
         let written = self.write(|c| {
             refuse_gone(c, profile)?;
+            // The hlc first: an edit the stored one overtook changes nothing
+            // quietly, a full list or not.
+            let stored: Option<String> = c
+                .query_row(
+                    "SELECT hlc FROM allowed WHERE profile_id = ?1 AND item_id = ?2",
+                    params![profile, row.item_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if stored.is_some_and(|s| s.as_str() >= hlc) {
+                return Ok(false);
+            }
             if row.allowed {
                 let kept: Option<i64> = c
                     .query_row(

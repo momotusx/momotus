@@ -204,7 +204,9 @@ impl Login {
         let Some(core) = self.core.upgrade() else {
             return;
         };
-        if super::kids(&core) {
+        // A read error is no turn to kids: the tokens are taken, and
+        // `trakt_connected` asks again.
+        if super::kids_now(&core) == Some(true) {
             // Turned kids while it polled: approved, never taken.
             self.set(TraktLoginSnapshot::Failed {
                 reason: super::KIDS.into(),
