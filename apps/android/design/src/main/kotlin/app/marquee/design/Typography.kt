@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
@@ -79,6 +80,8 @@ fun MqText(
     fontFamily: FontFamily? = null,
     /** Where a cut goes: the end, or the middle of one line (a host keeps its domain). */
     overflow: TextOverflow = TextOverflow.Ellipsis,
+    /** [TextDirection.Content] for text from elsewhere (an addon's name): a Hebrew one reads right to left. */
+    textDirection: TextDirection = TextDirection.Unspecified,
 ) {
     val size = Marquee.type.size(role)
     BasicText(
@@ -101,6 +104,7 @@ fun MqText(
                     },
                 lineHeight = size * (if (role.display) 1.1f else 1.4f),
                 textAlign = textAlign ?: TextAlign.Unspecified,
+                textDirection = textDirection,
             ),
         maxLines = maxLines,
         minLines = minLines,

@@ -53,6 +53,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -63,6 +64,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -612,6 +614,28 @@ private fun Card(
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
     val gate = remember { SelectGate() }
+    // Phone: this card's own install just landed. Its button goes, so focus (a keyboard's, a screen
+    // reader's) moves to the card's state instead of falling to the link field at the top.
+    val stay = remember { FocusRequester() }
+    var sawBusy by remember(entry.key) { mutableStateOf(false) }
+    var landed by remember(entry.key) { mutableStateOf(false) }
+    LaunchedEffect(busy) {
+        if (busy) {
+            sawBusy = true
+        } else if (sawBusy) {
+            sawBusy = false
+            landed = state?.words == null
+        }
+    }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(landed, action is Action.None) {
+        if (!tv && landed && action is Action.None) {
+            // The link field may have caught focus for a moment as the button went, and raised the keyboard.
+            stay.requestFocus(FocusDirection.Enter)
+            keyboard?.hide()
+            landed = false
+        }
+    }
     if (tv) {
         DisposableEffect(entry.key, requester) {
             focus[entry.key] = requester
@@ -669,11 +693,14 @@ private fun Card(
             Row(textModifier, horizontalArrangement = Arrangement.spacedBy(if (tv) 26.dp else 14.dp)) {
                 Mark(entry.name)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 4.dp)) {
+                    // The addon's own words read in their own direction (the web's dir="auto").
                     MqText(
                         entry.name,
+                        modifier = Modifier.fillMaxWidth(),
                         role = TextRole.Headline,
                         color = if (focused) colors.accent else colors.text,
                         weight = FontWeight.Bold,
+                        textDirection = TextDirection.Content,
                     )
                     // The link may hold keys: the host stands in for it, cut in the middle so the
                     // owner's domain at its end always shows.
@@ -694,9 +721,11 @@ private fun Card(
                     entry.description?.let {
                         MqText(
                             it,
+                            modifier = Modifier.fillMaxWidth(),
                             role = if (tv) TextRole.Callout else TextRole.Caption,
                             color = colors.muted,
                             maxLines = 2,
+                            textDirection = TextDirection.Content,
                         )
                     }
                     help?.let {
@@ -707,10 +736,9 @@ private fun Card(
                             weight = FontWeight.Medium,
                         )
                     }
-                    failure?.let {
-                        Box(
-                            Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                        ) { Note(it, failed = true, side = 0.dp) }
+                    // Always there, so a failure that comes is a change of a live region and is read out.
+                    Box(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                        failure?.let { Note(it, failed = true, side = 0.dp) }
                     }
                     if (noBrowser) Note(FindAddonsCopy.NO_BROWSER, failed = true, side = 0.dp)
                 }
@@ -734,7 +762,15 @@ private fun Card(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                word?.let { StateWord(it, installed = action is Action.None) }
+                word?.let {
+                    StateWord(
+                        it,
+                        installed = action is Action.None,
+                        // An installed card's one stop, which a landed install hands focus to.
+                        modifier = if (action is Action.None) Modifier.focusRequester(stay).focusable() else Modifier,
+                        spoken = cardWords.takeIf { action is Action.None },
+                    )
+                }
                 if (pressable) {
                     // The button stays while its request runs, so focus stays on it.
                     SecondaryButton(
@@ -820,16 +856,30 @@ private fun Mark(name: String) {
 private fun StateWord(
     text: String,
     installed: Boolean,
+    modifier: Modifier = Modifier,
+    /** Said in place of the word, as one stop (the phone's installed card). */
+    spoken: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     Row(
-        Modifier.heightIn(min = if (tv) 64.dp else 44.dp),
+        modifier
+            .then(
+                // Its own node (not merged into the card), saying [spoken] alone.
+                if (spoken !=
+                    null
+                ) {
+                    Modifier.semantics(mergeDescendants = true) { contentDescription = spoken }
+                } else {
+                    Modifier
+                },
+            ).heightIn(min = if (tv) 64.dp else 44.dp),
         horizontalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (installed) MqIcon(Icons.Check, tint = Marquee.colors.ok, size = if (tv) 26.dp else 18.dp)
         MqText(
             text,
+            modifier = if (spoken != null) Modifier.clearAndSetSemantics { } else Modifier,
             role = TextRole.Callout,
             color = if (installed) Marquee.colors.text else Marquee.colors.muted,
             weight = FontWeight.SemiBold,
