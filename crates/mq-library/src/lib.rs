@@ -22,4 +22,6 @@ pub use store::{
 pub use sync::{
     OWNER, OWNER_NAME, OutboxPage, SignedEntry, Stamp, SyncCursor, SyncRecord, coll, valid_avatar,
 };
-pub use tracker::{ImportReport, ImportedPlay, Intent, IntentOp, NewIntent, TrackerKey};
+pub use tracker::{
+    ImportReport, ImportedPlay, ImportedResume, Intent, IntentOp, NewIntent, TrackerKey,
+};

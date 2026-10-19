@@ -67,6 +67,19 @@ pub struct ImportedPlay {
     pub watched_ms: i64,
 }
 
+/// A resume point as a tracker reports it (Trakt's `/sync/playback`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportedResume {
+    pub item_id: String,
+    pub video_id: String,
+    pub kind: String,
+    pub name: String,
+    pub position_ms: i64,
+    pub duration_ms: i64,
+    /// When it was paused there.
+    pub paused_ms: i64,
+}
+
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct ImportReport {
     /// Marks that changed local state.
@@ -252,6 +265,46 @@ impl Library {
         })
     }
 
+    /// Sending the write with this revision failed: the next try waits 30 s
+    /// after the first failure, doubling, at most an hour. Returns the
+    /// number of tries so far.
+    pub fn fail_tracker_intent(
+        &self,
+        key: TrackerKey<'_>,
+        video_id: &str,
+        rev: i64,
+        now_ms: i64,
+    ) -> Result<i64, LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "UPDATE tracker_outbox SET tries = tries + 1,
+                   next_ms = ?6 + MIN(30000 << MIN(tries, 7), 3600000)
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND video_id = ?4 AND rev = ?5",
+                params![key.profile, key.tracker, key.account, video_id, rev, now_ms],
+            )?;
+            Ok(c.query_row(
+                "SELECT tries FROM tracker_outbox
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND video_id = ?4 AND rev = ?5",
+                params![key.profile, key.tracker, key.account, video_id, rev],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0))
+        })
+    }
+
+    /// When the earliest write waiting on a retry may go.
+    pub fn tracker_next_retry(&self, key: TrackerKey<'_>) -> Result<Option<i64>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT MIN(next_ms) FROM tracker_outbox
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND held = 0 AND next_ms > 0",
+                params![key.profile, key.tracker, key.account],
+                |r| r.get(0),
+            )
+        })
+    }
+
     /// The tracker took the write with this revision; a newer one stays.
     pub fn ack_tracker_intent(
         &self,
@@ -334,6 +387,137 @@ impl Library {
                 params![key.profile, key.tracker, key.account, name, value],
             )?;
             Ok(())
+        })
+    }
+
+    /// The tracker saw the play to its end (a scrobble answered `scrobble`):
+    /// the mark is set as a local edit, unless the user unmarked it after
+    /// `since` (the session's start). Returns whether it is set.
+    pub fn confirm_watched<'a>(
+        &self,
+        profile: &str,
+        item_id: &str,
+        video_id: &str,
+        since: &str,
+        stamp: impl Into<Stamp<'a>>,
+    ) -> Result<bool, LibraryError> {
+        let stamp = stamp.into();
+        self.write(|c| {
+            let stored: Option<(bool, String)> = c
+                .query_row(
+                    "SELECT watched, hlc FROM watched WHERE profile_id = ?1 AND video_id = ?2",
+                    params![profile, video_id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            if stored.is_some_and(|(watched, hlc)| !watched && hlc.as_str() > since) {
+                return Ok(false);
+            }
+            local(c, coll::WATCHED, &[profile, video_id], &stamp, |h| {
+                sql::set_watched(c, profile, item_id, video_id, true, h)
+            })?;
+            watched_now(c, profile, video_id)
+        })
+    }
+
+    /// Imports a tracker's resume points, stamped on `device` at the time
+    /// they were paused: each replaces only an older progress row, is never
+    /// stamped again, and syncs. Returns how many were taken.
+    pub fn import_resume_points(
+        &self,
+        profile: &str,
+        points: &[ImportedResume],
+        device: u64,
+    ) -> Result<usize, LibraryError> {
+        self.write(|c| {
+            refuse_gone(c, profile)?;
+            let zero = Hlc::zero(device).encode();
+            let mut taken = 0;
+            for p in points {
+                let item = LibraryItemRow {
+                    item_id: p.item_id.clone(),
+                    kind: p.kind.clone(),
+                    name: p.name.clone(),
+                    poster: None,
+                    poster_shape: None,
+                    added_ms: p.paused_ms,
+                };
+                local(
+                    c,
+                    coll::ITEMS,
+                    &[profile, &p.item_id],
+                    &Stamp::Fixed(&zero),
+                    |h| sql::upsert_item(c, profile, &item, false, h),
+                )?;
+                let row = ProgressRow {
+                    video_id: &p.video_id,
+                    item_id: &p.item_id,
+                    position_ms: p.position_ms,
+                    duration_ms: p.duration_ms,
+                    updated_ms: p.paused_ms,
+                };
+                let hlc = Hlc {
+                    wall_ms: p.paused_ms.max(1) as u64,
+                    counter: 0,
+                    device,
+                }
+                .encode();
+                // Not `local`: a resume point older than the stored row is
+                // dropped, never stamped again above it.
+                let changed = sql::set_progress(c, profile, &row, &hlc)?;
+                crate::sync::queue(c, changed, coll::PROGRESS, &[profile, &p.video_id])?;
+                taken += changed;
+            }
+            Ok(taken)
+        })
+    }
+
+    /// How many writes wait for the tracker, and when the oldest that may
+    /// be sent now (not held) was made.
+    pub fn tracker_pending(
+        &self,
+        key: TrackerKey<'_>,
+    ) -> Result<(usize, Option<i64>), LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT COUNT(*), MIN(CASE WHEN held = 0 THEN watched_ms END) FROM tracker_outbox
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3",
+                params![key.profile, key.tracker, key.account],
+                |r| Ok((r.get::<_, i64>(0)? as usize, r.get(1)?)),
+            )
+        })
+    }
+
+    /// The tracker's state values whose name starts with `prefix`.
+    pub fn tracker_states(
+        &self,
+        key: TrackerKey<'_>,
+        prefix: &str,
+    ) -> Result<Vec<(String, String)>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare(
+                "SELECT key, value FROM tracker_state
+                 WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND substr(key, 1, length(?4)) = ?4",
+            )?;
+            stmt.query_map(
+                params![key.profile, key.tracker, key.account, prefix],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?
+            .collect()
+        })
+    }
+
+    pub fn delete_tracker_state(
+        &self,
+        key: TrackerKey<'_>,
+        name: &str,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "DELETE FROM tracker_state WHERE profile_id = ?1 AND tracker = ?2 AND account = ?3 AND key = ?4",
+                params![key.profile, key.tracker, key.account, name],
+            )
+            .map(drop)
         })
     }
 
