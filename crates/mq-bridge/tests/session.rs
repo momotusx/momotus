@@ -731,6 +731,9 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
 
     let core_a = Core::temporary("p").unwrap();
     assert!(core_a.addons_fresh());
+    // An addons view open through the join drops `fresh` at once.
+    let view = mq_runtime::views::addons::AddonsView::open(&core_a);
+    assert!(view.snapshot().fresh);
     let (tx_a, mut rx_a) = Output::channel();
     let mut a = Session::new(core_a.clone(), tx_a);
     a.handle_text(
@@ -739,6 +742,13 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
     .await;
     let record = next(&mut rx_a).await["result"].clone();
     assert!(!core_a.addons_fresh(), "created an account");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while view.snapshot().fresh {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the open addons view follows the join");
 
     // Paired: B shows its QR, A approves it, B confirms the code.
     let core_b = Core::temporary("p").unwrap();

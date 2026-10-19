@@ -4,7 +4,7 @@ use mq_addons::{
     StoredResponse,
 };
 use mq_http::{ClientConfig, HttpClient};
-use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME, Policy};
+use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME, Policy, Table};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::collections::HashMap;
@@ -782,7 +782,11 @@ impl Core {
     /// recovered): it gets the account's addons by sync and never starts at
     /// the defaults step, also before its first sync stores the roster.
     pub fn joined_sync_account(&self) {
-        if let Err(e) = self.library().set_device_value(DEFAULTS_ERA, "joined") {
+        // Announced as an addons change: an open addons view drops `fresh`.
+        if let Err(e) =
+            self.library()
+                .set_device_value_announced(DEFAULTS_ERA, "joined", Table::Addons)
+        {
             tracing::warn!("could not mark the sync join: {e}");
         }
     }
@@ -839,9 +843,6 @@ fn error_kind(e: &CoreError) -> &'static str {
     }
 }
 
-/// Puts a fetched manifest in the list: in place over the row the link
-/// names (position, whether it is on and the stored link kept), else at the
-/// end, on.
 /// The rows of a default: by manifest id, or still on the default's own
 /// link after a refresh changed its id.
 fn default_rows(rows: &[AddonRow], d: &defaults::DefaultAddon) -> Vec<usize> {
@@ -853,6 +854,9 @@ fn default_rows(rows: &[AddonRow], d: &defaults::DefaultAddon) -> Vec<usize> {
         .collect()
 }
 
+/// Puts a fetched manifest in the list: in place over the row the link
+/// names (position, whether it is on and the stored link kept), else at the
+/// end, on.
 pub(crate) fn put_addon(rows: &mut Vec<AddonRow>, url: &str, manifest_json: String) {
     if let Ok(at) = position(rows, url) {
         rows[at].manifest_json = manifest_json;

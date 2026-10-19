@@ -15,7 +15,11 @@ use std::time::Instant;
 async fn the_nine_defaults_install_on_a_fresh_core_and_each_live_manifest_answers() {
     let core = Core::temporary(OWNER).unwrap();
     assert!(core.addons_fresh());
-    core.install_defaults(&[]).unwrap();
+    let all_on: Vec<defaults::DefaultChoice> = defaults::list()
+        .iter()
+        .map(|d| serde_json::from_value(serde_json::json!({ "key": d.key, "on": true })).unwrap())
+        .collect();
+    core.install_defaults(&all_on).unwrap();
     let rows = core.library().addons(OWNER).unwrap();
     assert_eq!(rows.len(), 9);
     let mut failed = Vec::new();

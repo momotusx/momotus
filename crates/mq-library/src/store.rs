@@ -224,6 +224,29 @@ impl Library {
         self.changes.subscribe()
     }
 
+    /// Sets a device value that a view reads through `table`, announcing
+    /// `table` with the commit (the defaults marker changes the addons
+    /// view's `fresh`).
+    pub fn set_device_value_announced(
+        &self,
+        key: &str,
+        value: &str,
+        table: Table,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "INSERT INTO device_state (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, value],
+            )?;
+            let mut touched = lock(&self.touched);
+            if !touched.contains(&table) {
+                touched.push(table);
+            }
+            Ok(())
+        })
+    }
+
     pub(crate) fn write<T>(
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
