@@ -254,3 +254,34 @@ final class InstallCards {
         ((error as? CoreError)?.code, error.localizedDescription)
     }
 }
+
+/// What Find addons shows for the chosen list: loading, in, or failed. A
+/// view that did not open (or stopped) fails the page whatever the list says.
+enum FindStatus: Equatable {
+    case loading
+    case ready(name: String, count: Int)
+    case failed(String)
+
+    init(failure: String?, list: AddonList?) {
+        if let failure {
+            self = .failed(failure)
+            return
+        }
+        switch list?.state {
+        case .ready?: self = .ready(name: list?.name ?? "", count: list?.entries.count ?? 0)
+        case .failed(let words)?: self = .failed(words.isEmpty ? W.failed : words)
+        default: self = .loading
+        }
+    }
+
+    /// What VoiceOver hears when the status turns into this one from `old`:
+    /// a list that came in (not a switch between lists already in), and
+    /// every failure.
+    func announcement(after old: FindStatus) -> String? {
+        switch self {
+        case .ready(let name, let count): old == .loading ? "\(name), \(count)" : nil
+        case .failed(let words): words
+        case .loading: nil
+        }
+    }
+}

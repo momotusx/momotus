@@ -18,13 +18,11 @@ enum FindFocus: Hashable {
 /// press. Entry links may hold keys and are never shown.
 struct FindAddonsScreen: View {
     let core: CoreClient
-    @State private var catalog: LiveRecord<AddonCatalogSnapshot>
+    @State private var page: FindAddonsPage
     /// The paste field's installs and their failure; the lists follow them.
     @State private var addons: LiveRecord<AddonsSnapshot>
     @State private var list = "official"
     @State private var filter = FindFilter.all
-    /// Set on the first appearance: results from an earlier visit are about what it showed then.
-    @State private var opened = false
     @FocusState private var focus: FindFocus?
     /// The card focus returns to when it comes back to the grid (TV).
     @State private var lastCard: String?
@@ -32,7 +30,7 @@ struct FindAddonsScreen: View {
 
     init(core: CoreClient) {
         self.core = core
-        _catalog = State(initialValue: LiveRecord("addonCatalog", core: core))
+        _page = State(initialValue: FindAddonsPage(core: core))
         _addons = State(initialValue: LiveRecord("addons", core: core))
     }
 
@@ -53,21 +51,10 @@ struct FindAddonsScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
-        .task(id: catalog.taskId) { catalog.start() }
-        .onAppear {
-            guard !opened else { return }
-            opened = true
-            // Requests still running keep their cards; their answers land on them.
-            InstallCards.shared.forgetAll(running: false)
-        }
-        .onChange(of: current?.state) { old, new in
-            // A list that just came in, or failed, is said once (not on a list switch).
-            guard old == nil || old == .loading, let current else { return }
-            switch new {
-            case .ready: announce("\(current.name), \(current.entries.count)")
-            case .failed(let words): announce(words.isEmpty ? W.failed : words)
-            default: break
-            }
+        .task(id: page.catalog.taskId) { page.catalog.start() }
+        .onAppear { page.appear() }
+        .onChange(of: status) { old, new in
+            if let words = new.announcement(after: old) { announce(words) }
         }
         #if os(tvOS)
         .defaultFocus($focus, entryFocus)
@@ -147,18 +134,18 @@ struct FindAddonsScreen: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var current: AddonList? { catalog.snapshot?.lists.first { $0.id == list } }
+    private var current: AddonList? { page.list(list) }
+
+    private var status: FindStatus { page.status(of: list) }
 
     /// The view could not open, or this list failed: its words, with Try again.
     private var failure: String? {
-        if let failure = catalog.failure { return failure }
-        if case .failed(let words) = current?.state { return words.isEmpty ? W.failed : words }
-        return nil
+        if case .failed(let words) = status { words } else { nil }
     }
 
     /// The count beside a list's chip, once that list is in.
     private func count(_ id: String) -> String? {
-        guard let list = catalog.snapshot?.lists.first(where: { $0.id == id }), list.state == .ready else { return nil }
+        guard let list = page.list(id), list.state == .ready else { return nil }
         return "\(list.entries.count)"
     }
 
@@ -253,15 +240,11 @@ struct FindAddonsScreen: View {
 
     private var gap: CGFloat { metrics.wide ? Theme.Space.m : Theme.Space.s }
 
-    /// Try again and Refresh close the view and open it with `fresh`, which
-    /// waits for the network instead of the addon cache. Results from before
-    /// are about the old list; requests still running keep their cards.
+    /// Try again and Refresh (`FindAddonsPage.reload`).
     private func retry() {
-        InstallCards.shared.forgetAll(running: false)
         // The pressed button goes away while the list loads: focus waits on the list chip.
         focus = .list(list)
-        catalog = LiveRecord("addonCatalog", params: ["fresh": true], core: core)
-        catalog.start()
+        page.reload()
     }
 
     #if os(tvOS)

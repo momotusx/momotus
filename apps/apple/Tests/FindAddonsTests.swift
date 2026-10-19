@@ -245,6 +245,24 @@ private func recorded() throws -> AddonCatalogSnapshot {
         #expect(InstallCards.refusal(CoreError("No code")).code == nil)
     }
 
+    @Test func aViewThatDidNotOpenIsSaidAsAListThatCameIn() {
+        let ready = AddonList(id: "official", name: "Official", state: .ready, entries: [entry(), entry("YouTube")])
+        let loading = AddonList(id: "community", name: "Community", state: .loading, entries: [])
+        // The view's own failure wins over the list's state, before or after a snapshot.
+        #expect(FindStatus(failure: "The core could not open", list: nil) == .failed("The core could not open"))
+        #expect(FindStatus(failure: "The core stopped", list: ready) == .failed("The core stopped"))
+        #expect(FindStatus(failure: nil, list: nil) == .loading)
+        #expect(FindStatus(failure: nil, list: loading) == .loading)
+        #expect(FindStatus(failure: nil, list: ready) == .ready(name: "Official", count: 2))
+        #expect(FindStatus(failure: nil, list: AddonList(id: "x", name: "X", state: .failed(words: ""), entries: [])) == .failed(W.failed))
+        // Said: a list that came in, and every failure; not a switch between lists already in.
+        #expect(FindStatus.failed("The core could not open").announcement(after: .loading) == "The core could not open")
+        #expect(FindStatus.failed("The core stopped").announcement(after: .ready(name: "Official", count: 2)) == "The core stopped")
+        #expect(FindStatus.ready(name: "Official", count: 2).announcement(after: .loading) == "Official, 2")
+        #expect(FindStatus.ready(name: "Community", count: 9).announcement(after: .ready(name: "Official", count: 2)) == nil)
+        #expect(FindStatus.loading.announcement(after: .failed("x")) == nil)
+    }
+
     @MainActor @Test func aSecondPressWhileBusyDoesNothingAndTheResultLandsOnItsCard() async {
         let cards = InstallCards()
         let held = Held()
