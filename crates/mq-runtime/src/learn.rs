@@ -442,6 +442,64 @@ mod tests {
         assert_eq!(p, base, "under 3 nothing moves");
     }
 
+    /// Mutation 17: one counter per pick, the first difference: 1080p SDR
+    /// chosen over 4K HDR moves lines only, never HDR as well.
+    #[test]
+    fn one_counter_per_pick_the_first_difference() {
+        use mq_streams::{Conditions, DeviceCaps, RankInput, Target, normalize, rank};
+        let body = serde_json::json!({ "streams": [
+            { "name": "T", "title": "Movie.2020.2160p.WEB-DL.HDR.DDP5.1.H.265-UHD\n👤 900 💾 4 GB",
+              "infoHash": "a".repeat(40), "fileIdx": 0 },
+            { "name": "T", "title": "Movie.2020.1080p.WEB-DL.DDP5.1.H.264-FHD\n👤 300 💾 4 GB",
+              "infoHash": "b".repeat(40), "fileIdx": 0 },
+        ]});
+        let wire = mq_protocol::decode_streams(body.to_string().as_bytes()).unwrap();
+        let streams = wire
+            .streams
+            .iter()
+            .enumerate()
+            .map(|(i, w)| normalize(w, "t", "t", 0, i as u32))
+            .collect();
+        let caps = DeviceCaps {
+            display_height: 2160,
+            display_hdr: vec![mq_relparse::Hdr::Hdr10],
+            ..DeviceCaps::basic_1080p()
+        };
+        let conditions = Conditions {
+            engine: true,
+            ..Conditions::default()
+        };
+        let ranked = rank(
+            streams,
+            &RankInput {
+                caps: &caps,
+                prefs: &StreamPrefs::default(),
+                target: &Target {
+                    title: "Movie".into(),
+                    ..Target::default()
+                },
+                last_binge_group: None,
+                kids: None,
+                conditions: &conditions,
+            },
+        );
+        let row = |q: &str| {
+            ranked
+                .rows
+                .iter()
+                .find(|r| r.stream.raw_description.contains(q))
+                .unwrap()
+        };
+        assert_eq!(
+            choice(row("1080p"), row("2160p"), &caps),
+            Some((LearnedChoice::Height, -1))
+        );
+        assert_eq!(
+            choice(row("2160p"), row("1080p"), &caps),
+            Some((LearnedChoice::Height, 1))
+        );
+    }
+
     #[test]
     fn the_epoch_in_effect_is_the_newest_stamp() {
         let by = LearnedByClass {
