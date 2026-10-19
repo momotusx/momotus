@@ -195,6 +195,24 @@ final class FakeTraktKeystore: @unchecked Sendable {
         withExtendedLifetime(core) {}
     }
 
+    @Test func aDeletedProfilesRecordGoesFromTheKeychain() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let keys = FakeTraktKeystore()
+        let trakt = TraktModel(core: core.client, keystore: keys.keystore)
+        let session = ProfileSession(core: core.client, sync: SyncModel(core: core.client, records: FakeKeychain().record,
+                                                                         defaults: try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))), trakt: trakt)
+        #expect(await eventually { session.snapshot != nil })
+        try await session.perform("createProfile", ["name": "Kid", "avatar": ProfileRules.formatAvatar(glyph: "cat", color: "teal")])
+        #expect(await eventually { session.snapshot?.profiles.count == 2 })
+        let kid = try #require(session.snapshot?.profiles.first { !$0.isOwner })
+        keys.held[kid.id] = .string("a stored sign-in")
+        keys.held["default"] = .string("the owner's")
+        try await session.perform("deleteProfile", ["profile": kid.id])
+        #expect(keys.held[kid.id] == nil)
+        #expect(keys.held["default"] != nil)
+    }
+
     @Test func backgroundIsAnsweredOnceScrobblesAreSent() async throws {
         let core = RealCore()
         #expect(await core.ready())
