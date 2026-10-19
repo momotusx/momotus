@@ -246,6 +246,7 @@ async fn run(
     drop(kept_head);
     let first = first.await.unwrap_or_default();
     let stats = engine.stats(t).await.map_err(|e| e.to_string())?;
+    let dialed = engine.connections();
     // The lease's claim ends first: the engine keeps a claimed torrent.
     drop(lease);
     let _ = engine.remove(t, false).await;
@@ -264,6 +265,8 @@ async fn run(
         "seeks": played.get("seeks"),
         "peers_at_ready": peers_at_ready,
         "peers": stats.peers,
+        "dialed_tcp": dialed.0,
+        "dialed_utp": dialed.1,
         "downloaded_bytes": stats.downloaded_bytes,
         "requests": stats.requests,
         "cancels": stats.cancels,
