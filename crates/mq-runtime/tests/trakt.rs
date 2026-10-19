@@ -1612,6 +1612,55 @@ async fn a_sign_out_during_a_sign_in_stays_signed_out() {
 }
 
 #[tokio::test]
+async fn a_record_from_the_app_during_a_sign_in_is_kept() {
+    let (core, fake) = setup("a-login-app").await;
+    fake.queue(
+        "POST /oauth/device/code",
+        vec![reply(
+            200,
+            json!({"device_code": "dev", "user_code": "ABCD1234",
+                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+        )],
+    );
+    let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
+                        "created_at": now() / 1000, "scope": "public"});
+    fake.queue("POST /oauth/device/token", vec![reply(200, tokens)]);
+    let user =
+        json!({"user": {"username": "tester", "ids": {"slug": "tester", "uuid": "a-login-app"}}});
+    fake.queue(
+        "GET /users/settings",
+        vec![Reply {
+            status: 200,
+            body: user.to_string(),
+            delay: Duration::from_millis(1500),
+            headers: String::new(),
+        }],
+    );
+    let login = TraktLoginView::open(&core);
+    fake.wait_for("the lookup", |f| {
+        !f.seen("GET", "/users/settings").is_empty()
+    })
+    .await;
+    // Another device signed in; the app hands its record over meanwhile.
+    core.set_trakt(Some(record_as("a-app", "app-access", 7)))
+        .await
+        .unwrap();
+    until("the sign-in's end", || {
+        matches!(
+            login.snapshot(),
+            TraktLoginSnapshot::Failed { .. } | TraktLoginSnapshot::Done { .. }
+        )
+    })
+    .await;
+    let after = status(&core);
+    assert_eq!(after.state, TraktState::Connected, "{after:?}");
+    assert_eq!(
+        after.record, None,
+        "the app's record stays, nothing adopted"
+    );
+}
+
+#[tokio::test]
 async fn a_newer_sign_in_overtakes_an_older_one() {
     let (core, fake) = setup("a-login-new").await;
     let code = |c: &str| {
