@@ -84,7 +84,8 @@ export function InstallField(props: { autofocus?: boolean; fkey?: string; onDraf
         )}
       </Show>
       <Show when={risky()}>
-        <button class="btn primary" type="button" data-f={`${key}:ack`} onClick={() => void install(undefined, true)}>
+        {/* A risky choice, not the screen's primary: glass with the warning's edge. */}
+        <button class="btn caution" type="button" data-f={`${key}:ack`} onClick={() => void install(undefined, true)}>
           {tokenInLink.confirm}
         </button>
       </Show>

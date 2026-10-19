@@ -50,6 +50,9 @@
 .addon-acts .btn { height: 60px; padding: 0 22px; font-size: var(--type-callout); gap: 10px; }
 .addon-acts .btn svg { width: 26px; height: 26px; }
 .btn.danger { background: var(--bad); color: var(--bg); box-shadow: none; }
+/* A choice that carries a risk (a link with a sign-in): a glass secondary
+ * with the warning's edge, never the white primary. */
+.btn.caution { box-shadow: inset 0 0 0 2px var(--warn); }
 .addon-acts .btn[aria-pressed="false"] { color: var(--muted); }
 
 /* Device codes and QR (Import, Pairing). */
