@@ -513,7 +513,7 @@ struct RecoveryKitScreen: View {
         FlowRow(spacing: Theme.Space.xs) {
             Button {} label: { Label(W.holdToShow, glyph: "eye") }
                 .buttonStyle(HoldStyle(holding: $holding))
-            Button { reveal() } label: { Label(W.showForAWhile, glyph: "timer") }
+            Button { reveal() } label: { Label(W.showForAWhile, glyph: "clock") }
                 .buttonStyle(PillButtonStyle())
                 .disabled(gate.asking)
             if visible, !holding, left > 0 {
@@ -653,13 +653,16 @@ private struct HoldStyle: ButtonStyle {
     @Binding var holding: Bool
 
     func makeBody(configuration: Configuration) -> some View {
+        // A pill like the others, darker while held.
         configuration.label
-            .labelFont(Theme.type.callout, relativeTo: .callout)
+            .labelFont(Theme.type.headline)
+            .labelStyle(PillLabelStyle())
             .foregroundStyle(Theme.Palette.text)
-            .padding(.horizontal, Theme.Space.s)
-            .padding(.vertical, Theme.Space.xs)
-            .background(Capsule().fill(configuration.isPressed ? Theme.Palette.raised : Theme.Palette.surface))
-            .overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
+            .padding(.horizontal, PillButtonStyle.horizontal)
+            .padding(.vertical, PillButtonStyle.vertical)
+            .background(Capsule().fill(configuration.isPressed ? AnyShapeStyle(Theme.Palette.raised) : AnyShapeStyle(Theme.controlFill)))
+            .overlay(Capsule().strokeBorder(Theme.Palette.control, lineWidth: 1))
+            .contentShape(Capsule())
             .onChange(of: configuration.isPressed) { _, pressed in holding = pressed }
     }
 }

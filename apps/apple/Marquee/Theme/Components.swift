@@ -235,11 +235,11 @@ struct PillButtonStyle: ButtonStyle {
     }
 
     #if os(tvOS)
-    private static let horizontal: CGFloat = 32
-    private static let vertical: CGFloat = 18
+    static let horizontal: CGFloat = 32
+    static let vertical: CGFloat = 18
     #else
-    private static let horizontal: CGFloat = 20
-    private static let vertical: CGFloat = 13
+    static let horizontal: CGFloat = 20
+    static let vertical: CGFloat = 13
     #endif
 }
 
@@ -412,7 +412,7 @@ struct DestructiveTextStyle: ButtonStyle {
     }
 }
 
-private struct PillLabelStyle: LabelStyle {
+struct PillLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 8) {
             configuration.icon.imageScale(.medium)
