@@ -133,6 +133,8 @@ targets:
       - path: Marquee/Sync/SyncRecord.swift
       - path: Marquee/Sync/KitLedger.swift
       - path: Marquee/Sync/Clipboard.swift
+      - path: Marquee/Settings/FindAddonsPage.swift
+      - path: Marquee/Profiles/ProfileSession.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests
