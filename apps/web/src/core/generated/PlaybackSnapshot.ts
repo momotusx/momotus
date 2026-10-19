@@ -52,6 +52,14 @@ subtitlesPending: boolean,
  */
 subtitleNotes: Array<SubtitleNote>, 
 /**
+ * The track (its `url`) every app turns on at start, once, when the
+ * list has settled: the profile set subtitle languages and the audio
+ * is in none of them, or the user chose one for this title before.
+ * Null otherwise. The user's own pick, or Off, always wins: send
+ * `subtitleChosen` (plans/m13-subtitle-languages.md 6).
+ */
+autoSubtitle: string | null, 
+/**
  * The next released episode, for an Up Next card.
  */
 next: NextEpisode | null, 

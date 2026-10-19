@@ -1394,6 +1394,10 @@ impl Session {
                 playback.report_duration(&param(command, "key")?, duration_ms);
             }
             (View::Playback(playback), "retry") => playback.retry(),
+            (View::Playback(playback), "subtitleChosen") => {
+                let url = command.get("url").and_then(Value::as_str);
+                playback.subtitle_chosen(url);
+            }
             (View::Playback(playback), "failOver") => {
                 let error = param(command, "error").unwrap_or_else(|_| "player error".into());
                 let attempt = command.get("attempt").and_then(Value::as_u64);

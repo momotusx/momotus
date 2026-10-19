@@ -891,6 +891,8 @@ data class PlaybackSnapshot(
     val subtitlesPending: Boolean,
     /** Subtitle sources that gave nothing this time, each once, shown under the subtitle list (plans/m13-turkcealtyazi.md 4.2). */
     val subtitleNotes: List<SubtitleNote> = emptyList(),
+    /** The track (its `url`) every app turns on at start, once, when the list has settled: the profile set subtitle languages and the audio is in none of them, or the user chose one for this title before. Null otherwise. The user's own pick, or Off, always wins: send `subtitleChosen` (plans/m13-subtitle-languages.md 6). */
+    val autoSubtitle: String? = null,
     /** The next released episode, for an Up Next card. */
     val next: NextEpisode? = null,
     /** The playing stream's binge group; pass it as `bingeGroup` when opening Versions for the next episode so the same release line is picked. */

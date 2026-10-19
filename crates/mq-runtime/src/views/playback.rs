@@ -10,7 +10,7 @@ use crate::live::{FRAME, coalesce};
 use crate::segments::{self, Segment, Target};
 use crate::turkcealtyazi::{self, NAME as BUILT_IN};
 use eyeball::SharedObservable;
-use futures_util::{Stream, StreamExt};
+use futures_util::{FutureExt, Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
@@ -96,6 +96,12 @@ pub struct PlaybackSnapshot {
     /// Subtitle sources that gave nothing this time, each once, shown under
     /// the subtitle list (plans/m13-turkcealtyazi.md 4.2).
     pub subtitle_notes: Vec<SubtitleNote>,
+    /// The track (its `url`) every app turns on at start, once, when the
+    /// list has settled: the profile set subtitle languages and the audio
+    /// is in none of them, or the user chose one for this title before.
+    /// Null otherwise. The user's own pick, or Off, always wins: send
+    /// `subtitleChosen` (plans/m13-subtitle-languages.md 6).
+    pub auto_subtitle: Option<String>,
     /// The next released episode, for an Up Next card.
     pub next: Option<NextEpisode>,
     /// The playing stream's binge group; pass it as `bingeGroup` when opening
@@ -374,6 +380,7 @@ impl State {
                 subtitles: Vec::new(),
                 subtitles_pending: false,
                 subtitle_notes: Vec::new(),
+                auto_subtitle: None,
                 next: None,
                 binge_group: None,
                 segments: Vec::new(),
@@ -655,6 +662,49 @@ impl PlaybackView {
         self.spawn_resolve();
     }
 
+    /// The user picked a subtitle track (`url`), or turned subtitles off
+    /// (`None`): nothing is turned on for them again in this playback
+    /// (`autoSubtitle` clears), and the title remembers the choice, the
+    /// track's language or Off, for its next plays.
+    pub fn subtitle_chosen(&self, url: Option<&str>) {
+        let mut s = lock(&self.state);
+        let choice = match url {
+            None => Some(OFF.to_owned()),
+            Some(url) => s
+                .snapshot
+                .subtitles
+                .iter()
+                .find(|t| t.url == url)
+                .map(|t| t.language.clone()),
+        };
+        if s.snapshot.auto_subtitle.take().is_some() {
+            self.snapshot.set(s.snapshot.clone());
+        }
+        let binge_group = s.snapshot.binge_group.clone();
+        drop(s);
+        let Some(choice) = choice else {
+            return;
+        };
+        let library = self.core.library();
+        let mut memory: serde_json::Value = library
+            .stream_memory(self.core.profile(), &self.target.item_id)
+            .ok()
+            .flatten()
+            .and_then(|m| serde_json::from_str(&m).ok())
+            .filter(serde_json::Value::is_object)
+            .unwrap_or_else(|| serde_json::json!({}));
+        memory["subtitle"] = choice.into();
+        if let Err(e) = library.set_stream_memory(
+            self.core.profile(),
+            &self.target.item_id,
+            binge_group.as_deref(),
+            &memory.to_string(),
+            self.core.clock(),
+        ) {
+            tracing::warn!("subtitle choice not remembered: {e}");
+        }
+    }
+
     /// The player knows the duration of the version `key`: look its skip
     /// segments up. Reports for another version, durations under a minute or
     /// over six hours, and repeats within 2 percent are ignored; a larger
@@ -882,6 +932,7 @@ fn release_all(s: &mut State) {
     s.snapshot.manifest = false;
     s.snapshot.subtitles.clear();
     s.snapshot.subtitle_notes.clear();
+    s.snapshot.auto_subtitle = None;
     s.order.clear();
     s.lease = None;
 }
@@ -1135,18 +1186,54 @@ async fn resolve_next(
                     let installed = core.installed_addons().unwrap_or_default();
                     let reader = video_reader(&upstream, reader).await;
                     let reader = reader.as_deref();
+                    // Read once, for the built-in source's ranking and the
+                    // audio language, only when one of them needs it.
+                    let needed = installed.iter().any(is_built_in)
+                        || !core.prefs().subtitle_languages.is_empty();
+                    let probed = probe_video(reader.filter(|_| needed)).shared();
                     let addons = async {
                         let extra = video_extra(reader, filename.as_deref()).await;
                         let found = (&slot, run, &*state, &snapshot);
                         find_subtitles(&core, &target, &installed, extra, found).await
                     };
                     let built_in = built_in_tracks(
-                        &core, &target, &stream, &installed, reader, &slot, run, &state, &snapshot,
+                        &core,
+                        &target,
+                        &stream,
+                        &installed,
+                        probed.clone(),
+                        &slot,
+                        run,
+                        &state,
+                        &snapshot,
                     );
                     tokio::join!(addons, built_in);
+                    // The release's languages when the file says none.
+                    let mut audio = probed.await.audio;
+                    if audio.is_empty() {
+                        audio = stream
+                            .release
+                            .languages
+                            .iter()
+                            .map(|l| crate::languages::language(l).tag)
+                            .collect();
+                    }
+                    let remembered = remembered_subtitle(&core, &target);
+                    let explicit: Vec<String> = core
+                        .prefs()
+                        .subtitle_languages
+                        .iter()
+                        .map(|l| crate::languages::language(l).tag)
+                        .collect();
                     let mut s = lock(&state);
-                    if current(&s, run) && s.snapshot.subtitles_pending {
+                    if current(&s, run) {
                         s.snapshot.subtitles_pending = false;
+                        s.snapshot.auto_subtitle = auto_subtitle(
+                            remembered.as_deref(),
+                            &explicit,
+                            &audio,
+                            &s.snapshot.subtitles,
+                        );
                         snapshot.set(s.snapshot.clone());
                     }
                 };
@@ -1900,7 +1987,7 @@ async fn built_in_tracks(
     target: &PlayTarget,
     stream: &ParsedStream,
     installed: &[InstalledAddon],
-    reader: Option<&dyn mq_media::RangeReader>,
+    probed: impl std::future::Future<Output = Probed>,
     slot: &SubtitleSlot,
     run: u64,
     state: &Arc<Mutex<State>>,
@@ -1923,11 +2010,7 @@ async fn built_in_tracks(
         cut: release.cut,
         fps: None,
     };
-    let probe = async {
-        let budget = mq_media::ProbeBudget::default();
-        let found = mq_media::probe(reader?, budget, &mq_media::CancellationToken::new()).await;
-        found.video?.fps.value
-    };
+    let probe = async { probed.await.fps };
     let listed = tokio::time::timeout(Deadlines::default().hard, async {
         // The request goes now; the ranking, from the cache, waits for the
         // frame rate.
@@ -2117,6 +2200,80 @@ fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
         .or_else(|| extra("movieReleaseName").map(str::to_owned))?;
     // At most 80 characters: a line in a menu.
     Some(text.chars().take(80).collect())
+}
+
+/// What the probe read of the playing file: its frame rate and its audio
+/// language (the default track's, else the first's), as tags.
+#[derive(Debug, Clone, Default)]
+struct Probed {
+    fps: Option<f64>,
+    audio: Vec<String>,
+}
+
+/// `mq_media::probe` on the playback's reader, within 2 MB and 1.5 s;
+/// nothing without a reader.
+async fn probe_video(reader: Option<&dyn mq_media::RangeReader>) -> Probed {
+    let Some(reader) = reader else {
+        return Probed::default();
+    };
+    let budget = mq_media::ProbeBudget::default();
+    let found = mq_media::probe(reader, budget, &mq_media::CancellationToken::new()).await;
+    let fps = found.video.as_ref().and_then(|v| v.fps.value);
+    let track = found
+        .audio
+        .iter()
+        .find(|a| a.default.value == Some(true))
+        .or(found.audio.first());
+    let audio = track
+        .and_then(|a| a.language.value.clone())
+        .filter(|l| !l.eq_ignore_ascii_case("und"))
+        .map(|l| crate::languages::language(&l).tag)
+        .into_iter()
+        .collect();
+    Probed { fps, audio }
+}
+
+/// The track the apps turn on at start, if any (plans/m13-subtitle-languages.md
+/// 6), from the snapshot's order:
+/// - the user's own choice for this title wins: Off turns nothing on, a
+///   language turns on its best track;
+/// - else the profile's subtitle languages in order, each skipped when the
+///   audio is in it: the best track of the first left that has one.
+fn auto_subtitle(
+    remembered: Option<&str>,
+    explicit: &[String],
+    audio: &[String],
+    tracks: &[SubtitleTrack],
+) -> Option<String> {
+    use crate::languages::primary;
+    let best = |tag: &str| {
+        let exact = tracks.iter().find(|t| t.language == tag);
+        exact
+            .or_else(|| tracks.iter().find(|t| primary(&t.language) == primary(tag)))
+            .map(|t| t.url.clone())
+    };
+    match remembered {
+        Some(OFF) => None,
+        Some(tag) => best(tag),
+        None => explicit
+            .iter()
+            // Subtitles in the audio's own language are not wanted.
+            .filter(|e| !audio.iter().any(|a| primary(a) == primary(e)))
+            .find_map(|e| best(e)),
+    }
+}
+
+/// How a title's memory says the user turned subtitles off.
+const OFF: &str = "off";
+
+/// The user's subtitle choice for this title: `OFF` or a language tag.
+fn remembered_subtitle(core: &Core, target: &PlayTarget) -> Option<String> {
+    let memory = core
+        .library()
+        .stream_memory(core.profile(), &target.item_id)
+        .ok()??;
+    let memory: serde_json::Value = serde_json::from_str(&memory).ok()?;
+    memory.get("subtitle")?.as_str().map(str::to_owned)
 }
 
 /// The video's bytes in process, for the subtitle hash and the frame rate:
@@ -2343,11 +2500,15 @@ pub(crate) fn next_after(meta: &mq_protocol::MetaItem, video_id: &str) -> Option
 /// Keeps the stream that started playing for this title, so Versions for its
 /// next episode prefers the same release line.
 fn remember_stream(core: &Core, target: &PlayTarget, stream: &ParsedStream) {
-    let memory = serde_json::json!({
+    let mut memory = serde_json::json!({
         "key": stream.key,
         "addonId": stream.addon_id,
         "release": stream.filename.as_deref().unwrap_or(&stream.raw_name),
     });
+    // The user's subtitle choice for the title stays.
+    if let Some(choice) = remembered_subtitle(core, target) {
+        memory["subtitle"] = choice.into();
+    }
     if let Err(e) = core.library().set_stream_memory(
         core.profile(),
         &target.item_id,
@@ -2707,5 +2868,54 @@ mod tests {
             ),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod auto_subtitle_tests {
+    use super::*;
+
+    fn track(url: &str, lang: &str) -> SubtitleTrack {
+        SubtitleTrack::new(url.into(), lang, None, "Subs", None)
+    }
+
+    #[test]
+    fn the_track_turned_on_at_start() {
+        let tracks = [
+            track("tr1", "tur"),
+            track("tr2", "tur"),
+            track("en1", "eng"),
+            track("br1", "pob"),
+        ];
+        let tags = |l: &[&str]| -> Vec<String> { l.iter().map(|s| s.to_string()).collect() };
+        let pick = |remembered: Option<&str>, explicit: &[&str], audio: &[&str]| {
+            auto_subtitle(remembered, &tags(explicit), &tags(audio), &tracks)
+        };
+        // (remembered, profile languages, audio) -> the track turned on.
+        type Case<'a> = (Option<&'a str>, &'a [&'a str], &'a [&'a str], Option<&'a str>);
+        let table: &[Case] = &[
+            (None, &[], &[], None),
+            (None, &[], &["en"], None),
+            (None, &["tr"], &[], Some("tr1")),
+            (None, &["tr"], &["en"], Some("tr1")),
+            (None, &["tr"], &["tr"], None),
+            (None, &["en"], &["en"], None),
+            (None, &["tr", "en"], &["en"], Some("tr1")),
+            (None, &["en", "tr"], &["en"], Some("tr1")),
+            (None, &["tr", "en"], &["tr"], Some("en1")),
+            (None, &["de", "en"], &["ja"], Some("en1")),
+            (None, &["pt"], &["en"], Some("br1")),
+            (None, &["de"], &["en"], None),
+            (Some(OFF), &["tr"], &["en"], None),
+            (Some("en"), &["tr"], &["tr"], Some("en1")),
+            (Some("en"), &[], &[], Some("en1")),
+        ];
+        for (remembered, explicit, audio, expected) in table {
+            assert_eq!(
+                pick(*remembered, explicit, audio).as_deref(),
+                *expected,
+                "{remembered:?} {explicit:?} {audio:?}"
+            );
+        }
     }
 }

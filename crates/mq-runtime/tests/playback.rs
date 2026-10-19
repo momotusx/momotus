@@ -1212,3 +1212,70 @@ async fn without_subtitle_languages_the_device_language_then_english_lead() {
         assert_eq!(names, order, "device {device:?}, profile {own:?}");
     }
 }
+
+/// The track every app turns on at start: only when the profile set
+/// subtitle languages and the audio is in none of them; the user's own
+/// choice (a track, or Off) wins and is remembered for the title.
+#[tokio::test]
+async fn a_subtitle_turns_on_at_start_only_as_the_profile_and_the_user_say() {
+    let (video, _) = counted_origin().await;
+    let stream = |title: &str| {
+        let subs: Vec<_> = ["eng", "tur", "tur"]
+            .iter()
+            .enumerate()
+            .map(|(i, lang)| serde_json::json!({"id": i.to_string(), "lang": lang, "url": format!("https://subs.test/{i}.srt")}))
+            .collect();
+        serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": title, "subtitles": subs}]})
+            .to_string()
+    };
+    let open =
+        |core: &Core, title: &str| PlaybackView::open(core, setup(core, &stream(title)), target());
+    let url = |s: &PlaybackSnapshot, lang: &str| {
+        s.subtitles
+            .iter()
+            .find(|t| t.lang == lang)
+            .unwrap()
+            .url
+            .clone()
+    };
+
+    // Not set: nothing turns on.
+    let core = Core::temporary("p").unwrap();
+    let s = settled_list(&open(&core, "Sintel.2010.1080p.WEB")).await;
+    assert_eq!(s.auto_subtitle, None);
+
+    // Set to Turkish, the audio's language unknown: the first Turkish track.
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["tur"] }))
+        .unwrap();
+    let view = open(&core, "Sintel.2010.1080p.WEB");
+    let s = settled_list(&view).await;
+    assert_eq!(s.auto_subtitle, Some(url(&s, "tur")));
+
+    // The audio is Turkish (the release says so): nothing turns on.
+    let dubbed = settled_list(&open(&core, "Sintel.2010.TURKISH.1080p.WEB")).await;
+    assert_eq!(dubbed.auto_subtitle, None);
+
+    // The user turns subtitles off: gone at once, and the title remembers.
+    view.subtitle_chosen(None);
+    assert_eq!(view.snapshot().auto_subtitle, None);
+    drop(view);
+    let again = settled_list(&open(&core, "Sintel.2010.1080p.WEB")).await;
+    assert_eq!(again.auto_subtitle, None, "Off is remembered for the title");
+
+    // The user picks the English track: next time English turns on, even
+    // though Turkish is the profile's language.
+    let view = open(&core, "Sintel.2010.1080p.WEB");
+    let s = settled_list(&view).await;
+    view.subtitle_chosen(Some(&url(&s, "eng")));
+    drop(view);
+    let next = settled_list(&open(&core, "Sintel.2010.1080p.WEB")).await;
+    assert_eq!(next.auto_subtitle, Some(url(&next, "eng")));
+}
+
+async fn settled_list(view: &PlaybackView) -> PlaybackSnapshot {
+    until(view, "the list", |s| {
+        s.phase == PlaybackPhase::Ready && !s.subtitles_pending
+    })
+    .await
+}
