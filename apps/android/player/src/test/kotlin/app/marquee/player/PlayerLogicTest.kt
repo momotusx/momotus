@@ -7,6 +7,7 @@ import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleTrack
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -290,5 +291,44 @@ class PlayerLogicTest {
         assertEquals(subs[2], bestInLanguage(subs.take(3), "tur"))
         assertEquals(subs[1], bestInLanguage(subs.take(2), "tur"))
         assertNull(bestInLanguage(subs, ""))
+    }
+
+    @Test
+    fun `the picture is waited for only before a first frame of a video the viewer wants, with what it needs`() {
+        // Ready, or buffering with more than a start needs held: a frame should have come.
+        assertTrue(
+            waitsForPicture(firstFrame = false, hasVideo = true, wantPlay = true, ready = true, bufferedAheadMs = 0),
+        )
+        assertTrue(waitsForPicture(false, true, true, ready = false, bufferedAheadMs = HAS_DATA_MS))
+        // Still loading what a start needs: the connection, not the decoder.
+        assertFalse(waitsForPicture(false, true, true, ready = false, bufferedAheadMs = HAS_DATA_MS - 1))
+        assertFalse(
+            waitsForPicture(firstFrame = true, hasVideo = true, wantPlay = true, ready = true, bufferedAheadMs = 0),
+        )
+        assertFalse(waitsForPicture(false, hasVideo = false, wantPlay = true, ready = true, bufferedAheadMs = 0))
+        assertFalse(waitsForPicture(false, true, wantPlay = false, ready = true, bufferedAheadMs = 0))
+    }
+
+    @Test
+    fun `the wait runs out after it held without a break`() {
+        val wait = PictureWait()
+        assertFalse(wait.outOfTime(true, 1_000))
+        assertFalse(wait.outOfTime(true, 1_000 + NO_PICTURE_MS - 1))
+        assertTrue(wait.outOfTime(true, 1_000 + NO_PICTURE_MS))
+        // A break starts it over.
+        assertFalse(wait.outOfTime(false, 6_000))
+        assertFalse(wait.outOfTime(true, 7_000))
+        assertFalse(wait.outOfTime(true, 7_000 + NO_PICTURE_MS - 1))
+        wait.reset()
+        assertFalse(wait.outOfTime(true, 20_000))
+    }
+
+    @Test
+    fun `a play with a side-loaded subtitle ends a second past the video's end`() {
+        assertTrue(ranPastEnd(positionMs = 53_209, durationMs = 52_209, sideLoaded = true))
+        assertFalse(ranPastEnd(positionMs = 53_208, durationMs = 52_209, sideLoaded = true))
+        // Media3 ends by itself without one; an unknown length is not an end.
+        assertFalse(ranPastEnd(positionMs = 60_000, durationMs = 52_209, sideLoaded = false))
+        assertFalse(ranPastEnd(positionMs = 60_000, durationMs = C.TIME_UNSET, sideLoaded = true))
     }
 }

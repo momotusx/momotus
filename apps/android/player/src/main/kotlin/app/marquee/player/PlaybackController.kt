@@ -189,6 +189,7 @@ class PlaybackController(
     private var ticker: Job? = null
     private var noticeJob: Job? = null
     private val marks = LinkedHashMap<String, Long>()
+    private val pictureWait = PictureWait()
 
     private val listener =
         object : Player.Listener {
@@ -280,7 +281,8 @@ class PlaybackController(
         nextAtMs = s.nextAtMs
         trakt = s.trakt
         offer = s.offer
-        subtitlesPending = s.subtitlesPending
+        // While a source is being found its list is still to come: not "None found".
+        subtitlesPending = s.subtitlesPending || s.phase == PlaybackPhase.Resolving
         snapshotSubs = s.subtitles
         val added = newSubtitleNotes(subtitleNotes, s.subtitleNotes)
         subtitleNotes = s.subtitleNotes
@@ -310,6 +312,8 @@ class PlaybackController(
                 val trying = s.trying
                 if (trying != null) {
                     status = "Trying the next version: ${trying.label}"
+                    // The Versions button names the version being tried.
+                    playingKey = trying.key
                 } else if (handlingFailure) {
                     val last = s.attempts.lastOrNull()
                     status =
@@ -353,6 +357,7 @@ class PlaybackController(
         seekPending = false
         // A new source reports nothing until it has shown its own first frame.
         firstFrame = false
+        pictureWait.reset()
         mark("url ready")
         player.setMediaItem(item(url, loadedSubs), from.coerceAtLeast(0L))
         player.playWhenReady = false
@@ -475,6 +480,21 @@ class PlaybackController(
         val cause = error.cause as? HttpDataSource.InvalidResponseCodeException
         val failure = classifyFailure(error.errorCode, cause?.responseCode)
         CoreLog.w("playback error ${error.errorCodeName}: ${failure.message}")
+        failOver(playback, failure)
+    }
+
+    /** No picture came though the source had what one needs ([waitsForPicture]): a decode failure, in the same words. */
+    private fun noPicture() {
+        val playback = view
+        if (handlingFailure || playback == null || released) return
+        CoreLog.w("no picture $NO_PICTURE_MS ms after the source had what a first frame needs")
+        failOver(playback, classifyFailure(PlaybackException.ERROR_CODE_DECODING_FAILED, null))
+    }
+
+    private fun failOver(
+        playback: PlaybackView,
+        failure: Failure,
+    ) {
         lastPositionMs = player.currentPosition.coerceAtLeast(0L)
         handlingFailure = true
         player.stop()
@@ -522,6 +542,19 @@ class PlaybackController(
             durationMs = player.duration.takeIf { it > 0 } ?: durationMs
             sendDuration()
             bufferedMs = player.bufferedPosition.coerceAtLeast(0L)
+            val waiting =
+                waitsForPicture(
+                    firstFrame,
+                    player.currentTracks.containsType(C.TRACK_TYPE_VIDEO),
+                    wantPlay,
+                    player.playbackState == Player.STATE_READY,
+                    bufferedMs - positionMs,
+                )
+            if (pictureWait.outOfTime(waiting, SystemClock.elapsedRealtime())) {
+                noPicture()
+                continue
+            }
+            if (player.isPlaying && ranPastEnd(positionMs, player.duration, loadedSubs.isNotEmpty())) endAtVideoEnd()
             if (player.isPlaying) {
                 sinceReport += TICK_MS
                 if (sinceReport >= REPORT_MS) {
@@ -532,6 +565,14 @@ class PlaybackController(
                 sinceReport = 0
             }
         }
+    }
+
+    /** The video ended but a longer subtitle would keep the player going on black ([ranPastEnd]): the play is over. */
+    private fun endAtVideoEnd() {
+        CoreLog.d("a subtitle runs past the video's end at ${player.duration} ms: the play ends there")
+        // Heard as a pause first (and reported so), then it is the end.
+        player.playWhenReady = false
+        stage = Stage.Ended
     }
 
     /** The core looks skip segments up by the length of the version that plays: tell it once per version. */

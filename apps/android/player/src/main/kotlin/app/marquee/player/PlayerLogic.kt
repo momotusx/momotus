@@ -110,6 +110,60 @@ fun upNextDue(
     return if (nextAtMs != null) positionMs >= nextAtMs else durationMs - positionMs <= NEXT_AT_MS
 }
 
+/** How long a source that has what a first frame needs may go without one before it counts as one this device cannot decode. */
+const val NO_PICTURE_MS = 4_000L
+
+/** Media held ahead of the playhead that is more than a start needs ([PlayerHost] starts at 1 s and rebuffers to 3 s). */
+const val HAS_DATA_MS = 3_000L
+
+/**
+ * The picture safety net, as on Apple: whether the player waits for a picture it has what it needs for. A
+ * decoder that takes the video and gives no frame back raises no error, so the player would wait forever.
+ * Counts before the first frame of a source with a video track while the viewer wants it playing, when the
+ * player is ready (sound over black: the video is not decoded) or still buffering with [HAS_DATA_MS] held.
+ */
+fun waitsForPicture(
+    firstFrame: Boolean,
+    hasVideo: Boolean,
+    wantPlay: Boolean,
+    ready: Boolean,
+    bufferedAheadMs: Long,
+): Boolean = !firstFrame && hasVideo && wantPlay && (ready || bufferedAheadMs >= HAS_DATA_MS)
+
+/** Times [waitsForPicture]: whether it has held for [NO_PICTURE_MS] without a break. */
+class PictureWait {
+    private var since = -1L
+
+    fun outOfTime(
+        waiting: Boolean,
+        nowMs: Long,
+    ): Boolean {
+        if (!waiting) {
+            since = -1L
+            return false
+        }
+        if (since < 0) since = nowMs
+        return nowMs - since >= NO_PICTURE_MS
+    }
+
+    fun reset() {
+        since = -1L
+    }
+}
+
+/** How far past the video's own end a play may run before it is ended. */
+const val OVERRUN_MS = 1_000L
+
+/**
+ * A side-loaded subtitle with cues past the video's end keeps Media3 playing on black until its last cue (the
+ * text renderer has not ended). Past the video's end by [OVERRUN_MS], the play is over.
+ */
+fun ranPastEnd(
+    positionMs: Long,
+    durationMs: Long,
+    sideLoaded: Boolean,
+): Boolean = sideLoaded && durationMs > 0 && positionMs >= durationMs + OVERRUN_MS
+
 /** What failed, as `failOver` reports it: the core words it for the attempt list. */
 enum class FailureKind(
     val wire: String,

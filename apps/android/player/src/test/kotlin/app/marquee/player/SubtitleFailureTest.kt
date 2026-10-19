@@ -6,11 +6,15 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
@@ -42,6 +46,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -82,7 +87,8 @@ class SubtitleFailureTest {
         notes: String = "[]",
         phase: String = "ready",
         extra: String = "",
-    ) = """{"phase":"$phase","url":"$video","key":"k1","attempt":1,"manifest":false,"subtitlesPending":false,""" +
+        url: String = video,
+    ) = """{"phase":"$phase","url":"$url","key":"k1","attempt":1,"manifest":false,"subtitlesPending":false,""" +
         """"trakt":"off","subtitleNotes":$notes,$extra"subtitles":[""" +
         subtitles.joinToString(",") {
             """{"url":"$it","lang":"tur","source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
@@ -124,12 +130,16 @@ class SubtitleFailureTest {
         executor.shutdownNow()
     }
 
-    /** Lets the main looper, the core's state thread and Compose's snapshot changes catch up until [check]. */
+    /**
+     * Lets the main looper, the core's state thread and Compose's snapshot changes catch up until [check], for up
+     * to 10 s of real time: a count of rounds ran out in 2.5 s on a loaded machine (1 run in 13).
+     */
     private fun until(
         what: String,
         check: () -> Boolean,
     ) {
-        repeat(400) {
+        val end = System.nanoTime() + 10_000_000_000L
+        while (System.nanoTime() < end) {
             Snapshot.sendApplyNotifications()
             shadowOf(Looper.getMainLooper()).idle()
             if (check()) return
@@ -137,6 +147,29 @@ class SubtitleFailureTest {
         }
         fail(what)
     }
+
+    /** Lets the main looper run for [ms] of real time: the controller's tick (every 500 ms) runs on real time. */
+    private fun runFor(ms: Long) {
+        val end = System.nanoTime() + ms * 1_000_000
+        while (System.nanoTime() < end) {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(5)
+        }
+    }
+
+    /** One H.264 video track, as Media3 lists a file's video. */
+    private val video264 =
+        Tracks(
+            listOf(
+                Tracks.Group(
+                    TrackGroup(Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H264).build()),
+                    false,
+                    intArrayOf(C.FORMAT_HANDLED),
+                    booleanArrayOf(true),
+                ),
+            ),
+        )
 
     private fun commands(type: String) =
         sent.filter {
@@ -358,11 +391,78 @@ class SubtitleFailureTest {
     @Test
     fun `moving on to the next version says which, and a failed pick offers the next`() {
         val (_, controller) = open()
-        push(snapshot(phase = "resolving", extra = "\"trying\":{\"key\":\"k2\",\"label\":\"1080p WEB\"},"))
+        push(
+            snapshot(
+                subtitles = emptyList(),
+                phase = "resolving",
+                extra = "\"trying\":{\"key\":\"k2\",\"label\":\"1080p WEB\"},",
+            ),
+        )
         until("the next version is named") { controller.status == "Trying the next version: 1080p WEB" }
+        // The Versions button follows the version tried, and its subtitles are still to come.
+        assertEquals("k2", controller.playingKey)
+        assertEquals("Searching", controller.subtitlesDetail())
         push(snapshot(phase = "failed", extra = "\"offer\":{\"key\":\"k3\",\"label\":\"720p BluRay\"},"))
         until("the playback failed") { controller.stage == PlaybackController.Stage.Failed }
         assertEquals(OtherVersion("k3", "720p BluRay"), controller.offer)
+        controller.release()
+    }
+
+    @Test
+    fun `a source that has what a first frame needs and shows none moves on as a decode failure`() {
+        val (player, controller) = open()
+        // Media3 holds 20 s of the file and still waits: the decoder gives no frame and raises nothing.
+        player.media(video264, 30_000_000L)
+        player.buffered(20_000)
+        runFor(700)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(NO_PICTURE_MS))
+        until("the decode failure goes to the core") { failOvers().isNotEmpty() }
+        val sent = failOvers().single()["command"]!!.jsonObject
+        assertEquals("decode", sent["kind"]?.jsonPrimitive?.content)
+        assertEquals("This device cannot decode the video", sent["error"]?.jsonPrimitive?.content)
+        assertEquals(1, player.stops)
+        // The next source waits afresh: the last one's wait does not carry over.
+        push(snapshot(url = "http://127.0.0.1:7780/video2.mp4"))
+        until("the next source loads") { player.items.size == 2 }
+        player.media(video264, 30_000_000L)
+        player.buffered(20_000)
+        runFor(1_200)
+        assertEquals(1, failOvers().size)
+        controller.release()
+    }
+
+    @Test
+    fun `a pause before the first frame, or a first frame, keeps the picture net out of the way`() {
+        val (player, controller) = open()
+        controller.pause()
+        player.media(video264, 30_000_000L)
+        player.buffered(20_000)
+        runFor(700)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(NO_PICTURE_MS))
+        runFor(1_200)
+        assertEquals(emptyList(), failOvers(), "paused by the viewer")
+        controller.play()
+        player.renderFirstFrame()
+        runFor(700)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(NO_PICTURE_MS))
+        runFor(1_200)
+        assertEquals(emptyList(), failOvers(), "a frame was shown")
+        controller.release()
+    }
+
+    @Test
+    fun `a subtitle longer than the video ends the play at the video's end`() {
+        val (player, controller) = open()
+        controller.selectText("late:$subtitle")
+        until("the subtitle is side-loaded") { player.items.size == 2 }
+        player.media(video264, 52_209_000L)
+        player.state(Player.STATE_READY)
+        player.renderFirstFrame()
+        until("it plays") { player.isPlaying }
+        // The video's end passed a second ago; the subtitle has cues for minutes more.
+        player.position(53_300)
+        until("the play ends") { controller.stage == PlaybackController.Stage.Ended }
+        assertFalse(player.playWhenReady)
         controller.release()
     }
 
@@ -375,6 +475,8 @@ class SubtitleFailureTest {
 
         val items = ArrayList<Item>()
         var stops = 0
+        private var tracks = Tracks.EMPTY
+        private var durationUs = C.TIME_UNSET
 
         var current =
             State
@@ -394,6 +496,37 @@ class SubtitleFailureTest {
             invalidateState()
             current = current.buildUpon().setNewlyRenderedFirstFrame(false).build()
         }
+
+        /** What the loaded item turned out to hold: its tracks and length. */
+        fun media(
+            tracks: Tracks,
+            durationUs: Long,
+        ) {
+            this.tracks = tracks
+            this.durationUs = durationUs
+            current = current.buildUpon().setPlaylist(current.playlist.map { data(it.mediaItem, it.uid) }).build()
+            invalidateState()
+        }
+
+        fun buffered(ms: Long) {
+            current = current.buildUpon().setContentBufferedPositionMs(PositionSupplier.getConstant(ms)).build()
+            invalidateState()
+        }
+
+        fun position(ms: Long) {
+            current = current.buildUpon().setContentPositionMs(ms).build()
+            invalidateState()
+        }
+
+        private fun data(
+            item: MediaItem,
+            uid: Any,
+        ) = MediaItemData
+            .Builder(uid)
+            .setMediaItem(item)
+            .setTracks(tracks)
+            .setDurationUs(durationUs)
+            .build()
 
         /** The playback state as Media3 reports it ([Player.STATE_BUFFERING], [Player.STATE_READY]). */
         fun state(playbackState: Int) {
@@ -428,7 +561,7 @@ class SubtitleFailureTest {
                             i,
                             m,
                             ->
-                            MediaItemData.Builder("item$i").setMediaItem(m).build()
+                            data(m, "item$i")
                         },
                     ).setCurrentMediaItemIndex(0)
                     .setContentPositionMs(startPositionMs.coerceAtLeast(0L))
