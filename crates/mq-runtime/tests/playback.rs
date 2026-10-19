@@ -1105,3 +1105,110 @@ async fn subtitles_come_grouped_by_language_named_and_told_apart() {
     // The addon's own code is kept for the player.
     assert_eq!(s.subtitles[11].lang, "pob");
 }
+
+/// An addon that answers `body` to every request: its manifest is the row.
+async fn answering_addon(body: String) -> AddonRow {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let body = Arc::new(body);
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "subs-langs", "version": "1.0.0", "name": "Langs",
+        "types": ["movie"], "resources": ["stream"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    }
+}
+
+/// A profile that set no subtitle languages: the languages the pick was
+/// ranked with lead, as for audio: the device's, then English. A profile's
+/// own subtitle languages still come first.
+#[tokio::test]
+async fn without_subtitle_languages_the_device_language_then_english_lead() {
+    use mq_runtime::{VersionsParams, VersionsView};
+    let (video, _) = counted_origin().await;
+    let subs: Vec<_> = ["ger", "eng", "tur", "fre"]
+        .iter()
+        .map(|lang| serde_json::json!({"id": lang, "lang": lang, "url": format!("https://subs.test/{lang}.srt")}))
+        .collect();
+    let streams = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.1080p.WEB-DL", "subtitles": subs}]});
+    for (device, own, order) in [
+        (Some("tr"), None, ["Turkish", "English", "French", "German"]),
+        (Some("en"), None, ["English", "French", "German", "Turkish"]),
+        (None, None, ["English", "French", "German", "Turkish"]),
+        (
+            Some("tr"),
+            Some("ger"),
+            ["German", "Turkish", "English", "French"],
+        ),
+    ] {
+        let core = Core::temporary("p").unwrap();
+        if let Some(own) = own {
+            core.set_prefs(&serde_json::json!({ "subtitleLanguages": [own] }))
+                .unwrap();
+        }
+        install(&core, &[answering_addon(streams.to_string()).await]);
+        // As the bridge reads the device: its language, then English.
+        let mut languages: Vec<String> = device.into_iter().map(str::to_owned).collect();
+        languages.push("en".into());
+        languages.dedup();
+        let params = VersionsParams {
+            kind: "movie".into(),
+            video_id: "tt1727587".into(),
+            target: mq_streams::Target {
+                title: "Sintel".into(),
+                year: None,
+                season: None,
+                episode: None,
+            },
+            caps: mq_streams::DeviceCaps::basic_1080p(),
+            prefs: mq_streams::StreamPrefs {
+                languages,
+                ..Default::default()
+            },
+            last_binge_group: None,
+            facts: Default::default(),
+        };
+        let versions = VersionsView::open(&core, params);
+        let mut key = None;
+        for _ in 0..3000 {
+            let s = versions.snapshot();
+            if let Some(r) = s.recommended.as_ref().filter(|_| s.done) {
+                key = Some(r.key.clone());
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let key = key.unwrap_or_else(|| panic!("no pick: {:?}", versions.snapshot()));
+        let plays = versions.plays();
+        let view = PlaybackView::open_picked(&core, versions.pick(&key), target(), &plays);
+        let s = until(&view, "the tracks", |s| {
+            s.phase == PlaybackPhase::Ready && !s.subtitles_pending
+        })
+        .await;
+        let names: Vec<_> = s
+            .subtitles
+            .iter()
+            .map(|t| t.language_name.as_str())
+            .collect();
+        assert_eq!(names, order, "device {device:?}, profile {own:?}");
+    }
+}

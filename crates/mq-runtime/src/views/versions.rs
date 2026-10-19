@@ -244,6 +244,10 @@ pub struct Pick {
     pub candidates: Vec<ParsedStream>,
     pub handle: PickHandle,
     pub note: Option<LearnedNote>,
+    /// The audio languages this view ranked with: the profile's, else the
+    /// device's language, then English (the bridge fills them in). The
+    /// playback orders subtitles with them too.
+    pub languages: Vec<String>,
 }
 
 /// Playback reports through this that the picked row failed; when it was
@@ -754,6 +758,7 @@ impl VersionsView {
             candidates,
             handle,
             note,
+            languages: self.learning.prefs.languages.clone(),
         }
     }
 

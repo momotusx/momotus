@@ -330,6 +330,9 @@ struct State {
     /// The running skip lookup; started and replaced under the state lock,
     /// so an older report can never abort a newer lookup.
     segments_task: Option<JoinHandle<()>>,
+    /// The audio languages the pick was ranked with (`Pick::languages`):
+    /// the profile's, else the device's, then English. Empty without a pick.
+    languages: Vec<String>,
     /// Each subtitle track's place, by URL: its source's position in the
     /// installed list (the stream's own first), then its rank there. Off
     /// the wire; `subtitles` is sorted by it within a language.
@@ -402,6 +405,7 @@ impl State {
             lookup: None,
             segments_task: None,
             order: HashMap::new(),
+            languages: Vec::new(),
             #[cfg(feature = "torrent")]
             torrents: Vec::new(),
         }
@@ -510,7 +514,9 @@ impl PlaybackView {
         target: PlayTarget,
         plays: &[Format],
     ) -> Self {
-        Self::open_with(core, pick.candidates, Some(pick.handle), target, plays)
+        let view = Self::open_with(core, pick.candidates, Some(pick.handle), target, plays);
+        lock(&view.state).languages = pick.languages;
+        view
     }
 
     /// "Try again" once every source failed: the same versions again from
@@ -1081,7 +1087,7 @@ async fn resolve_next(
         };
         match opened {
             Ok((upstream, filename, size, lease)) => {
-                let wanted = preferred_languages(&core);
+                let wanted = preferred_languages(&core, &state);
                 // The stream's own tracks come from its addon.
                 let addon_url = stream.addon_url.as_ref();
                 let slot = lease.subtitles();
@@ -1933,7 +1939,7 @@ async fn built_in_tracks(
     let listing = listed.unwrap_or(mq_turkcealtyazi::Listing::Problem(
         mq_turkcealtyazi::Problem::Unreachable,
     ));
-    let wanted = preferred_languages(core);
+    let wanted = preferred_languages(core, state);
     let owned = OwnedPlaying {
         group: playing.group.map(str::to_owned),
         source: playing.source,
@@ -2179,7 +2185,7 @@ async fn find_subtitles(
         .filter(|a| a.supports(&path) && !is_built_in(a))
         .cloned()
         .collect();
-    let wanted = preferred_languages(core);
+    let wanted = preferred_languages(core, state);
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     while let Some(event) = fanout.next().await {
         let mut s = lock(state);
@@ -2228,16 +2234,20 @@ fn extra_value(name: &str, value: String) -> ExtraValue {
     }
 }
 
-/// The profile's languages, most wanted first, as language tags: its
-/// subtitle languages, then its audio languages.
-fn preferred_languages(core: &Core) -> Vec<String> {
+/// The languages wanted most, first, as language tags: the profile's
+/// subtitle languages, then the audio languages the pick was ranked with
+/// (the profile's, else the device's, then English, as for audio), or the
+/// profile's audio languages without a pick.
+fn preferred_languages(core: &Core, state: &Mutex<State>) -> Vec<String> {
     let prefs = core.prefs();
+    let picked = lock(state).languages.clone();
+    let audio = if picked.is_empty() {
+        prefs.streams.languages
+    } else {
+        picked
+    };
     let mut tags: Vec<String> = Vec::new();
-    for code in prefs
-        .subtitle_languages
-        .iter()
-        .chain(&prefs.streams.languages)
-    {
+    for code in prefs.subtitle_languages.iter().chain(&audio) {
         let tag = crate::languages::language(code).tag;
         if !tags.contains(&tag) {
             tags.push(tag);
