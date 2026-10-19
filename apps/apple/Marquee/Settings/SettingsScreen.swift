@@ -82,6 +82,13 @@ struct SettingsScreen: View {
                     SettingsRow(symbol: "zap", title: "Debrid services", detail: debrid.inUse ?? "Real-Debrid, TorBox, AllDebrid or Premiumize, for fast direct links.")
                 }
                 .buttonStyle(.row)
+                // An account, as Debrid is (the web's order).
+                NavigationLink {
+                    TraktScreen()
+                } label: {
+                    SettingsRow(symbol: "history", title: TraktWords.title, detail: TraktRules.rowLine(trakt.status, clock: TraktClock.time))
+                }
+                .buttonStyle(.row)
                 NavigationLink {
                     HomeRowsScreen(core: core)
                 } label: {
@@ -99,12 +106,6 @@ struct SettingsScreen: View {
                     SyncScreen()
                 } label: {
                     SettingsRow(symbol: sync.joined ? "refresh-cw" : "qr-code", title: SyncWords.title, detail: syncSummary)
-                }
-                .buttonStyle(.row)
-                NavigationLink {
-                    TraktScreen()
-                } label: {
-                    SettingsRow(symbol: "history", title: TraktWords.title, detail: TraktRules.rowLine(trakt.status, clock: TraktClock.time))
                 }
                 .buttonStyle(.row)
                 if let p = prefs.snapshot {
