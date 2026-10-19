@@ -34,7 +34,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use bytes::{Bytes, BytesMut};
-use futures_util::{Stream, StreamExt, stream};
+use futures_util::{FutureExt, Stream, StreamExt, stream};
 use manifest::{Children, Declared, Role, Sniffed};
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions, Url};
 use mq_media::CancellationToken;
@@ -138,6 +138,9 @@ struct Playback {
     subtitles: Mutex<Vec<Subtitle>>,
     /// Told when a subtitle could not be served (`SubtitleSlot::on_trouble`).
     trouble: Mutex<Option<Reporter>>,
+    /// File offsets of `hev1` types served as `hvc1`, found by the first
+    /// request of a file (`relabels`).
+    relabel: tokio::sync::OnceCell<Arc<[u64]>>,
 }
 
 /// Why a subtitle was answered with an empty WebVTT instead of its cues.
@@ -346,6 +349,7 @@ impl StreamServer {
                     released: CancellationToken::new(),
                     subtitles: Mutex::default(),
                     trouble: Mutex::default(),
+                    relabel: Default::default(),
                 });
                 let name = manifest_name(filename, kind);
                 Ok(self.lease(token, playback, &name, Some(kind)))
@@ -500,6 +504,7 @@ impl StreamServer {
             released: CancellationToken::new(),
             subtitles: Mutex::default(),
             trouble: Mutex::default(),
+            relabel: Default::default(),
         })
     }
 
@@ -1025,7 +1030,10 @@ async fn serve(
     let range = range_of(&request);
     let head_only = request.method() == Method::HEAD;
     match &playback.body {
-        Content::Http(source) => serve_http(source.clone(), range, head_only).await,
+        Content::Http(source) => {
+            let relabel = relabels(playback.clone());
+            serve_http(source.clone(), range, head_only, relabel).await
+        }
         Content::Hls(hls) => {
             let query = request.uri().query();
             let main = hls.url.clone();
@@ -1034,9 +1042,89 @@ async fn serve(
         #[cfg(feature = "torrent")]
         Content::Torrent { claim, file } => {
             let released = playback.released.clone();
-            torrent::serve(claim, *file, range.as_deref(), head_only, released).await
+            let relabel = relabels(playback.clone());
+            torrent::serve(claim, *file, range.as_deref(), head_only, released, relabel).await
         }
     }
+}
+
+/// Reads for a file's `hev1` entries: a torrent's wait for their pieces, so
+/// the time is the swarm's; the bytes stay small (sample tables are skipped).
+const RELABEL_BUDGET: mq_media::ProbeBudget = mq_media::ProbeBudget {
+    max_bytes: 4 << 20,
+    max_time: Duration::from_secs(30),
+};
+
+/// A body's relabel offsets, awaited before its first bytes: the headers
+/// never wait for the scan, and a HEAD request never starts it.
+type Relabel = futures_util::future::BoxFuture<'static, Arc<[u64]>>;
+
+/// The offsets of the file's `hev1` types to serve as `hvc1`: Apple's
+/// AVFoundation decodes HEVC only from an `hvc1` sample entry and plays an
+/// `hev1` file's sound with no picture. Found once per playback, by the
+/// first body sent, wherever `moov` sits; only entries whose `hvcC` holds
+/// the parameter sets, since the label does not add them.
+fn relabels(playback: Arc<Playback>) -> Relabel {
+    Box::pin(async move { scan(&playback).await })
+}
+
+async fn scan(playback: &Playback) -> Arc<[u64]> {
+    let found = playback.relabel.get_or_init(|| async {
+        let reader: Box<dyn mq_media::RangeReader> = match &playback.body {
+            Content::Http(source) if !source.passthrough() => {
+                Box::new(ahead::Reader(source.clone()))
+            }
+            #[cfg(feature = "torrent")]
+            // A torrent's file names are its own: only an MP4 or MOV one is
+            // read, so other files never wait on the scan's pieces.
+            Content::Torrent { claim, file } => match claim.open_reader(*file).await {
+                Ok(reader) if torrent::iso_bmff(&reader.file().path) => {
+                    Box::new(torrent::TorrentBytes(reader))
+                }
+                _ => return Arc::from([]),
+            },
+            _ => return Arc::from([]),
+        };
+        let cancel = playback.released.clone();
+        let entries = mq_media::hev1_entries(reader.as_ref(), RELABEL_BUDGET, &cancel).await;
+        if entries.iter().any(|e| !e.parameter_sets) {
+            tracing::warn!("an hev1 video entry without parameter sets: no picture on Apple");
+        }
+        entries
+            .iter()
+            .filter(|e| e.parameter_sets)
+            .map(|e| e.fourcc_at)
+            .collect()
+    });
+    found.await.clone()
+}
+
+/// Writes `hvc1` over each `hev1` type at `relabel` that falls in `chunk`,
+/// which starts at file offset `pos`: a range may hold part of one.
+fn relabel_chunk(chunk: &mut [u8], pos: u64, relabel: &[u64]) {
+    for &at in relabel {
+        for (i, &byte) in b"hvc1".iter().enumerate() {
+            let slot = (at + i as u64)
+                .checked_sub(pos)
+                .and_then(|r| usize::try_from(r).ok())
+                .and_then(|r| chunk.get_mut(r));
+            if let Some(slot) = slot {
+                *slot = byte;
+            }
+        }
+    }
+}
+
+/// `bytes` from file offset `pos` as served: the same buffer when no
+/// relabelled type falls in it.
+fn relabelled(bytes: Bytes, pos: u64, relabel: &[u64]) -> Bytes {
+    let end = pos + bytes.len() as u64;
+    if !relabel.iter().any(|&at| at < end && at + 4 > pos) {
+        return bytes;
+    }
+    let mut owned = bytes.to_vec();
+    relabel_chunk(&mut owned, pos, relabel);
+    Bytes::from(owned)
 }
 
 /// A child of a manifest playback, by the role that named it: a media
@@ -1486,6 +1574,11 @@ fn range_headers(
 mod torrent {
     use super::*;
 
+    /// An MP4 or MOV file by its name in the torrent.
+    pub(crate) fn iso_bmff(name: &str) -> bool {
+        matches!(content_type(name), "video/mp4" | "video/quicktime")
+    }
+
     fn content_type(name: &str) -> &'static str {
         let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
         match ext.as_deref() {
@@ -1512,8 +1605,9 @@ mod torrent {
         range: Option<&str>,
         head_only: bool,
         released: CancellationToken,
+        relabel: Relabel,
     ) -> Response {
-        let answer = open(claim, file, range, head_only, released.clone());
+        let answer = open(claim, file, range, head_only, released.clone(), relabel);
         released
             .run_until_cancelled(answer)
             .await
@@ -1526,6 +1620,7 @@ mod torrent {
         range: Option<&str>,
         head_only: bool,
         released: CancellationToken,
+        relabel: Relabel,
     ) -> Response {
         let reader = match claim.open_reader(file).await {
             Ok(r) => r,
@@ -1557,20 +1652,69 @@ mod torrent {
         };
         // Release ends the body: a read waiting for pieces stops at once,
         // and the range's demand goes.
-        let chunks = stream::unfold(Some(body), |body| async move {
-            use tokio::io::AsyncReadExt;
-            let mut body = body?;
-            let mut buf = vec![0u8; 64 * 1024];
-            match body.read(&mut buf).await {
-                Ok(0) => None,
-                Ok(n) => {
-                    buf.truncate(n);
-                    Some((Ok(bytes::Bytes::from(buf)), Some(body)))
-                }
-                Err(e) => Some((Err(e), None)),
-            }
-        });
+        let chunks = async move { chunks(body, start, relabel.await) }.flatten_stream();
         (status, out, pumped(chunks, released)).into_response()
+    }
+
+    /// `body`'s reads from file offset `start`, `relabel` applied.
+    pub(crate) fn chunks<R>(
+        body: R,
+        start: u64,
+        relabel: Arc<[u64]>,
+    ) -> impl Stream<Item = std::io::Result<bytes::Bytes>> + Send + 'static
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+    {
+        stream::unfold(Some((body, start)), move |state| {
+            let relabel = relabel.clone();
+            async move {
+                use tokio::io::AsyncReadExt;
+                let (mut body, pos) = state?;
+                let mut buf = vec![0u8; 64 * 1024];
+                match body.read(&mut buf).await {
+                    Ok(0) => None,
+                    Ok(n) => {
+                        buf.truncate(n);
+                        relabel_chunk(&mut buf, pos, &relabel);
+                        Some((Ok(bytes::Bytes::from(buf)), Some((body, pos + n as u64))))
+                    }
+                    Err(e) => Some((Err(e), None)),
+                }
+            }
+        })
+    }
+
+    /// A file of the engine for the container scan: reads wait for pieces.
+    pub(crate) struct TorrentBytes(pub(crate) mq_engine::StreamReader);
+
+    impl mq_media::RangeReader for TorrentBytes {
+        fn len(&self) -> futures_util::future::BoxFuture<'_, Result<u64, mq_media::ProbeError>> {
+            let len = self.0.len();
+            Box::pin(async move { Ok(len) })
+        }
+
+        fn read_at(
+            &self,
+            offset: u64,
+            len: u64,
+        ) -> futures_util::future::BoxFuture<'_, Result<bytes::Bytes, mq_media::ProbeError>>
+        {
+            Box::pin(async move {
+                use tokio::io::AsyncReadExt;
+                let failed = |e: String| mq_media::ProbeError::Http(e);
+                let mut range = self
+                    .0
+                    .range(offset, Some(offset.saturating_add(len)))
+                    .await
+                    .map_err(|e| failed(e.to_string()))?;
+                let mut out = Vec::new();
+                range
+                    .read_to_end(&mut out)
+                    .await
+                    .map_err(|e| failed(e.to_string()))?;
+                Ok(bytes::Bytes::from(out))
+            })
+        }
     }
 
     #[cfg(test)]
@@ -1599,7 +1743,15 @@ mod torrent {
             let released = CancellationToken::new();
             released.cancel();
             let claim = s.leecher.claim(t, "default").unwrap();
-            let response = serve(&claim, file, Some("bytes=0-"), false, released).await;
+            let response = serve(
+                &claim,
+                file,
+                Some("bytes=0-"),
+                false,
+                released,
+                Box::pin(async { Arc::from([]) }),
+            )
+            .await;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
             let stats = s.leecher.stats(t).await.unwrap();
             assert_eq!((stats.readers, stats.pieces_total), (0, 0));
@@ -1626,7 +1778,10 @@ mod torrent {
                 let released = released.clone();
                 async move {
                     let range = Some("bytes=0-");
-                    serve(&claim, file, range, false, released).await.status()
+                    let relabel: Relabel = Box::pin(async { Arc::from([]) });
+                    serve(&claim, file, range, false, released, relabel)
+                        .await
+                        .status()
                 }
             });
             let reached = tokio::time::timeout(Duration::from_secs(5), hold.reached()).await;
@@ -1645,11 +1800,12 @@ mod torrent {
     }
 }
 
-/// Serves a range from the playback's read-ahead cache.
+/// Serves a range from the playback's read-ahead cache, `relabel` applied.
 async fn serve_http(
     source: Arc<ahead::Source>,
     range: Option<String>,
     head_only: bool,
+    relabel: Relabel,
 ) -> Response {
     if source.passthrough() {
         return proxy_http(&source, range, head_only).await;
@@ -1686,19 +1842,23 @@ async fn serve_http(
     if head_only {
         return (status, out).into_response();
     }
-    let body = stream::unfold(Some(start), move |pos| {
-        let source = source.clone();
-        async move {
-            let pos = pos.filter(|&p| p < end)?;
-            match source.read(pos, end).await {
-                Ok(bytes) => {
-                    let next = pos + bytes.len() as u64;
-                    Some((Ok(bytes), Some(next)))
+    let body = async move {
+        let relabel = relabel.await;
+        stream::unfold(Some(start), move |pos| {
+            let (source, relabel) = (source.clone(), relabel.clone());
+            async move {
+                let pos = pos.filter(|&p| p < end)?;
+                match source.read(pos, end).await {
+                    Ok(bytes) => {
+                        let next = pos + bytes.len() as u64;
+                        Some((Ok(relabelled(bytes, pos, &relabel)), Some(next)))
+                    }
+                    Err(e) => Some((Err(e), None)),
                 }
-                Err(e) => Some((Err(e), None)),
             }
-        }
-    });
+        })
+    }
+    .flatten_stream();
     (status, out, Body::from_stream(body)).into_response()
 }
 
@@ -1769,6 +1929,65 @@ async fn proxy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file whose `hev1` type sits at offset 10, served in every split:
+    /// each piece gets the part of `hvc1` that falls in it.
+    #[test]
+    fn a_relabel_lands_in_whatever_part_of_it_a_chunk_holds() {
+        let file: Vec<u8> = [&[7u8; 10][..], b"hev1", &[9u8; 10]].concat();
+        let mut want = file.clone();
+        want[10..14].copy_from_slice(b"hvc1");
+        let relabel = [10u64];
+        for cut in 0..=file.len() {
+            for second in cut..=file.len() {
+                let mut served = Vec::new();
+                for (from, to) in [(0, cut), (cut, second), (second, file.len())] {
+                    let mut chunk = file[from..to].to_vec();
+                    relabel_chunk(&mut chunk, from as u64, &relabel);
+                    served.extend(chunk);
+                }
+                assert_eq!(served, want, "cuts at {cut} and {second}");
+            }
+        }
+        let untouched = Bytes::from_static(b"abcdef");
+        let same = relabelled(untouched.clone(), 100, &relabel);
+        assert_eq!(
+            same.as_ptr(),
+            untouched.as_ptr(),
+            "no copy without a relabel"
+        );
+        assert_eq!(
+            &relabelled(Bytes::from_static(b"hev1"), 10, &relabel)[..],
+            b"hvc1"
+        );
+        assert_eq!(
+            &relabelled(Bytes::from_static(b"v1xx"), 12, &relabel)[..],
+            b"c1xx"
+        );
+    }
+
+    /// A torrent body read in pieces of any size: each read's file offset
+    /// is where the last one ended.
+    #[cfg(feature = "torrent")]
+    #[tokio::test]
+    async fn torrent_reads_relabel_at_their_own_offset() {
+        use tokio::io::AsyncReadExt;
+        let file: Vec<u8> = [&[1u8; 20][..], b"hev1", &[2u8; 20]].concat();
+        let parts = [&file[..5], &file[5..22], &file[22..]];
+        let body = std::io::Cursor::new(parts[0].to_vec())
+            .chain(std::io::Cursor::new(parts[1].to_vec()))
+            .chain(std::io::Cursor::new(parts[2].to_vec()));
+        let start = 100;
+        let relabel: Arc<[u64]> = Arc::from([start + 20]);
+        let chunks: Vec<_> = torrent::chunks(body, start, relabel).collect().await;
+        assert_eq!(chunks.len(), 3, "one chunk per read");
+        let served: Vec<u8> = chunks
+            .into_iter()
+            .flat_map(|c| c.unwrap().to_vec())
+            .collect();
+        assert_eq!(&served[20..24], b"hvc1");
+        assert_eq!(served.len(), file.len());
+    }
 
     #[test]
     fn a_blocking_reload_waits_at_most_90_s() {

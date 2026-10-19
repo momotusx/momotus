@@ -77,6 +77,89 @@ async fn serves_torrent_ranges_byte_for_byte() {
     assert!(all.body[..] == s.movie[..], "whole file differs");
 }
 
+/// A YTS-style hev1 MP4 from a torrent (mq-media's synthetic fixture, `moov`
+/// at the tail): the engine's bytes go out with the sample entry as hvc1,
+/// in a range that cuts the four bytes and in a whole read.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_hev1_mp4_is_served_as_hvc1() {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    let mp4 = std::fs::read(format!(
+        "{dir}/../mq-media/tests/fixtures/hev1-moov-tail.mp4"
+    ))
+    .unwrap();
+    let fourcc = mp4.windows(4).position(|w| w == b"hev1").unwrap();
+    let mut want = mp4.clone();
+    want[fourcc..fourcc + 4].copy_from_slice(b"hvc1");
+    let s = support::swarm_movie("movie.mp4", mp4).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let file = s
+        .leecher
+        .select_file(t, "default", &FileHint::Name("movie.mp4".into()))
+        .await
+        .unwrap();
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = server.register(
+        Upstream::Torrent {
+            claim: s.leecher.claim(t, "default").unwrap(),
+            file,
+        },
+        "movie.mp4",
+    );
+    let at = fourcc as u64 + 2;
+    let cut = http.get_range(&lease.url, at, 6, &local()).await.unwrap();
+    assert!(
+        cut.body[..] == want[fourcc + 2..fourcc + 8],
+        "the cut range"
+    );
+    let all = http.get(&lease.url, &local()).await.unwrap();
+    assert!(all.body[..] == want[..], "the whole file");
+}
+
+/// The scan for hev1 entries waits for pieces inside the body: an MP4
+/// whose swarm left still gets its headers at once.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_mp4_torrent_answers_its_headers_before_the_scan() {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    let mp4 = std::fs::read(format!(
+        "{dir}/../mq-media/tests/fixtures/hev1-moov-tail.mp4"
+    ))
+    .unwrap();
+    let s = support::swarm_movie("movie.mp4", mp4).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let seeded = s._seeder.add_magnet(&s.info_hash, &[], &[]).await.unwrap();
+    s._seeder.remove(seeded, true).await.unwrap();
+    let file = s
+        .leecher
+        .select_file(t, "default", &FileHint::Name("movie.mp4".into()))
+        .await
+        .unwrap();
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let server = StreamServer::start(http.clone()).await.unwrap();
+    let lease = server.register(
+        Upstream::Torrent {
+            claim: s.leecher.claim(t, "default").unwrap(),
+            file,
+        },
+        "movie.mp4",
+    );
+    let headers = tokio::time::timeout(
+        Duration::from_secs(2),
+        http.stream(&lease.url, Some("bytes=0-".into()), &local()),
+    )
+    .await;
+    let body = headers.expect("the headers waited for the scan").unwrap();
+    assert_eq!(body.status, 206);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn release_ends_work_in_flight() {
     let s = support::swarm(true).await;

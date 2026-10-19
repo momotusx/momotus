@@ -3037,3 +3037,149 @@ async fn dash_opens_only_for_a_player_that_plays_it() {
         assert!(lease.url.ends_with("/v.mpd"), "{path}");
     }
 }
+
+// ---------------------------------------------------------- hev1 as hvc1
+
+/// A synthetic file from mq-media's fixtures (ffmpeg's testsrc, 64x64, 1 s).
+fn fixture(name: &str) -> Arc<Vec<u8>> {
+    let dir = env!("CARGO_MANIFEST_DIR");
+    Arc::new(std::fs::read(format!("{dir}/../mq-media/tests/fixtures/{name}")).unwrap())
+}
+
+fn type_at(data: &[u8], kind: &[u8; 4]) -> usize {
+    data.windows(4)
+        .position(|w| w == kind)
+        .expect("type in file")
+}
+
+/// Apple's AVFoundation plays an hev1 file's sound with no picture: the
+/// server serves its sample entry as hvc1, with `moov` at the head or the
+/// tail, in a whole read and in ranges that cut the four bytes.
+#[tokio::test]
+async fn an_hev1_file_is_served_as_hvc1() {
+    for name in ["hev1-moov-head.mp4", "hev1-moov-tail.mp4"] {
+        let data = fixture(name);
+        let fourcc = type_at(&data, b"hev1");
+        let mut want = data.to_vec();
+        want[fourcc..fourcc + 4].copy_from_slice(b"hvc1");
+        let (_server, lease, _seen, http) = serve(&data, Behaviour::default()).await;
+        let url = lease.url.clone();
+        for (offset, n) in [
+            (fourcc + 2, 6),
+            (fourcc - 3, 5),
+            (fourcc + 1, 2),
+            (0, fourcc + 1),
+        ] {
+            let got = range(&http, &url, offset as u64, n as u64).await;
+            assert!(got == want[offset..offset + n], "{name}: {offset}+{n}");
+        }
+        let whole = http.get(&url, &local()).await.unwrap();
+        assert!(whole.body[..] == want[..], "{name}: the whole file");
+    }
+}
+
+/// Served as they are: an hev1 whose `hvcC` has no parameter sets (as hvc1
+/// it would not play either), an hvc1 file and an H.264 file.
+#[tokio::test]
+async fn other_files_are_served_as_they_are() {
+    let mut bare = fixture("hev1-moov-tail.mp4").to_vec();
+    let record = type_at(&bare, b"hvcC") + 4;
+    bare[record + 22] = 0; // numOfArrays
+    for data in [Arc::new(bare), fixture("hvc1.mp4"), fixture("h264.mp4")] {
+        let (_server, lease, _seen, http) = serve(&data, Behaviour::default()).await;
+        let whole = http.get(&lease.url, &local()).await.unwrap();
+        assert!(whole.body[..] == data[..]);
+    }
+}
+
+/// Live: a real hev1 file (`MQ_HVC1_FILE`, read only) served through the
+/// server from a local origin, its URL checked by AVFoundation with
+/// `swift MQ_HVC1_CHECK <url>`, which prints `playable=` and a frame.
+#[tokio::test]
+#[ignore = "a local hev1 file and the Swift toolchain"]
+async fn live_an_hev1_file_plays_on_apple_through_the_server() {
+    let path = std::env::var("MQ_HVC1_FILE").expect("MQ_HVC1_FILE");
+    let check = std::env::var("MQ_HVC1_CHECK").expect("MQ_HVC1_CHECK");
+    let origin = file_origin(path.into()).await;
+    let (_server, lease, _http) = serve_url(origin).await;
+    let out = tokio::process::Command::new("swift")
+        .arg(&check)
+        .arg(&lease.url)
+        .output()
+        .await
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    println!("{} {text}", lease.url);
+    assert!(text.contains("playable=true"), "{text}");
+    assert!(
+        text.contains("frame ") && !text.contains("no frame"),
+        "{text}"
+    );
+}
+
+/// HTTP/1.1 origin over a file on disk, single byte ranges, one request
+/// per connection; the file is only read.
+async fn file_origin(path: std::path::PathBuf) -> String {
+    use tokio::io::{AsyncSeekExt, SeekFrom};
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let path = path.clone();
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut buf = [0u8; 1024];
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match socket.read(&mut buf).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => head.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+                let mut file = tokio::fs::File::open(&path).await.unwrap();
+                let len = file.metadata().await.unwrap().len();
+                let span = head
+                    .lines()
+                    .find_map(|l| l.strip_prefix("range: bytes="))
+                    .and_then(|r| {
+                        let (a, b) = r.trim().split_once('-')?;
+                        let start: u64 = a.parse().ok()?;
+                        let end = match b {
+                            "" => len,
+                            b => (b.parse::<u64>().ok()? + 1).min(len),
+                        };
+                        Some((start, end))
+                    });
+                let (start, end) = span.unwrap_or((0, len));
+                let status = match span {
+                    Some(_) => format!(
+                        "206 Partial Content\r\nContent-Range: bytes {start}-{}/{len}",
+                        end - 1
+                    ),
+                    None => "200 OK".into(),
+                };
+                let header = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: video/mp4\r\nETag: \"v1\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    end - start
+                );
+                if socket.write_all(header.as_bytes()).await.is_err() {
+                    return;
+                }
+                file.seek(SeekFrom::Start(start)).await.unwrap();
+                let mut left = end - start;
+                let mut chunk = vec![0u8; 256 * 1024];
+                while left > 0 {
+                    let want = (left as usize).min(chunk.len());
+                    let Ok(n) = file.read(&mut chunk[..want]).await else {
+                        return;
+                    };
+                    if n == 0 || socket.write_all(&chunk[..n]).await.is_err() {
+                        return;
+                    }
+                    left -= n as u64;
+                }
+            });
+        }
+    });
+    format!("http://{addr}/movie.mp4")
+}

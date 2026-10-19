@@ -44,14 +44,32 @@ pub async fn swarm_with(
     piece_len: u32,
     dwh: bool,
 ) -> Swarm {
-    let (seed_dir, leech_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-    let src = seed_dir.path().join("src");
-    std::fs::create_dir_all(&src).unwrap();
     let movie: Vec<u8> = (0..5 * 1024 * 1024 + 12_345u32)
         .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
         .collect();
+    swarm_of(ip, seeder, leecher, piece_len, dwh, ("movie.mkv", movie)).await
+}
+
+/// The swarm on `127.0.0.1` with `movie` as the video file, named `name`.
+#[allow(dead_code)] // the server's MP4 tests use it
+pub async fn swarm_movie(name: &str, movie: Vec<u8>) -> Swarm {
+    let ip = Ipv4Addr::LOCALHOST.into();
+    swarm_of(ip, &[ip], &[ip], 256 * 1024, true, (name, movie)).await
+}
+
+async fn swarm_of(
+    ip: IpAddr,
+    seeder: &[IpAddr],
+    leecher: &[IpAddr],
+    piece_len: u32,
+    dwh: bool,
+    (name, movie): (&str, Vec<u8>),
+) -> Swarm {
+    let (seed_dir, leech_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let src = seed_dir.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("a.nfo"), vec![b'n'; 37_000]).unwrap();
-    std::fs::write(src.join("movie.mkv"), &movie).unwrap();
+    std::fs::write(src.join(name), &movie).unwrap();
     let spawner = mq_engine::librqbit::spawn_utils::BlockingSpawner::new(2);
     let created = mq_engine::librqbit::create_torrent(
         &src,
@@ -68,7 +86,7 @@ pub async fn swarm_with(
     // The seeder finds the data where it keeps every torrent.
     let data = seed_dir.path().join("engine").join(&info_hash);
     std::fs::create_dir_all(&data).unwrap();
-    for f in ["a.nfo", "movie.mkv"] {
+    for f in ["a.nfo", name] {
         std::fs::copy(src.join(f), data.join(f)).unwrap();
     }
     let config = |dir: &Path, scope: &[IpAddr]| {
