@@ -26,6 +26,8 @@ pub struct MagnetOptions {
     /// Data directory; a fresh temporary one (deleted after the run) when
     /// unset.
     pub data_dir: Option<PathBuf>,
+    /// Serve pieces to other peers.
+    pub upload: bool,
 }
 
 const SEEKS: [f64; 3] = [25.0, 50.0, 75.0];
@@ -138,6 +140,7 @@ async fn run(
     let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
     let config = EngineConfig {
         dwh: !o.stock,
+        upload: o.upload,
         ..EngineConfig::new(dir, http.torrent_scope(&[]))
     };
     let engine = Engine::start(config).await.map_err(|e| e.to_string())?;

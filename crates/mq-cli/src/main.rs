@@ -95,6 +95,9 @@ enum Command {
         /// Keep torrent data here (default: a temporary folder, deleted).
         #[arg(long)]
         data_dir: Option<PathBuf>,
+        /// Serve no pieces to other peers.
+        #[arg(long)]
+        no_upload: bool,
     },
     /// Probe an http(s) stream, play it in mpv and report time to first frame.
     PlayUrl {
@@ -172,6 +175,7 @@ async fn main() {
         stock,
         bytes,
         data_dir,
+        no_upload,
     } = cli.command
     {
         let options = magnet::MagnetOptions {
@@ -182,6 +186,7 @@ async fn main() {
             stock,
             bytes,
             data_dir,
+            upload: !no_upload,
         };
         match magnet::play_magnet(&magnet, options).await {
             Ok(run) => emit(run),
