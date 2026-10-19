@@ -22,6 +22,8 @@
 .door:focus-visible, [data-form="tv"] .door:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
 @media (hover: hover) { [data-form="desktop"] .door:hover { background: var(--raised); } }
 .step-body .aside { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
+/* The stream choice question: two answers side by side, the same doors. */
+.doors.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* The welcome steps sit in one centered column on TV and desktop, as the
  * settings pages do, instead of a block at the left of a wide screen. */

@@ -112,7 +112,13 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   expect(sent.some((m) => m.op === "installDefaults")).toBe(false);
 
   await page.locator('[data-f="welcome:next"]').click();
+  // The one stream choice question, then the setup check.
+  await expect(page).toHaveURL(/step=choice/);
+  await expect(page.locator("h1")).toHaveText("How should Marquee pick what to play?");
+  await shot(page, "stream-choice-question", "desktop");
+  await page.locator('[data-f="welcome:best"]').click();
   await expect(page).toHaveURL(/step=3/);
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: null, minSeeders: 20 });
   const choices = sent.find((m) => m.op === "installDefaults")?.choices as { key: string; on: boolean }[];
   expect(choices).toHaveLength(9);
   expect(choices.filter((c) => !c.on).map((c) => c.key)).toEqual(["torrentio", "trakt"]);
@@ -148,8 +154,15 @@ test("Browse first passes the switches, then opens Home", async ({ browser }) =>
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/defaults-step-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
   await page.locator('[data-f="welcome:next"]').click();
+  await expect(page).toHaveURL(/step=choice&then=home/);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/stream-choice-question-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
+  // Skip writes nothing: the defaults are Start fast's.
+  await page.locator('[data-f="welcome:skip"]').click();
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
   expect(Object.values(await states()).every((s) => s === "on")).toBe(true);
+  expect(sent.some((m) => m.op === "setPrefs" && JSON.stringify(m).includes("streams"))).toBe(false);
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: 5 * 1024 ** 3, minSeeders: 50 });
 });
 
 test("a TV does it with keys only: Continue first, a row toggles with select", async ({ browser }) => {
@@ -174,7 +187,13 @@ test("a TV does it with keys only: Continue first, a row toggles with select", a
   for (let i = 0; i < 8 && (await focused(page)) !== "welcome:next"; i++) await page.keyboard.press("ArrowDown");
   await expect.poll(() => focused(page)).toBe("welcome:next");
   await page.keyboard.press("Enter");
+  // Start fast is focused: one press takes it.
+  await expect(page).toHaveURL(/step=choice/);
+  await expect.poll(() => focused(page)).toBe("welcome:fast");
+  await shot(page, "stream-choice-question", "tv");
+  await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/step=3/);
+  expect(sent.find((m) => m.op === "setPrefs" && JSON.stringify(m).includes("streams"))).toMatchObject({ patch: { streams: { sizeLimitBytes: 5 * 1024 ** 3, minSeeders: 50 } } });
   const now = await states();
   const key = row.split(":")[2] as string;
   expect(now[key]).toBe("off");
@@ -288,7 +307,11 @@ test("after an import, Back from the setup check does not call Marquee's own ins
   await expect(page).toHaveURL(/step=2&from=import/);
   await expect(page.locator(".drow.fixed", { hasText: "Cinemeta" })).toContainText("From Stremio");
   await page.locator('[data-f="welcome:next"]').click();
+  await expect(page).toHaveURL(/step=choice/);
+  await page.locator('[data-f="welcome:fast"]').click();
   await expect(page).toHaveURL(/step=3/);
+  await page.goBack();
+  await expect(page).toHaveURL(/step=choice/);
   await page.goBack();
   await expect(page).toHaveURL(/step=2/);
   await expect(page).not.toHaveURL(/from=import/);

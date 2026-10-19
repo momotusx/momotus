@@ -1,16 +1,19 @@
 /** Welcome: one decision per step. 1: the doors. 2: the recommended addons,
  * a switch each (Start fresh, Browse first and a finished import all lead
- * here; nothing is installed before Continue). 3: the setup check, run on
- * its own with a fix per row. The step lives in the URL, so Back walks back
+ * here; nothing is installed before Continue). "choice": how Marquee picks
+ * what to play, asked once (plans/m13-stream-choice.md 4.5). 3: the setup
+ * check, run on its own with a fix per row. The step lives in the URL, so Back walks back
  * through the steps. The Settings page of the same switches is at the end. */
 
 import { A, useNavigate, useSearchParams } from "@solidjs/router";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
+import Gem from "lucide-solid/icons/gem";
 import Link2 from "lucide-solid/icons/link-2";
 import PackageSearch from "lucide-solid/icons/package-search";
 import QrCode from "lucide-solid/icons/qr-code";
 import Sparkle from "lucide-solid/icons/sparkle";
+import Zap from "lucide-solid/icons/zap";
 import { createEffect, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { displayCaps, link, liveView, op, ping, reasonOf } from "../core/client";
@@ -20,7 +23,7 @@ import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { autoFocus } from "../focus/dom";
 import { form } from "../form";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
-import { findAddons, type Tone } from "../lib/words";
+import { choiceWords, findAddons, type Tone } from "../lib/words";
 import { InstallField } from "./addons";
 import "./browse.css";
 import "./settings.css";
@@ -56,7 +59,7 @@ function useDefaults() {
 
 export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
-  const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : 1);
+  const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : 1);
   // A new step puts focus on its first action (on a remote or after keys).
   createEffect(on(step, () => queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(".welcome [data-autofocus]")))));
   const { addons, defaults, error } = useDefaults();
@@ -82,6 +85,13 @@ export default function Onboarding() {
         <Show when={step() === 1}>
           <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} data-f="welcome:skip">
             Browse first
+            <ChevronRight aria-hidden />
+          </A>
+        </Show>
+        {/* Skip writes nothing: the defaults are Start fast's. */}
+        <Show when={step() === "choice"}>
+          <A class="skip" href={afterContinue(query.then as string | undefined)} data-f="welcome:skip">
+            {choiceWords.question.skip.label}
             <ChevronRight aria-hidden />
           </A>
         </Show>
@@ -128,6 +138,9 @@ export default function Onboarding() {
             fromImport={query.from === "import"}
             then={query.then as string | undefined}
           />
+        </Match>
+        <Match when={step() === "choice"}>
+          <Question then={query.then as string | undefined} />
         </Match>
         <Match when={step() === 3}>
           <SetupCheck list={addons.state.data?.addons ?? []} defaults={defaults()?.addons ?? []} note={note()} onFix={fix} />
@@ -225,7 +238,8 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
         here.searchParams.delete("from");
         history.replaceState(history.state, "", `${here.pathname}${here.search}`);
       }
-      navigate(afterContinue(props.review ? "home" : props.then));
+      // Review (the Home card) goes home; a first run asks the one question.
+      navigate(props.review ? afterContinue("home") : `/welcome?step=choice${props.then === "home" ? "&then=home" : ""}`);
     } catch (e) {
       setProblem(`Could not add the addons: ${reasonOf(e)}`);
     } finally {
@@ -306,6 +320,60 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
           <PackageSearch aria-hidden />
           {findAddons.title}
         </A>
+      </Show>
+    </section>
+  );
+}
+
+/** The one question: Start fast (focused) or Best quality, each a patch of
+ * the stream preferences from the shared words. */
+function Question(props: { then?: string }) {
+  const navigate = useNavigate();
+  const q = choiceWords.question;
+  const [busy, setBusy] = createSignal(false);
+  const [problem, setProblem] = createSignal<string | null>(null);
+  const pick = async (patch: Record<string, unknown>) => {
+    if (busy()) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      await op("setPrefs", { patch: { streams: patch } });
+      navigate(afterContinue(props.then));
+    } catch (e) {
+      setProblem(`Could not save the choice: ${reasonOf(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section class="step-body" aria-label={q.title}>
+      <h1>{q.title}</h1>
+      <p class="lead">{q.lead}</p>
+      <div class="doors two" data-fgroup="choice">
+        <button class="door" data-f="welcome:fast" data-autofocus aria-disabled={busy()} onClick={() => void pick(q.fast.patch)}>
+          <Zap aria-hidden />
+          <span>
+            <b>{q.fast.label}</b>
+            <small>{q.fast.text}</small>
+          </span>
+          <ChevronRight aria-hidden class="chev" />
+        </button>
+        <button class="door" data-f="welcome:best" aria-disabled={busy()} onClick={() => void pick(q.best.patch)}>
+          <Gem aria-hidden />
+          <span>
+            <b>{q.best.label}</b>
+            <small>{q.best.text}</small>
+          </span>
+          <ChevronRight aria-hidden class="chev" />
+        </button>
+      </div>
+      <Show when={problem()}>
+        {(p) => (
+          <p class="st bad" role="status">
+            <i class="dot" />
+            {p()}
+          </p>
+        )}
       </Show>
     </section>
   );

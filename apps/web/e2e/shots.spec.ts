@@ -229,11 +229,14 @@ const SCREENS: Screen[] = [
     name: "settings",
     path: "/settings",
     ready: async (page) => {
-      await visible('[data-fgroup="pref-quality"]')(page);
+      await visible('[data-fgroup="pref-subs"]')(page);
+      await expect(page.locator('[data-f="settings:stream-choice"] small')).toContainText(/shared by at least/);
       await expect(page.locator('[data-f="settings:addons"] small')).toContainText(/\d+ installed/);
     },
   },
+  { name: "stream-choice", path: "/stream-choice", ready: visible('[data-fgroup="choice-size"]') },
   { name: "welcome", path: "/welcome", ready: visible(".door") },
+  { name: "welcome-choice", path: "/welcome?step=choice", ready: visible(".doors.two .door") },
   { name: "welcome-source", path: "/welcome?step=2", ready: visible(".drow") },
   { name: "welcome-check", path: "/welcome?step=3", ready: visible(".check li") },
   { name: "import", path: "/import", ready: visible(".code, .problem"), mask: ".code, .qrbox, b.mono, [data-f='import:open']" },
