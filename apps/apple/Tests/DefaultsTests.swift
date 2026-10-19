@@ -6,7 +6,7 @@ import Testing
 // field through a real core opened in a temporary directory.
 
 private func addon(_ key: String, _ installed: DefaultAddonInfo.Installed, group: String = "lists") -> DefaultAddonInfo {
-    DefaultAddonInfo(key: key, name: key.capitalized, line: "", group: group, installed: installed)
+    DefaultAddonInfo(key: key, name: key.capitalized, line: "", group: group, installed: installed, logo: nil)
 }
 
 private let mixed = [
@@ -74,10 +74,25 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
 @Test func newFieldsDecode() throws {
     let snapshot = try JSONDecoder().decode(AddonsSnapshot.self, from: Data(#"{"addons": [], "fresh": true}"#.utf8))
     #expect(snapshot.fresh)
+    // Cinemeta has no logo (null), Torrentio one on the loopback server, and a core before logos sends no field.
     let list = try JSONDecoder().decode(DefaultAddons.self, from: Data(#"""
-        {"version": 1, "addons": [{"key": "cinemeta", "name": "Cinemeta", "line": "Titles.", "group": "catalogs", "installed": "off"}]}
+        {"version": 1, "addons": [
+         {"key": "cinemeta", "name": "Cinemeta", "line": "Titles.", "group": "catalogs", "installed": "off", "logo": null},
+         {"key": "torrentio", "name": "Torrentio", "line": "Streams.", "group": "streams", "installed": "absent",
+          "logo": "http://127.0.0.1:7781/logo/0123abcd/torrentio"},
+         {"key": "trakt", "name": "Trakt", "line": "Lists.", "group": "lists", "installed": "on"}]}
         """#.utf8))
-    #expect(list.addons == [DefaultAddonInfo(key: "cinemeta", name: "Cinemeta", line: "Titles.", group: "catalogs", installed: .off)])
+    #expect(list.addons.map(\.logo) == [nil, "http://127.0.0.1:7781/logo/0123abcd/torrentio", nil])
+    #expect(list.addons[0] == DefaultAddonInfo(key: "cinemeta", name: "Cinemeta", line: "Titles.", group: "catalogs", installed: .off, logo: nil))
+}
+
+@Test func aRowWithoutALogoShowsItsInitial() {
+    #expect(DefaultsRules.initial("Cinemeta") == "C")
+    #expect(DefaultsRules.initial("anime Kitsu") == "A")
+    // Leading marks are skipped: the first letter or digit.
+    #expect(DefaultsRules.initial("[NEW] TurkceAltyazi") == "N")
+    #expect(DefaultsRules.initial("123 Movies") == "1")
+    #expect(DefaultsRules.initial("") == "")
 }
 
 @Suite(.serialized) @MainActor struct DefaultsWiringTests {

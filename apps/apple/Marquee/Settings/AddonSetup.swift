@@ -65,6 +65,12 @@ enum DefaultsRules {
         list?.addons.first { $0.key == key && $0.installed != .on }
     }
 
+    /// The mark's letter when there is no logo or it does not load: the
+    /// name's first letter or digit, as Find addons marks its cards.
+    static func initial(_ name: String) -> String {
+        name.first { $0.isLetter || $0.isNumber }.map { $0.uppercased() } ?? ""
+    }
+
     static func fixWords(_ addon: DefaultAddonInfo) -> String {
         addon.installed == .absent ? "Add \(addon.name)" : "Turn \(addon.name) on"
     }

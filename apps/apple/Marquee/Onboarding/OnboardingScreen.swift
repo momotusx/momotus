@@ -382,13 +382,14 @@ struct RecommendedAddons: View {
     }
 }
 
-/// One default: name and its line, with a switch or a word at the end.
+/// One default: its mark, name and line, with a switch or a word at the end.
 private struct DefaultRow<End: View>: View {
     let addon: DefaultAddonInfo
     @ViewBuilder let end: End
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Space.s) {
+            DefaultMark(addon: addon)
             VStack(alignment: .leading, spacing: 4) {
                 Text(addon.name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                 Text(addon.line)
@@ -404,6 +405,24 @@ private struct DefaultRow<End: View>: View {
         .padding(Theme.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+    }
+}
+
+/// A 56 pt tile leading each row: the addon's bundled logo, else its
+/// initial on the neutral tile, also while it loads and when it fails (an
+/// SVG logo is one: the image decoder reads bitmaps only).
+private struct DefaultMark: View {
+    let addon: DefaultAddonInfo
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous)
+        ArtImage(url: addon.logo, mode: .fit, maxPixels: 168, fallback: DefaultsRules.initial(addon.name))
+            .padding(addon.logo == nil ? 0 : 6)
+            .frame(width: 56, height: 56)
+            .background(shape.fill(Theme.Palette.surface))
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Theme.Palette.edge, lineWidth: 1))
+            .accessibilityHidden(true)
     }
 }
 

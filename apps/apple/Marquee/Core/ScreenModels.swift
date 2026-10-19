@@ -193,6 +193,11 @@ struct DefaultAddonInfo: Decodable, Hashable, Sendable, Identifiable {
     let group: String
     /// In the list by manifest id: a copy with other settings counts.
     let installed: Installed
+    /// Its bundled logo on the core's loopback server, valid while that core
+    /// runs: read it from each answer, never store it. Nil for Cinemeta
+    /// (it publishes none), when the server did not start, and from a core
+    /// before logos.
+    let logo: String?
 
     var id: String { key }
 
