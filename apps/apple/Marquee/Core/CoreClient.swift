@@ -260,6 +260,10 @@ final class CoreClient {
     }
 
     static func dataDirectory() -> URL {
+        #if DEBUG
+        // `-MQDataDir <path>`: a walk's own library, apart from the app's.
+        if let path = UserDefaults.standard.string(forKey: "MQDataDir") { return URL(filePath: path, directoryHint: .isDirectory) }
+        #endif
         #if os(tvOS)
         // tvOS only offers purgeable local storage; sync is the durable copy.
         let base = URL.cachesDirectory
