@@ -11,11 +11,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 /**
  * [content] with [spoken] read out by TalkBack once each time it changes: a native live region under it,
  * since a Compose live region on a card reached TalkBack only as a change of its parent. [content] is drawn
- * over it and not read twice; it must hold no control.
+ * over it and not read twice; it must hold no control. [quietMs] is how long a change waits before it is
+ * written: [ON_ARRIVAL_MS] for words that come with a screen.
  */
 @Composable
 fun LiveSpoken(
     spoken: String,
+    quietMs: Long = QUIET_MS,
     content: @Composable () -> Unit,
 ) {
     Box {
@@ -32,7 +34,7 @@ fun LiveSpoken(
             // warning) are written once: TalkBack drops a live region that changes again right after it spoke.
             update = { view ->
                 view.tag = spoken
-                view.postDelayed({ view.writeNewest() }, QUIET_MS)
+                view.postDelayed({ view.writeNewest() }, quietMs)
             },
             modifier = Modifier.matchParentSize(),
         )
@@ -48,3 +50,10 @@ private fun TextView.writeNewest() {
 
 /** How long a live line waits before its words are written, so a change at once is written once. */
 private const val QUIET_MS = 400L
+
+/**
+ * For words that appear with a screen (the learned note on Versions): TalkBack's first focus on a new
+ * screen interrupts whatever it is saying (measured: the note cut 66 ms in at 400 ms), and a polite live
+ * region said after that focus waits for it instead.
+ */
+const val ON_ARRIVAL_MS = 1_500L

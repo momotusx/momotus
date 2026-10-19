@@ -66,6 +66,7 @@ import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.ON_ARRIVAL_MS
 import app.marquee.design.PlayFilled
 import app.marquee.design.PrimaryButton
 import app.marquee.design.SecondaryButton
@@ -384,8 +385,8 @@ private fun LearnedLine(
     GlassBar(Modifier.padding(bottom = Marquee.space.xs)) {
         MqIcon(Icons.Sparkles, tint = colors.muted)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Said once when it appears.
-            LiveSpoken(text) { MqText(text, role = TextRole.Callout) }
+            // Said once when it appears, after the screen's first focus.
+            LiveSpoken(text, ON_ARRIVAL_MS) { MqText(text, role = TextRole.Callout) }
             SecondaryButton(StreamChoiceCopy.UNDO, {
                 undone = true
                 scope.launch { runCatching { onUndo(note) }.onFailure { undone = false } }

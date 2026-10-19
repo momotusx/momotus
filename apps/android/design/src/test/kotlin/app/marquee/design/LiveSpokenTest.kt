@@ -81,4 +81,19 @@ class LiveSpokenTest {
         compose.waitForIdle()
         assertEquals(listOf("This link carries a sign-in in its settings, maybe someone else's."), written)
     }
+
+    @Test
+    fun `words that come with a screen wait until after its first focus`() {
+        compose.setContent {
+            MarqueeTheme(
+                Form.Phone,
+            ) { LiveSpoken("On this phone you often picked bigger files.", ON_ARRIVAL_MS) { MqText("x") } }
+        }
+        compose.waitForIdle()
+        val view = liveRegion(compose.activity.window.decorView)!!
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(600))
+        assertEquals("", view.text.toString(), "written before the screen's first focus, which would cut it")
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_000))
+        assertEquals("On this phone you often picked bigger files.", view.text.toString())
+    }
 }
