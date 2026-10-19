@@ -29,6 +29,15 @@ const CONNECTION_ID_MAGIC: ConnectionId = 0x41727101980;
 
 pub type TransactionId = u32;
 
+/// Marquee fork (C27): where trackers may be reached. Every UDP datagram's
+/// destination and every HTTP announce's literal host must pass `permits`,
+/// checked when it is sent; names resolve through `resolver`.
+#[derive(Clone)]
+pub struct Policy {
+    pub permits: Arc<dyn Fn(IpAddr) -> bool + Send + Sync>,
+    pub resolver: Arc<dyn reqwest::dns::Resolve>,
+}
+
 pub fn new_transaction_id() -> TransactionId {
     rand::rng().random()
 }
@@ -245,6 +254,7 @@ struct ClientLocked {
 struct ClientShared {
     sock: UdpSocket,
     locked: RwLock<ClientLocked>,
+    policy: Option<Policy>,
 }
 
 #[derive(Clone)]
@@ -268,6 +278,7 @@ impl UdpTrackerClient {
     pub async fn new(
         cancel_token: CancellationToken,
         bind_device: Option<&BindDevice>,
+        policy: Option<Policy>,
     ) -> anyhow::Result<Self> {
         let addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0);
         let sock = UdpSocket::bind_udp(
@@ -283,6 +294,7 @@ impl UdpTrackerClient {
             state: Arc::new(ClientShared {
                 sock,
                 locked: RwLock::new(Default::default()),
+                policy,
             }),
         };
 
@@ -292,6 +304,11 @@ impl UdpTrackerClient {
         });
 
         Ok(client)
+    }
+
+    /// Marquee fork (C27): the policy every tracker of the session obeys.
+    pub fn policy(&self) -> Option<&Policy> {
+        self.state.policy.as_ref()
     }
 
     async fn run(self) -> anyhow::Result<()> {
@@ -354,6 +371,14 @@ impl UdpTrackerClient {
     }
 
     async fn request(&self, addr: SocketAddr, request: Request) -> anyhow::Result<Response> {
+        // Marquee fork (C27): checked at every send, so a literal, a fresh
+        // answer and a cached one (`prev_addrs`) all meet the current
+        // interface snapshot.
+        if let Some(p) = &self.state.policy
+            && !(p.permits)(addr.ip())
+        {
+            bail!("tracker outside the address policy");
+        }
         let (tx, rx) = tokio::sync::oneshot::channel();
         let tid_g = self.reserve_transaction_id(tx)?;
 

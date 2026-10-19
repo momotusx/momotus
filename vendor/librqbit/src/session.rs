@@ -428,6 +428,9 @@ impl Default for DhtSessionConfig {
 pub struct Destinations {
     /// Every peer dialed (any source, both phases) and every incoming peer.
     pub peers: Arc<dyn Fn(IpAddr) -> bool + Send + Sync>,
+    /// Every tracker announce: HTTP literals and UDP datagrams at each send,
+    /// names through its resolver.
+    pub trackers: tracker_comms::Policy,
 }
 
 pub struct SessionOptions {
@@ -744,6 +747,19 @@ impl Session {
                     }
                     b
                 };
+                // Marquee fork (C27): tracker names resolve through the
+                // policy; no proxy (it would resolve them itself), no
+                // redirects (a literal target would skip the resolver), and
+                // no idle connections, so every announce opens a new
+                // connection checked under the current interface snapshot.
+                let builder = match &opts.destinations {
+                    Some(d) => builder
+                        .no_proxy()
+                        .redirect(reqwest::redirect::Policy::none())
+                        .pool_max_idle_per_host(0)
+                        .dns_resolver(d.trackers.resolver.clone()),
+                    None => builder,
+                };
 
                 builder
                     .user_agent(&client_name_and_version)
@@ -786,9 +802,13 @@ impl Session {
                 None
             };
 
-            let udp_tracker_client = UdpTrackerClient::new(token.clone(), bind_device.as_ref())
-                .await
-                .context("error creating UDP tracker client")?;
+            let udp_tracker_client = UdpTrackerClient::new(
+                token.clone(),
+                bind_device.as_ref(),
+                opts.destinations.as_ref().map(|d| d.trackers.clone()),
+            )
+            .await
+            .context("error creating UDP tracker client")?;
 
             let lsd = {
                 if opts.disable_local_service_discovery {

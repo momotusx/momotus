@@ -42,3 +42,7 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   address policy (plans/c27-torrent-policy.md). The connector refuses a
   peer outside it before dialing, and an incoming peer outside it is
   refused before its handshake is read (counted in `blocked_incoming`).
+- src/session.rs, src/lib.rs: `Destinations::trackers`, the tracker policy
+  handed to the UDP tracker client; with it the session's tracker HTTP
+  client uses no proxy, follows no redirect, keeps no idle connection and
+  resolves names through the policy. `tracker_comms` is re-exported.

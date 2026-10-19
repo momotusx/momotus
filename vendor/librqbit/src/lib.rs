@@ -110,6 +110,9 @@ pub use librqbit_core::magnet::*;
 pub use librqbit_core::peer_id::*;
 pub use librqbit_core::torrent_metainfo::*;
 
+// Marquee fork (C27): the tracker policy type, and the UDP client for tests.
+pub use tracker_comms;
+
 #[cfg(test)]
 mod tests;
 

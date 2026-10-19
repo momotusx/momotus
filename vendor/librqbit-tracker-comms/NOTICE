@@ -10,5 +10,15 @@ the registry package ships neither). Upstream ships no NOTICE file of its own.
 What was taken: src/, resources/, README.md, Cargo.toml.orig and the
 Cargo.toml published to crates.io for 9.0.1, plus an empty [workspace] table.
 
-Marquee changes (each changed spot carries a "Marquee fork" comment): none
-yet.
+Marquee changes (each changed spot carries a "Marquee fork" comment), for
+the torrent address policy (plans/c27-torrent-policy.md, appendix A.1):
+
+- src/tracker_comms_udp.rs: `Policy { permits, resolver }`, held by
+  `UdpTrackerClient` (a new argument of `new`, read with `policy()`).
+  `request` refuses a destination outside it before `send_to`, so a
+  literal, a fresh answer and a cached one (`prev_addrs`) all meet the
+  current interface snapshot.
+- src/tracker_comms.rs: UDP tracker names resolve through the policy's
+  resolver, which keeps only permitted answers; every HTTP announce whose
+  host is an IP literal is checked against the policy before it is sent.
+- src/lib.rs: re-exports `Policy` and `AnnounceFields`.

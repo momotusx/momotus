@@ -142,17 +142,22 @@ impl Scopes {
     }
 }
 
-/// The checks the fork runs for the session. Trackers and the DHT join in
-/// phases 3 and 4 (plans/c27-torrent-policy.md 6); their scopes count
-/// nothing until then.
+/// The checks the fork runs for the session: peers, and trackers (every
+/// UDP datagram and every HTTP literal at send time, names through the
+/// scope's resolver). The DHT joins in phase 4 (plans/c27-torrent-policy.md
+/// 6); its scope counts nothing until then.
 pub fn destinations(
     peers: &AddressScope,
-    _trackers: &AddressScope,
+    trackers: &AddressScope,
     _dht: &AddressScope,
 ) -> Destinations {
-    let peers = peers.clone();
+    let (peers, tracker_permits) = (peers.clone(), trackers.clone());
     Destinations {
         peers: Arc::new(move |ip: IpAddr| peers.permits(ip)),
+        trackers: librqbit::tracker_comms::Policy {
+            permits: Arc::new(move |ip: IpAddr| tracker_permits.permits(ip)),
+            resolver: trackers.resolver(),
+        },
     }
 }
 

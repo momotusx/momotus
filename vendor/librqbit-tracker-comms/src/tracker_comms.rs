@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::net::SocketAddrV4;
 use std::net::SocketAddrV6;
@@ -23,6 +24,7 @@ use url::Url;
 
 use crate::tracker_comms_http;
 use crate::tracker_comms_udp;
+use crate::tracker_comms_udp::Policy;
 use crate::tracker_comms_udp::UdpTrackerClient;
 use librqbit_core::hash_id::Id20;
 
@@ -36,6 +38,8 @@ pub struct TrackerComms {
     announce_port: u16,
     reqwest_client: reqwest::Client,
     key: u32,
+    // Marquee fork (C27): the UDP client's policy, for HTTP literals.
+    policy: Option<Policy>,
 }
 
 #[derive(Default)]
@@ -105,6 +109,7 @@ enum UdpTrackerResolveResult {
 async fn udp_tracker_to_socket_addrs(
     host: url::Host<&str>,
     port: u16,
+    policy: Option<&Policy>,
 ) -> anyhow::Result<UdpTrackerResolveResult> {
     let res = match host {
         url::Host::Domain(name) => {
@@ -112,10 +117,22 @@ async fn udp_tracker_to_socket_addrs(
 
             let mut v4: Option<SocketAddrV4> = None;
             let mut v6: Option<SocketAddrV6> = None;
-            for addr in tokio::net::lookup_host((name, port))
-                .await
-                .with_context(|| format!("error looking up hostname {name}"))?
-            {
+            // Marquee fork (C27): names resolve through the session's
+            // policy, which keeps only permitted answers.
+            let found: Vec<SocketAddr> = match policy {
+                Some(p) => p
+                    .resolver
+                    .resolve(name.parse()?)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("error looking up hostname {name}: {e}"))?
+                    .map(|a| SocketAddr::new(a.ip(), port))
+                    .collect(),
+                None => tokio::net::lookup_host((name, port))
+                    .await
+                    .with_context(|| format!("error looking up hostname {name}"))?
+                    .collect(),
+            };
+            for addr in found {
                 match (v4, v6, addr) {
                     (None, _, SocketAddr::V4(addr)) => v4 = Some(addr),
                     (_, None, SocketAddr::V6(addr)) => v6 = Some(addr),
@@ -181,6 +198,7 @@ impl TrackerComms {
                 announce_port,
                 reqwest_client,
                 key: rand::random(),
+                policy: udp_client.policy().cloned(),
             });
             let mut futures = FuturesUnordered::new();
             for tracker in trackers {
@@ -290,6 +308,19 @@ impl TrackerComms {
         }
         url.set_query(Some(&queries));
 
+        // Marquee fork (C27): a literal host skips the resolver, so it is
+        // checked here, at every announce, against the current snapshot.
+        if let Some(p) = &self.policy {
+            let literal = match url.host() {
+                Some(url::Host::Ipv4(ip)) => Some(IpAddr::V4(ip)),
+                Some(url::Host::Ipv6(ip)) => Some(IpAddr::V6(ip)),
+                _ => None,
+            };
+            if literal.is_some_and(|ip| !(p.permits)(ip)) {
+                bail!("tracker outside the address policy");
+            }
+        }
+
         let response: reqwest::Response = self.reqwest_client.get(url).send().await?;
         if !response.status().is_success() {
             anyhow::bail!("tracker responded with {:?}", response.status());
@@ -341,7 +372,7 @@ impl TrackerComms {
 
             // This should retry forever until the addrs are resolved.
             let addrs = (async || {
-                udp_tracker_to_socket_addrs(host.clone(), port)
+                udp_tracker_to_socket_addrs(host.clone(), port, client.policy())
                     .instrument(trace_span!("resolve", ?host))
                     .await
                     .or_else(|err| prev_addrs.ok_or(err))
