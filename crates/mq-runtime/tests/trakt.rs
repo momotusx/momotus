@@ -2649,11 +2649,49 @@ async fn signing_out_never_waits_for_the_network() {
     assert_eq!(status(&core).state, TraktState::Off);
     // The round's answer comes after the sign-out: nothing of it lands.
     let _ = round.await.unwrap();
-    assert_eq!(state(&core, "a-out-slow", "activities"), None);
+    for name in ["activities", "round_ms"] {
+        assert_eq!(state(&core, "a-out-slow", name), None, "{name}");
+    }
     fake.wait_for("the revoke", |f| {
         f.seen("POST", "/oauth/revoke")
             .iter()
             .any(|r| r.body["token"] == "access")
     })
     .await;
+}
+
+#[tokio::test]
+async fn looks_add_up_however_rarely_the_app_is_opened() {
+    let (core, fake) = signed_in("a-sparse").await;
+    fake.meta_status.lock().unwrap().insert(SHOW.into(), 503);
+    let library = core.library();
+    // Three failed looks, the last three days ago.
+    let failing = json!({"first": now() - 9 * 86_400_000, "last": now() - 3 * 86_400_000,
+                         "looks": 3});
+    let plant = |round_ms: i64| {
+        let failing = failing.to_string();
+        let k = key("a-sparse");
+        library
+            .set_tracker_state(k, "failing:show:tt100", &failing)
+            .unwrap();
+        library
+            .set_tracker_state(k, "round_ms", &round_ms.to_string())
+            .unwrap();
+    };
+    // No round since: the app was not opened. The fourth look gives up.
+    plant(now() - 3 * 86_400_000 + 60_000);
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(unmapped_ids(&core), [SHOW]);
+    assert_eq!(pending(&core, "a-sparse"), 0);
+    // Rounds since, the show fine meanwhile: the failures start over.
+    plant(now() - 3_600_000);
+    title.set_watched("tt100:1:2", true).unwrap();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        pending(&core, "a-sparse"),
+        1,
+        "a first look again: it waits"
+    );
 }

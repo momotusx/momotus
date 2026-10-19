@@ -92,6 +92,14 @@ pub(super) async fn round(
         Err(e) => conn.failed(&super::reason(e)),
     }
     conn.set_importing(None);
+    // The app is in use: failed looks not seen again over two days of
+    // rounds start over (`map::failed`).
+    if let Ok(_fence) = round.fence() {
+        let at = now_ms().to_string();
+        let _ = core
+            .library()
+            .set_tracker_state(round.key, map::LAST_ROUND, &at);
+    }
     let pending = core.library().tracker_pending(round.key).map_or(0, |p| p.0);
     round.report.pending = pending as u32;
     result.map(|()| round.report)

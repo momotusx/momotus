@@ -12,13 +12,16 @@ use std::collections::HashMap;
 pub(super) const UNMAPPED: &str = "unmapped:";
 /// Tracker state names of items whose details failed start with this.
 const FAILING: &str = "failing:";
+/// Tracker state: when a round last ended (ms), the measure of the app in
+/// use.
+pub(super) const LAST_ROUND: &str = "round_ms";
 /// A failure that lasts gives up: after this many failed looks (looks
 /// closer than `LOOK_GAP_MS` count once) spread over at least a day. Rounds
 /// run every 5 minutes in the foreground, so a count alone would give up
 /// within half an hour of an addon outage; the day keeps any outage shorter
 /// than that from dropping a write, and four separate failures across it
 /// say the details are not coming, even for an app opened only now and
-/// then.
+/// then (looks add up across its sessions).
 const FAILED_LOOKS: u64 = 4;
 const FAILING_FOR_MS: i64 = 24 * 60 * 60 * 1000;
 const LOOK_GAP_MS: i64 = 60 * 1000;
@@ -157,10 +160,17 @@ pub(super) fn failed(
         .flatten()
         .and_then(|v| serde_json::from_str(&v).ok())
         .unwrap_or_default();
-    // Failures long past (it worked meanwhile, unrecorded) start over.
-    if stored["last"]
-        .as_i64()
-        .is_some_and(|last| now - last > 2 * FAILING_FOR_MS)
+    // Failures not seen again over two days of rounds start over (it
+    // worked meanwhile, or is no longer looked up). Days the app was not
+    // used do not count: an item that never maps adds up its looks however
+    // rarely the app is opened.
+    let rounds = library
+        .tracker_state(key, LAST_ROUND)
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<i64>().ok());
+    if let (Some(last), Some(rounds)) = (stored["last"].as_i64(), rounds)
+        && rounds - last > 2 * FAILING_FOR_MS
     {
         stored = Value::Null;
     }
