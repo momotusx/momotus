@@ -348,7 +348,9 @@ impl Core {
             .inner
             .server
             .get_or_try_init(|| async {
-                StreamServer::start(self.http().clone()).await.map(Arc::new)
+                let server = StreamServer::start(self.http().clone()).await?;
+                server.set_logos(defaults::LOGOS);
+                Ok::<_, std::io::Error>(Arc::new(server))
             })
             .await?;
         Ok(server.clone())
@@ -669,8 +671,10 @@ impl Core {
 
     /// The default addons and whether each is in this profile's list, by
     /// manifest id or its own link (plans/m13-default-addons.md 5).
-    pub fn default_addons(&self) -> Result<DefaultAddons, CoreError> {
+    pub async fn default_addons(&self) -> Result<DefaultAddons, CoreError> {
         let rows = self.library().addons(self.profile())?;
+        // No server (it could not bind): the apps show initials.
+        let server = self.stream_server().await.ok();
         let state = |d: &defaults::DefaultAddon| {
             default_rows(&rows, d)
                 .into_iter()
@@ -694,6 +698,7 @@ impl Core {
                     line: d.line.clone(),
                     group: d.group.clone(),
                     installed: state(d),
+                    logo: server.as_ref().and_then(|s| s.logo_url(&d.key)),
                 })
                 .collect(),
         })

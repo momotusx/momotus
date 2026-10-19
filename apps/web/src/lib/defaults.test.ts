@@ -8,6 +8,7 @@ const row = (key: string, group: string, installed: DefaultAddonInfo["installed"
   line: `${key} line`,
   group,
   installed,
+  logo: null,
 });
 const nine = [
   row("cinemeta", "catalogs"),

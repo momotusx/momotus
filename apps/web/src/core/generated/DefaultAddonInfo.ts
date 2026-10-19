@@ -4,4 +4,9 @@ import type { DefaultInstalled } from "./DefaultInstalled";
 /**
  * A default as the apps show it (`defaultAddons`).
  */
-export type DefaultAddonInfo = { key: string, name: string, line: string, group: string, installed: DefaultInstalled, };
+export type DefaultAddonInfo = { key: string, name: string, line: string, group: string, installed: DefaultInstalled, 
+/**
+ * The bundled logo, served by the core on this device's loopback (no
+ * logo host is asked); none when the addon publishes no logo.
+ */
+logo: string | null, };

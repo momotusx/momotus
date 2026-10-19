@@ -614,11 +614,10 @@ impl Session {
                 self.reply(json!(id), done(result));
             }
             Request::DefaultAddons { id } => {
-                let result = core
-                    .default_addons()
-                    .map_err(|e| e.to_string())
-                    .and_then(|d| to_value(&d));
-                self.reply(json!(id), result);
+                self.spawn_fenced(id, async move {
+                    let defaults = core.default_addons().await.map_err(|e| e.to_string())?;
+                    to_value(&defaults)
+                });
             }
             Request::InstallDefaults { id, choices } => {
                 let result = core.install_defaults(&choices);

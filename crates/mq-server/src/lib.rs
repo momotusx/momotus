@@ -177,6 +177,17 @@ struct Shared {
     http: HttpClient,
     playbacks: Mutex<HashMap<String, Arc<Playback>>>,
     addr: SocketAddr,
+    logos: std::sync::OnceLock<&'static [Logo]>,
+    /// One per server: as on every other route, a page cannot probe for
+    /// the server without it.
+    logo_token: String,
+}
+
+/// A bundled image the apps show, such as a default addon's logo.
+pub struct Logo {
+    pub key: &'static str,
+    pub mime: &'static str,
+    pub bytes: &'static [u8],
 }
 
 pub struct StreamServer {
@@ -193,6 +204,8 @@ impl StreamServer {
             http,
             playbacks: Mutex::default(),
             addr: listener.local_addr()?,
+            logos: std::sync::OnceLock::new(),
+            logo_token: new_token(),
         });
         let app = Router::new()
             .route("/s/{token}/{name}", get(serve).head(serve))
@@ -202,6 +215,7 @@ impl StreamServer {
                 get(serve_template).head(serve_template),
             )
             .route("/sub/{token}/{id}/{name}", get(serve_subtitle))
+            .route("/logo/{token}/{key}", get(serve_logo))
             // On every path, the fallback's and wrong methods' included.
             .layer(axum::middleware::from_fn_with_state(
                 shared.clone(),
@@ -465,6 +479,23 @@ impl StreamServer {
     /// Playbacks with a live token.
     pub fn playbacks(&self) -> usize {
         lock(&self.shared.playbacks).len()
+    }
+
+    /// Serves `logos` from now on; set once, later calls change nothing.
+    pub fn set_logos(&self, logos: &'static [Logo]) {
+        let _ = self.shared.logos.set(logos);
+    }
+
+    /// The loopback URL of logo `key`, when it is one of `set_logos`'.
+    pub fn logo_url(&self, key: &str) -> Option<String> {
+        let known = self.shared.logos.get()?.iter().any(|l| l.key == key);
+        known.then(|| {
+            let port = self.shared.addr.port();
+            format!(
+                "http://127.0.0.1:{port}/logo/{}/{key}",
+                self.shared.logo_token
+            )
+        })
     }
 
     pub fn addr(&self) -> SocketAddr {
@@ -789,6 +820,30 @@ async fn only_loopback(
     }
     tracing::debug!("refused a request for another host");
     StatusCode::FORBIDDEN.into_response()
+}
+
+/// A logo of `set_logos`, under this server's logo token; anything else
+/// is not found.
+async fn serve_logo(
+    State(shared): State<Arc<Shared>>,
+    Path((token, key)): Path<(String, String)>,
+) -> Response {
+    let logo = shared
+        .logos
+        .get()
+        .and_then(|l| l.iter().find(|l| l.key == key));
+    match logo {
+        Some(logo) if token == shared.logo_token => (
+            [
+                (header::CONTENT_TYPE, logo.mime),
+                (header::CACHE_CONTROL, "private, max-age=86400"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            logo.bytes,
+        )
+            .into_response(),
+        _ => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 /// The playback a token names, while its lease lives.

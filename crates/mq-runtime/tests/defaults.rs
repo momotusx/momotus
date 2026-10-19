@@ -48,6 +48,7 @@ async fn a_fresh_profile_gets_the_nine_in_order_with_its_switches() {
     );
     assert!(
         core.default_addons()
+            .await
             .unwrap()
             .addons
             .iter()
@@ -88,7 +89,7 @@ async fn a_fresh_profile_gets_the_nine_in_order_with_its_switches() {
         !core.addons_fresh(),
         "a profile with a list no longer starts there"
     );
-    let shown = core.default_addons().unwrap();
+    let shown = core.default_addons().await.unwrap();
     assert_eq!(shown.version, defaults::LIST_VERSION);
     let state = |key: &str| {
         shown
@@ -270,7 +271,7 @@ async fn a_default_whose_manifest_id_changed_is_switched_on_its_own_row() {
         (other, true),
         "the other addon untouched"
     );
-    let shown = core.default_addons().unwrap();
+    let shown = core.default_addons().await.unwrap();
     let kitsu_state = shown
         .addons
         .iter()
@@ -375,4 +376,67 @@ async fn profiles_of_a_device_from_before_defaults_are_not_fresh() {
     assert!(!core.addons_fresh());
     drop(core);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A plain GET on loopback: status, content type and body.
+async fn get(url: &str) -> (u16, String, Vec<u8>) {
+    let url = url::Url::parse(url).unwrap();
+    tokio::task::spawn_blocking(move || {
+        use std::io::{Read, Write};
+        let host = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
+        let mut socket = std::net::TcpStream::connect(&host).unwrap();
+        write!(
+            socket,
+            "GET {} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n",
+            url.path()
+        )
+        .unwrap();
+        let mut reply = Vec::new();
+        socket.read_to_end(&mut reply).unwrap();
+        let split = reply.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+        let head = String::from_utf8_lossy(&reply[..split]).to_lowercase();
+        let status = head[9..12].parse().unwrap();
+        let mime = head
+            .lines()
+            .find_map(|l| l.strip_prefix("content-type: "))
+            .unwrap_or_default()
+            .to_owned();
+        (status, mime, reply[split + 4..].to_vec())
+    })
+    .await
+    .unwrap()
+}
+
+/// The logos come from the core's own loopback server, so the first-run
+/// step asks no logo host: every default but Cinemeta (it publishes none)
+/// has one, and an unknown key or another token is not found.
+#[tokio::test]
+async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
+    let core = Core::temporary(OWNER).unwrap();
+    let shown = core.default_addons().await.unwrap();
+    let mut served = Vec::new();
+    for d in &shown.addons {
+        let Some(url) = &d.logo else {
+            assert_eq!(d.key, "cinemeta");
+            continue;
+        };
+        assert!(url.starts_with("http://127.0.0.1:"), "{url}");
+        assert!(url.ends_with(&format!("/{}", d.key)), "{url}");
+        let (status, mime, body) = get(url).await;
+        assert_eq!(status, 200, "{url}");
+        let image = match mime.as_str() {
+            "image/png" => body.starts_with(b"\x89PNG"),
+            "image/svg+xml" => String::from_utf8_lossy(&body).contains("<svg"),
+            _ => false,
+        };
+        assert!(image, "{}: {mime}, {} bytes", d.key, body.len());
+        served.push(d.key.clone());
+    }
+    assert_eq!(served.len(), 8, "{served:?}");
+    let torrentio = shown.addons[1].logo.clone().unwrap();
+    let unknown = torrentio.replace("/torrentio", "/nope");
+    assert_eq!(get(&unknown).await.0, 404);
+    let token = torrentio.rsplit('/').nth(1).unwrap();
+    let other = torrentio.replace(token, &"0".repeat(token.len()));
+    assert_eq!(get(&other).await.0, 404);
 }

@@ -26,6 +26,55 @@ pub struct DefaultAddon {
     pub manifest: Manifest,
 }
 
+/// The defaults' logos, bundled so the first-run step asks no logo host
+/// anything (assets/defaults/README.md). Cinemeta publishes none.
+pub(crate) static LOGOS: &[mq_server::Logo] = &[
+    logo(
+        "torrentio",
+        "image/png",
+        include_bytes!("../assets/defaults/torrentio.png"),
+    ),
+    logo(
+        "turkcealtyazi",
+        "image/png",
+        include_bytes!("../assets/defaults/turkcealtyazi.png"),
+    ),
+    logo(
+        "subsense",
+        "image/png",
+        include_bytes!("../assets/defaults/subsense.png"),
+    ),
+    logo(
+        "opensubtitles",
+        "image/png",
+        include_bytes!("../assets/defaults/opensubtitles.png"),
+    ),
+    logo(
+        "trakt",
+        "image/png",
+        include_bytes!("../assets/defaults/trakt.png"),
+    ),
+    logo(
+        "rottentomatoes",
+        "image/svg+xml",
+        include_bytes!("../assets/defaults/rottentomatoes.svg"),
+    ),
+    logo(
+        "torrentcatalogs",
+        "image/png",
+        include_bytes!("../assets/defaults/torrentcatalogs.png"),
+    ),
+    logo(
+        "kitsu",
+        "image/png",
+        include_bytes!("../assets/defaults/kitsu.png"),
+    ),
+];
+
+const fn logo(key: &'static str, mime: &'static str, bytes: &'static [u8]) -> mq_server::Logo {
+    mq_server::Logo { key, mime, bytes }
+}
+
 /// Whether a default is in the profile's list, by manifest id or its own
 /// link: a copy installed another way (another config, a Stremio import)
 /// counts.
@@ -56,6 +105,9 @@ pub struct DefaultAddonInfo {
     pub line: String,
     pub group: String,
     pub installed: DefaultInstalled,
+    /// The bundled logo, served by the core on this device's loopback (no
+    /// logo host is asked); none when the addon publishes no logo.
+    pub logo: Option<String>,
 }
 
 /// The `defaultAddons` answer: the list, and the version an existing

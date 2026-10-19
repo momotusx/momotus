@@ -235,6 +235,8 @@ data class DefaultAddonInfo(
     val line: String,
     val group: String,
     val installed: DefaultInstalled,
+    /** The bundled logo, served by the core on this device's loopback (no logo host is asked); none when the addon publishes no logo. */
+    val logo: String? = null,
 )
 
 /** The `defaultAddons` answer: the list, and the version an existing profile is offered (`defaultsSeen` below it shows the card once). */
