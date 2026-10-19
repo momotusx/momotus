@@ -315,10 +315,10 @@ impl Core {
             .filter(|r| r.enabled)
             .filter_map(|r| {
                 let manifest: Manifest = serde_json::from_str(&r.manifest_json).ok()?;
+                // The row's `allow_private` grants nothing: sync may set it.
                 Some(InstalledAddon {
                     transport_url: url::Url::parse(&r.transport_url).ok()?,
                     manifest,
-                    allow_private: r.allow_private,
                 })
             })
             .collect())
@@ -410,7 +410,7 @@ impl Core {
             .map_err(|e| CoreError::BadManifest(e.to_string()))?;
         let url = addon.transport_url.to_string();
         self.edit_addons(|rows| {
-            put_addon(rows, &url, manifest_json, addon.allow_private);
+            put_addon(rows, &url, manifest_json);
             Ok(())
         })?;
         Ok(addon)
@@ -442,10 +442,10 @@ impl Core {
         let fetched = futures_util::future::join_all(links.iter().map(|link| async move {
             let addon = self.addons().fetch_manifest(link).await.ok()?;
             let json = serde_json::to_string(&addon.manifest).ok()?;
-            Some((link.as_str(), (json, addon.allow_private)))
+            Some((link.as_str(), json))
         }))
         .await;
-        let manifests: HashMap<&str, (String, bool)> = fetched.into_iter().flatten().collect();
+        let manifests: HashMap<&str, String> = fetched.into_iter().flatten().collect();
         if manifests.is_empty() && !links.is_empty() {
             return Ok(0);
         }
@@ -454,7 +454,7 @@ impl Core {
         for profile in &profiles {
             let newer = |row: &AddonRow| {
                 let fetched = manifests.get(row.transport_url.as_str());
-                fetched.filter(|(json, _)| *json != row.manifest_json)
+                fetched.filter(|json| **json != row.manifest_json)
             };
             // No write, and nothing to sync, when nothing changed.
             if !library
@@ -466,9 +466,8 @@ impl Core {
             }
             let written = self.for_profile(profile).edit_addons(|rows| {
                 for row in rows.iter_mut() {
-                    if let Some((json, allow_private)) = newer(row) {
+                    if let Some(json) = newer(row) {
                         row.manifest_json = json.clone();
-                        row.allow_private = *allow_private;
                         changed += 1;
                     }
                 }
@@ -538,23 +537,20 @@ fn error_kind(e: &CoreError) -> &'static str {
 /// Puts a fetched manifest in the list: in place over the row the link
 /// names (position, whether it is on and the stored link kept), else at the
 /// end, on.
-pub(crate) fn put_addon(
-    rows: &mut Vec<AddonRow>,
-    url: &str,
-    manifest_json: String,
-    allow_private: bool,
-) {
+pub(crate) fn put_addon(rows: &mut Vec<AddonRow>, url: &str, manifest_json: String) {
     match position(rows, url) {
-        Ok(at) => {
-            rows[at].manifest_json = manifest_json;
-            rows[at].allow_private = allow_private;
-        }
+        Ok(at) => rows[at].manifest_json = manifest_json,
         Err(_) => rows.push(AddonRow {
             transport_url: url.to_owned(),
             manifest_json,
             position: 0,
             enabled: true,
-            allow_private,
+            // Grants nothing here (`AddonClient::client_for` reads the
+            // link); written for older app versions, which still read it.
+            allow_private: url::Url::parse(url)
+                .ok()
+                .and_then(|u| u.host_str().map(mq_http::is_private_host))
+                .unwrap_or(false),
         }),
     }
 }

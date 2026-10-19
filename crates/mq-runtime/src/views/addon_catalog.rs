@@ -347,7 +347,7 @@ where
     // Installed already (a race, or another way in): the manifest goes in
     // place, as `install_addon` does.
     core.edit_addons(|rows| {
-        put_addon(rows, &url, manifest_json, false);
+        put_addon(rows, &url, manifest_json);
         Ok(())
     })?;
     Ok((manifest.id, manifest.name))
@@ -480,7 +480,6 @@ async fn fetch_list(
 ) -> Result<Vec<ListedAddon>, String> {
     let url = Url::parse(source).map_err(|_| "Cinemeta could not be reached".to_owned())?;
     let source = InstalledAddon {
-        allow_private: url.host_str().is_some_and(mq_http::is_private_host),
         transport_url: url,
         manifest: source_manifest(),
     };

@@ -262,8 +262,12 @@ impl Pools {
         let follow = || builder(config).redirect(reqwest::redirect::Policy::custom(redirect));
         let build =
             |b: reqwest::ClientBuilder| b.build().map_err(|e| HttpError::Network(e.to_string()));
+        let inner = follow();
+        // Test builds only: names in the test table resolve here too.
+        #[cfg(any(test, feature = "test-dns"))]
+        let inner = inner.dns_resolver(Arc::new(TestTable));
         Ok(Self {
-            inner: build(follow())?,
+            inner: build(inner)?,
             public: build(follow().dns_resolver(Arc::new(PublicOnly)))?,
             direct: build(follow().no_proxy().dns_resolver(Arc::new(PublicOnly)))?,
         })
@@ -550,6 +554,21 @@ impl reqwest::dns::Resolve for PublicOnly {
                 return Err(format!("{} resolves only to private addresses", name.as_str()).into());
             }
             Ok(Box::new(public.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// The system resolver behind the test table, every address kept (test
+/// builds' private-reach client).
+#[cfg(any(test, feature = "test-dns"))]
+struct TestTable;
+
+#[cfg(any(test, feature = "test-dns"))]
+impl reqwest::dns::Resolve for TestTable {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let found = lookup(name.as_str()).await?;
+            Ok(Box::new(found.into_iter()) as reqwest::dns::Addrs)
         })
     }
 }

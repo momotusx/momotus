@@ -18,14 +18,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use url::Url;
 
-/// An addon the user installed. `allow_private` is set when the user installed
-/// it from a LAN or loopback address, so private-address fetches stay allowed
-/// for that addon only.
+/// An addon the user installed. Its only private reach is its own host,
+/// read from `transport_url` (`AddonClient::client_for`).
 #[derive(Debug, Clone)]
 pub struct InstalledAddon {
     pub transport_url: Url,
     pub manifest: Manifest,
-    pub allow_private: bool,
 }
 
 impl InstalledAddon {
@@ -81,22 +79,36 @@ impl AddonClient {
 
     pub async fn fetch_manifest(&self, transport_url: &str) -> Result<InstalledAddon, AddonError> {
         let url = transport::normalize_transport_url(transport_url)?;
-        let allow_private = url.host_str().is_some_and(mq_http::is_private_host);
         let opts = RequestOptions {
-            allow_private,
             timeout: Duration::from_secs(10),
             ..Default::default()
         };
         let manifest: Manifest = self
-            .http
+            .client_for(&url)
             .get_json(url.as_str(), &opts)
             .await
             .map_err(AddonError::Http)?;
         Ok(InstalledAddon {
             transport_url: url,
             manifest,
-            allow_private,
         })
+    }
+
+    /// The client for an install's requests. As for its playbacks, its own
+    /// host is its only private reach (`mq_http::local_addrs`, a scoped
+    /// client): a loopback or LAN literal reaches itself, a name reaches
+    /// public addresses only, and no bit a synced row carries is read.
+    fn client_for(&self, transport_url: &Url) -> HttpClient {
+        let local = transport_url
+            .host_str()
+            .map(mq_http::local_addrs)
+            .unwrap_or_default();
+        if local.is_empty() {
+            // Public reach, through the user's proxy when there is one.
+            self.http.clone()
+        } else {
+            self.http.scoped(&local)
+        }
     }
 
     /// Fetches one resource, serving from cache when fresh.
@@ -157,11 +169,10 @@ impl AddonClient {
             priority: Priority::Addon,
             timeout,
             max_bytes: self.max_bytes,
-            allow_private: addon.allow_private,
             ..Default::default()
         };
         let started = Instant::now();
-        let result = self.http.get(url, &opts).await;
+        let result = self.client_for(&addon.transport_url).get(url, &opts).await;
         let latency = started.elapsed();
         self.health.record(addon.id(), latency, result.is_ok());
         let response = result.map_err(AddonError::Http)?;

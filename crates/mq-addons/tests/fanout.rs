@@ -36,7 +36,6 @@ async fn addon(id: &str, delay: Duration, body: &'static str) -> InstalledAddon 
     InstalledAddon {
         transport_url: Url::parse(&format!("http://{addr}/manifest.json")).unwrap(),
         manifest,
-        allow_private: true,
     }
 }
 
