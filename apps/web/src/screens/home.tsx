@@ -182,7 +182,7 @@ export default function Home() {
         <Show when={empty()}>
           <section class="problem home-problem">
             <h2>Home fills up from your addons</h2>
-            <p>None of the addons you have on shows a catalog here. Set up Marquee adds the standard catalog in one step, or add an addon yourself.</p>
+            <p>{defaultsWords.emptyHome}</p>
             <div class="acts">
               <A class="btn primary" href="/welcome" data-f="home:setup" data-autofocus>
                 <Wrench aria-hidden />

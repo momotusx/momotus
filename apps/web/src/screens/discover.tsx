@@ -5,6 +5,7 @@ import { Match, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { liveView } from "../core/client";
 import type { DiscoverSnapshot } from "../core/generated/DiscoverSnapshot";
+import { defaultsWords } from "../lib/defaults";
 import "./browse.css";
 
 export default function Discover() {
@@ -27,7 +28,7 @@ export default function Discover() {
         <Match when={d() && d()?.kinds.length === 0}>
           <section class="problem">
             <h2>Nothing to browse yet</h2>
-            <p>Discover lists the catalogs of the addons you have on, and none of them has one. Set up Marquee adds the standard catalog in one step.</p>
+            <p>{defaultsWords.emptyDiscover}</p>
             <div class="acts">
               <A class="btn primary" href="/welcome" data-f="discover:setup" data-autofocus>
                 <Wrench aria-hidden />

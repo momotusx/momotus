@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
-import { afterContinue, cardOffer, catalogMissing, choicesFor, grouped, namesLine } from "./defaults";
+import { readFileSync } from "node:fs";
+import { afterContinue, cardOffer, catalogMissing, choicesFor, defaultsWords, grouped, namesLine } from "./defaults";
 
 const row = (key: string, group: string, installed: DefaultAddonInfo["installed"] = "absent"): DefaultAddonInfo => ({
   key,
@@ -70,4 +71,15 @@ test("names read as a sentence", () => {
 test("Browse first and Review go Home, the doors go to the setup check", () => {
   expect(afterContinue("home")).toBe("/");
   expect(afterContinue(undefined)).toBe("/welcome?step=3");
+});
+
+test("an empty Home and Discover point to the recommended addons, not the old standard catalog", () => {
+  for (const line of [defaultsWords.emptyHome, defaultsWords.emptyDiscover]) {
+    expect(line).toContain("recommended addons");
+    expect(line).not.toContain("standard catalog");
+  }
+  for (const screen of ["home.tsx", "discover.tsx"]) {
+    const source = readFileSync(new URL(`../screens/${screen}`, import.meta.url), "utf8");
+    expect(source).not.toContain("standard catalog");
+  }
 });

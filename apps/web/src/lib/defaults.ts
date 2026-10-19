@@ -21,6 +21,9 @@ export const defaultsWords = {
   noCatalog: "Home and search need a catalog addon.",
   cardTitle: "New recommended addons",
   tvMore: "Add more later from your phone or computer.",
+  // Set up Marquee opens the welcome steps, where the recommended addons are.
+  emptyHome: "None of the addons you have on shows a catalog here. Set up Marquee offers the recommended addons, or add an addon yourself.",
+  emptyDiscover: "Discover lists the catalogs of the addons you have on, and none of them has one. Set up Marquee offers the recommended addons.",
 };
 
 /** The defaults grouped for display: groups in the order they first come,
