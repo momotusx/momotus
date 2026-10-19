@@ -421,3 +421,24 @@ async fn a_limit_the_user_set_is_named_as_chosen() {
         large_line(&view)
     );
 }
+
+/// Code review r1 P3: a pick made while the recommendation is still
+/// starting teaches nothing, since its failure may follow; once it started,
+/// a pick is a real choice.
+#[tokio::test]
+async fn a_pick_while_the_recommendation_starts_waits_for_it() {
+    let (core, _server) = learning_core().await;
+    let view = settled_view(&core).await;
+    view.freeze();
+    let recommended = view.snapshot().recommended.unwrap().key;
+    let first = view.pick(&recommended);
+    view.pick(LARGE);
+    assert_eq!(core.prefs().learned.fhd.size, 0, "still starting");
+    first.handle.ready();
+    view.pick(LARGE);
+    assert_eq!(
+        core.prefs().learned.fhd.size,
+        1,
+        "it started: a real choice"
+    );
+}

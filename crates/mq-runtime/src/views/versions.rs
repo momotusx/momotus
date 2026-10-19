@@ -181,15 +181,21 @@ struct State {
     conditions: VersionsConditions,
     /// A playback of the recommendation failed in this view.
     recommendation_failed: bool,
+    /// The recommendation was picked and has not started or failed yet:
+    /// a pick now could still turn out to follow its failure (code review
+    /// r1 P3), so it teaches nothing.
+    recommendation_starting: bool,
     /// A pick already counted in this view (only the first does).
     learned: bool,
     note: Option<LearnedNote>,
     /// What the ranking reads beyond the device and the user; the meta and
     /// the cache checks fill it in.
     rank: Conditions,
-    /// Cache answers by lowercase info hash, and the hashes asked.
-    cache: HashMap<String, bool>,
-    asked: HashSet<String>,
+    /// Cache answers by store and lowercase info hash, and those asked:
+    /// with two accounts one store's answer never relabels the other's
+    /// rows (code review r1 P3).
+    cache: HashMap<CacheKey, bool>,
+    asked: HashSet<CacheKey>,
     blocked: Option<BlockedVersions>,
     streams: Vec<ParsedStream>,
     ranked: Ranked,
@@ -251,7 +257,16 @@ pub struct PickHandle {
 impl PickHandle {
     pub fn failed(&self) {
         if let (true, Some(state)) = (self.recommended, self.state.upgrade()) {
-            lock(&state).recommendation_failed = true;
+            let mut s = lock(&state);
+            s.recommendation_failed = true;
+            s.recommendation_starting = false;
+        }
+    }
+
+    /// The picked row started playing.
+    pub fn ready(&self) {
+        if let (true, Some(state)) = (self.recommended, self.state.upgrade()) {
+            lock(&state).recommendation_starting = false;
         }
     }
 }
@@ -489,6 +504,7 @@ impl VersionsView {
         let state = Arc::new(Mutex::new(State {
             conditions: view_conditions(core, &params, &conditions),
             recommendation_failed: false,
+            recommendation_starting: false,
             learned: false,
             note: None,
             rank: conditions,
@@ -541,6 +557,7 @@ impl VersionsView {
         let state = State {
             conditions: view_conditions(core, params, &Conditions::default()),
             recommendation_failed: false,
+            recommendation_starting: false,
             learned: false,
             note: None,
             rank: Conditions::default(),
@@ -650,8 +667,16 @@ impl VersionsView {
             state: Arc::downgrade(&self.state),
             recommended,
         };
+        if recommended {
+            s.recommendation_starting = true;
+        }
         let l = &self.learning;
-        let counts = l.on && s.frozen && !recommended && !s.recommendation_failed && !s.learned;
+        let counts = l.on
+            && s.frozen
+            && !recommended
+            && !s.recommendation_failed
+            && !s.recommendation_starting
+            && !s.learned;
         let chose = s.ranked.rows.iter().find(|r| r.stream.key == key);
         let taught = match (counts, chose, &s.recommended) {
             (true, Some(chose), Some(over)) if !self.replays(key) => {
@@ -933,7 +958,8 @@ async fn collect(
 /// link and says why nothing is listed when nothing is.
 fn settle(core: &Core, s: &mut State, ranking: &Ranking, done: bool) {
     s.done = done;
-    apply_cache(s);
+    let stores = core.debrid().map(|r| r.stores()).unwrap_or_default();
+    apply_cache(&mut s.streams, &s.cache, &stores);
     rerank(s, ranking);
     let target = &ranking.params.target;
     if s.done {
@@ -942,11 +968,13 @@ fn settle(core: &Core, s: &mut State, ranking: &Ranking, done: bool) {
     s.blocked = blocked(s, ranking);
 }
 
+/// A cache answer's store (`None`: the default) and lowercase info hash.
+type CacheKey = (Option<mq_debrid::StoreId>, String);
+
 /// What a side task found.
 enum Side {
     Meta(TitleFacts),
-    /// Cache answers by lowercase info hash.
-    Cache(Vec<(String, bool)>),
+    Cache(Vec<(CacheKey, bool)>),
 }
 
 impl Side {
@@ -1027,7 +1055,7 @@ fn info_hash(s: &ParsedStream) -> Option<String> {
 fn cache_asks(
     core: &Core,
     streams: &[ParsedStream],
-    asked: &mut HashSet<String>,
+    asked: &mut HashSet<CacheKey>,
 ) -> Vec<(Option<mq_debrid::StoreId>, Vec<String>)> {
     let Some(resolver) = core.debrid() else {
         return Vec::new();
@@ -1035,14 +1063,13 @@ fn cache_asks(
     let stores = resolver.stores();
     let mut asks: Vec<(Option<mq_debrid::StoreId>, Vec<String>)> = Vec::new();
     for s in streams.iter().filter(|s| s.cached.is_none()) {
-        let Some(hash) = info_hash(s).filter(|h| asked.insert(h.clone())) else {
+        let Some(hash) = info_hash(s) else {
             continue;
         };
-        let store = s
-            .service
-            .as_deref()
-            .and_then(mq_debrid::StoreId::from_service)
-            .filter(|id| stores.contains(id));
+        let store = store_of(s, &stores);
+        if !asked.insert((store, hash.clone())) {
+            continue;
+        }
         match asks.iter_mut().find(|(st, _)| *st == store) {
             Some((_, hashes)) => hashes.push(hash),
             None => asks.push((store, vec![hash])),
@@ -1067,22 +1094,36 @@ async fn cache_check(core: Core, store: Option<mq_debrid::StoreId>, hashes: Vec<
             .into_iter()
             .zip(answers)
             .filter_map(|(h, a)| match a {
-                CacheStatus::Cached => Some((h, true)),
-                CacheStatus::NotCached => Some((h, false)),
+                CacheStatus::Cached => Some(((store, h), true)),
+                CacheStatus::NotCached => Some(((store, h), false)),
                 CacheStatus::Unknown => None,
             })
             .collect(),
     )
 }
 
-/// Our cache answers on the rows no addon said anything about.
-fn apply_cache(s: &mut State) {
-    if s.cache.is_empty() {
+/// The store a stream resolves on: the one its service names when that
+/// account is here, else the default (`None`).
+fn store_of(s: &ParsedStream, stores: &[mq_debrid::StoreId]) -> Option<mq_debrid::StoreId> {
+    s.service
+        .as_deref()
+        .and_then(mq_debrid::StoreId::from_service)
+        .filter(|id| stores.contains(id))
+}
+
+/// Our cache answers on the rows no addon said anything about, each from
+/// the store it resolves on.
+fn apply_cache(
+    streams: &mut [ParsedStream],
+    cache: &HashMap<CacheKey, bool>,
+    stores: &[mq_debrid::StoreId],
+) {
+    if cache.is_empty() {
         return;
     }
-    let cache = &s.cache;
-    for stream in s.streams.iter_mut().filter(|st| st.cached.is_none()) {
-        if let Some(cached) = info_hash(stream).and_then(|h| cache.get(&h)) {
+    for stream in streams.iter_mut().filter(|st| st.cached.is_none()) {
+        let key = info_hash(stream).map(|h| (store_of(stream, stores), h));
+        if let Some(cached) = key.and_then(|k| cache.get(&k)) {
             stream.cached = Some(*cached);
         }
     }
@@ -1379,6 +1420,26 @@ fn first_line(description: &str, name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Code review r1 P3: with two accounts, one store's cache answer
+    /// marks only the rows that resolve on it.
+    #[test]
+    fn a_cache_answer_marks_only_its_own_stores_rows() {
+        use mq_debrid::StoreId;
+        let row = |service: &str| {
+            let body = format!(
+                r#"{{"streams":[{{"name":"T","title":"x","infoHash":"{}","behaviorHints":{{"service":"{service}"}}}}]}}"#,
+                "a".repeat(40)
+            );
+            let wire = mq_protocol::decode_streams(body.as_bytes()).unwrap();
+            normalize(&wire.streams[0], "t", "T", 0, 0)
+        };
+        let mut streams = vec![row("torbox"), row("premiumize")];
+        let stores = [StoreId::TorBox, StoreId::Premiumize];
+        let cache = HashMap::from([((Some(StoreId::TorBox), "a".repeat(40)), true)]);
+        apply_cache(&mut streams, &cache, &stores);
+        assert_eq!((streams[0].cached, streams[1].cached), (Some(true), None));
+    }
 
     #[test]
     fn title_facts_read_the_strings_apps_and_cinemeta_send() {

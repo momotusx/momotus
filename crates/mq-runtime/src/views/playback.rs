@@ -234,6 +234,9 @@ struct State {
     /// "Try again" was asked: each torrent gets the full start deadline,
     /// never cut early as a dead swarm.
     patient: bool,
+    /// Dead swarms waiting for proof the connection works (a peer or a
+    /// source reached in this chain), so an outage marks none of them.
+    dead: Dead,
     last: Option<(u64, u64)>,
     saved_at: Option<Instant>,
     dirty: bool,
@@ -299,6 +302,7 @@ impl State {
             closed: false,
             pick: None,
             patient: false,
+            dead: Dead::default(),
             last: None,
             saved_at: None,
             dirty: false,
@@ -789,6 +793,52 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     true
 }
 
+/// Swarms that failed to start in one playback's chain, remembered as dead
+/// only once something in the chain proved the connection works (code
+/// review r1 P2-5, P3): a swarm that unchoked us and sent nothing proves
+/// it itself; a metadata timeout waits for another candidate's peer or
+/// source.
+#[derive(Debug, Default)]
+struct Dead {
+    reached: bool,
+    pending: Vec<String>,
+}
+
+impl Dead {
+    /// `hash` did not start; `proven`: a peer of its own unchoked us.
+    /// The hashes to remember now.
+    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+    fn failed(&mut self, hash: &str, proven: bool) -> Vec<String> {
+        self.pending.push(hash.to_ascii_lowercase());
+        if proven {
+            self.reached = true;
+        }
+        self.flush()
+    }
+
+    /// Something in the chain reached a peer or a source.
+    fn reached(&mut self) -> Vec<String> {
+        self.reached = true;
+        self.flush()
+    }
+
+    fn flush(&mut self) -> Vec<String> {
+        if self.reached {
+            std::mem::take(&mut self.pending)
+        } else {
+            Vec::new()
+        }
+    }
+}
+
+/// Remembers `hashes` as stalled on this device for a day.
+fn remember_dead(core: &Core, hashes: Vec<String>) {
+    let now = mq_library::hlc::now_ms();
+    for hash in hashes {
+        crate::speed::record_dead(core.library(), &hash, now);
+    }
+}
+
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
@@ -920,10 +970,14 @@ async fn resolve_next(
                 let slot = lease.subtitles();
                 listen_for_trouble(&slot, Arc::downgrade(&state), snapshot.clone(), run);
                 let reader = lease.reader();
-                {
+                let proven = {
                     let mut s = lock(&state);
                     if !adopt(&mut s, run, lease) {
                         return;
+                    }
+                    let proven = s.dead.reached();
+                    if let Some(pick) = &s.pick {
+                        pick.ready();
                     }
                     clear_segments(&mut s);
                     s.snapshot.phase = PlaybackPhase::Ready;
@@ -944,7 +998,9 @@ async fn resolve_next(
                     s.snapshot.subtitles_pending = true;
                     s.snapshot.binge_group = stream.binge_group.clone();
                     snapshot.set(s.snapshot.clone());
-                }
+                    proven
+                };
+                remember_dead(&core, proven);
                 if matches!(upstream, Upstream::Http { .. }) {
                     let attempt = lock(&state).snapshot.attempt;
                     spawn_http_sample(&core, &state, attempt);
@@ -1026,7 +1082,7 @@ async fn open_source(
             file_idx,
             trackers,
             ..
-        } if core.debrid().is_none() => {
+        } if by_engine(stream, core.debrid().is_some(), core.has_engine()) => {
             // Full builds play torrents with the built-in engine; store
             // builds have none and need a debrid account.
             #[cfg(feature = "torrent")]
@@ -1130,6 +1186,10 @@ async fn open_torrent(
     .await
     .map_err(|_| {
         did_not_start();
+        // Stale seeder counts fail this way: dead, once the chain shows
+        // the connection works.
+        let now = lock(state).dead.failed(info_hash, false);
+        remember_dead(core, now);
         "No peer sent the torrent's details in time".to_owned()
     })?
     .map_err(|e| e.to_string())?;
@@ -1167,11 +1227,14 @@ async fn open_torrent(
             return Ok((file, info, Started::Wrong(why)));
         }
         let mut head = reader.range(0, None).await?;
+        // ponytail: verified bytes and connected peers stand in for the
+        // received payload and the first unchoke (code review r1 P1) until
+        // the engine's TorrentStats.received_bytes and unchoked_ms land.
         let progress = || async {
             let s = engine.stats(torrent).await.ok()?;
             Some(Progress {
-                bytes: s.downloaded_bytes,
-                peers: s.peers,
+                received: s.downloaded_bytes,
+                unchoked: s.peers > 0,
             })
         };
         // Cut early only when another candidate can play instead, and never
@@ -1191,7 +1254,7 @@ async fn open_torrent(
                 .next()
                 .unwrap_or(&info.path)
                 .to_owned();
-            spawn_sample(core, torrent, stream.seeders);
+            spawn_sample(core, torrent, info_hash, stream.seeders);
             let upstream = Upstream::Torrent { claim, file };
             return Ok((upstream, Some(name), Some(info.len)));
         }
@@ -1199,17 +1262,28 @@ async fn open_torrent(
         // torrent, its hold and its files stay, since another profile may
         // be playing it, and the next candidate plays instead.
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
-        Ok((_, _, Started::Late)) => {
+        Ok((_, _, Started::Late { unchoked })) => {
             did_not_start();
+            if unchoked {
+                let now = lock(state).dead.reached();
+                remember_dead(core, now);
+            }
             "the swarm did not send the start of the video in time".to_owned()
         }
         Ok((_, _, Started::Stalled { nothing })) => {
             did_not_start();
             // Ranked last here for a day only when it sent nothing at all
-            // in the full window it got: the listed seeders were wrong.
-            if nothing {
-                crate::speed::record_dead(core.library(), info_hash, mq_library::hlc::now_ms());
-            }
+            // in the full window it got (the listed seeders were wrong);
+            // its unchoke proves the connection either way.
+            let now = {
+                let mut s = lock(state);
+                if nothing {
+                    s.dead.failed(info_hash, true)
+                } else {
+                    s.dead.reached()
+                }
+            };
+            remember_dead(core, now);
             "the swarm sent almost nothing".to_owned()
         }
         Ok((_, _, Started::Wrong(why))) => why.to_owned(),
@@ -1224,6 +1298,7 @@ async fn open_torrent(
 
 /// How a torrent's start went.
 #[cfg(any(test, feature = "torrent"))]
+#[cfg_attr(not(feature = "torrent"), allow(dead_code))]
 enum Started<T> {
     Ready(T),
     /// Verified bytes grew by less than the floor in a window, and another
@@ -1231,8 +1306,10 @@ enum Started<T> {
     Stalled {
         nothing: bool,
     },
-    /// The deadline passed while bytes still came.
-    Late,
+    /// The deadline passed; `unchoked`: a peer had unchoked us.
+    Late {
+        unchoked: bool,
+    },
     /// The file is not the one the version listed.
     #[cfg_attr(test, allow(dead_code))]
     Wrong(&'static str),
@@ -1253,16 +1330,18 @@ struct Stall {
 #[cfg(any(test, feature = "torrent"))]
 #[derive(Clone, Copy)]
 struct Progress {
-    /// Verified bytes.
-    bytes: u64,
-    peers: usize,
+    /// Payload received (code review r1 P1: a 16 MiB piece verifies long
+    /// after its first blocks arrive).
+    received: u64,
+    /// A peer unchoked us.
+    unchoked: bool,
 }
 
 /// Waits for `ready` while the swarm keeps sending: a window opens at its
-/// first connected peer (the metadata is already in), and each `floor` of
-/// verified bytes must come within it (`first`, then `later`). A swarm
+/// first unchoke (the metadata is already in), and each `floor` of
+/// received payload must come within it (`first`, then `later`). A swarm
 /// that falls short is cut when `others` can play instead; otherwise, and
-/// with no peer at all, it gets until `deadline`. Never cut while it
+/// with no unchoke at all, it gets until `deadline`. Never cut while it
 /// progresses.
 #[cfg(any(test, feature = "torrent"))]
 async fn watch_start<T, P, F>(
@@ -1278,7 +1357,7 @@ where
 {
     let start = tokio::time::Instant::now();
     tokio::pin!(ready);
-    let first = progress().await.map_or(0, |p| p.bytes);
+    let first = progress().await.map_or(0, |p| p.received);
     // The bytes and time the current window began with, and its length.
     let mut window: Option<(u64, tokio::time::Instant, Duration)> = None;
     let mut tick = tokio::time::interval(Duration::from_secs(1));
@@ -1288,17 +1367,17 @@ where
             _ = tick.tick() => {
                 let now = tokio::time::Instant::now();
                 if now - start >= deadline {
-                    return Started::Late;
+                    return Started::Late { unchoked: window.is_some() };
                 }
                 let Some(p) = progress().await else { continue };
                 match window {
-                    None if p.peers > 0 => window = Some((p.bytes, now, stall.first)),
+                    None if p.unchoked => window = Some((p.received, now, stall.first)),
                     None => {}
-                    Some((mark, _, _)) if p.bytes >= mark.saturating_add(stall.floor) => {
-                        window = Some((p.bytes, now, stall.later));
+                    Some((mark, _, _)) if p.received >= mark.saturating_add(stall.floor) => {
+                        window = Some((p.received, now, stall.later));
                     }
                     Some((_, since, length)) if others && now - since >= length => {
-                        return Started::Stalled { nothing: p.bytes == first };
+                        return Started::Stalled { nothing: p.received == first };
                     }
                     Some(_) => {}
                 }
@@ -1329,15 +1408,28 @@ fn wrong_file(
     let other = |named: &[u32], want: Option<u32>| {
         want.is_some_and(|w| !named.is_empty() && !named.contains(&w))
     };
-    (other(&r.episodes, target.episode) || other(&r.seasons, target.season))
+    // A name with no season numbers its episodes across the show (anime:
+    // "One Piece - 1071"), which a per-season episode cannot judge (code
+    // review r1 P2-3).
+    let seasoned = !r.seasons.is_empty();
+    (other(&r.seasons, target.season) || (seasoned && other(&r.episodes, target.episode)))
         .then_some("the torrent's file is another episode")
 }
 
 /// Reads the torrent's capacity sample once its first 30 s are over and
 /// counts it into the estimate; a torrent removed by then (it failed over)
-/// gives none.
+/// gives none. Once per torrent and network: a pack's next episode reads
+/// the same first 30 s again (code review r1 P2-1).
 #[cfg(feature = "torrent")]
-fn spawn_sample(core: &Core, torrent: mq_engine::TorrentHandle, seeders: Option<u32>) {
+fn spawn_sample(
+    core: &Core,
+    torrent: mq_engine::TorrentHandle,
+    info_hash: &str,
+    seeders: Option<u32>,
+) {
+    if !first_sample(info_hash, core.network()) {
+        return;
+    }
     let core = core.clone();
     tokio::spawn(async move {
         tokio::time::sleep(SAMPLE_AFTER).await;
@@ -1399,6 +1491,29 @@ fn spawn_http_sample(core: &Core, state: &Arc<Mutex<State>>, attempt: u64) {
             mq_library::hlc::now_ms(),
         );
     });
+}
+
+/// True the first time this process samples `info_hash` on `network`.
+// ponytail: per process; a restart may sample a torrent once more.
+#[cfg(any(test, feature = "torrent"))]
+fn first_sample(info_hash: &str, network: crate::speed::Network) -> bool {
+    static SAMPLED: Mutex<Vec<(String, crate::speed::Network)>> = Mutex::new(Vec::new());
+    let key = (info_hash.to_ascii_lowercase(), network);
+    let mut sampled = lock(&SAMPLED);
+    if sampled.contains(&key) {
+        return false;
+    }
+    sampled.push(key);
+    true
+}
+
+/// A torrent row plays through the engine when there is no account, or
+/// when our cache check found the service does not have it: the ranking
+/// scored it by torrent speed (3.2), and asking the service would add it
+/// to the account (code review r1 P2-2).
+fn by_engine(stream: &ParsedStream, account: bool, engine: bool) -> bool {
+    matches!(stream.source, Source::Torrent { .. })
+        && (!account || (engine && stream.cached == Some(false)))
 }
 
 /// Verified torrent bytes for the subtitle hash.
@@ -2080,6 +2195,66 @@ mod tests {
         assert_eq!(s.snapshot.phase, PlaybackPhase::Resolving);
     }
 
+    /// Code review r1 P1: the stall rule reads received payload, so a
+    /// swarm whose 16 MiB pieces verify late (the first at 20 s) while
+    /// blocks arrive every second is never cut.
+    #[tokio::test(start_paused = true)]
+    async fn received_payload_not_verified_pieces_keeps_a_swarm_alive() {
+        // `at` gives received bytes: 128 KiB a second from the unchoke.
+        let (started, _) = watch(Some(Duration::from_secs(25)), |t| (t * 128 * KIB, 3), true).await;
+        assert!(matches!(started, Started::Ready(())));
+    }
+
+    /// Code review r1 P2-5, P3: a metadata timeout is remembered once the
+    /// chain proves the connection works, and an outage marks nothing.
+    #[test]
+    fn dead_swarms_wait_for_proof_the_connection_works() {
+        let mut dead = Dead::default();
+        assert!(dead.failed("AAAA", false).is_empty(), "no proof yet");
+        assert!(dead.failed("bbbb", false).is_empty());
+        assert_eq!(dead.reached(), ["aaaa", "bbbb"], "a source opened");
+        assert_eq!(dead.failed("cccc", false), ["cccc"], "proof already in");
+        let mut outage = Dead::default();
+        assert!(outage.failed("dddd", false).is_empty());
+        assert!(
+            outage.pending.len() == 1 && !outage.reached,
+            "dropped with the view"
+        );
+        let mut own = Dead::default();
+        assert_eq!(
+            own.failed("eeee", true),
+            ["eeee"],
+            "its own unchoke proves it"
+        );
+    }
+
+    /// Code review r1 P2-1: one capacity sample per torrent and network.
+    #[test]
+    fn a_torrent_is_sampled_once_per_network() {
+        use crate::speed::Network;
+        let hash = "f".repeat(40);
+        assert!(first_sample(&hash, Network::Wifi));
+        assert!(!first_sample(&hash.to_uppercase(), Network::Wifi));
+        assert!(first_sample(&hash, Network::Cellular));
+    }
+
+    /// Code review r1 P2-2: a torrent our check found uncached plays
+    /// through the engine, never the service first.
+    #[test]
+    fn an_uncached_swarm_row_goes_to_the_engine() {
+        let mut torrent = stream(&format!(r#"{{"infoHash":"{}"}}"#, "a".repeat(40)));
+        assert!(by_engine(&torrent, false, true), "no account");
+        assert!(
+            !by_engine(&torrent, true, true),
+            "unknown: the service first"
+        );
+        torrent.cached = Some(false);
+        assert!(by_engine(&torrent, true, true));
+        assert!(!by_engine(&torrent, true, false), "no engine: the service");
+        torrent.cached = Some(true);
+        assert!(!by_engine(&torrent, true, true));
+    }
+
     /// "Try again" restarts the same versions from the first, patiently
     /// (no early cut), and only once the playback failed.
     #[tokio::test]
@@ -2125,7 +2300,10 @@ mod tests {
         move || {
             let (bytes, peers) = at(t);
             t += 1;
-            std::future::ready(Some(Progress { bytes, peers }))
+            std::future::ready(Some(Progress {
+                received: bytes,
+                unchoked: peers > 0,
+            }))
         }
     }
 
@@ -2177,10 +2355,10 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn the_deadline_holds_with_no_other_candidate_or_no_peer() {
         let (started, took) = watch(None, |_| (0, 3), false).await;
-        assert!(matches!(started, Started::Late));
+        assert!(matches!(started, Started::Late { .. }));
         assert!(took >= DEADLINE, "{took:?}");
         let (started, took) = watch(None, |_| (0, 0), true).await;
-        assert!(matches!(started, Started::Late));
+        assert!(matches!(started, Started::Late { .. }));
         assert!(took >= DEADLINE, "{took:?}");
     }
 
@@ -2198,7 +2376,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn a_swarm_that_keeps_sending_is_never_cut_early() {
         let (started, _) = watch(None, |t| (t * 300 * KIB, 5), true).await;
-        assert!(matches!(started, Started::Late));
+        assert!(matches!(started, Started::Late { .. }));
         let (started, _) = watch(Some(Duration::from_secs(20)), |t| (t * 300 * KIB, 5), true).await;
         assert!(matches!(started, Started::Ready(())));
     }
@@ -2226,6 +2404,23 @@ mod tests {
         assert!(
             wrong_file(file, 3 * gb, Some(2 * gb), &episode, false).is_some(),
             "larger"
+        );
+        // Code review r1 P2-3: an absolute episode number with no season
+        // is not judged against the per-season episode.
+        let anime = PlayTarget {
+            season: Some(21),
+            episode: Some(1),
+            ..PlayTarget::default()
+        };
+        assert_eq!(
+            wrong_file(
+                "[SubsPlease] One Piece - 1071 (1080p).mkv",
+                gb,
+                Some(gb),
+                &anime,
+                false
+            ),
+            None
         );
         let other = "Show/Show.S01E06.1080p.WEB.mkv";
         assert!(wrong_file(other, gb, Some(gb), &episode, false).is_some());
