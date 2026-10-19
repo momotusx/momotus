@@ -49,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DefaultsCopy
+import app.marquee.core.DefaultsStep
 import app.marquee.core.InstallCards
 import app.marquee.core.model.DefaultAddonInfo
 import app.marquee.core.model.DefaultAddons
@@ -163,61 +164,11 @@ fun OnboardingScreen(
     }
 }
 
-/** The defaults step's state: the core's list, the switches the user touched, and the install. */
+/** The defaults step for the page's life (the state and the install live in [DefaultsStep]). */
 class DefaultsHolder(
-    private val session: CoreSession,
+    session: CoreSession,
 ) : ViewModel() {
-    var answer by mutableStateOf<DefaultAddons?>(null)
-        private set
-    var problem by mutableStateOf<String?>(null)
-        private set
-    var failed by mutableStateOf<String?>(null)
-        private set
-    var busy by mutableStateOf(false)
-        private set
-
-    /** Only the rows the user touched; the others follow [DefaultsCopy.initial]. */
-    val switches = mutableStateMapOf<String, Boolean>()
-
-    init {
-        load()
-    }
-
-    fun load() {
-        problem = null
-        viewModelScope.launch {
-            try {
-                answer = session.ops.defaultAddons()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                problem = InstallCards.wordsOf(e)
-            }
-        }
-    }
-
-    /** One `installDefaults` with the switches [mode] shows; [then] runs once it is written. */
-    fun save(
-        mode: DefaultsMode,
-        then: () -> Unit,
-    ) {
-        val list = answer?.addons ?: return
-        if (busy) return
-        busy = true
-        failed = null
-        viewModelScope.launch {
-            try {
-                session.ops.installDefaults(DefaultsCopy.choices(list, mode, switches))
-                then()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                failed = InstallCards.wordsOf(e)
-            } finally {
-                busy = false
-            }
-        }
-    }
+    val step = DefaultsStep(session.ops, viewModelScope).also { it.load() }
 }
 
 /**
@@ -239,7 +190,8 @@ fun DefaultsScreen(
         )
     val tv = Marquee.form == Form.Tv
     val go = remember { FocusRequester() }
-    val answer = holder.answer
+    val step = holder.step
+    val answer = step.answer
     if (answer != null) AutoFocus(go)
     val rows = DefaultsCopy.rows(answer?.addons.orEmpty(), mode)
     Column(
@@ -268,32 +220,32 @@ fun DefaultsScreen(
                 role = TextRole.Body,
                 color = Marquee.colors.muted,
             )
-            holder.problem?.let {
+            step.problem?.let {
                 StateMessage(
                     DefaultsCopy.NOT_LOADED,
                     it,
                     icon = Icons.CircleAlert,
                     actionLabel = "Try again",
-                    onAction = holder::load,
+                    onAction = { step.load() },
                 )
             }
-            if (answer == null && holder.problem == null) StatusWord("Loading", Status.Warn)
+            if (answer == null && step.problem == null) StatusWord("Loading", Status.Warn)
             for ((group, addons) in rows.groupBy { it.group }) {
                 Kicker(DefaultsCopy.group(group), side = 0.dp)
                 for (addon in addons) {
                     // After an import, the ones it brought keep how they are and say where they came from.
-                    val on = DefaultsCopy.on(addon, mode, holder.switches)
+                    val on = DefaultsCopy.on(addon, mode, step.switches)
                     DefaultRow(addon, on.takeIf { DefaultsCopy.hasSwitch(addon, mode) }) {
-                        if (!holder.busy) holder.switches[addon.key] = !on
+                        if (!step.busy) step.switches[addon.key] = !on
                     }
                 }
                 if (group == DefaultsCopy.CATALOGS &&
-                    DefaultsCopy.catalogMissing(answer?.addons.orEmpty(), mode, holder.switches)
+                    DefaultsCopy.catalogMissing(answer?.addons.orEmpty(), mode, step.switches)
                 ) {
                     LiveSpoken(DefaultsCopy.NO_CATALOG) { Note(DefaultsCopy.NO_CATALOG, failed = true, side = 0.dp) }
                 }
             }
-            holder.failed?.let {
+            step.failed?.let {
                 StateMessage(DefaultsCopy.FAILED, "$it. Try again.", icon = Icons.CircleAlert)
             }
             if (tv && (mode == DefaultsMode.FirstRun || mode == DefaultsMode.AfterImport)) {
@@ -303,13 +255,13 @@ fun DefaultsScreen(
         Row(width) {
             PrimaryButton(
                 when {
-                    holder.busy -> DefaultsCopy.WORKING
+                    step.busy -> DefaultsCopy.WORKING
                     mode == DefaultsMode.Settings -> DefaultsCopy.SAVE
                     else -> DefaultsCopy.CONTINUE
                 },
-                { holder.save(mode, onDone) },
+                { step.save(mode, onDone) },
                 icon = Icons.Check,
-                enabled = answer != null && !holder.busy,
+                enabled = answer != null && !step.busy,
                 focusRequester = go,
             )
         }
@@ -351,39 +303,21 @@ private fun DefaultRow(
     }
 }
 
-/**
- * What the Home card offers (plans/m13-default-addons.md 7): the list when this profile misses a
- * default and has not been offered this version, else null. Never for a kids profile.
- */
-internal suspend fun defaultsOffer(
-    session: CoreSession,
-    kids: Boolean,
-): DefaultAddons? {
-    if (kids) return null
-    val answer =
-        try {
-            session.ops.defaultAddons()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            return null
-        }
-    if (answer.addons.none { it.installed == DefaultInstalled.Absent }) return null
+/** The profile's `defaultsSeen`, read once from the settings view (null when it does not answer in time). */
+internal suspend fun defaultsSeen(session: CoreSession): Int? {
     val view = session.settings()
-    val seen =
-        try {
-            withTimeoutOrNull(OFFER_WAIT_MS) { snapshotFlow { view.snapshot }.filterNotNull().first().defaultsSeen }
-        } finally {
-            view.close()
-        }
-    return answer.takeIf { seen != null && DefaultsCopy.offer(it, seen, kids) }
+    return try {
+        withTimeoutOrNull(OFFER_WAIT_MS) { snapshotFlow { view.snapshot }.filterNotNull().first().defaultsSeen }
+    } finally {
+        view.close()
+    }
 }
 
 private const val OFFER_WAIT_MS = 5_000L
 
 /** The one-time Home card: the defaults this profile does not have, Review or Not now. */
 @Composable
-internal fun DefaultsCard(
+internal fun RecommendedCard(
     answer: DefaultAddons,
     onReview: () -> Unit,
     onNotNow: () -> Unit,

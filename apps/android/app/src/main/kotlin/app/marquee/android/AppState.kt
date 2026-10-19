@@ -8,11 +8,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
+import app.marquee.core.DefaultsCard
 import app.marquee.core.InstallCards
 import app.marquee.core.LinkInstall
 import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
+import app.marquee.core.startsFresh
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.ui.tv.TvHomeState
@@ -46,6 +48,9 @@ class AppState(
 
     /** Adding an addon by its link (Settings, Find addons): it outlives the page, never the profile. */
     val linkInstall = LinkInstall(viewModelScope)
+
+    /** Home's one-time recommended addons card: its answer is written on this scope, never the page's. */
+    val defaultsCard = DefaultsCard(session.ops, viewModelScope)
 
     private var homeView: HomeView? = null
 
@@ -87,6 +92,7 @@ class AppState(
         tvHome = TvHomeState()
         installCards.forgetAll()
         linkInstall.forget()
+        defaultsCard.forget()
         if (home) {
             sentHome = true
             start = Start.Home
@@ -119,25 +125,19 @@ class AppState(
      */
     private suspend fun decide(): Start {
         snapshotFlow { session.health }.first { it == CoreHealth.Running }
-        step = "opening the addons view"
+        step = "reading the addons view"
         CoreLog.d("start: the core runs")
-        val addons = session.addons()
-        return try {
-            addons.opened.await()
-            step = "waiting for the addons"
-            CoreLog.d("start: addons view opened")
-            snapshotFlow { addons.status }.first { it !is ViewStatus.Opening }
-            val start = if (addons.snapshot?.fresh == true) Start.Onboarding else Start.Home
-            CoreLog.d("start: $start")
-            start
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // Home shows its own explanation when the core cannot answer.
-            Start.Home
-        } finally {
-            addons.close()
-        }
+        val start =
+            try {
+                if (startsFresh(session.addons())) Start.Onboarding else Start.Home
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Home shows its own explanation when the core cannot answer.
+                Start.Home
+            }
+        CoreLog.d("start: $start")
+        return start
     }
 
     override fun onCleared() {
