@@ -188,6 +188,13 @@ final class CoreClient {
         return Int((ContinuousClock.now - start) / .milliseconds(1))
     }
 
+    /// `lifecycle background`, awaited: the core answers once running Trakt
+    /// scrobbles are sent, or after 4 s. False when it did not answer.
+    @discardableResult
+    func lifecycleBackground() async -> Bool {
+        (try? await request("lifecycle", ["event": "background"]) { _ in }) != nil
+    }
+
     /// Tells the core about app and system events (`foreground`, `background`,
     /// `memoryPressure`, `networkChanged`).
     func lifecycle(_ event: String) {

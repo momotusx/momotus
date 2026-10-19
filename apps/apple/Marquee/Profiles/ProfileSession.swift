@@ -29,6 +29,8 @@ final class ProfileSession {
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let sync: SyncModel
+    /// Its view is device-wide state the switch closes, and a removed profile's record goes.
+    @ObservationIgnored private let trakt: TraktModel?
     @ObservationIgnored private var decided = false
     /// What `chosen` was when the switch under way started: Cancel puts it back,
     /// so a start picker that was never answered asks again.
@@ -44,9 +46,10 @@ final class ProfileSession {
     /// nothing of the profile shows until the new core says which one runs.
     private var seen = -1
 
-    init(core: CoreClient, sync: SyncModel) {
+    init(core: CoreClient, sync: SyncModel, trakt: TraktModel? = nil) {
         self.core = core
         self.sync = sync
+        self.trakt = trakt
         view = LiveRecord("profiles", core: core)
         view.onSnapshot = { [weak self] snapshot in self?.saw(snapshot) }
         core.onProfileGone = { [weak self] id in self?.removed(id) }
@@ -84,6 +87,8 @@ final class ProfileSession {
     }
 
     private func removed(_ id: String) {
+        // A removed profile's keystore entries go too (also for one removed before this session).
+        trakt?.profileGone(id)
         gone = (id, (gone?.count ?? 0) + 1)
     }
 
@@ -133,6 +138,7 @@ final class ProfileSession {
         epoch += 1
         // Device-level views a profile does not own still count as open.
         sync.endPairing()
+        trakt?.end()
         // The session's own task: the caller's view leaves with the gate.
         let work = Task { await runSwitch(id, pin: pin) }
         return await work.value
@@ -190,5 +196,7 @@ final class ProfileSession {
     /// Profile ops that answer the new snapshot (create, update, delete, setPin).
     func perform(_ op: String, _ fields: [String: any Sendable]) async throws {
         try await core.perform(op, fields)
+        // Deleted here: its Trakt record goes at once, not only when the core says it is gone.
+        if op == "deleteProfile", let id = fields["profile"] as? String { trakt?.profileGone(id) }
     }
 }

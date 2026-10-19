@@ -39,7 +39,16 @@ struct ScenePhaseForward: ViewModifier {
                 // Pull what other devices changed while this one was away.
                 if sync.joined { sync.request() }
             case .background:
+                #if os(iOS) || os(tvOS)
+                // Trakt's scrobbles go before the app is suspended: the system waits for the answer.
+                let task = UIApplication.shared.beginBackgroundTask(withName: "lifecycle", expirationHandler: nil)
+                Task {
+                    await core.lifecycleBackground()
+                    UIApplication.shared.endBackgroundTask(task)
+                }
+                #else
                 core.lifecycle("background")
+                #endif
             default:
                 break
             }

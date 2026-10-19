@@ -13,6 +13,8 @@ final class PlayerModel {
     private(set) var position: Double = 0
     private(set) var duration: Double = 0
     private(set) var playing = false
+    /// Paused by the user or the system, not buffering: what `progress` says to Trakt.
+    private var paused = false
     private(set) var waiting = true
     private(set) var ended = false
     private(set) var firstFrameMs: Int?
@@ -262,7 +264,7 @@ final class PlayerModel {
     }
 
     func togglePlay() {
-        if playing { player.pause(); report() } else { if ended { seek(to: 0) }; player.play() }
+        if playing { player.pause(); report(paused: true) } else { if ended { seek(to: 0) }; player.play() }
     }
 
     func seek(to seconds: Double) {
@@ -437,9 +439,16 @@ final class PlayerModel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
                 MainActor.assumeIsolated {
-                    self?.playing = status == .playing
-                    self?.waiting = status == .waitingToPlayAtSpecifiedRate
-                    self?.publishNowPlaying()
+                    guard let self else { return }
+                    self.playing = status == .playing
+                    self.waiting = status == .waitingToPlayAtSpecifiedRate
+                    self.publishNowPlaying()
+                    // A pause or a play from anywhere (the Lock Screen, a call) reaches Trakt at once;
+                    // buffering is neither.
+                    if status != .waitingToPlayAtSpecifiedRate, (status == .paused) != self.paused {
+                        self.paused = status == .paused
+                        self.report()
+                    }
                 }
             }
             .store(in: &bag)
@@ -468,11 +477,12 @@ final class PlayerModel {
 
     /// Saves progress in the core. Nothing before the first frame: a position
     /// of zero then would wipe the resume point.
-    private func report() {
+    /// `paused` tells Trakt's scrobbles a pause from a play (the player's own pause unless given).
+    private func report(paused: Bool? = nil) {
         guard rendered, let sub, duration > 0, position > 0 else { return }
         lastReport = .now
         let at = stoppedPosition(pendingStart: pendingStart, position: position)
-        core.commandNow(sub, ["type": "progress", "positionMs": Int(at * 1000), "durationMs": Int(duration * 1000)])
+        core.commandNow(sub, ["type": "progress", "positionMs": Int(at * 1000), "durationMs": Int(duration * 1000), "paused": paused ?? self.paused])
     }
 
     /// The Lock Screen's title, episode, length, playhead and speed (0 while paused).

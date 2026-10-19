@@ -59,6 +59,7 @@ enum DebugHooks {
         case "sync": return .sync
         case "kit": return .kit
         case "compare": return .compare
+        case "trakt": return .trakt
         default: break
         }
         return pairedPreview ? .pairing : nil

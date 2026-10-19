@@ -135,6 +135,9 @@ targets:
       - path: Marquee/Sync/Clipboard.swift
       - path: Marquee/Settings/FindAddonsPage.swift
       - path: Marquee/Profiles/ProfileSession.swift
+      - path: Marquee/Trakt/TraktModel.swift
+      - path: Marquee/Trakt/TraktWords.swift
+      - path: Marquee/Core/TraktModels.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests

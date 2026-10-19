@@ -8,6 +8,7 @@ enum SettingsPage: Hashable {
     case sync
     case kit
     case compare
+    case trakt
 }
 
 /// Sources (addons) and the few playback choices worth making; everything
@@ -20,6 +21,7 @@ struct SettingsScreen: View {
     @Environment(SyncModel.self) private var sync
     @Environment(ProfileSession.self) private var profiles
     @Environment(DebridSession.self) private var debrid
+    @Environment(TraktModel.self) private var trakt
 
     init(core: CoreClient) {
         self.core = core
@@ -99,6 +101,12 @@ struct SettingsScreen: View {
                     SettingsRow(symbol: sync.joined ? "refresh-cw" : "qr-code", title: SyncWords.title, detail: syncSummary)
                 }
                 .buttonStyle(.row)
+                NavigationLink {
+                    TraktScreen()
+                } label: {
+                    SettingsRow(symbol: "history", title: TraktWords.title, detail: TraktRules.rowLine(trakt.status, clock: TraktClock.time))
+                }
+                .buttonStyle(.row)
                 if let p = prefs.snapshot {
                     section("Playback").padding(.top, Theme.Space.s)
                     playback(p)
@@ -134,6 +142,7 @@ struct SettingsScreen: View {
             case .sync: SyncScreen()
             case .kit: RecoveryKitScreen()
             case .compare: ForkReviewScreen()
+            case .trakt: TraktScreen()
             }
         }
     }

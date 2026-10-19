@@ -93,6 +93,7 @@ struct PlayerControls: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .accessibilityLabel(spokenEpisode(season: season, episode: episode))
                 }
+                TraktMark(trakt: model.playback?.trakt)
             }
             Spacer()
             if model.duration > 0, model.playback?.phase != "failed" {

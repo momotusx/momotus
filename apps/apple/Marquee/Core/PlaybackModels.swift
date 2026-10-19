@@ -105,6 +105,8 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let segments: [Segment]?
     /// When to offer Up Next (the credits start); nil keeps the app's own timing.
     let nextAtMs: Int64?
+    /// Trakt's side of this play (optional for older cores).
+    let trakt: TraktPlayback?
 }
 
 /// Where a source starts: where the last one stopped when a failover

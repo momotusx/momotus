@@ -10,6 +10,7 @@ struct MarqueeApp: App {
     @State private var system: SystemEvents
     @State private var sync: SyncModel
     @State private var debrid: DebridSession
+    @State private var trakt: TraktModel
 
     init() {
         Fonts.register()
@@ -29,11 +30,19 @@ struct MarqueeApp: App {
         #if DEBUG
         if DebugHooks.kitPreview { sync.kits.hold(DebugHooks.previewKit) }
         #endif
-        _profiles = State(initialValue: ProfileSession(core: core, sync: sync))
+        let trakt = TraktModel(core: core)
+        _trakt = State(initialValue: trakt)
+        _profiles = State(initialValue: ProfileSession(core: core, sync: sync, trakt: trakt))
         _debrid = State(initialValue: DebridSession(core: core))
         #if DEBUG && os(macOS)
         DebugHooks.listenForSnapshots()
         #endif
+    }
+
+    /// Which profile's Trakt runs: none while the picker shows, a new one for every core.
+    private var traktKey: String {
+        guard profiles.open, let active = profiles.snapshot?.active else { return "" }
+        return "\(core.generation)/\(active)"
     }
 
     var body: some Scene {
@@ -53,6 +62,16 @@ struct MarqueeApp: App {
                 .environment(debrid)
                 // The debrid accounts, on every core open before the app shows anything.
                 .task(id: core.generation) { await debrid.opened() }
+                .environment(trakt)
+                // The running profile's Trakt: its record, then its view, each time a profile
+                // opens (a start, an unlock, a switch, a new core); closed while none is open.
+                .task(id: traktKey) {
+                    if let profile = profiles.open ? profiles.snapshot?.active : nil {
+                        await trakt.begin(profile: profile)
+                    } else {
+                        trakt.end()
+                    }
+                }
         }
         #if os(macOS)
         .defaultSize(width: 1440, height: 900)
