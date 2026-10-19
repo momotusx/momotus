@@ -5,8 +5,12 @@
 #   Core/marquee_core.swift        generated Swift bindings
 # Both are build outputs (not committed); run this before the first Xcode build.
 #
-# Usage: apps/apple/scripts/build-core.sh [--tvos]
+# Usage: apps/apple/scripts/build-core.sh [--tvos | --dev]
 #   --tvos   also build the tvOS device slice (needed to build Marquee-tvOS)
+#   --dev    debug assertions on, which compiles the bridge's dev hooks in (Trakt from
+#            a local fake on this machine, `MQ_DEV_TRAKT`), in its own target dir, with
+#            the macOS and iOS simulator slices only: for tests and simulator walks.
+#            Never for a device, TestFlight or store build: build those without it.
 set -euo pipefail
 
 apple="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,9 +20,15 @@ target_dir="${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-apple}"
 out="$apple/Core"
 
 targets=(aarch64-apple-ios aarch64-apple-ios-sim)
+dev_assertions=false
 if [[ "${1:-}" == "--tvos" ]]; then
   targets+=(aarch64-apple-tvos)
+elif [[ "${1:-}" == "--dev" ]]; then
+  targets=(aarch64-apple-ios-sim)
+  dev_assertions=true
+  target_dir="${target_dir}-dev"
 fi
+export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$dev_assertions
 
 # C code built by build scripts (SQLite, ring) must match the app floors.
 export MACOSX_DEPLOYMENT_TARGET=15.0 IPHONEOS_DEPLOYMENT_TARGET=18.0 TVOS_DEPLOYMENT_TARGET=18.0
