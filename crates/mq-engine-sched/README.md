@@ -25,6 +25,7 @@ for a in out.drain(..) {
 - Send `RangeOpened` as soon as the HTTP `Range` header is parsed, before reading the body (range-before-read). `start` and `end_hint` (exclusive) are file-relative.
 - Send `RangeAdvanced` as the body writer moves forward and `RangeClosed` when the response ends. `PlayPosition` is optional; when present, bytes the player already buffered stop being critical.
 - Peers: `PeerConnected` (bitfield, advertised `reqq` or 250), `PeerHave`, `PeerChoked` / `PeerUnchoked`, `PeerDisconnected`, and a `PeerRate` sample about once a second (payload bytes per second, RTT).
+- Block indexes count 16 KiB blocks from each piece's start, as librqbit counts chunks, so any piece length works: a piece that is not a multiple of 16 KiB (YTS uses 136 KiB) ends in a short block. Map a PIECE message to its block with `geo.block_at(piece, begin)`.
 - Blocks: `BlockReceived` for every payload block (unrequested and duplicate ones too), `BlockRejected` / `BlockTimedOut` for requests the peer will not answer, `PieceVerified` / `PieceFailed` after hashing (also for pieces found on disk at start).
 - `Tick` whenever the clock moves; periodic work (snubbing, hedging, stall release) runs at most every `tick_ms`.
 - Peer acquisition (connect burst, DHT, trackers, uTP), disk and the HTTP server are the adapter's job (research/10 6.2 items 8 and 10).
