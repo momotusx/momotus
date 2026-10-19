@@ -15,6 +15,14 @@ set -euo pipefail
 
 apple="$(cd "$(dirname "$0")/.." && pwd)"
 root="$(cd "$apple/../.." && pwd)"
+# The Trakt app (client id and redirect URI, read by `option_env!`) when this
+# machine has it: .env.trakt.local at the repository root, gitignored. Without
+# the file the core has no Trakt app (notConfigured), as in CI or a fresh clone.
+if [[ -f "$root/.env.trakt.local" ]]; then
+  set -a
+  source "$root/.env.trakt.local"
+  set +a
+fi
 # One target dir per checkout (see the repository rules).
 target_dir="${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-apple}"
 out="$apple/Core"

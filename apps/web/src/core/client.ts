@@ -49,7 +49,7 @@ export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "fai
 
 export const reasonOf = (e: unknown) =>
   e instanceof Error && e.message === "connection closed"
-    ? `Cannot reach the core at ${bridgeUrl}. Start it with: cargo run -p mq-bridge`
+    ? `Cannot reach the core at ${bridgeUrl}. Start it with: bun run bridge (in apps/web)`
     : String(e instanceof Error ? e.message : e);
 
 /** Work from before a profile switch or a lock (`switched`): its screen is gone, so nothing shows it. */
