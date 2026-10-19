@@ -25,6 +25,9 @@ const MAX_REASONS: usize = 3;
 const SPARE_BYTES: u64 = 1 << 30;
 /// Torrents under this many seeders may not start at all.
 const FEW_SEEDERS: u32 = 5;
+/// Seeders count in the score up to this many, then the file decides. The
+/// owner's rule is as many seeders as possible, at least 50 (question 5).
+const SATURATE_SEEDERS: f32 = 1000.0;
 /// Share of the measured speed a file may need (Jellyfin's factor).
 const SAFE_SHARE: f32 = 0.7;
 
@@ -616,11 +619,13 @@ fn within(
     input: &RankInput<'_>,
 ) -> u16 {
     let r = &s.release;
-    // Start: seeders saturate at 200; the engine talks to at most 80 peers.
+    // Start: more seeders, up to `SATURATE_SEEDERS`.
     let mut score = match (class, s.seeders) {
         (SourceClass::Ready, _) => 250.0,
         (_, None) => 125.0,
-        (_, Some(n)) => 250.0 * ((1.0 + n as f32).log2() / 201f32.log2()).min(1.0),
+        (_, Some(n)) => {
+            250.0 * ((1.0 + n as f32).log2() / (1.0 + SATURATE_SEEDERS).log2()).min(1.0)
+        }
     };
     // Headroom: how far the safe speed is above the file's need.
     score += match (bitrate, safe) {

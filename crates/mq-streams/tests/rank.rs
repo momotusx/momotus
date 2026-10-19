@@ -766,17 +766,27 @@ fn a_cinema_copy_never_wins_on_seeds() {
     assert_eq!(kind(&row(&ranked, "Movie.2020.1080p.HDTS").line), "copy");
 }
 
-/// Mutation 12: past 200 seeders the file decides: a Blu-ray with 300
-/// beats a WEBRip with 2,000.
+/// Mutation 12 (question 5: as many seeders as possible): seeders count up
+/// to 1,000. Below it more seeders win, as in Shawshank's recording: a
+/// stereo 1.6 GB copy with 698 over a 5.1 2.2 GB one with 239. Past it the
+/// file decides: a Blu-ray with 1,000 over a WEBRip with 5,000.
 #[test]
-fn seeders_count_up_to_200_then_the_file_decides() {
+fn seeders_count_up_to_1000_then_the_file_decides() {
     let ranked = Case::stick().rank(vec![
-        seeded(1, "Movie.2020.1080p.WEBRip.x264-GRP", 2000, 2.0),
-        seeded(2, "Movie.2020.1080p.BluRay.x264-GRP", 300, 2.0),
+        seeded(1, "Movie.2020.1080p.BluRay.x264.AAC.5.1-SIX", 239, 2.2),
+        seeded(2, "Movie.2020.1080p.BrRip.x264-YIFY", 698, 1.6),
     ]);
     assert_eq!(
         first_line(ranked.best().unwrap()),
-        "Movie.2020.1080p.BluRay.x264-GRP"
+        "Movie.2020.1080p.BrRip.x264-YIFY"
+    );
+    let ranked = Case::stick().rank(vec![
+        seeded(3, "Movie.2020.1080p.WEBRip.x264-MANY", 5000, 2.0),
+        seeded(4, "Movie.2020.1080p.BluRay.x264-DISC", 1000, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-DISC"
     );
 }
 
