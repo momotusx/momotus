@@ -42,12 +42,18 @@ const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 /// gets the URL (players give up on a silent body after a few seconds).
 #[cfg(feature = "torrent")]
 const TORRENT_READY_TIMEOUT: Duration = Duration::from_secs(60);
-/// ...but a swarm whose verified bytes grow by less than this in this long
-/// is dead, whatever seeders its addon listed: the next candidate plays.
-#[cfg(feature = "torrent")]
-const STALL_WINDOW: Duration = Duration::from_secs(15);
-#[cfg(feature = "torrent")]
-const STALL_FLOOR: u64 = 256 << 10;
+/// ...but a swarm that sends almost nothing is cut early when another
+/// candidate can play instead (plans/m13-stream-choice.md 7, dead swarms).
+/// Measured: a healthy bare-hash swarm found and unchoked its peers for
+/// most of its first 19 s (Android, bench/c27/android-bare-lto.jsonl), and
+/// a Torrentio swarm with 22 listed seeders sent nothing for 150 s after
+/// its metadata (the Apple walk).
+#[cfg(any(test, feature = "torrent"))]
+const STALL: Stall = Stall {
+    first: Duration::from_secs(30),
+    later: Duration::from_secs(15),
+    floor: 256 << 10,
+};
 /// A capacity sample is read this long after its source started
 /// (plans/m13-stream-choice.md 5).
 const SAMPLE_AFTER: Duration = Duration::from_secs(30);
@@ -225,6 +231,9 @@ struct State {
     /// The Versions pick this playback came from: a failure is reported
     /// to it (plans/m13-stream-choice.md 3.9).
     pick: Option<crate::views::versions::PickHandle>,
+    /// "Try again" was asked: each torrent gets the full start deadline,
+    /// never cut early as a dead swarm.
+    patient: bool,
     last: Option<(u64, u64)>,
     saved_at: Option<Instant>,
     dirty: bool,
@@ -289,6 +298,7 @@ impl State {
             run: 0,
             closed: false,
             pick: None,
+            patient: false,
             last: None,
             saved_at: None,
             dirty: false,
@@ -405,6 +415,25 @@ impl PlaybackView {
         plays: &[Format],
     ) -> Self {
         Self::open_with(core, pick.candidates, Some(pick.handle), target, plays)
+    }
+
+    /// "Try again" once every source failed: the same versions again from
+    /// the first, each torrent with the full start deadline, so a swarm
+    /// that is only slow to start gets its chance. Ignored unless the
+    /// playback failed.
+    pub fn retry(&self) {
+        {
+            let mut s = lock(&self.state);
+            if s.snapshot.phase != PlaybackPhase::Failed || s.closed {
+                return;
+            }
+            s.next = 0;
+            s.patient = true;
+            s.snapshot.phase = PlaybackPhase::Resolving;
+            s.snapshot.attempts.clear();
+            self.snapshot.set(s.snapshot.clone());
+        }
+        self.spawn_resolve();
     }
 
     /// A kids policy refused the target at open.
@@ -1138,15 +1167,20 @@ async fn open_torrent(
             return Ok((file, info, Started::Wrong(why)));
         }
         let mut head = reader.range(0, None).await?;
-        let progress = || async { engine.stats(torrent).await.ok().map(|s| s.downloaded_bytes) };
-        let ready = watch_start(
-            head.ready(),
-            progress,
-            STALL_WINDOW,
-            STALL_FLOOR,
-            TORRENT_READY_TIMEOUT,
-        )
-        .await;
+        let progress = || async {
+            let s = engine.stats(torrent).await.ok()?;
+            Some(Progress {
+                bytes: s.downloaded_bytes,
+                peers: s.peers,
+            })
+        };
+        // Cut early only when another candidate can play instead, and never
+        // after "Try again".
+        let others = {
+            let s = lock(state);
+            !s.patient && s.next < s.candidates.len()
+        };
+        let ready = watch_start(head.ready(), progress, STALL, others, TORRENT_READY_TIMEOUT).await;
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let failed = match started.await {
@@ -1169,11 +1203,14 @@ async fn open_torrent(
             did_not_start();
             "the swarm did not send the start of the video in time".to_owned()
         }
-        Ok((_, _, Started::Stalled)) => {
+        Ok((_, _, Started::Stalled { nothing })) => {
             did_not_start();
-            // Ranked last here for a day: the listed seeders were wrong.
-            crate::speed::record_dead(core.library(), info_hash, mq_library::hlc::now_ms());
-            "the swarm sent almost nothing; trying the next version".to_owned()
+            // Ranked last here for a day only when it sent nothing at all
+            // in the full window it got: the listed seeders were wrong.
+            if nothing {
+                crate::speed::record_dead(core.library(), info_hash, mq_library::hlc::now_ms());
+            }
+            "the swarm sent almost nothing".to_owned()
         }
         Ok((_, _, Started::Wrong(why))) => why.to_owned(),
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
@@ -1187,8 +1224,11 @@ async fn open_torrent(
 #[cfg(any(test, feature = "torrent"))]
 enum Started<T> {
     Ready(T),
-    /// Verified bytes grew by less than the floor in a window.
-    Stalled,
+    /// Verified bytes grew by less than the floor in a window, and another
+    /// candidate can play; `nothing`: not one byte came in it.
+    Stalled {
+        nothing: bool,
+    },
     /// The deadline passed while bytes still came.
     Late,
     /// The file is not the one the version listed.
@@ -1196,24 +1236,49 @@ enum Started<T> {
     Wrong(&'static str),
 }
 
-/// Waits for `ready` while `progress` (verified bytes, read each second)
-/// keeps growing by `floor` within every `window`; a swarm that stops
-/// short is cut early, one that keeps coming gets until `deadline`.
+/// How long a swarm may take to send each `floor` of verified bytes: the
+/// first window, from its first connected peer, is longer, since a swarm
+/// spends its first seconds finding and unchoking peers.
+#[cfg(any(test, feature = "torrent"))]
+#[derive(Clone, Copy)]
+struct Stall {
+    first: Duration,
+    later: Duration,
+    floor: u64,
+}
+
+/// What the engine says of a starting torrent, each second.
+#[cfg(any(test, feature = "torrent"))]
+#[derive(Clone, Copy)]
+struct Progress {
+    /// Verified bytes.
+    bytes: u64,
+    peers: usize,
+}
+
+/// Waits for `ready` while the swarm keeps sending: a window opens at its
+/// first connected peer (the metadata is already in), and each `floor` of
+/// verified bytes must come within it (`first`, then `later`). A swarm
+/// that falls short is cut when `others` can play instead; otherwise, and
+/// with no peer at all, it gets until `deadline`. Never cut while it
+/// progresses.
 #[cfg(any(test, feature = "torrent"))]
 async fn watch_start<T, P, F>(
     ready: impl std::future::Future<Output = T>,
     mut progress: P,
-    window: Duration,
-    floor: u64,
+    stall: Stall,
+    others: bool,
     deadline: Duration,
 ) -> Started<T>
 where
     P: FnMut() -> F,
-    F: std::future::Future<Output = Option<u64>>,
+    F: std::future::Future<Output = Option<Progress>>,
 {
     let start = tokio::time::Instant::now();
     tokio::pin!(ready);
-    let mut mark = (progress().await.unwrap_or(0), start);
+    let first = progress().await.map_or(0, |p| p.bytes);
+    // The bytes and time the current window began with, and its length.
+    let mut window: Option<(u64, tokio::time::Instant, Duration)> = None;
     let mut tick = tokio::time::interval(Duration::from_secs(1));
     loop {
         tokio::select! {
@@ -1223,11 +1288,17 @@ where
                 if now - start >= deadline {
                     return Started::Late;
                 }
-                let bytes = progress().await.unwrap_or(mark.0);
-                if bytes >= mark.0.saturating_add(floor) {
-                    mark = (bytes, now);
-                } else if now - mark.1 >= window {
-                    return Started::Stalled;
+                let Some(p) = progress().await else { continue };
+                match window {
+                    None if p.peers > 0 => window = Some((p.bytes, now, stall.first)),
+                    None => {}
+                    Some((mark, _, _)) if p.bytes >= mark.saturating_add(stall.floor) => {
+                        window = Some((p.bytes, now, stall.later));
+                    }
+                    Some((_, since, length)) if others && now - since >= length => {
+                        return Started::Stalled { nothing: p.bytes == first };
+                    }
+                    Some(_) => {}
                 }
             }
         }
@@ -2007,72 +2078,127 @@ mod tests {
         assert_eq!(s.snapshot.phase, PlaybackPhase::Resolving);
     }
 
-    /// The engine's verified bytes, scripted per second.
-    fn fake_progress(script: Vec<u64>) -> impl FnMut() -> std::future::Ready<Option<u64>> {
-        let mut at = 0;
+    /// "Try again" restarts the same versions from the first, patiently
+    /// (no early cut), and only once the playback failed.
+    #[tokio::test]
+    async fn try_again_restarts_the_same_versions_patiently() {
+        let core = Core::temporary("default").unwrap();
+        // A loopback link from no install is refused at once.
+        let dead = stream(r#"{"url":"http://127.0.0.1:9/v.mkv"}"#);
+        let view = PlaybackView::open(&core, vec![dead], PlayTarget::default());
+        view.retry();
+        assert!(!lock(&view.state).patient, "not failed yet: ignored");
+        let failed = || async {
+            for _ in 0..3000 {
+                if view.snapshot().phase == PlaybackPhase::Failed {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("never failed: {:?}", view.snapshot());
+        };
+        failed().await;
+        assert_eq!(view.snapshot().attempts.len(), 1);
+        view.retry();
+        {
+            let s = lock(&view.state);
+            assert!(s.patient);
+            assert_eq!(s.snapshot.phase, PlaybackPhase::Resolving);
+            assert!(s.snapshot.attempts.is_empty());
+        }
+        failed().await;
+        assert_eq!(
+            view.snapshot().attempts.len(),
+            1,
+            "the same version tried again"
+        );
+    }
+
+    /// The engine's verified bytes and connected peers, one per second
+    /// (`at(t)` gives second `t`'s).
+    fn fake(
+        at: impl Fn(u64) -> (u64, usize),
+    ) -> impl FnMut() -> std::future::Ready<Option<Progress>> {
+        let mut t = 0;
         move || {
-            let bytes = script.get(at).or(script.last()).copied();
-            at += 1;
-            std::future::ready(bytes)
+            let (bytes, peers) = at(t);
+            t += 1;
+            std::future::ready(Some(Progress { bytes, peers }))
         }
     }
 
-    /// Dead-swarm failover: metadata came, then no data. The start gives up
-    /// after the 15 s window, not the 60 s deadline.
-    #[tokio::test(start_paused = true)]
-    async fn a_swarm_that_sends_nothing_is_cut_after_the_window() {
-        let window = Duration::from_secs(15);
+    const KIB: u64 = 1 << 10;
+    const DEADLINE: Duration = Duration::from_secs(60);
+
+    async fn watch(
+        ready_after: Option<Duration>,
+        at: impl Fn(u64) -> (u64, usize),
+        others: bool,
+    ) -> (Started<()>, Duration) {
         let begun = tokio::time::Instant::now();
-        let started = watch_start(
-            std::future::pending::<()>(),
-            fake_progress(vec![0]),
-            window,
-            256 << 10,
-            Duration::from_secs(60),
-        )
-        .await;
-        assert!(matches!(started, Started::Stalled));
-        let took = begun.elapsed();
-        assert!(
-            (window..window + Duration::from_secs(2)).contains(&took),
-            "{took:?}"
-        );
+        let ready = async move {
+            match ready_after {
+                Some(d) => tokio::time::sleep(d).await,
+                None => std::future::pending::<()>().await,
+            }
+        };
+        let started = watch_start(ready, fake(at), STALL, others, DEADLINE).await;
+        (started, begun.elapsed())
+    }
+
+    /// A swarm with peers that sends nothing is cut once its first window
+    /// (30 s from the first peer) ends, when another candidate can play,
+    /// and is remembered: nothing came.
+    #[tokio::test(start_paused = true)]
+    async fn a_dead_swarm_is_cut_after_its_first_window() {
+        let (started, took) = watch(None, |_| (0, 3), true).await;
+        assert!(matches!(started, Started::Stalled { nothing: true }));
+        assert!((30..33).contains(&took.as_secs()), "{took:?}");
+    }
+
+    /// A healthy swarm that is slow to start (the Android bare-hash runs
+    /// spent most of their first 19 s finding peers): no peer for 15 s, the
+    /// first bytes 18 s after it, Ready at 42 s. Never cut: its first window
+    /// starts at its first peer and lasts 30 s.
+    #[tokio::test(start_paused = true)]
+    async fn a_slow_starting_healthy_swarm_is_never_cut() {
+        let at = |t: u64| {
+            let peers = if t < 15 { 0 } else { 4 };
+            (t.saturating_sub(33) * 300 * KIB, peers)
+        };
+        let (started, took) = watch(Some(Duration::from_secs(42)), at, true).await;
+        assert!(matches!(started, Started::Ready(())), "{took:?}");
+    }
+
+    /// With no other candidate a dead swarm gets the whole deadline; so does
+    /// one where no peer ever connects.
+    #[tokio::test(start_paused = true)]
+    async fn the_deadline_holds_with_no_other_candidate_or_no_peer() {
+        let (started, took) = watch(None, |_| (0, 3), false).await;
+        assert!(matches!(started, Started::Late));
+        assert!(took >= DEADLINE, "{took:?}");
+        let (started, took) = watch(None, |_| (0, 0), true).await;
+        assert!(matches!(started, Started::Late));
+        assert!(took >= DEADLINE, "{took:?}");
+    }
+
+    /// After its first 256 KiB a swarm gets 15 s for each next 256 KiB: one
+    /// that stops is cut, but not remembered, since it sent something.
+    #[tokio::test(start_paused = true)]
+    async fn a_swarm_that_stops_is_cut_but_not_remembered() {
+        let (started, took) = watch(None, |t| ((t.min(6)) * 60 * KIB, 2), true).await;
+        assert!(matches!(started, Started::Stalled { nothing: false }));
+        assert!((19..23).contains(&took.as_secs()), "{took:?}");
     }
 
     /// A swarm that keeps sending is never cut early: it gets the deadline,
     /// and a ready head wins at once.
     #[tokio::test(start_paused = true)]
     async fn a_swarm_that_keeps_sending_is_never_cut_early() {
-        let growing: Vec<u64> = (0..100).map(|s| s * (300 << 10)).collect();
-        let started = watch_start(
-            std::future::pending::<()>(),
-            fake_progress(growing.clone()),
-            Duration::from_secs(15),
-            256 << 10,
-            Duration::from_secs(60),
-        )
-        .await;
+        let (started, _) = watch(None, |t| (t * 300 * KIB, 5), true).await;
         assert!(matches!(started, Started::Late));
-        let started = watch_start(
-            tokio::time::sleep(Duration::from_secs(20)),
-            fake_progress(growing),
-            Duration::from_secs(15),
-            256 << 10,
-            Duration::from_secs(60),
-        )
-        .await;
+        let (started, _) = watch(Some(Duration::from_secs(20)), |t| (t * 300 * KIB, 5), true).await;
         assert!(matches!(started, Started::Ready(())));
-        // A trickle under the floor in every window is dead.
-        let trickle: Vec<u64> = (0..100).map(|s| s * (10 << 10)).collect();
-        let started = watch_start(
-            std::future::pending::<()>(),
-            fake_progress(trickle),
-            Duration::from_secs(15),
-            256 << 10,
-            Duration::from_secs(60),
-        )
-        .await;
-        assert!(matches!(started, Started::Stalled));
     }
 
     /// 3.4: the engine's file must be the version listed; only larger
