@@ -73,6 +73,13 @@ enum DefaultsRules {
         return tv ? 1400 : 880
     }
 
+    /// `-MQOnboardingStep defaults` opens a first run on the recommended addons
+    /// step, so a walk shoots it and its TV focus without a remote. Only a
+    /// DEBUG build reads the argument; Release passes `debug: false`.
+    static func walkOpensDefaults(_ argument: String?, debug: Bool) -> Bool {
+        debug && argument == "defaults"
+    }
+
     /// The mark's letter when there is no logo or it does not load: the
     /// name's first letter or digit, as Find addons marks its cards.
     static func initial(_ name: String) -> String {

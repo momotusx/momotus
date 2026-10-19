@@ -43,7 +43,12 @@ struct OnboardingScreen: View {
     init(core: CoreClient, start: Step = .doors, close: (() -> Void)? = nil) {
         self.core = core
         self.close = close
-        _step = State(initialValue: start)
+        #if DEBUG
+        let walk = DefaultsRules.walkOpensDefaults(UserDefaults.standard.string(forKey: "MQOnboardingStep"), debug: true)
+        #else
+        let walk = false
+        #endif
+        _step = State(initialValue: walk && start == .doors ? .defaults : start)
         _addons = State(initialValue: LiveRecord("addons", core: core))
         _defaults = State(initialValue: DefaultsStep(core: core, scope: .all))
         _fixer = State(initialValue: DefaultsStep(core: core, scope: .all))
