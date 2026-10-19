@@ -9,6 +9,9 @@ import type { SubtitleNote } from "../core/generated/SubtitleNote";
 import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
 import type { VersionStatus } from "../core/generated/VersionStatus";
+import type { Form } from "../form";
+import { bytes } from "./format";
+import choice from "../../../shared/stream-choice-words.json";
 
 export function reasonText(r: Reason, status: VersionStatus): string {
   switch (r) {
@@ -551,4 +554,107 @@ export function syncSummary(s: { locked: boolean; problem: string | null; joined
   const note = s.report && outcomeOf(s.report) !== "complete" ? reportNotes(s.report)[0] : undefined;
   if (note) return note;
   return s.time ? `On. Synced at ${s.time}.` : "On.";
+}
+
+// Smart stream choice (plans/m13-stream-choice.md 3.7, 3.9, 3.11, 4.4, 4.5).
+// The words live in apps/shared/stream-choice-words.json so Android and Apple
+// say the same; its "about" gives the rules every app follows.
+
+export const choiceWords = choice;
+
+/** The core's typed line for a version (`ReasonLine` in
+ * crates/mq-streams/src/model.rs), with its numbers. */
+// ponytail: mirrors the Rust enum until phase 2 exports the generated type.
+export type ReasonLine =
+  | { kind: "copy"; quality: string }
+  | { kind: "fetch"; service: string | null }
+  | { kind: "veryFew"; seeders: number }
+  | { kind: "otherYear"; year: number }
+  | { kind: "mayPause"; needMbps: number; haveMbps: number; samples: number }
+  | { kind: "washedOut" }
+  | { kind: "large"; sizeBytes: number; limitBytes: number }
+  | { kind: "few"; seeders: number }
+  | { kind: "ready"; service: string | null; sizeBytes: number | null }
+  | { kind: "quick"; seeders: number | null; sizeBytes: number | null }
+  | { kind: "should"; seeders: number | null; sizeBytes: number | null; service: string | null };
+
+type Fields = Record<string, string | number | null | undefined>;
+
+/** Fills `{name}` fields; null when one is unknown, so the part is left out. */
+function part(line: string, fields: Fields): string | null {
+  let known = true;
+  const text = line.replace(/\{(\w+)\}/g, (_, name: string) => {
+    const v = fields[name];
+    if (v === null || v === undefined) known = false;
+    return String(v ?? "");
+  });
+  return known ? text : null;
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** "1 seeder", "1,204 seeders". */
+export const counted = (what: keyof typeof choice.plurals, n: number) =>
+  (choice.plurals[what][n === 1 ? 0 : 1] as string).replace("{n}", n.toLocaleString("en-US"));
+
+const numbers = (l: ReasonLine): Fields => {
+  const f: Fields = { ...l };
+  if ("seeders" in l) f.seeders = l.seeders === null ? null : counted("seeders", l.seeders);
+  if ("sizeBytes" in l) f.size = l.sizeBytes === null ? null : bytes(l.sizeBytes);
+  if (l.kind === "large") f.limit = bytes(l.limitBytes);
+  if (l.kind === "mayPause") {
+    f.need = Math.round(l.needMbps);
+    f.have = Math.round(l.haveMbps);
+    f.speedSource = l.samples > 0 ? choice.speedSource.measured.replace("{playbacks}", counted("playbacks", l.samples)) : choice.speedSource.estimated;
+  }
+  return f;
+};
+
+/** A version's line: the tone, the default text, and the details shown on
+ * focus (TV), hover (desktop) or tap (phone). `limitChosen`: the user set
+ * the size limit, so a large file is "larger than the size you chose". */
+export function lineWords(l: ReasonLine, limitChosen = false): { tone: Exclude<Tone, "idle">; text: string; details: string } {
+  const w = choice.lines[l.kind];
+  const text = limitChosen && "textChosen" in w ? w.textChosen : w.text;
+  const f = numbers(l);
+  const details = w.details.map((d) => part(d, f)).filter((d) => d !== null);
+  return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(details.join(", ")) };
+}
+
+/** Why no version is visible, with its one action (3.11). */
+export function blockedWords(reason: keyof typeof choice.blocked, count: number) {
+  const w = choice.blocked[reason];
+  return { text: w.text.replace("{versions}", counted("versions", count)), action: w.action };
+}
+
+/** What the core knows about this device, as one line (4.2, 4.4). */
+export interface DeviceConditions {
+  screenClass: number;
+  hdr: boolean;
+  network: string;
+  speedMbps: number | null;
+  speedMeasured: boolean;
+  freeBytes: number | null;
+}
+
+const c = choice.conditions;
+
+export const deviceName = (f: Form) => c.devices[f];
+
+/** "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */
+export function conditionsLine(d: DeviceConditions): string {
+  const screen = c.screens[String(d.screenClass) as keyof typeof c.screens] ?? `${d.screenClass}p`;
+  const network = c.networks[d.network as keyof typeof c.networks] ?? c.networks.other;
+  const speed = d.speedMeasured && d.speedMbps !== null ? part(c.speed, { mbps: Math.round(d.speedMbps), network }) : part(c.speedUnknown, { network });
+  const free = d.freeBytes === null ? null : part(c.free, { free: bytes(d.freeBytes) });
+  return [d.hdr ? part(c.hdr, { screen }) : screen, speed, free].filter((x) => x !== null).join(", ");
+}
+
+/** "This TV: 4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */
+export const conditionsHeader = (f: Form, d: DeviceConditions) => capital(c.header.replace("{device}", deviceName(f)).replace("{conditions}", conditionsLine(d)));
+
+/** The one-time note when a learned counter crosses 3 (3.9). */
+export function learnedNote(counter: keyof Omit<typeof choice.learned, "undo">, up: boolean, f: Form, fields: { limit?: number; height?: number } = {}): string | null {
+  const height = fields.height === undefined ? undefined : (c.screens[String(fields.height) as keyof typeof c.screens] ?? `${fields.height}p`);
+  return part(choice.learned[counter][up ? "up" : "down"], { device: deviceName(f), limit: fields.limit === undefined ? undefined : bytes(fields.limit), height });
 }

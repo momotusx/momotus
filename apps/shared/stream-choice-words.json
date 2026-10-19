@@ -1,0 +1,263 @@
+{
+  "about": "Smart stream choice words (plans/m13-stream-choice.md 3.7, 3.9, 3.11, 4.4, 4.5), shared by the web, Android and Apple apps. A line's details are parts joined with \", \"; a part shows only when every field it names is known, and the joined details start with a capital letter. Counts use the plurals below and group thousands with a comma. Sizes use 1024-based units, as addons print them: one decimal under 100 GB with a trailing .0 dropped, whole numbers from 100 GB, MB under 1 GB. Mbit/s are whole numbers.",
+  "plurals": {
+    "seeders": ["{n} seeder", "{n} seeders"],
+    "playbacks": ["{n} playback", "{n} playbacks"],
+    "versions": ["{n} version", "{n} versions"]
+  },
+  "lines": {
+    "copy": {
+      "tone": "bad",
+      "text": "Recorded in a cinema, low quality",
+      "details": ["{quality} copy"]
+    },
+    "fetch": {
+      "tone": "bad",
+      "text": "Not ready yet, has to download first",
+      "details": ["{service} does not have it yet"]
+    },
+    "veryFew": {
+      "tone": "bad",
+      "text": "May not start",
+      "details": ["{seeders}"]
+    },
+    "otherYear": {
+      "tone": "warn",
+      "text": "May be a different film or show",
+      "details": ["The release says {year}"]
+    },
+    "mayPause": {
+      "tone": "warn",
+      "text": "May pause on this connection",
+      "details": [
+        "Needs about {need} Mbit/s; this connection gives about {have} ({speedSource})"
+      ]
+    },
+    "washedOut": {
+      "tone": "warn",
+      "text": "Colors may look washed out on this screen",
+      "details": ["HDR file, screen without HDR"]
+    },
+    "large": {
+      "tone": "warn",
+      "text": "Large file",
+      "textChosen": "Larger than the size you chose",
+      "details": ["{size}; Marquee prefers files up to {limit}"]
+    },
+    "few": {
+      "tone": "warn",
+      "text": "May start slowly",
+      "details": ["{seeders}"]
+    },
+    "ready": {
+      "tone": "ok",
+      "text": "Starts right away",
+      "details": ["Ready on {service}", "{size}"]
+    },
+    "quick": {
+      "tone": "ok",
+      "text": "Starts quickly",
+      "details": ["{seeders}", "{size}"]
+    },
+    "should": {
+      "tone": "ok",
+      "text": "Should start quickly",
+      "details": ["{seeders}", "{size}", "may be ready on {service}"]
+    }
+  },
+  "speedSource": {
+    "measured": "measured from {playbacks}",
+    "estimated": "estimated"
+  },
+  "blocked": {
+    "needsAccount": {
+      "text": "Marquee found {versions}. This version of the app plays them only through a streaming service account (Real-Debrid, TorBox, AllDebrid or Premiumize). Add one in Settings.",
+      "action": "Add an account"
+    },
+    "nothingPlaysHere": {
+      "text": "Found {versions}, but none plays on this device.",
+      "action": "Show them"
+    }
+  },
+  "learned": {
+    "size": {
+      "up": "On {device} you often picked bigger files, so Marquee now picks files up to {limit}.",
+      "down": "On {device} you often picked smaller files, so Marquee now picks files up to {limit}."
+    },
+    "height": {
+      "up": "On {device} you often picked sharper versions, so Marquee now picks up to {height}.",
+      "down": "On {device} you often picked lower resolutions, so Marquee now picks up to {height}."
+    },
+    "ready": {
+      "up": "On {device} you often picked files ready on your streaming service, so Marquee now prefers them.",
+      "down": "On {device} you often picked torrents over ready files, so Marquee now treats them like the rest."
+    },
+    "hdr": {
+      "up": "On {device} you often picked HDR versions, so Marquee now prefers HDR.",
+      "down": "On {device} you often picked versions without HDR, so Marquee now leaves HDR off."
+    },
+    "undo": "Undo"
+  },
+  "question": {
+    "title": "How should Marquee pick what to play?",
+    "lead": "You can change this later in Settings, under Stream choice.",
+    "fast": {
+      "label": "Start fast",
+      "text": "Smaller files that many people share. Starts in seconds.",
+      "patch": {
+        "sizeLimitBytes": 5368709120,
+        "minSeeders": 50
+      }
+    },
+    "best": {
+      "label": "Best quality",
+      "text": "The best version your screen and connection can play.",
+      "patch": {
+        "sizeLimitBytes": null,
+        "minSeeders": 20
+      }
+    },
+    "skip": "fast"
+  },
+  "settings": {
+    "title": "Stream choice",
+    "lede": "How Marquee picks the version to play. Every version stays in the list, so you can always pick another.",
+    "size": {
+      "label": "File size",
+      "choices": [
+        {
+          "label": "Up to 2 GB",
+          "value": 2147483648
+        },
+        {
+          "label": "Up to 5 GB",
+          "value": 5368709120
+        },
+        {
+          "label": "Up to 10 GB",
+          "value": 10737418240
+        },
+        {
+          "label": "Up to 20 GB",
+          "value": 21474836480
+        },
+        {
+          "label": "Any size",
+          "value": null
+        }
+      ]
+    },
+    "seeders": {
+      "label": "Shared by at least",
+      "help": "Files shared by more people start faster.",
+      "choices": [
+        {
+          "label": "10 people",
+          "value": 10
+        },
+        {
+          "label": "20 people",
+          "value": 20
+        },
+        {
+          "label": "50 people",
+          "value": 50
+        },
+        {
+          "label": "100 people",
+          "value": 100
+        }
+      ]
+    },
+    "resolution": {
+      "label": "Resolution",
+      "choices": [
+        {
+          "label": "This screen's",
+          "value": null
+        },
+        {
+          "label": "1080p",
+          "value": 1080
+        },
+        {
+          "label": "720p",
+          "value": 720
+        }
+      ]
+    },
+    "hdr": {
+      "label": "HDR",
+      "choices": [
+        {
+          "label": "Use it when the screen shows it",
+          "value": true
+        },
+        {
+          "label": "Off",
+          "value": false
+        }
+      ]
+    },
+    "ready": {
+      "label": "Streaming service",
+      "onlyWithAccount": true,
+      "choices": [
+        {
+          "label": "Prefer files that are ready on your account",
+          "value": true
+        },
+        {
+          "label": "Treat them like the rest",
+          "value": false
+        }
+      ]
+    },
+    "audio": {
+      "label": "Audio"
+    },
+    "learn": {
+      "label": "Learn from my picks",
+      "choices": [
+        {
+          "label": "On",
+          "value": true
+        },
+        {
+          "label": "Off",
+          "value": false
+        }
+      ],
+      "forget": "Forget what was learned"
+    },
+    "device": {
+      "label": "This device",
+      "measureAgain": "Measure again",
+      "measuring": "Measuring at the next playback"
+    }
+  },
+  "conditions": {
+    "header": "{device}: {conditions}",
+    "devices": {
+      "tv": "this TV",
+      "desktop": "this computer",
+      "phone": "this phone"
+    },
+    "screens": {
+      "2160": "4K",
+      "1080": "1080p",
+      "720": "720p",
+      "480": "SD"
+    },
+    "hdr": "{screen} HDR",
+    "speed": "about {mbps} Mbit/s on {network}",
+    "speedUnknown": "{network}, speed not measured yet",
+    "free": "{free} free",
+    "networks": {
+      "wifi": "Wi-Fi",
+      "ethernet": "Ethernet",
+      "cellular": "mobile data",
+      "other": "this network"
+    }
+  }
+}

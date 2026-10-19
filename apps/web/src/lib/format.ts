@@ -1,9 +1,13 @@
 /** Small, pure formatters shared by screens. */
 
+/** A stream's size in the 1024-based units addons print: 5368709120 is
+ * "5 GB", as Torrentio lists it and as the size limit reads. */
 export function bytes(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`;
-  if (n >= 1e6) return `${Math.round(n / 1e6)} MB`;
-  return `${Math.max(1, Math.round(n / 1e3))} KB`;
+  const gb = n / 1024 ** 3;
+  if (gb >= 100) return `${Math.round(gb)} GB`;
+  if (gb >= 1) return `${Number(gb.toFixed(1))} GB`;
+  if (n >= 1024 ** 2) return `${Math.round(n / 1024 ** 2)} MB`;
+  return `${Math.max(1, Math.round(n / 1024))} KB`;
 }
 
 /** 161 -> "2:41", 3725 -> "1:02:05". */

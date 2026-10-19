@@ -1,9 +1,12 @@
 import { expect, test } from "bun:test";
 import { bytes, clock, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
 
-test("bytes", () => {
-  expect(bytes(8.4e9)).toBe("8.4 GB");
-  expect(bytes(612e6)).toBe("612 MB");
+test("bytes are 1024-based, as addons print sizes", () => {
+  expect(bytes(5368709120)).toBe("5 GB");
+  expect(bytes(2.2 * 1024 ** 3)).toBe("2.2 GB");
+  expect(bytes(8.4e9)).toBe("7.8 GB");
+  expect(bytes(150 * 1024 ** 3 + 1)).toBe("150 GB");
+  expect(bytes(612 * 1024 ** 2)).toBe("612 MB");
 });
 
 test("clock", () => {
