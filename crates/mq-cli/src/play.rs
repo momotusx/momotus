@@ -71,11 +71,14 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
 
     let stream = connect(&socket, Duration::from_secs(5)).await?;
     let (read, mut write) = stream.into_split();
-    let observe = json!({ "command": ["observe_property", 1, "video-params"] }).to_string() + "\n";
-    write
-        .write_all(observe.as_bytes())
-        .await
-        .map_err(|e| e.to_string())?;
+    // `paused-for-cache` counts stalls (plans/m13-stream-choice.md 6.4).
+    for (id, name) in [(1, "video-params"), (2, "paused-for-cache")] {
+        let observe = json!({ "command": ["observe_property", id, name] }).to_string() + "\n";
+        write
+            .write_all(observe.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     let mut lines = BufReader::new(read).lines();
     let mut first_frame_ms = None;
     let mut file_loaded_ms = None;
@@ -96,6 +99,47 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
             }
             Some("end-file") => break,
             _ => {}
+        }
+    }
+    // Stalls while it plays: each time mpv pauses to fill its cache, until
+    // the file ends or the playback ran far past its length.
+    let (mut stalls, mut stall_ms, mut stalled_at) = (0u32, 0u64, None::<Instant>);
+    let mut ended = false;
+    if first_frame_ms.is_some() && options.seeks.is_empty() {
+        let cap = Instant::now() + Duration::from_secs(options.seconds + 120);
+        while Instant::now() < cap {
+            let left = cap.saturating_duration_since(Instant::now());
+            let Ok(Ok(Some(line))) = tokio::time::timeout(left, lines.next_line()).await else {
+                break;
+            };
+            let event = serde_json::from_str::<Value>(&line).unwrap_or_default();
+            match event.get("event").and_then(Value::as_str) {
+                Some("property-change") if event["name"] == "paused-for-cache" => {
+                    match (event["data"].as_bool(), stalled_at) {
+                        (Some(true), None) => {
+                            stalls += 1;
+                            stalled_at = Some(Instant::now());
+                        }
+                        (Some(false), Some(at)) => {
+                            stall_ms += at.elapsed().as_millis() as u64;
+                            stalled_at = None;
+                        }
+                        _ => {}
+                    }
+                }
+                Some("end-file") => {
+                    ended = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        if let Some(at) = stalled_at {
+            stall_ms += at.elapsed().as_millis() as u64;
+        }
+        if !ended {
+            let quit = json!({ "command": ["quit"] }).to_string() + "\n";
+            let _ = write.write_all(quit.as_bytes()).await;
         }
     }
     // Seek latency: from the seek command to mpv's next `playback-restart`
@@ -139,6 +183,9 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
         "probe_ms": probe_ms,
         "file_loaded_ms": file_loaded_ms,
         "first_frame_ms": first_frame_ms,
+        "stalls": stalls,
+        "stall_ms": stall_ms,
+        "ended": ended,
         "seeks": seeks,
         "total_ms": started.elapsed().as_millis() as u64,
     }))

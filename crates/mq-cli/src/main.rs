@@ -492,6 +492,7 @@ async fn play(
         "ms": ms(started.elapsed()),
     }));
 
+    let opened = Instant::now();
     let playback = PlaybackView::open(
         core,
         versions.candidates(&key),
@@ -505,17 +506,40 @@ async fn play(
             episode,
         },
     );
-    let ready = until(Duration::from_secs(60), || {
+    // The race's start timeout (plans/m13-stream-choice.md 6.4): 120 s.
+    let ready = until(Duration::from_secs(120), || {
         let s = playback.snapshot();
         (s.phase != PlaybackPhase::Resolving).then_some(s)
     })
-    .await
-    .ok_or("playback did not resolve in 60 s")?;
+    .await;
+    let ready_ms = ms(opened.elapsed());
+    // One summary line per run for the race (6.4): first frame from Play.
+    let race = |first_frame: Option<u64>, played: &serde_json::Value, attempts: usize| {
+        let seeders = match &pick.status {
+            mq_runtime::views::versions::VersionStatus::Torrent { seeds } => *seeds,
+            _ => None,
+        };
+        json!({
+            "event": "race", "arm": arm, "key": key, "release": pick.release_name,
+            "sizeBytes": pick.size_bytes, "seeders": seeders, "bitrateMbps": pick.bitrate_mbps,
+            "line": pick.line, "readyMs": ready_ms, "firstFrameMs": first_frame.map(|f| ready_ms + f),
+            "stalls": played["stalls"], "stallMs": played["stall_ms"], "attempts": attempts,
+            "ok": first_frame.is_some(),
+        })
+    };
+    let Some(ready) = ready else {
+        emit(race(None, &json!({}), playback.snapshot().attempts.len()));
+        return Err("playback did not resolve in 120 s".into());
+    };
     emit(json!({
         "event": "resolved", "phase": ready.phase, "attempts": ready.attempts,
         "resume_ms": ready.resume_ms, "ms": ms(started.elapsed()),
     }));
-    let url = ready.url.ok_or("no source could be opened")?;
+    let attempts = ready.attempts.len();
+    let Some(url) = ready.url.clone() else {
+        emit(race(None, &json!({}), attempts));
+        return Err("no source could be opened".into());
+    };
     let played = play::play_url(
         &url,
         play::PlayOptions {
@@ -526,6 +550,7 @@ async fn play(
         },
     )
     .await?;
+    emit(race(played["first_frame_ms"].as_u64(), &played, attempts));
     playback.report_progress(ready.resume_ms.unwrap_or(0) + seconds * 1000, 0, false);
     let subs = until(Duration::from_secs(10), || {
         let s = playback.snapshot();
