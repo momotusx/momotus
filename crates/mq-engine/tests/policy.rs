@@ -11,7 +11,7 @@ mod support;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use mq_engine::librqbit::{ListenerMode, ListenerOptions, Session, SessionOptions};
 use mq_engine::{Engine, EngineConfig, FileHint};
@@ -395,10 +395,11 @@ async fn every_http_announce_opens_a_new_connection() {
     .into_bytes();
     answer.extend(body);
     let tracker = support::HttpTracker::start(answer, true);
+    // Three announces need two seconds; five leave room on a loaded machine.
     announce_for(
         &[V6],
         std::slice::from_ref(&tracker.url),
-        Duration::from_millis(3500),
+        Duration::from_secs(5),
     )
     .await;
     let (requests, connections) = (tracker.requests(), tracker.connections());
@@ -489,12 +490,383 @@ async fn a_cached_udp_tracker_address_meets_the_current_snapshot() {
     assert_eq!(scope.refused(), refused + 1);
 }
 
+fn announce_fields() -> mq_engine::librqbit::tracker_comms::AnnounceFields {
+    use mq_engine::librqbit::dht::Id20;
+    mq_engine::librqbit::tracker_comms::AnnounceFields {
+        info_hash: Id20::new([1; 20]),
+        peer_id: Id20::new([2; 20]),
+        downloaded: 0,
+        left: 0,
+        uploaded: 0,
+        event: 0,
+        key: 0,
+        port: 6881,
+    }
+}
+
+/// A UDP tracker client whose policy is `permits`.
+async fn udp_client(
+    permits: impl Fn(IpAddr) -> bool + Send + Sync + 'static,
+) -> mq_engine::librqbit::tracker_comms::UdpTrackerClient {
+    use mq_engine::librqbit::tracker_comms::{Policy, UdpTrackerClient};
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let policy = Policy {
+        permits: Arc::new(permits),
+        resolver: http.torrent_scope(&[]).resolver(),
+    };
+    UdpTrackerClient::new(Default::default(), None, Some(policy))
+        .await
+        .unwrap()
+}
+
+/// A UDP tracker on `127.0.0.1` that answers Connect and Announce (no
+/// peers), from its own socket or, given one, from `answer_from`. Counts
+/// both kinds of request.
+struct UdpTracker {
+    addr: SocketAddr,
+    connects: Arc<AtomicUsize>,
+    announces: Arc<AtomicUsize>,
+}
+
+fn udp_tracker(answer_from: Option<std::net::UdpSocket>) -> UdpTracker {
+    let socket = std::net::UdpSocket::bind((V4, 0)).unwrap();
+    let addr = socket.local_addr().unwrap();
+    let (connects, announces) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+    let (c, a) = (connects.clone(), announces.clone());
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 2048];
+        while let Ok((n, from)) = socket.recv_from(&mut buf) {
+            if n < 16 {
+                continue;
+            }
+            // Action and transaction id sit at the same place in both.
+            let (action, tid) = (&buf[8..12], &buf[12..16]);
+            let mut answer = Vec::from(action);
+            answer.extend(tid);
+            if action == 0u32.to_be_bytes() {
+                c.fetch_add(1, Ordering::SeqCst);
+                answer.extend(7u64.to_be_bytes());
+            } else {
+                a.fetch_add(1, Ordering::SeqCst);
+                answer.extend([0, 0, 7, 8]); // interval
+                answer.extend([0; 8]); // leechers, seeders
+            }
+            let _ = answer_from
+                .as_ref()
+                .unwrap_or(&socket)
+                .send_to(&answer, from);
+        }
+    });
+    UdpTracker {
+        addr,
+        connects,
+        announces,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_cached_udp_connection_id_meets_the_current_policy() {
+    let allowed = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let tracker = udp_tracker(None);
+    let client = udp_client({
+        let allowed = allowed.clone();
+        move |_| allowed.load(Ordering::SeqCst)
+    })
+    .await;
+    client
+        .announce(tracker.addr, announce_fields())
+        .await
+        .expect("connected and announced");
+    // Refused now (a network change), with its connection id still cached.
+    allowed.store(false, Ordering::SeqCst);
+    let second = timeout(
+        Duration::from_millis(300),
+        client.announce(tracker.addr, announce_fields()),
+    )
+    .await
+    .expect("refused at once");
+    let error = second.expect_err("refused").to_string();
+    assert!(error.contains("address policy"), "{error}");
+    settle().await;
+    let seen = (
+        tracker.connects.load(Ordering::SeqCst),
+        tracker.announces.load(Ordering::SeqCst),
+    );
+    assert_eq!(seen, (1, 1), "nothing sent on the cached id");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_udp_answer_from_another_address_is_ignored() {
+    let other = std::net::UdpSocket::bind((V4, 0)).unwrap();
+    let tracker = udp_tracker(Some(other));
+    let client = udp_client(|_| true).await;
+    let answer = timeout(
+        Duration::from_millis(1500),
+        client.announce(tracker.addr, announce_fields()),
+    )
+    .await;
+    assert!(answer.is_err(), "took an answer from another address");
+    assert_eq!(tracker.connects.load(Ordering::SeqCst), 1);
+}
+
+/// An HTTP tracker on `[::1]` that reads each request and then, by `answer`,
+/// says nothing or streams an endless body. Records when the client hung up.
+fn misbehaving_tracker(answer: bool) -> (String, Arc<std::sync::Mutex<Option<Instant>>>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind((V6, 0)).unwrap();
+    let url = format!("http://{}/announce", listener.local_addr().unwrap());
+    let closed = Arc::new(std::sync::Mutex::new(None));
+    let seen = closed.clone();
+    std::thread::spawn(move || {
+        let Some(Ok(mut stream)) = listener.incoming().next() else {
+            return;
+        };
+        let mut head = Vec::new();
+        let mut buf = [0u8; 1024];
+        while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+            match stream.read(&mut buf) {
+                Ok(0) | Err(_) => return,
+                Ok(n) => head.extend_from_slice(&buf[..n]),
+            }
+        }
+        if answer {
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000000\r\n\r\n");
+            let chunk = vec![b'x'; 64 * 1024];
+            while stream.write_all(&chunk).is_ok() {}
+        } else {
+            while matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
+        }
+        *seen.lock().unwrap() = Some(Instant::now());
+    });
+    (url, closed)
+}
+
+/// Runs an add of a torrent with only `tracker` until the tracker sees the
+/// client hang up or `limit` passes; how long that took.
+async fn hang_up_after(
+    url: String,
+    closed: &std::sync::Mutex<Option<Instant>>,
+    limit: Duration,
+) -> Option<Duration> {
+    let (engine, _http, _dir) = engine(&[V6]).await;
+    let started = Instant::now();
+    let add = engine.add_magnet(NOWHERE, std::slice::from_ref(&url), &[]);
+    let hung_up = async {
+        loop {
+            if let Some(at) = *closed.lock().unwrap() {
+                return at - started;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    };
+    // The add stays alive meanwhile: dropping it would end the announce.
+    timeout(limit, async {
+        tokio::select! {
+            _ = add => None,
+            took = hung_up => Some(took),
+        }
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stalling_tracker_is_given_up() {
+    let (url, closed) = misbehaving_tracker(false);
+    let took = hang_up_after(url, &closed, Duration::from_secs(40))
+        .await
+        .expect("the announce gave up within 40 s");
+    assert!(took >= Duration::from_secs(25), "{took:?}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_endless_tracker_answer_is_cut_off() {
+    let (url, closed) = misbehaving_tracker(true);
+    let took = hang_up_after(url, &closed, Duration::from_secs(10))
+        .await
+        .expect("the answer was cut off");
+    assert!(took < Duration::from_secs(5), "{took:?}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_url_with_a_refused_literal_is_never_fetched() {
+    use mq_engine::librqbit::AddTorrent;
+    let canary = Canary::tcp(V4, 0);
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let scope = http.torrent_scope(&[]);
+    let dir = tempfile::tempdir().unwrap();
+    let opts = SessionOptions {
+        dht: None,
+        disable_local_service_discovery: true,
+        listen: None,
+        destinations: Some(mq_engine::destinations(&scope, &scope, &scope)),
+        ..Default::default()
+    };
+    let session = Session::new_with_opts(dir.path().into(), opts)
+        .await
+        .unwrap();
+    let url = format!("http://{}/movie.torrent", canary.addr());
+    let added = session.add_torrent(AddTorrent::from_url(url), None).await;
+    let error = format!("{:#}", added.err().expect("refused"));
+    assert!(error.contains("address policy"), "{error}");
+    settle().await;
+    assert_eq!(canary.hits(), 0);
+    session.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_proxy_cannot_be_combined_with_the_policy() {
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let scope = http.torrent_scope(&[]);
+    let dir = tempfile::tempdir().unwrap();
+    let opts = SessionOptions {
+        dht: None,
+        disable_local_service_discovery: true,
+        listen: None,
+        connect: Some(mq_engine::librqbit::ConnectionOptions {
+            proxy_url: Some("socks5://127.0.0.1:1".into()),
+            ..Default::default()
+        }),
+        destinations: Some(mq_engine::destinations(&scope, &scope, &scope)),
+        ..Default::default()
+    };
+    let started = Session::new_with_opts(dir.path().into(), opts).await;
+    let error = format!("{:#}", started.err().expect("refused"));
+    assert!(error.contains("proxy"), "{error}");
+}
+
 // Phase 4: the DHT.
+
+/// A session with the DHT only, persisted in `file` (dumped every 200 ms),
+/// bootstrapping from `bootstrap`, allowed `allowed`; and its DHT scope.
+async fn dht_session(
+    allowed: &[IpAddr],
+    bootstrap: Vec<String>,
+    file: &std::path::Path,
+) -> (Arc<Session>, mq_http::AddressScope) {
+    use mq_engine::librqbit::DhtSessionConfig;
+    use mq_engine::librqbit::dht::DhtPersistenceConfig;
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let scope = http.torrent_scope(allowed);
+    let dht = scope.with_own_count();
+    // The DHT as Marquee runs it: persisted, through the session.
+    let opts = SessionOptions {
+        dht: Some(DhtSessionConfig {
+            bootstrap_addrs: Some(bootstrap),
+            port: None,
+            persistence: Some(DhtPersistenceConfig {
+                config_filename: Some(file.into()),
+                dump_interval: Some(Duration::from_millis(200)),
+            }),
+        }),
+        disable_local_service_discovery: true,
+        listen: None,
+        destinations: Some(mq_engine::destinations(&scope, &scope, &dht)),
+        ..Default::default()
+    };
+    let session = Session::new_with_opts(file.parent().unwrap().into(), opts)
+        .await
+        .unwrap();
+    (session, dht)
+}
+
+/// The byte string under `key` in the bencoded dictionary `msg`.
+fn bencode_get<'a>(msg: &'a [u8], key: &[u8]) -> Option<&'a [u8]> {
+    fn string(msg: &[u8], at: usize) -> Option<(&[u8], usize)> {
+        let colon = at + msg.get(at..)?.iter().position(|&b| b == b':')?;
+        let len: usize = std::str::from_utf8(&msg[at..colon]).ok()?.parse().ok()?;
+        Some((msg.get(colon + 1..colon + 1 + len)?, colon + 1 + len))
+    }
+    fn skip(msg: &[u8], at: usize) -> Option<usize> {
+        match *msg.get(at)? {
+            b'i' => Some(at + msg[at..].iter().position(|&b| b == b'e')? + 1),
+            b'l' | b'd' => {
+                let mut i = at + 1;
+                while *msg.get(i)? != b'e' {
+                    i = skip(msg, i)?;
+                }
+                Some(i + 1)
+            }
+            _ => string(msg, at).map(|(_, end)| end),
+        }
+    }
+    let mut i = 1;
+    while *msg.get(i)? != b'e' {
+        let (k, value) = string(msg, i)?;
+        if k == key {
+            return string(msg, value).map(|(v, _)| v);
+        }
+        i = skip(msg, value)?;
+    }
+    None
+}
+
+/// A DHT node on `[::1]` that answers every query with its id and, given
+/// one, `contact` in `nodes6`. Counts the queries it got.
+struct FakeNode {
+    addr: SocketAddr,
+    queries: Arc<AtomicUsize>,
+}
+
+fn fake_node(contact: Option<SocketAddr>) -> FakeNode {
+    // Answers carry nodes of the asker's family, so the node sits in the
+    // contact's: `nodes` for IPv4, `nodes6` for IPv6.
+    let ip = if contact.is_some_and(|c| c.is_ipv4()) {
+        V4
+    } else {
+        V6
+    };
+    let socket = std::net::UdpSocket::bind((ip, 0)).unwrap();
+    let addr = socket.local_addr().unwrap();
+    let queries = Arc::new(AtomicUsize::new(0));
+    let counted = queries.clone();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 2048];
+        while let Ok((n, from)) = socket.recv_from(&mut buf) {
+            let msg = &buf[..n];
+            let Some(tid) = bencode_get(msg, b"t").map(<[u8]>::to_vec) else {
+                continue;
+            };
+            if bencode_get(msg, b"y") != Some(b"q") {
+                continue;
+            }
+            counted.fetch_add(1, Ordering::SeqCst);
+            let mut answer = b"d1:rd2:id20:".to_vec();
+            answer.extend([0x11; 20]);
+            match contact {
+                Some(SocketAddr::V4(c)) => {
+                    answer.extend(b"5:nodes26:");
+                    answer.extend([0x22; 20]);
+                    answer.extend(c.ip().octets());
+                    answer.extend(c.port().to_be_bytes());
+                }
+                Some(SocketAddr::V6(c)) => {
+                    answer.extend(b"6:nodes638:");
+                    answer.extend([0x22; 20]);
+                    answer.extend(c.ip().octets());
+                    answer.extend(c.port().to_be_bytes());
+                }
+                None => {}
+            }
+            answer.extend(format!("e1:t{}:", tid.len()).bytes());
+            answer.extend(&tid);
+            answer.extend(b"1:y1:re");
+            let _ = socket.send_to(&answer, from);
+        }
+    });
+    FakeNode { addr, queries }
+}
+
+/// A node that never answers: an allowed bootstrap that keeps a DHT up.
+fn silent_node() -> (std::net::UdpSocket, String) {
+    let socket = std::net::UdpSocket::bind((V6, 0)).unwrap();
+    let addr = socket.local_addr().unwrap().to_string();
+    (socket, addr)
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn dht_never_sends_to_the_canary() {
-    use mq_engine::librqbit::DhtSessionConfig;
-    use mq_engine::librqbit::dht::DhtPersistenceConfig;
     for control in [false, true] {
         let allowed = if control { vec![V4, V6] } else { vec![] };
         // Bootstrap nodes by IPv4 literal, mapped literal and `[::1]`.
@@ -504,28 +876,8 @@ async fn dht_never_sends_to_the_canary() {
             mapped(canaries[1].addr()).to_string(),
             canaries[2].addr().to_string(),
         ];
-        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
-        let scope = http.torrent_scope(&allowed);
-        let dht = scope.with_own_count();
-        // The DHT as Marquee runs it: persisted, through the session.
         let dir = tempfile::tempdir().unwrap();
-        let opts = SessionOptions {
-            dht: Some(DhtSessionConfig {
-                bootstrap_addrs: Some(bootstrap),
-                port: None,
-                persistence: Some(DhtPersistenceConfig {
-                    config_filename: Some(dir.path().join("dht.json")),
-                    ..Default::default()
-                }),
-            }),
-            disable_local_service_discovery: true,
-            listen: None,
-            destinations: Some(mq_engine::destinations(&scope, &scope, &dht)),
-            ..Default::default()
-        };
-        let session = Session::new_with_opts(dir.path().into(), opts)
-            .await
-            .unwrap();
+        let (session, dht) = dht_session(&allowed, bootstrap, &dir.path().join("dht.json")).await;
         tokio::time::sleep(Duration::from_secs(3)).await;
         assert_canaries(control, &canaries.each_ref());
         if control {
@@ -533,6 +885,112 @@ async fn dht_never_sends_to_the_canary() {
         } else {
             assert!(dht.refused() >= 3, "each node refused: {}", dht.refused());
         }
+        session.stop().await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_refused_source_gets_no_dht_reply() {
+    for control in [false, true] {
+        let allowed = if control { vec![V4, V6] } else { vec![V6] };
+        let (_silent, bootstrap) = silent_node();
+        let dir = tempfile::tempdir().unwrap();
+        let (session, dht) =
+            dht_session(&allowed, vec![bootstrap], &dir.path().join("dht.json")).await;
+        let port = session.get_dht().unwrap().listen_addr().port();
+        let before = dht.refused();
+        let asker = tokio::net::UdpSocket::bind((V4, 0)).await.unwrap();
+        let mut ping = b"d1:ad2:id20:".to_vec();
+        ping.extend([0x33; 20]);
+        ping.extend(b"e1:q4:ping1:t2:aa1:y1:qe");
+        asker.send_to(&ping, (V4, port)).await.unwrap();
+        let mut buf = [0u8; 1500];
+        let answered = timeout(Duration::from_secs(1), asker.recv_from(&mut buf))
+            .await
+            .is_ok();
+        assert_eq!(answered, control, "a reply only to an allowed source");
+        if !control {
+            assert!(dht.refused() > before, "the reply was refused and counted");
+        }
+        session.stop().await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn persisted_dht_nodes_meet_the_policy() {
+    // A table that holds the canary: a first session, allowed everything,
+    // learns it from a node's answer (a node enters the table when it is
+    // queried) and saves the table. Only the IPv4 table is loaded again.
+    let canary = Canary::udp(V4, 0);
+    let node = fake_node(Some(canary.addr()));
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("dht.json");
+    let (first, _) = dht_session(&[V4, V6], vec![node.addr.to_string()], &file).await;
+    let seeded = timeout(Duration::from_secs(5), async {
+        loop {
+            match std::fs::read_to_string(&file) {
+                Ok(json) if json.contains(&canary.addr().to_string()) => return json,
+                _ => tokio::time::sleep(Duration::from_millis(100)).await,
+            }
+        }
+    })
+    .await
+    .expect("the learned node saved");
+    first.stop().await;
+    for control in [false, true] {
+        std::fs::write(&file, &seeded).unwrap();
+        let allowed = if control { vec![V4, V6] } else { vec![V6] };
+        let (_silent, bootstrap) = silent_node();
+        let before = canary.hits();
+        let (session, dht) = dht_session(&allowed, vec![bootstrap], &file).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        session.stop().await;
+        settle().await;
+        let pinged = canary.hits() - before;
+        if control {
+            assert!(pinged >= 1, "control: the saved node was pinged");
+        } else {
+            assert_eq!(pinged, 0, "the saved node was pinged");
+            assert!(dht.refused() >= 1, "the saved node's ping was refused");
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn nodes_learned_from_answers_meet_the_policy() {
+    for control in [false, true] {
+        let canary = Canary::udp(V4, 0);
+        // An allowed node that names the canary in its answers.
+        let node = fake_node(Some(mapped(canary.addr())));
+        let allowed = if control { vec![V4, V6] } else { vec![V6] };
+        let dir = tempfile::tempdir().unwrap();
+        let (session, dht) = dht_session(
+            &allowed,
+            vec![node.addr.to_string()],
+            &dir.path().join("dht.json"),
+        )
+        .await;
+        let tried = timeout(Duration::from_secs(3), async {
+            while canary.hits() == 0 && dht.refused() == 0 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await;
+        assert!(tried.is_ok(), "the learned node was tried");
+        assert!(node.queries.load(Ordering::SeqCst) >= 1);
+        if !control {
+            // A refused query fails at once: none waits out its 10 s
+            // timeout, so the lookup moves on.
+            let drained = timeout(Duration::from_secs(1), async {
+                while session.get_dht().unwrap().stats().outstanding_requests > 0 {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await;
+            assert!(drained.is_ok(), "a refused query stayed outstanding");
+        }
+        settle().await;
+        assert_canaries(control, &[&canary]);
         session.stop().await;
     }
 }
