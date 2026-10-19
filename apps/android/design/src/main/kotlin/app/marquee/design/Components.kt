@@ -531,7 +531,7 @@ fun ChosenVersion(
 
 /**
  * A status line: a spinner and [text] while [busy] (16 dp, 24 dp on TV), else a dot in [tone]. The
- * text wraps to two lines.
+ * text wraps to two lines unless [maxLines] says more.
  */
 @Composable
 fun StatusNote(
@@ -539,6 +539,8 @@ fun StatusNote(
     modifier: Modifier = Modifier,
     tone: Status = Status.Idle,
     busy: Boolean = false,
+    /** Why nothing plays is said whole ("Marquee found 9 versions. This version of the app..."). */
+    maxLines: Int = 2,
 ) {
     val tv = Marquee.form == Form.Tv
     Row(
@@ -547,7 +549,7 @@ fun StatusNote(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (busy) Spinner(size = if (tv) 24.dp else 16.dp) else StatusDot(tone)
-        MqText(text, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 2)
+        MqText(text, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = maxLines)
     }
 }
 

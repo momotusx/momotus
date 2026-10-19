@@ -426,7 +426,7 @@ private fun VersionStatus(line: VersionLine) {
         }
 
         is VersionLine.Problem -> {
-            StatusNote(line.text, tone = Status.Warn)
+            StatusNote(line.text, tone = Status.Warn, maxLines = Int.MAX_VALUE)
         }
     }
 }
