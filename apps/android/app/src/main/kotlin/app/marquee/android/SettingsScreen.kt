@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
@@ -81,6 +82,7 @@ import app.marquee.design.RoundButton
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
+import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.dpadExits
 import app.marquee.design.focusClickable
@@ -523,9 +525,14 @@ private fun AddonRow(
     val colors = Marquee.colors
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                verticalAlignment = Alignment.CenterVertically,
+            // The name line is one switch (as the recommended addons): TalkBack reads the name with its state.
+            SwitchRow(
+                addon.enabled,
+                onToggle,
+                Modifier
+                    .focusRequester(focusRequester)
+                    .marqueeFocus(Marquee.radius.m, scale = 1.01f)
+                    .clip(RoundedCornerShape(Marquee.radius.m)),
             ) {
                 Column(Modifier.weight(1f)) {
                     MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
@@ -537,15 +544,6 @@ private fun AddonRow(
                         maxLines = 1,
                     )
                 }
-                // Named for its addon, so TalkBack moving between switches says which one it is.
-                Chip(
-                    if (addon.enabled) "On" else "Off",
-                    selected = addon.enabled,
-                    onClick = onToggle,
-                    modifier = Modifier.semantics { contentDescription = addon.name },
-                    focusRequester = focusRequester,
-                    switch = true,
-                )
             }
             addon.description?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
             // Wraps on a small phone or a large font instead of cutting a label.

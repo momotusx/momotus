@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,16 +62,15 @@ import app.marquee.design.Icons
 import app.marquee.design.MarkTile
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
-import app.marquee.design.MqSwitch
 import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.SecondaryButton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
+import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
-import app.marquee.design.focusToggleable
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
@@ -292,44 +293,30 @@ private fun DefaultRow(
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val shape = RoundedCornerShape(Marquee.radius.l)
-    Row(
+    val card =
         Modifier
             .fillMaxWidth()
-            .then(if (on != null) Modifier.marqueeFocus(Marquee.radius.l, scale = 1.01f) else Modifier)
             .clip(shape)
             .background(colors.surface)
             .border(1.dp, colors.edge, shape)
-            .then(
-                if (on !=
-                    null
-                ) {
-                    Modifier.focusToggleable(on, onToggle)
-                } else {
-                    Modifier.semantics(mergeDescendants = true) {}
-                },
-            ).padding(if (tv) 16.dp else 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val padding = PaddingValues(if (tv) 16.dp else 12.dp)
+    val words: @Composable RowScope.() -> Unit = {
         MarkTile(addon.logo, addon.name)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
             MqText(addon.line, role = TextRole.Caption, color = colors.muted)
         }
-        if (on == null) {
+    }
+    if (on != null) {
+        SwitchRow(on, onToggle, Modifier.marqueeFocus(Marquee.radius.l, scale = 1.01f).then(card), padding, words)
+    } else {
+        Row(
+            card.semantics(mergeDescendants = true) {}.padding(padding),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            words()
             MqText(DefaultsCopy.FROM_STREMIO, role = TextRole.Caption, color = colors.muted)
-        } else {
-            MqSwitch(on)
-            // TV says the state in a word too, in a box as wide as the longer word so the tracks line up.
-            if (tv) {
-                Box(Modifier.widthIn(min = 40.dp)) {
-                    MqText(
-                        if (on) "On" else "Off",
-                        role = TextRole.Callout,
-                        color = if (on) colors.text else colors.muted,
-                    )
-                }
-            }
         }
     }
 }

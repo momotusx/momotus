@@ -2,10 +2,15 @@ package app.marquee.design
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -70,6 +75,40 @@ fun MqSwitch(
                 .clip(CircleShape)
                 .background(colors.knob),
         )
+    }
+}
+
+/**
+ * A row that is one switch: [content] (a mark, a name, a line) and the switch at its end. One focus
+ * stop on TV, where the state is also said in a word; TalkBack reads the row's words with the switch
+ * role and its state. [modifier] draws the row (focus, shape, fill); [padding] sits inside the touch area.
+ */
+@Composable
+fun SwitchRow(
+    on: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    padding: PaddingValues = PaddingValues(),
+    content: @Composable RowScope.() -> Unit,
+) {
+    val tv = Marquee.form == Form.Tv
+    Row(
+        modifier.focusToggleable(on, onToggle).padding(padding),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
+        MqSwitch(on)
+        // As wide as the longer word, so a list's tracks line up.
+        if (tv) {
+            Box(Modifier.widthIn(min = 40.dp)) {
+                MqText(
+                    if (on) "On" else "Off",
+                    role = TextRole.Callout,
+                    color = if (on) Marquee.colors.text else Marquee.colors.muted,
+                )
+            }
+        }
     }
 }
 
