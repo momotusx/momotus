@@ -17,7 +17,7 @@ use net::Device;
 use reqwest::header::{CONTENT_TYPE, HeaderName, HeaderValue, LOCATION, RANGE, RETRY_AFTER};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Once, RwLock};
 use std::time::Duration;
 use tokio::time::Instant;
@@ -365,6 +365,7 @@ impl Scopes {
         let allowed = Allowed {
             local,
             device: self.device.clone(),
+            refused: Default::default(),
         };
         let client = builder(&self.config)
             .redirect(reqwest::redirect::Policy::none())
@@ -391,12 +392,65 @@ struct Allowed {
     /// Canonical and sorted.
     local: Vec<IpAddr>,
     device: Arc<RwLock<Device>>,
+    /// Addresses refused, never which ones.
+    refused: Arc<AtomicU64>,
 }
 
 impl Allowed {
     fn permits(&self, ip: IpAddr) -> bool {
         let device = self.device.read().unwrap_or_else(|e| e.into_inner());
-        net::permitted(ip, &self.local, &device)
+        let ok = net::permitted(ip, &self.local, &device);
+        if !ok {
+            self.refused.fetch_add(1, Ordering::Relaxed);
+        }
+        ok
+    }
+}
+
+/// Where the torrent engine may connect (plans/c27-torrent-policy.md): the
+/// playback rule for the addresses in `local`, which the apps leave empty.
+/// Refused addresses are counted, never logged.
+#[derive(Clone)]
+pub struct AddressScope {
+    allowed: Allowed,
+    scopes: Arc<Scopes>,
+}
+
+impl AddressScope {
+    pub fn permits(&self, ip: IpAddr) -> bool {
+        self.allowed.permits(ip)
+    }
+
+    /// Re-reads the device's interfaces, as every `scoped` call does.
+    pub fn refresh(&self) {
+        self.scopes.refresh();
+    }
+
+    pub fn refused(&self) -> u64 {
+        self.allowed.refused.load(Ordering::Relaxed)
+    }
+
+    /// The same rule and snapshot with a count of its own (one per kind of
+    /// destination).
+    pub fn with_own_count(&self) -> AddressScope {
+        let mut scope = self.clone();
+        scope.allowed.refused = Default::default();
+        scope
+    }
+
+    /// Names through the system resolver (the test table first), keeping
+    /// permitted answers; none left fails as `blocked address`. Refusals
+    /// count on this scope.
+    pub fn resolver(&self) -> Arc<dyn reqwest::dns::Resolve> {
+        Arc::new(self.allowed.clone())
+    }
+}
+
+impl std::fmt::Debug for AddressScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AddressScope")
+            .field("refused", &self.refused())
+            .finish_non_exhaustive()
     }
 }
 
@@ -468,6 +522,82 @@ pub mod test_dns {
     pub fn own_addresses(http: &HttpClient) -> Vec<IpAddr> {
         let device = http.scopes.device.read().unwrap_or_else(|e| e.into_inner());
         device.own().to_vec()
+    }
+
+    /// A listener counting what reaches it, for tests that prove a check
+    /// ran: hostile addresses are built from its own, so a check that does
+    /// not run lets them through. It fails loudly if it cannot bind.
+    pub struct Canary {
+        addr: std::net::SocketAddr,
+        hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl Canary {
+        /// Counts accepted TCP connections on `ip`; `port` 0 picks one.
+        pub fn tcp(ip: IpAddr, port: u16) -> Canary {
+            let listener = std::net::TcpListener::bind((ip, port)).expect("the canary must bind");
+            let canary = Canary::at(listener.local_addr().expect("bound"));
+            let hits = canary.hits.clone();
+            std::thread::spawn(move || {
+                for _ in listener.incoming().flatten() {
+                    hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                }
+            });
+            canary
+        }
+
+        /// Counts UDP datagrams received on `ip`; `port` 0 picks one.
+        pub fn udp(ip: IpAddr, port: u16) -> Canary {
+            let socket = std::net::UdpSocket::bind((ip, port)).expect("the canary must bind");
+            let canary = Canary::at(socket.local_addr().expect("bound"));
+            let hits = canary.hits.clone();
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 2048];
+                while socket.recv_from(&mut buf).is_ok() {
+                    hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                }
+            });
+            canary
+        }
+
+        /// The C23 tests' TCP canary: on a not-public address no scope there
+        /// allows, `127.0.0.3` on Linux, `[::1]` on macOS (lo0 has only
+        /// 127.0.0.1 and ::1).
+        pub fn default_tcp(port: u16) -> Canary {
+            let ip: IpAddr = if cfg!(target_os = "linux") {
+                std::net::Ipv4Addr::new(127, 0, 0, 3).into()
+            } else {
+                std::net::Ipv6Addr::LOCALHOST.into()
+            };
+            Canary::tcp(ip, port)
+        }
+
+        fn at(addr: std::net::SocketAddr) -> Canary {
+            Canary {
+                addr,
+                hits: Default::default(),
+            }
+        }
+
+        pub fn addr(&self) -> std::net::SocketAddr {
+            self.addr
+        }
+
+        pub fn hits(&self) -> usize {
+            self.hits.load(std::sync::atomic::Ordering::SeqCst)
+        }
+
+        /// `host:port` forms that reach it: its literal, `name` pointed at it
+        /// through `set`, and its mapped literal when it is IPv4.
+        pub fn hosts(&self, name: &str) -> Vec<String> {
+            let (ip, port) = (self.addr.ip(), self.addr.port());
+            set(name, &[ip]);
+            let mut hosts = vec![self.addr.to_string(), format!("{name}:{port}")];
+            if let IpAddr::V4(v4) = ip {
+                hosts.push(format!("[::ffff:{v4}]:{port}"));
+            }
+            hosts
+        }
     }
 
     pub(crate) fn get(name: &str) -> Option<Vec<IpAddr>> {
@@ -613,6 +743,14 @@ fn redirect(attempt: reqwest::redirect::Attempt) -> reqwest::redirect::Action {
     }
 }
 
+/// `local` as scopes key it: canonical, sorted, without repeats.
+fn canonical(local: &[IpAddr]) -> Vec<IpAddr> {
+    let mut key: Vec<IpAddr> = local.iter().map(|ip| ip.to_canonical()).collect();
+    key.sort();
+    key.dedup();
+    key
+}
+
 fn downgrades(from: &Url, to: &Url) -> bool {
     from.scheme() == "https" && to.scheme() == "http"
 }
@@ -660,9 +798,7 @@ impl HttpClient {
     /// connections while the snapshot stays the same, and every handle shares
     /// this client's budget.
     pub fn scoped(&self, local: &[IpAddr]) -> HttpClient {
-        let mut key: Vec<IpAddr> = local.iter().map(|ip| ip.to_canonical()).collect();
-        key.sort();
-        key.dedup();
+        let key = canonical(local);
         self.scopes.refresh();
         // Built here, so a playback's open pays for it rather than its first read.
         let _ = self.scopes.client(&key);
@@ -671,6 +807,21 @@ impl HttpClient {
             budget: self.budget.clone(),
             scopes: self.scopes.clone(),
             scope: Some(key.into()),
+        }
+    }
+
+    /// The torrent engine's destination rule: the one `scoped` applies to
+    /// playback, for `local`, on this client's interface snapshot (refreshed
+    /// now, and by `AddressScope::refresh`).
+    pub fn torrent_scope(&self, local: &[IpAddr]) -> AddressScope {
+        self.scopes.refresh();
+        AddressScope {
+            allowed: Allowed {
+                local: canonical(local),
+                device: self.scopes.device.clone(),
+                refused: Default::default(),
+            },
+            scopes: self.scopes.clone(),
         }
     }
 
@@ -1232,6 +1383,7 @@ mod tests {
         let allowed = Allowed {
             local: vec![ip("127.0.0.1")],
             device: Default::default(),
+            refused: Default::default(),
         };
         let answer = [
             "8.8.8.8",

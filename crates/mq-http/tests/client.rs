@@ -1,11 +1,10 @@
-use mq_http::test_dns::Interface;
+use mq_http::test_dns::{Canary, Interface};
 use mq_http::{
     Body, ClientConfig, HttpClient, HttpError, Method, Priority, RequestOptions, Url, local_addrs,
     test_dns,
 };
 use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -332,56 +331,14 @@ fn reply(status: &str, headers: &str, body: &str) -> String {
     )
 }
 
-/// A listener on a not-public address no scope here allows, counting the
-/// connections it accepts: `127.0.0.3` on Linux, `[::1]` on macOS (lo0 has
-/// only 127.0.0.1 and ::1). Hostile URLs are built from its address, so a
-/// check that does not run lets them connect. `port` 0 picks one; a name test
-/// passes the origin's, since a name's URL has one port for every answer.
-struct Canary {
-    addr: SocketAddr,
-    accepted: Arc<AtomicUsize>,
-}
-
-impl Canary {
-    async fn start(port: u16) -> Canary {
-        let ip: IpAddr = if cfg!(target_os = "linux") {
-            Ipv4Addr::new(127, 0, 0, 3).into()
-        } else {
-            Ipv6Addr::LOCALHOST.into()
-        };
-        let listener = TcpListener::bind((ip, port))
-            .await
-            .expect("the canary must bind");
-        let addr = listener.local_addr().unwrap();
-        let accepted = Arc::new(AtomicUsize::new(0));
-        let count = accepted.clone();
-        tokio::spawn(async move {
-            while let Ok((socket, _)) = listener.accept().await {
-                count.fetch_add(1, Ordering::SeqCst);
-                drop(socket);
-            }
-        });
-        Canary { addr, accepted }
-    }
-
-    fn accepted(&self) -> usize {
-        self.accepted.load(Ordering::SeqCst)
-    }
-
-    /// Its literal, its mapped literal when it is IPv4, and `name` pointed at
-    /// it through `test-dns`.
-    fn urls(&self, name: &str) -> Vec<String> {
-        let (ip, port) = (self.addr.ip(), self.addr.port());
-        test_dns::set(name, &[ip]);
-        let mut urls = vec![
-            format!("http://{}/", self.addr),
-            format!("http://{name}:{port}/"),
-        ];
-        if let IpAddr::V4(v4) = ip {
-            urls.push(format!("http://[::ffff:{v4}]:{port}/"));
-        }
-        urls
-    }
+/// The canary's URLs: its literal, `name` pointed at it, its mapped literal
+/// when it is IPv4.
+fn urls(canary: &Canary, name: &str) -> Vec<String> {
+    canary
+        .hosts(name)
+        .into_iter()
+        .map(|h| format!("http://{h}/"))
+        .collect()
 }
 
 fn scoped(local: &[IpAddr]) -> HttpClient {
@@ -416,7 +373,7 @@ async fn refused(http: &HttpClient, url: &str) -> HttpError {
 #[tokio::test]
 async fn changing_dns_answers_are_checked_per_connection() {
     let origin = Origin::ok(0).await;
-    let canary = Canary::start(origin.addr.port()).await;
+    let canary = Canary::default_tcp(origin.addr.port());
     test_dns::set("flip.c23.test", &[LOOPBACK]);
     let http = scoped(&[LOOPBACK]);
     let url = format!("http://flip.c23.test:{}/", origin.addr.port());
@@ -424,30 +381,30 @@ async fn changing_dns_answers_are_checked_per_connection() {
         .await
         .expect("the first answer is the origin");
     assert_eq!(&ok.body[..], b"ok");
-    test_dns::set("flip.c23.test", &[canary.addr.ip()]);
+    test_dns::set("flip.c23.test", &[canary.addr().ip()]);
     refused(&http, &url).await;
-    assert_eq!(canary.accepted(), 0);
+    assert_eq!(canary.hits(), 0);
     assert_eq!(origin.heads().len(), 1);
 }
 
 #[tokio::test]
 async fn mixed_answers_never_reach_the_denied_address() {
     let origin = Origin::ok(0).await;
-    let canary = Canary::start(origin.addr.port()).await;
+    let canary = Canary::default_tcp(origin.addr.port());
     // The canary first: a resolver that passes the list on connects to it.
-    test_dns::set("mixed.c23.test", &[canary.addr.ip(), LOOPBACK]);
+    test_dns::set("mixed.c23.test", &[canary.addr().ip(), LOOPBACK]);
     let url = format!("http://mixed.c23.test:{}/", origin.addr.port());
     let ok = within("mixed", scoped(&[LOOPBACK]).get(&url, &playback()))
         .await
         .expect("reaches the origin");
     assert_eq!(&ok.body[..], b"ok");
-    assert_eq!(canary.accepted(), 0);
+    assert_eq!(canary.hits(), 0);
 }
 
 #[tokio::test]
 async fn a_redirect_outside_the_scope_never_connects() {
-    let canary = Canary::start(0).await;
-    let targets = canary.urls("redirect.c23.test");
+    let canary = Canary::default_tcp(0);
+    let targets = urls(&canary, "redirect.c23.test");
     let routes = targets.clone();
     let origin = Origin::start(0, move |path| {
         let at: usize = path.trim_start_matches("/to/").parse().unwrap();
@@ -458,10 +415,10 @@ async fn a_redirect_outside_the_scope_never_connects() {
     let http = scoped(&[LOOPBACK]);
     for at in 0..targets.len() {
         let err = refused(&http, &origin.url(&format!("/to/{at}"))).await;
-        let canary_ip = canary.addr.ip().to_string();
+        let canary_ip = canary.addr().ip().to_string();
         assert!(!err.to_string().contains(&canary_ip), "{err}");
     }
-    assert_eq!(canary.accepted(), 0);
+    assert_eq!(canary.hits(), 0);
 }
 
 #[tokio::test]
@@ -477,12 +434,12 @@ async fn mapped_literals_match_the_scope() {
         .await
         .expect("::ffff:127.0.0.1 is 127.0.0.1");
     assert_eq!(&ok.body[..], b"ok");
-    let canary = Canary::start(0).await;
-    if let IpAddr::V4(v4) = canary.addr.ip() {
-        let url = format!("http://[::ffff:{v4}]:{}/", canary.addr.port());
+    let canary = Canary::default_tcp(0);
+    if let IpAddr::V4(v4) = canary.addr().ip() {
+        let url = format!("http://[::ffff:{v4}]:{}/", canary.addr().port());
         refused(&scoped(&[LOOPBACK]), &url).await;
     }
-    assert_eq!(canary.accepted(), 0);
+    assert_eq!(canary.hits(), 0);
 }
 
 /// `/hop/{at}/{end}` redirects to `/hop/{at + 1}/{end}` until `end`.
@@ -641,13 +598,13 @@ async fn secrets_stay_with_their_origin() {
 
 #[tokio::test]
 async fn blocked_hops_are_typed() {
-    let canary = Canary::start(0).await;
+    let canary = Canary::default_tcp(0);
     let http = scoped(&[LOOPBACK]);
     // A literal (the check before connecting) and a name (the resolver).
-    for url in &canary.urls("typed.c23.test")[..2] {
+    for url in &urls(&canary, "typed.c23.test")[..2] {
         let err = refused(&http, url).await;
         assert!(
-            !err.to_string().contains(&canary.addr.ip().to_string()),
+            !err.to_string().contains(&canary.addr().ip().to_string()),
             "{err}"
         );
         let Err(err) = within(url, http.stream(url, None, &playback())).await else {
@@ -655,7 +612,7 @@ async fn blocked_hops_are_typed() {
         };
         assert_eq!(err.kind(), "blocked address", "{url}: {err}");
     }
-    assert_eq!(canary.accepted(), 0);
+    assert_eq!(canary.hits(), 0);
 }
 
 // The interface snapshot, through `scoped()` (plans/c21-c23-loopback.md 3.1).
@@ -696,11 +653,11 @@ fn listed() -> RequestOptions {
 async fn the_listed_path_never_connects_to_a_private_address() {
     let origin = Origin::ok(0).await;
     let port = origin.addr.port();
-    let canary = Canary::start(port).await;
+    let canary = Canary::default_tcp(port);
     let http = quick_client();
     // Mixed answers, the private one first: it is never tried, and the
     // answer standing for a public address serves the request.
-    test_dns::set("mixed.m12.test", &[canary.addr.ip()]);
+    test_dns::set("mixed.m12.test", &[canary.addr().ip()]);
     test_dns::set_public("mixed.m12.test", &[LOOPBACK]);
     let url = format!("http://mixed.m12.test:{port}/");
     let answer = within("mixed", http.get(&url, &listed()))
@@ -708,12 +665,12 @@ async fn the_listed_path_never_connects_to_a_private_address() {
         .unwrap_or_else(|e| panic!("the public answer was not reached: {e}"));
     assert_eq!(&answer.body[..], b"ok");
     // Only private answers: nothing is left to connect to.
-    test_dns::set("private.m12.test", &[canary.addr.ip()]);
+    test_dns::set("private.m12.test", &[canary.addr().ip()]);
     let url = format!("http://private.m12.test:{port}/");
     within("private", http.get(&url, &listed()))
         .await
         .expect_err("only private answers");
-    assert_eq!(canary.accepted(), 0, "a private answer was tried");
+    assert_eq!(canary.hits(), 0, "a private answer was tried");
     // A name the system resolver itself answers with loopback, its trailing
     // dot and all.
     let url = format!("http://localhost.:{port}/");
@@ -1286,5 +1243,117 @@ async fn a_network_change_drops_every_pooled_connection() {
         *served.lock().unwrap(),
         [0, 0, 1],
         "the pooled connection, then a new one"
+    );
+}
+
+/// C27: the torrent engine's rule is playback's, read through one scope.
+#[test]
+fn torrent_scope_is_the_playback_rule() {
+    let http = quick_client();
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:2::abcd/64", false)]));
+    let scope = http.torrent_scope(&[]);
+    let refused = [
+        "127.0.0.1",
+        "::1",
+        "10.0.0.1",
+        "::ffff:127.0.0.1",
+        "64:ff9b::7f00:1",
+        "2001:db8:1:2::1",
+        "2001:db8:1:2::abcd",
+    ];
+    for addr in refused {
+        assert!(!scope.permits(ip(addr)), "{addr} must be refused");
+    }
+    for addr in ["8.8.8.8", "198.18.0.1", "2001:db8:1:3::1"] {
+        assert!(scope.permits(ip(addr)), "{addr} must be allowed");
+    }
+    assert_eq!(scope.refused(), refused.len() as u64);
+    let seeder = http.torrent_scope(&[ip("::1")]);
+    assert!(seeder.permits(ip("::1")));
+    assert!(!seeder.permits(ip("127.0.0.1")));
+    assert_eq!(seeder.refused(), 1);
+}
+
+#[tokio::test]
+async fn torrent_scope_resolves_only_permitted_answers() {
+    let scope = quick_client().torrent_scope(&[ip("::1")]);
+    test_dns::set("mixed.c27.test", &[ip("127.0.0.1"), ip("::1")]);
+    let kept: Vec<IpAddr> = scope
+        .resolver()
+        .resolve("mixed.c27.test".parse().unwrap())
+        .await
+        .expect("::1 is in scope")
+        .map(|a| a.ip())
+        .collect();
+    assert_eq!(kept, vec![ip("::1")]);
+    test_dns::set("canary.c27.test", &[ip("127.0.0.1")]);
+    let err = match scope
+        .resolver()
+        .resolve("canary.c27.test".parse().unwrap())
+        .await
+    {
+        Ok(_) => panic!("a name with no answer in scope must fail"),
+        Err(e) => e.to_string(),
+    };
+    assert!(err.contains("scope"), "{err}");
+    assert_eq!(scope.refused(), 2, "both refused answers counted");
+}
+
+#[test]
+fn torrent_scope_refresh_rereads_the_interfaces() {
+    let http = quick_client();
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:2::abcd/64", false)]));
+    let scope = http.torrent_scope(&[]);
+    assert!(!scope.permits(ip("2001:db8:1:2::1")));
+    assert!(scope.permits(ip("2001:db8:1:3::1")));
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:3::abcd/64", false)]));
+    scope.refresh();
+    assert!(
+        scope.permits(ip("2001:db8:1:2::1")),
+        "A's link is public now"
+    );
+    assert!(
+        !scope.permits(ip("2001:db8:1:3::1")),
+        "B's link is on-link now"
+    );
+}
+
+#[test]
+fn counts_are_kept_apart() {
+    let http = quick_client();
+    let peers = http.torrent_scope(&[]);
+    let trackers = peers.with_own_count();
+    assert!(!trackers.permits(ip("127.0.0.1")));
+    assert_eq!((peers.refused(), trackers.refused()), (0, 1));
+    test_dns::set_interfaces(&http, Ok(vec![interface("2001:db8:1:2::abcd/64", false)]));
+    peers.refresh();
+    assert!(
+        !trackers.permits(ip("2001:db8:1:2::1")),
+        "one snapshot for both"
+    );
+    assert_eq!((peers.refused(), trackers.refused()), (0, 2));
+}
+
+#[test]
+fn canaries_count_what_reaches_them() {
+    let tcp = Canary::tcp(LOOPBACK, 0);
+    drop(std::net::TcpStream::connect(tcp.addr()).unwrap());
+    let udp = Canary::udp(LOOPBACK, 0);
+    let socket = std::net::UdpSocket::bind((LOOPBACK, 0)).unwrap();
+    socket.send_to(b"ping", udp.addr()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while (tcp.hits(), udp.hits()) != (1, 1) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!((tcp.hits(), udp.hits()), (1, 1));
+    let hosts = tcp.hosts("canary.hosts.c27.test");
+    let port = tcp.addr().port();
+    assert_eq!(
+        hosts,
+        vec![
+            format!("127.0.0.1:{port}"),
+            format!("canary.hosts.c27.test:{port}"),
+            format!("[::ffff:127.0.0.1]:{port}"),
+        ]
     );
 }
