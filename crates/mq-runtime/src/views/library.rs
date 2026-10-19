@@ -1,5 +1,6 @@
 //! Library: the titles the user added, filtered by type and sorted, with the
-//! progress of the newest video watched.
+//! progress of the newest video watched. A kids profile's library is its
+//! counted list (plans/m11-kids.md 4.6).
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
@@ -147,7 +148,7 @@ async fn watch(
     while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables
             .iter()
-            .any(|t| matches!(t, Table::LibraryItems | Table::Progress))
+            .any(|t| matches!(t, Table::LibraryItems | Table::Progress | Table::Access))
         {
             let query = lock(&query).clone();
             let next = render(&core, &query);
@@ -159,7 +160,13 @@ async fn watch(
 }
 
 fn render(core: &Core, query: &Query) -> LibrarySnapshot {
-    let entries = core.library().library(core.profile()).unwrap_or_default();
+    let library = core.library();
+    let entries = if core.policy().kids() {
+        library.allowed_entries(core.profile())
+    } else {
+        library.library(core.profile())
+    }
+    .unwrap_or_default();
     let mut kinds: Vec<KindCount> = Vec::new();
     for e in &entries {
         match kinds.iter_mut().find(|k| k.kind == e.item.kind) {

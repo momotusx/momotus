@@ -3,11 +3,15 @@
 //! film from two metadata addons appears once.
 //!
 //! The query is debounced here, so every UI types into the same behaviour.
+//!
+//! A kids profile's search asks no addon: it matches the query over its
+//! list's names, in one row (plans/m11-kids.md 4.6).
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
-use crate::views::addons_changed;
-use crate::views::home::{HomeRow, RowState, Tile, tile_from_preview, type_label};
+use crate::views::home::{
+    HomeRow, KIDS_ROW_ID, RowState, Tile, kids_tile, tile_from_preview, type_label,
+};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
@@ -138,14 +142,23 @@ impl Drop for SearchView {
 }
 
 /// Runs the query on screen again when the installed addons change, so a
-/// newly installed search catalog shows up without retyping.
+/// newly installed search catalog shows up without retyping, and when a
+/// kids list changes.
 async fn watch_addons(
     core: Core,
     snapshot: SharedObservable<SearchSnapshot>,
     task: Arc<Mutex<Option<JoinHandle<()>>>>,
     mut changes: Receiver<Vec<Table>>,
 ) {
-    while addons_changed(&mut changes).await {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
+        let again = tables.iter().any(|t| match t {
+            Table::Addons => true,
+            Table::Access => core.policy().kids(),
+            _ => false,
+        });
+        if !again {
+            continue;
+        }
         let query = snapshot.get().query;
         if query.is_empty() {
             continue;
@@ -198,6 +211,14 @@ fn search_slots(addons: &[InstalledAddon], query: &str) -> Vec<Slot> {
 
 async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapshot>) {
     tokio::time::sleep(DEBOUNCE).await;
+    if core.policy().kids() {
+        snapshot.set(SearchSnapshot {
+            rows: kids_matches(&core, &query),
+            query,
+            recent: Vec::new(),
+        });
+        return;
+    }
     let slots = search_slots(&core.installed_addons().unwrap_or_default(), &query);
     let mut rows: Vec<(RowState, Vec<Tile>)> = vec![(RowState::Loading, Vec::new()); slots.len()];
     let publish = |rows: &[(RowState, Vec<Tile>)]| {
@@ -290,6 +311,39 @@ fn render(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<HomeRow> {
             })
         })
         .collect()
+}
+
+/// The counted titles whose name or other names hold the folded query, a
+/// title named exactly that first; no row when none does.
+fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
+    let wanted = fold(query);
+    let list = core.library().allowed_list(core.profile());
+    let mut found: Vec<(bool, Tile)> = list
+        .map(|l| l.counted)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|row| {
+            let names: Vec<String> = std::iter::once(&row.name)
+                .chain(&row.names)
+                .map(|n| fold(n))
+                .collect();
+            names
+                .iter()
+                .any(|n| n.contains(&wanted))
+                .then(|| (!names.contains(&wanted), kids_tile(row)))
+        })
+        .collect();
+    found.sort_by_key(|(inexact, _)| *inexact);
+    if found.is_empty() {
+        return Vec::new();
+    }
+    vec![HomeRow {
+        row_id: KIDS_ROW_ID.into(),
+        title: "Your shows and movies".into(),
+        source: "Your list".into(),
+        state: RowState::Ready,
+        tiles: found.into_iter().map(|(_, t)| t).collect(),
+    }]
 }
 
 /// Lowercase letters and digits only, words joined by single spaces.

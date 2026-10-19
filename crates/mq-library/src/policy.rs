@@ -2,7 +2,7 @@
 //! allowlist entries, and the reads that pair a decision with the access
 //! generation it was made under.
 
-use crate::store::{Library, LibraryError};
+use crate::store::{Library, LibraryEntry, LibraryError, entries};
 use crate::sync::{OWNER, coll, queue, refuse_gone, sql};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashMap;
@@ -272,7 +272,7 @@ impl Library {
             )?;
             let over_count = (total as usize).saturating_sub(counted.len());
             let mut stmt = tx.prepare(&format!(
-                "{SELECT_ALLOWED} WHERE profile_id = ?1 AND allowed = 1
+                "{SELECT_ROW} FROM allowed WHERE profile_id = ?1 AND allowed = 1
                  ORDER BY added_ms DESC, item_id DESC LIMIT ?2"
             ))?;
             let over = stmt
@@ -285,10 +285,24 @@ impl Library {
             })
         })
     }
+
+    /// The counted titles as the Library screen shows them, each with its
+    /// newest progress row (plans/m11-kids.md 4.6): a kids profile's
+    /// library is its list.
+    pub fn allowed_entries(&self, profile: &str) -> Result<Vec<LibraryEntry>, LibraryError> {
+        self.read(|c| {
+            entries(
+                c,
+                &format!(
+                    "SELECT item_id, kind, name, poster, NULL AS poster_shape, added_ms {COUNTED}"
+                ),
+                params![profile, MAX_ALLOWED as i64],
+            )
+        })
+    }
 }
 
-const SELECT_ALLOWED: &str =
-    "SELECT item_id, kind, name, names, poster, allowed, added_ms FROM allowed";
+const SELECT_ROW: &str = "SELECT item_id, kind, name, names, poster, allowed, added_ms";
 
 fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AllowedRow> {
     let names: String = r.get(3)?;
@@ -305,14 +319,15 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AllowedRow> {
     })
 }
 
-/// The first 1,000 allowed by allow time, ties by id: every device holding
-/// the same rows counts the same ones (3.4). The index orders by allow time
-/// only, so the tie-break here is the one that decides.
+/// The first 1,000 allowed by allow time, ties by id (?1 the profile, ?2
+/// `MAX_ALLOWED`): every device holding the same rows counts the same ones
+/// (3.4), and every read of the list goes through it. The index orders by
+/// allow time only, so the tie-break here is the one that decides.
+const COUNTED: &str = "FROM allowed WHERE profile_id = ?1 AND allowed = 1
+         ORDER BY added_ms, item_id LIMIT ?2";
+
 fn counted(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AllowedRow>> {
-    let mut stmt = c.prepare(&format!(
-        "{SELECT_ALLOWED} WHERE profile_id = ?1 AND allowed = 1
-         ORDER BY added_ms, item_id LIMIT ?2"
-    ))?;
+    let mut stmt = c.prepare(&format!("{SELECT_ROW} {COUNTED}"))?;
     stmt.query_map(params![profile, MAX_ALLOWED as i64], row)?
         .collect()
 }

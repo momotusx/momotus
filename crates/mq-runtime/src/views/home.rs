@@ -1,6 +1,9 @@
 //! Home: Continue Watching first, then one row per addon catalog in the
 //! user's addon order. Row positions are fixed at open so focus never jumps
 //! while catalogs arrive; empty and failed rows stay as explained states.
+//!
+//! A kids profile's Home asks no catalog and has no hero: Continue Watching
+//! of allowed titles, then its list's 20 newest (plans/m11-kids.md 5).
 
 use crate::live::{FRAME, ListDiff, coalesce};
 use crate::views::playback::{NextEpisode, next_after};
@@ -10,7 +13,7 @@ use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
-use mq_library::{ContinueItem, Table};
+use mq_library::{AllowedRow, ContinueItem, Table};
 use mq_protocol::{ResourcePath, ResourceResponse};
 use serde::Serialize;
 use std::pin::Pin;
@@ -19,6 +22,8 @@ use std::time::Duration;
 use tokio::task::JoinSet;
 
 pub const CONTINUE_ROW_ID: &str = "continue-watching";
+/// A kids profile's own titles, on Home and in Search.
+pub const KIDS_ROW_ID: &str = "kids-titles";
 const ROW_TILES: usize = 20;
 const SOFT_DEADLINE: Duration = Duration::from_millis(2500);
 const HARD_DEADLINE: Duration = Duration::from_secs(12);
@@ -158,17 +163,29 @@ impl HomeView {
     pub fn open(core: &Core) -> Self {
         // Subscribed before reading, so no addon change falls in between.
         let changes = core.library().subscribe();
-        let addons = core.installed_addons().unwrap_or_default();
-        let slots = shown(arrange(catalog_slots(&addons), &core.prefs().home_rows));
+        let kids = core.policy().kids();
+        let access = core.library().subscribe();
+        let slots = board(core);
         let ids = slots.iter().map(|s| s.row_id.clone()).collect();
         let mut initial = ObservableVector::new();
+        if kids {
+            initial.push_back(kids_row(core));
+        }
         for slot in &slots {
             initial.push_back(loading_row(slot));
         }
         let rows = Arc::new(Mutex::new(initial));
         let header = SharedObservable::new(HomeHeader::default());
         let mut tasks = JoinSet::new();
-        tasks.spawn(watch_continue(core.clone(), rows.clone(), header.clone()));
+        if kids {
+            tasks.spawn(watch_kids_row(core.clone(), access, rows.clone()));
+        }
+        tasks.spawn(watch_continue(
+            core.clone(),
+            kids,
+            rows.clone(),
+            header.clone(),
+        ));
         tasks.spawn(load_catalogs(
             core.clone(),
             slots,
@@ -281,6 +298,16 @@ fn shown(arranged: Vec<(CatalogSlot, bool)>) -> Vec<CatalogSlot> {
         .into_iter()
         .filter_map(|(s, hidden)| (!hidden).then_some(s))
         .collect()
+}
+
+/// The catalog rows Home shows: none for a kids profile, so it never asks
+/// an addon for a catalog (plans/m11-kids.md 14.1).
+fn board(core: &Core) -> Vec<CatalogSlot> {
+    if core.policy().kids() {
+        return Vec::new();
+    }
+    let addons = core.installed_addons().unwrap_or_default();
+    shown(arrange(catalog_slots(&addons), &core.prefs().home_rows))
 }
 
 /// One catalog as the "Customize Home" screen lists it.
@@ -409,10 +436,7 @@ async fn watch_addons(
 ) {
     let mut loads = JoinSet::new();
     while home_changed(&mut changes).await {
-        let slots = shown(arrange(
-            catalog_slots(&core.installed_addons().unwrap_or_default()),
-            &core.prefs().home_rows,
-        ));
+        let slots = board(&core);
         let next: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
         if next == ids {
             continue;
@@ -630,7 +654,9 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         .iter()
         .take_while(|row| row.state != RowState::Loading)
         // Continue Watching is the first row already; the hero repeating its
-        // first tile reads as a mistake (design audit), so it features a catalog.
+        // first tile reads as a mistake (design audit), so it features a
+        // catalog. A kids Home has none, and its own tiles carry no
+        // background, so it has no hero.
         .filter(|row| row.row_id != CONTINUE_ROW_ID)
         .find_map(|row| {
             let tile = row.tiles.iter().find(|t| t.background.is_some())?;
@@ -656,6 +682,7 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
 
 async fn watch_continue(
     core: Core,
+    kids: bool,
     rows: Arc<Mutex<ObservableVector<HomeRow>>>,
     header: SharedObservable<HomeHeader>,
 ) {
@@ -663,28 +690,94 @@ async fn watch_continue(
     refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
     while let Some(tables) = crate::views::next_change(&mut changes).await {
-        if tables
-            .iter()
-            .any(|t| matches!(t, Table::Progress | Table::Watched | Table::LibraryItems))
-        {
+        if tables.iter().any(|t| {
+            matches!(t, Table::Progress | Table::Watched | Table::LibraryItems)
+                || (kids && *t == Table::Access)
+        }) {
             refresh_continue(&core, &rows).await;
             maybe_pick_hero(&rows, &header);
         }
     }
 }
 
+/// A kids Home's own row follows the list at once (local reads only).
+async fn watch_kids_row(
+    core: Core,
+    mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
+    rows: Arc<Mutex<ObservableVector<HomeRow>>>,
+) {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
+        if tables.contains(&Table::Access) {
+            let next = kids_row(&core);
+            update_row(&rows, KIDS_ROW_ID, |row| *row = next);
+        }
+    }
+}
+
+/// "Your shows and movies": the 20 most recently allowed of the counted list.
+fn kids_row(core: &Core) -> HomeRow {
+    let list = core.library().allowed_list(core.profile());
+    let tiles: Vec<Tile> = list
+        .map(|l| l.counted)
+        .unwrap_or_default()
+        .iter()
+        .rev()
+        .take(ROW_TILES)
+        .map(kids_tile)
+        .collect();
+    HomeRow {
+        row_id: KIDS_ROW_ID.into(),
+        title: "Your shows and movies".into(),
+        source: "Your list".into(),
+        state: if tiles.is_empty() {
+            RowState::Empty
+        } else {
+            RowState::Ready
+        },
+        tiles,
+    }
+}
+
+pub(crate) fn kids_tile(row: &AllowedRow) -> Tile {
+    Tile {
+        id: row.item_id.clone(),
+        kind: row.kind.clone(),
+        name: row.name.clone(),
+        poster: row.poster.clone(),
+        background: None,
+        logo: None,
+        poster_shape: "poster".into(),
+        release_info: None,
+        progress: None,
+        video_id: None,
+        rating: None,
+        blurb: None,
+    }
+}
+
 /// Continue Watching: unfinished videos plus Next Up (the released episode
-/// after a finished one), newest activity first.
+/// after a finished one), newest activity first. For kids, titles off the
+/// list are left out before any meta is asked for, and again when the
+/// tiles land (plans/m11-kids.md 4.2).
 // ponytail: runs the indexed queries on the async thread; each is a single
 // LIMIT 20 read, move to spawn_blocking if traces show it on the hot path.
+// For kids the 20 are taken before the list filter, so 20 newer plays of
+// removed titles leave the row short; read more if that shows up.
 async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
     let library = core.library();
-    let unfinished = library
+    let policy = core.policy();
+    let unfinished: Vec<ContinueItem> = library
         .continue_watching(core.profile(), ROW_TILES)
-        .unwrap_or_default();
-    let finished = library
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|item| policy.allows(&item.kind, &item.item_id))
+        .collect();
+    let finished: Vec<_> = library
         .finished_series(core.profile(), ROW_TILES)
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|done| policy.allows("series", &done.item_id))
+        .collect();
     // A new row shows at once from the library, so it never pushes the page
     // down late; artwork and Next Up follow when the metas answer.
     if find_row(&lock(rows), CONTINUE_ROW_ID).is_none() {
@@ -692,7 +785,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
             .iter()
             .map(|item| (item.updated_ms, tile_from_continue(item.clone(), None)))
             .collect();
-        apply_continue(rows, quick);
+        apply_continue(core, rows, quick);
     }
     // Metas come from the addon cache after the first look; they give the
     // tiles their artwork (the episode's still, else the backdrop).
@@ -712,12 +805,19 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     }))
     .await;
     items.extend(next_up.into_iter().flatten());
-    apply_continue(rows, items);
+    apply_continue(core, rows, items);
 }
 
 /// Puts the newest tiles in the Continue Watching row, adding or removing
-/// the row as needed.
-fn apply_continue(rows: &Mutex<ObservableVector<HomeRow>>, mut items: Vec<(i64, Tile)>) {
+/// the row as needed. The policy is read again here: a title taken off a
+/// kids list while its meta was on the way never comes back.
+fn apply_continue(
+    core: &Core,
+    rows: &Mutex<ObservableVector<HomeRow>>,
+    mut items: Vec<(i64, Tile)>,
+) {
+    let policy = core.policy();
+    items.retain(|(_, t)| policy.allows(&t.kind, &t.id));
     items.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
     let tiles: Vec<Tile> = items.into_iter().take(ROW_TILES).map(|(_, t)| t).collect();
     let mut rows = lock(rows);

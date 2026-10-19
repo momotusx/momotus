@@ -3,7 +3,7 @@ use mq_addons::{
     StoredResponse,
 };
 use mq_http::{ClientConfig, HttpClient};
-use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME};
+use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME, Policy};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::collections::HashMap;
@@ -264,6 +264,13 @@ impl Core {
         &self.profile
     }
 
+    /// What this profile may see (plans/m11-kids.md 4.1); fails closed.
+    // ponytail: one read per call, the whole list for kids; a device-level
+    // cache keyed by the `Access` notification if traces show it.
+    pub fn policy(&self) -> Policy {
+        self.library().policy(self.profile())
+    }
+
     pub(crate) fn pins(&self) -> &std::sync::Mutex<crate::profiles::Throttle> {
         &self.inner.device.pins
     }
@@ -353,9 +360,14 @@ impl Core {
     }
 
     /// Installed addons in the user's order. Rows whose manifest no longer
-    /// parses are skipped rather than failing the whole list.
+    /// parses are skipped rather than failing the whole list. A kids profile
+    /// reads the owner's list without adult-flagged addons; its own list is
+    /// unused (plans/m11-kids.md 4.6).
     pub fn installed_addons(&self) -> Result<Vec<InstalledAddon>, CoreError> {
-        let rows = self.library().addons(self.profile())?;
+        let kids = self.policy().kids();
+        let rows = self
+            .library()
+            .addons(if kids { OWNER } else { self.profile() })?;
         Ok(rows
             .into_iter()
             .filter(|r| r.enabled)
@@ -367,6 +379,7 @@ impl Core {
                     manifest,
                 })
             })
+            .filter(|a| !(kids && a.manifest.behavior_hints.adult))
             .collect())
     }
 
@@ -374,8 +387,7 @@ impl Core {
     /// Stremio; later addons are asked only when earlier ones fail. Returns the
     /// meta and the name of the addon that gave it.
     pub async fn fetch_meta(&self, kind: &str, id: &str) -> Result<(MetaItem, String), String> {
-        let (_, meta, name) = self.fetch_meta_body(kind, id).await.map_err(|m| m.reason)?;
-        Ok((meta, name))
+        self.fetch_meta_body(kind, id).await.map_err(|m| m.reason)
     }
 
     /// As `fetch_meta`; a failure also says whether no addon answered.
@@ -384,7 +396,7 @@ impl Core {
         kind: &str,
         id: &str,
     ) -> Result<MetaItem, MetaMiss> {
-        let (_, meta, _) = self.fetch_meta_body(kind, id).await?;
+        let (meta, _) = self.fetch_meta_body(kind, id).await?;
         Ok(meta)
     }
 
@@ -459,14 +471,12 @@ impl Core {
         }
     }
 
-    /// The first meta answer in addon order that decodes, as raw bytes and
-    /// decoded, with the addon's name. Otherwise the last addon's failure as
-    /// the title page shows it.
-    async fn fetch_meta_body(
-        &self,
-        kind: &str,
-        id: &str,
-    ) -> Result<(bytes::Bytes, MetaItem, String), MetaMiss> {
+    /// The first meta answer in addon order that decodes, with the addon's
+    /// name. Otherwise the last addon's failure as the title page shows it.
+    /// For kids (plans/m11-kids.md 4.2) an answer for another kind or id is
+    /// that addon failing, and videos not of the title are dropped, so no
+    /// consumer ever sees them.
+    async fn fetch_meta_body(&self, kind: &str, id: &str) -> Result<(MetaItem, String), MetaMiss> {
         let path = ResourcePath {
             resource: "meta".into(),
             r#type: kind.to_owned(),
@@ -477,6 +487,7 @@ impl Core {
             reason: e.to_string(),
             unreached: false,
         })?;
+        let kids = self.policy().kids();
         let mut last_error = "None of your addons has details for this title".to_owned();
         // Addons asked, and those that gave no answer at all.
         let (mut asked, mut silent) = (0, 0);
@@ -485,8 +496,16 @@ impl Core {
             asked += 1;
             match self.addons().fetch(addon, &path, META_TIMEOUT).await {
                 Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
-                    Ok(ResourceResponse::Meta { meta }) => {
-                        return Ok((fetched.body, meta, name.clone()));
+                    Ok(ResourceResponse::Meta { meta })
+                        if kids && (meta.preview.id != id || meta.preview.r#type != kind) =>
+                    {
+                        last_error = format!("{name} sent details for another title");
+                    }
+                    Ok(ResourceResponse::Meta { mut meta }) => {
+                        if kids {
+                            meta.videos.retain(|v| Policy::belongs(id, &v.id));
+                        }
+                        return Ok((meta, name.clone()));
                     }
                     Ok(_) => last_error = format!("{name} has no details for this title"),
                     Err(e) => {

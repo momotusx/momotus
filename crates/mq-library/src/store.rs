@@ -616,6 +616,47 @@ fn addon_rows(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AddonRow>> 
     .collect()
 }
 
+/// The titles `items` gives (item_id, kind, name, poster, poster_shape,
+/// added_ms of profile ?1), each with its newest progress row: what the
+/// Library screen shows, for the library or a kids profile's list.
+pub(crate) fn entries(
+    c: &Connection,
+    items: &str,
+    args: impl rusqlite::Params,
+) -> rusqlite::Result<Vec<LibraryEntry>> {
+    let mut stmt = c.prepare(&format!(
+        "SELECT i.item_id, i.kind, i.name, i.poster, i.poster_shape, i.added_ms,
+                p.updated_ms, COALESCE(p.position_ms, 0), COALESCE(p.duration_ms, 0),
+                p.video_id,
+                COALESCE(w.watched, 0) = 1 AND (p.hlc IS NULL OR NOT p.hlc > w.hlc)
+         FROM ({items}) i
+         LEFT JOIN progress p ON p.profile_id = ?1 AND p.item_id = i.item_id
+           AND p.video_id = (SELECT q.video_id FROM progress q
+                             WHERE q.profile_id = ?1 AND q.item_id = i.item_id
+                             ORDER BY q.updated_ms DESC, q.video_id DESC LIMIT 1)
+         LEFT JOIN watched w ON w.profile_id = ?1
+           AND w.video_id = COALESCE(p.video_id, i.item_id)"
+    ))?;
+    stmt.query_map(args, |r| {
+        Ok(LibraryEntry {
+            item: LibraryItemRow {
+                item_id: r.get(0)?,
+                kind: r.get(1)?,
+                name: r.get(2)?,
+                poster: r.get(3)?,
+                poster_shape: r.get(4)?,
+                added_ms: r.get(5)?,
+            },
+            last_watched_ms: r.get(6)?,
+            position_ms: r.get(7)?,
+            duration_ms: r.get(8)?,
+            video_id: r.get(9)?,
+            watched: r.get(10)?,
+        })
+    })?
+    .collect()
+}
+
 fn commit<T>(
     conn: &mut Connection,
     f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
@@ -724,38 +765,12 @@ impl Library {
     /// Titles the user added (`in_library`), each with its newest progress row.
     pub fn library(&self, profile: &str) -> Result<Vec<LibraryEntry>, LibraryError> {
         self.read(|c| {
-            let mut stmt = c.prepare(
-                "SELECT i.item_id, i.kind, i.name, i.poster, i.poster_shape, i.added_ms,
-                        p.updated_ms, COALESCE(p.position_ms, 0), COALESCE(p.duration_ms, 0),
-                        p.video_id,
-                        COALESCE(w.watched, 0) = 1 AND (p.hlc IS NULL OR NOT p.hlc > w.hlc)
-                 FROM library_items i
-                 LEFT JOIN progress p ON p.profile_id = i.profile_id AND p.item_id = i.item_id
-                   AND p.video_id = (SELECT q.video_id FROM progress q
-                                     WHERE q.profile_id = i.profile_id AND q.item_id = i.item_id
-                                     ORDER BY q.updated_ms DESC, q.video_id DESC LIMIT 1)
-                 LEFT JOIN watched w ON w.profile_id = i.profile_id
-                   AND w.video_id = COALESCE(p.video_id, i.item_id)
-                 WHERE i.profile_id = ?1 AND i.in_library = 1",
-            )?;
-            stmt.query_map(params![profile], |r| {
-                Ok(LibraryEntry {
-                    item: LibraryItemRow {
-                        item_id: r.get(0)?,
-                        kind: r.get(1)?,
-                        name: r.get(2)?,
-                        poster: r.get(3)?,
-                        poster_shape: r.get(4)?,
-                        added_ms: r.get(5)?,
-                    },
-                    last_watched_ms: r.get(6)?,
-                    position_ms: r.get(7)?,
-                    duration_ms: r.get(8)?,
-                    video_id: r.get(9)?,
-                    watched: r.get(10)?,
-                })
-            })?
-            .collect()
+            entries(
+                c,
+                "SELECT item_id, kind, name, poster, poster_shape, added_ms
+                 FROM library_items WHERE profile_id = ?1 AND in_library = 1",
+                params![profile],
+            )
         })
     }
 
