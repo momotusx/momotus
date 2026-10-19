@@ -158,9 +158,14 @@ impl Login {
         self.set(TraktLoginSnapshot::Code {
             user_code: code.user_code.clone(),
             url: code.verification_url.clone(),
-            // ponytail: the bare activation page; whether a code in its path
-            // pre-fills is for the P0 live check.
-            qr: code.verification_url.clone(),
+            // The activation page with the code in its path: Trakt fills the
+            // code in (checked live, 2026-10-19). The page and the code stay
+            // as text for typing.
+            qr: format!(
+                "{}/{}",
+                code.verification_url.trim_end_matches('/'),
+                code.user_code
+            ),
             expires_ms: now_ms() + code.expires_in.as_millis() as u64,
         });
         let mut interval = code.interval;

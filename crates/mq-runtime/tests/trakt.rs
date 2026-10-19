@@ -1276,7 +1276,7 @@ async fn a_device_code_sign_in_offers_the_record_until_stored() {
         vec![reply(
             200,
             json!({"device_code": "dev", "user_code": "ABCD1234",
-                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
         )],
     );
     let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
@@ -1294,6 +1294,11 @@ async fn a_device_code_sign_in_offers_the_record_until_stored() {
         matches!(login.snapshot(), TraktLoginSnapshot::Code { ref user_code, .. } if user_code == "ABCD1234")
     })
     .await;
+    // The page and the code as text; the QR carries the code in the page.
+    if let TraktLoginSnapshot::Code { url, qr, .. } = login.snapshot() {
+        assert_eq!(url, "https://auth.trakt.tv/activate");
+        assert_eq!(qr, "https://auth.trakt.tv/activate/ABCD1234");
+    }
     for _ in 0..300 {
         if login.snapshot() != TraktLoginSnapshot::Starting
             && !matches!(login.snapshot(), TraktLoginSnapshot::Code { .. })
@@ -1640,7 +1645,7 @@ async fn a_sign_out_during_a_sign_in_stays_signed_out() {
         vec![reply(
             200,
             json!({"device_code": "dev", "user_code": "ABCD1234",
-                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
         )],
     );
     let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
@@ -1681,7 +1686,7 @@ async fn a_record_from_the_app_during_a_sign_in_is_kept() {
         vec![reply(
             200,
             json!({"device_code": "dev", "user_code": "ABCD1234",
-                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
         )],
     );
     let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
@@ -1728,7 +1733,7 @@ async fn a_newer_sign_in_overtakes_an_older_one() {
     let code = |c: &str| {
         reply(
             200,
-            json!({"device_code": c, "user_code": c, "verification_url": "https://trakt.tv/activate",
+            json!({"device_code": c, "user_code": c, "verification_url": "https://auth.trakt.tv/activate",
                    "expires_in": 600, "interval": 1}),
         )
     };
@@ -2593,7 +2598,7 @@ async fn a_sign_in_whose_user_cannot_be_read_revokes_its_tokens() {
         vec![reply(
             200,
             json!({"device_code": "dev", "user_code": "ABCD1234",
-                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
         )],
     );
     let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
@@ -2897,7 +2902,7 @@ async fn a_kids_profile_starts_no_sign_in_and_one_turned_kids_takes_no_tokens() 
         vec![reply(
             200,
             json!({"device_code": "dev", "user_code": "ABCD1234",
-                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
         )],
     );
     let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
@@ -3140,7 +3145,7 @@ async fn a_sign_in_whose_profile_cannot_be_read_keeps_its_tokens() {
         vec![reply(
             200,
             json!({"device_code": "dev", "user_code": "ABCD1234",
-                   "verification_url": "https://trakt.tv/activate", "expires_in": 600, "interval": 1}),
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
         )],
     );
     let tokens = json!({"access_token": "at", "refresh_token": "rt", "expires_in": 604_800,
