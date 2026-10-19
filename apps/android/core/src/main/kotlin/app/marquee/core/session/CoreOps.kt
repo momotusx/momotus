@@ -91,8 +91,9 @@ class CoreOps(
     suspend fun defaultAddons(): DefaultAddons = call("defaultAddons", emptyMap(), DefaultAddons.serializer())
 
     /**
-     * Installs the defaults in one write, no network: absent ones on or off as chosen, present ones
-     * take their switch. A key left out is on. Refused for a kids profile.
+     * Installs the defaults in one write, no network: a named absent one goes in on or off as chosen,
+     * a named present one takes its switch. A key left out is never added or switched, and an empty
+     * list writes nothing. Refused for a kids profile.
      */
     suspend fun installDefaults(choices: List<DefaultChoice>) {
         client.request(
