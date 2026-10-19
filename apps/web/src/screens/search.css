@@ -1,0 +1,93 @@
+/* Search: a centered command palette (design/DECISION.md, flystream's
+ * pattern). Strong glass over the blurred page; a pill input; a scope pill;
+ * result rows with a small poster. Sizes are TV points; phone overrides. */
+
+/* Over the screen: the scrim dims and blurs what is behind the palette. */
+.palette-layer { position: absolute; inset: 0; z-index: 40; display: flex; justify-content: center; align-items: flex-start;
+  padding: var(--safe-top) var(--safe-side) var(--safe-bottom); }
+.palette-scrim { position: absolute; inset: 0; background: var(--scrim);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-saturate)); }
+/* The deep link (/search): the same panel as a page under the navigation. */
+.search-page { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start;
+  padding: var(--content-top) var(--safe-side) var(--safe-bottom); }
+
+.palette { position: relative; display: flex; flex-direction: column; gap: 18px; width: 1280px; max-width: 100%; max-height: 100%;
+  padding: 28px; border-radius: var(--radius-hero); }
+.palette.dialog { animation: palette-in var(--motion-panel) var(--ease); }
+@keyframes palette-in { from { opacity: 0; transform: translateY(16px) scale(.98); } }
+
+/* The pill input. */
+.palette .field { display: flex; align-items: center; gap: 18px; height: 84px; padding: 0 32px; border-radius: var(--radius-pill);
+  background: var(--glass); box-shadow: inset 0 0 0 2px var(--control); }
+.palette .field svg { width: 34px; height: 34px; color: var(--muted); }
+.palette .field input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-headline) / 1 var(--font-text); outline: none; }
+.palette .field input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.palette .field input::-webkit-search-cancel-button { display: none; }
+.palette .field input:focus { outline: none; box-shadow: none; }
+.palette .field:focus-within { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); }
+
+/* The scope pill and the count. The wrapper only marks the focus entry. */
+.palette-main { display: contents; }
+.palette-tools { display: flex; align-items: center; gap: 20px; min-height: 52px; }
+.scope { display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 22px; border-radius: var(--radius-pill);
+  font: var(--weight-label) var(--type-callout) / 1 var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
+  background: var(--selected-fill); box-shadow: var(--selected-edge); }
+.scope svg { width: 24px; height: 24px; }
+.scope[aria-disabled="true"] { color: var(--dim); background: none; box-shadow: inset 0 0 0 2px var(--control); }
+.scope:focus-visible, [data-form="tv"] .scope:focus { transform: scale(var(--focus-scale-card)); }
+.palette-count { font: 500 var(--type-caption) / 1 var(--font-text); color: var(--dim); }
+
+/* Results: one list, a quiet heading per catalog, as the core groups them. */
+.palette-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 22px; margin: 0 -28px -28px; padding: 6px 28px 28px; }
+.palette-body [data-f] { scroll-margin: 16px 0 24px; }
+.hits { display: flex; flex-direction: column; gap: 4px; }
+.hits-head { display: flex; align-items: baseline; gap: 14px; padding: 0 14px 6px; font: inherit; }
+.hits-src { font: 500 var(--type-caption) / 1 var(--font-text); color: var(--dim); }
+.hit { display: flex; align-items: center; gap: 22px; padding: 10px 14px; border-radius: var(--radius-card); transform-origin: center; }
+.hit-art { position: relative; flex: none; width: 64px; height: 96px; border-radius: var(--radius-s); overflow: hidden; background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--edge); }
+.hit-art img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
+.hit-ph { position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; color: var(--dim); }
+.hit-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.hit-text > b { font: 700 var(--type-body) / 1.2 var(--font-text); letter-spacing: var(--tracking-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: color var(--motion-focus) var(--ease); }
+.hit-meta { display: flex; align-items: center; gap: 10px; font: 500 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); white-space: nowrap; overflow: hidden; }
+.hit-meta i { font-style: normal; color: var(--dim); }
+.hit-chev { flex: none; width: 28px; height: 28px; color: var(--dim); }
+.hit:focus-visible, [data-form="tv"] .hit:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
+.hit:focus-visible .hit-text > b, [data-form="tv"] .hit:focus .hit-text > b { color: var(--accent); }
+@media (hover: hover) {
+  [data-form="desktop"] .hit:hover { background: var(--raised); }
+  [data-form="desktop"] .hit:hover .hit-text > b { color: var(--accent); }
+}
+.hit-wait { display: flex; flex-direction: column; gap: 8px; }
+.hit-skel { height: 116px; border-radius: var(--radius-card); }
+.palette-note { padding: 4px 14px; font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
+.palette .recent { display: grid; gap: 18px; padding: 0 14px; }
+
+/* Phone: a sheet near the top, thumb sized, the list scrolling inside. */
+[data-form="phone"] .palette-layer { position: fixed; z-index: 60; padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)); }
+[data-form="phone"] .search-page { position: static; padding: 12px 10px 104px; }
+[data-form="phone"] .palette { padding: 14px; gap: 12px; border-radius: 22px; }
+[data-form="phone"] .palette .field { height: 48px; padding: 0 16px; gap: 10px; }
+[data-form="phone"] .palette .field svg { width: 20px; height: 20px; }
+[data-form="phone"] .palette .field input { font-size: 17px; }
+[data-form="phone"] .palette .field:focus-within { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+[data-form="phone"] .palette-tools { min-height: 36px; gap: 12px; }
+[data-form="phone"] .scope { height: 36px; padding: 0 14px; gap: 6px; font-size: 14px; }
+[data-form="phone"] .scope svg { width: 16px; height: 16px; }
+[data-form="phone"] .palette-count { font-size: 13px; }
+[data-form="phone"] .palette-body { gap: 14px; margin: 0 -14px -14px; padding: 2px 14px 14px; }
+[data-form="phone"] .hits-head { padding: 0 6px 4px; }
+[data-form="phone"] .hits-src { font-size: 12px; }
+[data-form="phone"] .hit { gap: 12px; padding: 6px; border-radius: 12px; }
+[data-form="phone"] .hit-art { width: 40px; height: 60px; border-radius: 6px; }
+[data-form="phone"] .hit-ph { width: 18px; height: 18px; }
+[data-form="phone"] .hit-text { gap: 4px; }
+[data-form="phone"] .hit-text > b { font-size: 15px; }
+[data-form="phone"] .hit-meta { gap: 6px; font-size: 13px; }
+[data-form="phone"] .hit-chev { width: 18px; height: 18px; }
+[data-form="phone"] .hit-skel { height: 72px; }
+[data-form="phone"] .palette-note { padding: 2px 6px; font-size: 15px; }
+[data-form="phone"] .palette .recent { gap: 10px; padding: 0 6px; }

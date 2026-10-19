@@ -1,23 +1,89 @@
+/** Search as a centered command palette (design/DECISION.md, flystream's
+ * pattern): strong glass over the blurred page, a pill input, a scope pill
+ * and result rows with a small poster. The navigation opens it over the
+ * screen you are on; /search shows the same panel as a page, for deep links.
+ * The core's search view and its rows are unchanged: only how they show. */
+
+import { A } from "@solidjs/router";
+import ChevronRight from "lucide-solid/icons/chevron-right";
+import Film from "lucide-solid/icons/film";
+import ListFilter from "lucide-solid/icons/list-filter";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SearchIcon from "lucide-solid/icons/search";
-import { createSignal, For, Match, Show, Switch } from "solid-js";
-import { Row } from "../components/row";
+import Star from "lucide-solid/icons/star";
+import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { Poster } from "../components/art";
 import { liveView } from "../core/client";
+import type { HomeRow } from "../core/generated/HomeRow";
 import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
-import "./browse.css";
+import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
+import { focusEl, isBackKey, mayAutoFocus } from "../focus/dom";
+import { titlePath } from "../lib/format";
+import { kindLabel } from "../lib/words";
+import "./browse.css";
+import "./search.css";
 
-// The last query survives leaving the screen, so Back lands on the results.
+// The last query survives closing the palette, so reopening lands on the results.
 let lastQuery = "";
 // Recent searches belong to the profile that typed them.
 onProfileReset(() => {
   lastQuery = "";
 });
 
+const [open, setOpen] = createSignal(false);
+/** The palette is over the page. */
+export const searchOpen = open;
+let opener: HTMLElement | null = null;
+
+export function openSearch() {
+  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  setOpen(true);
+}
+
+/** Closes the palette. A remote or keyboard gets its place back (`refocus`);
+ * a new screen (a result was opened) places focus itself. */
+export function closeSearch(refocus = true) {
+  if (!open()) return;
+  setOpen(false);
+  const back = opener?.isConnected ? opener : document.querySelector<HTMLElement>('[data-f="nav:/search"]');
+  opener = null;
+  if (refocus && back && mayAutoFocus()) queueMicrotask(() => focusEl(back));
+}
+
+/** The palette over the screen: Back, the scrim or a result closes it. */
+export function SearchOverlay() {
+  onMount(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isBackKey(e)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeSearch();
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));
+  });
+  return (
+    <div class="palette-layer">
+      <div class="palette-scrim" aria-hidden="true" onClick={() => closeSearch()} />
+      <SearchPanel dialog />
+    </div>
+  );
+}
+
+/** The deep link: the panel as a page under the navigation. */
 export default function Search() {
+  return (
+    <main class="search-page">
+      <SearchPanel />
+    </main>
+  );
+}
+
+function SearchPanel(props: { dialog?: boolean }) {
   const view = liveView<SearchSnapshot>("search");
   const [text, setText] = createSignal(lastQuery);
-  const [page, setPage] = createSignal<HTMLElement | null>(null);
+  const [scope, setScope] = createSignal<string | null>(null);
   const s = () => view.state.data;
   const send = (q: string) => {
     lastQuery = q;
@@ -26,14 +92,36 @@ export default function Search() {
   };
   if (lastQuery) queueMicrotask(() => send(lastQuery));
   const searching = () => text().trim().length > 0;
-  const loading = () => s()?.rows.some((r) => r.state.state === "loading" || r.state.state === "slow");
+  const rows = () => s()?.rows ?? [];
+  const loading = () => rows().some((r) => r.state.state === "loading" || r.state.state === "slow");
+  // The scope pill steps through the kinds the results hold (All, Movie, Series).
+  const kinds = createMemo(() => [...new Set(rows().flatMap((r) => r.tiles.map((t) => t.kind)))]);
+  const current = () => {
+    const k = scope();
+    return k && kinds().includes(k) ? k : null;
+  };
+  const scoped = (r: HomeRow) => (current() ? r.tiles.filter((t) => t.kind === current()) : r.tiles);
+  const scopes = () => [null, ...kinds()];
+  const nextScope = () => {
+    const all = scopes();
+    if (all.length > 1) setScope(all[(all.indexOf(current()) + 1) % all.length] ?? null);
+  };
+  const scopeLabel = () => (current() ? kindLabel(current() as string) : "All");
+  const count = () => rows().reduce((n, r) => n + scoped(r).length, 0);
+  const remember = () => void view.command({ type: "remember" });
+
+  let input!: HTMLInputElement;
+  onMount(() => {
+    if (props.dialog) queueMicrotask(() => focusEl(input));
+  });
 
   return (
-    <main class="browse page search" data-vscroll ref={setPage}>
-      <label class="field" data-row>
+    <section class="palette glass strong" classList={{ dialog: props.dialog }} role={props.dialog ? "dialog" : undefined} aria-modal={props.dialog ? "true" : undefined} aria-label="Search">
+      <label class="field">
         <SearchIcon aria-hidden />
         <span class="sr">Search</span>
         <input
+          ref={input}
           type="search"
           value={text()}
           placeholder="Search titles"
@@ -45,41 +133,116 @@ export default function Search() {
           onInput={(e) => send(e.currentTarget.value)}
         />
       </label>
-      <Switch>
-        <Match when={view.state.status.state === "failed"}>
-          <section class="problem">
-            <h2>Search could not open</h2>
-            <p>{(view.state.status as { reason: string }).reason}</p>
-          </section>
-        </Match>
-        <Match when={!searching()}>
-          <Show when={s()?.recent.length} fallback={<p class="note">Type a title. Results come from every addon with a search catalog.</p>}>
-            <section class="recent">
-              <h2 class="kicker">Recent searches</h2>
-              <div class="chips-track wrap" data-fgroup="recent">
-                <For each={s()?.recent ?? []}>
-                  {(q) => (
-                    <button class="chip" data-f={`recent:${q}`} onClick={() => send(q)}>
-                      <History aria-hidden />
-                      {q}
-                    </button>
-                  )}
-                </For>
-              </div>
-            </section>
-          </Show>
-        </Match>
-        <Match when={s() && s()?.query === text() && !loading() && s()?.rows.length === 0}>
-          <p class="note">No matches for "{text()}" in your catalogs.</p>
-        </Match>
-        <Match when={true}>
-          <div class="results">
-            <For each={s()?.rows ?? []}>
-              {(row) => <Row row={row} autofocus={false} root={page} scope="search" onOpen={() => void view.command({ type: "remember" })} />}
+      {/* One way in from the field: the scope pill first, then the results. */}
+      <div class="palette-main" data-fentry>
+      <div class="palette-tools">
+        <button class="scope" data-f="search:scope" aria-label={`Show ${scopeLabel()}`} aria-disabled={scopes().length < 2} onClick={nextScope}>
+          <ListFilter aria-hidden />
+          {scopeLabel()}
+        </button>
+        <Show when={searching() && count() > 0}>
+          <span class="palette-count num">{`${count()} ${count() === 1 ? "result" : "results"}`}</span>
+        </Show>
+      </div>
+      <div class="palette-body" data-vscroll data-fgroup="hits">
+        <Switch>
+          <Match when={view.state.status.state === "failed"}>
+            <p class="st bad palette-note">
+              <i class="dot" />
+              Search could not open: {(view.state.status as { reason: string }).reason}
+            </p>
+          </Match>
+          <Match when={!searching()}>
+            <Show when={s()?.recent.length} fallback={<p class="palette-note">Type a title. Results come from every addon with a search catalog.</p>}>
+              <section class="recent">
+                <h2 class="kicker">Recent searches</h2>
+                <div class="chips-track wrap" data-fgroup="recent">
+                  <For each={s()?.recent ?? []}>
+                    {(q) => (
+                      <button class="chip" data-f={`recent:${q}`} onClick={() => send(q)}>
+                        <History aria-hidden />
+                        {q}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </section>
+            </Show>
+          </Match>
+          <Match when={s() && s()?.query === text() && !loading() && rows().length === 0}>
+            <p class="palette-note">No matches for "{text()}" in your catalogs.</p>
+          </Match>
+          <Match when={true}>
+            <For each={rows()}>
+              {(row) => (
+                <Show when={!current() || scoped(row).length > 0}>
+                  <section class="hits" aria-label={`${row.title}, ${row.source}`}>
+                    <h3 class="hits-head">
+                      <span class="kicker">{row.title}</span>
+                      <span class="hits-src">{row.source}</span>
+                    </h3>
+                    <Switch>
+                      <Match when={row.state.state === "failed" && row.tiles.length === 0}>
+                        <p class="st bad palette-note">
+                          <i class="dot" />
+                          {row.source} could not search {row.title}: {row.state.state === "failed" ? row.state.reason : ""}
+                        </p>
+                      </Match>
+                      <Match when={row.tiles.length === 0}>
+                        <Show when={row.state.state === "slow"}>
+                          <p class="st warn palette-note">
+                            <i class="dot" />
+                            {row.source} is slow to answer, still trying
+                          </p>
+                        </Show>
+                        <div class="hit-wait" aria-hidden="true">
+                          <For each={[0, 1, 2]}>{() => <div class="skel hit-skel" />}</For>
+                        </div>
+                      </Match>
+                      <Match when={true}>
+                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} />}</For>
+                      </Match>
+                    </Switch>
+                  </section>
+                </Show>
+              )}
             </For>
-          </div>
-        </Match>
-      </Switch>
-    </main>
+          </Match>
+        </Switch>
+      </div>
+      </div>
+    </section>
+  );
+}
+
+/** A result: a small poster, the name, then "Movie · 2021 · ★ 8.0". */
+function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
+  const t = () => props.tile;
+  return (
+    <A class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()}>
+      {/* No poster, or not yet: a film mark on the surface, never squeezed words. */}
+      <span class="hit-art" aria-hidden="true">
+        <Film class="hit-ph" />
+        <Poster src={t().poster} name={t().name} w={64} h={96} nameCard={false} />
+      </span>
+      <span class="hit-text">
+        <b>{t().name}</b>
+        <span class="hit-meta num">
+          <span>{kindLabel(t().kind)}</span>
+          <Show when={t().releaseInfo}>
+            <i aria-hidden="true">·</i>
+            <span>{t().releaseInfo}</span>
+          </Show>
+          <Show when={t().rating}>
+            <i aria-hidden="true">·</i>
+            <span class="rate" aria-label={`Rated ${t().rating}`}>
+              <Star aria-hidden />
+              {t().rating}
+            </span>
+          </Show>
+        </span>
+      </span>
+      <ChevronRight aria-hidden class="hit-chev" />
+    </A>
   );
 }

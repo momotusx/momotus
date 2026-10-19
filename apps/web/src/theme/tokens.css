@@ -77,6 +77,8 @@
   --lift-focus-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   --lift-hover-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
   --lift-primary-shadow: 0 3px 16px rgba(0, 0, 0, 0.28);
+  --selected-fill: rgba(255, 255, 255, 0.16);
+  --selected-edge: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
   --motion-focus: 180ms;
   --motion-panel: 260ms;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);

@@ -29,7 +29,7 @@ import Onboarding from "./screens/onboarding";
 import Pairing from "./screens/pairing";
 import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/profiles";
 import Player from "./screens/player";
-import Search from "./screens/search";
+import Search, { closeSearch, openSearch, SearchOverlay, searchOpen } from "./screens/search";
 import SettingsScreen from "./screens/settings";
 import SyncScreen, { AddDevice, ForkReview, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
 import { Stub } from "./screens/stub";
@@ -69,12 +69,20 @@ export const markBack = () => {
   wentBack = true;
 };
 
+/** Search opens as a palette over the screen you are on; its route stays for
+ * deep links (and is where the palette lives when you are already there). */
+const paletteClick = (path: string) => (e: MouseEvent) => {
+  if (path !== "/search" || window.location.pathname === "/search") return;
+  e.preventDefault();
+  openSearch();
+};
+
 /** TV and desktop: a floating glass pill at the top. Sections are words;
  * Search and Settings, after a divider, carry their icon. */
 function TopNav() {
   const location = useLocation();
   const link = (d: Destination) => (
-    <A href={d.path} end class="nav" classList={{ on: section(location.pathname) === d.path }} data-f={`nav:${d.path}`}>
+    <A href={d.path} end class="nav" classList={{ on: section(location.pathname) === d.path }} data-f={`nav:${d.path}`} on:click={paletteClick(d.path)}>
       <Show when={d.tool}>
         <d.icon aria-hidden />
       </Show>
@@ -82,7 +90,7 @@ function TopNav() {
     </A>
   );
   return (
-    <nav class="topnav glass" aria-label="Main" data-fgroup="rail">
+    <nav class="topnav glass" aria-label="Main" data-fgroup="rail" inert={searchOpen() || undefined}>
       <span class="brand">Marquee</span>
       <For each={destinations.filter((d) => !d.tool)}>{link}</For>
       <span class="sep" aria-hidden="true" />
@@ -109,10 +117,10 @@ function ProfileButton() {
 function Tabs() {
   const location = useLocation();
   return (
-    <nav class="tabs glass strong" aria-label="Main">
+    <nav class="tabs glass strong" aria-label="Main" inert={searchOpen() || undefined}>
       <For each={destinations}>
         {(d) => (
-          <A href={d.path} end classList={{ on: section(location.pathname) === d.path }}>
+          <A href={d.path} end classList={{ on: section(location.pathname) === d.path }} on:click={paletteClick(d.path)}>
             <d.icon aria-hidden />
             <span>{d.label}</span>
           </A>
@@ -195,6 +203,8 @@ function Shell(props: RouteSectionProps) {
       () => location.pathname,
       () => {
         setScrolled(false);
+        // A new screen (a result was opened, or Back) leaves the palette.
+        closeSearch(false);
         const wasBack = wentBack;
         wentBack = false;
         // Touch has no cursor to place; remotes and keyboards do.
@@ -216,9 +226,14 @@ function Shell(props: RouteSectionProps) {
               <div class="nav-scrim" classList={{ on: scrolled() }} aria-hidden="true" />
               <TopNav />
             </Show>
-            <div class="screen">{props.children}</div>
+            <div class="screen" inert={searchOpen() || undefined}>
+              {props.children}
+            </div>
             <Show when={nav() && form() === "phone"}>
               <Tabs />
+            </Show>
+            <Show when={searchOpen()}>
+              <SearchOverlay />
             </Show>
             </Show>
           </Show>

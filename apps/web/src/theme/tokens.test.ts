@@ -17,3 +17,12 @@ test("tokens.css matches design/tokens.json (run `bun run tokens`)", () => {
   expect(css).not.toContain('data-theme="light"');
   expect(css).toMatch(/:root \{[^}]*--focus-halo: 14px;/);
 });
+
+test("selected states use the generated tokens, not raw white edges", () => {
+  const css = generate(JSON.parse(readFileSync(tokensPath, "utf8")));
+  expect(css).toContain("--selected-edge: inset 0 0 0 2px rgba(255, 255, 255, 0.55);");
+  for (const file of ["title.css", "browse.css", "search.css"]) {
+    const sheet = readFileSync(new URL(`../screens/${file}`, import.meta.url), "utf8");
+    expect(sheet).not.toMatch(/inset 0 0 0 2px rgba\(255, 255, 255, \.5\d?\)/);
+  }
+});

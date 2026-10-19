@@ -153,7 +153,24 @@ const SCREENS: Screen[] = [
     path: "/search",
     ready: async (page) => {
       await page.locator('[data-f="search:input"]').fill("thrones");
-      await visible(".results .tile img.in")(page);
+      await visible(".hit img.in")(page);
+    },
+  },
+  {
+    // The palette over Home, opened from the navigation as a person would;
+    // TV walks to the first result.
+    name: "search-palette",
+    path: "/",
+    ready: async (page, form) => {
+      await visible(".hero .reason")(page);
+      if (form === "phone") await page.locator('.tabs a[href="/search"]').tap();
+      else await page.locator('[data-f="nav:/search"]').click();
+      await page.locator('[data-f="search:input"]').fill("thrones");
+      await visible(".hit img.in")(page);
+      if (form === "tv") {
+        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowDown");
+      }
     },
   },
   { name: "library", path: "/library", ready: visible(".grid .tile img.in") },

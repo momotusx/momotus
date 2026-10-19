@@ -28,8 +28,7 @@
 .chip svg { width: 24px; height: 24px; }
 /* Selected is a lighter fill, a bright edge and the check, as the season
  * tabs: a white pill is only ever the screen's primary action. */
-.chip.on { color: var(--text); font-weight: 700; background: color-mix(in srgb, var(--text) 16%, transparent);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 55%, transparent); }
+.chip.on { color: var(--text); font-weight: 700; background: var(--selected-fill); box-shadow: var(--selected-edge); }
 .chip:focus-visible, [data-form="tv"] .chip:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .chip:not(.on):hover { color: var(--text); } }
 
@@ -42,22 +41,6 @@
 .note.bad { display: flex; align-items: center; gap: 14px; color: var(--text); }
 .browse .problem { margin-top: 10px; }
 .browse .problem .acts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
-
-/* Search */
-.search .field { display: flex; align-items: center; gap: 20px; height: 96px; max-width: 1240px; padding: 0 34px; margin: 14px 0 40px;
-  border-radius: var(--radius-pill); background: var(--glass); box-shadow: inset 0 0 0 2px var(--control);
-  -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
-  transition: box-shadow var(--motion-focus) var(--ease), outline-color var(--motion-focus) var(--ease); }
-.search .field svg { width: 36px; height: 36px; color: var(--muted); }
-.search .field input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-title3) / 1 var(--font-text); outline: none; }
-.search .field input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
-.search .field input::-webkit-search-cancel-button { display: none; }
-.search .field input:focus { outline: none; box-shadow: none; }
-.search .field:focus-within { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
-  box-shadow: var(--focus-shadow); }
-.recent h2 { margin-bottom: 20px; }
-.results { margin: 0 calc(var(--safe-side) * -1); }
-.results .row:first-child { margin-top: 0; }
 
 /* Phone */
 [data-form="phone"] .browse.page { position: static; padding: 12px 16px 96px; }
@@ -73,8 +56,4 @@
 [data-form="phone"] .grid { gap: 16px 11px; padding: 0; margin: 0; justify-content: space-between; }
 [data-form="phone"] .grid-foot { margin-top: 20px; font-size: 13px; }
 [data-form="phone"] .note { font-size: 15px; }
-[data-form="phone"] .search .field { height: 50px; padding: 0 16px; gap: 10px; margin: 8px 0 20px; }
-[data-form="phone"] .search .field svg { width: 20px; height: 20px; }
-[data-form="phone"] .search .field input { font-size: 17px; }
-[data-form="phone"] .results { margin: 0 -16px; }
-[data-form="phone"] .search .field:focus-within { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+
