@@ -462,7 +462,8 @@ fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
 
 /// The approver saw other digits on the new device: the approval for `qr`
 /// ends now instead of when it times out. The key rotates at once, dropping
-/// the device if it joined meanwhile, so the sealed payload it was handed
+/// the device if it joined meanwhile, and every device it vouched for since
+/// (the user approved none of them), so the sealed payload it was handed
 /// (the current key and a sponsor statement bound to this roster head) is
 /// worth nothing: a join built on it no longer fits the roster. Returns
 /// this device's record to store.
@@ -476,8 +477,16 @@ pub async fn cancel_pairing(
     let (_, keys) = read_code(config, qr)?;
     let id = keys.id();
     let mut session = Session::open(library, http, config, clock).await?;
+    let me = session.member.id();
     // A user's own action: no grace period after a relay restore delays it.
-    session.rotate(|_| vec![id]).await?;
+    // Judged on the roster each try is built on, as a lost report is.
+    session
+        .rotate(|roster| {
+            let mut drop = roster.descendants(&id, &me);
+            drop.push(id);
+            drop
+        })
+        .await?;
     for state in [APPROVAL, CANCEL] {
         library.delete_sync_state(&format!("{state}{}", hex::encode(id.0)))?;
     }

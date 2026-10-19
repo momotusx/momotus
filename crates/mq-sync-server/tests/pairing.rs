@@ -399,3 +399,33 @@ async fn an_approval_ended_after_the_join_drops_the_device() {
     .unwrap_err();
     assert!(matches!(err, SyncError::Dropped), "{err:?}");
 }
+
+/// Ended after the device joined and vouched for another: both go, since
+/// the user never approved either.
+#[tokio::test]
+async fn an_approval_ended_late_drops_the_devices_it_let_in() {
+    let (server, _db) = relay().await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let tv = start_pairing(&http(), &server).await.unwrap();
+    phone.approve(&tv.qr).await.unwrap();
+    let offer = tv.poll(&http()).await.unwrap().expect("offer");
+    let mut tv_device = Device::with(tv.claim(&http(), offer, "TV").await.unwrap());
+    tv_device.sync().await;
+    let laptop = start_pairing(&http(), &server).await.unwrap();
+    tv_device.approve(&laptop.qr).await.unwrap();
+    let offer = laptop.poll(&http()).await.unwrap().expect("offer");
+    let mut laptop_device = Device::with(laptop.claim(&http(), offer, "Laptop").await.unwrap());
+    laptop_device.sync().await;
+    phone.sync().await;
+    assert_eq!(phone.names().await.len(), 3, "the TV let the laptop in");
+    phone.record = cancel_pairing(&phone.library, &http(), &phone.record, &phone.clock, &tv.qr)
+        .await
+        .unwrap();
+    assert_eq!(phone.names().await, vec!["Phone".to_owned()]);
+    for device in [&tv_device, &laptop_device] {
+        let err = sync_once(&device.library, &http(), &device.record, &device.clock)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, SyncError::Dropped), "{err:?}");
+    }
+}
