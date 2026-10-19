@@ -258,6 +258,15 @@ test.describe("Versions", () => {
     await expect.poll(() => tip.evaluate((t) => getComputedStyle(t).opacity)).toBe("1");
     // The tip says what the TV's focus line says.
     await expect(tip).toHaveText((await row.locator(".more .detail").textContent()) as string);
+    // It opens below its line, clear of the group's pinned heading above.
+    const at = await row.evaluate((r) => ({
+      tip: (r.querySelector(".line .tip") as HTMLElement).getBoundingClientRect().top,
+      line: (r.querySelector(".line") as HTMLElement).getBoundingClientRect().bottom,
+    }));
+    expect(at.tip).toBeGreaterThan(at.line);
+    // Via shows the source's whole name.
+    const via = row.locator(".via");
+    expect(await via.evaluate((v) => v.scrollWidth <= v.clientWidth)).toBe(true);
     await shot(page, "stream-choice-versions", "desktop");
   });
 

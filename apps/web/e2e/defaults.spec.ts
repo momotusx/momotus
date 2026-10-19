@@ -190,6 +190,13 @@ test("a TV does it with keys only: Continue first, a row toggles with select", a
   // Start fast is focused: one press takes it.
   await expect(page).toHaveURL(/step=choice/);
   await expect.poll(() => focused(page)).toBe("welcome:fast");
+  // On a TV the two answers sit in the middle of the screen, not its top half.
+  const mid = await page.locator(".doors.two").evaluate((d) => {
+    const r = d.getBoundingClientRect();
+    return (r.top + r.bottom) / 2 / innerHeight;
+  });
+  expect(mid).toBeGreaterThan(0.45);
+  expect(mid).toBeLessThan(0.65);
   await shot(page, "stream-choice-question", "tv");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/step=3/);

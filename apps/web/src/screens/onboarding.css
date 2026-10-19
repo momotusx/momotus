@@ -24,6 +24,11 @@
 .step-body .aside { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
 /* The stream choice question: two answers side by side, the same doors. */
 .doors.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* On a TV the question sits in the middle of the screen, not in its top
+ * half: the page stacks the header over the step, which takes the rest
+ * and centers its block. */
+[data-form="tv"] .welcome.page:has(> .question) { display: flex; flex-direction: column; }
+[data-form="tv"] .welcome.page > .question { flex: 1; align-content: center; margin-top: 0; padding-bottom: 72px; }
 
 /* The welcome steps sit in one centered column on TV and desktop, as the
  * settings pages do, instead of a block at the left of a wide screen. */

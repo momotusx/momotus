@@ -346,7 +346,7 @@ function Question(props: { then?: string }) {
     }
   };
   return (
-    <section class="step-body" aria-label={q.title}>
+    <section class="step-body question" aria-label={q.title}>
       <h1>{q.title}</h1>
       <p class="lead">{q.lead}</p>
       <div class="doors two" data-fgroup="choice">
