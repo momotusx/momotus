@@ -11,6 +11,7 @@ import ListFilter from "lucide-solid/icons/list-filter";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import Star from "lucide-solid/icons/star";
+import X from "lucide-solid/icons/x";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
 import { liveView } from "../core/client";
@@ -19,6 +20,7 @@ import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
 import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
 import { focusEl, isBackKey, mayAutoFocus } from "../focus/dom";
+import { historyDepth } from "../history";
 import { titlePath } from "../lib/format";
 import { kindLabel } from "../lib/words";
 import "./browse.css";
@@ -36,15 +38,44 @@ const [open, setOpen] = createSignal(false);
 export const searchOpen = open;
 let opener: HTMLElement | null = null;
 
+// The palette is a history entry on the page's address, so the browser's
+// Back closes it instead of leaving the page under it.
+type Entry = { _palette?: boolean; _depth?: number } | null;
+const onPaletteEntry = () => !!(history.state as Entry)?._palette;
+// Registered before the app's own popstate listeners (this module loads
+// first): leaving the palette's entry is not a screen's Back.
+window.addEventListener("popstate", (e) => {
+  if (!open() || onPaletteEntry()) return;
+  e.stopImmediatePropagation();
+  finish(true);
+});
+// A reload on the palette's entry: the palette is gone, so is its mark.
+if (onPaletteEntry()) history.replaceState({ ...(history.state as object), _palette: undefined }, "");
+
 export function openSearch() {
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  history.pushState({ ...(history.state as object), _palette: true, _depth: historyDepth() + 1 }, "");
   setOpen(true);
 }
 
-/** Closes the palette. A remote or keyboard gets its place back (`refocus`);
- * a new screen (a result was opened) places focus itself. */
-export function closeSearch(refocus = true) {
+/** Closes the palette (Close, Back, the scrim) by popping its history entry;
+ * a remote or keyboard gets its place back. */
+export function closeSearch() {
   if (!open()) return;
+  if (!onPaletteEntry()) return finish(true);
+  history.back();
+}
+
+/** A new screen took the palette's place (a result replaces its entry, or
+ * any other navigation): close without Back, clear the mark the new entry
+ * may have inherited, and let the new screen place focus. */
+export function leaveSearch() {
+  if (!open()) return;
+  if (onPaletteEntry()) history.replaceState({ ...(history.state as object), _palette: undefined }, "");
+  finish(false);
+}
+
+function finish(refocus: boolean) {
   setOpen(false);
   const back = opener?.isConnected ? opener : document.querySelector<HTMLElement>('[data-f="nav:/search"]');
   opener = null;
@@ -143,6 +174,13 @@ function SearchPanel(props: { dialog?: boolean }) {
         <Show when={searching() && count() > 0}>
           <span class="palette-count num">{`${count()} ${count() === 1 ? "result" : "results"}`}</span>
         </Show>
+        {/* A way out every reader and pointer can find (Back and the scrim also close it). */}
+        <Show when={props.dialog}>
+          <button class="palette-close" data-f="search:close" aria-label="Close search" onClick={() => closeSearch()}>
+            <X aria-hidden />
+            Close
+          </button>
+        </Show>
       </div>
       <div class="palette-body" data-vscroll data-fgroup="hits">
         <Switch>
@@ -200,7 +238,7 @@ function SearchPanel(props: { dialog?: boolean }) {
                         </div>
                       </Match>
                       <Match when={true}>
-                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} />}</For>
+                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} replace={props.dialog} />}</For>
                       </Match>
                     </Switch>
                   </section>
@@ -216,10 +254,12 @@ function SearchPanel(props: { dialog?: boolean }) {
 }
 
 /** A result: a small poster, the name, then "Movie · 2021 · ★ 8.0". */
-function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
+/** From the palette a result takes the palette's history entry, so Back
+ * from the title returns to the page, not to a closed palette. */
+function Hit(props: { tile: Tile; fkey: string; onOpen: () => void; replace?: boolean }) {
   const t = () => props.tile;
   return (
-    <A class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()}>
+    <A class="hit" href={titlePath(t().kind, t().id)} replace={props.replace} data-f={props.fkey} onClick={() => props.onOpen()}>
       {/* No poster, or not yet: a film mark on the surface, never squeezed words. */}
       <span class="hit-art" aria-hidden="true">
         <Film class="hit-ph" />

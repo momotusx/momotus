@@ -68,6 +68,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
         await page.keyboard.press("Escape");
         await expect(page.locator(".palette-layer")).toHaveCount(0);
         await expect.poll(() => focused(page)).toBe("nav:/search");
+        // Back took the palette's history entry with it.
+        expect(await page.evaluate(() => !!(history.state as { _palette?: boolean } | null)?._palette)).toBe(false);
       } else {
         // A pointer closes it on the scrim.
         await page.locator(".palette-scrim").click({ position: { x: 20, y: 600 } });
@@ -134,5 +136,53 @@ test("tv: a query typed while the search view is still opening is not lost", asy
   // Typed at once, before the view has opened.
   await page.locator('[data-f="search:input"]').fill("thrones");
   await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  await context.close();
+});
+
+const onPaletteEntry = (page: Page) => page.evaluate(() => !!(history.state as { _palette?: boolean } | null)?._palette);
+
+test("desktop: browser Back closes the palette and stays on the screen under it", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await page.locator('[data-f="nav:/discover"]').click();
+  await expect(page).toHaveURL(/\/discover/);
+  await openFromNav(page, "desktop");
+  expect(await onPaletteEntry(page)).toBe(true);
+  await page.goBack();
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+  expect(new URL(page.url()).pathname).toBe("/discover");
+  // Its entry is gone: the next Back leaves Discover for Home, as before.
+  await page.goBack();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await context.close();
+});
+
+test("phone: a labelled Close closes the palette and takes its history entry with it", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await openFromNav(page, "phone");
+  const close = page.getByRole("button", { name: "Close search" });
+  await expect(close).toBeVisible();
+  await close.tap();
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+  expect(new URL(page.url()).pathname).toBe("/");
+  await expect.poll(() => onPaletteEntry(page)).toBe(false);
+  await context.close();
+});
+
+test("phone: a result opened from the palette takes its entry, so Back returns to the screen", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  const before = await page.evaluate(() => history.length);
+  await openFromNav(page, "phone");
+  await page.locator('[data-f="search:input"]').fill("thrones");
+  await page.locator(".hit").first().tap({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/title\//);
+  // One step over the screen, not two: the title replaced the palette's entry.
+  expect(await page.evaluate(() => history.length)).toBe(before + 1);
+  await page.goBack();
+  await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+  expect(await onPaletteEntry(page)).toBe(false);
   await context.close();
 });

@@ -29,7 +29,7 @@ import Onboarding from "./screens/onboarding";
 import Pairing from "./screens/pairing";
 import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/profiles";
 import Player from "./screens/player";
-import Search, { closeSearch, openSearch, SearchOverlay, searchOpen } from "./screens/search";
+import Search, { leaveSearch, openSearch, SearchOverlay, searchOpen } from "./screens/search";
 import SettingsScreen from "./screens/settings";
 import SyncScreen, { AddDevice, ForkReview, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
 import { Stub } from "./screens/stub";
@@ -204,7 +204,7 @@ function Shell(props: RouteSectionProps) {
       () => {
         setScrolled(false);
         // A new screen (a result was opened, or Back) leaves the palette.
-        closeSearch(false);
+        leaveSearch();
         const wasBack = wentBack;
         wentBack = false;
         // Touch has no cursor to place; remotes and keyboards do.
