@@ -299,10 +299,17 @@ async fn a_kid_gets_only_releases_of_the_allowed_title() {
     assert_eq!(by(HideReason::WrongTitle), 1);
     assert_eq!(by(HideReason::NotForKids), 1);
     assert_eq!(by(HideReason::LeavesApp), 1);
-    // The owner's Versions are as before.
+    // The owner's Versions have none of the kids rules; the link out is
+    // hidden for every profile, since playback opens none (M13 code review
+    // r2 P1-1).
     let owners = VersionsView::open(&owner, params("movie", "tt1", "Up"));
     let s = settled(&owners).await;
-    assert_eq!(s.hidden.count, 0, "{:?}", s.hidden);
+    assert_eq!(
+        s.hidden.by_reason,
+        [(HideReason::UnsupportedSource, 1)],
+        "{:?}",
+        s.hidden
+    );
 }
 
 #[tokio::test]
