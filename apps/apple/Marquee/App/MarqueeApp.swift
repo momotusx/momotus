@@ -20,11 +20,11 @@ struct MarqueeApp: App {
         URLCache.shared = URLCache(memoryCapacity: 64 << 20, diskCapacity: 512 << 20)
         // A sync key left by a deleted install goes before the core opens an empty library.
         let library = CoreClient.dataDirectory().appending(path: "library.sqlite").path(percentEncoded: false)
-        SyncRecord.keychain.forgetLeftover(libraryExists: FileManager.default.fileExists(atPath: library))
+        let leftover = SyncRecord.keychain.forgetLeftover(libraryExists: FileManager.default.fileExists(atPath: library))
         let core = CoreClient()
         _core = State(initialValue: core)
         _system = State(initialValue: SystemEvents(core: core))
-        let sync = SyncModel(core: core)
+        let sync = SyncModel(core: core, leftover: leftover)
         _sync = State(initialValue: sync)
         #if DEBUG
         if DebugHooks.kitPreview { sync.kits.hold(DebugHooks.previewKit) }

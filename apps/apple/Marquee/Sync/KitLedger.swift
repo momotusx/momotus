@@ -51,15 +51,24 @@ struct KitLedger: Equatable {
         pending.append(kit.id.isEmpty ? Self.unknown : kit.id)
     }
 
+    /// The held kit's id, read once the list shows it: until then it is pending
+    /// as unknown, so an app stopped in between never leaves it unmarked.
+    mutating func name(_ id: String) {
+        guard let kit = held, kit.id.isEmpty, !id.isEmpty else { return }
+        held = HeldKit(id: id, kit: kit.kit)
+        if let i = pending.firstIndex(of: Self.unknown) { pending[i] = id }
+    }
+
     /// "I saved it": the letters leave memory and nothing marks the kit pending.
     mutating func saved() {
         if let entry = heldEntry, let i = pending.firstIndex(of: entry) { pending.remove(at: i) }
         held = nil
     }
 
-    /// The hold ran out for `kit`; a newer kit held since stays.
+    /// The hold ran out for `kit`; a newer kit held since stays. By its letters:
+    /// the kit may have been named since its hold began.
     mutating func expire(_ kit: HeldKit) {
-        guard held == kit else { return }
+        guard held?.kit == kit.kit else { return }
         held = nil
         expired = true
     }
@@ -117,4 +126,69 @@ enum KitRules {
     static func covers(_ phase: ScenePhase, mac: Bool = mac) -> Bool {
         mac ? phase == .background : phase != .active
     }
+}
+
+/// Whether the kit page may show the held kit: only after the OS prompt said
+/// it is the owner (or right after making it, behind the same prompt), and
+/// only when the page stayed in view while the prompt and the server
+/// answered. The prompt's own scene change (on a device the app goes
+/// inactive under it) neither covers the kit nor asks again; the background,
+/// another tab or leaving the page does. On a Mac, where no API keeps a
+/// window out of every screen recording, the kit shows for `macWindow` after
+/// each reveal, or while Show is held.
+struct KitGate: Equatable {
+    static let macWindow: TimeInterval = 20
+
+    /// The owner was confirmed and the page stayed in view since.
+    private(set) var unlocked = false
+    /// The OS prompt (or the server, for a new kit) has not answered yet.
+    private(set) var asking = false
+    /// The page left view while asking: the answer shows nothing.
+    private(set) var coveredWhileAsking = false
+    /// Mac: when the kit hides again.
+    private(set) var until: Date?
+
+    mutating func ask() {
+        asking = true
+        coveredWhileAsking = false
+    }
+
+    /// The prompt answered (and, for a new kit, the kit arrived).
+    mutating func answered(ok: Bool, now: Date = .now) {
+        asking = false
+        guard ok, !coveredWhileAsking else { return }
+        unlocked = true
+        until = now.addingTimeInterval(Self.macWindow)
+    }
+
+    /// The page left view: the background, another tab, leaving it.
+    mutating func cover() {
+        unlocked = false
+        until = nil
+        if asking { coveredWhileAsking = true }
+    }
+
+    /// The scene changed. While the prompt is up only the background covers.
+    mutating func phase(_ phase: ScenePhase, mac: Bool = KitRules.mac) {
+        if asking ? phase == .background : KitRules.covers(phase, mac: mac) { cover() }
+    }
+
+    /// The scene is about to go inactive: the prompt's own doing while asking, else leaving.
+    mutating func deactivating() {
+        if !asking { cover() }
+    }
+
+    /// Mac: whether the kit shows now (held Show, or inside the window after a reveal).
+    func shows(now: Date = .now, holding: Bool, mac: Bool = KitRules.mac) -> Bool {
+        guard unlocked else { return false }
+        return !mac || holding || (until.map { now < $0 } ?? false)
+    }
+
+    #if DEBUG
+    /// The made-up preview kit only (`DebugHooks.kitPreview`).
+    mutating func previewUnlock(now: Date = .now) {
+        unlocked = true
+        until = now.addingTimeInterval(Self.macWindow)
+    }
+    #endif
 }

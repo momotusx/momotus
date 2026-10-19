@@ -355,13 +355,14 @@ struct RecoveryKitScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
     @Environment(\.tabShown) private var tabShown
-    /// The held kit may show: just made here, or the OS prompt said it is the owner.
-    @State private var revealed = false
-    @State private var asking = false
+    /// Whether the held kit may show (`KitGate`).
+    @State private var gate = KitGate()
+    /// Mac: Show is held down.
+    @State private var holding = false
     @State private var error: String?
     @State private var copied = false
 
-    private var shown: HeldKit? { revealed ? sync.kits.held : nil }
+    private var shown: HeldKit? { gate.unlocked ? sync.kits.held : nil }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -391,25 +392,23 @@ struct RecoveryKitScreen: View {
             sync.kitPage(open: true)
             #if DEBUG
             // Only the made-up preview kit ever shows without the prompt.
-            if DebugHooks.kitPreview, sync.kits.held == DebugHooks.previewKit { revealed = true }
+            if DebugHooks.kitPreview, sync.kits.held == DebugHooks.previewKit { gate.previewUnlock() }
             #endif
         }
         .onDisappear {
-            revealed = false
+            gate.cover()
             sync.kitPage(open: false)
         }
         // Another tab over this one is leaving the page: the hold runs, and coming back asks again.
         .onChange(of: tabShown) { _, shown in
-            if !shown { revealed = false }
+            if !shown { gate.cover() }
             sync.kitPage(open: shown)
         }
         // Back to the app (from the switcher, another app or the lock screen): the OS prompt again.
-        .onChange(of: phase) { _, now in
-            if KitRules.covers(now) { revealed = false }
-        }
+        .onChange(of: phase) { _, now in gate.phase(now) }
         #if os(iOS)
         // The scene phase can come late or not at all for a quick visit away.
-        .onReceive(NotificationCenter.default.publisher(for: UIScene.willDeactivateNotification)) { _ in revealed = false }
+        .onReceive(NotificationCenter.default.publisher(for: UIScene.willDeactivateNotification)) { _ in gate.deactivating() }
         #endif
         // Leaving keeps the kit (the model holds it), but while it shows the way out is I saved it.
         #if !os(macOS)
@@ -453,41 +452,80 @@ struct RecoveryKitScreen: View {
             FlowRow(spacing: Theme.Space.xs) {
                 Button { reveal() } label: { Label(W.showKitAgain, glyph: "key-round") }
                     .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled(asking)
+                    .disabled(gate.asking)
                 Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())
             }
         }
     }
 
+    /// The kit shows once made only if the page stayed in view meanwhile; else it waits, covered.
     private func make() {
-        guard !sync.makingKit else { return }
+        guard !sync.makingKit, !gate.asking else { return }
         error = nil
         copied = false
+        gate.ask()
         Task {
             do {
                 try await sync.createRecoveryKit()
-                // Just confirmed by the prompt that made it; not while the app is away.
-                if !KitRules.covers(phase) { revealed = true }
+                gate.answered(ok: sync.kits.held != nil)
             } catch {
+                gate.answered(ok: false)
                 self.error = SyncProblem(error, action: .kit).words
             }
         }
     }
 
     private func reveal() {
-        guard !asking else { return }
-        asking = true
+        guard !gate.asking else { return }
         error = nil
+        gate.ask()
         Task {
-            defer { asking = false }
             do {
                 try await sync.confirmShowKit()
-                if !KitRules.covers(phase) { revealed = true }
+                gate.answered(ok: true)
             } catch {
+                gate.answered(ok: false)
                 self.error = SyncProblem(error, action: .kit).words
             }
         }
     }
+
+    /// The letters, out of captures where the system allows it; never selectable: the system's
+    /// Copy would put them on every device of the Apple account with no expiry.
+    private func letters(_ held: HeldKit, visible: Bool) -> some View {
+        CaptureProof {
+            Text(visible ? held.kit : W.kitHidden)
+                .font(visible ? .mono(Theme.type.title3) : .text(Theme.type.body))
+                .foregroundStyle(visible ? Theme.Palette.text : Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(Theme.Space.s)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.s).fill(Theme.Palette.surface))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(visible ? "\(W.kitShown): \(held.kit.map(String.init).joined(separator: " "))" : W.kitHidden)
+    }
+
+    #if os(macOS)
+    /// Hold to show, Show for 20 seconds (the OS prompt again: for a keyboard or VoiceOver
+    /// user who cannot hold), and the seconds left (not announced: it changes every second).
+    private func macControls(left: Int, visible: Bool) -> some View {
+        FlowRow(spacing: Theme.Space.xs) {
+            Button {} label: { Label(W.holdToShow, glyph: "eye") }
+                .buttonStyle(HoldStyle(holding: $holding))
+            Button { reveal() } label: { Label(W.showForAWhile, glyph: "timer") }
+                .buttonStyle(PillButtonStyle())
+                .disabled(gate.asking)
+            if visible, !holding, left > 0 {
+                Text(W.hiddenIn(left))
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .monospacedDigit()
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+    #endif
 
     private func kit(_ held: HeldKit) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -496,19 +534,23 @@ struct RecoveryKitScreen: View {
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
             if held.id.isEmpty { Said(tone: .warn, text: W.kitIdUnknown) }
-            // Not selectable: the system's Copy would put it on every device of the Apple
-            // account with no expiry. The page's own Copy is the only way out.
-            CaptureProof {
-                Text(held.kit)
-                    .font(.mono(Theme.type.title3))
-                    .foregroundStyle(Theme.Palette.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(Theme.Space.s)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            #if os(macOS)
+            // No API keeps a Mac window out of every screen recording: the kit shows for a
+            // while after each reveal, or while Show is held, and the page says why.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let visible = gate.shows(now: context.date, holding: holding)
+                VStack(alignment: .leading, spacing: Theme.Space.s) {
+                    letters(held, visible: visible)
+                    macControls(left: gate.until.map { max(0, Int($0.timeIntervalSince(context.date).rounded(.up))) } ?? 0, visible: visible)
+                }
             }
-            .background(RoundedRectangle(cornerRadius: Theme.Radius.s).fill(Theme.Palette.surface))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(W.kitShown): \(held.kit.map(String.init).joined(separator: " "))")
+            Text(W.macCapture)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            #else
+            letters(held, visible: true)
+            #endif
             Callout(glyph: "triangle-alert", text: W.kitWarning)
             Text(copied ? W.kitCopied : W.copyKitHelp)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
@@ -606,7 +648,25 @@ private struct SecureLayer<Content: View>: UIViewRepresentable {
 #endif
 
 #if os(macOS)
-/// Leaves its window out of screen capture and recording while it is in it.
+/// A pill that reports while it is pressed: the Mac shows the kit only while Show is held.
+private struct HoldStyle: ButtonStyle {
+    @Binding var holding: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .labelFont(Theme.type.callout, relativeTo: .callout)
+            .foregroundStyle(Theme.Palette.text)
+            .padding(.horizontal, Theme.Space.s)
+            .padding(.vertical, Theme.Space.xs)
+            .background(Capsule().fill(configuration.isPressed ? Theme.Palette.raised : Theme.Palette.surface))
+            .overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
+            .onChange(of: configuration.isPressed) { _, pressed in holding = pressed }
+    }
+}
+
+/// Leaves its window out of screen capture and recording while it is in it
+/// (best effort: Apple calls `sharingType` legacy, and a ScreenCaptureKit
+/// recording can still capture the window).
 private struct UnsharedWindow: NSViewRepresentable {
     final class Probe: NSView {
         private weak var held: NSWindow?

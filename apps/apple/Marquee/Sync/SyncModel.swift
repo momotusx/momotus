@@ -18,9 +18,14 @@ import Observation
 final class SyncModel {
     /// A record is stored, or held for this session: this device is in a sync account.
     private(set) var joined: Bool
-    /// This device left the account but the Keychain kept its record: the
-    /// page says so with Try again (`deleteKeyAgain`).
-    private(set) var keyLeft = false
+    /// A record the Keychain kept that this device does not use: after
+    /// leaving, or left by a deleted install. The page says so with Try again
+    /// (`deleteKeyAgain`).
+    private(set) var keyLeft: KeyLeft?
+
+    enum KeyLeft: Equatable {
+        case afterLeave, earlierInstall
+    }
     /// The Keychain did not answer when asked for the record: this device may
     /// be in an account, so the page says so with Try again, never the ways in.
     private(set) var keyUnreadable = false
@@ -63,6 +68,8 @@ final class SyncModel {
     /// How long a made kit's letters stay once its page is left.
     @ObservationIgnored var kitHold = KitLedger.hold
     @ObservationIgnored private var holdTimer: Task<Void, Never>?
+    /// The kit page is in view (`kitPage`).
+    @ObservationIgnored private var kitPageOpen = false
     @ObservationIgnored private var scheduled: Task<Void, Never>?
     @ObservationIgnored private var worker: Task<Void, Never>?
     @ObservationIgnored private var pending = false
@@ -75,12 +82,20 @@ final class SyncModel {
     /// A record the Keychain refused, held in memory: nothing is sent until it is stored.
     @ObservationIgnored private var unstored: JSONValue?
 
-    init(core: CoreClient, records: SyncRecord = .keychain, defaults: UserDefaults = .standard) {
+    /// `leftover`: a record left by a deleted install could not be removed yet
+    /// (`SyncRecord.forgetLeftover`): it is never loaded, and the page offers
+    /// to delete it.
+    init(core: CoreClient, records: SyncRecord = .keychain, defaults: UserDefaults = .standard, leftover: Bool = false) {
         self.core = core
         self.records = records
         self.defaults = defaults
         recovered = defaults.bool(forKey: "syncRecovered")
         kits = KitLedger(pending: defaults.stringArray(forKey: "syncPendingKits") ?? [])
+        if leftover {
+            joined = false
+            keyLeft = .earlierInstall
+            return
+        }
         do {
             joined = try records.load() != nil
         } catch {
@@ -205,6 +220,9 @@ final class SyncModel {
         dropKits()
         // A new account's record is stored as it is: revisions compare only within an account.
         let stored = records.store(record)
+        // A key left by a deleted install is gone once the new one took its place.
+        if keyLeft == .earlierInstall, stored { SyncRecord.cleaned(defaults) }
+        keyLeft = nil
         unstored = stored ? nil : record
         joinStored = stored
         joined = true
@@ -294,9 +312,11 @@ final class SyncModel {
             let made: Made = try await withRecord("createRecoveryKit") { $0.record }
             guard mine == account else { return }
             recovered = false
+            // Held at once, pending as unknown: an app stopped before the list answers still marks it.
+            hold(HeldKit(id: "", kit: made.kit))
             let after = try? await loadDevices()
             guard mine == account else { return }
-            kits.hold(HeldKit(id: KitLedger.newKitId(before: before, after: after), kit: made.kit))
+            kits.name(KitLedger.newKitId(before: before, after: after))
         }.value
         #endif
     }
@@ -309,6 +329,7 @@ final class SyncModel {
     /// The kit page is open, or was left: the letters never go while the
     /// page can show them, and go `kitHold` after it is left.
     func kitPage(open: Bool) {
+        kitPageOpen = open
         holdTimer?.cancel()
         guard !open, let kit = kits.held else { return }
         // ponytail: a fixed hold after the page; the letters never outlive it, and the kit then counts as unseen.
@@ -317,6 +338,13 @@ final class SyncModel {
             guard !Task.isCancelled else { return }
             self?.kits.expire(kit)
         }
+    }
+
+    /// A kit just made: held, and when its page is not in view (left while
+    /// the kit was made, or another tab over it) its hold starts now.
+    func hold(_ kit: HeldKit) {
+        kits.hold(kit)
+        if !kitPageOpen { kitPage(open: false) }
     }
 
     /// "I saved it": the letters leave memory and the kit is no longer pending.
@@ -358,8 +386,8 @@ final class SyncModel {
     }
 
     /// Leaves the account. Without `force` the core refuses while edits are unsent.
-    func signOut(force: Bool) async throws {
-        try await confirmOwner(SyncWords.authLeave)
+    func signOut(force: Bool, askedAgain: Bool = false) async throws {
+        try await confirmOwner(SyncWords.authLeave, endsAccess: true, askedAgain: askedAgain)
         let _: JSONValue = try await withRecord("signOut", ["force": force]) { _ in nil }
         forget()
         problem = nil
@@ -369,8 +397,8 @@ final class SyncModel {
     /// Stops syncing on this device only: nothing is sent and the sync server
     /// still lists it; the core takes only this device's own record
     /// (`wrongRecord` otherwise). The way out when the server will not let it leave.
-    func leaveHere() async throws {
-        try await confirmOwner(SyncWords.authLeave)
+    func leaveHere(askedAgain: Bool = false) async throws {
+        try await confirmOwner(SyncWords.authLeave, endsAccess: true, askedAgain: askedAgain)
         let _: JSONValue = try await withRecord("signOut", ["force": true, "local": true]) { _ in nil }
         forget()
         problem = nil
@@ -393,9 +421,11 @@ final class SyncModel {
         failed = SyncFailed()
     }
 
-    /// Deletes a record the Keychain kept after leaving (`keyLeft`).
+    /// Deletes a record the Keychain kept (`keyLeft`).
     func deleteKeyAgain() {
-        keyLeft = !records.delete()
+        guard let left = keyLeft, records.delete() else { return }
+        if left == .earlierInstall { SyncRecord.cleaned(defaults) }
+        keyLeft = nil
     }
 
     /// Drops the account record here only, when the relay cannot take this
@@ -487,8 +517,8 @@ final class SyncModel {
     /// record, `keyLeft` says so: the next launch would otherwise find it.
     private func forget() {
         account += 1
-        keyLeft = !records.delete()
-        if keyLeft { coreLog.error("sync: the Keychain kept the record after leaving") }
+        keyLeft = records.delete() ? nil : .afterLeave
+        if keyLeft != nil { coreLog.error("sync: the Keychain kept the record after leaving") }
         unstored = nil
         joined = false
         joinStored = nil
@@ -505,15 +535,27 @@ final class SyncModel {
     /// The OS prompt (passcode, Face ID or Touch ID) before changing the
     /// account's devices or making a kit, as the protocol asks. A TV has no
     /// way to check who is there: its pages ask a second time instead.
-    private func confirmOwner(_ reason: String) async throws {
-        #if !os(tvOS)
+    /// `endsAccess`: the op only ends this device's access (stopping syncing):
+    /// with no lock it is not refused, the page asks a second time
+    /// (`noLockAsk`) and calls again with `askedAgain`.
+    private func confirmOwner(_ reason: String, endsAccess: Bool = false, askedAgain: Bool = false) async throws {
+        #if os(tvOS)
+        // Other TV pages ask a second time on their own.
+        let hasLock = !endsAccess
+        #else
         let context = LAContext()
         var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            throw CoreError("no passcode", code: "noPasscode")
-        }
-        let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
-        guard ok else { throw CoreError("not confirmed", code: "unconfirmed") }
+        let hasLock = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
         #endif
+        switch SyncRules.ownerStep(hasLock: hasLock, endsAccess: endsAccess, askedAgain: askedAgain) {
+        case .prompt:
+            #if !os(tvOS)
+            let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
+            guard ok else { throw CoreError("not confirmed", code: "unconfirmed") }
+            #endif
+        case .run: return
+        case .askAgain: throw CoreError("no lock", code: "noLockAsk")
+        case .refuse: throw CoreError("no passcode", code: "noPasscode")
+        }
     }
 }

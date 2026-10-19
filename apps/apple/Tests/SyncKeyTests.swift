@@ -44,15 +44,15 @@ private let account = try! JSONDecoder().decode(JSONValue.self, from: Data(#"{"r
         let keychain = FakeKeychain(account)
         keychain.deleteFails = true
         let sync = SyncModel(core: core.client, records: keychain.record, defaults: try defaults())
-        #expect(sync.joined && !sync.keyLeft)
+        #expect(sync.joined && sync.keyLeft == nil)
         sync.forgetHere()
-        #expect(!sync.joined && sync.keyLeft)
+        #expect(!sync.joined && sync.keyLeft == .afterLeave)
         #expect(keychain.held == account)
         sync.deleteKeyAgain()
-        #expect(sync.keyLeft)
+        #expect(sync.keyLeft == .afterLeave)
         keychain.deleteFails = false
         sync.deleteKeyAgain()
-        #expect(!sync.keyLeft && keychain.held == nil)
+        #expect(sync.keyLeft == nil && keychain.held == nil)
     }
 
     @Test func aListThatCouldNotBeReadSaysItMayBeOutOfDate() async throws {
@@ -66,10 +66,10 @@ private let account = try! JSONDecoder().decode(JSONValue.self, from: Data(#"{"r
     }
 
     @Test func aKeyLeftByADeletedInstallGoesBeforeTheCoreOpens() throws {
-        // First launch of an install with no library: the old install's key goes.
+        // First launch of an install with no library: the old install's key goes, nothing is pending.
         let keychain = FakeKeychain(account)
         let fresh = try defaults()
-        #expect(keychain.record.forgetLeftover(libraryExists: false, defaults: fresh))
+        #expect(!keychain.record.forgetLeftover(libraryExists: false, defaults: fresh))
         #expect(keychain.held == nil)
         // Later launches never touch it, library or not.
         keychain.held = account
@@ -79,11 +79,42 @@ private let account = try! JSONDecoder().decode(JSONValue.self, from: Data(#"{"r
         let updated = try defaults()
         #expect(!keychain.record.forgetLeftover(libraryExists: true, defaults: updated))
         #expect(keychain.held == account)
-        // A Keychain that does not answer: nothing is deleted blind.
-        keychain.readFails = true
-        #expect(!keychain.record.forgetLeftover(libraryExists: false, defaults: try defaults()))
-        keychain.readFails = false
+    }
+
+    @Test func aLeftoverTheKeychainKeptIsTriedAgainAndNeverLoaded() async throws {
+        let keychain = FakeKeychain(account)
+        let store = try defaults()
+        // A refused deletion: pending, not marked done.
+        keychain.deleteFails = true
+        #expect(keychain.record.forgetLeftover(libraryExists: false, defaults: store))
+        #expect(!store.bool(forKey: SyncRecord.installedKey))
+        // The next launch finds the library the core made since, and still tries.
+        #expect(keychain.record.forgetLeftover(libraryExists: true, defaults: store))
         #expect(keychain.held == account)
+        // While it is pending the app never loads that key: the page offers to delete it.
+        let core = RealCore()
+        #expect(await core.ready())
+        keychain.readFails = true
+        let sync = SyncModel(core: core.client, records: keychain.record, defaults: store, leftover: true)
+        #expect(!sync.joined && !sync.keyUnreadable && sync.keyLeft == .earlierInstall)
+        keychain.readFails = false
+        sync.deleteKeyAgain()
+        #expect(sync.keyLeft == .earlierInstall)
+        keychain.deleteFails = false
+        sync.deleteKeyAgain()
+        #expect(sync.keyLeft == nil && keychain.held == nil)
+        #expect(store.bool(forKey: SyncRecord.installedKey) && store.object(forKey: SyncRecord.pendingKey) == nil)
+    }
+
+    @Test func aLeftoverTheKeychainCouldNotReadIsTriedAgain() throws {
+        let keychain = FakeKeychain(account)
+        let store = try defaults()
+        keychain.readFails = true
+        #expect(keychain.record.forgetLeftover(libraryExists: false, defaults: store))
+        #expect(keychain.held == account && !store.bool(forKey: SyncRecord.installedKey))
+        keychain.readFails = false
+        #expect(!keychain.record.forgetLeftover(libraryExists: true, defaults: store))
+        #expect(keychain.held == nil && store.bool(forKey: SyncRecord.installedKey))
     }
 
     @Test func aKitOnAMacsClipboardIsClearedAtTheNextLaunch() throws {

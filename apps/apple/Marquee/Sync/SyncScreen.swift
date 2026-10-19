@@ -43,8 +43,8 @@ private struct NotJoined: View {
             } else if let notice = sync.notice {
                 Said(tone: .ok, text: notice)
             }
-            if sync.keyLeft {
-                Said(tone: .bad, text: W.keyLeft)
+            if let left = sync.keyLeft {
+                Said(tone: .bad, text: left == .afterLeave ? W.keyLeft : W.keyLeftover)
                 Button { sync.deleteKeyAgain() } label: { Label(W.retry, glyph: "refresh-cw") }
                     .buttonStyle(PillButtonStyle(prominent: true))
             }
@@ -375,6 +375,11 @@ private struct LeaveSync: View {
     @State private var refused = false
     @State private var error: String?
     @State private var busy = false
+    /// No lock to ask with: the second step, for a stop with or without `force`.
+    @State private var again: Bool?
+    #if os(tvOS)
+    @FocusState private var cancelFocused: Bool
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
@@ -383,6 +388,22 @@ private struct LeaveSync: View {
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
             if let error { Said(tone: .bad, text: error) }
+            #if os(tvOS)
+            if let force = again {
+                // Its own step, Cancel first: one press never stops syncing on a TV.
+                Text(W.tvSure)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                FlowRow(spacing: Theme.Space.xs) {
+                    Button(W.cancel) { again = nil }
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                        .focused($cancelFocused)
+                    Button { Task { await leave(force: force, askedAgain: true) } } label: { Label(force ? W.leaveAnyway : W.leaveButton, glyph: "log-out") }
+                        .buttonStyle(DestructiveTextStyle())
+                }
+                .onAppear { cancelFocused = true }
+            }
+            #endif
             FlowRow(spacing: Theme.Space.xs) {
                 if unsent {
                     Button { unsent = false; error = nil; sync.request() } label: { Label(W.syncAgain, glyph: "refresh-cw") }
@@ -394,20 +415,37 @@ private struct LeaveSync: View {
                         .buttonStyle(DestructiveTextStyle())
                 }
             }
-            .disabled(busy)
+            .disabled(busy || again != nil)
             if refused { LeaveHere() }
         }
+        #if !os(tvOS)
+        .confirmationDialog(W.leaveTitle, isPresented: Binding(get: { again != nil }, set: { if !$0 { again = nil } }), titleVisibility: .visible) {
+            Button(again == true ? W.leaveAnyway : W.leaveButton, role: .destructive) {
+                let force = again ?? false
+                Task { await leave(force: force, askedAgain: true) }
+            }
+            Button(W.cancel, role: .cancel) {}
+        } message: {
+            Text(W.noLockAsk)
+        }
+        #endif
     }
 
-    private func leave(force: Bool) async {
+    private func leave(force: Bool, askedAgain: Bool = false) async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
         error = nil
+        again = nil
         do {
-            try await sync.signOut(force: force)
+            try await sync.signOut(force: force, askedAgain: askedAgain)
         } catch {
             let problem = SyncProblem(error, action: .leave)
+            // No lock to ask with (or a TV): the page asks a second time.
+            if problem.code == "noLockAsk" {
+                again = force
+                return
+            }
             unsent = problem.code == "unsent"
             // Not for edits that wait or a prompt the user cancelled.
             refused = problem.code != "unsent" && problem.code != "unconfirmed" && problem.code != "noPasscode"
@@ -463,7 +501,8 @@ struct LeaveHere: View {
         defer { busy = false }
         error = nil
         do {
-            try await sync.leaveHere()
+            // Its step before ("Stop syncing here only?") was the second ask.
+            try await sync.leaveHere(askedAgain: true)
         } catch {
             let problem = SyncProblem(error, action: .leave)
             notHere = problem.code == "wrongRecord"

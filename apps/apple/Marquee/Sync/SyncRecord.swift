@@ -18,22 +18,45 @@ struct SyncRecord: Sendable {
     )
 
     /// A record left by a deleted install: the Keychain outlives the app, its
-    /// library does not. Deleted before the core opens, on the first launch
-    /// of an install whose library is empty, so the app never joins silently
-    /// with it. True when one was deleted.
-    @discardableResult
+    /// library does not. Run before the core opens. The first launch of an
+    /// install whose library is empty marks the cleanup pending; it is done
+    /// only once the Keychain says there is no record or deleted it, and is
+    /// tried again at every launch until then (the library exists by then).
+    /// True while it is pending: the app then never loads that key.
     func forgetLeftover(libraryExists: Bool, defaults: UserDefaults = .standard) -> Bool {
-        let marked = defaults.bool(forKey: Self.installedKey)
-        defaults.set(true, forKey: Self.installedKey)
-        guard !marked, !libraryExists, (try? load()) != nil else { return false }
-        guard delete() else {
-            coreLog.error("sync: a key left by a deleted install could not be deleted")
+        guard !defaults.bool(forKey: Self.installedKey) else { return false }
+        // An update over a library, not a new install: nothing was left behind.
+        guard defaults.bool(forKey: Self.pendingKey) || !libraryExists else {
+            defaults.set(true, forKey: Self.installedKey)
             return false
         }
-        coreLog.notice("sync: deleted a key left by a deleted install")
-        return true
+        defaults.set(true, forKey: Self.pendingKey)
+        let record: JSONValue?
+        do {
+            record = try load()
+        } catch {
+            coreLog.error("sync: the Keychain did not answer; a key left by a deleted install is removed at the next launch")
+            return true
+        }
+        if record != nil {
+            guard delete() else {
+                coreLog.error("sync: a key left by a deleted install could not be deleted")
+                return true
+            }
+            coreLog.notice("sync: deleted a key left by a deleted install")
+        }
+        Self.cleaned(defaults)
+        return false
     }
 
-    /// Set on the first launch of an install; deleting the app deletes it.
+    /// The leftover is gone: the install is marked, and nothing is pending.
+    static func cleaned(_ defaults: UserDefaults) {
+        defaults.set(true, forKey: installedKey)
+        defaults.removeObject(forKey: pendingKey)
+    }
+
+    /// Set once an install's first launch found nothing left behind, or removed it; deleting the app deletes it.
     static let installedKey = "installed"
+    /// A record left by a deleted install is still to be removed.
+    static let pendingKey = "syncLeftoverPending"
 }

@@ -62,6 +62,8 @@ enum SyncWords {
     static let leaveText = "Your library stays here. Edits not sent yet go out first."
     static let leaveButton = "Stop syncing"
     static let leaveAnyway = "Stop anyway"
+    static let noLockAsk = "This device has no passcode, so nothing can check that it is you. Stop syncing on it anyway? Your library stays here."
+    static let tvSure = "Nobody can confirm it is you on this TV. Are you sure?"
     static let syncAgain = "Sync again"
     // A different device list: the compare page
     static let compare = "Compare device lists"
@@ -93,6 +95,7 @@ enum SyncWords {
     static let forgetHere = "Forget it on this device"
     static let forgetHereText = "This device deletes the account's key from its Keychain. Your library stays here."
     static let keyUnreadable = "This device cannot read its sync key from the Keychain right now, so it cannot tell whether it syncs. Try again in a moment; if it keeps failing, restart the device."
+    static let keyLeftover = "A sync key from an earlier install of Marquee is still in this device's Keychain: Marquee could not delete it, so it does not use it. Try again."
     static let keyLeft = "This device stopped syncing, but its sync key is still in the Keychain: Marquee could not delete it. Try again."
     static let listStale = "This list and the 12 characters may be out of date: this device could not read the list again."
     static let removeStale = "The list could not be read again, so the recovery kits named here may be out of date. Try again before you remove."
@@ -142,6 +145,16 @@ enum SyncWords {
     static let kitIdUnknown = "Marquee could not tell which recovery kit in the device list is this one. If you do not save it, check the recovery kits in the list."
     static let kitUnseenUnknown = "A recovery kit was made here and never said saved, and Marquee cannot tell which one it is. Check the recovery kits in the list and remove those you do not hold."
     static let checked = "I checked"
+    static let macCapture = "Screen recording and screen sharing can capture what this window shows, so on a Mac the kit shows for 20 seconds after you confirm it is you, or while you hold Show."
+    static let kitHidden = "Hidden. Hold Show to see the kit."
+    static let holdToShow = "Hold to show"
+    static let showForAWhile = "Show for 20 seconds"
+
+    /// The seconds left before a Mac hides the kit again.
+    static func hiddenIn(_ seconds: Int) -> String {
+        "Hides in \(count(seconds, "second", "seconds"))"
+    }
+
     // Remove and report lost
     static let removeKitAsk = "Remove this recovery kit? It stops working."
     static let lostLede = "{name} is removed from your account and cannot read anything you change from now on."
@@ -412,6 +425,26 @@ enum SyncRules {
     static func sponsorName(_ member: MemberInfo, in members: [MemberInfo]) -> String? {
         guard let sponsor = member.sponsor else { return nil }
         return members.first { $0.id == sponsor }.map(memberName) ?? "a removed device"
+    }
+
+    /// What asking who is there comes to (Android's `guarded`).
+    enum OwnerStep: Equatable {
+        /// The OS prompt (passcode, Face ID or Touch ID).
+        case prompt
+        /// Asked twice already: it runs.
+        case run
+        /// No lock to ask with: the page asks a second time in its own words.
+        case askAgain
+        /// No lock, and the op is more than ending access: nothing can confirm it.
+        case refuse
+    }
+
+    /// With a lock the OS prompt; without one, stopping syncing (it only ends
+    /// this device's access) asks a second time and runs, anything else is refused.
+    static func ownerStep(hasLock: Bool, endsAccess: Bool, askedAgain: Bool) -> OwnerStep {
+        if hasLock { return .prompt }
+        guard endsAccess else { return .refuse }
+        return askedAgain ? .run : .askAgain
     }
 
     /// The account has no kit the user holds: none in the list but those that went unseen here.

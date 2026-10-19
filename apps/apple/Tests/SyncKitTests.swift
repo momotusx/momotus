@@ -138,6 +138,23 @@ private func list(_ members: [MemberInfo]) -> SyncDevices {
         withExtendedLifetime(core) {}
     }
 
+    @Test func aKitMadeWhileItsPageIsClosedStartsItsHold() async throws {
+        let (sync, _, core) = try await model()
+        sync.kitHold = .milliseconds(150)
+        // The page was left (or another tab covers it) before the kit arrived.
+        sync.kitPage(open: true)
+        sync.kitPage(open: false)
+        sync.hold(HeldKit(id: "", kit: "SECRET-KIT"))
+        #expect(await eventually { sync.kits.held == nil })
+        #expect(sync.kits.expired && sync.kits.unknownUnseen)
+        // On its open page it stays.
+        sync.kitPage(open: true)
+        sync.hold(HeldKit(id: "k2", kit: "OTHER-KIT"))
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(sync.kits.held?.id == "k2")
+        withExtendedLifetime(core) {}
+    }
+
     @Test func savingOrLeavingForgetsTheKit() async throws {
         let (sync, defaults, core) = try await model()
         sync.kits.hold(HeldKit(id: "k1", kit: "SECRET-KIT"))
@@ -178,3 +195,86 @@ final class FakeKeychain: @unchecked Sendable {
         )
     }
 }
+
+// Round 4 (reviewer r2): the gate that decides whether the kit shows, the kit
+// named once the list shows it, and the owner check without a lock.
+@Suite struct SyncKitGateTests {
+    @Test func thePromptsOwnSceneChangeNeitherCoversNorAsksAgain() {
+        var gate = KitGate()
+        gate.ask()
+        // On a device the app goes inactive under the prompt.
+        gate.phase(.inactive, mac: false)
+        gate.deactivating()
+        gate.answered(ok: true)
+        #expect(gate.unlocked && !gate.asking)
+        // Out of the prompt, the same change covers it.
+        gate.deactivating()
+        #expect(!gate.unlocked)
+        gate.ask()
+        gate.answered(ok: true)
+        gate.phase(.inactive, mac: false)
+        #expect(!gate.unlocked)
+    }
+
+    @Test func aKitThatArrivesWhileItsPageWasCoveredStaysCovered() {
+        var gate = KitGate()
+        gate.ask()
+        // Another tab while the server made the kit.
+        gate.cover()
+        gate.answered(ok: true)
+        #expect(!gate.unlocked)
+        // The background while the prompt was up.
+        gate.ask()
+        gate.phase(.background, mac: false)
+        gate.answered(ok: true)
+        #expect(!gate.unlocked)
+        // A refused prompt shows nothing.
+        gate.ask()
+        gate.answered(ok: false)
+        #expect(!gate.unlocked)
+        // A new ask after a cover starts clean.
+        gate.ask()
+        gate.answered(ok: true)
+        #expect(gate.unlocked)
+    }
+
+    @Test func aMacShowsTheKitForTwentySecondsOrWhileShowIsHeld() {
+        var gate = KitGate()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        #expect(!gate.shows(now: t0, holding: true, mac: true))
+        gate.ask()
+        gate.answered(ok: true, now: t0)
+        #expect(gate.shows(now: t0.addingTimeInterval(19), holding: false, mac: true))
+        #expect(!gate.shows(now: t0.addingTimeInterval(20), holding: false, mac: true))
+        #expect(gate.shows(now: t0.addingTimeInterval(60), holding: true, mac: true))
+        // A phone shows it for as long as the page stays in view.
+        #expect(gate.shows(now: t0.addingTimeInterval(600), holding: false, mac: false))
+        gate.cover()
+        #expect(!gate.shows(now: t0, holding: true, mac: true))
+        #expect(W.hiddenIn(1) == "Hides in 1 second" && W.hiddenIn(20) == "Hides in 20 seconds")
+    }
+
+    @Test func aNewKitIsPendingAtOnceAndNamedOnceTheListShowsIt() {
+        var ledger = KitLedger()
+        let kit = HeldKit(id: "", kit: "DDDD")
+        ledger.hold(kit)
+        #expect(ledger.pending == [KitLedger.unknown])
+        ledger.name("k9")
+        #expect(ledger.held == HeldKit(id: "k9", kit: "DDDD") && ledger.pending == ["k9"])
+        // Named once only, and a hold that began before the name still runs out.
+        ledger.name("k10")
+        #expect(ledger.held?.id == "k9")
+        ledger.expire(kit)
+        #expect(ledger.held == nil && ledger.unseen == ["k9"])
+    }
+
+    @Test func withoutALockOnlyStoppingSyncAsksTwiceAndRuns() {
+        #expect(SyncRules.ownerStep(hasLock: true, endsAccess: true, askedAgain: false) == .prompt)
+        #expect(SyncRules.ownerStep(hasLock: true, endsAccess: false, askedAgain: true) == .prompt)
+        #expect(SyncRules.ownerStep(hasLock: false, endsAccess: true, askedAgain: false) == .askAgain)
+        #expect(SyncRules.ownerStep(hasLock: false, endsAccess: true, askedAgain: true) == .run)
+        #expect(SyncRules.ownerStep(hasLock: false, endsAccess: false, askedAgain: true) == .refuse)
+    }
+}
+
+private typealias W = SyncWords

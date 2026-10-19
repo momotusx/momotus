@@ -147,7 +147,7 @@ struct SettingsScreen: View {
 
     /// "Synced 14:02", or what is wrong or waits first.
     private var syncSummary: String {
-        let problem = sync.keyUnreadable ? SyncWords.keyUnreadable : sync.keyLeft ? SyncWords.keyLeft : sync.problem?.words
+        let problem = sync.keyUnreadable ? SyncWords.keyUnreadable : sync.keyLeft == .afterLeave ? SyncWords.keyLeft : sync.keyLeft == .earlierInstall ? SyncWords.keyLeftover : sync.problem?.words
         return SyncWords.summary(joined: sync.joined, problem: problem, failed: SyncWords.failedSince(sync.failed),
                                  notes: sync.lastReport?.notes ?? [], at: sync.lastSynced)
     }
