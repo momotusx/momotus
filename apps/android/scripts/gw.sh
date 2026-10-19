@@ -4,7 +4,9 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-export JAVA_HOME=${JAVA_HOME:-$HOME/.local/jdks/zulu17.68.203-ca-jdk17.0.20.1-macosx_aarch64/Contents/Home}
+# JDK 21: Robolectric needs it for SDK 36 (the player's tests), and one JDK for the whole gate keeps
+# locale data, and so formatted dates, the same everywhere.
+export JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home}
 export ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}
 export ANDROID_SDK_ROOT=$ANDROID_HOME
 # Gradle's install tasks go to every connected device unless one is named. The adb server is
