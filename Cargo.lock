@@ -2578,6 +2578,7 @@ dependencies = [
  "anyhow",
  "librqbit",
  "mq-engine-sched",
+ "mq-http",
  "mq-relparse",
  "tempfile",
  "thiserror 2.0.21",

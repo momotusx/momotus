@@ -3,7 +3,7 @@
 Embedded torrent streaming engine for Marquee `full` builds: a thin fork of librqbit 9.0.1 (`vendor/librqbit`, Apache-2.0) for the protocol, with the DWH scheduler (`mq-engine-sched`) choosing every block of a streamed torrent. Plans: `plans/architecture.md` section 6, `research/10-sota-torrent-engines.md` sections 3, 6 and appendix A.
 
 ```rust
-let engine = Engine::start(EngineConfig::new(data_dir)).await?;
+let engine = Engine::start(EngineConfig::new(data_dir, http.torrent_scope(&[]))).await?;
 let t = engine.add_magnet(info_hash, &trackers, &[]).await?;        // metadata only
 let file = engine.select_file(t, &FileHint::Episode { season: 1, episode: 2 }).await?;
 let reader = engine.open_reader(t, file).await?;
@@ -16,7 +16,7 @@ engine.stats(t).await?; engine.remove(t, false).await?;
 
 ## What it does
 
-- One librqbit session per process: shared DHT persisted in `data_dir/dht.json`, inbound TCP and uTP listener (`listen_port` or a free port) with UPnP, outgoing TCP first and uTP after 1 s or a TCP failure, PEX, LSD, IPv6 dual stack. Honest peer id `-MQ0100-` and client name `Marquee 0.1.0 (librqbit 9.0.1)`. `upload: false` stops serving pieces.
+- One librqbit session per process: shared DHT persisted in `data_dir/dht.json`, trackers, inbound TCP listener (`listen_port` or a free port), outgoing TCP, PEX, IPv6 dual stack; LSD, UPnP and uTP are off. Every peer, dialed or incoming, must pass `EngineConfig::policy` (mq-http's playback address rule, `plans/c27-torrent-policy.md`); refusals are counted per kind (`Engine::refused`), never logged with an address. Honest peer id `-MQ0100-` and client name `Marquee 0.1.0 (librqbit 9.0.1)`. `upload: false` stops serving pieces.
 - `add_magnet` resolves metadata only (librqbit `list_only`, peers it met are kept); nothing downloads until `select_file`, which picks by index, filename, season and episode (through `mq-relparse`) or the largest video, and starts the torrent with only that file wanted.
 - With DWH (the default) librqbit's piece picker is off for the torrent: the adapter (`src/adapter.rs`) turns librqbit's events into DWH `Event`s (`PeerConnected` with bitfield and BEP 10 `reqq`, `PeerHave`, choke, unchoke, disconnect, `BlockReceived`, `PieceVerified` / `PieceFailed`, a `PeerRate` sample per peer every second with an RTT estimate, `Tick` every 100 ms) and executes `Request`, `Cancel` and `Ready`. Ranges feed `RangeOpened` before the first body read, `RangeAdvanced` and `RangeClosed`.
 - Readers wrap librqbit's `FileStream`, so they only ever return verified bytes. `RangeReader::ready()` resolves on DWH `Ready` (the range's first 1 MiB plus the file's last 2 MiB verified); stock mode uses the same rule.

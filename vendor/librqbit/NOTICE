@@ -38,3 +38,7 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   `rustls` with ring.
 - src/session.rs: the ring provider is installed before the first reqwest
   client is built (core backlog C11).
+- src/session.rs, src/stream_connect.rs, src/lib.rs: `Destinations`, the
+  address policy (plans/c27-torrent-policy.md). The connector refuses a
+  peer outside it before dialing, and an incoming peer outside it is
+  refused before its handshake is read (counted in `blocked_incoming`).

@@ -1,7 +1,7 @@
 //! A seeder engine with a small two-file torrent on loopback, shared by the
 //! engine and server integration tests.
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 
@@ -16,9 +16,20 @@ pub struct Swarm {
     _dirs: (tempfile::TempDir, tempfile::TempDir),
 }
 
-/// A 37,000-byte `.nfo` then a video file (so pieces straddle files) in
-/// 256 KiB pieces, seeded on loopback with discovery off.
+/// The swarm on `127.0.0.1`, which both engines' policies allow.
 pub async fn swarm(dwh: bool) -> Swarm {
+    swarm_on(Ipv4Addr::LOCALHOST.into(), dwh).await
+}
+
+/// The seeder addressed on `ip`, both engines scoped to `[ip]`.
+pub async fn swarm_on(ip: IpAddr, dwh: bool) -> Swarm {
+    swarm_scoped(ip, &[ip], &[ip], dwh).await
+}
+
+/// A 37,000-byte `.nfo` then a video file (so pieces straddle files) in
+/// 256 KiB pieces, seeded on loopback with discovery off. The seeder is
+/// addressed on `ip`; each engine's policy allows its own list.
+pub async fn swarm_scoped(ip: IpAddr, seeder: &[IpAddr], leecher: &[IpAddr], dwh: bool) -> Swarm {
     let (seed_dir, leech_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let src = seed_dir.path().join("src");
     std::fs::create_dir_all(&src).unwrap();
@@ -46,12 +57,15 @@ pub async fn swarm(dwh: bool) -> Swarm {
     for f in ["a.nfo", "movie.mkv"] {
         std::fs::copy(src.join(f), data.join(f)).unwrap();
     }
-    let config = |dir: &Path| EngineConfig {
-        discovery: false,
-        dwh,
-        ..EngineConfig::new(dir)
+    let config = |dir: &Path, scope: &[IpAddr]| {
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        EngineConfig {
+            discovery: false,
+            dwh,
+            ..EngineConfig::new(dir, http.torrent_scope(scope))
+        }
     };
-    let seeder = Engine::start(config(&seed_dir.path().join("engine")))
+    let seeder = Engine::start(config(&seed_dir.path().join("engine"), seeder))
         .await
         .unwrap();
     let t = seeder
@@ -64,12 +78,14 @@ pub async fn swarm(dwh: bool) -> Swarm {
         .unwrap();
     wait_complete(&seeder, t).await;
     let port = seeder.listen_addr().unwrap().port();
-    let leecher = Engine::start(config(leech_dir.path())).await.unwrap();
+    let leecher = Engine::start(config(leech_dir.path(), leecher))
+        .await
+        .unwrap();
     Swarm {
         _seeder: seeder,
         leecher,
         info_hash,
-        seeder_addr: SocketAddr::from(([127, 0, 0, 1], port)),
+        seeder_addr: SocketAddr::new(ip, port),
         movie,
         _dirs: (seed_dir, leech_dir),
     }

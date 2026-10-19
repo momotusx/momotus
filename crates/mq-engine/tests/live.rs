@@ -17,7 +17,10 @@ const TRACKERS: [&str; 3] = [
 /// largest video, all within two minutes.
 async fn stream(info_hash: &str, video: &str) {
     let dir = tempfile::tempdir().unwrap();
-    let engine = Engine::start(EngineConfig::new(dir.path())).await.unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let engine = Engine::start(EngineConfig::new(dir.path(), http.torrent_scope(&[])))
+        .await
+        .unwrap();
     let trackers: Vec<String> = TRACKERS.iter().map(|t| t.to_string()).collect();
     let run = async {
         let t = engine.add_magnet(info_hash, &trackers, &[]).await.unwrap();

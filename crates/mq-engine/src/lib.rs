@@ -1,9 +1,10 @@
 //! Embedded torrent streaming engine: a thin librqbit fork for the protocol
-//! (DHT, trackers, PEX, LSD, uTP, UPnP, storage, hashing) with the DWH
-//! scheduler (`mq-engine-sched`) choosing every block of a streamed torrent.
+//! (DHT, trackers, PEX, storage, hashing) with the DWH scheduler
+//! (`mq-engine-sched`) choosing every block of a streamed torrent. Every
+//! peer, in and out, passes the address policy (plans/c27-torrent-policy.md).
 //!
 //! ```text
-//! let engine = Engine::start(EngineConfig::new(dir)).await?;
+//! let engine = Engine::start(EngineConfig::new(dir, http.torrent_scope(&[]))).await?;
 //! let t = engine.add_magnet(info_hash, &trackers, &[]).await?;   // metadata
 //! let file = engine.select_file(t, "default", &FileHint::Episode { season: 1, episode: 2 }).await?;
 //! let reader = engine.open_reader(t, "default", file).await?;
@@ -24,7 +25,7 @@ pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -32,11 +33,12 @@ use std::time::{Duration, Instant};
 
 use librqbit::dht::DhtPersistenceConfig;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, DhtSessionConfig,
-    ExtSched, ListenerMode, ListenerOptions, ManagedTorrent, Session, SessionOptions,
-    generate_azereus_style,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, Destinations,
+    DhtSessionConfig, ExtSched, ListenerMode, ListenerOptions, ManagedTorrent, Session,
+    SessionOptions, generate_azereus_style,
 };
 use mq_engine_sched::{Config as SchedConfig, DemandId};
+use mq_http::AddressScope;
 use tokio::sync::mpsc;
 
 /// Hardware tier: scheduler windows and connection limits.
@@ -83,12 +85,14 @@ pub struct EngineConfig {
     /// DWH chooses every block (the default); `false` keeps librqbit's stock
     /// picker and streaming lookahead, for A/B runs.
     pub dwh: bool,
-    /// DHT, trackers, LSD and UPnP. Off only for tests on loopback.
+    /// The DHT. Off only for tests on loopback; trackers run either way.
     pub discovery: bool,
+    /// Where the engine may connect: `HttpClient::torrent_scope(&[])`.
+    pub policy: AddressScope,
 }
 
 impl EngineConfig {
-    pub fn new(data_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(data_dir: impl Into<PathBuf>, policy: AddressScope) -> Self {
         Self {
             data_dir: data_dir.into(),
             cache_budget_bytes: 4 << 30,
@@ -97,7 +101,106 @@ impl EngineConfig {
             device_class: DeviceClass::Standard,
             dwh: true,
             discovery: true,
+            policy,
         }
+    }
+}
+
+/// Addresses the policy refused, per kind of destination; never which ones.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Refused {
+    pub peers: u64,
+    pub trackers: u64,
+    pub dht: u64,
+}
+
+impl Refused {
+    /// What was refused after `earlier` was read.
+    pub fn since(self, earlier: Refused) -> Refused {
+        Refused {
+            peers: self.peers.saturating_sub(earlier.peers),
+            trackers: self.trackers.saturating_sub(earlier.trackers),
+            dht: self.dht.saturating_sub(earlier.dht),
+        }
+    }
+}
+
+/// The policy once per kind of destination, each counting its own refusals.
+struct Scopes {
+    peers: AddressScope,
+    trackers: AddressScope,
+    dht: AddressScope,
+}
+
+impl Scopes {
+    fn new(policy: &AddressScope) -> Self {
+        Self {
+            peers: policy.with_own_count(),
+            trackers: policy.with_own_count(),
+            dht: policy.with_own_count(),
+        }
+    }
+}
+
+/// The checks the fork runs for the session. Trackers and the DHT join in
+/// phases 3 and 4 (plans/c27-torrent-policy.md 6); their scopes count
+/// nothing until then.
+pub fn destinations(
+    peers: &AddressScope,
+    _trackers: &AddressScope,
+    _dht: &AddressScope,
+) -> Destinations {
+    let peers = peers.clone();
+    Destinations {
+        peers: Arc::new(move |ip: IpAddr| peers.permits(ip)),
+    }
+}
+
+/// The session the engine runs: LSD, UPnP and uTP off (each talks to
+/// addresses before any check could run), trackers on, the DHT only with
+/// `discovery`.
+fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
+    let version = env!("CARGO_PKG_VERSION");
+    let v: Vec<u8> = version.split('.').filter_map(|p| p.parse().ok()).collect();
+    let dht = cfg.discovery.then(|| DhtSessionConfig {
+        persistence: Some(DhtPersistenceConfig {
+            config_filename: Some(cfg.data_dir.join("dht.json")),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+    SessionOptions {
+        dht,
+        disable_local_service_discovery: true,
+        // Honest: says what we are, never another client's id.
+        peer_id: Some(generate_azereus_style(
+            *b"MQ",
+            (
+                v.first().copied().unwrap_or(0),
+                v.get(1).copied().unwrap_or(0),
+                v.get(2).copied().unwrap_or(0),
+                0,
+            ),
+        )),
+        client_name_and_version: Some(format!(
+            "Marquee {version} (librqbit {})",
+            librqbit::version()
+        )),
+        listen: Some(ListenerOptions {
+            mode: ListenerMode::TcpOnly,
+            listen_addr: (
+                std::net::Ipv6Addr::UNSPECIFIED,
+                cfg.listen_port.unwrap_or(0),
+            )
+                .into(),
+            enable_upnp_port_forwarding: false,
+            ..Default::default()
+        }),
+        connect: Some(ConnectionOptions::default()),
+        peer_limit: Some(cfg.device_class.peer_limit()),
+        disable_upload: !cfg.upload,
+        destinations: Some(destinations(&scopes.peers, &scopes.trackers, &scopes.dht)),
+        ..Default::default()
     }
 }
 
@@ -179,6 +282,7 @@ impl std::fmt::Debug for Engine {
 struct Inner {
     session: Arc<Session>,
     cfg: EngineConfig,
+    scopes: Scopes,
     torrents: Mutex<HashMap<TorrentHandle, Arc<Torrent>>>,
     next: AtomicU64,
     next_demand: AtomicU64,
@@ -292,56 +396,17 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 impl Engine {
     /// One session for the process: shared DHT (persisted in `data_dir`),
-    /// inbound TCP and uTP listener with UPnP, PEX, IPv6 dual stack.
+    /// inbound TCP listener, PEX, IPv6 dual stack.
     pub async fn start(cfg: EngineConfig) -> Result<Self> {
         std::fs::create_dir_all(&cfg.data_dir)?;
-        let version = env!("CARGO_PKG_VERSION");
-        let v: Vec<u8> = version.split('.').filter_map(|p| p.parse().ok()).collect();
-        let dht = cfg.discovery.then(|| DhtSessionConfig {
-            persistence: Some(DhtPersistenceConfig {
-                config_filename: Some(cfg.data_dir.join("dht.json")),
-                ..Default::default()
-            }),
-            ..Default::default()
-        });
-        let opts = SessionOptions {
-            dht,
-            disable_trackers: !cfg.discovery,
-            disable_local_service_discovery: !cfg.discovery,
-            // Honest: says what we are, never another client's id.
-            peer_id: Some(generate_azereus_style(
-                *b"MQ",
-                (
-                    v.first().copied().unwrap_or(0),
-                    v.get(1).copied().unwrap_or(0),
-                    v.get(2).copied().unwrap_or(0),
-                    0,
-                ),
-            )),
-            client_name_and_version: Some(format!(
-                "Marquee {version} (librqbit {})",
-                librqbit::version()
-            )),
-            listen: Some(ListenerOptions {
-                mode: ListenerMode::TcpAndUtp,
-                listen_addr: (
-                    std::net::Ipv6Addr::UNSPECIFIED,
-                    cfg.listen_port.unwrap_or(0),
-                )
-                    .into(),
-                enable_upnp_port_forwarding: cfg.discovery,
-                ..Default::default()
-            }),
-            connect: Some(ConnectionOptions::default()),
-            peer_limit: Some(cfg.device_class.peer_limit()),
-            disable_upload: !cfg.upload,
-            ..Default::default()
-        };
+        let scopes = Scopes::new(&cfg.policy);
+        let opts = session_options(&cfg, &scopes);
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
         let engine = Self {
             inner: Arc::new(Inner {
                 session,
                 cfg,
+                scopes,
                 torrents: Mutex::default(),
                 next: AtomicU64::new(1),
                 next_demand: AtomicU64::new(1),
@@ -358,6 +423,16 @@ impl Engine {
         self.inner.session.listen_addr()
     }
 
+    /// Addresses the policy refused so far, per kind.
+    pub fn refused(&self) -> Refused {
+        let s = &self.inner.scopes;
+        Refused {
+            peers: s.peers.refused(),
+            trackers: s.trackers.refused(),
+            dht: s.dht.refused(),
+        }
+    }
+
     /// Resolves metadata for an info hash (40 hex or 32 base32 characters).
     /// `trackers` may carry Stremio `sources` (`tracker:` prefixes are
     /// stripped, `dht:` entries are skipped since the DHT is always on).
@@ -368,6 +443,8 @@ impl Engine {
         trackers: &[String],
         peers: &[SocketAddr],
     ) -> Result<TorrentHandle> {
+        // Every add reads the interfaces again, as every playback open does.
+        self.inner.cfg.policy.refresh();
         let hash = info_hash.trim();
         let valid = (hash.len() == 40 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
             || (hash.len() == 32 && hash.bytes().all(|b| b.is_ascii_alphanumeric()));
@@ -401,6 +478,7 @@ impl Engine {
         bytes: Vec<u8>,
         peers: &[SocketAddr],
     ) -> Result<TorrentHandle> {
+        self.inner.cfg.policy.refresh();
         self.add(AddTorrent::from_bytes(bytes), peers).await
     }
 
@@ -808,4 +886,28 @@ fn percent_encode(s: &str) -> String {
             _ => format!("%{b:02X}"),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_session_turns_off_upnp_lsd_and_utp() {
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        for discovery in [true, false] {
+            let cfg = EngineConfig {
+                discovery,
+                ..EngineConfig::new("unused", http.torrent_scope(&[]))
+            };
+            let opts = session_options(&cfg, &Scopes::new(&cfg.policy));
+            let listen = opts.listen.as_ref().expect("a listener");
+            assert!(!listen.enable_upnp_port_forwarding, "UPnP off");
+            assert!(opts.disable_local_service_discovery, "LSD off");
+            assert!(matches!(listen.mode, ListenerMode::TcpOnly), "uTP off");
+            assert!(opts.destinations.is_some(), "the policy is set");
+            assert!(!opts.disable_trackers, "trackers run either way");
+            assert_eq!(opts.dht.is_some(), discovery);
+        }
+    }
 }

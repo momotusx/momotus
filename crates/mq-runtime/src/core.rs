@@ -346,7 +346,10 @@ impl Core {
             .inner
             .engine
             .get_or_try_init(|| async {
-                let config = mq_engine::EngineConfig::new(&self.inner.torrent_dir);
+                // No exception for a LAN or an addon's host: one engine
+                // serves every addon (plans/c27-torrent-policy.md 3.2).
+                let policy = self.http().torrent_scope(&[]);
+                let config = mq_engine::EngineConfig::new(&self.inner.torrent_dir, policy);
                 mq_engine::Engine::start(config)
                     .await
                     .map_err(|e| CoreError::Torrent(e.to_string()))

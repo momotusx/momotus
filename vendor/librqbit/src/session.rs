@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     io::Read,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::{Component, Path, PathBuf},
     sync::{
         Arc,
@@ -32,7 +32,8 @@ use crate::{
         BoxStorageFactory, StorageFactoryExt, TorrentStorage, filesystem::FilesystemStorageFactory,
     },
     stream_connect::{
-        ConnectionKind, ConnectionOptions, SocksProxyConfig, StreamConnector, StreamConnectorArgs,
+        ConnectionKind, ConnectionOptions, Permits, SocksProxyConfig, StreamConnector,
+        StreamConnectorArgs,
     },
     torrent_state::{
         ManagedTorrentHandle, ManagedTorrentLocked, ManagedTorrentOptions, ManagedTorrentState,
@@ -140,6 +141,8 @@ pub struct Session {
 
     pub blocklist: IpRanges,
     pub allowlist: Option<IpRanges>,
+    // Marquee fork (C27): incoming peers must pass it.
+    peer_permits: Option<Permits>,
 
     // Monitoring / tracing / logging
     pub(crate) stats: Arc<SessionStats>,
@@ -419,6 +422,14 @@ impl Default for DhtSessionConfig {
     }
 }
 
+/// Marquee fork (C27): where the session may connect. Unset, the session
+/// behaves as upstream does.
+#[derive(Clone)]
+pub struct Destinations {
+    /// Every peer dialed (any source, both phases) and every incoming peer.
+    pub peers: Arc<dyn Fn(IpAddr) -> bool + Send + Sync>,
+}
+
 pub struct SessionOptions {
     /// DHT configuration. Set to None to disable DHT entirely.
     /// Defaults to DHT enabled with persistence.
@@ -483,6 +494,9 @@ pub struct SessionOptions {
     /// Override the client name and version used in User-Agent headers and
     /// peer extended handshakes. Defaults to "rqbit X.Y.Z".
     pub client_name_and_version: Option<String>,
+
+    /// Marquee fork (C27): the address policy.
+    pub destinations: Option<Destinations>,
 }
 
 impl Default for SessionOptions {
@@ -511,6 +525,7 @@ impl Default for SessionOptions {
             disable_local_service_discovery: false,
             ipv4_only: false,
             client_name_and_version: None,
+            destinations: None,
         }
     }
 }
@@ -578,6 +593,10 @@ impl Session {
                 .peer_id
                 .unwrap_or_else(|| generate_azereus_style(*b"rQ", crate_version!()));
             let token = opts.cancellation_token.take().unwrap_or_default();
+            let peer_permits = opts
+                .destinations
+                .as_ref()
+                .map(|d| Permits(d.peers.clone()));
 
             #[cfg(feature = "disable-upload")]
             if opts.disable_upload {
@@ -742,6 +761,7 @@ impl Session {
                     utp_socket: listen_result.as_ref().and_then(|l| l.utp_socket.clone()),
                     bind_device: bind_device.clone(),
                     ipv4_only: opts.ipv4_only,
+                    permits: peer_permits.clone(),
                 })
                 .await
                 .context("error creating stream connector")?,
@@ -822,6 +842,7 @@ impl Session {
                 _disable_upload: opts.disable_upload,
                 blocklist,
                 allowlist,
+                peer_permits,
                 lsd,
             });
 
@@ -938,6 +959,18 @@ impl Session {
                 .blocked_incoming
                 .fetch_add(1, Ordering::Relaxed);
             bail!("Incoming ip {incoming_ip} is not in allowlist");
+        }
+        // Marquee fork (C27): before the handshake is read or answered.
+        if self
+            .peer_permits
+            .as_ref()
+            .is_some_and(|p| !(p.0)(incoming_ip))
+        {
+            self.stats
+                .counters
+                .blocked_incoming
+                .fetch_add(1, Ordering::Relaxed);
+            bail!("incoming peer outside the address policy");
         }
 
         let mut read_buf = ReadBuf::new();

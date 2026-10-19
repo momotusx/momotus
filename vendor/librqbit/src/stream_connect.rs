@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{Context, bail};
 use librqbit_dualstack_sockets::ConnectOpts;
@@ -51,6 +55,17 @@ impl Default for ConnectionOptions {
     }
 }
 
+/// Marquee fork (C27): a check on peer addresses; its `Debug` leaves the
+/// closure out.
+#[derive(Clone)]
+pub(crate) struct Permits(pub Arc<dyn Fn(IpAddr) -> bool + Send + Sync>);
+
+impl std::fmt::Debug for Permits {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Permits")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct SocksProxyConfig {
     pub host: String,
@@ -65,6 +80,7 @@ pub(crate) struct StreamConnectorArgs {
     pub utp_socket: Option<Arc<UtpSocketUdp>>,
     pub bind_device: Option<BindDevice>,
     pub ipv4_only: bool,
+    pub permits: Option<Permits>,
 }
 
 impl SocksProxyConfig {
@@ -133,6 +149,7 @@ pub(crate) struct StreamConnector {
     utp_socket: Option<Arc<librqbit_utp::UtpSocketUdp>>,
     stats: ConnectStatsAtomic,
     ipv4_only: bool,
+    permits: Option<Permits>,
 }
 
 impl StreamConnector {
@@ -158,6 +175,7 @@ impl StreamConnector {
             bind_device: config.bind_device,
             stats: Default::default(),
             ipv4_only: config.ipv4_only,
+            permits: config.permits,
         })
     }
 
@@ -222,6 +240,17 @@ impl StreamConnector {
             return Err(Error::Anyhow(anyhow::anyhow!(
                 "ipv6 disabled, skipping connection to {}",
                 addr
+            )));
+        }
+
+        // Marquee fork (C27): every outgoing peer, from every source and in
+        // both the metadata and the live phase, is dialed only here. The
+        // message names no address.
+        // ponytail: a refused peer takes the normal reconnect backoff (10 s,
+        // x6, a day at most); refuse in task_peer_adder too if they crowd it.
+        if self.permits.as_ref().is_some_and(|p| !(p.0)(addr.ip())) {
+            return Err(Error::Anyhow(anyhow::anyhow!(
+                "peer outside the address policy"
             )));
         }
 

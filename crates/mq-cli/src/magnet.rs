@@ -135,9 +135,10 @@ async fn run(
     o: MagnetOptions,
 ) -> Result<Value, String> {
     let started = Instant::now();
+    let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
     let config = EngineConfig {
         dwh: !o.stock,
-        ..EngineConfig::new(dir)
+        ..EngineConfig::new(dir, http.torrent_scope(&[]))
     };
     let engine = Engine::start(config).await.map_err(|e| e.to_string())?;
     let t = tokio::time::timeout(METADATA_TIMEOUT, engine.add_magnet(hash, trackers, &[]))
@@ -161,7 +162,6 @@ async fn run(
         "files": engine.files(t).map(|f| f.len()).unwrap_or(0),
     }));
 
-    let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
     let server = StreamServer::start(http.clone())
         .await
         .map_err(|e| e.to_string())?;
