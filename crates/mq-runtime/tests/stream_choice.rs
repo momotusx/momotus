@@ -531,3 +531,28 @@ async fn one_short_playback_measures_the_connection() {
     assert_eq!(speed.samples, 1, "{speed:?}");
     assert!(speed.mbps > 1.0, "{speed:?}");
 }
+
+/// After a restart the core reads the network the app last reported, not
+/// "other", until the app reports one again.
+#[tokio::test]
+async fn a_restart_keeps_the_last_network() {
+    use mq_runtime::speed::Network;
+    let dir = std::env::temp_dir().join(format!("mq-network-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let open = || {
+        Core::open(mq_runtime::CoreConfig {
+            data_dir: dir.clone(),
+            profile_id: "p".into(),
+            device_id: 0,
+        })
+        .unwrap()
+    };
+    let core = open();
+    assert_eq!(core.stream_conditions().network, Network::Other);
+    core.set_network(Network::Wifi);
+    drop(core);
+    let core = open();
+    assert_eq!(core.stream_conditions().network, Network::Wifi);
+    drop(core);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -123,9 +123,6 @@ struct Inner {
     debrid: Arc<crate::debrid::Accounts>,
     /// Skip segment lookups and their session cache.
     segments: crate::segments::Finder,
-    /// The network type the app last reported (`versions`, `networkChanged`):
-    /// speed is measured and read per type.
-    network: std::sync::Mutex<crate::speed::Network>,
     /// TurkceAltyazi.org, read on this device: its caches and its one
     /// request at a time.
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
@@ -245,7 +242,6 @@ impl Core {
                 engine: OnceCell::new(),
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
-                network: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
             }),
             profile: profile.into(),
@@ -364,13 +360,15 @@ impl Core {
         }
     }
 
-    /// The network type speed is measured and read for.
+    /// The network type speed is measured and read for: the one the app
+    /// last reported (`versions`, `networkChanged`), kept in the device's
+    /// store so a restart does not read "other" until the app reports again.
     pub fn network(&self) -> crate::speed::Network {
-        *self.inner.network.lock().unwrap_or_else(|p| p.into_inner())
+        crate::speed::last_network(self.library())
     }
 
     pub fn set_network(&self, network: crate::speed::Network) {
-        *self.inner.network.lock().unwrap_or_else(|p| p.into_inner()) = network;
+        crate::speed::remember_network(self.library(), network);
     }
 
     /// This build has the torrent engine.

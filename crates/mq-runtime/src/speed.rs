@@ -178,6 +178,26 @@ pub fn reset(lib: &Library, network: Network) {
     }
 }
 
+const NETWORK_KEY: &str = "network";
+
+/// The network type the app last reported on this device; "other" before
+/// the first report.
+pub fn last_network(lib: &Library) -> Network {
+    lib.device_value(NETWORK_KEY)
+        .ok()
+        .flatten()
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default()
+}
+
+/// Keeps `network` as this device's network; written only when it changed.
+pub fn remember_network(lib: &Library, network: Network) {
+    if last_network(lib) != network {
+        let value = serde_json::to_string(&network).unwrap_or_default();
+        let _ = lib.set_device_value(NETWORK_KEY, &value);
+    }
+}
+
 /// How long a swarm that stalled here stays demoted.
 // ponytail: one day, whatever the network; per network if the race shows a
 // swarm that stalls on cellular and starts on Wi-Fi.
