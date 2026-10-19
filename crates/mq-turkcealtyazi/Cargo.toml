@@ -1,6 +1,6 @@
 [package]
 name = "mq-turkcealtyazi"
-description = "TurkceAltyazi.org's pages read on the device: the subtitle list of a title"
+description = "TurkceAltyazi.org read on the device: a title's Turkish subtitles"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,13 @@ publish.workspace = true
 # The archive reader inflates with the flate2 the workspace already locks
 # (1.0, pinned by stremio-core's watched bitfield crate); see src/archive.rs.
 flate2 = "1"
+mq-http = { path = "../mq-http" }
 mq-relparse = { path = "../mq-relparse" }
 regex = "1"
 thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+mq-http = { path = "../mq-http", features = ["test-dns"] }
+tokio = { workspace = true, features = ["test-util"] }

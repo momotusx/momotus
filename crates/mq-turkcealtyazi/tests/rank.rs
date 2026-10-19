@@ -14,7 +14,7 @@ fn rows(file: &str, url: &str, digits: &str) -> Vec<Row> {
 fn breaking_bad() -> Vec<Row> {
     rows(
         "title-breaking-bad.html",
-        "https://turkcealtyazi.org/mov/0903747/breaking-badd.html",
+        "/mov/0903747/breaking-badd.html",
         "0903747",
     )
 }
@@ -81,7 +81,7 @@ fn the_playing_group_and_frame_rate_come_first() {
 fn a_few_episodes_and_the_pack_for_an_episode_inside_them() {
     let simpsons = rows(
         "title-simpsons.html",
-        "https://turkcealtyazi.org/mov/0096697/the-simpsons.html",
+        "/mov/0096697/the-simpsons.html",
         "0096697",
     );
     let got = tracks(
@@ -113,7 +113,7 @@ fn a_few_episodes_and_the_pack_for_an_episode_inside_them() {
 fn a_movie_gets_one_part_files_only() {
     let matrix = rows(
         "title-matrix.html",
-        "https://turkcealtyazi.org/mov/0133093/the-matrix1.html",
+        "/mov/0133093/the-matrix1.html",
         "0133093",
     );
     let got = tracks(&matrix, Target::Movie, &Playing::default());

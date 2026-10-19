@@ -73,7 +73,6 @@ pub enum Kind {
     },
 }
 
-const ORIGIN_MOV: &str = "https://turkcealtyazi.org/mov/";
 const WRAPPER: &str = r#"<div class="altyazi-list-wrapper">"#;
 /// Where the list ends: the next block of the page ("Bu diziyi sevenler",
 /// "Forumdan Benzer Başlıklar").
@@ -87,10 +86,7 @@ macro_rules! re {
     };
 }
 
-re!(
-    FINAL_URL,
-    r"^https://turkcealtyazi\.org/mov/(\d{1,9})/([a-z0-9-]{1,120})\.html$"
-);
+re!(TITLE_PATH, r"^/mov/(\d{1,9})/([a-z0-9-]{1,120})\.html$");
 re!(ANCHOR, r#"href="/sub/"#);
 // A row's language cell; a section header's says "Dil" instead.
 re!(LANGUAGE_CELL, r#"<div class="aldil">\s*<span"#);
@@ -123,20 +119,16 @@ re!(LIST, r"^\d{1,4}(?:,\d{1,4})+$");
 re!(RANGE, r"^(\d{1,4})-(\d{1,4})$");
 re!(SPECIAL, r"^Özel(?: Bölüm)?$");
 
-/// Reads the title page that `final_url` answered for IMDb `digits` (as
-/// the site writes them, `0903747` for tt0903747). `final_url` is where the
-/// request ended after redirects: anything but a title page on the site's
-/// own origin is a change, and `404-error.html` means the site has no such
-/// title. Rows are counted three ways (the language cell, the subtitle
+/// Reads the title page whose final path (where the request ended after
+/// redirects, its origin already checked by the caller) is `path`, asked
+/// for IMDb `digits` (as the site writes them, `0903747` for tt0903747).
+/// Any other path is a change, and `404-error.html` means the site has no
+/// such title. Rows are counted three ways (the language cell, the subtitle
 /// link and the row's opening tag), so renaming any one of them still
 /// counts the rows; more than a quarter of them unread is a change.
-pub fn title_page(final_url: &str, digits: &str, html: &str) -> Result<TitlePage, Changed> {
-    let Some(url) = FINAL_URL.captures(final_url) else {
-        return Err(Changed(if final_url.starts_with(ORIGIN_MOV) {
-            "the title page has a new address"
-        } else {
-            "the title page is no longer on the site"
-        }));
+pub fn title_page(path: &str, digits: &str, html: &str) -> Result<TitlePage, Changed> {
+    let Some(url) = TITLE_PATH.captures(path) else {
+        return Err(Changed("the title page has a new address"));
     };
     if &url[1] != digits {
         return Ok(TitlePage::OtherTitle);

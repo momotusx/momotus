@@ -5,24 +5,20 @@ use mq_turkcealtyazi::{Changed, Kind, Lang, Row, TitlePage, title_page};
 
 const BREAKING_BAD: (&str, &str, &str) = (
     "title-breaking-bad.html",
-    "https://turkcealtyazi.org/mov/0903747/breaking-badd.html",
+    "/mov/0903747/breaking-badd.html",
     "0903747",
 );
 const SIMPSONS: (&str, &str, &str) = (
     "title-simpsons.html",
-    "https://turkcealtyazi.org/mov/0096697/the-simpsons.html",
+    "/mov/0096697/the-simpsons.html",
     "0096697",
 );
 const MATRIX: (&str, &str, &str) = (
     "title-matrix.html",
-    "https://turkcealtyazi.org/mov/0133093/the-matrix1.html",
+    "/mov/0133093/the-matrix1.html",
     "0133093",
 );
-const NOT_FOUND: (&str, &str, &str) = (
-    "title-404.html",
-    "https://turkcealtyazi.org/mov/9999999/404-error.html",
-    "9999999",
-);
+const NOT_FOUND: (&str, &str, &str) = ("title-404.html", "/mov/9999999/404-error.html", "9999999");
 
 fn corpus(name: &str) -> String {
     let path = format!("{}/tests/corpus/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -170,39 +166,21 @@ fn no_page_for_the_id_and_an_empty_list_are_nothing() {
 }
 
 #[test]
-fn only_this_titles_page_on_the_sites_own_origin_is_read() {
+fn only_a_title_page_path_is_read() {
+    // The origin (https on the site's own host) is the site client's check.
     let (file, url, digits) = BREAKING_BAD;
     let html = corpus(file);
-    for (final_url, why) in [
-        (
-            "http://turkcealtyazi.org/mov/0903747/breaking-badd.html",
-            "the title page is no longer on the site",
-        ),
-        (
-            "https://turkcealtyazi.org.example/mov/0903747/breaking-badd.html",
-            "the title page is no longer on the site",
-        ),
-        (
-            "https://www.turkcealtyazi.org/mov/0903747/breaking-badd.html",
-            "the title page is no longer on the site",
-        ),
-        (
-            "https://turkcealtyazi.org/index.php",
-            "the title page is no longer on the site",
-        ),
-        (
-            "https://turkcealtyazi.org/mov/0903747/breaking-badd.php",
-            "the title page has a new address",
-        ),
-        (
-            "https://turkcealtyazi.org/mov/0903747/Breaking-Badd.html",
-            "the title page has a new address",
-        ),
+    for path in [
+        "/index.php",
+        "/mov/0903747/breaking-badd.php",
+        "/mov/0903747/Breaking-Badd.html",
+        "/mov/0903747/",
+        "/sub/108735/breaking-badd.html",
     ] {
         assert_eq!(
-            title_page(final_url, digits, &html),
-            Err(Changed(why)),
-            "{final_url}"
+            title_page(path, digits, &html),
+            Err(Changed("the title page has a new address")),
+            "{path}"
         );
     }
     // Another title's page is never read as this one's: nothing for this title.
