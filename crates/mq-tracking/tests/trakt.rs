@@ -1,5 +1,5 @@
 use mq_http::{ClientConfig, HttpClient};
-use mq_tracking::trakt::{Answer, Api, Auth, AuthError, Hosts, Poll, TraktRecord, auth};
+use mq_tracking::trakt::{Answer, Api, Auth, AuthError, Hosts, Poll, TraktRecord, auth, call};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -147,6 +147,7 @@ fn aging_record() -> TraktRecord {
         expires_at_ms: now + 86_400_000,
         scope: "public".into(),
         account: "someone".into(),
+        user: "someone".into(),
         revision: 0,
         generation: 1,
     }
@@ -377,7 +378,7 @@ async fn a_fresh_sign_in_is_held_until_stored() {
         expires_at_ms: 2,
         scope: "public".into(),
     };
-    let record = auth.adopt(tokens, "someone").await;
+    let record = auth.adopt(tokens, "someone", "someone").await;
     assert_eq!(record.generation, 1);
     assert_eq!(auth.unacked().await.as_ref(), Some(&record));
     assert!(auth.set(Some(record)).await);
@@ -488,4 +489,69 @@ async fn an_unanswered_refresh_backs_off_and_never_blocks_sign_out() {
     assert_eq!(mock.seen("/oauth/token").len(), 1);
     assert!(auth.set(None).await);
     assert_eq!(auth.status().await, Err(AuthError::Off));
+}
+
+/// A record far from its expiry: no refresh before the first call.
+fn fresh_record() -> TraktRecord {
+    let now = auth::now_ms();
+    TraktRecord {
+        created_at_ms: now,
+        expires_at_ms: now + 7 * 86_400_000,
+        ..aging_record()
+    }
+}
+
+#[tokio::test]
+async fn a_401_refreshes_once_and_the_call_goes_on() {
+    let mock = Mock::default();
+    mock.on(
+        "/sync/x",
+        vec![json(401, "{}"), json(200, r#"{"ok":true}"#)],
+    );
+    mock.on(
+        "/oauth/token",
+        vec![json(200, &tokens_body("new-access", "new-refresh"))],
+    );
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(fresh_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let body = call::body(call::get(&api, &gate, &auth, "/sync/x").await).unwrap();
+    assert_eq!(body["ok"], true);
+    assert_eq!(mock.seen("/oauth/token").len(), 1);
+    let calls = mock.seen("/sync/x");
+    assert!(calls[0].head.contains("bearer old-access"));
+    assert!(
+        calls[1].head.contains("bearer new-access"),
+        "the retry uses the new token"
+    );
+}
+
+#[tokio::test]
+async fn lists_are_read_until_an_empty_page() {
+    let mock = Mock::default();
+    // Trakt shrank the pages: a short one is not the end.
+    mock.on(
+        "/sync/list",
+        vec![json(200, "[1,2]"), json(200, "[3]"), json(200, "[]")],
+    );
+    mock.on("/sync/broken", vec![json(200, "[1]"), json(503, "{}")]);
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    assert!(auth.set(Some(fresh_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let items = call::get_all(&api, &gate, &auth, "/sync/list?type=x", 250)
+        .await
+        .unwrap();
+    assert_eq!(items, [1, 2, 3]);
+    let pages: Vec<String> = mock
+        .seen("/sync/list")
+        .iter()
+        .map(|s| s.head.lines().next().unwrap().to_owned())
+        .collect();
+    assert_eq!(pages.len(), 3);
+    assert!(pages[2].contains("?type=x&page=3&limit=250"), "{pages:?}");
+    // A failed page fails the list: never a short list.
+    let broken = call::get_all(&api, &gate, &auth, "/sync/broken", 250).await;
+    assert!(broken.unwrap_err().transient());
 }

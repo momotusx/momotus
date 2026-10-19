@@ -23,8 +23,11 @@ pub struct TraktRecord {
     pub created_at_ms: u64,
     pub expires_at_ms: u64,
     pub scope: String,
-    /// The Trakt user slug the tokens belong to.
+    /// The Trakt user's stable id (`ids.uuid`) the tokens belong to.
     pub account: String,
+    /// The user's name, to show.
+    #[serde(default)]
+    pub user: String,
     /// Raised on every rotation.
     pub revision: u64,
     /// Raised on every new connection.
@@ -274,7 +277,7 @@ impl Auth {
     }
 
     /// A new sign-in: a new connection generation, held until acknowledged.
-    pub async fn adopt(&self, tokens: Tokens, account: &str) -> TraktRecord {
+    pub async fn adopt(&self, tokens: Tokens, account: &str, user: &str) -> TraktRecord {
         let mut s = lock(&self.state);
         s.generation += 1;
         let record = TraktRecord {
@@ -284,6 +287,7 @@ impl Auth {
             expires_at_ms: tokens.expires_at_ms,
             scope: tokens.scope,
             account: account.to_owned(),
+            user: user.to_owned(),
             revision: 0,
             generation: s.generation,
         };
@@ -302,6 +306,17 @@ impl Auth {
 
     pub async fn account(&self) -> Option<String> {
         lock(&self.state).record.as_ref().map(|r| r.account.clone())
+    }
+
+    /// The user's name, while a record is held.
+    pub async fn user(&self) -> Option<String> {
+        lock(&self.state).record.as_ref().map(|r| r.user.clone())
+    }
+
+    /// Raised by every sign-in, sign-out and new record: work started under
+    /// an older one drops its results.
+    pub async fn generation(&self) -> u64 {
+        lock(&self.state).generation
     }
 
     /// A token to call with, refreshed first when under a quarter of its
