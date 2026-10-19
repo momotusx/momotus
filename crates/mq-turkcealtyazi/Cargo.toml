@@ -8,5 +8,9 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The archive reader inflates with the flate2 the workspace already locks
+# (1.0, pinned by stremio-core's watched bitfield crate); see src/archive.rs.
+flate2 = "1"
+mq-relparse = { path = "../mq-relparse" }
 regex = "1"
 thiserror.workspace = true

@@ -2825,6 +2825,8 @@ dependencies = [
 name = "mq-turkcealtyazi"
 version = "0.1.0"
 dependencies = [
+ "flate2",
+ "mq-relparse",
  "regex",
  "thiserror 2.0.21",
 ]
