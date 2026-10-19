@@ -31,7 +31,8 @@ export default async function globalSetup() {
     // e2e/defaults.spec.ts's, on cores of its own).
     await c.req("setPrefs", { patch: { defaultsSeen: 1 } });
 
-    // Game of Thrones S2:E3, 21 of 57 minutes (the pick is a Torrentio torrent).
+    // Game of Thrones S2:E3, 21 of 57 minutes (the pick is the sample source's
+    // direct link: Torrentio's rows need an account in this build).
     await watch(
       c,
       { kind: "series", itemId: GOT.id, videoId: GOT.resume, title: "Game of Thrones", season: 2, episode: 3 },

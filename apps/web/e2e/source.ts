@@ -1,8 +1,12 @@
-/** A minimal Stremio stream addon for tests: one direct HTTP stream for Big
- * Buck Bunny (2008, CC BY 3.0, Blender Foundation). The file comes from
- * Wikimedia Commons once, is kept in e2e/.cache, and is served from here
- * with Range support, so playback runs through the real core and stream
- * server without a remote media host in every run. */
+/** A minimal Stremio stream addon for tests: direct HTTP streams of Big Buck
+ * Bunny (2008, CC BY 3.0, Blender Foundation). The file comes from Wikimedia
+ * Commons once, is kept in e2e/.cache, and is served from here with Range
+ * support, so playback runs through the real core and stream server without
+ * a remote media host in every run. The same file stands in for two Game of
+ * Thrones episodes: the web bridge has no torrent engine and the e2e cores
+ * no streaming service account, so Torrentio's rows are blocked
+ * (needsAccount) and these direct links are what plays, with no BitTorrent
+ * in any run. */
 
 import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -19,6 +23,8 @@ export const NAME = "Big.Buck.Bunny.2008.240p.WEB.VP9.webm";
 // A real addon names the release it serves; the stand-in film carries the
 // episode's name so the core's title and episode checks accept it.
 const EPISODE_NAME = "Game.of.Thrones.S01E05.Sample.240p.WEB.VP9.webm";
+// The resume episode gets two, so Versions has a pick and one row besides.
+const RESUME_NAMES = ["Game.of.Thrones.S02E03.Sample.240p.WEB.VP9-OPENFILM.webm", "Game.of.Thrones.S02E03.Sample.240p.WEB.VP9-BLENDER.webm"];
 
 /** Downloads the test film once (about 30 MB). */
 export async function ensureMedia(): Promise<void> {
@@ -35,6 +41,16 @@ export async function ensureMedia(): Promise<void> {
  * it, so a test can pick an episode that is not the resume target and see
  * playback and progress land on that episode. */
 export const SAMPLE_EPISODE = "tt0944947:1:5";
+/** Game of Thrones S2:E3, the shared core's resume target (`GOT.resume`). */
+const RESUME_EPISODE = "tt0944947:2:3";
+
+/** What each stream request lists, by path. */
+const LISTED: Record<string, string[]> = {
+  [`/stream/movie/${BBB_ID}.json`]: [NAME],
+  [`/stream/series/${SAMPLE_EPISODE}.json`]: [EPISODE_NAME],
+  [`/stream/series/${RESUME_EPISODE}.json`]: RESUME_NAMES,
+};
+const SERVED = new Set(Object.values(LISTED).flat().map((n) => `/media/${n}`));
 
 const manifest = {
   id: "dev.marquee.sample-source",
@@ -55,21 +71,19 @@ export function startSource(port: number): Promise<Server> {
     };
     const path = decodeURIComponent(req.url ?? "");
     if (path === "/manifest.json") return json(200, manifest);
-    const file = path === `/stream/movie/${BBB_ID}.json` ? NAME : path === `/stream/series/${SAMPLE_EPISODE}.json` ? EPISODE_NAME : null;
-    if (file) {
+    const files = LISTED[path];
+    if (files) {
       const size = statSync(BBB_FILE).size;
       return json(200, {
-        streams: [
-          {
-            name: "Sample Source\n240p",
-            title: file,
-            url: `http://127.0.0.1:${port}/media/${file}`,
-            behaviorHints: { filename: file, videoSize: size },
-          },
-        ],
+        streams: files.map((file) => ({
+          name: "Sample Source\n240p",
+          title: file,
+          url: `http://127.0.0.1:${port}/media/${file}`,
+          behaviorHints: { filename: file, videoSize: size },
+        })),
       });
     }
-    if (req.url === `/media/${NAME}` || req.url === `/media/${EPISODE_NAME}`) {
+    if (SERVED.has(req.url ?? "")) {
       const size = statSync(BBB_FILE).size;
       const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? "");
       const start = m?.[1] ? Number(m[1]) : 0;

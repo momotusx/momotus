@@ -1,10 +1,11 @@
 /** Smart stream choice on the web (plans/m13-stream-choice.md 3.7, 3.9,
  * 3.11, 4.3, 4.4). Settings > Stream choice writes to a fresh core of its
  * own (DEFAULTS_PORT; the suite runs one test at a time). Versions reads the
- * shared core's real lines and conditions. Until the core fills them
- * (phase 2 stubs), `blocked`, `note` and a measured speed are put into the
- * core's answers at the socket, and the writes they lead to are checked as
- * sent; playback is never opened. Shots go to e2e/shots/ at TV, desktop and
+ * shared core's real lines, conditions and blocked state (this build has no
+ * engine and no account, so a title only Torrentio lists is blocked). What
+ * the core cannot reach here (nothing plays on this device, a learning note,
+ * a measured speed) is put into its answers at the socket, and the writes
+ * they lead to are checked as sent; playback is never opened. Shots go to e2e/shots/ at TV, desktop and
  * phone sizes. */
 
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
@@ -22,6 +23,8 @@ const FORMS = {
 };
 const OUT = process.env.SHOTS_DIR ?? "e2e/shots";
 const GiB = 1024 ** 3;
+/** The Shawshank Redemption: only Torrentio lists it here. */
+const SHAWSHANK = "tt0111161";
 const errors: string[] = [];
 
 type Msg = Record<string, unknown> & { id?: number; op?: string; view?: string; sub?: number };
@@ -273,8 +276,9 @@ test.describe("Versions", () => {
     expect(page.url()).toBe(url);
   });
 
-  /** Every version as blocked for `reason`, as the core words it (3.11). */
-  const blockedAs = (reason: "needsAccount" | "nothingPlaysHere") => (s: VersionsSnapshot): VersionsSnapshot => {
+  /** Every version as blocked for `reason` (3.11), for a reason this build's
+   * core cannot reach on its own. */
+  const blockedAs = (reason: "nothingPlaysHere") => (s: VersionsSnapshot): VersionsSnapshot => {
     const rows = [...(s.recommended ? [s.recommended] : []), ...s.rows];
     return rows.length && s.done ? { ...s, recommended: null, rows: [], blocked: { reason, count: rows.length, rows } } : s;
   };
@@ -298,20 +302,33 @@ test.describe("Versions", () => {
     }
   });
 
-  test("blocked, needs an account: Versions, Title and the player say so, and lead to the account", async ({ browser }) => {
-    const page = await device(browser, "desktop", PORTS.bridge, { versions: blockedAs("needsAccount") });
-    await page.goto(path("desktop"));
+  test("blocked, needs an account (the core's own answer): words, Add an account and Show them, on Versions, Title and the player", async ({ browser }) => {
+    // Only Torrentio lists S1:E1, and this build has no engine and no
+    // account: the core blocks every row (no answer is changed here).
+    const page = await device(browser, "desktop", PORTS.bridge);
+    await page.goto(`/title/series/${GOT.id}/versions/${GOT.id}:1:1?form=desktop`);
     const card = page.locator(".pick .blocked");
-    await expect(card.locator("p")).toContainText("only through a streaming service account", { timeout: 60_000 });
-    await expect(page.locator('[data-f="versions:account"]')).toHaveText("Add an account");
-    await expect(page.locator('[data-f="versions:account"]')).toHaveAttribute("href", "/debrid");
+    await expect(card.locator("p")).toHaveText(
+      /^Marquee found \d+ versions?\. This version of the app plays them only through a streaming service account \(Real-Debrid, TorBox, AllDebrid or Premiumize\)\. Add one in Settings\.$/,
+      { timeout: 60_000 },
+    );
+    await expect(page.locator(".vstate .st").first()).toHaveText(/^\d+ versions?$/);
+    await expect(page.locator(".vstate .st").first()).not.toHaveText("0 versions");
+    const account = page.locator('[data-f="versions:account"]');
+    await expect(account).toHaveText("Add an account");
+    await expect(account).toHaveAttribute("href", "/debrid");
+    await expect(page.locator(".vrow")).toHaveCount(0);
     await shot(page, "stream-choice-account", "desktop");
-    // The title page's primary leads to the account, not to another source.
-    await page.goto(`/title/series/${GOT.id}?form=desktop`);
+    // Show them: the versions as they would rank with an account, each with its line.
+    await page.locator('[data-f="versions:show"]').click();
+    await expect(page.locator(".vrow .line").first()).toBeVisible();
+    await shot(page, "stream-choice-account-shown", "desktop");
+    // A film with only Torrentio versions: Title's primary leads to the account.
+    await page.goto(`/title/movie/${SHAWSHANK}?form=desktop`);
     await expect(page.locator('[data-f="title:addaccount"]')).toHaveText("Add an account", { timeout: 60_000 });
     await expect(page.locator(".vline")).toContainText("only through a streaming service account");
     // The player, opened straight (a deep link), says the same (no playback is opened).
-    await page.goto(`/play/series/${GOT.id}/${GOT.resume}?form=desktop`);
+    await page.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`);
     await expect(page.locator(".player-scr")).toContainText("only through a streaming service account", { timeout: 60_000 });
   });
 
