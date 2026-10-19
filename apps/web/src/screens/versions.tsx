@@ -249,10 +249,17 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                             </button>
                           }
                         >
-                          <A class="btn primary" href="/debrid" data-f="versions:account" data-autofocus>
-                            <KeyRound aria-hidden />
-                            {w().action}
-                          </A>
+                          <div class="acts">
+                            <A class="btn primary" href="/debrid" data-f="versions:account" data-autofocus>
+                              <KeyRound aria-hidden />
+                              {w().action}
+                            </A>
+                            {/* The versions as they would rank with an account. */}
+                            <button class="btn" data-f="versions:show" aria-expanded={showBlocked()} onClick={() => setShowBlocked(!showBlocked())}>
+                              <Eye aria-hidden />
+                              {choiceWords.blocked.showRows}
+                            </button>
+                          </div>
                         </Show>
                       </div>
                     );

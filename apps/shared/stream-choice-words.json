@@ -86,7 +86,8 @@
     "nothingPlaysHere": {
       "text": "Found {versions}, but none plays on this device.",
       "action": "Show them"
-    }
+    },
+    "showRows": "Show them"
   },
   "learned": {
     "size": {
