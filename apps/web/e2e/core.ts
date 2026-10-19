@@ -20,6 +20,8 @@ export const SYNC_PORTS = { relay: 17803 + shift, a: 17804 + shift, b: 17805 + s
 export const TRAKT_PORTS = { bridge: 17807 + shift, fake: 17808 + shift, plain: 17809 + shift };
 /** The default addons spec's own: a fresh core per walk, so the shared one never gets the defaults. */
 export const DEFAULTS_PORT = 17810 + shift;
+/** The subtitle notes spec's own: a core with one addon whose subtitle files fail. */
+export const NOTES_PORT = 17811 + shift;
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");

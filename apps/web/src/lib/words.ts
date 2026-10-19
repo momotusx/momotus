@@ -5,6 +5,7 @@ import type { Group } from "../core/generated/Group";
 import type { HiddenSummary } from "../core/generated/HiddenSummary";
 import type { HideReason } from "../core/generated/HideReason";
 import type { Reason } from "../core/generated/Reason";
+import type { SubtitleNote } from "../core/generated/SubtitleNote";
 import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
 import type { VersionStatus } from "../core/generated/VersionStatus";
@@ -89,6 +90,21 @@ export function languageName(code: string): string {
     // Not a language code: fall through.
   }
   return code.toUpperCase();
+}
+
+/** A subtitle source that gave nothing this time, as every app says it
+ * (plans/m13-turkcealtyazi.md 4.2). */
+export function subtitleNote({ source, problem }: SubtitleNote): string {
+  switch (problem) {
+    case "unreachable":
+      return `${source} did not answer. Try its subtitles again in a moment.`;
+    case "blocked":
+      return `${source} is turning requests away. Marquee will try again in a few minutes.`;
+    case "changed":
+      return `${source} changed its pages, so Marquee cannot read them. An update will fix this.`;
+    case "trackFailed":
+      return `A subtitle file from ${source} could not be read. Pick another one.`;
+  }
 }
 
 /** Continue Watching tiles (in progress, or Next Up) carry their one caption

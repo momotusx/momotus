@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { hiddenSummary, languageName, pairingProblem, plainAddress, reasonText, serverHost, statusText } from "./words";
+import { hiddenSummary, languageName, pairingProblem, plainAddress, reasonText, serverHost, statusText, subtitleNote } from "./words";
 
 test("reasons read as plain sentences", () => {
   expect(reasonText("readyNow", { kind: "ready", service: "Real-Debrid" })).toBe("Ready now, cached on Real-Debrid");
@@ -36,4 +36,12 @@ test("pairing keeps the core's own reasons and never shows an address", () => {
   expect(plainAddress("https://relay.example")).toBe(true);
   expect(plainAddress("https://user:secret@relay.example")).toBe(false);
   expect(plainAddress("not an address")).toBe(false);
+});
+
+test("a subtitle note names its source and what to do", () => {
+  const say = (problem: Parameters<typeof subtitleNote>[0]["problem"]) => subtitleNote({ source: "OpenSubtitles v3", problem });
+  expect(say("unreachable")).toBe("OpenSubtitles v3 did not answer. Try its subtitles again in a moment.");
+  expect(say("blocked")).toBe("OpenSubtitles v3 is turning requests away. Marquee will try again in a few minutes.");
+  expect(say("changed")).toBe("OpenSubtitles v3 changed its pages, so Marquee cannot read them. An update will fix this.");
+  expect(say("trackFailed")).toBe("A subtitle file from OpenSubtitles v3 could not be read. Pick another one.");
 });

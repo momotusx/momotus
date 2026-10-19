@@ -26,7 +26,7 @@ import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, sourceStart } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
-import { languageName, qualityCell, qualityText } from "../lib/words";
+import { languageName, qualityCell, qualityText, subtitleNote } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -210,6 +210,23 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     setTrack(sub);
     engine.setSubtitle(sub);
   };
+
+  // A file the core could not serve plays as an empty track and comes back
+  // as a note. Only the picked track is fetched, so a new note is about it:
+  // say so, and turn it off when it left the list.
+  let notesSeen = 0;
+  createEffect(() => {
+    const notes = snap()?.subtitleNotes ?? [];
+    const fresh = notes.length > notesSeen ? notes[notes.length - 1] : undefined;
+    notesSeen = notes.length;
+    const picked = untrack(track);
+    if (!fresh || !picked) return;
+    setSubError(subtitleNote(fresh));
+    if (!snap()?.subtitles.some((t) => t.url === picked.url)) {
+      setTrack(null);
+      engine.setSubtitle(null);
+    }
+  });
 
   const remaining = () => Math.max(0, duration() - time());
   const endsAt = () => {
@@ -673,6 +690,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             <Show when={snap()?.subtitlesPending}>
               <p class="opt-note">Still asking subtitle addons</p>
             </Show>
+            <For each={snap()?.subtitleNotes ?? []}>{(n) => <p class="opt-note">{subtitleNote(n)}</p>}</For>
           </div>
         </aside>
       </Show>

@@ -15,7 +15,7 @@ const BBB_REMOTE =
   "https://upload.wikimedia.org/wikipedia/commons/transcoded/c/c0/Big_Buck_Bunny_4K.webm/Big_Buck_Bunny_4K.webm.240p.vp9.webm";
 const CACHE = fileURLToPath(new URL("./.cache/", import.meta.url));
 export const BBB_FILE = `${CACHE}bbb-240p-vp9.webm`;
-const NAME = "Big.Buck.Bunny.2008.240p.WEB.VP9.webm";
+export const NAME = "Big.Buck.Bunny.2008.240p.WEB.VP9.webm";
 // A real addon names the release it serves; the stand-in film carries the
 // episode's name so the core's title and episode checks accept it.
 const EPISODE_NAME = "Game.of.Thrones.S01E05.Sample.240p.WEB.VP9.webm";
