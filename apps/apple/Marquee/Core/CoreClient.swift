@@ -38,8 +38,11 @@ final class CoreClient {
     @ObservationIgnored private var queued: [String] = []
     /// A profile removed on another device (the session coordinator listens).
     @ObservationIgnored var onProfileGone: ((String) -> Void)?
+    @ObservationIgnored private let directory: URL
 
-    init() {
+    /// Opens the core in the app's data directory; tests pass a directory of their own.
+    init(directory: URL = CoreClient.dataDirectory()) {
+        self.directory = directory
         openCore()
     }
 
@@ -74,7 +77,7 @@ final class CoreClient {
             Task { @MainActor in self?.onProfileGone?(profile) }
         }
         (self.router, core, queued, failure) = (router, nil, [], nil)
-        let dir = Self.dataDirectory()
+        let dir = directory
         // Started here, not from a main-actor task, so it runs while the first
         // frame is built rather than after it.
         let opening = Task.detached(priority: .userInitiated) {
