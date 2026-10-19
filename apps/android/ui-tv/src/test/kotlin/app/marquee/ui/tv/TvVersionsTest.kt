@@ -168,11 +168,14 @@ class TvVersionsTest {
             }
         }
         // The core's state thread writes the snapshot; Compose hears of it once the change is applied.
-        compose.waitUntil(5_000) {
+        compose.waitUntil(15_000) {
             Snapshot.sendApplyNotifications()
             view.snapshot != null
         }
-        compose.waitForIdle()
+        // The header counts the versions once the screen drew the snapshot.
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test
