@@ -4,44 +4,44 @@ import Observation
 /// The recommended addons (plans/m13-default-addons.md sections 6 and 7):
 /// the core holds the nine and installs them; the app carries no addon links.
 enum DefaultsRules {
-    /// What the step lists: every default (first run, after an import, the
-    /// setup check), or only the ones missing from the list (the Home card).
+    /// What the step lists: every default (first run, after an import), or
+    /// only the ones missing from the list (the Home card's Review).
     enum Scope { case all, missing }
 
-    /// Onboarding's groups, in order, with their headings.
+    /// The groups, in order, with their headings.
     static let groups: [(id: String, title: String)] = [
         ("catalogs", "Catalogs and details"), ("streams", "Streams"), ("subtitles", "Subtitles"), ("lists", "Lists"),
     ]
     static let title = "Recommended addons"
     static let lead = "Marquee starts with these. Turn off any you do not want; you can change this later in Settings."
-    static let catalogKey = "cinemeta"
+    static let reviewLead = "Turn off any you do not want; you can change this later in Settings."
+    static let settingsLead = "The addons Marquee recommends. A switch turned on adds the addon; Addons lists everything you have."
+    static let settingsDetail = "Catalogs, streams, subtitles and lists Marquee recommends, a switch each."
     static let catalogWarning = "Home and search need a catalog addon."
 
     static func shown(_ list: [DefaultAddonInfo], scope: Scope) -> [DefaultAddonInfo] {
         scope == .all ? list : list.filter { $0.installed == .absent }
     }
 
-    /// A default already in the list and on has no switch: it stays as it is.
-    static func hasSwitch(_ addon: DefaultAddonInfo) -> Bool { addon.installed != .on }
+    /// Only a missing default has a switch, on until turned off; one the
+    /// profile has keeps its own state (Settings switches it).
+    static func hasSwitch(_ addon: DefaultAddonInfo) -> Bool { addon.installed == .absent }
 
-    /// Where a switch starts: a missing default on, one in the list but off stays off.
-    static func starts(_ addon: DefaultAddonInfo) -> Bool { addon.installed != .off }
-
-    /// The word in place of a switch.
-    static func presentWord(imported: Bool) -> String { imported ? "From Stremio" : "Added" }
-
-    /// Every default's choice for `installDefaults`, which takes a key left
-    /// out as on: a switch the step shows sends its position, and every other
-    /// default what the list has, so one in the list and off stays off.
-    static func choices(_ list: [DefaultAddonInfo], scope: Scope, moved: [String: Bool]) -> [DefaultChoice] {
-        let shown = Set(shown(list, scope: scope).filter(hasSwitch).map(\.key))
-        return list.map { addon in
-            DefaultChoice(key: addon.key, on: shown.contains(addon.key) ? moved[addon.key] ?? starts(addon) : addon.installed != .off)
-        }
+    /// The words in place of a switch.
+    static func presentWord(_ addon: DefaultAddonInfo, imported: Bool) -> String {
+        imported ? "From Stremio" : addon.installed == .on ? "Installed" : "Installed, off"
     }
 
-    static func warns(_ choices: [DefaultChoice]) -> Bool {
-        choices.first { $0.key == catalogKey }?.on == false
+    /// What Continue sends: exactly the rows with a switch, since the core
+    /// touches only the keys it is sent (a new profile names all nine; an
+    /// empty list writes nothing).
+    static func choices(_ list: [DefaultAddonInfo], moved: [String: Bool]) -> [DefaultChoice] {
+        list.filter(hasSwitch).map { DefaultChoice(key: $0.key, on: moved[$0.key] ?? true) }
+    }
+
+    /// The switches would leave the profile without any catalog addon.
+    static func warns(_ list: [DefaultAddonInfo], moved: [String: Bool], hasCatalog: Bool) -> Bool {
+        !hasCatalog && !list.contains { $0.group == "catalogs" && ($0.installed == .absent ? moved[$0.key] ?? true : $0.installed == .on) }
     }
 
     /// The Home card's names: the defaults the profile misses, once per list
@@ -53,18 +53,20 @@ enum DefaultsRules {
         return names.isEmpty ? nil : names
     }
 
-    /// The setup check's fix for a line with nothing on.
-    enum Fix: Equatable {
-        /// The group's default is in the list but off, and none is missing.
-        case turnOn(key: String, name: String)
-        /// Some default is missing: installing appends every missing one, so the user sees their switches first.
-        case review
+    /// "Torrentio, Trakt and OpenSubtitles v3".
+    static func namesLine(_ names: [String]) -> String {
+        guard let last = names.last, names.count > 1 else { return names.joined() }
+        return names.dropLast().joined(separator: ", ") + " and " + last
     }
 
-    static func fix(group: String, in list: DefaultAddons?) -> Fix? {
-        guard let addons = list?.addons else { return nil }
-        if addons.contains(where: { $0.installed == .absent }) { return .review }
-        return addons.first { $0.group == group && $0.installed == .off }.map { .turnOn(key: $0.key, name: $0.name) }
+    /// The setup check's fix for a line with nothing on: its recommended
+    /// addon (named by key), when it is missing or off.
+    static func fix(_ key: String, in list: DefaultAddons?) -> DefaultAddonInfo? {
+        list?.addons.first { $0.key == key && $0.installed != .on }
+    }
+
+    static func fixWords(_ addon: DefaultAddonInfo) -> String {
+        addon.installed == .absent ? "Add \(addon.name)" : "Turn \(addon.name) on"
     }
 }
 
@@ -76,15 +78,15 @@ struct DefaultChoice: Equatable, Sendable {
     var fields: [String: any Sendable] { ["key": key, "on": on] }
 }
 
-/// The recommended addons step: the list from the core, the switches the
-/// user moved, and Continue.
+/// The recommended addons: the list from the core, the switches the user
+/// moved, and Continue; Settings and the setup check send one key at a time.
 @MainActor @Observable
 final class DefaultsStep {
     let scope: DefaultsRules.Scope
     private(set) var list: DefaultAddons?
     private(set) var failure: String?
     private(set) var busy = false
-    /// Switches the user moved, by key; the rest sit where they start.
+    /// Switches the user moved, by key; the rest are on.
     private(set) var moved: [String: Bool] = [:]
     @ObservationIgnored let core: CoreClient
 
@@ -94,9 +96,9 @@ final class DefaultsStep {
     }
 
     var rows: [DefaultAddonInfo] { DefaultsRules.shown(list?.addons ?? [], scope: scope) }
-    var choices: [DefaultChoice] { DefaultsRules.choices(list?.addons ?? [], scope: scope, moved: moved) }
+    var choices: [DefaultChoice] { DefaultsRules.choices(rows, moved: moved) }
 
-    func isOn(_ addon: DefaultAddonInfo) -> Bool { moved[addon.key] ?? DefaultsRules.starts(addon) }
+    func isOn(_ addon: DefaultAddonInfo) -> Bool { moved[addon.key] ?? true }
 
     func flip(_ addon: DefaultAddonInfo) {
         moved[addon.key] = !isOn(addon)
@@ -112,21 +114,30 @@ final class DefaultsStep {
         }
     }
 
-    /// Continue: every switch in one write. A list not read yet is read
-    /// first, so a default in the list keeps its state. The profile has then
-    /// seen this list: one removed later brings no card. True once installed.
+    /// Continue: every switch in one write (the core then counts this list
+    /// as seen, so a default removed later brings no card). A list not read
+    /// yet is read first, so the switches are never sent empty. True once installed.
     @discardableResult
     func install() async -> Bool {
         guard !busy else { return false }
         busy = true
         defer { busy = false }
         if list == nil { await load() }
-        guard let version = list?.version else { return false }
+        guard list != nil else { return false }
+        return await send(choices)
+    }
+
+    /// One default added, or switched where it is (the setup check's fix, Settings).
+    func set(_ key: String, on: Bool) async -> Bool {
+        guard await send([DefaultChoice(key: key, on: on)]) else { return false }
+        await load()
+        return true
+    }
+
+    private func send(_ choices: [DefaultChoice]) async -> Bool {
         do {
             try await core.perform("installDefaults", ["choices": choices.map(\.fields)])
             failure = nil
-            // ponytail: a failed write only means the card may show once.
-            try? await core.perform("setPrefs", ["patch": ["defaultsSeen": version]])
             return true
         } catch is CancellationError {
             return false
@@ -134,13 +145,6 @@ final class DefaultsStep {
             failure = error.localizedDescription
             return false
         }
-    }
-
-    /// The setup check's one-press fix: that default on, the rest as they are.
-    func turnOn(_ key: String) async -> Bool {
-        await load()
-        moved = [key: true]
-        return await install()
     }
 }
 
@@ -187,10 +191,13 @@ final class DefaultsOffer {
 /// refused by the core (`tokenInLink`) until the user says it is theirs.
 @MainActor @Observable
 final class LinkInstall {
-    static let tokenWarning = "This link carries a sign-in in its settings, maybe someone else's. Add it only if it is yours."
-    static let tokenConfirm = "It is mine, add it"
+    static let tokenWarning = "This link carries a sign-in: a token or a key. Whoever has it uses that account. Install it only if it is yours."
+    static let tokenConfirm = "It is mine, install"
 
-    var link = ""
+    /// Editing the link drops a refusal: the warning was about the old one.
+    var link = "" {
+        didSet { if link != oldValue { refused = nil } }
+    }
     private(set) var installing = false
     private(set) var problem: String?
     /// The refused link, waiting for the user's word. May hold keys: never show or log it.

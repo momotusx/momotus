@@ -59,6 +59,12 @@ struct SettingsScreen: View {
                 }
                 section("Sources").padding(.top, Theme.Space.s)
                 NavigationLink {
+                    RecommendedAddonsPage(core: core, scope: .all)
+                } label: {
+                    SettingsRow(symbol: "sparkle", title: DefaultsRules.title, detail: DefaultsRules.settingsDetail)
+                }
+                .buttonStyle(.row)
+                NavigationLink {
                     FindAddonsScreen(core: core)
                 } label: {
                     SettingsRow(symbol: "package-search", title: FindAddonsWords.title, detail: FindAddonsWords.lede)

@@ -18,32 +18,33 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     Dictionary(uniqueKeysWithValues: choices.map { ($0.key, $0.on) })
 }
 
-@Test func everyDefaultIsSentAndOneInTheListKeepsItsState() {
-    // Missing ones only (the card): the off one is not shown and stays off; a key left out would mean on.
-    let missing = DefaultsRules.choices(mixed, scope: .missing, moved: [:])
-    #expect(missing.count == mixed.count)
-    #expect(on(missing) == ["cinemeta": false, "torrentio": true, "subsense": true, "trakt": true])
-    // Every one (first run, the check): the off one has a switch that starts off.
-    #expect(on(DefaultsRules.choices(mixed, scope: .all, moved: [:]))["cinemeta"] == false)
-    #expect(on(DefaultsRules.choices(mixed, scope: .all, moved: ["cinemeta": true, "trakt": false])) == [
-        "cinemeta": true, "torrentio": true, "subsense": true, "trakt": false,
-    ])
-    // A switch moved on a row the step does not show changes nothing.
-    #expect(on(DefaultsRules.choices(mixed, scope: .missing, moved: ["cinemeta": true]))["cinemeta"] == false)
-}
-
-@Test func onlyMissingOrOffDefaultsHaveASwitch() {
+@Test func continueNamesExactlyTheRowsWithASwitch() {
+    // Only a missing default has a switch: one the profile has (on or off) is left out and keeps its state.
+    #expect(on(DefaultsRules.choices(mixed, moved: [:])) == ["torrentio": true, "trakt": true])
+    #expect(on(DefaultsRules.choices(mixed, moved: ["trakt": false, "cinemeta": true])) == ["torrentio": true, "trakt": false])
+    // A new profile has none: all nine are named (an empty list would write nothing).
+    let new = mixed.map { addon($0.key, .absent, group: $0.group) }
+    #expect(on(DefaultsRules.choices(new, moved: ["subsense": false])) == ["cinemeta": true, "torrentio": true, "subsense": false, "trakt": true])
+    // The card's Review shows the missing ones only.
     #expect(DefaultsRules.shown(mixed, scope: .missing).map(\.key) == ["torrentio", "trakt"])
     #expect(DefaultsRules.shown(mixed, scope: .all).count == 4)
-    #expect(mixed.map(DefaultsRules.hasSwitch) == [true, true, false, true])
-    #expect(mixed.map(DefaultsRules.starts) == [false, true, true, true])
-    #expect(DefaultsRules.presentWord(imported: true) == "From Stremio")
-    #expect(DefaultsRules.presentWord(imported: false) == "Added")
 }
 
-@Test func turningTheCatalogOffWarns() {
-    #expect(DefaultsRules.warns(DefaultsRules.choices(mixed, scope: .all, moved: [:])))
-    #expect(!DefaultsRules.warns(DefaultsRules.choices(mixed, scope: .all, moved: ["cinemeta": true])))
+@Test func aDefaultTheProfileHasSaysSoInsteadOfASwitch() {
+    #expect(mixed.map(DefaultsRules.hasSwitch) == [false, true, false, true])
+    #expect(DefaultsRules.presentWord(mixed[2], imported: true) == "From Stremio")
+    #expect(DefaultsRules.presentWord(mixed[2], imported: false) == "Installed")
+    #expect(DefaultsRules.presentWord(mixed[0], imported: false) == "Installed, off")
+}
+
+@Test func switchingEveryCatalogOffWarns() {
+    let list = [addon("cinemeta", .absent, group: "catalogs"), addon("kitsu", .absent, group: "catalogs"), addon("torrentio", .absent, group: "streams")]
+    #expect(!DefaultsRules.warns(list, moved: ["cinemeta": false], hasCatalog: false))
+    #expect(DefaultsRules.warns(list, moved: ["cinemeta": false, "kitsu": false], hasCatalog: false))
+    // A catalog already on (an import brought one) needs no warning.
+    #expect(!DefaultsRules.warns(list, moved: ["cinemeta": false, "kitsu": false], hasCatalog: true))
+    #expect(!DefaultsRules.warns([addon("cinemeta", .on, group: "catalogs")], moved: [:], hasCatalog: false))
+    #expect(DefaultsRules.warns([addon("cinemeta", .off, group: "catalogs")], moved: [:], hasCatalog: false))
 }
 
 @Test func theCardShowsOncePerVersionAndNeverOnKidsOrAtFirstRun() {
@@ -56,16 +57,18 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     #expect(DefaultsRules.cardNames(list, seen: nil, kids: false, fresh: false) == nil)
     #expect(DefaultsRules.cardNames(nil, seen: 0, kids: false, fresh: false) == nil)
     #expect(DefaultsRules.cardNames(DefaultAddons(version: 1, addons: [mixed[0], mixed[2]]), seen: 0, kids: false, fresh: false) == nil)
+    #expect(DefaultsRules.namesLine(["Torrentio", "Trakt", "OpenSubtitles v3"]) == "Torrentio, Trakt and OpenSubtitles v3")
+    #expect(DefaultsRules.namesLine(["Trakt"]) == "Trakt")
 }
 
-@Test func theChecksFixReviewsWhenOneIsMissingElseTurnsTheGroupsOn() {
-    // Installing appends every missing default: the user sees their switches first.
-    #expect(DefaultsRules.fix(group: "catalogs", in: DefaultAddons(version: 1, addons: mixed)) == .review)
-    let present = [addon("cinemeta", .off, group: "catalogs"), addon("subsense", .on, group: "subtitles"), addon("opensubtitles", .off, group: "subtitles")]
-    #expect(DefaultsRules.fix(group: "catalogs", in: DefaultAddons(version: 1, addons: present)) == .turnOn(key: "cinemeta", name: "Cinemeta"))
-    #expect(DefaultsRules.fix(group: "subtitles", in: DefaultAddons(version: 1, addons: present)) == .turnOn(key: "opensubtitles", name: "Opensubtitles"))
-    #expect(DefaultsRules.fix(group: "streams", in: DefaultAddons(version: 1, addons: present)) == nil)
-    #expect(DefaultsRules.fix(group: "catalogs", in: nil) == nil)
+@Test func theChecksFixIsItsRecommendedAddonWhenMissingOrOff() {
+    let list = DefaultAddons(version: 1, addons: mixed)
+    #expect(DefaultsRules.fix("cinemeta", in: list)?.installed == .off)
+    #expect(DefaultsRules.fix("torrentio", in: list)?.installed == .absent)
+    #expect(DefaultsRules.fix("subsense", in: list) == nil)
+    #expect(DefaultsRules.fix("cinemeta", in: nil) == nil)
+    #expect(DefaultsRules.fixWords(mixed[0]) == "Turn Cinemeta on")
+    #expect(DefaultsRules.fixWords(mixed[1]) == "Add Torrentio")
 }
 
 @Test func newFieldsDecode() throws {
@@ -81,6 +84,13 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     private func installed(_ core: CoreClient) async throws -> [String: DefaultAddonInfo.Installed] {
         let list = try await core.call("defaultAddons", as: DefaultAddons.self)
         return Dictionary(uniqueKeysWithValues: list.addons.map { ($0.key, $0.installed) })
+    }
+
+    /// A profile from an older device: the nine installed, never offered (the core counts installDefaults as seen).
+    private func older(_ core: CoreClient) async throws {
+        let list = try await core.call("defaultAddons", as: DefaultAddons.self)
+        try await core.perform("installDefaults", ["choices": list.addons.map { DefaultChoice(key: $0.key, on: true).fields }])
+        try await core.perform("setPrefs", ["patch": ["defaultsSeen": 0]])
     }
 
     /// The installed addon a default became, by its name in the addons view.
@@ -99,7 +109,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         let step = DefaultsStep(core: core.client, scope: .all)
         await step.load()
         #expect(step.rows.count == 9)
-        #expect(step.rows.allSatisfy { step.isOn($0) })
+        #expect(step.rows.allSatisfy { DefaultsRules.hasSwitch($0) && step.isOn($0) })
         for row in step.rows where ["torrentio", "trakt"].contains(row.key) { step.flip(row) }
         #expect(await step.install())
         let state = try await installed(core.client)
@@ -115,10 +125,10 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(offer.names(kids: false) == nil)
     }
 
-    @Test func browseFirstInstallsAllOnWithoutReadingTheListFirst() async throws {
+    @Test func continueBeforeTheListIsReadStillNamesAllNine() async throws {
         let core = RealCore()
         #expect(await core.ready())
-        // Browse first sends Continue on a step that never loaded.
+        // Continue pressed before the list arrived.
         #expect(await DefaultsStep(core: core.client, scope: .all).install())
         #expect(try await installed(core.client).values.allSatisfy { $0 == .on })
     }
@@ -128,7 +138,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(await core.ready())
         let offer = DefaultsOffer(core: core.client)
         offer.start()
-        try await core.client.perform("installDefaults", ["choices": [[String: any Sendable]]()])
+        try await older(core.client)
         let torrentio = try #require(await url("Torrentio", offer))
         let cinemeta = try #require(await url("Cinemeta", offer))
         try await core.client.perform("removeAddon", ["url": torrentio])
@@ -153,7 +163,7 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(await core.ready())
         let offer = DefaultsOffer(core: core.client)
         offer.start()
-        try await core.client.perform("installDefaults", ["choices": [[String: any Sendable]]()])
+        try await older(core.client)
         try await core.client.perform("removeAddon", ["url": try #require(await url("Trakt Tv", offer))])
         #expect(await eventually { offer.addons.snapshot?.addons.count == 8 && offer.prefs.snapshot != nil })
         await offer.refresh()
@@ -169,18 +179,29 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(await core.ready())
         let offer = DefaultsOffer(core: core.client)
         offer.start()
-        try await core.client.perform("installDefaults", ["choices": [[String: any Sendable]]()])
+        try await older(core.client)
         for name in ["Cinemeta", "OpenSubtitles v3"] {
             try await core.client.perform("setAddonEnabled", ["url": try #require(await url(name, offer)), "enabled": false])
         }
+        try await core.client.perform("removeAddon", ["url": try #require(await url("Torrentio", offer))])
         let fixer = DefaultsStep(core: core.client, scope: .all)
         await fixer.load()
-        #expect(DefaultsRules.fix(group: "catalogs", in: fixer.list) == .turnOn(key: "cinemeta", name: "Cinemeta"))
-        #expect(await fixer.turnOn("cinemeta"))
-        let state = try await installed(core.client)
+        #expect(DefaultsRules.fix("cinemeta", in: fixer.list)?.installed == .off)
+        #expect(await fixer.set("cinemeta", on: true))
+        var state = try await installed(core.client)
         #expect(state["cinemeta"] == .on)
         #expect(state["opensubtitles"] == .off)
+        #expect(state["torrentio"] == .absent)
+        // A missing one is added by itself.
+        #expect(await fixer.set("torrentio", on: true))
+        state = try await installed(core.client)
+        #expect(state["torrentio"] == .on)
+        #expect(state["opensubtitles"] == .off)
         #expect(state.filter { $0.value == .on }.count == 8)
+        // Settings switches one where it is, and reads the list again.
+        #expect(await fixer.set("trakt", on: false))
+        #expect(fixer.list?.addons.first { $0.key == "trakt" }?.installed == .off)
+        #expect(try await installed(core.client).filter { $0.value == .on }.count == 7)
     }
 
     @Test func aLinkWithASignInWaitsForTheUsersWord() async throws {
@@ -193,6 +214,12 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
         #expect(install.refused == link)
         #expect(install.problem == nil)
         #expect(install.link == link)
+        // Editing the link drops the warning; the same link asks again.
+        install.link = link + " "
+        #expect(install.refused == nil)
+        install.link = link
+        await install.install()
+        #expect(install.refused == link)
         // Its word given: sent again acknowledged, so the core goes on to fetch it (and this host does not exist).
         await install.install(acknowledged: true)
         #expect(install.refused == nil)

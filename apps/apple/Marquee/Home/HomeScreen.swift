@@ -73,7 +73,9 @@ struct HomeScreen: View {
             PlayerScreen(route: route, versions: heroVersions, core: core)
         }
         .navigationDestination(isPresented: $showSources) { AddonsPage(core: core, sourcesOnly: true) }
-        .navigationDestination(isPresented: $reviewing) { RecommendedAddonsPage(core: core) }
+        .navigationDestination(isPresented: $reviewing) {
+            RecommendedAddonsPage(core: core, scope: .missing, hasCatalog: model.offer.addons.snapshot?.addons.contains { $0.enabled && $0.provides.contains("catalog") } == true)
+        }
         .task(id: model.offer.addons.taskId) { model.offer.start() }
         .task(id: model.offer.addons.snapshot) { await model.offer.refresh() }
         // First run: the recommended addons before anything else.
@@ -274,7 +276,7 @@ private struct RecommendedCard: View {
                 .display(Theme.type.title3)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
-            Text(names.joined(separator: ", "))
+            Text(DefaultsRules.namesLine(names))
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)

@@ -5,8 +5,9 @@ import SwiftUI
 /// Stremio, Start fresh, I already use Marquee), then the recommended addons
 /// with a switch each (plans/m13-default-addons.md 6), then the setup check,
 /// where every line has a dot, a word and, when something is missing, its
-/// fix. Start fresh and a finished import lead to the addons; joining never
-/// does. Settings opens the check step alone as a page.
+/// fix. Start fresh, Browse first on a new profile and a finished import
+/// lead to the addons; joining never does. Settings opens the check step
+/// alone as a page.
 struct OnboardingScreen: View {
     enum Step { case doors, defaults, check }
 
@@ -19,10 +20,10 @@ struct OnboardingScreen: View {
     @State private var defaults: DefaultsStep
     /// The defaults the check's fixes read, again whenever the list changes.
     @State private var fixer: DefaultsStep
-    /// Where Back on the addons step goes: the doors, or the check that opened it.
-    @State private var defaultsBack = Step.doors
     /// The addons step follows a Stremio import: defaults it brought say so.
     @State private var imported = false
+    /// Browse first passed through the addons step: Continue goes Home.
+    @State private var thenHome = false
     @State private var pingMs: Int?
     @State private var pinged = false
     @State private var online = true
@@ -68,7 +69,7 @@ struct OnboardingScreen: View {
             ImportScreen(core: core) {
                 showImport = false
                 imported = true
-                openDefaults(from: .doors)
+                openDefaults()
             }
         }
         // A join is the way in: Done goes Home, as the other doors end.
@@ -91,7 +92,7 @@ struct OnboardingScreen: View {
                 Wordmark(size: 22)
                 Spacer()
                 if let close {
-                    Button("Browse first") { Task { await browseFirst(close) } }
+                    Button("Browse first") { browseFirst(close) }
                         .buttonStyle(.textLink)
                         .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.text)
@@ -109,8 +110,8 @@ struct OnboardingScreen: View {
                     Door(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
                 }
                 .focused($firstDoor)
-                Button { openDefaults(from: .doors) } label: {
-                    Door(symbol: "sparkle", title: "Start fresh", text: "Begin with the recommended addons for catalogs, streams and subtitles.")
+                Button { openDefaults() } label: {
+                    Door(symbol: "sparkle", title: "Start fresh", text: "Pick from the recommended addons, then browse and play.")
                 }
                 if !sync.joined {
                     Button { showPairing = true } label: {
@@ -136,7 +137,7 @@ struct OnboardingScreen: View {
     private var defaultsStep: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             stepHeading(DefaultsRules.title, DefaultsRules.lead)
-            RecommendedAddons(model: defaults, imported: imported)
+            RecommendedAddons(model: defaults, imported: imported, hasCatalog: !names("catalog").isEmpty)
             #if !os(tvOS)
             // TV adds more from Settings: typing a link with a remote is no first step.
             VStack(alignment: .leading, spacing: Theme.Space.s) {
@@ -150,10 +151,13 @@ struct OnboardingScreen: View {
             .padding(.top, Theme.Space.s)
             #endif
             HStack {
-                Button("Back") { step = defaultsBack }.buttonStyle(PillButtonStyle())
+                Button("Back") { step = .doors }.buttonStyle(PillButtonStyle())
                 Spacer()
                 Button(defaults.busy ? "Adding" : "Continue") {
-                    Task { if await defaults.install() { step = .check } }
+                    Task {
+                        guard await defaults.install() else { return }
+                        if thenHome, let close { close() } else { step = .check }
+                    }
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .disabled(defaults.busy)
@@ -238,14 +242,14 @@ struct OnboardingScreen: View {
             Check(label: "Display", tone: .ok, text: DeviceCaps.displayWords),
             Check(
                 label: "Catalogs", tone: catalogs.isEmpty ? .idle : .ok, text: catalogs.isEmpty ? "None yet" : catalogs.joined(separator: ", "),
-                fix: catalogs.isEmpty ? fix("catalogs") : nil),
+                fix: catalogs.isEmpty ? fix("cinemeta") : nil),
             Check(
                 label: "Sources", tone: sources.isEmpty ? .idle : .ok,
                 text: sources.isEmpty ? "None yet: titles cannot play" : sources.joined(separator: ", "),
-                fix: sources.isEmpty ? fix("streams") : nil),
+                fix: sources.isEmpty ? fix("torrentio") : nil),
             Check(
                 label: "Subtitles", tone: subtitles.isEmpty ? .idle : .ok, text: subtitles.isEmpty ? "None yet" : subtitles.joined(separator: ", "),
-                fix: subtitles.isEmpty ? fix("subtitles") : nil),
+                fix: subtitles.isEmpty ? fix("opensubtitles") : nil),
         ]
     }
 
@@ -253,44 +257,36 @@ struct OnboardingScreen: View {
         (addons.snapshot?.addons ?? []).filter { $0.enabled && $0.provides.contains(kind) }.map(\.name)
     }
 
-    /// A missing line's fix from the recommended addons: the group's default
-    /// turned on in one press, or the addons step when some are missing.
-    private func fix(_ group: String) -> (label: String, run: () -> Void)? {
-        switch DefaultsRules.fix(group: group, in: fixer.list) {
-        case .turnOn(let key, let name)?:
-            return ("Turn \(name) on", { Task { await turnOn(key, name) } })
-        case .review?:
-            return (DefaultsRules.title, { openDefaults(from: .check) })
-        case nil:
-            return nil
-        }
+    /// A missing line's fix: its recommended addon, added or turned on in
+    /// one press, and nothing else.
+    private func fix(_ key: String) -> (label: String, run: () -> Void)? {
+        guard let addon = DefaultsRules.fix(key, in: fixer.list) else { return nil }
+        let words = DefaultsRules.fixWords(addon)
+        return (words, { Task { await turnOn(addon, words) } })
     }
 
-    private func turnOn(_ key: String, _ name: String) async {
+    private func turnOn(_ addon: DefaultAddonInfo, _ words: String) async {
         guard busy == nil else { return }
-        busy = key
+        busy = addon.key
         note = nil
         defer { busy = nil }
-        note = await fixer.turnOn(key) ? (true, "Turned \(name) on") : (false, "Could not turn \(name) on: \(fixer.failure ?? "unknown error")")
+        let added = addon.installed == .absent
+        note = await fixer.set(addon.key, on: true)
+            ? (true, added ? "Added \(addon.name)" : "Turned \(addon.name) on")
+            : (false, "\(words) did not work: \(fixer.failure ?? "unknown error")")
     }
 
-    /// The addons step with every switch where it starts.
-    private func openDefaults(from back: Step) {
-        defaultsBack = back
+    /// The addons step with every switch on.
+    private func openDefaults(thenHome: Bool = false) {
+        self.thenHome = thenHome
         defaults = DefaultsStep(core: core, scope: .all)
         step = .defaults
     }
 
-    /// Browse first: a new profile still gets the recommended addons, all on;
-    /// one that has a list keeps it as it is.
-    private func browseFirst(_ close: () -> Void) async {
-        if addons.snapshot?.fresh == true {
-            guard await defaults.install() else {
-                note = (false, "Could not add the recommended addons: \(defaults.failure ?? "unknown error")")
-                return
-            }
-        }
-        close()
+    /// Browse first: a new profile still passes the switches (nothing is
+    /// installed unasked) and then goes Home; one with a list goes Home.
+    private func browseFirst(_ close: () -> Void) {
+        if addons.snapshot?.fresh == true { openDefaults(thenHome: true) } else { close() }
     }
 
     /// Liveness from the core itself, every few seconds while this screen is open.
@@ -313,12 +309,16 @@ struct OnboardingScreen: View {
     }
 }
 
-/// The recommended addons grouped, each with its line and a switch; one
-/// already in the list and on says so instead. Onboarding and the Home
-/// card's Review show it.
+/// The recommended addons grouped, each with its line. In the step a
+/// missing one has a switch, on until turned off, and one the profile has
+/// says so; in Settings every one is a switch that acts at once.
 struct RecommendedAddons: View {
     let model: DefaultsStep
     var imported = false
+    /// An addon on already brings a catalog: turning the recommended ones off warns nothing.
+    var hasCatalog = false
+    /// Settings: each switch adds or switches its addon at once.
+    var settings = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -340,12 +340,11 @@ struct RecommendedAddons: View {
                             .tracking(1.6)
                             .foregroundStyle(Theme.Palette.muted)
                             .accessibilityAddTraits(.isHeader)
-                        ForEach(rows) { addon in
-                            row(addon)
-                            // Under the catalog's own row, where the switch was moved.
-                            if addon.key == DefaultsRules.catalogKey, DefaultsRules.warns(model.choices) {
-                                StatusDot(tone: .warn, text: DefaultsRules.catalogWarning)
-                            }
+                        ForEach(rows) { row($0) }
+                        // Under the catalogs, where their switches are.
+                        if group.id == "catalogs", !settings,
+                           DefaultsRules.warns(model.list?.addons ?? [], moved: model.moved, hasCatalog: hasCatalog) {
+                            StatusDot(tone: .warn, text: DefaultsRules.catalogWarning)
                         }
                     }
                 }
@@ -357,24 +356,29 @@ struct RecommendedAddons: View {
     }
 
     @ViewBuilder private func row(_ addon: DefaultAddonInfo) -> some View {
-        if DefaultsRules.hasSwitch(addon) {
-            let on = model.isOn(addon)
-            Button { model.flip(addon) } label: {
-                DefaultRow(addon: addon) { SwitchMark(on: on) }
-            }
-            .buttonStyle(.row)
-            // On the button itself: a new element around it would not press it (VoiceOver, Full Keyboard Access).
-            .accessibilityLabel("\(addon.name). \(addon.line)")
-            .accessibilityValue(on ? "On" : "Off")
-            .accessibilityAddTraits(.isToggle)
+        if settings {
+            switchRow(addon, on: addon.installed == .on) { Task { await model.set(addon.key, on: addon.installed != .on) } }
+        } else if DefaultsRules.hasSwitch(addon) {
+            switchRow(addon, on: model.isOn(addon)) { model.flip(addon) }
         } else {
             DefaultRow(addon: addon) {
-                Text(DefaultsRules.presentWord(imported: imported))
+                Text(DefaultsRules.presentWord(addon, imported: imported))
                     .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
             }
             .accessibilityElement(children: .combine)
         }
+    }
+
+    private func switchRow(_ addon: DefaultAddonInfo, on: Bool, flip: @escaping () -> Void) -> some View {
+        Button(action: flip) {
+            DefaultRow(addon: addon) { SwitchMark(on: on) }
+        }
+        .buttonStyle(.row)
+        // On the button itself: a new element around it would not press it (VoiceOver, Full Keyboard Access).
+        .accessibilityLabel("\(addon.name). \(addon.line)")
+        .accessibilityValue(on ? "On" : "Off")
+        .accessibilityAddTraits(.isToggle)
     }
 }
 
@@ -403,34 +407,40 @@ private struct DefaultRow<End: View>: View {
     }
 }
 
-/// The Home card's Review: the recommended addons the profile misses, with
-/// their switches on; Continue installs them and goes back.
+/// A page of recommended addons: the Home card's Review (the missing ones,
+/// switched on; Continue installs them and goes back) or Settings (all
+/// nine, each switch acting at once).
 struct RecommendedAddonsPage: View {
     @State private var model: DefaultsStep
+    private let hasCatalog: Bool
+    private var settings: Bool { model.scope == .all }
     @FocusState private var onContinue: Bool
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
 
-    init(core: CoreClient) {
-        _model = State(initialValue: DefaultsStep(core: core, scope: .missing))
+    init(core: CoreClient, scope: DefaultsRules.Scope, hasCatalog: Bool = false) {
+        _model = State(initialValue: DefaultsStep(core: core, scope: scope))
+        self.hasCatalog = hasCatalog
     }
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: DefaultsRules.title)
-                Text(DefaultsRules.lead)
+                Text(settings ? DefaultsRules.settingsLead : DefaultsRules.reviewLead)
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                RecommendedAddons(model: model)
-                Button(model.busy ? "Adding" : "Continue") {
-                    Task { if await model.install() { dismiss() } }
+                RecommendedAddons(model: model, hasCatalog: hasCatalog, settings: settings)
+                if !settings {
+                    Button(model.busy ? "Adding" : "Continue") {
+                        Task { if await model.install() { dismiss() } }
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .disabled(model.busy || model.list == nil)
+                    .focused($onContinue)
+                    .padding(.top, Theme.Space.s)
                 }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .disabled(model.busy || model.list == nil)
-                .focused($onContinue)
-                .padding(.top, Theme.Space.s)
             }
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
