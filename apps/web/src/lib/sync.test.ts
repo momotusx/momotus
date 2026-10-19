@@ -12,7 +12,6 @@ import {
   lostDrop,
   lostRows,
   memberName,
-  pairingHost,
   pairingMember,
   sortMembers,
   sponsorName,
@@ -28,7 +27,6 @@ import {
   outcomeOf,
   removeDeviceAsk,
   reportNotes,
-  reviewAsk,
   stepProblem,
   syncProblem,
   syncSummary,
@@ -76,15 +74,12 @@ test("a look that ends after Cancel approves nothing", async () => {
   expect(found).toEqual(["marquee:pair?v=2&p=2"]);
 });
 
-test("a scanned code names its sync server's host, and the device it belongs to", async () => {
+test("a scanned code names the device it belongs to", async () => {
   const sign = Buffer.alloc(32, 7);
   const g = sign.toString("base64url");
   const code = `marquee:pair?v=2&s=${encodeURIComponent("https://sync.example.org:8443")}&p=abc&k=x&g=${g}`;
-  expect(pairingHost(code)).toBe("sync.example.org");
-  expect(pairingHost("marquee:pair?v=2")).toBeNull();
-  expect(pairingHost("nonsense")).toBeNull();
-  expect(reviewAsk("sync.example.org")).toBe("Approve a device from sync.example.org?");
-  expect(reviewAsk(null)).toBe("Approve this device?");
+  // The host is always this account's own server: the question names none.
+  expect(syncWords.reviewAsk).toBe("Approve a new device?");
   // As the core derives a member id: SHA-256 of the signing key, first 16 bytes.
   const want = createHash("sha256").update(sign).digest().subarray(0, 16).toString("hex");
   expect(await pairingMember(code)).toBe(want);
@@ -94,7 +89,10 @@ test("a scanned code names its sync server's host, and the device it belongs to"
 
 test("the record goes only over an encrypted link or one on this machine", () => {
   for (const ok of ["ws://127.0.0.1:7777/ws", "ws://localhost:7777/ws", "ws://[::1]:7777/ws", "wss://tv.local/ws"]) expect(isPrivateLink(ok)).toBe(true);
-  for (const bad of ["ws://192.168.1.20:7777/ws", "ws://tv.local:7777/ws", "not a url"]) expect(isPrivateLink(bad)).toBe(false);
+  for (const ok of ["ws://127.1.2.3:7777/ws", "ws://127.255.255.255/ws"]) expect(isPrivateLink(ok)).toBe(true);
+  // A name that only starts like a loopback address is someone else's host.
+  for (const bad of ["ws://192.168.1.20:7777/ws", "ws://tv.local:7777/ws", "ws://127.0.0.1.evil.com/ws", "ws://127.evil.com/ws", "ws://127-0-0-1.example/ws", "not a url"])
+    expect(isPrivateLink(bad)).toBe(false);
 });
 
 test("the 12 characters read in groups of four", () => {
@@ -166,6 +164,7 @@ test("a round is complete, waiting or failed, never green while changes failed",
   expect(failedSince(0, 0)).toBeNull();
   expect(failedSince(1, 0)).toBe("Since this device joined, 1 edit from this device could not be sent and stays here only.");
   expect(failedSince(2, 3)).toBe("Since this device joined, 2 edits from this device could not be sent and stay here only, and 3 changes from other devices could not be read.");
+  expect(failedSince(0, 0, 1)).toBe("Since this device joined, 1 change from a newer version of Marquee waits for an update here.");
 });
 
 test("each fact of a sync round has its sentence, and a quiet round has none", () => {
@@ -193,6 +192,9 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(syncProblem("fork", "x")).toContain("Compare the lists");
   expect(syncProblem("unsent", "x")).toContain("stop anyway");
   expect(syncProblem("passkey", "x")).toBe("The passkey did not confirm it, so nothing changed.");
+  // A passkey without PRF is not a server that did not answer.
+  expect(syncProblem("noPrf", "this passkey has no PRF")).toBe(syncWords.noPrf);
+  expect(stepProblem("noPrf", "x", "unlock")).toBe(syncWords.noPrf);
   expect(syncProblem("plainLink", "x")).toBe(syncWords.plainLink);
   expect(syncProblem("alreadyJoined", "x")).toBe(syncWords.alreadyJoined);
   expect(syncProblem(undefined, "roster: this device cannot report itself")).toBe("This device cannot report itself.");
@@ -248,6 +250,7 @@ test("Settings names what failed or waits before the time, and a lock or a probl
   expect(syncSummary({ ...base, report: { ...quiet, blocked: "notActive" } })).toBe("The sync server does not take edits from this device yet, so they were not sent.");
   expect(syncSummary({ ...base, report: { ...quiet, refused: 1 } })).toStartWith("1 edit from this device could not be sent");
   expect(syncSummary({ ...base, refused: 2 })).toStartWith("Since this device joined, 2 edits");
+  expect(syncSummary({ ...base, newer: 2 })).toContain("2 changes from a newer version of Marquee wait");
   expect(syncSummary({ ...base, problem: "The sync server did not answer." })).toBe("The sync server did not answer.");
   expect(syncSummary({ ...base, joined: false })).toBe(syncWords.offLine);
   expect(syncSummary({ ...base, joined: false, locked: true })).toBe(syncWords.locked);

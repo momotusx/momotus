@@ -39,13 +39,18 @@ function db(): Promise<IDBDatabase> {
   });
 }
 
+/** One request in its own transaction. It settles when the transaction
+ * commits, not when the request succeeds: a write the browser then aborts
+ * (quota, eviction, a closing tab) is a failed write. */
 async function tx<T>(mode: IDBTransactionMode, work: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   const d = await db();
   try {
     return await new Promise<T>((ok, fail) => {
-      const r = work(d.transaction(STORE, mode).objectStore(STORE));
-      r.onsuccess = () => ok(r.result as T);
-      r.onerror = () => fail(r.error);
+      const t = d.transaction(STORE, mode);
+      const r = work(t.objectStore(STORE));
+      t.oncomplete = () => ok(r.result as T);
+      t.onabort = () => fail(t.error ?? new DOMException("the write did not commit", "AbortError"));
+      t.onerror = () => fail(t.error);
     });
   } finally {
     d.close();
@@ -158,9 +163,24 @@ export async function enable(record: SyncRecord): Promise<void> {
   const first = prf.results?.first ?? (await evaluate(made.rawId, salt));
   const k = await derive(first);
   const sealed = await seal(record, k, made.rawId, salt);
-  await write(sealed);
+  try {
+    await write(sealed);
+  } catch (e) {
+    // The passkey exists but guards nothing: ask its manager to drop it, where the browser can.
+    void forgetPasskey(made.rawId);
+    throw e;
+  }
+  // Ask the browser not to evict this storage when it runs low or sits idle.
+  void navigator.storage?.persist?.().catch(() => false);
   key = k;
   held = sealed;
+}
+
+/** Tells the passkey manager a credential guards nothing (WebAuthn Signal API; best effort). */
+function forgetPasskey(id: ArrayBuffer) {
+  const signal = (PublicKeyCredential as unknown as { signalUnknownCredential?: (o: { rpId: string; credentialId: string }) => Promise<void> }).signalUnknownCredential;
+  const credentialId = btoa(String.fromCharCode(...new Uint8Array(id))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return signal?.call(PublicKeyCredential, { rpId: location.hostname, credentialId }).catch(() => undefined);
 }
 
 /** Opens the record this browser remembers, after the passkey verified the user. */

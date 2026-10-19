@@ -37,6 +37,8 @@ const consoleLines: string[] = [];
 const secrets = new Set<string>();
 /** The next request of this op from the page on a core's port is answered as a relay failure. */
 const failOnce = new Map<number, string>();
+/** Every request a page sent its core, by the core's port: op and view, nothing else. */
+const asked: { port: number; op?: string; view?: string }[] = [];
 /** Desk's fake camera films this file (Chromium reads it when the camera opens). */
 let camera = "";
 let scratch = "";
@@ -86,10 +88,37 @@ const FORMS = {
   tv: { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 },
 };
 
+/** On a load the test marks (a session flag), IndexedDB answers 5 s late: the check for a remembered account is slow. */
+function slowVaultOnMark() {
+  if (sessionStorage.getItem("mq.e2e.slowIdb") !== "1") return;
+  sessionStorage.removeItem("mq.e2e.slowIdb");
+  const real = IDBFactory.prototype.open;
+  IDBFactory.prototype.open = function (this: IDBFactory, ...args: Parameters<typeof real>) {
+    const late = { onsuccess: null, onerror: null, onupgradeneeded: null, result: null, error: null } as unknown as IDBOpenDBRequest & Record<string, unknown>;
+    setTimeout(() => {
+      const r = real.apply(this, args);
+      r.onupgradeneeded = (e) => {
+        (late as Record<string, unknown>).result = r.result;
+        (late.onupgradeneeded as ((e: Event) => void) | null)?.(e);
+      };
+      r.onsuccess = (e) => {
+        (late as Record<string, unknown>).result = r.result;
+        (late.onsuccess as ((e: Event) => void) | null)?.(e);
+      };
+      r.onerror = (e) => {
+        (late as Record<string, unknown>).error = r.error;
+        (late.onerror as ((e: Event) => void) | null)?.(e);
+      };
+    }, 5000);
+    return late;
+  };
+}
+
 /** A browser context whose page talks to the core on `port`. */
 async function device(browser: Browser, port: number, form: keyof typeof FORMS, host = "127.0.0.1"): Promise<Page> {
   const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", baseURL: `http://${host}:${PORTS.vite}` });
   await context.grantPermissions(["clipboard-read", "clipboard-write", "camera"]);
+  await context.addInitScript(slowVaultOnMark);
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const core = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     const early: string[] = [];
@@ -103,10 +132,11 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS, 
     core.addEventListener("close", () => ws.close());
     ws.onMessage((m) => {
       collect(String(m));
-      const asked = JSON.parse(String(m)) as { id?: number; op?: string };
-      if (asked.op && asked.op === failOnce.get(port)) {
+      const request = JSON.parse(String(m)) as { id?: number; op?: string; view?: string };
+      asked.push({ port, op: request.op, view: request.view });
+      if (request.op && request.op === failOnce.get(port)) {
         failOnce.delete(port);
-        ws.send(JSON.stringify({ id: asked.id, ok: false, error: "http status 502" }));
+        ws.send(JSON.stringify({ id: request.id, ok: false, error: "http status 502" }));
         return;
       }
       if (core.readyState === WebSocket.OPEN) core.send(String(m));
@@ -137,6 +167,8 @@ async function syncNow(page: Page, remote = false) {
     await page.keyboard.press("Enter");
   } else await page.locator('[data-f="sync:now"]').click();
   await expect.poll(async () => Number((await card(page).getAttribute("data-round")) ?? "Infinity"), { timeout: 30_000 }).toBeGreaterThan(before);
+  // A round already running when the button was pressed ends first; the loop then runs the pressed one.
+  await expect(card(page).or(page.locator("main > .st.bad")).first()).not.toHaveAttribute("data-syncing", "", { timeout: 30_000 });
 }
 const member = (page: Page, name: string) => page.locator(".sync-member").filter({ has: page.getByRole("heading", { name, exact: false }) });
 const names = (page: Page) => page.locator(".sync-members h3").evaluateAll((hs) => hs.map((h) => h.firstChild?.textContent ?? ""));
@@ -155,7 +187,7 @@ const go = async (page: Page, path: string) => {
 };
 const signCount = async () => {
   const { credentials } = (await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: { signCount: number }[] };
-  return credentials.map((c) => c.signCount);
+  return credentials.reduce((n, c) => n + c.signCount, 0);
 };
 
 /** Everything a page keeps where other code could read it, as text: the URL,
@@ -254,6 +286,10 @@ test.describe.serial("sync across three devices", () => {
     await go(desk, "/pair");
     await expect(desk.locator(".problem")).toContainText("This device already syncs.");
     await expect(desk.locator(".qrbox")).toHaveCount(0);
+    // With lists that agree, the comparison page offers nothing to continue with.
+    await go(desk, "/sync/fork");
+    await expect(desk.locator(".problem")).toContainText("There is nothing to compare.");
+    await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveCount(0);
     await go(desk, "/sync");
   });
 
@@ -267,12 +303,25 @@ test.describe.serial("sync across three devices", () => {
     const fp = await desk.locator(".sync-fp").textContent();
     await desk.locator('[data-f="sync:remember"]').click();
     await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
-    expect(await signCount()).toHaveLength(1);
+    const { credentials } = (await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: unknown[] };
+    expect(credentials).toHaveLength(1);
     const { dbs } = await kept(desk);
     expect(dbs).toContain("marquee-vault");
     await noSecretKept(desk);
 
-    await desk.reload();
+    // Reloaded on /pair and /sync/start while this browser is still being checked for a
+    // remembered account (IndexedDB made slow for that load): nothing starts before the answer.
+    for (const path of ["/pair", "/sync/start"]) {
+      await desk.evaluate(() => sessionStorage.setItem("mq.e2e.slowIdb", "1"));
+      const from = asked.length;
+      await desk.goto(path);
+      // The page is up while the check is still out: nothing that starts an account shows.
+      await expect(desk.locator("main h1")).toBeVisible();
+      expect(await desk.locator(".qrbox, [data-f=\"sync-form:go\"], [data-f=\"pair:start\"]").count()).toBe(0);
+      await expect(desk.getByText("This browser remembers a sync account. Unlock it or forget it on Devices and sync before joining another.")).toBeVisible({ timeout: 10_000 });
+      expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.a && a.view === "pairing")).toEqual([]);
+    }
+    await desk.goto("/sync");
     await expect(desk.locator('[data-f="sync:unlock"]')).toBeVisible();
     await expect(desk.locator(".sync-card")).toHaveCount(0);
     await shot(desk, "sync-locked-desktop");
@@ -304,9 +353,20 @@ test.describe.serial("sync across three devices", () => {
     // The camera films the code the phone shows; nothing is approved before the question.
     film(code);
     await desk.locator('[data-f="sync-add:scan"]').click();
-    await expect(desk.locator("#sync-review")).toHaveText("Approve a device from 127.0.0.1?");
+    await expect(desk.locator("#sync-review")).toHaveText("Approve a new device?");
     await expect(desk.locator(".code")).toHaveCount(0);
     await shot(desk, "sync-review-desktop");
+    // The browser aborts the sealed write that follows the approval.
+    await desk.evaluate(() => {
+      const put = IDBObjectStore.prototype.put;
+      (window as unknown as { restorePut: () => void }).restorePut = () => (IDBObjectStore.prototype.put = put);
+      IDBObjectStore.prototype.put = function (...args: Parameters<typeof put>) {
+        const request = put.apply(this, args);
+        // The request succeeds; the transaction then aborts before it commits.
+        request.addEventListener("success", () => this.transaction.abort());
+        return request;
+      };
+    });
     await desk.locator('[data-f="sync-add:review-approve"]').click();
     const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
     expect(digits).toMatch(/^\d{6}$/);
@@ -320,6 +380,13 @@ test.describe.serial("sync across three devices", () => {
     await synced(phone);
     await desk.locator('[data-f="sync-add:done"]').click();
     await expect(member(desk, "Phone")).toContainText("through Desk");
+    // The page no longer claims to remember, and nothing stale stays sealed.
+    await expect(desk.getByText("This browser could not keep the sync key, so it no longer remembers this account.")).toBeVisible();
+    await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toHaveCount(0);
+    await expect.poll(async () => (await kept(desk)).text.includes("credential")).toBe(false);
+    await desk.evaluate(() => (window as unknown as { restorePut: () => void }).restorePut());
+    await desk.locator('[data-f="sync:remember"]').click();
+    await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
   });
 
   test("the camera stops when the page is left", async () => {
@@ -338,6 +405,26 @@ test.describe.serial("sync across three devices", () => {
     await go(desk, "/sync");
     expect(await desk.evaluate(() => (window as unknown as { seen: MediaStreamTrack }).seen.readyState)).toBe("ended");
     await synced(desk);
+
+    // A tab that goes to the background stops the camera too.
+    await go(desk, "/sync/add");
+    await desk.locator('[data-f="sync-add:scan"]').click();
+    await desk.waitForFunction(() => (document.querySelector("video")?.readyState ?? 0) >= 2);
+    await desk.evaluate(() => {
+      (window as unknown as { seen: MediaStreamTrack }).seen = (document.querySelector("video")?.srcObject as MediaStream).getVideoTracks()[0] as MediaStreamTrack;
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(desk.locator(".sync-scan video")).toHaveCount(0);
+    expect(await desk.evaluate(() => (window as unknown as { seen: MediaStreamTrack }).seen.readyState)).toBe("ended");
+    await go(desk, "/sync");
+    // Coming back to the tab syncs.
+    const before = Number(await card(desk).getAttribute("data-round"));
+    await desk.evaluate(() => {
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect.poll(async () => Number(await card(desk).getAttribute("data-round"))).toBeGreaterThan(before);
   });
 
   test("what Desk had arrives on Phone", async () => {
@@ -429,7 +516,7 @@ test.describe.serial("sync across three devices", () => {
   test("Desk reports Phone lost from a list it read before the TV joined, and keeps the TV", async () => {
     // Desk's page still shows the list from before the kit and the TV.
     await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
-    const before = (await signCount())[0] ?? 0;
+    const before = await signCount();
     const fp = await desk.locator(".sync-fp").textContent();
     // The first read fails: the page says so and offers to try again or leave.
     failOnce.set(SYNC_PORTS.a, "lostPreview");
@@ -455,7 +542,7 @@ test.describe.serial("sync across three devices", () => {
     // The 12 characters follow the new list at once, not the last round's.
     await expect.poll(() => desk.locator(".sync-fp").textContent()).not.toBe(fp);
     // The passkey confirmed the report.
-    expect((await signCount())[0]).toBeGreaterThan(before);
+    expect(await signCount()).toBeGreaterThan(before);
   });
 
   test("Phone learns it was removed; the TV's edit reaches Desk in one Sync now", async () => {
@@ -493,6 +580,13 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator(".confirm .code")).toHaveText(digits);
     await phone.locator('[data-f="pair:yes"]').click();
     await expect(phone.locator(".summary h2")).toHaveText("This device joined the account");
+    // The passkey answers without verifying the user first: the page refuses it, nothing
+    // changes, and the button stays and says why.
+    await passkey.cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId: passkey.id, isBadUV: true });
+    await desk.locator('[data-f="sync-add:differ"]').click();
+    await expect(desk.locator(".confirm .st.bad")).toHaveText("The passkey did not confirm it, so nothing changed.");
+    await expect(desk.locator('[data-f="sync-add:differ"]')).toBeVisible();
+    await passkey.cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId: passkey.id, isBadUV: false });
     await desk.locator('[data-f="sync-add:differ"]').click();
     await expect(desk.locator(".confirm .st")).toHaveText("The device that answered showed other digits, so it was removed. Nothing else changed.");
     await phone.locator('[data-f="pair:done"]').click();
@@ -513,7 +607,10 @@ test.describe.serial("sync across three devices", () => {
     let code = await phone.evaluate(() => navigator.clipboard.readText());
     await go(desk, "/sync/add");
     await desk.locator('[data-f="sync-add:code"]').fill(code);
+    const signed = await signCount();
     await desk.locator('[data-f="sync-add:approve"]').click();
+    // Approving hands over the account: the passkey signed first.
+    await expect.poll(signCount).toBeGreaterThan(signed);
     await expect(phone.locator(".confirm .code")).toHaveText((await desk.locator(".confirm .code").textContent()) ?? "");
     await phone.locator('[data-f="pair:no"]').click();
     await expect(phone.locator(".problem h2")).toHaveText("Pairing stopped");
@@ -615,9 +712,11 @@ test.describe.serial("sync across three devices", () => {
     await kitRow.locator('[data-f$=":confirm"]').click();
     await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
 
+    const beforeLeave = await signCount();
     await desk.locator('[data-f="sync:leave"]').click();
     await expect(desk.locator('[data-f="sync:start"]')).toBeVisible();
     await expect(desk.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
+    expect(await signCount()).toBeGreaterThan(beforeLeave);
     expect((await kept(desk)).text).not.toContain("credential");
     await go(desk, "/settings");
     await expect(desk.locator('[data-f="settings:sync"]')).toContainText("Keep your library, progress and addons the same on every device.");
@@ -630,6 +729,12 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator('[data-f="sync:pair"]')).toBeVisible();
     await expect(phone.locator(".sync-card")).toHaveCount(0);
     await expect(phone.getByText("A browser has no safe place for this device's sync key")).toBeVisible();
+    // Nothing remembered here: once the (slow) check settles, pairing starts with the known server.
+    await phone.evaluate(() => sessionStorage.setItem("mq.e2e.slowIdb", "1"));
+    await phone.goto("/pair");
+    await expect(phone.locator("main h1")).toBeVisible();
+    expect(await phone.locator(".qrbox").count()).toBe(0);
+    await expect(phone.locator(".qrbox svg")).toBeVisible({ timeout: 15_000 });
   });
 
   test("nothing secret reaches storage, history, the URL or the console", async () => {

@@ -107,6 +107,7 @@ export default function SettingsScreen() {
       joined: sync.joined(),
       refused: sync.failed().refused,
       unreadable: sync.failed().unreadable,
+      newer: sync.failed().newer,
       report: sync.report(),
       time: sync.syncedAt() ? new Date(sync.syncedAt() as number).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null,
     });

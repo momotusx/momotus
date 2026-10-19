@@ -37,7 +37,6 @@ import {
   lostDrop,
   lostRows,
   memberName,
-  pairingHost,
   pairingMember,
   sortMembers,
   sponsorName,
@@ -55,7 +54,6 @@ import {
   plainAddress,
   removeDeviceAsk,
   reportNotes,
-  reviewAsk,
   type SyncStep,
   stepProblem,
   syncWords as w,
@@ -312,7 +310,7 @@ function Joined() {
               {w.rotationPending}
             </p>
           </Show>
-          <Show when={failedSince(sync.failed().refused, sync.failed().unreadable)}>
+          <Show when={failedSince(sync.failed().refused, sync.failed().unreadable, sync.failed().newer)}>
             {(line) => (
               <div class="sync-note bad">
                 <TriangleAlert aria-hidden />
@@ -453,7 +451,7 @@ function Remember() {
     try {
       await sync.remember();
     } catch (e) {
-      setError(codeOf(e) === "noPrf" ? w.noPasskey : say(e, "unlock"));
+      setError(say(e, "unlock"));
     } finally {
       setBusy(false);
     }
@@ -467,13 +465,14 @@ function Remember() {
           <Show when={can()} fallback={<p class="note small sync-lead">{can.loading ? "" : w.noPasskey}</p>}>
             <p class="note small sync-lead">{w.rememberText}</p>
             <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
+            <Show when={sync.memoryProblem()}>{(p) => <Said tone="bad">{p()}</Said>}</Show>
+            <p class="note small sync-lead">{w.notRemembered}</p>
             <div class="acts">
               <button class="btn" data-f="sync:remember" aria-busy={busy() || undefined} onClick={() => void turnOn()}>
                 <Fingerprint aria-hidden />
                 {busy() ? w.remembering : w.rememberButton}
               </button>
             </div>
-            <p class="note small">{w.tabOnly}</p>
           </Show>
         }
       >
@@ -550,10 +549,10 @@ function NoSecondAccount(props: { children: JSX.Element }) {
   return (
     <Show when={privateLink} fallback={<Said tone="bad">{w.plainLink}</Said>}>
       <Show
-        when={!sync.joined() && !sync.locked()}
+        when={sync.settled() && !sync.joined() && !sync.locked()}
         fallback={
-          <section class="problem">
-            <p>{w.alreadyJoined}</p>
+          <section class="problem" hidden={!sync.settled()}>
+            <p>{sync.locked() ? w.lockedFirst : w.alreadyJoined}</p>
             <A class="btn primary" href="/sync" data-f="sync:back" data-autofocus>
               {w.title}
             </A>
@@ -710,6 +709,7 @@ export function AddDevice() {
   const [error, setError] = createSignal<string | null>(null);
   const [approved, setApproved] = createSignal<{ digits: string; code: string } | null>(null);
   const [differ, setDiffer] = createSignal<string | null>(null);
+  const [differError, setDifferError] = createSignal<string | null>(null);
   const approve = async (qr: string) => {
     if (busy() || !qr.trim()) return;
     setScanning(false);
@@ -737,6 +737,7 @@ export function AddDevice() {
     const a = approved();
     if (!a || busy()) return;
     setBusy(true);
+    setDifferError(null);
     try {
       const id = await pairingMember(a.code);
       const list = await sync.loadDevices();
@@ -746,7 +747,8 @@ export function AddDevice() {
         await sync.loadDevices().catch(() => undefined);
       } else setDiffer(w.differWaiting);
     } catch (e) {
-      setDiffer(say(e, "remove"));
+      // A cancelled passkey or a failed call changes nothing: the button stays.
+      setDifferError(say(e, "remove"));
     } finally {
       setBusy(false);
     }
@@ -802,7 +804,7 @@ export function AddDevice() {
               >
                 {(qr) => (
                   <section class="confirm" aria-labelledby="sync-review">
-                    <h2 id="sync-review">{reviewAsk(pairingHost(qr()))}</h2>
+                    <h2 id="sync-review">{w.reviewAsk}</h2>
                     <p class="note">{w.reviewText}</p>
                     <div class="acts">
                       <button class="btn primary" data-f="sync-add:review-approve" onClick={() => void approve(qr())}>
@@ -824,6 +826,7 @@ export function AddDevice() {
                 <Spoken class="code" text={a().digits} label="Code" />
                 <p class="note small">{w.approvedHelp}</p>
                 <Show when={differ()}>{(d) => <Said tone="warn">{d()}</Said>}</Show>
+                <Show when={differError()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
                 <div class="acts">
                   <button class="btn primary" data-f="sync-add:done" data-autofocus onClick={() => navigate("/sync")}>
                     <Check aria-hidden />
@@ -1068,7 +1071,9 @@ function Lost(props: { id: string; done: () => void }) {
 export function ForkReview() {
   const navigate = useNavigate();
   const done = () => navigate("/sync", { replace: true });
-  const [data, { refetch }] = createResource(() => sync.forkPreview());
+  // Only a device whose list differs compares: anything else would rotate the key for nothing.
+  const forked = () => sync.problem()?.code === "fork";
+  const [data, { refetch }] = createResource(() => forked() || undefined, () => sync.forkPreview());
   const got = () => (data.error ? undefined : data());
   const sides = () => {
     const d = got();
@@ -1106,6 +1111,17 @@ export function ForkReview() {
       <h1>{w.forkTitle}</h1>
       <p class="lede">{w.forkLede}</p>
       <NeedsAccount>
+        <Show
+          when={forked()}
+          fallback={
+            <section class="problem">
+              <p>{w.forkNone}</p>
+              <A class="btn primary" href="/sync" data-f="sync-fork:back" data-autofocus>
+                {w.title}
+              </A>
+            </section>
+          }
+        >
         <Show
           when={!data.error}
           fallback={
@@ -1200,6 +1216,7 @@ export function ForkReview() {
               </button>
             </div>
           </Show>
+        </Show>
         </Show>
       </NeedsAccount>
     </main>

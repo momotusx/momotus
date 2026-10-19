@@ -5,7 +5,7 @@ import QrCode from "lucide-solid/icons/qr-code";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Settings2 from "lucide-solid/icons/settings-2";
 import X from "lucide-solid/icons/x";
-import { createEffect, createSignal, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createResource, createSignal, Match, on, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
 import { A } from "@solidjs/router";
 import { liveView, privateLink } from "../core/client";
@@ -24,12 +24,18 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
   const [copied, setCopied] = createSignal(false);
   // The join is stored the moment it arrives, once, as a copy: the view's store may change it.
   let took = false;
+  // An account that appeared meanwhile (another tab of this page, an unlock) is never replaced.
+  const [refused, setRefused] = createSignal(false);
   createEffect(() => {
     const s = p();
     if (s?.phase !== "joined" || took) return;
     took = true;
-    sync.join(JSON.parse(JSON.stringify(s.record)));
-    props.onJoined();
+    try {
+      sync.joinPaired(JSON.parse(JSON.stringify(s.record)));
+      props.onJoined();
+    } catch {
+      setRefused(true);
+    }
   });
   const until = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   // Each step that asks something takes focus to its answer: on a TV the remote is never left
@@ -115,6 +121,11 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
           </section>
         )}
       </Match>
+      <Match when={refused()}>
+        <section class="problem">
+          <p>{syncWords.alreadyJoined}</p>
+        </section>
+      </Match>
       <Match when={p()?.phase === "joined"}>
         <section class="summary">
           <h2>
@@ -143,18 +154,15 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
   );
 }
 
-export default function PairingScreen() {
+function PairForm() {
   // The server this device used before: with it, the code shows at once and
   // nothing is typed. The fields live under Advanced, open only when no
   // server is known yet.
   // A remembered address with a user name or password (an older version saved it) is not used.
   const known = sync.rememberedServer();
-  // A device that syncs, or remembers an account, pairs nothing new: that would leave a
-  // ghost of it in the old account. Read once, so this page's own join keeps its summary.
-  const allowed = sync.mayPair();
   const [server, setServer] = createSignal(known);
   const [name, setName] = createSignal(sync.defaultDeviceName());
-  const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known && allowed ? { server: known, name: name(), n: 1 } : null);
+  const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known ? { server: known, name: name(), n: 1 } : null);
   const [advanced, setAdvanced] = createSignal(!known);
   // Once joined, the page is the result and Done: no second pairing starts from it.
   const [joined, setJoined] = createSignal(false);
@@ -169,20 +177,7 @@ export default function PairingScreen() {
     setRun({ server: s, name: name().trim() || "Marquee", n: (run()?.n ?? 0) + 1 });
   };
   return (
-    <main class="browse page settings-page" data-vscroll>
-      <h1>Pair this device</h1>
-      <p class="lede">Joins your sync account so library, progress and addons follow you. Nothing is kept until both screens show the same code.</p>
-      <Show
-        when={allowed}
-        fallback={
-          <section class="problem">
-            <p>{privateLink ? syncWords.alreadyJoined : syncWords.plainLink}</p>
-            <A class="btn primary" href="/sync" data-f="pair:back" data-autofocus>
-              {syncWords.title}
-            </A>
-          </section>
-        }
-      >
+    <>
       <Show when={run()} keyed>
         {(r) => <Session server={r.server} name={r.name} onDone={() => setRun({ ...r, n: r.n + 1 })} onJoined={() => setJoined(true)} />}
       </Show>
@@ -217,6 +212,37 @@ export default function PairingScreen() {
         </form>
       </Show>
       </Show>
+    </>
+  );
+}
+
+export default function PairingScreen() {
+  // A device that syncs, or that remembers an account, pairs nothing new: that would leave a
+  // ghost of it in the old account. Asked once this browser was checked for a remembered
+  // account (never before: a reload would start pairing first), and kept, so this page's own
+  // join keeps its summary.
+  const [allowed] = createResource(async () => {
+    await sync.vaultReady;
+    return sync.mayPair();
+  });
+  return (
+    <main class="browse page settings-page" data-vscroll>
+      <h1>Pair this device</h1>
+      <p class="lede">Joins your sync account so library, progress and addons follow you. Nothing is kept until both screens show the same code.</p>
+      <Show when={allowed.state === "ready"}>
+        <Show
+          when={allowed()}
+          fallback={
+            <section class="problem">
+              <p>{!privateLink ? syncWords.plainLink : sync.locked() ? syncWords.lockedFirst : syncWords.alreadyJoined}</p>
+              <A class="btn primary" href="/sync" data-f="pair:back" data-autofocus>
+                {syncWords.title}
+              </A>
+            </section>
+          }
+        >
+          <PairForm />
+        </Show>
       </Show>
     </main>
   );

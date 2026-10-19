@@ -281,7 +281,8 @@ export const syncWords = {
   pasteOnly: "Paste the code",
   noScan: "This browser cannot scan codes. On the new device, choose Copy the code, then paste it here.",
   pasteHint: "marquee:pair?...",
-  reviewText: "Approve it only if the new device is in front of you and shows the code you scanned.",
+  reviewAsk: "Approve a new device?",
+  reviewText: "Approve it only if the new device is in front of you and shows the code you scanned. Whoever confirms the six digits next joins your account.",
   approve: "Approve",
   approving: "Approving",
   approvedStep: "The new device now shows six digits. They must be these:",
@@ -322,6 +323,11 @@ export const syncWords = {
   remembered: "Remembered in this browser, locked with a passkey.",
   forgetBrowser: "Forget in this browser",
   noPasskey: "This browser cannot lock the sync key with a passkey, so it stays in this tab only and a reload forgets it.",
+  noPrf: "This passkey cannot lock the sync key, so this browser keeps it in this tab only. A passkey from another manager may work.",
+  rememberLost: "This browser could not keep the sync key, so it no longer remembers this account. Remember it again, or it lasts until this tab closes.",
+  notRemembered: "Not remembered: the sync key lasts until this tab closes or reloads.",
+  lockedFirst: "This browser remembers a sync account. Unlock it or forget it on Devices and sync before joining another.",
+  forkNone: "This device and the sync server list the same devices. There is nothing to compare.",
   locked: "This browser remembers your sync account, locked with a passkey.",
   unlock: "Unlock with your passkey",
   unlocking: "Waiting for the passkey",
@@ -343,9 +349,6 @@ export const lostButton = (devices: number) => `Remove ${count(devices, "device"
 /** The kits a lost report removes, always. */
 export const lostKits = (kits: number) =>
   `${kits === 1 ? "1 recovery kit made on these devices stops" : `${kits} recovery kits made on these devices stop`} working. Make a new one afterwards.`;
-
-/** The question before a scanned code is approved. */
-export const reviewAsk = (host: string | null) => (host ? `Approve a device from ${host}?` : "Approve this device?");
 
 /** The button that continues with the server's list, naming what the user ticked. */
 export const forkButton = (ticked: number) => (ticked ? `Continue and remove ${count(ticked, "device", "devices")}` : syncWords.forkGo);
@@ -379,6 +382,8 @@ export function syncProblem(code: string | undefined, message: string): string {
       return "The sync server address must start with https.";
     case "passkey":
       return "The passkey did not confirm it, so nothing changed.";
+    case "noPrf":
+      return syncWords.noPrf;
     case "plainLink":
       return syncWords.plainLink;
     case "alreadyJoined":
@@ -461,20 +466,21 @@ export function reportNotes(r: Facts): string[] {
 }
 
 /** Failures since this device joined, kept until the user dismisses them. */
-export function failedSince(refused: number, unreadable: number): string | null {
+export function failedSince(refused: number, unreadable: number, newer = 0): string | null {
   const parts = [
     refused ? `${count(refused, "edit", "edits")} from this device could not be sent and stay${refused === 1 ? "s" : ""} here only` : "",
     unreadable ? `${count(unreadable, "change", "changes")} from other devices could not be read` : "",
+    newer ? `${count(newer, "change", "changes")} from a newer version of Marquee wait${newer === 1 ? "s" : ""} for an update here` : "",
   ].filter(Boolean);
   return parts.length ? `Since this device joined, ${parts.join(", and ")}.` : null;
 }
 
 /** The Settings row under Devices and sync: what is wrong or waits first, then the time. */
-export function syncSummary(s: { locked: boolean; problem: string | null; joined: boolean; refused: number; unreadable: number; report: Facts | null; time: string | null }): string {
+export function syncSummary(s: { locked: boolean; problem: string | null; joined: boolean; refused: number; unreadable: number; newer?: number; report: Facts | null; time: string | null }): string {
   if (s.locked) return syncWords.locked;
   if (s.problem) return s.problem;
   if (!s.joined) return syncWords.offLine;
-  const failed = failedSince(s.refused, s.unreadable);
+  const failed = failedSince(s.refused, s.unreadable, s.newer ?? 0);
   if (failed) return failed;
   const note = s.report && outcomeOf(s.report) !== "complete" ? reportNotes(s.report)[0] : undefined;
   if (note) return note;

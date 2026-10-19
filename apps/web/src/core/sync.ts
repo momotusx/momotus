@@ -35,13 +35,19 @@ const [fingerprint, setFingerprint] = createSignal<string | null>(null);
 /** Joined with a recovery kit and no new kit made since: the screen asks for one. */
 const [recovered, setRecovered] = createSignal(false);
 /** Changes that failed since this device joined, until the user dismisses them. */
-const [failed, setFailed] = createSignal({ refused: 0, unreadable: 0 });
+const [failed, setFailed] = createSignal({ refused: 0, unreadable: 0, newer: 0 });
 /** This browser remembers an account that the passkey has not opened yet. */
 const [locked, setLocked] = createSignal(false);
 const [remembered, setRemembered] = createSignal(false);
-export { devices, failed, fingerprint, joined, locked, notice, problem, recovered, remembered, report, rounds, syncedAt, syncing };
+/** Why this browser stopped remembering the account (a write that did not commit). */
+const [memoryProblem, setMemoryProblem] = createSignal<string | null>(null);
+/** Whether this browser was checked for a remembered account yet: until then nothing may start a new one. */
+const [settled, setSettled] = createSignal(false);
+/** Bumped by Forget and by leaving: a passkey answer from before it changes nothing. */
+let vaultGen = 0;
+export { devices, failed, fingerprint, joined, locked, memoryProblem, notice, problem, recovered, remembered, report, rounds, settled, syncedAt, syncing };
 
-export const dismissFailed = () => setFailed({ refused: 0, unreadable: 0 });
+export const dismissFailed = () => setFailed({ refused: 0, unreadable: 0, newer: 0 });
 
 const code = (e: unknown) => (e instanceof BridgeError || e instanceof vault.VaultError ? e.code : undefined);
 export const problemOf = (e: unknown) => ({ code: code(e), words: syncProblem(code(e), e instanceof Error ? e.message : String(e)) });
@@ -60,7 +66,15 @@ function inTurn<T>(work: () => Promise<T>): Promise<T> {
 
 function store(next: SyncRecord) {
   record = keepNewer(record, next);
-  if (vault.active()) void vault.save(record).catch(() => undefined);
+  if (vault.active()) void vault.save(record).catch(lostMemory);
+}
+
+/** A sealed write that did not commit: this browser no longer claims to remember the account. */
+function lostMemory() {
+  vaultGen++;
+  setRemembered(false);
+  setMemoryProblem(syncWords.rememberLost);
+  void vault.clear();
 }
 
 /** Runs an op on the record, in turn. A record in the answer is stored at
@@ -95,12 +109,13 @@ function reset() {
   setDevices(null);
   setFingerprint(null);
   setRecovered(false);
-  setFailed({ refused: 0, unreadable: 0 });
+  setFailed({ refused: 0, unreadable: 0, newer: 0 });
 }
 
 /** The account is gone here (left, or this device was removed): the sealed copy goes too. */
 function forget() {
   reset();
+  vaultGen++;
   setLocked(false);
   setRemembered(false);
   void vault.clear();
@@ -157,7 +172,8 @@ async function roundsOnce() {
         setFingerprint(r.fingerprint);
         setSyncedAt(Date.now());
         setProblem(null);
-        if (r.refused || r.unreadable) setFailed((f) => ({ refused: f.refused + r.refused, unreadable: f.unreadable + r.unreadable }));
+        if (r.refused || r.unreadable || r.newer)
+          setFailed((f) => ({ refused: f.refused + r.refused, unreadable: f.unreadable + r.unreadable, newer: f.newer + r.newer }));
         if (!r.again) return;
       } catch (e) {
         // A removal (dropped) or a different list (fork) was said by withRecord already.
@@ -184,19 +200,27 @@ export async function loadDevices(): Promise<Devices> {
 }
 
 export async function createAccount(server: string, name: string, invite: string) {
+  await vaultReady;
   refuseSecond();
   guardLink();
   join(await op<SyncRecord>("createSyncAccount", { server, name, ...(invite ? { invite } : {}) }));
 }
 
 export async function recover(server: string, kit: string, name: string) {
+  await vaultReady;
   refuseSecond();
   guardLink();
   join(await op<SyncRecord>("recover", { server, kit, name }), true);
 }
 
-/** Pairing may start here: nothing syncs or waits to be unlocked, and the link is private. */
+/** Pairing may start here: no account syncs or waits to be unlocked, and the link is private. Ask after `vaultReady`. */
 export const mayPair = () => !record && !locked() && privateLink;
+
+/** A pairing that finished on this page: refused when an account appeared meanwhile. */
+export function joinPaired(next: SyncRecord) {
+  refuseSecond();
+  join(next);
+}
 
 /** Before a change that cannot be undone: the passkey when this browser remembers the account. */
 async function gate() {
@@ -204,7 +228,11 @@ async function gate() {
 }
 
 /** Vouches for the device that shows `qr`; returns the six digits it must show too. */
-export const approvePairing = async (qr: string) => (await withRecord<{ code: string; record: SyncRecord }>("approvePairing", { qr }, (r) => r.record)).code;
+/** Vouches for the device that shows `qr`; returns the six digits it must show too. Hands over the account, so the passkey first. */
+export async function approvePairing(qr: string): Promise<string> {
+  await gate();
+  return (await withRecord<{ code: string; record: SyncRecord }>("approvePairing", { qr }, (r) => r.record)).code;
+}
 
 /** The kit, to show once: nothing here keeps it. */
 export async function makeKit(): Promise<string> {
@@ -233,6 +261,7 @@ export async function reportLost(lost: string, keep: string[]) {
 /** Leaves the account; the library stays. Without `force` the core refuses while edits are unsent (`unsent`). */
 export async function signOut(force: boolean) {
   const mine = account;
+  await gate();
   await withRecord("signOut", { force }, () => null);
   if (mine !== account) return;
   forget();
@@ -256,12 +285,20 @@ export async function useServerRoster(drop: string[]) {
 export async function remember() {
   const r = record;
   if (!r) throw new BridgeError("this device has not joined the account", "notJoined");
+  const gen = vaultGen;
+  const mine = account;
   await vault.enable(r);
+  // Left or told to forget during the prompt: nothing stays sealed.
+  if (gen !== vaultGen || mine !== account) return void (await vault.clear());
+  // A record that changed during the prompt replaces the one sealed.
+  if (record && record !== r) await vault.save(record);
   setRemembered(true);
+  setMemoryProblem(null);
 }
 
 /** Stops remembering: the sealed copy goes; a joined page keeps syncing until it closes. */
 export async function forgetBrowser() {
+  vaultGen++;
   await vault.clear();
   setRemembered(false);
   setLocked(false);
@@ -269,14 +306,21 @@ export async function forgetBrowser() {
 
 /** Opens what this browser remembers, with the passkey, then syncs. */
 export async function unlock() {
+  const gen = vaultGen;
   const opened = await vault.unlock();
+  // Forgotten during the prompt, or an account joined meanwhile: the opened copy is dropped.
+  if (gen !== vaultGen || record) return void (await vault.clear());
   setLocked(false);
   join(opened);
 }
 
-void vault.stored().then((has) => {
-  if (has && !record) setLocked(true);
-});
+/** Settles once this browser was checked for a remembered account. */
+export const vaultReady: Promise<void> = vault
+  .stored()
+  .then((has) => {
+    if (has && !record) setLocked(true);
+  })
+  .finally(() => setSettled(true));
 
 const SERVER_KEY = "mq.syncServer";
 const NAME_KEY = "mq.syncName";

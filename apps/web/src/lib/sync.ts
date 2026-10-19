@@ -53,16 +53,6 @@ const param = (code: string, name: string) => {
   }
 };
 
-/** The sync server's host a pairing code names, or null when it names none. */
-export function pairingHost(code: string): string | null {
-  const s = param(code, "s");
-  try {
-    return s ? new URL(s).hostname || null : null;
-  } catch {
-    return null;
-  }
-}
-
 /** The member id the device showing `code` will have: the first 16 bytes of
  * SHA-256 of its signing key (`g`, base64url), in hex, as the core derives it. */
 export async function pairingMember(code: string): Promise<string | null> {
@@ -86,7 +76,9 @@ export function isPrivateLink(url: string): boolean {
     const u = new URL(url);
     if (u.protocol === "wss:" || u.protocol === "https:") return true;
     const host = u.hostname.replace(/^\[|\]$/g, "");
-    return host === "localhost" || host === "::1" || /^127\./.test(host);
+    // The whole host as an IPv4 literal in 127.0.0.0/8, never a name that starts with 127.
+    const v4 = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    return host === "localhost" || host === "::1" || (!!v4 && v4.slice(1).every((n) => Number(n) <= 255));
   } catch {
     return false;
   }
