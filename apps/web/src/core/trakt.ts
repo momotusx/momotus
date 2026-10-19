@@ -18,8 +18,9 @@ import { gateOpen, onProfileReset, profiles } from "./profiles";
 import * as vault from "./vault";
 
 type Sub = Awaited<ReturnType<typeof bridge.subscribe>>;
-/** One opening of the view for one profile; a switch, a lock or a reopen starts another. */
-type Session = { profile: string; sub: Promise<Sub | null> };
+/** One opening of the view for one profile; a switch, a lock or a reopen starts another.
+ * `offered` names the last record it took, so a record pushed again is stored once. */
+type Session = { profile: string; sub: Promise<Sub | null>; offered?: string };
 let current: Session | null = null;
 const still = (session: Session) => () => current === session;
 
@@ -34,11 +35,17 @@ export { storage as traktStorage };
 /** False on a page whose link to the core is not private: no Trakt record travels it. */
 export const traktLink = privateLink;
 
+/** This browser keeps the open profile's sign-in under a passkey not opened yet: unlocking on
+ * Devices and sync brings it back. */
+const [lockedHere, setLockedHere] = createSignal(false);
+export { lockedHere as traktLockedHere };
+
 /** The sealed records could not be read since remembering opened: nothing is sealed over them. */
 let unread = false;
 const records = new TraktRecords({
   send: (record) => op("setTrakt", { record }).then(() => undefined),
   persist: (all) => (unread ? Promise.reject(new Error("the sealed sign-ins were not read")) : vault.saveTrakt(all)),
+  forget: (profile) => vault.forgetTrakt(profile),
 });
 
 /** An offered record whose store failed: stored and acknowledged once the storage works again. */
@@ -61,13 +68,25 @@ function got(session: Session, snapshot: TraktStatus) {
   if (current !== session) return;
   const { record, ...rest } = snapshot;
   setStatus({ ...rest, record: null } as TraktStatus);
-  if (record) void store(session, record as TraktRecord);
+  if (!record) return;
+  // Every push carries the record until it is acknowledged: one store and one acknowledgement each.
+  const r = record as TraktRecord;
+  const name = `${r.account}:${r.generation}:${r.revision}`;
+  if (session.offered === name) return;
+  session.offered = name;
+  void store(session, r);
 }
 
 /** The profile's record first (when this page holds one), then the view. */
 function openFor(profile: string) {
   const session: Session = { profile, sub: Promise.resolve(null) };
   current = session;
+  setLockedHere(false);
+  if (!vault.active())
+    void vault.holdsTrakt(profile).then(
+      (held) => current === session && setLockedHere(held),
+      () => undefined,
+    );
   session.sub = records
     .resend(profile, still(session))
     .catch(() => undefined)
@@ -112,7 +131,10 @@ createRoot(() =>
       () => (traktLink && gateOpen() ? profiles()?.active : undefined),
       (active) => {
         if (!active || current?.profile === active) return;
-        void closeView().then(() => openFor(active));
+        // Two changes in a row: only the newest opens, once.
+        void closeView().then(() => {
+          if (current === null && gateOpen() && profiles()?.active === active) openFor(active);
+        });
       },
     ),
   ),
@@ -124,6 +146,7 @@ createRoot(() =>
 async function meetSealed() {
   const session = current;
   let sealed: Record<string, TraktRecord>;
+  setLockedHere(false);
   try {
     sealed = (await vault.openTrakt()) as Record<string, TraktRecord>;
     unread = false;
@@ -161,11 +184,17 @@ export async function traktSignOut(): Promise<boolean> {
   const profile = current?.profile;
   if (!profile) return false;
   await op("traktSignOut");
-  try {
+  // Gone from this browser too, its lock open or not: never "signed out" with a sealed copy left.
+  const forget = async () => {
     await records.signedOut(profile);
+    setLockedHere(false);
+    if (storage()?.words === traktWords.deleteFailed) setStorage(null);
+  };
+  try {
+    await forget();
     return true;
   } catch {
-    setStorage({ words: traktWords.deleteFailed, retry: saveAgain });
+    setStorage({ words: traktWords.deleteFailed, retry: forget });
     return false;
   }
 }

@@ -18,6 +18,8 @@ export const traktWords = {
   signingOut: "Signing out",
   keptInTab: "The sign-in lasts until this tab closes or reloads. With sync on, Remember this browser on Devices and sync keeps it.",
   keptSealed: "The sign-in is kept in this browser, locked with your passkey.",
+  unlockToUse: "Unlock to use Trakt",
+  lockedLine: "This browser keeps this profile's Trakt sign-in, locked with your passkey. Unlock it on Devices and sync to use Trakt here.",
   saveFailed: "This browser could not store the newest Trakt sign-in. Until it does, a reload may ask you to sign in to Trakt again.",
   saveAgain: "Save again",
   deleteFailed: "Signed out of Trakt, but this browser could not delete the sign-in it keeps. Try again.",
@@ -61,10 +63,12 @@ export function loginLine(login: TraktLoginSnapshot): string {
 /** A sign-in that ended without connecting offers a new code (never a build without Trakt). */
 export const loginRetry = (login: TraktLoginSnapshot) => login.phase === "expired" || login.phase === "denied" || login.phase === "failed";
 
-export type TraktAction = "connect" | "signInHere" | "signInAgain" | "syncNow" | "signOut";
+export type TraktAction = "connect" | "signInHere" | "signInAgain" | "syncNow" | "signOut" | "unlock";
 
-/** The card's line and its actions for a state. `clock` formats a time of day. */
-export function stateCard(status: TraktStatus, clock: (ms: number) => string): { line: string; detail?: string; actions: TraktAction[] } {
+/** The card's line and its actions for a state. `clock` formats a time of day. `lockedHere`: this
+ * browser keeps the profile's sign-in under a passkey not opened yet, so unlocking brings it back. */
+export function stateCard(status: TraktStatus, clock: (ms: number) => string, lockedHere = false): { line: string; detail?: string; actions: TraktAction[] } {
+  if (lockedHere && (status.state === "off" || status.state === "thisDeviceOff")) return { line: traktWords.lockedLine, actions: ["unlock"] };
   switch (status.state) {
     case "connected":
       return { line: status.user ? fill(traktWords.connected, { user: status.user }) : traktWords.connectedNoUser, actions: ["syncNow", "signOut"] };
@@ -86,8 +90,10 @@ export function stateCard(status: TraktStatus, clock: (ms: number) => string): {
 }
 
 /** Settings' line for Trakt: off (or not read yet) invites, the other states say themselves. */
-export function rowLine(status: TraktStatus | null, privateLink: boolean, clock: (ms: number) => string): string {
+export function rowLine(status: TraktStatus | null, privateLink: boolean, clock: (ms: number) => string, storage: string | null = null, lockedHere = false): string {
   if (!privateLink) return traktWords.plainLink;
+  if (storage) return storage;
+  if (status && lockedHere) return stateCard(status, clock, true).line;
   if (!status || status.state === "off") return traktWords.rowOff;
   return stateCard(status, clock).line;
 }
@@ -137,6 +143,9 @@ export interface TraktRecordsIo {
   /** Keeps every profile's record where this browser remembers (resolves at once where it does
    * not); rejects when that storage failed. */
   persist(all: Record<string, TraktRecord>): Promise<void>;
+  /** Deletes the profile's kept record, whether or not this browser's lock is open; rejects when
+   * the storage failed. */
+  forget(profile: string): Promise<void>;
 }
 
 /** Every profile's Trakt record, in this tab's memory (and through `persist`, sealed where the
@@ -182,12 +191,12 @@ export class TraktRecords {
     });
   }
 
-  /** Signed out of Trakt: the profile's record goes, here and where it was sealed (rejects when
-   * the sealed copy could not be deleted; `save` tries again). */
+  /** Signed out of Trakt: the profile's record goes, here and where it was sealed, locked or
+   * not (rejects when the sealed copy could not be deleted; calling it again tries again). */
   signedOut(profile: string): Promise<void> {
     return this.inTurn(async () => {
       delete this.all[profile];
-      await this.persist();
+      await this.io.forget(profile);
     });
   }
 

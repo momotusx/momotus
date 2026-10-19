@@ -100,6 +100,10 @@ function harness(persistFails = false) {
       if (failing.now) throw new Error("storage failed");
       stored.push(all);
     },
+    forget: async (profile) => {
+      log.push(`forget ${profile}`);
+      if (failing.now) throw new Error("storage failed");
+    },
   });
   return { log, stored, records, failing };
 }
@@ -148,10 +152,10 @@ test("signing out deletes the profile's record, here and where it was sealed", a
   await records.offered("p2", record(1, 0, "u2"), open);
   log.length = 0;
   await records.signedOut("p1");
-  expect(log).toEqual(["persist p2"]);
-  expect(stored.at(-1)).toEqual({ p2: record(1, 0, "u2") });
+  expect(log).toEqual(["forget p1"]);
+  expect(records.get("p2")).toEqual(record(1, 0, "u2"));
   await records.resend("p1", open);
-  expect(log).toEqual(["persist p2"]);
+  expect(log).toEqual(["forget p1"]);
 });
 
 test("a sealed copy that could not be deleted on sign-out is not reported as gone", async () => {
@@ -183,6 +187,11 @@ test("changes run in the order they came", async () => {
         log.push(`persist ${Object.keys(all).join(",") || "none"}`);
         release = done;
       }),
+    forget: (profile) =>
+      new Promise((done) => {
+        log.push(`forget ${profile}`);
+        release = done;
+      }),
   });
   const first = records.offered("p1", record(1, 0), open);
   const second = records.signedOut("p1");
@@ -194,7 +203,7 @@ test("changes run in the order they came", async () => {
   await new Promise((r) => setTimeout(r, 5));
   release();
   await second;
-  expect(log).toEqual(["persist p1", "send a1.0", "persist none"]);
+  expect(log).toEqual(["persist p1", "send a1.0", "forget p1"]);
 });
 
 test("Settings' Trakt line: an invitation when off, the state otherwise, and the link's words on a plain link", () => {
@@ -202,4 +211,16 @@ test("Settings' Trakt line: an invitation when off, the state otherwise, and the
   expect(rowLine(status({ state: "off" }), true, clock)).toBe(traktWords.rowOff);
   expect(rowLine(status({ state: "connected" }), true, clock)).toBe("Connected as ana");
   expect(rowLine(status({ state: "connected" }), false, clock)).toBe(traktWords.plainLink);
+});
+
+test("a sign-in kept under a lock not opened offers Unlock, not Connect", () => {
+  expect(stateCard(status({ state: "off" }), clock, true)).toEqual({ line: traktWords.lockedLine, actions: ["unlock"] });
+  expect(stateCard(status({ state: "thisDeviceOff" }), clock, true).actions).toEqual(["unlock"]);
+  // Connected meanwhile (the core holds one): as it is.
+  expect(stateCard(status({ state: "connected" }), clock, true).actions).toEqual(["syncNow", "signOut"]);
+  expect(rowLine(status({ state: "off" }), true, clock, null, true)).toBe(traktWords.lockedLine);
+});
+
+test("Settings' Trakt line says a storage problem first", () => {
+  expect(rowLine(status({ state: "connected" }), true, clock, traktWords.saveFailed)).toBe(traktWords.saveFailed);
 });

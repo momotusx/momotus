@@ -6,6 +6,7 @@
 
 import { A } from "@solidjs/router";
 import CircleCheck from "lucide-solid/icons/circle-check";
+import Fingerprint from "lucide-solid/icons/fingerprint-pattern";
 import Link from "lucide-solid/icons/link";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import LogOut from "lucide-solid/icons/log-out";
@@ -17,7 +18,7 @@ import { liveView } from "../core/client";
 import type { TraktLoginSnapshot } from "../core/generated/TraktLoginSnapshot";
 import type { TraktStatus } from "../core/generated/TraktStatus";
 import { remembered } from "../core/sync";
-import { traktLink, traktSignOut, traktStatus, traktStorage, traktSync } from "../core/trakt";
+import { traktLink, traktLockedHere, traktSignOut, traktStatus, traktStorage, traktSync } from "../core/trakt";
 import { form } from "../form";
 import { fill, loginLine, loginRetry, pendingLine, stateCard, syncedLine, timeLeft, type TraktAction, traktWords as w } from "../lib/trakt";
 import "./browse.css";
@@ -70,7 +71,7 @@ export default function TraktScreen() {
 
 /** The connected card, or what each other state says and offers. */
 function Card(props: { status: TraktStatus; connect: () => void }) {
-  const card = () => stateCard(props.status, clock);
+  const card = () => stateCard(props.status, clock, traktLockedHere());
   const [busy, setBusy] = createSignal<"sync" | "signOut" | null>(null);
   const [said, setSaid] = createSignal<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [asking, setAsking] = createSignal(false);
@@ -119,6 +120,13 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
             </Show>
             {busy() === "sync" ? w.syncing : w.syncNow}
           </button>
+        );
+      case "unlock":
+        return (
+          <A class="btn primary" href="/sync" data-f="trakt:unlock" data-autofocus={first || undefined}>
+            <Fingerprint aria-hidden />
+            {w.unlockToUse}
+          </A>
         );
       case "signOut":
         return (

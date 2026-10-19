@@ -14,8 +14,11 @@ import type { SyncRecord } from "../lib/sync";
 const DB = "marquee-vault";
 const STORE = "sealed";
 const ENTRY = "sync";
-const TRAKT = "trakt";
+/** One sealed entry per profile, "trakt:<profile id>", so one profile's can go without the key. */
+const TRAKT = "trakt:";
 const INFO = new TextEncoder().encode("marquee/web-record/v1");
+/** The Trakt entries' own additional data: a sync record's ciphertext never opens as one. */
+const TRAKT_INFO = new TextEncoder().encode("marquee/web-trakt/v1");
 
 interface Sealed {
   credential: ArrayBuffer;
@@ -153,15 +156,15 @@ async function evaluate(credential: ArrayBuffer, salt: Uint8Array<ArrayBuffer>):
   return first;
 }
 
-async function seal(record: unknown, with_: CryptoKey, credential: ArrayBuffer, salt: Uint8Array<ArrayBuffer>): Promise<Sealed> {
+async function seal(record: unknown, with_: CryptoKey, credential: ArrayBuffer, salt: Uint8Array<ArrayBuffer>, info = INFO): Promise<Sealed> {
   const iv = random(12);
-  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: INFO }, with_, new TextEncoder().encode(JSON.stringify(record)));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: info }, with_, new TextEncoder().encode(JSON.stringify(record)));
   return { credential, salt, iv, data };
 }
 
-async function open<T = SyncRecord>(sealed: Sealed, with_: CryptoKey): Promise<T> {
+async function open<T = SyncRecord>(sealed: Sealed, with_: CryptoKey, info = INFO): Promise<T> {
   try {
-    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: sealed.iv, additionalData: INFO }, with_, sealed.data);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: sealed.iv, additionalData: info }, with_, sealed.data);
     return JSON.parse(new TextDecoder().decode(plain)) as T;
   } catch {
     throw new VaultError("passkey");
@@ -265,7 +268,11 @@ export async function clear(): Promise<void> {
     // Which passkey guarded it: held when unlocked, else read (a locked page never opened it).
     const entry = held ?? (await read().catch(() => undefined));
     try {
-      await tx("readwrite", (s) => (s.delete(TRAKT), s.delete(ENTRY)));
+      const trakt = await traktKeys();
+      await tx("readwrite", (s) => {
+        for (const id of trakt) s.delete(id);
+        return s.delete(ENTRY);
+      });
     } catch {
       throw new VaultError("forget");
     }
@@ -290,27 +297,54 @@ const opened = () => {
   for (const fn of listeners) fn();
 };
 
-/** Seals the profiles' Trakt records beside the sync record, in turn with its saves; nothing
- * while remembering is off or a Forget runs. No record at all deletes the entry. */
+/** Every Trakt entry here (a reading that fails rejects). */
+async function traktKeys(): Promise<string[]> {
+  const keys = await tx<IDBValidKey[]>("readonly", (s) => s.getAllKeys());
+  return keys.filter((k): k is string => typeof k === "string" && k.startsWith("trakt"));
+}
+
+/** Seals each profile's Trakt record beside the sync record, in turn with its saves; nothing
+ * while remembering is off or a Forget runs. */
 export function saveTrakt(records: Record<string, unknown>): Promise<void> {
   const k = key;
   const h = held;
   if (!k || !h || clearing > 0) return Promise.resolve();
   const run = saving.then(async () => {
     if (key !== k || clearing > 0) return;
-    if (Object.keys(records).length === 0) return void (await tx("readwrite", (s) => s.delete(TRAKT)));
-    const sealed = await seal(records, k, h.credential, h.salt);
-    if (key !== k || clearing > 0) return;
-    await tx("readwrite", (s) => s.put(sealed, TRAKT));
+    const sealed = await Promise.all(Object.entries(records).map(async ([profile, record]) => [TRAKT + profile, await seal(record, k, h.credential, h.salt, TRAKT_INFO)] as const));
+    if (key !== k || clearing > 0 || sealed.length === 0) return;
+    await tx("readwrite", (s) => {
+      let last: IDBRequest | undefined;
+      for (const [id, value] of sealed) last = s.put(value, id);
+      return last as IDBRequest;
+    });
   });
   saving = run.catch(() => undefined);
   return run;
 }
 
-/** The Trakt records sealed here, once remembering is on (none before). */
+/** Deletes one profile's sealed Trakt record. A delete needs no key: it works while this browser
+ * remembers an account it has not opened yet (rejects when the storage failed). */
+export function forgetTrakt(profile: string): Promise<void> {
+  const run = saving.then(() => tx("readwrite", (s) => s.delete(TRAKT + profile)).then(() => undefined));
+  saving = run.catch(() => undefined);
+  return run;
+}
+
+/** Whether a Trakt record for `profile` is sealed here (readable without the key). */
+export async function holdsTrakt(profile: string): Promise<boolean> {
+  return (await tx<IDBValidKey | undefined>("readonly", (s) => s.getKey(TRAKT + profile))) !== undefined;
+}
+
+/** The Trakt records sealed here, by profile, once remembering is on (none before). */
 export async function openTrakt(): Promise<Record<string, unknown>> {
   const k = key;
   if (!k) return {};
-  const sealed = await tx<Sealed | undefined>("readonly", (s) => s.get(TRAKT));
-  return sealed ? open<Record<string, unknown>>(sealed, k) : {};
+  const out: Record<string, unknown> = {};
+  for (const id of await traktKeys()) {
+    if (!id.startsWith(TRAKT)) continue;
+    const sealed = await tx<Sealed | undefined>("readonly", (s) => s.get(id));
+    if (sealed) out[id.slice(TRAKT.length)] = await open(sealed, k, TRAKT_INFO);
+  }
+  return out;
 }

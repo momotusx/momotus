@@ -59,6 +59,8 @@ g.indexedDB = {
         };
         const store = {
           get: (key: string) => ((reading = key), { result: disk.get(key) }),
+          getKey: (key: string) => ((reading = key), { result: disk.has(key) ? key : undefined }),
+          getAllKeys: () => ({ get result() { return [...disk.keys()]; } }),
           put: (value: unknown, key: string) => (changes.push(() => disk.set(key, value)), { result: key }),
           delete: (key: string) => (changes.push(() => disk.delete(key)), { result: undefined }),
         };
@@ -97,7 +99,9 @@ const vault = await import("./vault");
 const trakt = await import("./trakt");
 const settled = () => new Promise((done) => setTimeout(done, 10));
 const live = () => views.filter((v) => !v.closed);
-const record = (token: string) => ({ accessToken: token, refreshToken: `${token}-r`, createdAtMs: 0, expiresAtMs: 1, scope: "public", account: "u", user: "ana", revision: 0, generation: 1 });
+let revision = 0;
+/** A record as the core offers one: each a new rotation. */
+const record = (token: string) => ({ accessToken: token, refreshToken: `${token}-r`, createdAtMs: 0, expiresAtMs: 1, scope: "public", account: "u", user: "ana", revision: ++revision, generation: 1 });
 const status = (extra: Record<string, unknown> = {}) => ({ state: "connected", user: "ana", lastOkMs: null, lastError: null, pendingWrites: 0, unmapped: [], importing: null, record: null, ...extra });
 /** What the page told the core, in order, then forgotten. */
 const told = () => sent.splice(0).map((s) => (s.name === "setTrakt" ? `setTrakt ${(s.fields.record as { accessToken: string }).accessToken}` : s.name));
@@ -111,8 +115,8 @@ const offer = async (token: string) => {
   live().at(-1)?.handlers.snapshot(status({ record: record(token) }));
   await settled();
 };
-/** The sealed Trakt entry, as bytes on disk. */
-const sealed = () => disk.get("trakt") as { iv: Uint8Array; data: ArrayBuffer } | undefined;
+/** A profile's sealed Trakt entry, as bytes on disk. */
+const sealed = (profile = "p1") => disk.get(`trakt:${profile}`) as { iv: Uint8Array; data: ArrayBuffer } | undefined;
 
 afterAll(async () => {
   // The vault module is shared with the other test files: nothing remembered after this one.
@@ -182,7 +186,7 @@ test("a sealed write that fails is said and not acknowledged; Save again stores 
 test("a sealed copy that could not be read is never overwritten", async () => {
   const before = sealed();
   // The passkey opens remembering again (an unlock): reading the Trakt entry fails.
-  idb.failRead = "trakt";
+  idb.failRead = "trakt:p1";
   await vault.unlock();
   await settled();
   expect(trakt.traktStorage()?.words).toContain("could not read the Trakt sign-ins");
@@ -209,4 +213,49 @@ test("sign-out deletes the sealed copy; one that stays is said, not reported as 
   await reset({ active: "p2", locked: false });
   await reset({ active: "p1", locked: false });
   expect(told()).toEqual(["close trakt", "subscribe trakt", "close trakt", "subscribe trakt"]);
+});
+
+test("a record pushed again is stored and acknowledged once", async () => {
+  const again = record("w1");
+  live().at(-1)?.handlers.snapshot(status({ record: again }));
+  live().at(-1)?.handlers.updates([status({ record: again }), status({ record: again })]);
+  await settled();
+  expect(told().filter((x) => x === "setTrakt w1")).toHaveLength(1);
+});
+
+test("two switches in a row open only the newest profile's view", async () => {
+  // Back to back, as the core can report them, while the open view is still closing.
+  expect(live()).toHaveLength(1);
+  setSession({ active: "p2", locked: false });
+  setSession({ active: "p3", locked: false });
+  await settled();
+  expect(live()).toHaveLength(1);
+  // What that view offers is the newest profile's.
+  await offer("v1");
+  await reset({ active: "p1", locked: false });
+  told();
+  await reset({ active: "p3", locked: false });
+  expect(told()).toEqual(["close trakt", "setTrakt v1", "subscribe trakt"]);
+});
+
+test("signing out while this browser's lock is closed deletes the sealed copy, and only then says signed out", async () => {
+  // p1 and p2 each have a sealed sign-in.
+  await reset({ active: "p1", locked: false });
+  await offer("t5");
+  await reset({ active: "p2", locked: false });
+  await offer("u1");
+  expect(sealed("p1") && sealed("p2")).toBeTruthy();
+  // As after a reload: this browser remembers, its lock not opened yet.
+  vault.drop();
+  await reset({ active: "p1", locked: false });
+  expect(trakt.traktLockedHere()).toBe(true);
+  told();
+  expect(await trakt.traktSignOut()).toBe(true);
+  expect(sealed("p1")).toBeUndefined();
+  expect(sealed("p2")).toBeDefined();
+  expect(trakt.traktLockedHere()).toBe(false);
+  // Unlocked again, the sign-out stays done: p1's sign-in does not come back, the others do.
+  await vault.unlock();
+  await settled();
+  expect(Object.keys(await vault.openTrakt()).sort()).toEqual(["p2", "p3"]);
 });

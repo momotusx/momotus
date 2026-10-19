@@ -17,7 +17,7 @@ import type { QualityPref } from "../core/generated/QualityPref";
 import { chooseForm, type Form, form } from "../form";
 import { findAddons, languageName, syncSummary, syncWords } from "../lib/words";
 import * as sync from "../core/sync";
-import { traktLink, traktStatus } from "../core/trakt";
+import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
 import { rowLine, traktWords } from "../lib/trakt";
 import "./browse.css";
 import "./settings.css";
@@ -166,6 +166,13 @@ export default function SettingsScreen() {
             title="Debrid services"
             text={debridAccounts()?.accounts.length ? inUse(debridAccounts()!.accounts.length) : "Play torrents as fast direct links with a debrid account."}
           />
+          <LinkRow
+            href="/trakt"
+            fkey="settings:trakt"
+            icon={<Radio aria-hidden />}
+            title={traktWords.title}
+            text={rowLine(traktStatus(), traktLink, clockTime, traktStorage()?.words ?? null, traktLockedHere())}
+          />
           <LinkRow href="/import" fkey="settings:import" icon={<Download aria-hidden />} title="Import from Stremio" text="Addons, library and progress, with a code. No password typed here." />
           <LinkRow href="/welcome?step=3" fkey="settings:setup" icon={<Wrench aria-hidden />} title="Setup check" text="Network, display, catalogs, sources and subtitles at a glance." />
         </div>
@@ -175,7 +182,6 @@ export default function SettingsScreen() {
         <h2>Devices and sync</h2>
         <div class="links">
           <LinkRow href="/sync" fkey="settings:sync" icon={<MonitorSmartphone aria-hidden />} title={syncWords.title} text={syncLine()} />
-          <LinkRow href="/trakt" fkey="settings:trakt" icon={<Radio aria-hidden />} title={traktWords.title} text={rowLine(traktStatus(), traktLink, clockTime)} />
         </div>
       </section>
 
