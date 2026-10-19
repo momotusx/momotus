@@ -21,6 +21,7 @@ import androidx.media3.datasource.HttpDataSource
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Segment
@@ -79,6 +80,10 @@ class PlaybackController(
         private set
 
     var attempts: List<Attempt> by mutableStateOf(emptyList())
+        private set
+
+    /** A version picked by hand failed for a reason of its own: the failure card offers this one first. */
+    var offer: OtherVersion? by mutableStateOf(null)
         private set
 
     var positionMs by mutableLongStateOf(0L)
@@ -169,6 +174,12 @@ class PlaybackController(
     private var handlingFailure = false
     private var lastPositionMs = 0L
     private var pick: TextPick? = null
+
+    /** The viewer picked a subtitle or Off in this play: the core's start subtitle no longer turns on. */
+    private var chose = false
+
+    /** The start subtitle already turned on, so a repeat of it does nothing. */
+    private var started: String? = null
 
     /** Addon subtitle files that did not load in this play: not side-loaded or offered again. */
     private val dead = HashSet<String>()
@@ -268,6 +279,7 @@ class PlaybackController(
         segments = s.segments
         nextAtMs = s.nextAtMs
         trakt = s.trakt
+        offer = s.offer
         subtitlesPending = s.subtitlesPending
         snapshotSubs = s.subtitles
         val added = newSubtitleNotes(subtitleNotes, s.subtitleNotes)
@@ -280,6 +292,13 @@ class PlaybackController(
             val gone = loadedSubs.filter { sub -> s.subtitles.none { it.url == sub.url } }
             if (gone.isNotEmpty()) dropSubtitles(gone, words = null)
         }
+        // The core's start subtitle, once, as if picked; nothing goes back to the core.
+        startSubtitle(s.autoSubtitle, chose, pick != null, started)?.let { url ->
+            s.subtitles.firstOrNull { it.url == url }?.let { track ->
+                started = url
+                turnOn(track)
+            }
+        }
         when (s.phase) {
             PlaybackPhase.Ready -> {
                 val url = s.url
@@ -287,7 +306,11 @@ class PlaybackController(
             }
 
             PlaybackPhase.Resolving -> {
-                if (handlingFailure) {
+                // The core moved on to the ranking's next version by itself: say which.
+                val trying = s.trying
+                if (trying != null) {
+                    status = "Trying the next version: ${trying.label}"
+                } else if (handlingFailure) {
                     val last = s.attempts.lastOrNull()
                     status =
                         last?.let { "Source failed (${it.via}: ${it.error}), trying the next one" }
@@ -598,7 +621,60 @@ class PlaybackController(
                 .build()
     }
 
+    /**
+     * The viewer's pick from the subtitle menu (or Off): it wins for the rest of the play, and a core track
+     * or Off goes back to the core, which remembers it for the title (`subtitleChosen`). A track in the
+     * file is the viewer's pick too, but the core does not know it.
+     */
     fun selectText(id: String) {
+        chose = true
+        val url =
+            when {
+                id == TRACK_OFF -> {
+                    null
+                }
+
+                id.startsWith(LATE) -> {
+                    id.removePrefix(LATE)
+                }
+
+                id.startsWith(EXTERNAL) -> {
+                    find(C.TRACK_TYPE_TEXT, id)?.let { (g, i) ->
+                        externalUrl(g.getTrackFormat(i).id)
+                    }
+                }
+
+                else -> {
+                    return choose(id)
+                }
+            }
+        if (id != TRACK_OFF && url == null) return choose(id)
+        view?.subtitleChosen(url)
+        choose(id)
+    }
+
+    /** Turns one of the core's tracks on: picked from the menu, or the start subtitle. */
+    private fun turnOn(track: SubtitleTrack) {
+        pick = TextPick(track.lang, external = true, url = track.url)
+        // Before a source is loaded, the load takes the picked file with it.
+        if (loadedUrl == null) return
+        if (loadedSubs.any { it.url == track.url }) {
+            applyPick(player.currentTracks)
+            refreshTracks()
+            return
+        }
+        // The override of an earlier pick would still match after the reload and keep the old track on.
+        player.trackSelectionParameters =
+            player.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .build()
+        reloadWith(loadedSubs + track)
+        refreshTracks()
+    }
+
+    private fun choose(id: String) {
         val params = player.trackSelectionParameters.buildUpon()
         when {
             id == TRACK_OFF -> {
@@ -608,15 +684,8 @@ class PlaybackController(
 
             id.startsWith(LATE) -> {
                 val late = snapshotSubs.firstOrNull { it.url == id.removePrefix(LATE) } ?: return
-                pick = TextPick(late.lang, external = true, url = late.url)
-                // The override of an earlier pick would still match after the reload and keep the old track on.
-                player.trackSelectionParameters =
-                    params
-                        .clearOverridesOfType(
-                            C.TRACK_TYPE_TEXT,
-                        ).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                        .build()
-                reloadWith(loadedSubs + late)
+                turnOn(late)
+                return
             }
 
             else -> {

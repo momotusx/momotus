@@ -217,3 +217,14 @@ fun textChoice(
         ).joinToString(", ")
     return TrackChoice(id, name, detail.ifBlank { null }, selected)
 }
+
+/**
+ * The start subtitle to turn on (plans/m13-subtitle-languages.md 6): the core's [auto] track, once, unless
+ * the viewer [chose] one (or Off) in this play, or a pick carried from the episode before is on.
+ */
+internal fun startSubtitle(
+    auto: String?,
+    chose: Boolean,
+    picked: Boolean,
+    started: String?,
+): String? = auto?.takeIf { !chose && !picked && it != started }

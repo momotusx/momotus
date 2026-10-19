@@ -102,4 +102,14 @@ class SubtitleRowsTest {
         assertEquals("SubSense, loads when chosen", row.detail)
         assertNull(subtitleRows(emptyList(), emptyMap(), emptySet(), emptyList(), "late:").first().section)
     }
+
+    @Test
+    fun `the start subtitle turns on once, unless the viewer chose or a carried pick is on`() {
+        assertEquals("u/tur", startSubtitle("u/tur", chose = false, picked = false, started = null))
+        assertNull(startSubtitle(null, chose = false, picked = false, started = null))
+        assertNull(startSubtitle("u/tur", chose = true, picked = false, started = null), "the viewer chose (or Off)")
+        assertNull(startSubtitle("u/tur", chose = false, picked = true, started = null), "a carried pick is on")
+        assertNull(startSubtitle("u/tur", chose = false, picked = false, started = "u/tur"), "once")
+        assertEquals("u/eng", startSubtitle("u/eng", chose = false, picked = false, started = "u/tur"))
+    }
 }

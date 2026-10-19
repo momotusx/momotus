@@ -112,6 +112,8 @@ fun TvPlayer(
     modifier: Modifier = Modifier,
     /** False while the player fades out after leaving: Back and keys go to the page coming in. */
     active: Boolean = true,
+    /** The failure card's "Play {label}": open that version from the same Versions view. */
+    onOffer: (String) -> Unit = {},
 ) {
     val safe = Marquee.safe
     val stage = controller.stage
@@ -364,6 +366,8 @@ fun TvPlayer(
                 onBack = onBack,
                 focus = failFocus,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = 360.dp),
+                offer = controller.offer,
+                onOffer = onOffer,
             )
         }
         // A notice while the buffer fills keeps the mark in the middle.

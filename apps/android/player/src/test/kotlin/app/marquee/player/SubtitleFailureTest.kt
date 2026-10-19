@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
+import app.marquee.core.model.OtherVersion
 import app.marquee.core.views.PlaybackView
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -26,6 +27,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -74,12 +76,14 @@ class SubtitleFailureTest {
 
     private val other = "http://127.0.0.1:7781/opensubtitles/tur.srt"
 
-    /** The core's playback snapshot with these subtitle files and notes. */
+    /** The core's playback snapshot with these subtitle files and notes, and [extra] fields ending in a comma. */
     private fun snapshot(
         subtitles: List<String> = listOf(subtitle),
         notes: String = "[]",
-    ) = """{"phase":"ready","url":"$video","key":"k1","attempt":1,"manifest":false,"subtitlesPending":false,""" +
-        """"trakt":"off","subtitleNotes":$notes,"subtitles":[""" +
+        phase: String = "ready",
+        extra: String = "",
+    ) = """{"phase":"$phase","url":"$video","key":"k1","attempt":1,"manifest":false,"subtitlesPending":false,""" +
+        """"trakt":"off","subtitleNotes":$notes,$extra"subtitles":[""" +
         subtitles.joinToString(",") {
             """{"url":"$it","lang":"tur","source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
                 """"forced":false,"hearingImpaired":false}"""
@@ -134,13 +138,21 @@ class SubtitleFailureTest {
         fail(what)
     }
 
-    private fun failOvers() =
+    private fun commands(type: String) =
         sent.filter {
             it["command"]
                 ?.jsonObject
                 ?.get("type")
                 ?.jsonPrimitive
-                ?.content == "failOver"
+                ?.content == type
+        }
+
+    private fun failOvers() = commands("failOver")
+
+    /** What each `subtitleChosen` sent: a track's address, or null for Off. */
+    private fun chosen() =
+        commands("subtitleChosen").map {
+            it["command"]!!.jsonObject["url"]?.jsonPrimitive?.contentOrNull
         }
 
     private fun httpError(
@@ -309,6 +321,49 @@ class SubtitleFailureTest {
         } finally {
             CoreLog.sink = { _, _, _ -> }
         }
+    }
+
+    @Test
+    fun `the core's start subtitle turns on once by itself, and nothing goes back`() {
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
+        push(snapshot(subtitles = listOf(subtitle, other), extra = "\"autoSubtitle\":\"$subtitle\","))
+        until("the start subtitle is side-loaded") { player.items.size == 2 }
+        assertEquals(listOf(subtitle), player.items.last().subtitles)
+        // Once: the same snapshot again changes nothing (the note marks it as heard).
+        val note = """[{"source":"SubSense","problem":"blocked"}]"""
+        push(snapshot(subtitles = listOf(subtitle, other), notes = note, extra = "\"autoSubtitle\":\"$subtitle\","))
+        until("the snapshot is heard") { controller.subtitlePanelNote != null }
+        assertEquals(2, player.items.size)
+        assertEquals(emptyList(), chosen(), "the start subtitle is not the viewer's pick")
+        controller.release()
+    }
+
+    @Test
+    fun `the viewer's pick or Off wins over the start subtitle and goes back to the core`() {
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
+        controller.selectText(TRACK_OFF)
+        until("Off goes to the core") { chosen() == listOf(null) }
+        // The note marks the snapshot as heard.
+        val note = """[{"source":"SubSense","problem":"blocked"}]"""
+        push(snapshot(subtitles = listOf(subtitle, other), notes = note, extra = "\"autoSubtitle\":\"$subtitle\","))
+        until("the snapshot is heard") { controller.subtitlePanelNote != null }
+        assertEquals(1, player.items.size, "the start subtitle turned on after Off")
+        // A pick of a file not loaded yet: it loads, and its address goes to the core.
+        controller.selectText("late:$other")
+        until("the pick is side-loaded") { player.items.size == 2 }
+        until("the pick goes to the core") { chosen() == listOf(null, other) }
+        controller.release()
+    }
+
+    @Test
+    fun `moving on to the next version says which, and a failed pick offers the next`() {
+        val (_, controller) = open()
+        push(snapshot(phase = "resolving", extra = "\"trying\":{\"key\":\"k2\",\"label\":\"1080p WEB\"},"))
+        until("the next version is named") { controller.status == "Trying the next version: 1080p WEB" }
+        push(snapshot(phase = "failed", extra = "\"offer\":{\"key\":\"k3\",\"label\":\"720p BluRay\"},"))
+        until("the playback failed") { controller.stage == PlaybackController.Stage.Failed }
+        assertEquals(OtherVersion("k3", "720p BluRay"), controller.offer)
+        controller.release()
     }
 
     /** A player that records the items it is given and raises the errors a test hands it. */

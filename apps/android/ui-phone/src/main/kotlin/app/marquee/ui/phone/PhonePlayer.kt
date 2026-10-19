@@ -106,6 +106,8 @@ fun PhonePlayer(
     onPictureInPicture: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The failure card's "Play {label}": open that version from the same Versions view. */
+    onOffer: (String) -> Unit = {},
 ) {
     val stage = controller.stage
     val density = LocalDensity.current
@@ -254,6 +256,8 @@ fun PhonePlayer(
                     problem = controller.problem,
                     attempts = controller.attempts,
                     onVersions = onVersions,
+                    offer = controller.offer,
+                    onOffer = onOffer,
                     onBack = onBack,
                     focus = remember { FocusRequester() },
                     modifier =

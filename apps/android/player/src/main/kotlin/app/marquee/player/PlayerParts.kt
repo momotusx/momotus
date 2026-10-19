@@ -68,6 +68,7 @@ import app.marquee.core.Format
 import app.marquee.core.TraktCopy
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.Segment
 import app.marquee.core.model.TraktPlayback
 import app.marquee.design.CapsLabel
@@ -79,6 +80,7 @@ import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
+import app.marquee.design.PlayFilled
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RemoteImage
 import app.marquee.design.SecondaryButton
@@ -305,6 +307,9 @@ fun PlayerStatus(
     onBack: () -> Unit,
     focus: FocusRequester,
     modifier: Modifier = Modifier,
+    /** The core's next version after a version picked by hand failed: the first way on, "Play {label}". */
+    offer: OtherVersion? = null,
+    onOffer: (String) -> Unit = {},
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -354,7 +359,18 @@ fun PlayerStatus(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 modifier = Modifier.padding(top = Marquee.space.xs),
             ) {
-                PrimaryButton("Choose a version", onVersions, icon = Icons.Layers, focusRequester = focus)
+                if (offer != null) {
+                    // The core's next version comes first; the others stay a step away.
+                    PrimaryButton(
+                        "Play ${offer.label}",
+                        { onOffer(offer.key) },
+                        icon = PlayFilled,
+                        focusRequester = focus,
+                    )
+                    SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
+                } else {
+                    PrimaryButton("Choose a version", onVersions, icon = Icons.Layers, focusRequester = focus)
+                }
                 SecondaryButton("Back", onBack)
             }
         } else {

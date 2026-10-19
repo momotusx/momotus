@@ -190,6 +190,7 @@ class PlayerHolder(
  * @param onVersions the Versions screen of this video (it replaces the player).
  * @param onTitle the title page of a series, for its episodes; null for a movie.
  * @param onNext the next episode (it replaces the player).
+ * @param onOffer the version the failure card offers, by its key (it replaces the player).
  */
 @Composable
 fun PlayerScreen(
@@ -202,6 +203,7 @@ fun PlayerScreen(
     onVersions: () -> Unit,
     onTitle: (() -> Unit)?,
     onNext: (NextEpisode, String?) -> Unit,
+    onOffer: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val holder =
@@ -220,9 +222,23 @@ fun PlayerScreen(
         holder.shutdown()
         onNext(episode, binge)
     }
+    val offer: (String) -> Unit = { key ->
+        holder.shutdown()
+        onOffer(key)
+    }
     if (form == Form.Tv) {
-        TvPlayer(controller, holder.autoplayNext, onVersions, onTitle, next, leave, active = active)
+        TvPlayer(controller, holder.autoplayNext, onVersions, onTitle, next, leave, active = active, onOffer = offer)
     } else {
-        PhonePlayer(controller, holder.autoplayNext, window.inPip, onVersions, onTitle, next, window::enterPip, leave)
+        PhonePlayer(
+            controller,
+            holder.autoplayNext,
+            window.inPip,
+            onVersions,
+            onTitle,
+            next,
+            window::enterPip,
+            leave,
+            onOffer = offer,
+        )
     }
 }
