@@ -1,0 +1,20 @@
+librqbit-dualstack-sockets, vendored for Marquee
+
+Upstream: https://github.com/ikatson/librqbit-dualstack-sockets, commit
+e2f221ca745c25c7790abb593ed260ce5a499fa1 (from the package's
+.cargo_vcs_info.json), published to crates.io as librqbit-dualstack-sockets
+0.7.0. Copyright 2025 Igor Katson. Licensed under the Apache License, Version
+2.0: LICENSE is upstream's header as the registry package ships it,
+LICENSE-APACHE-2.0 the full text (copied from vendor/librqbit). Upstream ships
+no NOTICE file of its own.
+
+What was taken: src/, README.md, LICENSE, Cargo.toml.orig and the Cargo.toml
+published to crates.io for 0.7.0, plus an empty [workspace] table.
+
+Marquee changes (the changed spot carries a "Marquee fork" comment):
+
+- src/bind_device.rs: `BindDevice::bind_sref` binds by interface index
+  (`bind_device_by_index_v4` / `_v6`) on iOS and tvOS as on macOS. Upstream
+  gates that to macOS only, so the iOS and tvOS builds fell to socket2's
+  `bind_device`, which exists only on Linux, Android and Fuchsia, and failed
+  to compile (E0599).
