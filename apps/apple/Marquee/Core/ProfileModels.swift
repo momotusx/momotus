@@ -25,6 +25,8 @@ struct ProfileInfo: Decodable, Hashable, Sendable, Identifiable {
     let isOwner: Bool
     /// Its PIN record has not arrived from another device yet: shown, not openable.
     let syncing: Bool
+    /// A kids profile: it reads the owner's addons.
+    var kids = false
 }
 
 /// Profile rules the screens share, equal to the web's `lib/profiles.ts` and

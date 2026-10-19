@@ -35,5 +35,6 @@
    "url": "http://127.0.0.1:7792/manifest.json",
    "version": "1.0.0"
   }
- ]
+ ],
+ "fresh": false
 }

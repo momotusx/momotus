@@ -81,21 +81,6 @@ import Testing
     #expect(two.contains("2 edits wait for the sync server's clock to catch up. Nothing is lost."))
 }
 
-@Test func startFreshTurnsAnInstalledButOffCatalogBackOn() {
-    let url = "https://v3-cinemeta.strem.io/manifest.json"
-    func cinemeta(enabled: Bool) -> AddonInfo {
-        AddonInfo(
-            url: url, host: "v3-cinemeta.strem.io", name: "Cinemeta", description: nil, logo: nil, version: "3.0.14",
-            enabled: enabled, provides: ["catalog", "meta"], types: ["movie", "series"], configurable: false, configureUrl: nil)
-    }
-    // Installed counts as installed and on: off is turned back on, never installed again or shown as done.
-    #expect(AddonSetup.step(url, in: [cinemeta(enabled: false)]) == .turnOn)
-    #expect(AddonSetup.step(url, in: [cinemeta(enabled: true)]) == .done)
-    #expect(AddonSetup.step(url, in: []) == .install)
-    // The list not read yet: install (adding turns it on first, so an installed one still ends up on).
-    #expect(AddonSetup.step(url, in: nil) == .install)
-}
-
 @Test func tvBackGoesHomeThenToTheTopThenExits() {
     // Another place, wherever it is scrolled: Home first.
     #expect(TVBack.step(atHome: false, scrolledDown: true) == .goHome)

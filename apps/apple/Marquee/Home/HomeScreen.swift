@@ -24,6 +24,7 @@ struct HomeScreen: View {
     @State private var playing: PlayRoute?
     @State private var showSources = false
     @State private var showHeroVersions = false
+    @State private var reviewing = false
     #if os(tvOS)
     /// The hero's Play is where focus goes back to.
     @Namespace private var startScope
@@ -72,6 +73,11 @@ struct HomeScreen: View {
             PlayerScreen(route: route, versions: heroVersions, core: core)
         }
         .navigationDestination(isPresented: $showSources) { AddonsPage(core: core, sourcesOnly: true) }
+        .navigationDestination(isPresented: $reviewing) { RecommendedAddonsPage(core: core) }
+        .task(id: model.offer.addons.taskId) { model.offer.start() }
+        .task(id: model.offer.addons.snapshot) { await model.offer.refresh() }
+        // First run: the recommended addons before anything else.
+        .onChange(of: model.offer.fresh, initial: true) { _, fresh in if fresh { onboarding = true } }
         .navigationDestination(isPresented: $showHeroVersions) {
             if let heroVersions {
                 VersionsScreen(model: heroVersions, heading: heroVersions.target.title, core: core)
@@ -100,8 +106,11 @@ struct HomeScreen: View {
         case .ready where model.allFailed:
             couldNotLoad.padding(.horizontal, metrics.gutter)
         case .ready:
+            // The card sits under Continue Watching, or first without it.
+            if !model.rows.contains(where: { $0.rowId == continueRow }) { offerCard }
             ForEach(model.rows, id: \.rowId) { row in
                 RowView(row: row, retry: model.reload, startScope: start == .row(row.rowId) ? startScopeID : nil)
+                if row.rowId == continueRow { offerCard }
             }
             if model.needsSetup { setup.padding(.horizontal, metrics.gutter) }
         }
@@ -126,6 +135,22 @@ struct HomeScreen: View {
             } else {
                 showHeroVersions = true
             }
+        }
+    }
+
+    private var continueRow: String { "continue-watching" }
+
+    /// "New recommended addons", once per profile and list version.
+    @ViewBuilder private var offerCard: some View {
+        if let names = model.offer.names(kids: profiles.snapshot?.current?.kids == true) {
+            RecommendedCard(
+                names: names,
+                review: {
+                    Task { await model.offer.seen() }
+                    reviewing = true
+                },
+                notNow: { Task { await model.offer.seen() } })
+            .padding(.horizontal, metrics.gutter)
         }
     }
 
@@ -158,7 +183,7 @@ struct HomeScreen: View {
             }
             CatalogSetup(
                 title: "Home fills up from your addons",
-                text: "None of the addons you have on shows a catalog here. Set up Marquee adds the standard catalog in one step, or add an addon yourself.",
+                text: "None of the addons you have on shows a catalog here. Set up Marquee offers the recommended addons, or add an addon yourself.",
                 core: core, setUp: { onboarding = true })
         }
         .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xxl - 20)
@@ -202,8 +227,8 @@ struct HomeScreen: View {
 }
 
 /// No catalog to show (empty Home and Discover): why, then Set up Marquee,
-/// whose Start fresh adds the standard catalog in one press with no typing
-/// on a remote, and Add an addon. On TV the focus enters on Set up Marquee.
+/// whose Start fresh offers the recommended addons with no typing on a
+/// remote, and Add an addon. On TV the focus enters on Set up Marquee.
 struct CatalogSetup: View {
     let title: String
     let text: String
@@ -232,5 +257,38 @@ struct CatalogSetup: View {
             .padding(.top, 4)
         }
         .defaultFocus($primary, true)
+    }
+}
+
+/// The card that offers recommended addons a profile does not have yet:
+/// their names, Review (the addons step for them) and Not now.
+private struct RecommendedCard: View {
+    let names: [String]
+    let review: () -> Void
+    let notNow: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("New recommended addons")
+                .display(Theme.type.title3)
+                .foregroundStyle(Theme.Palette.text)
+                .accessibilityAddTraits(.isHeader)
+            Text(names.joined(separator: ", "))
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            // Centered on one line: the words beside the pill sit on its middle.
+            HStack(spacing: 12) {
+                Button("Review", action: review).buttonStyle(PillButtonStyle())
+                Button("Not now", action: notNow)
+                    .buttonStyle(.textLink)
+                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+            }
+            .padding(.top, 4)
+        }
+        .padding(Theme.Space.s + 4)
+        .frame(maxWidth: 760, alignment: .leading)
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 }

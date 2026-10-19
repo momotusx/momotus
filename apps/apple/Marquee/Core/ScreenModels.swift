@@ -84,6 +84,9 @@ struct KindCount: Decodable, Hashable, Sendable {
 
 struct AddonsSnapshot: Decodable, Hashable, Sendable {
     let addons: [AddonInfo]
+    /// First run: the profile starts at the recommended addons step (it never
+    /// had a list, this device is in no sync account, not a kids profile).
+    let fresh: Bool
 }
 
 struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
@@ -170,21 +173,31 @@ struct ListedAddon: Decodable, Hashable, Sendable {
     }
 }
 
-/// What makes a standard addon (Cinemeta for Start fresh and the setup
-/// check) count as added: installed and on. One installed but turned off
-/// (an empty Home sends people to setup) is turned back on, never installed
-/// again or shown as done.
-enum AddonSetup: Equatable {
-    case install
-    case turnOn
-    case done
+/// The default addons and whether each is in the profile's list
+/// (`defaultAddons`, plans/m13-default-addons.md).
+struct DefaultAddons: Decodable, Hashable, Sendable {
+    /// The list's version: a profile whose `defaultsSeen` is below it is
+    /// offered the missing ones once.
+    let version: Int
+    /// The nine, in order.
+    let addons: [DefaultAddonInfo]
+}
 
-    /// From the installed list; nil (not read yet) means install. Adding one
-    /// tries turning it on first whatever this says, so an installed one in a
-    /// list not read yet still ends up on.
-    static func step(_ url: String, in addons: [AddonInfo]?) -> AddonSetup {
-        guard let addon = addons?.first(where: { $0.url == url }) else { return .install }
-        return addon.enabled ? .done : .turnOn
+struct DefaultAddonInfo: Decodable, Hashable, Sendable, Identifiable {
+    /// Names it in `installDefaults` choices.
+    let key: String
+    let name: String
+    /// What it does, in one line; shown as is.
+    let line: String
+    /// "catalogs", "streams", "subtitles" or "lists".
+    let group: String
+    /// In the list by manifest id: a copy with other settings counts.
+    let installed: Installed
+
+    var id: String { key }
+
+    enum Installed: String, Decodable, Sendable {
+        case absent, on, off
     }
 }
 
@@ -208,6 +221,8 @@ struct Prefs: Decodable, Hashable, Sendable {
     let subtitleLanguages: [String]
     /// Start the next episode when one ends.
     let autoplayNext: Bool
+    /// The default addons version this profile was last offered.
+    let defaultsSeen: Int
 }
 
 struct StreamPrefs: Decodable, Hashable, Sendable {

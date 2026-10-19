@@ -154,6 +154,7 @@ targets:
       - path: Marquee/Trakt/TraktModel.swift
       - path: Marquee/Trakt/TraktWords.swift
       - path: Marquee/Core/TraktModels.swift
+      - path: Marquee/Settings/AddonSetup.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev.tests

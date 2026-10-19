@@ -19,8 +19,6 @@ enum FindFocus: Hashable {
 struct FindAddonsScreen: View {
     let core: CoreClient
     @State private var page: FindAddonsPage
-    /// The paste field's installs and their failure; the lists follow them.
-    @State private var addons: LiveRecord<AddonsSnapshot>
     @State private var list = "official"
     @State private var filter = FindFilter.all
     @FocusState private var focus: FindFocus?
@@ -31,7 +29,6 @@ struct FindAddonsScreen: View {
     init(core: CoreClient) {
         self.core = core
         _page = State(initialValue: FindAddonsPage(core: core))
-        _addons = State(initialValue: LiveRecord("addons", core: core))
     }
 
     var body: some View {
@@ -88,10 +85,7 @@ struct FindAddonsScreen: View {
             .buttonStyle(PillButtonStyle())
             .focused($focus, equals: .paste)
         #else
-        InstallField(addons: addons)
-        if let failure = addons.failure {
-            StateLine(symbol: "triangle-alert", text: failure)
-        }
+        InstallField(core: core)
         #endif
     }
 

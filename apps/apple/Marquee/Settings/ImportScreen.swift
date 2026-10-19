@@ -4,16 +4,21 @@ import SwiftUI
 
 /// One-way import from a Stremio account. Opening the view starts the sign-in:
 /// the user links this device on Stremio's site with a code, never typing a
-/// password here.
+/// password here. In onboarding a finished import goes on to the
+/// recommended addons.
 struct ImportScreen: View {
     @State private var importer: LiveRecord<ImportSnapshot>
     @State private var attempt = 0
+    @FocusState private var onContinue: Bool
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
     let core: CoreClient
+    /// Onboarding: Continue after a finished import.
+    let finished: (() -> Void)?
 
-    init(core: CoreClient) {
+    init(core: CoreClient, finished: (() -> Void)? = nil) {
         self.core = core
+        self.finished = finished
         _importer = State(initialValue: LiveRecord("import", core: core))
     }
 
@@ -85,6 +90,13 @@ struct ImportScreen: View {
                 ForEach(summary.addonsSkipped, id: \.self) { Label($0, glyph: "circle-minus") }
                 if summary.seriesUnmatched > 0 {
                     Text("Watched marks for \(summary.seriesUnmatched) series could not be matched to episodes.")
+                }
+                if let finished {
+                    Button("Continue", action: finished)
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                        .focused($onContinue)
+                        .onAppear { onContinue = true }
+                        .padding(.top, Theme.Space.s)
                 }
             }
             .font(.text(Theme.type.body))

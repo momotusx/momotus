@@ -16,10 +16,13 @@ final class HomeModel {
     /// Bumping this restarts `run()` through the view's `.task(id:)`.
     private(set) var generation = 0
 
+    /// First run and the "New recommended addons" card.
+    let offer: DefaultsOffer
     @ObservationIgnored private let core: CoreClient
 
     init(core: CoreClient) {
         self.core = core
+        offer = DefaultsOffer(core: core)
     }
 
     func reload() {

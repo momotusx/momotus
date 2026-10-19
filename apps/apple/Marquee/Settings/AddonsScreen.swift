@@ -30,11 +30,11 @@ struct AddonsScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Addons")
                 Text(sourcesOnly
-                    ? "A source is an addon that finds a playable stream for a title. Marquee does not include any: \(linkVerb.lowercased()) a source addon's link to add one."
+                    ? "A source is an addon that finds a playable stream for a title. \(linkVerb) a source addon's link to add one."
                     : "Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.")
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.muted)
-                InstallField(addons: addons, focusRequest: focusLink ? 1 : 0)
+                InstallField(core: addons.core, focusRequest: focusLink ? 1 : 0)
                 FindAddonsLink(core: addons.core)
                 if let failure = addons.failure {
                     StateLine(symbol: "triangle-alert", text: failure)
@@ -107,14 +107,18 @@ extension AddonInfo {
     var isSource: Bool { provides.contains("stream") }
 }
 
-/// An addon link field with Install; shared by Addons and onboarding.
+/// An addon link field with Install; shared by Addons and onboarding. A link
+/// whose settings carry a sign-in is installed only once the user says it is theirs.
 struct InstallField: View {
-    let addons: LiveRecord<AddonsSnapshot>
-    /// Bump to move focus into the field ("Start fresh" does).
+    /// Bump to move focus into the field ("Add a source" does).
     var focusRequest = 0
-    @State private var link = ""
-    @State private var installing = false
+    @State private var install: LinkInstall
     @FocusState private var fieldFocused: Bool
+
+    init(core: CoreClient, focusRequest: Int = 0) {
+        self.focusRequest = focusRequest
+        _install = State(initialValue: LinkInstall(core: core))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -123,7 +127,7 @@ struct InstallField: View {
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
             HStack(spacing: 12) {
-                TextField("https://example.org/manifest.json or stremio://", text: $link)
+                TextField("https://example.org/manifest.json or stremio://", text: $install.link)
                     .textFieldStyle(.plain)
                     .font(.text(Theme.type.body))
                     .autocorrectionDisabled()
@@ -138,29 +142,32 @@ struct InstallField: View {
                     .padding(.vertical, 12)
                     .fieldChrome(focused: fieldFocused)
                 Button(action: installLink) {
-                    Label(installing ? "Installing" : "Install", glyph: "plus")
+                    Label(install.installing ? "Installing" : "Install", glyph: "plus")
                 }
                 // The primary only once there is a link to install.
-                .buttonStyle(PillButtonStyle(prominent: !link.trimmingCharacters(in: .whitespaces).isEmpty))
-                .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || installing)
+                .buttonStyle(PillButtonStyle(prominent: !install.trimmed.isEmpty))
+                .disabled(install.trimmed.isEmpty || install.installing)
+            }
+            if install.refused != nil {
+                StatusDot(tone: .warn, text: LinkInstall.tokenWarning)
+                Button(LinkInstall.tokenConfirm) { Task { await install.install(acknowledged: true) } }
+                    .buttonStyle(PillButtonStyle())
+                    .disabled(install.installing)
+            } else if let problem = install.problem {
+                StatusDot(tone: .bad, text: problem)
             }
         }
     }
 
     private func installLink() {
-        let url = link.trimmingCharacters(in: .whitespaces)
-        guard !url.isEmpty else { return }
-        installing = true
-        Task {
-            if await addons.perform("installAddon", ["url": url]) { link = "" }
-            installing = false
-        }
+        Task { await install.install() }
     }
 }
 
 /// One addon: logo, name and version, host, description, what it provides,
-/// and whether it is on. The whole card is one target (one focus stop on TV)
-/// that opens its actions; Remove comes last and asks first.
+/// and whether it is on. The card opens its actions; Remove comes last and
+/// asks first. Phone and Mac press the switch itself, as on the web and
+/// Android; on TV the card stays one focus stop and the switch is in its actions.
 private struct AddonCard: View {
     let addon: AddonInfo
     let first: Bool
@@ -198,6 +205,17 @@ private struct AddonCard: View {
         .menuIndicator(.hidden)
         #endif
         .accessibilityHint("Opens its actions: move, turn off, remove")
+        #if !os(tvOS)
+        .overlay(alignment: .topTrailing) {
+            Button(action: toggle) {
+                SwitchMark(on: addon.enabled).padding(Theme.Space.s).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(addon.name)
+            .accessibilityValue(addon.enabled ? "On" : "Off")
+            .accessibilityAddTraits(.isToggle)
+        }
+        #endif
     }
 
     private var card: some View {
@@ -222,7 +240,12 @@ private struct AddonCard: View {
                 }
                 .opacity(addon.enabled ? 1 : 0.55)
                 Spacer(minLength: 0)
+                #if os(tvOS)
                 SwitchMark(on: addon.enabled)
+                #else
+                // The pressable switch lies over this place.
+                SwitchMark(on: addon.enabled).hidden().accessibilityHidden(true)
+                #endif
             }
         }
         .multilineTextAlignment(.leading)
@@ -247,32 +270,32 @@ private struct AddonCard: View {
             .accessibilityHidden(true)
     }
 
-    /// On or off as a labelled switch: a state, not a button (the card is the button).
-    private struct SwitchMark: View {
-        let on: Bool
-
-        var body: some View {
-            HStack(spacing: 8) {
-                Text(on ? "On" : "Off")
-                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
-                    .foregroundStyle(on ? Theme.Palette.text : Theme.Palette.muted)
-                Capsule()
-                    .fill(on ? Theme.Palette.ok : Theme.Palette.raised)
-                    .overlay(Capsule().strokeBorder(Theme.Palette.control))
-                    .frame(width: 36, height: 22)
-                    .overlay(alignment: on ? .trailing : .leading) {
-                        Circle().fill(.white).padding(3)
-                    }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(on ? "On" : "Off")
-        }
-    }
-
     /// "Catalogs, Details for movie, series"
     private var provides: String {
         let words = addon.provides.map(providesWord)
         let types = addon.types.isEmpty ? "" : " for \(addon.types.joined(separator: ", "))"
         return words.joined(separator: ", ") + types
+    }
+}
+
+/// On or off as a labelled switch: the state only; a button around it acts.
+struct SwitchMark: View {
+    let on: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(on ? "On" : "Off")
+                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                .foregroundStyle(on ? Theme.Palette.text : Theme.Palette.muted)
+            Capsule()
+                .fill(on ? Theme.Palette.ok : Theme.Palette.raised)
+                .overlay(Capsule().strokeBorder(Theme.Palette.control))
+                .frame(width: 36, height: 22)
+                .overlay(alignment: on ? .trailing : .leading) {
+                    Circle().fill(.white).padding(3)
+                }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(on ? "On" : "Off")
     }
 }
