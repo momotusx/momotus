@@ -15,4 +15,9 @@ autoplayNext: boolean,
 /**
  * Which addon catalogs Home shows, and in what order.
  */
-homeRows: HomeRows, };
+homeRows: HomeRows, 
+/**
+ * The default addons list version this profile was last offered
+ * (`defaultAddons`): below the current one, Home offers the new ones once.
+ */
+defaultsSeen: number, };

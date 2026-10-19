@@ -40,6 +40,8 @@ const LONG = new Set([
 ]);
 const FLOAT = new Set(["progress"]);
 const INT = new Set([
+  "version",
+  "defaultsSeen",
   "position",
   "max",
   "epoch",

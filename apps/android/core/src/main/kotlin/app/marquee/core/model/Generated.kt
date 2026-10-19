@@ -50,6 +50,8 @@ data class AddonList(
 @Serializable
 data class AddonsSnapshot(
     val addons: List<AddonInfo> = emptyList(),
+    /** The profile starts at the default addons step: it never had a list, this device is in no sync account, and it is not a kids profile. */
+    val fresh: Boolean,
 )
 
 @Serializable
@@ -224,6 +226,38 @@ data class DebridTombstone(
     val service: String,
     val generation: String,
 )
+
+/** A default as the apps show it (`defaultAddons`). */
+@Serializable
+data class DefaultAddonInfo(
+    val key: String,
+    val name: String,
+    val line: String,
+    val group: String,
+    val installed: DefaultInstalled,
+)
+
+/** The `defaultAddons` answer: the list, and the version an existing profile is offered (`defaultsSeen` below it shows the card once). */
+@Serializable
+data class DefaultAddons(
+    val version: Int,
+    val addons: List<DefaultAddonInfo> = emptyList(),
+)
+
+/** One switch of the defaults step (`installDefaults`). */
+@Serializable
+data class DefaultChoice(
+    val key: String,
+    val on: Boolean,
+)
+
+/** Whether a default is in the profile's list, by manifest id: a copy installed another way (another config, a Stremio import) counts. */
+@Serializable
+enum class DefaultInstalled {
+    @SerialName("absent") Absent,
+    @SerialName("on") On,
+    @SerialName("off") Off,
+}
 
 /** A device and the recovery kits it made. */
 @Serializable
@@ -655,6 +689,8 @@ data class Prefs(
     val autoplayNext: Boolean,
     /** Which addon catalogs Home shows, and in what order. */
     val homeRows: HomeRows,
+    /** The default addons list version this profile was last offered (`defaultAddons`): below the current one, Home offers the new ones once. */
+    val defaultsSeen: Int,
 )
 
 @Serializable
