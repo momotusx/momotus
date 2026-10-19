@@ -2442,3 +2442,61 @@ async fn failed_lookups_leave_the_stop_its_tries() {
     })
     .await;
 }
+
+/// Counts the scheduler's failed rounds (its `trakt round` lines) on the
+/// test's thread, where the core's tasks run.
+struct Rounds(Arc<AtomicUsize>);
+
+impl tracing::Subscriber for Rounds {
+    fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+        true
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, event: &tracing::Event<'_>) {
+        let mut round = false;
+        event.record(
+            &mut |field: &tracing::field::Field, value: &dyn std::fmt::Debug| {
+                round |=
+                    field.name() == "message" && format!("{value:?}").starts_with("trakt round");
+            },
+        );
+        if round {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+#[tokio::test]
+async fn a_dead_sign_in_never_spins_the_scheduler() {
+    let (core, fake) = signed_in("a-spin").await;
+    // The write meets a 401 and the refresh is refused: the sign-in is dead.
+    fake.queue("POST /sync/history", vec![reply(401, json!({}))]);
+    fake.queue(
+        "POST /oauth/token",
+        vec![reply(400, json!({"error": "invalid_grant"}))],
+    );
+    let title = TitleView::open(&core, "series", SHOW);
+    title.set_watched("tt100:1:1", true).unwrap();
+    let _ = core.trakt_sync().await;
+    assert!(matches!(status(&core).state, TraktState::Reconnect { .. }));
+    // The write's retry time is set, and already past.
+    let intent = ready(&core, "a-spin").remove(0);
+    core.library()
+        .retry_tracker_intent(key("a-spin"), &intent.video_id, intent.rev, now() - 1000)
+        .unwrap();
+    let rounds = Arc::new(AtomicUsize::new(0));
+    let _counting = tracing::subscriber::set_default(Rounds(rounds.clone()));
+    core.trakt_foreground();
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let n = rounds.load(Ordering::SeqCst);
+    assert!(
+        (1..=3).contains(&n),
+        "{n} rounds in 2 s: the scheduler waits for a sign-in"
+    );
+}

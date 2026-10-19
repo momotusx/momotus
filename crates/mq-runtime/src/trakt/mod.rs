@@ -609,15 +609,20 @@ fn gone(core: &Core) -> bool {
 
 /// Rounds for one profile: when woken (a record, the foreground, a closed
 /// playback, a sign-in), every 5 minutes in the foreground, and when an
-/// outbox retry is due. It holds the core weakly: once every handle is
-/// gone, or the profile is, it ends.
+/// outbox retry is due while the sign-in is usable. It holds the core
+/// weakly: once every handle is gone, or the profile is, it ends.
 async fn schedule(core: crate::core::WeakCore, conn: Arc<Conn>) {
     loop {
         let Some(trakt) = core.upgrade().map(|c| c.trakt()) else {
             return;
         };
-        let retry =
-            lock(&conn.retry_at).map(|at| Duration::from_millis(at.saturating_sub(now_ms())));
+        // A retry cannot go while the sign-in is unusable: a new record
+        // wakes this, else the round interval does. Never a due time that
+        // would come back at once, round after round.
+        let usable = conn.auth.status().await.is_ok();
+        let retry = lock(&conn.retry_at)
+            .filter(|_| usable)
+            .map(|at| Duration::from_millis(at.saturating_sub(now_ms())));
         let every = trakt
             .foreground
             .load(Ordering::SeqCst)
