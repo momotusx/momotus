@@ -109,6 +109,9 @@ pub enum EngineError {
     BadInfoHash,
     #[error("no file in the torrent matches")]
     NoFile,
+    /// Paused by [`Engine::pause_now`] and not released since: nothing wakes it.
+    #[error("the torrent is held")]
+    Held,
     #[error("torrent: {0:#}")]
     Torrent(#[from] anyhow::Error),
     #[error("io: {0}")]
@@ -149,6 +152,10 @@ pub struct TorrentStats {
     pub seeks: u64,
     /// Ranges open on the torrent, each one scheduler demand.
     pub readers: usize,
+    /// The torrent is paused (idle past its keep-warm minute, or held).
+    pub paused: bool,
+    /// [`Engine::pause_now`] holds it: no range or file choice wakes it.
+    pub held: bool,
 }
 
 const KEEP_WARM: Duration = Duration::from_secs(60);
@@ -185,9 +192,22 @@ pub(crate) struct Torrent {
     peers: Vec<SocketAddr>,
     metadata_ms: u64,
     dir: PathBuf,
+    /// Also the torrent's lock for holds: pausing, releasing and waking
+    /// each take it first.
     live: tokio::sync::Mutex<Option<Live>>,
+    hold: Mutex<Hold>,
     readers: AtomicUsize,
     last_used: Mutex<Instant>,
+}
+
+/// A hold and the authorization that may lift it (plans/m11-kids.md 4.4):
+/// two generations that only rise, so a pause read before a newer
+/// authorization, or an authorization read before a newer pause, loses.
+#[derive(Default)]
+struct Hold {
+    held: bool,
+    hold_gen: u64,
+    auth_gen: u64,
 }
 
 pub(crate) struct Live {
@@ -351,6 +371,7 @@ impl Engine {
             peers,
             metadata_ms,
             live: tokio::sync::Mutex::new(None),
+            hold: Mutex::default(),
             readers: AtomicUsize::new(0),
             last_used: Mutex::new(Instant::now()),
         });
@@ -384,6 +405,9 @@ impl Engine {
         let t = self.torrent(h)?;
         let idx = pick::pick(&t.files, hint).ok_or(EngineError::NoFile)?;
         let mut live = t.live.lock().await;
+        if lock(&t.hold).held {
+            return Err(EngineError::Held);
+        }
         if let Some(l) = live.as_mut() {
             if l.selected != idx {
                 let only = HashSet::from([idx]);
@@ -458,11 +482,13 @@ impl Engine {
         let mut s = TorrentStats {
             metadata_ms: t.metadata_ms,
             readers: t.readers.load(Ordering::Relaxed),
+            held: lock(&t.hold).held,
             ..Default::default()
         };
         let Some(l) = live.as_ref() else {
             return Ok(s);
         };
+        s.paused = l.managed.is_paused();
         let rq = l.managed.stats();
         let total = l.managed.with_metadata(|m| m.lengths().total_pieces())?;
         s.pieces_total = total;
@@ -526,12 +552,52 @@ impl Engine {
         self.inner.next_demand.fetch_add(1, Ordering::Relaxed)
     }
 
-    /// Unpauses a torrent whose keep-warm window ran out.
+    /// Pauses `h` at once and holds it: no range read or file choice wakes
+    /// it until [`Engine::release_hold`] passes a newer authorization. The
+    /// `generation` is the access generation the denial was read at; a
+    /// pause at or below the newest authorization is ignored (`false`).
+    pub async fn pause_now(&self, h: TorrentHandle, generation: u64) -> Result<bool> {
+        let t = self.torrent(h)?;
+        let live = t.live.lock().await;
+        {
+            let mut hold = lock(&t.hold);
+            if generation <= hold.auth_gen {
+                return Ok(false);
+            }
+            hold.hold_gen = hold.hold_gen.max(generation);
+            hold.held = true;
+        }
+        if let Some(l) = live.as_ref().filter(|l| !l.managed.is_paused()) {
+            self.inner.session.pause(&l.managed).await?;
+            let _ = l.msgs.send(adapter::Msg::Stopped);
+        }
+        Ok(true)
+    }
+
+    /// Lifts the hold of `h` for an authorization read at `generation`,
+    /// only when that is newer than the hold (`false` otherwise). The torrent
+    /// wakes with its next range.
+    pub async fn release_hold(&self, h: TorrentHandle, generation: u64) -> Result<bool> {
+        let t = self.torrent(h)?;
+        let _live = t.live.lock().await;
+        let mut hold = lock(&t.hold);
+        if generation <= hold.hold_gen {
+            return Ok(false);
+        }
+        hold.auth_gen = hold.auth_gen.max(generation);
+        hold.held = false;
+        Ok(true)
+    }
+
+    /// Unpauses a torrent whose keep-warm window ran out; a held one stays.
     pub(crate) async fn wake(
         &self,
         t: &Torrent,
     ) -> Result<Option<(Arc<ManagedTorrent>, mpsc::UnboundedSender<adapter::Msg>)>> {
         let live = t.live.lock().await;
+        if lock(&t.hold).held {
+            return Err(EngineError::Held);
+        }
         let Some(l) = live.as_ref() else {
             return Ok(None);
         };
