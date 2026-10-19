@@ -593,10 +593,7 @@ impl Session {
                 .peer_id
                 .unwrap_or_else(|| generate_azereus_style(*b"rQ", crate_version!()));
             let token = opts.cancellation_token.take().unwrap_or_default();
-            let peer_permits = opts
-                .destinations
-                .as_ref()
-                .map(|d| Permits(d.peers.clone()));
+            let peer_permits = opts.destinations.as_ref().map(|d| Permits(d.peers.clone()));
 
             #[cfg(feature = "disable-upload")]
             if opts.disable_upload {
