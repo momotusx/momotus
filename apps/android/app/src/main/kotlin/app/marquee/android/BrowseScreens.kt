@@ -428,13 +428,13 @@ fun DiscoverScreen(
 
             snapshot.kinds.isEmpty() -> {
                 full("empty") {
-                    // The ways out, as on Home: setup adds the standard catalog in one step (no typing
+                    // The ways out, as on Home: setup offers the recommended addons in one step (no typing
                     // with a remote), Settings holds the addons. On TV focus lands on the first.
                     StateMessage(
                         title = "Nothing to browse yet",
                         body =
                             "Discover lists the catalogs of the addons you have on, and none of them has one. " +
-                                "Set up Marquee adds the standard catalog in one step.",
+                                "Set up Marquee offers the recommended addons in one step.",
                         actionLabel = "Set up Marquee",
                         onAction = onSetup,
                         secondaryLabel = "Add an addon",
