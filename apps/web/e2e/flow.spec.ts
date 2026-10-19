@@ -497,6 +497,18 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
       return { hero: heading(0) - hero, row: heading(1) - firstRow };
     });
     expect(gaps.hero).toBeGreaterThanOrEqual(gaps.row - 1);
+    // The hero's eyebrow stays clear of the floating pill, even over a
+    // synopsis that runs to its three lines (24 canvas px, 15 at desktop scale).
+    if (form !== "phone") {
+      const clear = await page.evaluate(() => {
+        const syn = document.querySelector(".hero-syn");
+        if (syn) syn.textContent = "A long synopsis. ".repeat(40);
+        const chip = document.querySelector(".hero .reason")?.getBoundingClientRect().top ?? 0;
+        const nav = document.querySelector(".topnav")?.getBoundingClientRect().bottom ?? 0;
+        return chip - nav;
+      });
+      expect(clear).toBeGreaterThan(12);
+    }
 
     // Title actions never leave one button alone on a second row: a movie
     // with a trailer has the most secondary actions.
