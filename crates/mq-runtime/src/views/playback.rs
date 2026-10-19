@@ -111,6 +111,29 @@ pub struct PlaybackSnapshot {
     /// `off`, `thisDeviceOff` (the profile uses Trakt, this device is not
     /// signed in).
     pub trakt: crate::trakt::TraktPlayback,
+    /// The recommended version failed for a reason of its own (no picture
+    /// on this device, a dead swarm, the wrong file) and the view moved on
+    /// by itself to this one, the ranking's next pick, at most twice: "Trying
+    /// the next version: {label}" while `phase` is `resolving`.
+    pub trying: Option<OtherVersion>,
+    /// A version picked by hand failed for a reason of its own: the failure
+    /// card offers this one, the ranking's next pick (open `playback` with
+    /// its key from the same Versions subscription).
+    pub offer: Option<OtherVersion>,
+}
+
+/// A version the playback moved on to, or offers instead.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OtherVersion {
+    pub key: String,
+    /// "1080p WEB", "4K Remux": the row's quality and source.
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -268,6 +291,13 @@ struct State {
     snapshot: PlaybackSnapshot,
     candidates: Vec<ParsedStream>,
     next: usize,
+    /// A source of the version failed for a reason of the version's own:
+    /// no picture here, a dead swarm, the wrong file.
+    version_failed: bool,
+    /// The versions this view started (row keys), and how many it moved on
+    /// to by itself.
+    tried: Vec<String>,
+    hops: u8,
     /// The playing source's token: its URL and its subtitles' URLs live as
     /// long as it is kept here.
     lease: Option<Lease>,
@@ -346,9 +376,18 @@ impl State {
                 segments: Vec::new(),
                 next_at_ms: None,
                 trakt: crate::trakt::TraktPlayback::Off,
+                trying: None,
+                offer: None,
             },
+            tried: candidates
+                .first()
+                .map(|c| c.key.clone())
+                .into_iter()
+                .collect(),
             candidates,
             next: 0,
+            version_failed: false,
+            hops: 0,
             lease: None,
             run: 0,
             closed: false,
@@ -488,6 +527,7 @@ impl PlaybackView {
             s.patient = true;
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.attempts.clear();
+            s.snapshot.offer = None;
             self.snapshot.set(s.snapshot.clone());
         }
         self.spawn_resolve();
@@ -591,6 +631,11 @@ impl PlaybackView {
             if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
                 let attempt = attempt(stream, error);
                 s.snapshot.attempts.push(attempt);
+            }
+            // The player shows no picture from it (Apple reports a frame
+            // that never came this way).
+            if kind == Some("decode") {
+                s.version_failed = true;
             }
             if let Some(pick) = &s.pick {
                 pick.failed();
@@ -850,6 +895,9 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.snapshot.manifest = lease.format.is_some();
     s.snapshot.attempt += 1;
     s.lease = Some(lease);
+    // A source plays: what failed before it says nothing about a later
+    // failure.
+    s.version_failed = false;
     true
 }
 
@@ -1003,6 +1051,9 @@ async fn resolve_next(
             if s.closed {
                 return;
             }
+            if s.next >= s.candidates.len() && move_on(&mut s) {
+                snapshot.set(s.snapshot.clone());
+            }
             let Some(stream) = s.candidates.get(s.next).cloned() else {
                 s.snapshot.phase = PlaybackPhase::Failed;
                 snapshot.set(s.snapshot.clone());
@@ -1020,7 +1071,7 @@ async fn resolve_next(
                     .open_for(upstream.clone(), &name, PROBE_TIMEOUT, &plays)
                     .await
                 {
-                    Ok(lease) => shows_picture(&core, &stream, &lease, hvc1_only)
+                    Ok(lease) => shows_picture(&core, &stream, &lease, hvc1_only, &state)
                         .await
                         .map(|()| (upstream, filename, size, lease)),
                     Err(e) => Err(e),
@@ -1130,13 +1181,52 @@ async fn shows_picture(
     stream: &ParsedStream,
     lease: &Lease,
     hvc1_only: bool,
+    state: &Mutex<State>,
 ) -> Result<(), String> {
     if !hvc1_only || !lease.picture_missing_on_apple().await {
         return Ok(());
     }
+    lock(state).version_failed = true;
     let now = mq_library::hlc::now_ms();
     crate::speed::record_no_picture(core.library(), &stream.key, now);
     Err("This file's video shows no picture on this device".into())
+}
+
+/// The recommendation moves on by itself at most this many times.
+const HOPS: u8 = 2;
+
+/// Every source of the version failed. When it failed for a reason of its
+/// own, the ranking's next version follows: by itself when the
+/// recommendation started (at most `HOPS` times, `trying` names it), as the
+/// failure card's offer when the user picked the version by hand. Whether
+/// a version is next comes from the Versions view, read now.
+fn move_on(s: &mut State) -> bool {
+    if !std::mem::take(&mut s.version_failed) {
+        return false;
+    }
+    let Some(pick) = &s.pick else {
+        return false;
+    };
+    if pick.recommended() && s.hops >= HOPS {
+        return false;
+    }
+    let Some(next) = pick.next_version(&s.tried) else {
+        return false;
+    };
+    let other = OtherVersion {
+        key: next.key.clone(),
+        label: next.label,
+    };
+    if !pick.recommended() {
+        s.snapshot.offer = Some(other);
+        return false;
+    }
+    s.hops += 1;
+    s.tried.push(next.key);
+    s.candidates = next.candidates;
+    s.next = 0;
+    s.snapshot.trying = Some(other);
+    true
 }
 
 type Opened = (Upstream, Option<String>, Option<u64>);
@@ -1271,7 +1361,11 @@ async fn open_torrent(
         did_not_start();
         // Stale seeder counts fail this way: dead, once the chain shows
         // the connection works.
-        let now = lock(state).dead.failed(info_hash, false);
+        let now = {
+            let mut s = lock(state);
+            s.version_failed = true;
+            s.dead.failed(info_hash, false)
+        };
         remember_dead(core, now);
         "No peer sent the torrent's details in time".to_owned()
     })?
@@ -1346,6 +1440,7 @@ async fn open_torrent(
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
         Ok((_, _, Started::Late { unchoked })) => {
             did_not_start();
+            lock(state).version_failed = true;
             if unchoked {
                 let now = lock(state).dead.reached();
                 remember_dead(core, now);
@@ -1359,6 +1454,7 @@ async fn open_torrent(
             // its unchoke proves the connection either way.
             let now = {
                 let mut s = lock(state);
+                s.version_failed = true;
                 if nothing {
                     s.dead.failed(info_hash, true)
                 } else {
@@ -1368,7 +1464,10 @@ async fn open_torrent(
             remember_dead(core, now);
             "the swarm sent almost nothing".to_owned()
         }
-        Ok((_, _, Started::Wrong(why))) => why.to_owned(),
+        Ok((_, _, Started::Wrong(why))) => {
+            lock(state).version_failed = true;
+            why.to_owned()
+        }
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
     };
     // The next candidate plays instead: stop downloading this one, unless

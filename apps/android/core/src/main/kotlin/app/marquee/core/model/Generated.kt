@@ -789,6 +789,14 @@ data class NextEpisode(
     val thumbnail: String? = null,
 )
 
+/** A version the playback moved on to, or offers instead. */
+@Serializable
+data class OtherVersion(
+    val key: String,
+    /** "1080p WEB", "4K Remux": the row's quality and source. */
+    val label: String,
+)
+
 @Serializable
 @JsonClassDiscriminator("phase")
 sealed interface PairingSnapshot {
@@ -893,6 +901,10 @@ data class PlaybackSnapshot(
     val nextAtMs: Long? = null,
     /** Trakt's side: `on` scrobbles, `unmapped` (Trakt cannot name it), `off`, `thisDeviceOff` (the profile uses Trakt, this device is not signed in). */
     val trakt: TraktPlayback,
+    /** The recommended version failed for a reason of its own (no picture on this device, a dead swarm, the wrong file) and the view moved on by itself to this one, the ranking's next pick, at most twice: "Trying the next version: {label}" while `phase` is `resolving`. */
+    val trying: OtherVersion? = null,
+    /** A version picked by hand failed for a reason of its own: the failure card offers this one, the ranking's next pick (open `playback` with its key from the same Versions subscription). */
+    val offer: OtherVersion? = null,
 )
 
 @Serializable

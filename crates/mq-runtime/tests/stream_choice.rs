@@ -541,90 +541,194 @@ fn media_fixture(name: &str) -> Vec<u8> {
     std::fs::read(format!("{dir}/../mq-media/tests/fixtures/{name}")).unwrap()
 }
 
-/// Apple shows no picture from an hev1 entry without parameter sets, even
-/// served as hvc1: on an hvc1-only device that version does not start, the
-/// attempt says why, and the next Versions view ranks it last with its
-/// line. A device that shows it plays it.
-#[tokio::test]
-async fn a_file_with_no_picture_here_does_not_start_and_ranks_last() {
+/// An hev1 file whose `hvcC` has no parameter sets: Apple shows no
+/// picture from it, even served as hvc1.
+fn bare_hev1() -> Vec<u8> {
     let mut bare = media_fixture("hev1-moov-tail.mp4");
     let record = bare.windows(4).position(|w| w == b"hvcC").unwrap() + 4;
-    bare[record + 22] = 0; // numOfArrays: no parameter sets
-    let bare_base = range_origin(bare, Duration::ZERO).await;
-    let fine_base = range_origin(media_fixture("hvc1.mp4"), Duration::ZERO).await;
-    let streams = serde_json::json!({ "streams": [
-        { "name": "Direct\n1080p", "title": "Show.S01E01.1080p.WEB-DL.HEVC-BARE",
-          "url": format!("{bare_base}/bare.mp4") },
-        { "name": "Direct\n720p", "title": "Show.S01E01.720p.WEB-DL.HEVC-FINE",
-          "url": format!("{fine_base}/fine.mp4") },
-    ]});
+    bare[record + 22] = 0; // numOfArrays
+    bare
+}
+
+/// A core whose addon lists each `(title, file)` as a direct link, each
+/// from its own loopback origin; the keys in the same order.
+async fn direct_rows(rows: Vec<(&str, Vec<u8>)>) -> (Core, Server, Vec<String>) {
+    let (mut streams, mut keys) = (Vec::new(), Vec::new());
+    for (i, (title, body)) in rows.into_iter().enumerate() {
+        let url = format!("{}/v{i}.mp4", range_origin(body, Duration::ZERO).await);
+        keys.push(format!("url:{url}"));
+        streams.push(serde_json::json!({ "name": "Direct", "title": title, "url": url }));
+    }
+    let streams = serde_json::json!({ "streams": streams }).to_string();
     let server = Server::start(vec![
-        route(
-            "GET",
-            "/stream/series/tt1%3A1%3A1.json",
-            200,
-            &streams.to_string(),
-        ),
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &streams),
         route("GET", "/meta/series/tt1.json", 200, &meta()),
     ])
     .await;
-    let core = core_with(&server);
-    let bare_key = format!("url:{bare_base}/bare.mp4");
-    let fine_key = format!("url:{fine_base}/fine.mp4");
-    let facts = || TitleFacts::read(Some("52 min"), Some("2019-"), Some("2019-05-01"), Some(2));
-    let open = |caps: DeviceCaps| async {
-        let view = VersionsView::open(
-            &core,
-            VersionsParams {
-                caps,
-                ..params(facts())
-            },
-        );
-        until("done", || view.snapshot().done).await;
-        view
-    };
-    let play = |view: &VersionsView| {
-        let pick = view.pick(&bare_key);
-        let target = mq_runtime::PlayTarget::default();
-        mq_runtime::PlaybackView::open_picked(&core, pick, target, &view.plays())
-    };
-    let shows = DeviceCaps::basic_1080p();
-    let apple = DeviceCaps {
-        hvc1_only: true,
-        ..shows.clone()
-    };
+    (core_with(&server), server, keys)
+}
 
-    let view = open(apple.clone()).await;
-    assert_eq!(view.snapshot().recommended.unwrap().key, bare_key);
-    let playback = play(&view);
-    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
-    until("the version to fail", failed).await;
-    let s = playback.snapshot();
-    assert!(s.url.is_none());
-    assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
-    assert_eq!(s.attempts[0].key, bare_key);
-    assert_eq!(
-        s.attempts[0].error,
-        "This file's video shows no picture on this device"
+async fn versions_for(core: &Core, caps: DeviceCaps) -> VersionsView {
+    let facts = TitleFacts::read(Some("52 min"), Some("2019-"), Some("2019-05-01"), Some(2));
+    let view = VersionsView::open(
+        core,
+        VersionsParams {
+            caps,
+            ..params(facts)
+        },
     );
+    until("done", || view.snapshot().done).await;
+    view
+}
+
+fn play(core: &Core, view: &VersionsView, key: &str) -> mq_runtime::PlaybackView {
+    let target = mq_runtime::PlayTarget::default();
+    mq_runtime::PlaybackView::open_picked(core, view.pick(key), target, &view.plays())
+}
+
+fn apple() -> DeviceCaps {
+    DeviceCaps {
+        hvc1_only: true,
+        ..DeviceCaps::basic_1080p()
+    }
+}
+
+const NO_PICTURE: &str = "This file's video shows no picture on this device";
+
+/// On an hvc1-only device a no-picture file does not start, and the
+/// attempt says why; the recommendation moves on by itself to the
+/// ranking's next version and names it. The next Versions view ranks the
+/// file last with its line. A device that shows it plays it.
+#[tokio::test]
+async fn a_file_with_no_picture_here_does_not_start_and_ranks_last() {
+    let (core, _server, keys) = direct_rows(vec![
+        ("Show.S01E01.1080p.WEB-DL.HEVC-BARE", bare_hev1()),
+        (
+            "Show.S01E01.720p.WEB-DL.HEVC-FINE",
+            media_fixture("hvc1.mp4"),
+        ),
+    ])
+    .await;
+    let (bare, fine) = (&keys[0], &keys[1]);
+
+    let view = versions_for(&core, apple()).await;
+    assert_eq!(&view.snapshot().recommended.unwrap().key, bare);
+    let playback = play(&core, &view, bare);
+    until("the next version", || playback.snapshot().url.is_some()).await;
+    let s = playback.snapshot();
+    assert_eq!(s.key.as_ref(), Some(fine));
+    assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
+    assert_eq!(&s.attempts[0].key, bare);
+    assert_eq!(s.attempts[0].error, NO_PICTURE);
+    let trying = s.trying.expect("the version it moved on to");
+    assert_eq!((&trying.key, trying.label.as_str()), (fine, "720p WEB"));
+    assert!(s.offer.is_none());
     drop((playback, view));
 
-    let view = open(apple).await;
+    let view = versions_for(&core, apple()).await;
     let snapshot = view.snapshot();
-    assert_eq!(snapshot.recommended.unwrap().key, fine_key);
-    let row = snapshot.rows.iter().find(|r| r.key == bare_key).unwrap();
+    assert_eq!(&snapshot.recommended.unwrap().key, fine);
+    let row = snapshot.rows.iter().find(|r| &r.key == bare).unwrap();
     assert_eq!(row.line, mq_streams::ReasonLine::NoPicture);
     drop(view);
 
-    let view = open(shows).await;
-    assert_eq!(view.snapshot().recommended.unwrap().key, bare_key);
-    let playback = play(&view);
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_eq!(&view.snapshot().recommended.unwrap().key, bare);
+    let playback = play(&core, &view, bare);
     until("the file where it shows", || {
         playback.snapshot().url.is_some()
     })
     .await;
-    assert_eq!(playback.snapshot().key.as_deref(), Some(bare_key.as_str()));
+    assert_eq!(playback.snapshot().key.as_ref(), Some(bare));
     assert!(playback.snapshot().attempts.is_empty());
+}
+
+/// A version picked by hand that fails for a reason of its own does not
+/// move on: the failure card offers the ranking's next version.
+#[tokio::test]
+async fn a_version_picked_by_hand_offers_the_next_one() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.HEVC-FINE",
+            media_fixture("hvc1.mp4"),
+        ),
+        ("Show.S01E01.720p.WEB-DL.HEVC-BARE", bare_hev1()),
+    ])
+    .await;
+    let (fine, bare) = (&keys[0], &keys[1]);
+    let view = versions_for(&core, apple()).await;
+    assert_eq!(&view.snapshot().recommended.unwrap().key, fine);
+    let playback = play(&core, &view, bare);
+    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("the version to fail", failed).await;
+    let s = playback.snapshot();
+    assert!(s.url.is_none() && s.trying.is_none());
+    assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
+    assert_eq!(s.attempts[0].error, NO_PICTURE);
+    let offer = s.offer.expect("the next version, offered");
+    assert_eq!((&offer.key, offer.label.as_str()), (fine, "1080p WEB"));
+}
+
+/// The recommendation moves on at most twice, then stops with the
+/// failure card: the fourth version is never started.
+#[tokio::test]
+async fn the_recommendation_moves_on_at_most_twice() {
+    let (core, _server, keys) = direct_rows(vec![
+        ("Show.S01E01.1080p.WEB-DL.HEVC-A", bare_hev1()),
+        ("Show.S01E01.720p.WEB-DL.HEVC-B", bare_hev1()),
+        ("Show.S01E01.480p.WEB-DL.HEVC-C", bare_hev1()),
+        ("Show.S01E01.360p.WEB-DL.HEVC-D", media_fixture("hvc1.mp4")),
+    ])
+    .await;
+    let view = versions_for(&core, apple()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let playback = play(&core, &view, &keys[0]);
+    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("the last move to fail", failed).await;
+    let s = playback.snapshot();
+    let tried: Vec<&String> = s.attempts.iter().map(|a| &a.key).collect();
+    assert_eq!(tried, [&keys[0], &keys[1], &keys[2]]);
+    assert_eq!(s.trying.map(|t| t.key), Some(keys[2].clone()));
+    assert!(s.offer.is_none());
+}
+
+/// Only a failure of the version's own moves on: the player's "decode"
+/// does, a network failure does not.
+#[tokio::test]
+async fn only_a_failure_of_the_versions_own_moves_on() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let caps = DeviceCaps::basic_1080p();
+    let view = versions_for(&core, caps.clone()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.fail_over(None, Some("network"), None, "offline");
+    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("the version to fail", failed).await;
+    let s = playback.snapshot();
+    assert!(s.trying.is_none() && s.offer.is_none());
+    drop((playback, view));
+
+    let view = versions_for(&core, caps).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    let moved = || playback.snapshot().key.as_ref() == Some(&keys[1]);
+    until("the next version", moved).await;
+    assert_eq!(
+        playback.snapshot().trying.map(|t| t.key),
+        Some(keys[1].clone())
+    );
 }
 
 /// After a restart the core reads the network the app last reported, not

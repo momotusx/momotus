@@ -271,6 +271,57 @@ impl PickHandle {
             lock(&state).recommendation_starting = false;
         }
     }
+
+    /// The pick was the recommendation.
+    pub fn recommended(&self) -> bool {
+        self.recommended
+    }
+
+    /// The version the ranking picks after the row keys `tried`: the first
+    /// listed row that can start, with its failover chain. None once the
+    /// view is gone.
+    pub fn next_version(&self, tried: &[String]) -> Option<NextVersion> {
+        let state = self.state.upgrade()?;
+        let s = lock(&state);
+        let row = s
+            .ranked
+            .rows
+            .iter()
+            .find(|r| r.key.viable && !tried.contains(&r.stream.key))?;
+        Some(NextVersion {
+            key: row.stream.key.clone(),
+            label: version_label(&row.stream.release),
+            candidates: std::iter::once(&row.stream)
+                .chain(&row.failover)
+                .cloned()
+                .collect(),
+        })
+    }
+}
+
+/// A version a playback can move on to.
+pub struct NextVersion {
+    pub key: String,
+    pub label: String,
+    pub candidates: Vec<ParsedStream>,
+}
+
+/// "1080p WEB", "4K Remux", "Blu-ray": the row's quality, then its source.
+fn version_label(rel: &mq_relparse::ParsedRelease) -> String {
+    use mq_relparse::Quality as Q;
+    let quality = quality_word(rel.resolution.height(), rel.quality);
+    let source = match rel.quality {
+        Q::WebDl | Q::WebRip => "WEB",
+        Q::BluRay => "Blu-ray",
+        Q::Remux => "Remux",
+        Q::Hdtv => "HDTV",
+        Q::Dvd => "DVD",
+        _ => return quality,
+    };
+    if rel.resolution.height() == 0 {
+        return quality;
+    }
+    format!("{quality} {source}")
 }
 
 /// A kids profile's target as the list allows it (plans/m11-kids.md 4.3):
