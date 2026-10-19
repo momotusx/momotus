@@ -152,6 +152,10 @@ pub struct TitleView {
     core: Core,
     kind: String,
     id: String,
+    /// A kids profile (plans/m11-kids.md 4.6): no trailers.
+    kids: bool,
+    /// A kids policy refused the title: the view does no work.
+    denied: bool,
     header: SharedObservable<TitleHeader>,
     episodes: Arc<Mutex<ObservableVector<Episode>>>,
     state: Arc<Mutex<State>>,
@@ -171,7 +175,10 @@ pub struct TitleSnapshot {
 }
 
 impl TitleView {
+    /// Opens the page. Under a kids policy a title off the list opens
+    /// denied: no work, an empty snapshot, and `denied()` says so.
     pub fn open(core: &Core, kind: &str, id: &str) -> Self {
+        let policy = core.policy();
         let header = SharedObservable::new(TitleHeader {
             state: TitleState::Loading,
             details: None,
@@ -185,6 +192,8 @@ impl TitleView {
             core: core.clone(),
             kind: kind.to_owned(),
             id: id.to_owned(),
+            kids: policy.kids(),
+            denied: !policy.allows(kind, id),
             header,
             episodes: Arc::new(Mutex::new(ObservableVector::new())),
             state: Arc::new(Mutex::new(State {
@@ -193,9 +202,16 @@ impl TitleView {
             })),
             _tasks: JoinSet::new(),
         };
-        view._tasks.spawn(load_meta(view.ctx()));
-        view._tasks.spawn(watch_library(view.ctx()));
+        if !view.denied {
+            view._tasks.spawn(load_meta(view.ctx()));
+            view._tasks.spawn(watch_library(view.ctx()));
+        }
         view
+    }
+
+    /// A kids policy refused this title at open.
+    pub fn denied(&self) -> bool {
+        self.denied
     }
 
     fn ctx(&self) -> Ctx {
@@ -203,6 +219,7 @@ impl TitleView {
             core: self.core.clone(),
             kind: self.kind.clone(),
             id: self.id.clone(),
+            kids: self.kids,
             header: self.header.clone(),
             episodes: self.episodes.clone(),
             state: self.state.clone(),
@@ -300,6 +317,7 @@ struct Ctx {
     core: Core,
     kind: String,
     id: String,
+    kids: bool,
     header: SharedObservable<TitleHeader>,
     episodes: Arc<Mutex<ObservableVector<Episode>>>,
     state: Arc<Mutex<State>>,
@@ -406,9 +424,14 @@ impl Ctx {
             .collect();
 
         let play_target = play_target(&meta, &self.kind, resume, &watched);
+        let mut details = details(&meta, source);
+        if self.kids {
+            // A trailer is a YouTube hand-off: it leaves the app.
+            details.trailers.clear();
+        }
         let header = TitleHeader {
             state: TitleState::Ready,
-            details: Some(details(&meta, source)),
+            details: Some(details),
             in_library,
             seasons,
             selected_season: season,

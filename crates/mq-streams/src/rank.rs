@@ -12,6 +12,10 @@ pub struct RankInput<'a> {
     pub target: &'a Target,
     /// Binge group of the stream used for the previous episode, if any.
     pub last_binge_group: Option<&'a str>,
+    /// A kids profile's rules (plans/m11-kids.md 4.4): the names of the
+    /// allowed title, one of which a release's title must equal; hand-offs
+    /// and adult terms hide. `None` for an open profile.
+    pub kids: Option<&'a [String]>,
 }
 
 const MAX_REASONS: usize = 3;
@@ -44,6 +48,11 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
     ) {
         return Some(HideReason::UnsupportedSource);
     }
+    if let Some(names) = input.kids
+        && let Some(reason) = kids_gate(s, names)
+    {
+        return Some(reason);
+    }
     let text = format!("{} {}", s.raw_name, s.raw_description).to_lowercase();
     if input
         .prefs
@@ -61,7 +70,7 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
     if wrong_episode(s, input.target) {
         return Some(HideReason::WrongEpisode);
     }
-    if wrong_title(s, input.target) {
+    if input.kids.is_none() && wrong_title(s, input.target) {
         return Some(HideReason::WrongTitle);
     }
     if playability(s, input.caps).is_none() {
@@ -108,6 +117,107 @@ fn normalize_title(t: &str) -> String {
         .filter(|w| !matches!(*w, "the" | "a" | "an" | "and" | "of"))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// A kids profile's gate (plans/m11-kids.md 4.4): a source that leaves the
+/// app, a release naming an adult term, and a release whose title is not
+/// exactly one of the allowed title's names are hidden.
+fn kids_gate(s: &ParsedStream, names: &[String]) -> Option<HideReason> {
+    if matches!(
+        s.source,
+        Source::YouTube { .. } | Source::PlayerFrame { .. } | Source::External { .. }
+    ) {
+        return Some(HideReason::LeavesApp);
+    }
+    let filename = s.filename.as_deref().unwrap_or_default();
+    if [s.raw_name.as_str(), &s.raw_description, filename]
+        .iter()
+        .any(|text| tokens(text).any(|t| ADULT_TERMS.contains(&t.as_str())))
+    {
+        return Some(HideReason::NotForKids);
+    }
+    let parsed = kids_title(&s.release.title);
+    if parsed.is_empty() || !names.iter().any(|n| kids_title(n) == parsed) {
+        return Some(HideReason::WrongTitle);
+    }
+    None
+}
+
+/// Lowercase words, split on anything that is not a letter or a digit:
+/// terms match whole words only ("Essex" is no adult term).
+fn tokens(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+}
+
+/// Terms that hide a release from a kid, as whole words, English only.
+/// Best effort: a mislabelled file still passes (the trust boundary of 4.4).
+const ADULT_TERMS: &[&str] = &[
+    "anal",
+    "bangbros",
+    "bdsm",
+    "blowjob",
+    "boobs",
+    "brazzers",
+    "camgirl",
+    "cumshot",
+    "ecchi",
+    "erotic",
+    "erotica",
+    "fetish",
+    "gangbang",
+    "handjob",
+    "hardcore",
+    "hentai",
+    "incest",
+    "jav",
+    "milf",
+    "nsfw",
+    "nude",
+    "nudes",
+    "nudity",
+    "onlyfans",
+    "orgy",
+    "playboy",
+    "porn",
+    "porno",
+    "pornhub",
+    "pussy",
+    "sex",
+    "sextape",
+    "slut",
+    "softcore",
+    "stripper",
+    "threesome",
+    "tits",
+    "xxx",
+];
+
+/// A title as the kids rule compares it: `normalize_title` with
+/// apostrophes dropped first ("Philosopher's" is "Philosophers") and the
+/// roman numerals I to XX read as numbers ("Frozen II" is "Frozen 2").
+fn kids_title(t: &str) -> String {
+    let joined: String = t
+        .chars()
+        .filter(|c| !matches!(c, '\'' | '\u{2019}'))
+        .collect();
+    normalize_title(&joined)
+        .split(' ')
+        .map(|w| roman(w).map_or_else(|| w.to_owned(), |n| n.to_string()))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn roman(word: &str) -> Option<u8> {
+    const NUMERALS: [&str; 20] = [
+        "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii", "xiii", "xiv",
+        "xv", "xvi", "xvii", "xviii", "xix", "xx",
+    ];
+    NUMERALS
+        .iter()
+        .position(|n| *n == word)
+        .map(|i| i as u8 + 1)
 }
 
 /// Token overlap (Sorensen-Dice on words), robust to translated subtitles

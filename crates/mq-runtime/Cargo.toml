@@ -10,6 +10,8 @@ ts = ["dep:ts-rs", "mq-streams/ts", "mq-sync/ts"]
 # Built-in torrent engine (full builds; store builds play torrents only
 # through debrid).
 torrent = ["dep:mq-engine", "mq-server/torrent"]
+# The engine's range barrier, for tests of a playback stopped mid-setup.
+test-hooks = ["torrent", "mq-engine/test-hooks"]
 
 [dependencies]
 ts-rs = { version = "12", optional = true, features = ["serde-compat"] }
@@ -50,4 +52,6 @@ mq-relparse = { path = "../mq-relparse" }
 mq-streams = { path = "../mq-streams" }
 # Tests make a stored row unreadable behind the library's back.
 rusqlite = "0.40"
+# The engine's loopback swarm (tests/kids_play.rs, feature torrent).
+tempfile = "3"
 tokio = { workspace = true, features = ["test-util"] }

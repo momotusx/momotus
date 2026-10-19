@@ -179,6 +179,11 @@ pub enum HideReason {
     TooLarge,
     Unplayable,
     UnsupportedSource,
+    /// Kids: a source that leaves the app (YouTube, an embedded player, an
+    /// external link).
+    LeavesApp,
+    /// Kids: the release names an adult term.
+    NotForKids,
 }
 
 /// Lexicographic sort key: earlier fields always win, so no within-tier

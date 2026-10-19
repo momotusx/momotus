@@ -12,7 +12,7 @@ use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
-use mq_library::{FINISHED_RATIO, LibraryItemRow, ProgressRow};
+use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
 use mq_server::{Format, Lease, SubtitleSlot, Upstream};
 use mq_streams::ParsedStream;
@@ -188,6 +188,10 @@ struct State {
     /// The running skip lookup; started and replaced under the state lock,
     /// so an older report can never abort a newer lookup.
     segments_task: Option<JoinHandle<()>>,
+    /// Every torrent this view started, from the moment `add_magnet`
+    /// answered: a policy closure pauses them all, a lease adopted or not.
+    #[cfg(feature = "torrent")]
+    torrents: Vec<mq_engine::TorrentHandle>,
 }
 
 pub struct PlaybackView {
@@ -201,6 +205,8 @@ pub struct PlaybackView {
     task: Mutex<Option<(u64, JoinHandle<()>)>>,
     /// The Trakt session; dropped after the last save, which sends the stop.
     trakt: Option<crate::trakt::Scrobble>,
+    /// A kids policy refused the target: the view does no work.
+    denied: bool,
 }
 
 impl State {
@@ -235,6 +241,8 @@ impl State {
             source: 0,
             lookup: None,
             segments_task: None,
+            #[cfg(feature = "torrent")]
+            torrents: Vec::new(),
         }
     }
 }
@@ -247,13 +255,38 @@ impl PlaybackView {
 
     /// Opens the candidates in turn for a player that plays the playlist
     /// formats `plays` names (`VersionsView::plays`): a playlist it cannot
-    /// play fails over like any source that does not open.
+    /// play fails over like any source that does not open. Under a kids
+    /// policy a target off the list, or a video not of its title, opens
+    /// denied: no work, an empty snapshot, and `denied()` says so.
     pub fn open_for(
         core: &Core,
         candidates: Vec<ParsedStream>,
         target: PlayTarget,
         plays: &[Format],
     ) -> Self {
+        let denied = core.policy().kids()
+            && !matches!(
+                core.library().authorize(
+                    core.profile(),
+                    &target.kind,
+                    &target.item_id,
+                    Some(&target.video_id),
+                ),
+                Ok(Authorization::Authorized { .. })
+            );
+        if denied {
+            let state = State::new(Vec::new(), None);
+            return Self {
+                core: core.clone(),
+                snapshot: SharedObservable::new(state.snapshot.clone()),
+                state: Arc::new(Mutex::new(state)),
+                target: Arc::new(target),
+                plays: plays.into(),
+                task: Mutex::new(None),
+                trakt: None,
+                denied: true,
+            };
+        }
         let resume_ms = core
             .library()
             .progress(core.profile(), &target.video_id)
@@ -291,9 +324,55 @@ impl PlaybackView {
             state: shared,
             task: Mutex::new(None),
             trakt,
+            denied: false,
         };
         view.spawn_resolve();
         view
+    }
+
+    /// A kids policy refused the target at open.
+    pub fn denied(&self) -> bool {
+        self.denied
+    }
+
+    /// The title left the kids profile's list (plans/m11-kids.md 4.4, 8):
+    /// the resolve stops (the subtitle hash reader with it), the position is
+    /// saved, the lease drops (its URLs end and bodies being served stop),
+    /// no lease is adopted again, and every torrent the view started is
+    /// paused at once with the `generation` the denial was read at.
+    pub async fn stop_forbidden(&self, generation: u64) {
+        if let Some((_, task)) = lock(&self.task).take() {
+            task.abort();
+        }
+        self.save();
+        let started = {
+            let mut s = lock(&self.state);
+            if let Some(task) = s.segments_task.take() {
+                task.abort();
+            }
+            // A resolve still running reads this under the same lock: it
+            // adopts no lease and starts no torrent after this.
+            s.closed = true;
+            release_all(&mut s);
+            self.snapshot.set(s.snapshot.clone());
+            #[cfg(feature = "torrent")]
+            let started = std::mem::take(&mut s.torrents);
+            #[cfg(not(feature = "torrent"))]
+            let started: Vec<()> = Vec::new();
+            started
+        };
+        #[cfg(feature = "torrent")]
+        if !started.is_empty()
+            && let Ok(engine) = self.core.torrent_engine().await
+        {
+            for torrent in started {
+                if let Err(e) = engine.pause_now(torrent, generation).await {
+                    tracing::warn!("pausing a forbidden torrent: {e}");
+                }
+            }
+        }
+        #[cfg(not(feature = "torrent"))]
+        let _ = (started, generation);
     }
 
     pub fn snapshot(&self) -> PlaybackSnapshot {
@@ -696,7 +775,7 @@ async fn resolve_next(
             s.next += 1;
             stream
         };
-        let opened = match open_source(&core, &stream, &target).await {
+        let opened = match open_source(&core, &stream, &target, &state).await {
             Ok((upstream, filename, size)) => {
                 let name = filename
                     .clone()
@@ -743,8 +822,15 @@ async fn resolve_next(
                 let next = async {
                     if let Some(next) = next_episode(&core, &target).await {
                         let mut s = lock(&state);
-                        s.snapshot.next = Some(next);
-                        snapshot.set(s.snapshot.clone());
+                        // Checked as it is set: the title may have left a
+                        // kids list while its meta was on the way.
+                        let policy = core.policy();
+                        let allowed = policy.allows(&target.kind, &target.item_id)
+                            && (!policy.kids() || Policy::belongs(&target.item_id, &next.video_id));
+                        if allowed && !s.closed {
+                            s.snapshot.next = Some(next);
+                            snapshot.set(s.snapshot.clone());
+                        }
                     }
                 };
                 tokio::join!(subtitles, next);
@@ -768,7 +854,10 @@ async fn open_source(
     core: &Core,
     stream: &ParsedStream,
     target: &PlayTarget,
+    state: &Mutex<State>,
 ) -> Result<Opened, String> {
+    #[cfg(not(feature = "torrent"))]
+    let _ = state;
     let (url, headers, filename, size, addon_url) = match &stream.source {
         Source::Http { url } => (
             url.to_string(),
@@ -786,7 +875,7 @@ async fn open_source(
             // Full builds play torrents with the built-in engine; store
             // builds have none and need a debrid account.
             #[cfg(feature = "torrent")]
-            return open_torrent(core, stream, target, info_hash, *file_idx, trackers).await;
+            return open_torrent(core, stream, target, state, info_hash, *file_idx, trackers).await;
             #[cfg(not(feature = "torrent"))]
             {
                 let _ = (info_hash, file_idx, trackers);
@@ -816,7 +905,7 @@ async fn open_source(
                 },
             ) = (&resolved, &stream.source)
             {
-                return open_torrent(core, stream, target, info_hash, *file_idx, trackers)
+                return open_torrent(core, stream, target, state, info_hash, *file_idx, trackers)
                     .await
                     .map_err(|p2p| format!("{e}; peer to peer: {p2p}"));
             }
@@ -847,12 +936,26 @@ async fn open_torrent(
     core: &Core,
     stream: &ParsedStream,
     target: &PlayTarget,
+    state: &Mutex<State>,
     info_hash: &str,
     file_idx: Option<u32>,
     trackers: &[String],
 ) -> Result<Opened, String> {
     use mq_engine::FileHint;
     let engine = core.torrent_engine().await.map_err(|e| e.to_string())?;
+    // This playback's own check, read before the torrent is touched: a
+    // hold placed after it (the title left a kids list) is never lifted by
+    // it (plans/m11-kids.md 4.4).
+    let generation = match core.library().authorize(
+        core.profile(),
+        &target.kind,
+        &target.item_id,
+        Some(&target.video_id),
+    ) {
+        Ok(Authorization::Authorized { generation }) => generation,
+        Ok(Authorization::Denied { .. }) => return Err("This title is not on the list".into()),
+        Err(e) => return Err(e.to_string()),
+    };
     let torrent = tokio::time::timeout(
         METADATA_TIMEOUT,
         engine.add_magnet(info_hash, trackers, &[]),
@@ -860,6 +963,20 @@ async fn open_torrent(
     .await
     .map_err(|_| "No peer sent the torrent's details in time".to_owned())?
     .map_err(|e| e.to_string())?;
+    {
+        // Kept from now on, so a closure pauses it even before its head is
+        // ready; a view already stopped starts nothing.
+        let mut s = lock(state);
+        if s.closed {
+            return Err("The playback was stopped".into());
+        }
+        s.torrents.push(torrent);
+    }
+    // Only a newer authorization lifts a hold; an older one leaves it, and
+    // the file choice below then answers that the torrent is held.
+    if let Err(e) = engine.release_hold(torrent, generation).await {
+        tracing::debug!("torrent hold: {e}");
+    }
     let hint = match (file_idx, &stream.filename, target.season, target.episode) {
         (Some(i), ..) => FileHint::Index(i as usize),
         (None, Some(name), ..) => FileHint::Name(name.clone()),

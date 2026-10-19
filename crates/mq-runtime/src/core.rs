@@ -355,6 +355,14 @@ impl Core {
         Ok(engine.clone())
     }
 
+    /// Uses `engine` as the device's torrent engine, when none started yet
+    /// (tests run one on loopback with discovery off).
+    #[cfg(feature = "torrent")]
+    #[doc(hidden)]
+    pub fn set_torrent_engine(&self, engine: mq_engine::Engine) {
+        let _ = self.inner.engine.set(engine);
+    }
+
     pub(crate) fn accounts(&self) -> &crate::debrid::Accounts {
         &self.inner.debrid
     }

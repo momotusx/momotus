@@ -11,7 +11,7 @@ use crate::views::addons_changed;
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
-use mq_library::Table;
+use mq_library::{Policy, Table};
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_streams::{
     DeviceCaps, Group, HideReason, ParsedStream, RankInput, Ranked, RankedRow, Reason, StreamPrefs,
@@ -115,7 +115,88 @@ pub struct VersionsView {
     episode: (Option<u32>, Option<u32>),
     snapshot: SharedObservable<VersionsSnapshot>,
     state: Arc<Mutex<State>>,
+    /// A kids profile's checked target; playback ids come from it.
+    verified: Option<Verified>,
+    /// A kids policy refused the target: the view does no work.
+    denied: bool,
     _tasks: JoinSet<()>,
+}
+
+/// A kids profile's target as the list allows it (plans/m11-kids.md 4.3):
+/// the title is on the list as this kind and the video is one of its own.
+/// Only [`verify_play`] makes one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Verified {
+    kind: String,
+    item_id: String,
+    video_id: String,
+    /// The allowlist entry's name, then its other names.
+    names: Vec<String>,
+}
+
+impl Verified {
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    pub fn item_id(&self) -> &str {
+        &self.item_id
+    }
+
+    pub fn video_id(&self) -> &str {
+        &self.video_id
+    }
+
+    /// The allowlist entry's name.
+    pub fn name(&self) -> &str {
+        &self.names[0]
+    }
+
+    /// Season and episode from the video id itself (`tt1:2:5`), never from
+    /// what an app passed.
+    fn episode(&self) -> (Option<u32>, Option<u32>) {
+        let rest = self
+            .video_id
+            .strip_prefix(&self.item_id)
+            .unwrap_or_default();
+        let numbers: Vec<u32> = rest
+            .split(':')
+            .filter(|p| !p.is_empty())
+            .filter_map(|p| p.parse().ok())
+            .collect();
+        match numbers[..] {
+            [season, episode] => (Some(season), Some(episode)),
+            [episode] => (None, Some(episode)),
+            _ => (None, None),
+        }
+    }
+}
+
+/// Checks a kids profile's target against its list: `item_id` is given and
+/// allowed as `kind`, and `video_id` belongs to it. `None` refuses.
+pub fn verify_play(
+    core: &Core,
+    kind: &str,
+    item_id: Option<&str>,
+    video_id: &str,
+) -> Option<Verified> {
+    let item_id = item_id?;
+    if !core.policy().allows(kind, item_id) || !Policy::belongs(item_id, video_id) {
+        return None;
+    }
+    let entry = core
+        .library()
+        .allowed_list(core.profile())
+        .ok()?
+        .counted
+        .into_iter()
+        .find(|r| r.item_id == item_id && r.kind == kind)?;
+    Some(Verified {
+        kind: kind.to_owned(),
+        item_id: item_id.to_owned(),
+        video_id: video_id.to_owned(),
+        names: std::iter::once(entry.name).chain(entry.names).collect(),
+    })
 }
 
 pub struct VersionsParams {
@@ -128,9 +209,30 @@ pub struct VersionsParams {
 }
 
 impl VersionsView {
-    pub fn open(core: &Core, mut params: VersionsParams) -> Self {
+    /// `open_checked` without an item id: a kids policy refuses it.
+    pub fn open(core: &Core, params: VersionsParams) -> Self {
+        Self::open_checked(core, params, None)
+    }
+
+    /// Opens Versions for a video of `item_id`. A kids profile needs the
+    /// item id: the target is verified against the list, and the ranking
+    /// takes the allowlist entry's names and the video's own season and
+    /// episode, not the app's. A refused target opens denied: no work, an
+    /// empty snapshot, and `denied()` says so.
+    pub fn open_checked(core: &Core, mut params: VersionsParams, item_id: Option<&str>) -> Self {
+        let verified = if core.policy().kids() {
+            let Some(verified) = verify_play(core, &params.kind, item_id, &params.video_id) else {
+                return Self::denied_view(core, &params);
+            };
+            params.target.title = verified.name().to_owned();
+            (params.target.season, params.target.episode) = verified.episode();
+            Some(verified)
+        } else {
+            None
+        };
         if params.last_binge_group.is_none() {
-            let item_id = params.video_id.split(':').next().unwrap_or_default();
+            let item_id =
+                item_id.unwrap_or_else(|| params.video_id.split(':').next().unwrap_or_default());
             params.last_binge_group = core
                 .library()
                 .last_binge_group(core.profile(), item_id)
@@ -164,12 +266,16 @@ impl VersionsView {
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
+        let ranking = Arc::new(Ranking {
+            kids: verified.as_ref().map(|v| v.names.clone()),
+            params,
+        });
         tasks.spawn(supervise(
             core.clone(),
             changes,
             eligible,
             path,
-            Arc::new(params),
+            ranking,
             state.clone(),
             snapshot.clone(),
         ));
@@ -179,8 +285,44 @@ impl VersionsView {
             episode,
             snapshot,
             state,
+            verified,
+            denied: false,
             _tasks: tasks,
         }
+    }
+
+    fn denied_view(core: &Core, params: &VersionsParams) -> Self {
+        let state = State {
+            streams: Vec::new(),
+            ranked: Ranked::default(),
+            recommended: None,
+            frozen: false,
+            pending: Vec::new(),
+            slow: Vec::new(),
+            failed: Vec::new(),
+            done: false,
+            prefetched: true,
+        };
+        Self {
+            core: core.clone(),
+            plays: plays(&params.caps),
+            episode: (None, None),
+            snapshot: SharedObservable::new(render(&state)),
+            state: Arc::new(Mutex::new(state)),
+            verified: None,
+            denied: true,
+            _tasks: JoinSet::new(),
+        }
+    }
+
+    /// A kids policy refused the target at open.
+    pub fn denied(&self) -> bool {
+        self.denied
+    }
+
+    /// A kids profile's verified target, for its playback.
+    pub fn verified(&self) -> Option<&Verified> {
+        self.verified.as_ref()
     }
 
     pub fn snapshot(&self) -> VersionsSnapshot {
@@ -256,7 +398,7 @@ async fn supervise(
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
     mut addons: Vec<InstalledAddon>,
     path: ResourcePath,
-    params: Arc<VersionsParams>,
+    ranking: Arc<Ranking>,
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<VersionsSnapshot>,
 ) {
@@ -264,7 +406,7 @@ async fn supervise(
         let current = urls(&addons);
         // Dropping an unfinished run stops its writes at once.
         let outcome = tokio::select! {
-            () = collect(core.clone(), addons, path.clone(), params.clone(), state.clone(), snapshot.clone()) => None,
+            () = collect(core.clone(), addons, path.clone(), ranking.clone(), state.clone(), snapshot.clone()) => None,
             next = changed_set(&mut changes, &core, &path, &current) => Some(next),
         };
         let next = match outcome {
@@ -331,10 +473,11 @@ async fn collect(
     core: Core,
     addons: Vec<InstalledAddon>,
     path: ResourcePath,
-    params: Arc<VersionsParams>,
+    ranking: Arc<Ranking>,
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<VersionsSnapshot>,
 ) {
+    let params = &ranking.params;
     // Name and rank by transport URL: two installs may share a manifest id.
     let names: std::collections::HashMap<Url, (String, u16)> = addons
         .iter()
@@ -420,7 +563,7 @@ async fn collect(
             }
             AddonEvent::Done => s.done = true,
         }
-        rerank(&mut s, &params);
+        rerank(&mut s, &ranking);
         if s.done {
             maybe_prefetch(&core, &mut s, (params.target.season, params.target.episode));
         }
@@ -454,12 +597,21 @@ fn plays(caps: &DeviceCaps) -> Vec<mq_server::Format> {
     .collect()
 }
 
-fn rerank(s: &mut State, params: &VersionsParams) {
+/// What the ranking reads: the view's params, and for a kids profile the
+/// allowed title's names (plans/m11-kids.md 4.4).
+struct Ranking {
+    params: VersionsParams,
+    kids: Option<Vec<String>>,
+}
+
+fn rerank(s: &mut State, ranking: &Ranking) {
+    let params = &ranking.params;
     let input = RankInput {
         caps: &params.caps,
         prefs: &params.prefs,
         target: &params.target,
         last_binge_group: params.last_binge_group.as_deref(),
+        kids: ranking.kids.as_deref(),
     };
     s.ranked = rank(s.streams.clone(), &input);
     if !s.frozen {

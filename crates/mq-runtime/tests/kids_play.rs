@@ -1,0 +1,676 @@
+//! A kids profile's play path (plans/m11-kids.md, phase K3b): title,
+//! versions and playback refused outside the list, the strict release rule,
+//! the next episode checked when it lands, and a playback stopped because
+//! its title left the list. Open profiles are checked to be as before.
+
+use mq_library::{AddonRow, AllowedRow, OWNER};
+use mq_runtime::views::versions::Verified;
+use mq_runtime::{
+    Core, PlayTarget, PlaybackPhase, PlaybackView, TitleView, VersionsParams, VersionsView,
+};
+use mq_streams::{DeviceCaps, HideReason, StreamPrefs, Target};
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+
+/// A local addon serving metas and streams, logging each request.
+#[derive(Clone, Default)]
+struct Fixture {
+    log: Arc<Mutex<Vec<String>>>,
+    /// Answers by request path; a meta defaults to one of the asked kind
+    /// and id, streams to none.
+    answers: Arc<Mutex<HashMap<String, Value>>>,
+    /// How long a meta answer takes.
+    meta_delay: Arc<Mutex<Duration>>,
+}
+
+impl Fixture {
+    async fn addon(&self) -> AddonRow {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let fixture = self.clone();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let fixture = fixture.clone();
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 4096];
+                    let n = socket.read(&mut buf).await.unwrap_or(0);
+                    let head = String::from_utf8_lossy(&buf[..n]).to_string();
+                    let path = head
+                        .split_whitespace()
+                        .nth(1)
+                        .unwrap_or_default()
+                        .replace("%3A", ":");
+                    fixture.log.lock().unwrap().push(path.clone());
+                    let body = fixture.answer(&path).await;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = socket.write_all(resp.as_bytes()).await;
+                });
+            }
+        });
+        let manifest = json!({
+            "id": "fixture", "version": "1.0.0", "name": "Fixture",
+            "types": ["movie", "series"], "resources": ["meta", "stream"],
+            "idPrefixes": ["tt"], "catalogs": []
+        });
+        AddonRow {
+            transport_url: format!("http://{addr}/manifest.json"),
+            manifest_json: manifest.to_string(),
+            position: 0,
+            enabled: true,
+            allow_private: true,
+        }
+    }
+
+    async fn answer(&self, path: &str) -> String {
+        let path = path.replace("%3A", ":");
+        if path.starts_with("/meta/") {
+            let delay = *self.meta_delay.lock().unwrap();
+            tokio::time::sleep(delay).await;
+        }
+        if let Some(answer) = self.answers.lock().unwrap().get(&path) {
+            return answer.to_string();
+        }
+        let rest = path.trim_end_matches(".json");
+        if let Some(rest) = rest.strip_prefix("/meta/") {
+            let (kind, id) = rest.split_once('/').unwrap_or_default();
+            return json!({"meta": {"id": id, "type": kind, "name": format!("Name {id}")}})
+                .to_string();
+        }
+        json!({"streams": []}).to_string()
+    }
+
+    fn set(&self, path: &str, answer: Value) {
+        self.answers.lock().unwrap().insert(path.into(), answer);
+    }
+
+    fn asked(&self, prefix: &str) -> Vec<String> {
+        let log = self.log.lock().unwrap();
+        log.iter()
+            .filter(|p| p.starts_with(prefix))
+            .cloned()
+            .collect()
+    }
+}
+
+const PIN: &str = "1357";
+
+/// The owner with a PIN and `fixture`'s addon, and a kids profile.
+async fn kid(fixture: &Fixture) -> (Core, Core) {
+    let owner = Core::temporary(OWNER).unwrap();
+    owner.set_pin(OWNER, Some(PIN), None).await.unwrap();
+    let addon = fixture.addon().await;
+    owner
+        .library()
+        .set_addons(OWNER, &[addon], &owner.hlc())
+        .unwrap();
+    let id = owner.create_kids_profile("Kid", "fox").unwrap();
+    (owner.clone(), owner.for_profile(&id))
+}
+
+fn allow(kid: &Core, id: &str, kind: &str, name: &str, names: &[&str]) {
+    let row = AllowedRow {
+        item_id: id.into(),
+        kind: kind.into(),
+        name: name.into(),
+        names: names.iter().map(|n| n.to_string()).collect(),
+        poster: None,
+        allowed: true,
+        added_ms: 1,
+    };
+    kid.library()
+        .write_allowed(kid.profile(), &row, &kid.hlc())
+        .unwrap();
+}
+
+fn remove(kid: &Core, id: &str) {
+    let row = AllowedRow {
+        item_id: id.into(),
+        kind: "movie".into(),
+        name: String::new(),
+        names: vec![],
+        poster: None,
+        allowed: false,
+        added_ms: 0,
+    };
+    kid.library()
+        .write_allowed(kid.profile(), &row, &kid.hlc())
+        .unwrap();
+}
+
+fn generation(core: &Core) -> u64 {
+    core.library().policy_checked(core.profile()).unwrap().1
+}
+
+async fn until(what: &str, check: impl Fn() -> bool) {
+    for _ in 0..200 {
+        if check() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    panic!("waited 5 s for {what}");
+}
+
+fn params(kind: &str, video_id: &str, title: &str) -> VersionsParams {
+    VersionsParams {
+        kind: kind.into(),
+        video_id: video_id.into(),
+        target: Target {
+            title: title.into(),
+            ..Target::default()
+        },
+        caps: DeviceCaps::basic_1080p(),
+        prefs: StreamPrefs::default(),
+        last_binge_group: None,
+    }
+}
+
+fn target(kind: &str, item_id: &str, video_id: &str) -> PlayTarget {
+    PlayTarget {
+        kind: kind.into(),
+        item_id: item_id.into(),
+        video_id: video_id.into(),
+        name: Some("Name".into()),
+        ..PlayTarget::default()
+    }
+}
+
+#[tokio::test]
+async fn a_title_off_the_list_opens_denied_and_trailers_never_show() {
+    let fixture = Fixture::default();
+    fixture.set(
+        "/meta/movie/tt1.json",
+        json!({"meta": {"id": "tt1", "type": "movie", "name": "Up",
+            "trailerStreams": [{"title": "Trailer", "ytId": "eRsGyueVLvQ"}]}}),
+    );
+    let (owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let off = TitleView::open(&kid, "movie", "tt2");
+    assert!(off.denied());
+    let page = TitleView::open(&kid, "movie", "tt1");
+    assert!(!page.denied());
+    until("the details", || page.snapshot().header.details.is_some()).await;
+    assert!(page.snapshot().header.details.unwrap().trailers.is_empty());
+    assert!(fixture.asked("/meta/movie/tt2").is_empty(), "never asked");
+    assert!(off.snapshot().header.details.is_none());
+    // The owner's page is as before.
+    let owners = TitleView::open(&owner, "movie", "tt1");
+    until("the owner's details", || {
+        owners.snapshot().header.details.is_some()
+    })
+    .await;
+    assert_eq!(owners.snapshot().header.details.unwrap().trailers.len(), 1);
+}
+
+#[tokio::test]
+async fn versions_need_the_list_and_a_video_of_the_title() {
+    let fixture = Fixture::default();
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "series", "Bluey", &[]);
+    let refused = [
+        VersionsView::open(&kid, params("series", "tt1:1:1", "Bluey")),
+        VersionsView::open_checked(&kid, params("series", "tt10:1:1", "Bluey"), Some("tt1")),
+        VersionsView::open_checked(&kid, params("movie", "tt1", "Bluey"), Some("tt1")),
+        VersionsView::open_checked(&kid, params("movie", "tt2", "Up"), Some("tt2")),
+    ];
+    assert!(refused.iter().all(VersionsView::denied));
+    assert!(refused.iter().all(|v| v.candidates("any").is_empty()));
+    let allowed =
+        VersionsView::open_checked(&kid, params("series", "tt1:2:5", "Other"), Some("tt1"));
+    assert!(!allowed.denied());
+    let verified: &Verified = allowed.verified().unwrap();
+    assert_eq!(
+        (verified.item_id(), verified.video_id(), verified.name()),
+        ("tt1", "tt1:2:5", "Bluey")
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let asked = fixture.asked("/stream/");
+    assert_eq!(
+        asked,
+        ["/stream/series/tt1:2:5.json"],
+        "only the allowed one"
+    );
+}
+
+/// The releases a kid's "Up" meets on one addon.
+fn up_streams() -> Value {
+    let torrent = |i: u8, title: &str| {
+        json!({"name": "Fixture\n1080p", "title": title,
+               "infoHash": format!("{i:040x}"), "fileIdx": 0})
+    };
+    json!({"streams": [
+        torrent(1, "Up.2009.1080p.BluRay.x264-GROUP"),
+        torrent(2, "Up.in.the.Air.2009.1080p.BluRay.x264-GROUP"),
+        torrent(3, "Yukari.Bak.2009.720p.WEB.x264-GROUP"),
+        torrent(4, "Up.2009.XXX.1080p.WEB.x264-GROUP"),
+        torrent(5, "Up.2009.720p.BluRay.x264-GROUP\nRipped in Essex"),
+        {"ytId": "abcdefghijk", "title": "Up"}
+    ]})
+}
+
+async fn settled(view: &VersionsView) -> mq_runtime::VersionsSnapshot {
+    until("every addon answered", || view.snapshot().done).await;
+    view.snapshot()
+}
+
+fn release_names(s: &mq_runtime::VersionsSnapshot) -> Vec<String> {
+    let mut names: Vec<String> = s
+        .recommended
+        .iter()
+        .chain(&s.rows)
+        .map(|r| r.release_name.clone())
+        .collect();
+    names.sort();
+    names
+}
+
+#[tokio::test]
+async fn a_kid_gets_only_releases_of_the_allowed_title() {
+    let fixture = Fixture::default();
+    fixture.set("/stream/movie/tt1.json", up_streams());
+    let (owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &["Yukari Bak"]);
+    // The app passes another title: the list's names rank, not it.
+    let view =
+        VersionsView::open_checked(&kid, params("movie", "tt1", "Up in the Air"), Some("tt1"));
+    let s = settled(&view).await;
+    assert_eq!(
+        release_names(&s),
+        [
+            "Up.2009.1080p.BluRay.x264-GROUP",
+            "Up.2009.720p.BluRay.x264-GROUP",
+            "Yukari.Bak.2009.720p.WEB.x264-GROUP"
+        ]
+    );
+    let by = |reason| {
+        s.hidden
+            .by_reason
+            .iter()
+            .find(|(r, _)| *r == reason)
+            .map_or(0, |(_, n)| *n)
+    };
+    assert_eq!(by(HideReason::WrongTitle), 1);
+    assert_eq!(by(HideReason::NotForKids), 1);
+    assert_eq!(by(HideReason::LeavesApp), 1);
+    // The owner's Versions are as before.
+    let owners = VersionsView::open(&owner, params("movie", "tt1", "Up"));
+    let s = settled(&owners).await;
+    assert_eq!(s.hidden.count, 0, "{:?}", s.hidden);
+}
+
+#[tokio::test]
+async fn nothing_playable_leaves_no_pick_and_the_owner_counts_none() {
+    let fixture = Fixture::default();
+    fixture.set(
+        "/stream/movie/tt1.json",
+        json!({"streams": [{"name": "Fixture", "title": "Up.in.the.Air.2009.1080p.x264-GROUP",
+                            "infoHash": format!("{:040x}", 7), "fileIdx": 0}]}),
+    );
+    let (owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let s = settled(&VersionsView::open_checked(
+        &kid,
+        params("movie", "tt1", "Up"),
+        Some("tt1"),
+    ))
+    .await;
+    assert!(s.recommended.is_none() && s.rows.is_empty());
+    // "View as": the owner runs the same view as the kid.
+    let as_kid = owner.for_profile(kid.profile());
+    let s = settled(&VersionsView::open_checked(
+        &as_kid,
+        params("movie", "tt1", "Up"),
+        Some("tt1"),
+    ))
+    .await;
+    assert_eq!(s.recommended.iter().count() + s.rows.len(), 0);
+}
+
+#[tokio::test]
+async fn a_playback_off_the_list_opens_denied() {
+    let fixture = Fixture::default();
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "series", "Bluey", &[]);
+    for t in [
+        target("movie", "tt2", "tt2"),
+        target("series", "tt1", "tt10:1:1"),
+        target("movie", "tt1", "tt1"),
+    ] {
+        let view = PlaybackView::open(&kid, Vec::new(), t);
+        assert!(view.denied());
+        assert_eq!(view.snapshot().url, None);
+    }
+    assert!(!PlaybackView::open(&kid, Vec::new(), target("series", "tt1", "tt1:1:1")).denied());
+}
+
+/// A file origin: answers any range of a `len`-byte file, sending it in
+/// 16 KiB pieces `gap` apart, after `first` before the first byte.
+async fn origin(len: u64, first: Duration, gap: Duration) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
+                let start: u64 = head
+                    .split("range: bytes=")
+                    .nth(1)
+                    .and_then(|r| r.split('-').next())
+                    .and_then(|s| s.trim().parse().ok())
+                    .unwrap_or(0);
+                tokio::time::sleep(first).await;
+                let resp = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{}/{len}\r\nContent-Length: {}\r\nContent-Type: video/x-matroska\r\nConnection: close\r\n\r\n",
+                    len - 1,
+                    len - start
+                );
+                if socket.write_all(resp.as_bytes()).await.is_err() {
+                    return;
+                }
+                let mut left = len - start;
+                while left > 0 {
+                    let n = left.min(16 * 1024);
+                    if socket.write_all(&vec![b'v'; n as usize]).await.is_err() {
+                        return;
+                    }
+                    left -= n;
+                    tokio::time::sleep(gap).await;
+                }
+            });
+        }
+    });
+    format!("http://{addr}")
+}
+
+fn http_streams(base: &str) -> Value {
+    json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                        "url": format!("{base}/up.mkv")}]})
+}
+
+/// The kid's candidates for `video_id` of `item_id`, from its own Versions.
+async fn candidates(
+    kid: &Core,
+    kind: &str,
+    item_id: &str,
+    video_id: &str,
+) -> Vec<mq_streams::ParsedStream> {
+    let view = VersionsView::open_checked(kid, params(kind, video_id, ""), Some(item_id));
+    let s = settled(&view).await;
+    let key = s.recommended.expect("a pick").key;
+    view.candidates(&key)
+}
+
+async fn ready(view: &PlaybackView) -> String {
+    until("ready", || {
+        view.snapshot().phase != PlaybackPhase::Resolving
+    })
+    .await;
+    let s = view.snapshot();
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    s.url.unwrap()
+}
+
+#[tokio::test]
+async fn the_next_episode_is_checked_when_it_lands() {
+    let fixture = Fixture::default();
+    let base = origin(64 * 1024, Duration::ZERO, Duration::ZERO).await;
+    fixture.set(
+        "/stream/series/tt1:1:1.json",
+        json!({"streams": [
+        {"name": "Fixture", "title": "Bluey.S01E01.1080p.WEB.x264-GROUP",
+         "url": format!("{base}/e1.mkv")}]}),
+    );
+    fixture.set(
+        "/meta/series/tt1.json",
+        json!({"meta": {"id": "tt1", "type": "series", "name": "Bluey", "videos": [
+            {"id": "tt1:1:1", "title": "One", "season": 1, "episode": 1,
+             "released": "2020-01-01T00:00:00Z"},
+            {"id": "tt1:1:2", "title": "Two", "season": 1, "episode": 2,
+             "released": "2020-01-08T00:00:00Z"}]}}),
+    );
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "series", "Bluey", &[]);
+    let found = candidates(&kid, "series", "tt1", "tt1:1:1").await;
+    *fixture.meta_delay.lock().unwrap() = Duration::from_millis(800);
+    let mut play = target("series", "tt1", "tt1:1:1");
+    (play.season, play.episode) = (Some(1), Some(1));
+    let view = PlaybackView::open(&kid, found, play);
+    ready(&view).await;
+    // Taken off the list while the next episode's meta is on the way.
+    remove(&kid, "tt1");
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(view.snapshot().next, None);
+}
+
+#[tokio::test]
+async fn a_stopped_playback_ends_its_body_and_its_url() {
+    let fixture = Fixture::default();
+    let base = origin(8 << 20, Duration::ZERO, Duration::from_millis(20)).await;
+    fixture.set("/stream/movie/tt1.json", http_streams(&base));
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let found = candidates(&kid, "movie", "tt1", "tt1").await;
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    let url = ready(&view).await;
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let local = mq_http::RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let mut body = http.stream(&url, None, &local).await.unwrap();
+    let first = body.next_chunk().await.unwrap().unwrap();
+    assert!(!first.is_empty());
+    view.stop_forbidden(generation(&kid)).await;
+    let mut read = first.len();
+    let ended = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(Ok(chunk)) = body.next_chunk().await {
+            read += chunk.len();
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "the body ended");
+    assert!(read < 8 << 20, "cut short at {read}");
+    assert_eq!(view.snapshot().url, None);
+    let again = http.stream(&url, None, &local).await.unwrap();
+    assert_eq!(again.status, 404, "the URL is gone");
+}
+
+#[tokio::test]
+async fn a_resolve_that_ends_after_the_stop_adopts_nothing() {
+    let fixture = Fixture::default();
+    let base = origin(64 * 1024, Duration::from_millis(800), Duration::ZERO).await;
+    fixture.set("/stream/movie/tt1.json", http_streams(&base));
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let found = candidates(&kid, "movie", "tt1", "tt1").await;
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    view.stop_forbidden(generation(&kid)).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let s = view.snapshot();
+    assert_eq!((s.url, s.phase), (None, PlaybackPhase::Resolving));
+    assert_eq!(kid.stream_server().await.unwrap().playbacks(), 0);
+}
+
+// Torrents (feature `torrent`): a loopback swarm with discovery off, the
+// leecher installed as the device's engine.
+
+#[cfg(feature = "torrent")]
+#[path = "../../mq-engine/tests/support/mod.rs"]
+#[allow(dead_code)]
+mod support;
+
+/// The swarm, its torrent known to the leecher (so the playback's own
+/// `add_magnet` finds it with its peer), and a kid whose "Up" is it.
+#[cfg(feature = "torrent")]
+async fn torrent_kid() -> (
+    support::Swarm,
+    mq_engine::TorrentHandle,
+    Core,
+    Vec<mq_streams::ParsedStream>,
+) {
+    let s = support::swarm(true).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = s
+        .leecher
+        .files(t)
+        .unwrap()
+        .iter()
+        .position(|f| f.path.ends_with("movie.mkv"))
+        .unwrap();
+    let fixture = Fixture::default();
+    fixture.set(
+        "/stream/movie/tt1.json",
+        json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                            "infoHash": s.info_hash, "fileIdx": movie}]}),
+    );
+    let (_owner, kid) = kid(&fixture).await;
+    kid.set_torrent_engine(s.leecher.clone());
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let found = candidates(&kid, "movie", "tt1", "tt1").await;
+    (s, t, kid, found)
+}
+
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stopped_playback_pauses_its_torrent_and_an_allow_plays_it_again() {
+    let (s, t, kid, found) = torrent_kid().await;
+    let view = PlaybackView::open(&kid, found.clone(), target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    remove(&kid, "tt1");
+    view.stop_forbidden(generation(&kid)).await;
+    let stats = s.leecher.stats(t).await.unwrap();
+    assert!(stats.paused && stats.held, "{stats:?}");
+    drop(view);
+    // Allowed again: the new playback's own check is newer than the hold.
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let again = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    ready(&again).await;
+    assert!(!s.leecher.stats(t).await.unwrap().held);
+}
+
+/// Taken off the list while the playback is still setting its torrent up
+/// (before the head is ready): the torrent is paused and held all the same.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_playback_stopped_during_setup_holds_its_torrent() {
+    let (s, t, kid, found) = torrent_kid().await;
+    let hold = mq_engine::test_hooks::hold_ranges(&s.leecher);
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    tokio::time::timeout(Duration::from_secs(30), hold.reached())
+        .await
+        .expect("the head range is being set up");
+    remove(&kid, "tt1");
+    view.stop_forbidden(generation(&kid)).await;
+    hold.open();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let stats = s.leecher.stats(t).await.unwrap();
+    assert!(stats.paused && stats.held, "{stats:?}");
+    assert_eq!(view.snapshot().url, None);
+}
+
+/// The corpus bar (plans/m11-kids.md 4.4): the 30 most popular family
+/// movies and 20 family series in Cinemeta's catalogs, allowed for a kid
+/// with the real meta and stream addons (Cinemeta and Torrentio). Prints
+/// one JSON line per title: what the kid can play next to what an open
+/// profile can. Run by hand; the numbers go to bench/m11.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "network: Cinemeta and Torrentio"]
+async fn corpus_of_fifty_family_titles() {
+    let owner = Core::temporary(OWNER).unwrap();
+    owner.set_pin(OWNER, Some(PIN), None).await.unwrap();
+    owner
+        .install_addon("https://v3-cinemeta.strem.io/manifest.json")
+        .await
+        .unwrap();
+    owner
+        .install_addon("https://torrentio.strem.fun/manifest.json")
+        .await
+        .unwrap();
+    let kid_id = owner.create_kids_profile("Kid", "fox").unwrap();
+    let kid = owner.for_profile(&kid_id);
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let mut titles: Vec<(String, String, String)> = Vec::new();
+    for (kind, take) in [("movie", 30), ("series", 20)] {
+        let url = format!("https://v3-cinemeta.strem.io/catalog/{kind}/top/genre=Family.json");
+        let body = http.get(&url, &Default::default()).await.unwrap().body;
+        let list: Value = serde_json::from_slice(&body).unwrap();
+        for m in list["metas"].as_array().unwrap().iter().take(take) {
+            titles.push((
+                kind.into(),
+                m["id"].as_str().unwrap().into(),
+                m["name"].as_str().unwrap_or_default().into(),
+            ));
+        }
+    }
+    let count = |view: &VersionsView| {
+        let s = view.snapshot();
+        s.recommended.iter().count() + s.rows.len()
+    };
+    for (kind, id, name) in titles {
+        let allowed = owner.allow_title(&kid_id, &kind, &id).await;
+        let video = if kind == "series" {
+            let meta = owner.fetch_meta("series", &id).await.ok().map(|m| m.0);
+            meta.and_then(|m| {
+                m.videos
+                    .iter()
+                    .filter(|v| v.series_info.as_ref().is_some_and(|s| s.season > 0))
+                    .min_by_key(|v| {
+                        let s = v.series_info.as_ref().unwrap();
+                        (s.season, s.episode)
+                    })
+                    .map(|v| v.id.clone())
+            })
+        } else {
+            Some(id.clone())
+        };
+        let Some(video) = video else {
+            println!(
+                "{}",
+                json!({"id": id, "kind": kind, "name": name, "error": "no episode"})
+            );
+            continue;
+        };
+        // One view at a time, paced: Torrentio limits how often it is asked.
+        let open = VersionsView::open(&owner, params(&kind, &video, &name));
+        answered(&open).await;
+        let kids = VersionsView::open_checked(&kid, params(&kind, &video, ""), Some(&id));
+        answered(&kids).await;
+        let hidden = kids.snapshot().hidden.by_reason;
+        let allowed = allowed
+            .as_ref()
+            .err()
+            .map_or("ok", |e| e.code().unwrap_or("error"));
+        println!(
+            "{}",
+            json!({"id": id, "kind": kind, "name": name, "video": video,
+                   "allowed": allowed, "denied": kids.denied(),
+                   "open": count(&open), "kids": count(&kids),
+                   "openFailed": open.snapshot().failed_addons,
+                   "kidsFailed": kids.snapshot().failed_addons,
+                   "kidsHidden": serde_json::to_value(&hidden).unwrap()})
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
+
+/// Waits until every addon answered, at most 40 s (real addons).
+async fn answered(view: &VersionsView) {
+    let started = std::time::Instant::now();
+    while !view.snapshot().done && started.elapsed() < Duration::from_secs(40) {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
