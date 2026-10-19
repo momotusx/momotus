@@ -290,6 +290,10 @@ impl TitleView {
     /// Marks or unmarks by hand. With Trakt connected, a mark that flips
     /// queues the write for Trakt in the same transaction.
     pub fn set_watched(&self, video_id: &str, watched: bool) -> Result<(), crate::CoreError> {
+        // No watched row for a title off the kids list.
+        if self.denied {
+            return Ok(());
+        }
         let (library, profile) = (self.core.library(), self.core.profile());
         let account = library.tracker_account(profile, crate::trakt::TRACKER)?;
         let tracker = account.as_ref().map(|(account, _)| {

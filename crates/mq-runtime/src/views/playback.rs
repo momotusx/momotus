@@ -339,7 +339,9 @@ impl PlaybackView {
     /// the resolve stops (the subtitle hash reader with it), the position is
     /// saved, the lease drops (its URLs end and bodies being served stop),
     /// no lease is adopted again, and every torrent the view started is
-    /// paused at once with the `generation` the denial was read at.
+    /// held for this profile with the `generation` the denial was read at
+    /// (paused at once unless another profile is playing it). A failover
+    /// after this does nothing.
     pub async fn stop_forbidden(&self, generation: u64) {
         if let Some((_, task)) = lock(&self.task).take() {
             task.abort();
@@ -366,7 +368,10 @@ impl PlaybackView {
             && let Ok(engine) = self.core.torrent_engine().await
         {
             for torrent in started {
-                if let Err(e) = engine.pause_now(torrent, generation).await {
+                if let Err(e) = engine
+                    .pause_now(torrent, self.core.profile(), generation)
+                    .await
+                {
                     tracing::warn!("pausing a forbidden torrent: {e}");
                 }
             }
@@ -412,7 +417,9 @@ impl PlaybackView {
         {
             let mut s = lock(&self.state);
             let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);
-            if s.snapshot.phase != PlaybackPhase::Ready || other {
+            // A stopped view opens no other source (a debrid one would
+            // reach the account for a title off the list).
+            if s.snapshot.phase != PlaybackPhase::Ready || other || s.closed {
                 return;
             }
             // The running task's work for this source ends here.
@@ -479,6 +486,10 @@ impl PlaybackView {
     /// most every few seconds; the last report is always saved when the
     /// view closes. Trakt gets start and pause from it.
     pub fn report_progress(&self, position_ms: u64, duration_ms: u64, paused: bool) {
+        // No progress row for a title off the kids list.
+        if self.denied {
+            return;
+        }
         if let Some(trakt) = &self.trakt {
             trakt.progress(position_ms, duration_ms, paused);
         }
@@ -767,6 +778,9 @@ async fn resolve_next(
     loop {
         let stream = {
             let mut s = lock(&state);
+            if s.closed {
+                return;
+            }
             let Some(stream) = s.candidates.get(s.next).cloned() else {
                 s.snapshot.phase = PlaybackPhase::Failed;
                 snapshot.set(s.snapshot.clone());
@@ -963,6 +977,10 @@ async fn open_torrent(
     .await
     .map_err(|_| "No peer sent the torrent's details in time".to_owned())?
     .map_err(|e| e.to_string())?;
+    // This profile's use of it, for as long as the playback lives: a hold
+    // for another profile leaves the torrent running for it.
+    let profile = core.profile();
+    let claim = engine.claim(torrent, profile).map_err(|e| e.to_string())?;
     {
         // Kept from now on, so a closure pauses it even before its head is
         // ready; a view already stopped starts nothing.
@@ -974,7 +992,7 @@ async fn open_torrent(
     }
     // Only a newer authorization lifts a hold; an older one leaves it, and
     // the file choice below then answers that the torrent is held.
-    if let Err(e) = engine.release_hold(torrent, generation).await {
+    if let Err(e) = engine.release_hold(torrent, profile, generation).await {
         tracing::debug!("torrent hold: {e}");
     }
     let hint = match (file_idx, &stream.filename, target.season, target.episode) {
@@ -984,8 +1002,8 @@ async fn open_torrent(
         _ => FileHint::Largest,
     };
     let started = async {
-        let file = engine.select_file(torrent, &hint).await?;
-        let reader = engine.open_reader(torrent, file).await?;
+        let file = engine.select_file(torrent, profile, &hint).await?;
+        let reader = claim.open_reader(file).await?;
         let mut head = reader.range(0, None).await?;
         let ready = tokio::time::timeout(TORRENT_READY_TIMEOUT, head.ready()).await;
         Ok::<_, mq_engine::EngineError>((file, reader.file().clone(), ready))
@@ -998,13 +1016,13 @@ async fn open_torrent(
                 .next()
                 .unwrap_or(&info.path)
                 .to_owned();
-            let upstream = Upstream::Torrent {
-                engine,
-                torrent,
-                file,
-            };
+            let upstream = Upstream::Torrent { claim, file };
             return Ok((upstream, Some(name), Some(info.len)));
         }
+        // Held for this profile (its check is older than the hold): the
+        // torrent, its hold and its files stay, since another profile may
+        // be playing it, and the next candidate plays instead.
+        Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
         Ok((_, _, Err(_))) => "the swarm did not send the start of the video in time".to_owned(),
         Ok((_, _, Ok(Err(e)))) | Err(e) => e.to_string(),
     };
@@ -1164,11 +1182,7 @@ async fn video_extra(
         // Over the playback's own cache and cursors; none for passthrough.
         Upstream::Http { .. } => reader,
         #[cfg(feature = "torrent")]
-        Upstream::Torrent {
-            engine,
-            torrent,
-            file,
-        } => match engine.open_reader(*torrent, *file).await {
+        Upstream::Torrent { claim, file } => match claim.open_reader(*file).await {
             Ok(reader) => Some(Box::new(TorrentBytes(reader)) as Box<dyn mq_media::RangeReader>),
             Err(e) => {
                 tracing::warn!("torrent reader for the subtitle hash: {e}");
@@ -1419,5 +1433,21 @@ mod tests {
         assert!(!adopt(&mut s, 2, lease()), "a closed view");
         assert_eq!(server.playbacks(), 0);
         assert_eq!(s.snapshot.url, None);
+    }
+
+    /// A resolve that runs on after its view closed (one the abort did not
+    /// reach in time) takes no other candidate.
+    #[tokio::test]
+    async fn a_closed_view_opens_no_source() {
+        let core = Core::temporary("default").unwrap();
+        let mut s = State::new(vec![stream(r#"{"url":"http://127.0.0.1:9/v.mkv"}"#)], None);
+        s.closed = true;
+        let snapshot = SharedObservable::new(s.snapshot.clone());
+        let state = Arc::new(Mutex::new(s));
+        let target = Arc::new(PlayTarget::default());
+        resolve_next(core, target, Arc::from([]), state.clone(), snapshot, 0).await;
+        let s = lock(&state);
+        assert_eq!(s.next, 0, "no candidate taken");
+        assert_eq!(s.snapshot.phase, PlaybackPhase::Resolving);
     }
 }

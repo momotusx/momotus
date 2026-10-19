@@ -56,7 +56,7 @@ impl Fixture {
         });
         let manifest = json!({
             "id": "fixture", "version": "1.0.0", "name": "Fixture",
-            "types": ["movie", "series"], "resources": ["meta", "stream"],
+            "types": ["movie", "series"], "resources": ["meta", "stream", "subtitles"],
             "idPrefixes": ["tt"], "catalogs": []
         });
         AddonRow {
@@ -501,6 +501,98 @@ async fn a_resolve_that_ends_after_the_stop_adopts_nothing() {
     assert_eq!(kid.stream_server().await.unwrap().playbacks(), 0);
 }
 
+/// A title off the list writes nothing: no watched mark from its page, no
+/// progress from its playback (they would sync, and show once allowed).
+#[tokio::test]
+async fn denied_views_write_no_progress_or_watched_rows() {
+    let fixture = Fixture::default();
+    let (_owner, kid) = kid(&fixture).await;
+    let page = TitleView::open(&kid, "movie", "tt2");
+    assert!(page.denied());
+    page.set_watched("tt2", true).unwrap();
+    let play = PlaybackView::open(&kid, Vec::new(), target("movie", "tt2", "tt2"));
+    assert!(play.denied());
+    play.report_progress(60_000, 600_000, false);
+    drop(play);
+    let library = kid.library();
+    assert!(
+        library
+            .watched_videos(kid.profile(), "tt2")
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(library.progress(kid.profile(), "tt2").unwrap(), None);
+}
+
+/// An origin that counts the connections it gets and answers none.
+async fn counter() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = count.clone();
+    tokio::spawn(async move {
+        while let Ok((socket, _)) = listener.accept().await {
+            seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            drop(socket);
+        }
+    });
+    (format!("http://{addr}"), count)
+}
+
+/// After the stop, a failover opens no other source: the same release from
+/// a second origin (a debrid one would reach the owner's account) is never
+/// asked, and the view stays as the stop left it.
+#[tokio::test]
+async fn a_stopped_playback_opens_no_other_source() {
+    let fixture = Fixture::default();
+    let base = origin(64 * 1024, Duration::ZERO, Duration::ZERO).await;
+    let (spare, asked) = counter().await;
+    fixture.set(
+        "/stream/movie/tt1.json",
+        json!({"streams": [
+            {"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+             "url": format!("{base}/up.mkv")},
+            {"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+             "url": format!("{spare}/up.mkv")}]}),
+    );
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let found = candidates(&kid, "movie", "tt1", "tt1").await;
+    assert_eq!(found.len(), 2, "one release from two origins");
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    remove(&kid, "tt1");
+    view.stop_forbidden(generation(&kid)).await;
+    let stopped = view.snapshot();
+    view.fail_over(None, None, None, "player error");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(view.snapshot(), stopped);
+}
+
+/// The stop ends the resolve: its subtitle work (the hash read still under
+/// way) asks no addon after it.
+#[tokio::test]
+async fn a_stopped_playback_asks_no_addon_again() {
+    let fixture = Fixture::default();
+    let base = origin(
+        8 << 20,
+        Duration::from_millis(600),
+        Duration::from_millis(20),
+    )
+    .await;
+    fixture.set("/stream/movie/tt1.json", http_streams(&base));
+    let (_owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let found = candidates(&kid, "movie", "tt1", "tt1").await;
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    remove(&kid, "tt1");
+    view.stop_forbidden(generation(&kid)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+    assert_eq!(fixture.asked("/subtitles/"), Vec::<String>::new());
+}
+
 // Torrents (feature `torrent`): a loopback swarm with discovery off, the
 // leecher installed as the device's engine.
 
@@ -515,6 +607,7 @@ mod support;
 async fn torrent_kid() -> (
     support::Swarm,
     mq_engine::TorrentHandle,
+    Core,
     Core,
     Vec<mq_streams::ParsedStream>,
 ) {
@@ -537,17 +630,17 @@ async fn torrent_kid() -> (
         json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
                             "infoHash": s.info_hash, "fileIdx": movie}]}),
     );
-    let (_owner, kid) = kid(&fixture).await;
+    let (owner, kid) = kid(&fixture).await;
     kid.set_torrent_engine(s.leecher.clone());
     allow(&kid, "tt1", "movie", "Up", &[]);
     let found = candidates(&kid, "movie", "tt1", "tt1").await;
-    (s, t, kid, found)
+    (s, t, owner, kid, found)
 }
 
 #[cfg(feature = "torrent")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_stopped_playback_pauses_its_torrent_and_an_allow_plays_it_again() {
-    let (s, t, kid, found) = torrent_kid().await;
+    let (s, t, _owner, kid, found) = torrent_kid().await;
     let view = PlaybackView::open(&kid, found.clone(), target("movie", "tt1", "tt1"));
     ready(&view).await;
     remove(&kid, "tt1");
@@ -562,12 +655,107 @@ async fn a_stopped_playback_pauses_its_torrent_and_an_allow_plays_it_again() {
     assert!(!s.leecher.stats(t).await.unwrap().held);
 }
 
+/// Whether `url` serves its first bytes within 10 s.
+#[cfg(feature = "torrent")]
+async fn serves(url: &str) -> bool {
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let local = mq_http::RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let read = async {
+        let mut body = http.stream(url, None, &local).await.ok()?;
+        if !(200..300).contains(&body.status) {
+            return None;
+        }
+        body.next_chunk().await?.ok().filter(|c| !c.is_empty())
+    };
+    tokio::time::timeout(Duration::from_secs(10), read)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+}
+
+/// The kid's hold binds the kid only: the owner, and a second kids profile
+/// with the title on its list, play the held release at the same access
+/// generation.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn others_play_a_release_held_for_the_kid() {
+    let (s, t, owner, kid, found) = torrent_kid().await;
+    let other = owner.for_profile(&owner.create_kids_profile("Other", "owl").unwrap());
+    allow(&other, "tt1", "movie", "Up", &[]);
+    let view = PlaybackView::open(&kid, found.clone(), target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    remove(&kid, "tt1");
+    let removed = generation(&kid);
+    view.stop_forbidden(removed).await;
+    drop(view);
+    assert!(s.leecher.stats(t).await.unwrap().held);
+    for core in [&owner, &other] {
+        assert_eq!(generation(core), removed, "nothing committed since");
+        let play = PlaybackView::open(core, found.clone(), target("movie", "tt1", "tt1"));
+        let url = ready(&play).await;
+        assert!(serves(&url).await, "{}", core.profile());
+    }
+    assert!(
+        s.leecher.stats(t).await.unwrap().held,
+        "the kid's hold stays"
+    );
+}
+
+/// The owner is already playing the release when the kid's playback of it
+/// is stopped: the torrent is not paused and the owner's goes on.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_owners_playback_goes_on_when_the_kids_is_stopped() {
+    let (s, t, owner, kid, found) = torrent_kid().await;
+    let mine = PlaybackView::open(&owner, found.clone(), target("movie", "tt1", "tt1"));
+    let url = ready(&mine).await;
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    remove(&kid, "tt1");
+    view.stop_forbidden(generation(&kid)).await;
+    let stats = s.leecher.stats(t).await.unwrap();
+    assert!(stats.held && !stats.paused, "{stats:?}");
+    assert!(serves(&url).await);
+    assert_eq!(mine.snapshot().phase, PlaybackPhase::Ready);
+}
+
+/// A kid's playback whose check is older than the hold (the removal
+/// committed after it read the list) fails with `Held` while the owner
+/// plays the same release: the torrent, its hold and its files stay, and
+/// the owner's playback goes on.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stale_held_failure_removes_nothing() {
+    let (s, t, owner, kid, found) = torrent_kid().await;
+    let mine = PlaybackView::open(&owner, found.clone(), target("movie", "tt1", "tt1"));
+    let url = ready(&mine).await;
+    // The watcher's pause for a removal this playback's check did not see.
+    let later = generation(&kid) + 1;
+    assert!(s.leecher.pause_now(t, kid.profile(), later).await.unwrap());
+    let stale = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    until("the stale playback failed", || {
+        stale.snapshot().phase == PlaybackPhase::Failed
+    })
+    .await;
+    let stats = s
+        .leecher
+        .stats(t)
+        .await
+        .expect("the torrent is still there");
+    assert!(stats.held, "{stats:?}");
+    assert!(serves(&url).await);
+}
+
 /// Taken off the list while the playback is still setting its torrent up
 /// (before the head is ready): the torrent is paused and held all the same.
 #[cfg(feature = "test-hooks")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_playback_stopped_during_setup_holds_its_torrent() {
-    let (s, t, kid, found) = torrent_kid().await;
+    let (s, t, _owner, kid, found) = torrent_kid().await;
     let hold = mq_engine::test_hooks::hold_ranges(&s.leecher);
     let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
     tokio::time::timeout(Duration::from_secs(30), hold.reached())

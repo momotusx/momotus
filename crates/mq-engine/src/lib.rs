@@ -5,8 +5,8 @@
 //! ```text
 //! let engine = Engine::start(EngineConfig::new(dir)).await?;
 //! let t = engine.add_magnet(info_hash, &trackers, &[]).await?;   // metadata
-//! let file = engine.select_file(t, &FileHint::Episode { season: 1, episode: 2 }).await?;
-//! let reader = engine.open_reader(t, file).await?;
+//! let file = engine.select_file(t, "default", &FileHint::Episode { season: 1, episode: 2 }).await?;
+//! let reader = engine.open_reader(t, "default", file).await?;
 //! let mut range = reader.range(start, None).await?;  // RangeOpened
 //! range.ready().await?;                               // blocking window + tail
 //! range.read(&mut buf).await?;                        // verified bytes only
@@ -109,7 +109,8 @@ pub enum EngineError {
     BadInfoHash,
     #[error("no file in the torrent matches")]
     NoFile,
-    /// Paused by [`Engine::pause_now`] and not released since: nothing wakes it.
+    /// Paused for this profile by [`Engine::pause_now`] and not released
+    /// since: none of its file choices or ranges wakes it.
     #[error("the torrent is held")]
     Held,
     #[error("torrent: {0:#}")]
@@ -154,7 +155,8 @@ pub struct TorrentStats {
     pub readers: usize,
     /// The torrent is paused (idle past its keep-warm minute, or held).
     pub paused: bool,
-    /// [`Engine::pause_now`] holds it: no range or file choice wakes it.
+    /// [`Engine::pause_now`] holds it for some profile: none of that
+    /// profile's ranges or file choices wakes it.
     pub held: bool,
 }
 
@@ -195,19 +197,85 @@ pub(crate) struct Torrent {
     /// Also the torrent's lock for holds: pausing, releasing and waking
     /// each take it first.
     live: tokio::sync::Mutex<Option<Live>>,
-    hold: Mutex<Hold>,
+    hold: Mutex<Holds>,
     readers: AtomicUsize,
     last_used: Mutex<Instant>,
 }
 
-/// A hold and the authorization that may lift it (plans/m11-kids.md 4.4):
-/// two generations that only rise, so a pause read before a newer
-/// authorization, or an authorization read before a newer pause, loses.
+/// A torrent's holds, one per profile (plans/m11-kids.md 4.4): a kids
+/// profile's closure holds it against that profile's file choices and
+/// ranges only, and pauses it only while no other profile has a claim.
+#[derive(Default)]
+struct Holds {
+    by_profile: HashMap<String, Hold>,
+    /// Live claims by profile; a profile with none has no entry.
+    claims: HashMap<String, usize>,
+}
+
+impl Holds {
+    fn held(&self, profile: &str) -> bool {
+        self.by_profile.get(profile).is_some_and(|h| h.held)
+    }
+}
+
+/// A hold and the authorization that may lift it: two generations that
+/// only rise, so a pause read before a newer authorization, or an
+/// authorization read before a newer pause, loses.
 #[derive(Default)]
 struct Hold {
     held: bool,
     hold_gen: u64,
     auth_gen: u64,
+}
+
+/// A profile's live use of a torrent: a playback keeps one for as long as
+/// its lease lives, so a hold for another profile leaves the torrent
+/// running. Clones share it; it ends when the last one drops.
+#[derive(Clone)]
+pub struct Claim(Arc<ClaimInner>);
+
+struct ClaimInner {
+    engine: Engine,
+    handle: TorrentHandle,
+    torrent: Arc<Torrent>,
+    profile: String,
+}
+
+impl Claim {
+    pub fn handle(&self) -> TorrentHandle {
+        self.0.handle
+    }
+
+    pub fn profile(&self) -> &str {
+        &self.0.profile
+    }
+
+    /// A reader for `file`, for this claim's profile.
+    pub async fn open_reader(&self, file: usize) -> Result<StreamReader> {
+        let c = &self.0;
+        c.engine.open_reader(c.handle, &c.profile, file).await
+    }
+}
+
+impl std::fmt::Debug for Claim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Claim")
+            .field("handle", &self.0.handle)
+            .field("profile", &self.0.profile)
+            .finish()
+    }
+}
+
+impl Drop for ClaimInner {
+    fn drop(&mut self) {
+        let mut holds = lock(&self.torrent.hold);
+        if let Some(n) = holds.claims.get_mut(&self.profile) {
+            *n -= 1;
+            if *n == 0 {
+                holds.claims.remove(&self.profile);
+            }
+        }
+    }
 }
 
 pub(crate) struct Live {
@@ -398,14 +466,20 @@ impl Engine {
         Ok(self.torrent(h)?.files.clone())
     }
 
-    /// Picks the file to play and starts the torrent on it (or switches the
-    /// running torrent to it). Only that file is wanted; with DWH nothing
-    /// beyond the readahead budget downloads unless a reader asks.
-    pub async fn select_file(&self, h: TorrentHandle, hint: &FileHint) -> Result<usize> {
+    /// Picks the file to play for `profile` and starts the torrent on it (or
+    /// switches the running torrent to it). Only that file is wanted; with
+    /// DWH nothing beyond the readahead budget downloads unless a reader
+    /// asks. `Held` when `profile` holds it.
+    pub async fn select_file(
+        &self,
+        h: TorrentHandle,
+        profile: &str,
+        hint: &FileHint,
+    ) -> Result<usize> {
         let t = self.torrent(h)?;
         let idx = pick::pick(&t.files, hint).ok_or(EngineError::NoFile)?;
         let mut live = t.live.lock().await;
-        if lock(&t.hold).held {
+        if lock(&t.hold).held(profile) {
             return Err(EngineError::Held);
         }
         if let Some(l) = live.as_mut() {
@@ -466,14 +540,37 @@ impl Engine {
         Ok(idx)
     }
 
-    /// A reader for one file; selects it first when nothing was selected.
-    pub async fn open_reader(&self, h: TorrentHandle, file: usize) -> Result<StreamReader> {
+    /// A reader for one file, for `profile`: its ranges wake the torrent
+    /// unless that profile holds it. Selects the file first when nothing
+    /// was selected.
+    pub async fn open_reader(
+        &self,
+        h: TorrentHandle,
+        profile: &str,
+        file: usize,
+    ) -> Result<StreamReader> {
         let t = self.torrent(h)?;
         let info = t.files.get(file).cloned().ok_or(EngineError::NoFile)?;
         if t.live.lock().await.is_none() {
-            self.select_file(h, &FileHint::Index(file)).await?;
+            self.select_file(h, profile, &FileHint::Index(file)).await?;
         }
-        Ok(StreamReader::new(self.clone(), t, info))
+        Ok(StreamReader::new(self.clone(), t, info, profile))
+    }
+
+    /// Marks `profile`'s live use of `h` until the claim (every clone of
+    /// it) drops.
+    pub fn claim(&self, h: TorrentHandle, profile: &str) -> Result<Claim> {
+        let torrent = self.torrent(h)?;
+        *lock(&torrent.hold)
+            .claims
+            .entry(profile.to_owned())
+            .or_default() += 1;
+        Ok(Claim(Arc::new(ClaimInner {
+            engine: self.clone(),
+            handle: h,
+            torrent,
+            profile: profile.to_owned(),
+        })))
     }
 
     pub async fn stats(&self, h: TorrentHandle) -> Result<TorrentStats> {
@@ -482,7 +579,7 @@ impl Engine {
         let mut s = TorrentStats {
             metadata_ms: t.metadata_ms,
             readers: t.readers.load(Ordering::Relaxed),
-            held: lock(&t.hold).held,
+            held: lock(&t.hold).by_profile.values().any(|h| h.held),
             ..Default::default()
         };
         let Some(l) = live.as_ref() else {
@@ -552,20 +649,32 @@ impl Engine {
         self.inner.next_demand.fetch_add(1, Ordering::Relaxed)
     }
 
-    /// Pauses `h` at once and holds it: no range read or file choice wakes
-    /// it until [`Engine::release_hold`] passes a newer authorization. The
-    /// `generation` is the access generation the denial was read at; a
-    /// pause at or below the newest authorization is ignored (`false`).
-    pub async fn pause_now(&self, h: TorrentHandle, generation: u64) -> Result<bool> {
+    /// Holds `h` for `profile`: none of its range reads or file choices
+    /// wakes it until [`Engine::release_hold`] passes a newer authorization
+    /// for it. The torrent pauses at once unless another profile has a
+    /// claim on it, whose playback goes on. The `generation` is the access
+    /// generation the denial was read at; a pause at or below the profile's
+    /// newest authorization is ignored (`false`).
+    pub async fn pause_now(
+        &self,
+        h: TorrentHandle,
+        profile: &str,
+        generation: u64,
+    ) -> Result<bool> {
         let t = self.torrent(h)?;
         let live = t.live.lock().await;
-        {
-            let mut hold = lock(&t.hold);
+        let shared = {
+            let mut holds = lock(&t.hold);
+            let hold = holds.by_profile.entry(profile.to_owned()).or_default();
             if generation <= hold.auth_gen {
                 return Ok(false);
             }
             hold.hold_gen = hold.hold_gen.max(generation);
             hold.held = true;
+            holds.claims.keys().any(|p| p != profile)
+        };
+        if shared {
+            return Ok(true);
         }
         if let Some(l) = live.as_ref().filter(|l| !l.managed.is_paused()) {
             self.inner.session.pause(&l.managed).await?;
@@ -574,13 +683,19 @@ impl Engine {
         Ok(true)
     }
 
-    /// Lifts the hold of `h` for an authorization read at `generation`,
-    /// only when that is newer than the hold (`false` otherwise). The torrent
-    /// wakes with its next range.
-    pub async fn release_hold(&self, h: TorrentHandle, generation: u64) -> Result<bool> {
+    /// Lifts `profile`'s hold of `h` for an authorization read at
+    /// `generation`, only when that is newer than the hold (`false`
+    /// otherwise). The torrent wakes with its next range.
+    pub async fn release_hold(
+        &self,
+        h: TorrentHandle,
+        profile: &str,
+        generation: u64,
+    ) -> Result<bool> {
         let t = self.torrent(h)?;
         let _live = t.live.lock().await;
-        let mut hold = lock(&t.hold);
+        let mut holds = lock(&t.hold);
+        let hold = holds.by_profile.entry(profile.to_owned()).or_default();
         if generation <= hold.hold_gen {
             return Ok(false);
         }
@@ -589,13 +704,15 @@ impl Engine {
         Ok(true)
     }
 
-    /// Unpauses a torrent whose keep-warm window ran out; a held one stays.
+    /// Unpauses a torrent for a range of `profile`; one that profile holds
+    /// stays paused.
     pub(crate) async fn wake(
         &self,
         t: &Torrent,
+        profile: &str,
     ) -> Result<Option<(Arc<ManagedTorrent>, mpsc::UnboundedSender<adapter::Msg>)>> {
         let live = t.live.lock().await;
-        if lock(&t.hold).held {
+        if lock(&t.hold).held(profile) {
             return Err(EngineError::Held);
         }
         let Some(l) = live.as_ref() else {

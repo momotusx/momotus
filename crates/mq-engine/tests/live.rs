@@ -21,8 +21,11 @@ async fn stream(info_hash: &str, video: &str) {
     let trackers: Vec<String> = TRACKERS.iter().map(|t| t.to_string()).collect();
     let run = async {
         let t = engine.add_magnet(info_hash, &trackers, &[]).await.unwrap();
-        let file = engine.select_file(t, &FileHint::Largest).await.unwrap();
-        let reader = engine.open_reader(t, file).await.unwrap();
+        let file = engine
+            .select_file(t, "default", &FileHint::Largest)
+            .await
+            .unwrap();
+        let reader = engine.open_reader(t, "default", file).await.unwrap();
         assert!(
             reader.file().path.ends_with(video),
             "{}",

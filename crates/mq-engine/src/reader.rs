@@ -20,14 +20,22 @@ pub struct StreamReader {
     engine: Engine,
     torrent: Arc<Torrent>,
     file: FileInfo,
+    /// Whose ranges these are: that profile's hold refuses them.
+    profile: String,
 }
 
 impl StreamReader {
-    pub(crate) fn new(engine: Engine, torrent: Arc<Torrent>, file: FileInfo) -> Self {
+    pub(crate) fn new(
+        engine: Engine,
+        torrent: Arc<Torrent>,
+        file: FileInfo,
+        profile: &str,
+    ) -> Self {
         Self {
             engine,
             torrent,
             file,
+            profile: profile.to_owned(),
         }
     }
 
@@ -56,7 +64,7 @@ impl StreamReader {
         }
         let (managed, msgs) = self
             .engine
-            .wake(&self.torrent)
+            .wake(&self.torrent, &self.profile)
             .await?
             .ok_or(EngineError::NoFile)?;
         self.torrent.readers.fetch_add(1, Ordering::Relaxed);

@@ -58,7 +58,10 @@ pub async fn swarm(dwh: bool) -> Swarm {
         .add_torrent_bytes(created.as_bytes().unwrap().to_vec(), &[])
         .await
         .unwrap();
-    seeder.select_file(t, &FileHint::Largest).await.unwrap();
+    seeder
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
     wait_complete(&seeder, t).await;
     let port = seeder.listen_addr().unwrap().port();
     let leecher = Engine::start(config(leech_dir.path())).await.unwrap();

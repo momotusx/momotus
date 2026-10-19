@@ -60,10 +60,11 @@ pub enum Upstream {
         /// (a debrid link) reaches public addresses only.
         addon_url: Option<Url>,
     },
+    /// A file of a torrent, read as the claim's profile: the claim lives as
+    /// long as the playback.
     #[cfg(feature = "torrent")]
     Torrent {
-        engine: mq_engine::Engine,
-        torrent: mq_engine::TorrentHandle,
+        claim: mq_engine::Claim,
         file: usize,
     },
 }
@@ -94,8 +95,7 @@ enum Content {
     Hls(Arc<Hls>),
     #[cfg(feature = "torrent")]
     Torrent {
-        engine: mq_engine::Engine,
-        torrent: mq_engine::TorrentHandle,
+        claim: mq_engine::Claim,
         file: usize,
     },
 }
@@ -434,15 +434,7 @@ impl StreamServer {
                 Content::Http(source)
             }
             #[cfg(feature = "torrent")]
-            Upstream::Torrent {
-                engine,
-                torrent,
-                file,
-            } => Content::Torrent {
-                engine,
-                torrent,
-                file,
-            },
+            Upstream::Torrent { claim, file } => Content::Torrent { claim, file },
         };
         Arc::new(Playback {
             body,
@@ -858,21 +850,9 @@ async fn serve(
             cors(serve_playlist(&playback, hls, None, main, query).await)
         }
         #[cfg(feature = "torrent")]
-        Content::Torrent {
-            engine,
-            torrent,
-            file,
-        } => {
+        Content::Torrent { claim, file } => {
             let released = playback.released.clone();
-            torrent::serve(
-                engine,
-                *torrent,
-                *file,
-                range.as_deref(),
-                head_only,
-                released,
-            )
-            .await
+            torrent::serve(claim, *file, range.as_deref(), head_only, released).await
         }
     }
 }
@@ -1345,14 +1325,13 @@ mod torrent {
     /// A release before the answer goes out stops the setup too, so a
     /// released torrent is never selected, woken or given demand again.
     pub(crate) async fn serve(
-        engine: &mq_engine::Engine,
-        torrent: mq_engine::TorrentHandle,
+        claim: &mq_engine::Claim,
         file: usize,
         range: Option<&str>,
         head_only: bool,
         released: CancellationToken,
     ) -> Response {
-        let answer = open(engine, torrent, file, range, head_only, released.clone());
+        let answer = open(claim, file, range, head_only, released.clone());
         released
             .run_until_cancelled(answer)
             .await
@@ -1360,14 +1339,13 @@ mod torrent {
     }
 
     async fn open(
-        engine: &mq_engine::Engine,
-        torrent: mq_engine::TorrentHandle,
+        claim: &mq_engine::Claim,
         file: usize,
         range: Option<&str>,
         head_only: bool,
         released: CancellationToken,
     ) -> Response {
-        let reader = match engine.open_reader(torrent, file).await {
+        let reader = match claim.open_reader(file).await {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!("torrent stream unavailable: {e}");
@@ -1438,7 +1416,8 @@ mod torrent {
             let file = s.leecher.files(t).unwrap().len() - 1;
             let released = CancellationToken::new();
             released.cancel();
-            let response = serve(&s.leecher, t, file, Some("bytes=0-"), false, released).await;
+            let claim = s.leecher.claim(t, "default").unwrap();
+            let response = serve(&claim, file, Some("bytes=0-"), false, released).await;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
             let stats = s.leecher.stats(t).await.unwrap();
             assert_eq!((stats.readers, stats.pieces_total), (0, 0));
@@ -1457,16 +1436,15 @@ mod torrent {
                 .await
                 .unwrap();
             let hint = mq_engine::FileHint::Name("movie.mkv".into());
-            let file = s.leecher.select_file(t, &hint).await.unwrap();
+            let file = s.leecher.select_file(t, "default", &hint).await.unwrap();
             let hold = mq_engine::test_hooks::hold_ranges(&s.leecher);
             let released = CancellationToken::new();
             let request = tokio::spawn({
-                let (engine, released) = (s.leecher.clone(), released.clone());
+                let claim = s.leecher.claim(t, "default").unwrap();
+                let released = released.clone();
                 async move {
                     let range = Some("bytes=0-");
-                    serve(&engine, t, file, range, false, released)
-                        .await
-                        .status()
+                    serve(&claim, file, range, false, released).await.status()
                 }
             });
             let reached = tokio::time::timeout(Duration::from_secs(5), hold.reached()).await;

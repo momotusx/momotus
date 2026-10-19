@@ -30,15 +30,14 @@ async fn serves_torrent_ranges_byte_for_byte() {
         .unwrap();
     let file = s
         .leecher
-        .select_file(t, &FileHint::Name("movie.mkv".into()))
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
         .await
         .unwrap();
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http.clone()).await.unwrap();
     let lease = server.register(
         Upstream::Torrent {
-            engine: s.leecher.clone(),
-            torrent: t,
+            claim: s.leecher.claim(t, "default").unwrap(),
             file,
         },
         "movie.mkv",
@@ -91,15 +90,14 @@ async fn release_ends_work_in_flight() {
     s._seeder.remove(seeded, true).await.unwrap();
     let file = s
         .leecher
-        .select_file(t, &FileHint::Name("movie.mkv".into()))
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
         .await
         .unwrap();
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http.clone()).await.unwrap();
     let lease = server.register(
         Upstream::Torrent {
-            engine: s.leecher.clone(),
-            torrent: t,
+            claim: s.leecher.claim(t, "default").unwrap(),
             file,
         },
         "movie.mkv",
@@ -142,15 +140,14 @@ async fn a_stalled_player_holds_no_demand_after_release() {
         .unwrap();
     let file = s
         .leecher
-        .select_file(t, &FileHint::Name("movie.mkv".into()))
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
         .await
         .unwrap();
     let http = HttpClient::new(ClientConfig::default()).unwrap();
     let server = StreamServer::start(http).await.unwrap();
     let lease = server.register(
         Upstream::Torrent {
-            engine: s.leecher.clone(),
-            torrent: t,
+            claim: s.leecher.claim(t, "default").unwrap(),
             file,
         },
         "movie.mkv",

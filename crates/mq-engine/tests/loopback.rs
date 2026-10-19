@@ -15,7 +15,7 @@ async fn read_range(
     start: u64,
     end: u64,
 ) -> Vec<u8> {
-    let reader = engine.open_reader(t, file).await.unwrap();
+    let reader = engine.open_reader(t, "default", file).await.unwrap();
     let mut range = reader.range(start, Some(end)).await.unwrap();
     range.ready().await.unwrap();
     let mut out = Vec::new();
@@ -38,7 +38,7 @@ async fn leech_and_compare(dwh: bool) {
         assert_eq!(again, t, "a known torrent is not resolved again");
         let file = s
             .leecher
-            .select_file(t, &FileHint::Name("movie.mkv".into()))
+            .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
             .await
             .unwrap();
         assert_eq!(files[file].len, s.movie.len() as u64);

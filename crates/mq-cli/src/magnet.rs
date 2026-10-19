@@ -32,6 +32,8 @@ const SEEKS: [f64; 3] = [25.0, 50.0, 75.0];
 const METADATA_TIMEOUT: Duration = Duration::from_secs(120);
 const READY_TIMEOUT: Duration = Duration::from_secs(180);
 const MIB: u64 = 1024 * 1024;
+/// The engine's reads are a profile's; this tool plays outside any.
+const CLI: &str = "cli";
 
 fn ms(since: Instant) -> u64 {
     since.elapsed().as_millis() as u64
@@ -145,12 +147,12 @@ async fn run(
     let metadata_ms = ms(started);
     let hint = o.file.map_or(FileHint::Largest, FileHint::Index);
     let file = engine
-        .select_file(t, &hint)
+        .select_file(t, CLI, &hint)
         .await
         .map_err(|e| e.to_string())?;
     let selected = Instant::now();
     let reader = engine
-        .open_reader(t, file)
+        .open_reader(t, CLI, file)
         .await
         .map_err(|e| e.to_string())?;
     let info = reader.file().clone();
@@ -171,8 +173,7 @@ async fn run(
         .to_owned();
     let lease = server.register(
         Upstream::Torrent {
-            engine: engine.clone(),
-            torrent: t,
+            claim: engine.claim(t, CLI).map_err(|e| e.to_string())?,
             file,
         },
         &name,
