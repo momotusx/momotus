@@ -42,9 +42,15 @@ const sync = await import("./sync");
 await sync.vaultReady;
 
 const account = (name: string) => ({ deviceToken: name }) as unknown as SyncRecord;
-const settled = () => new Promise((done) => setTimeout(done, 5));
 /** The account this page syncs, read from the round `join` starts. */
 const syncing = () => calls.filter((c) => c.name === "syncNow").map((c) => (c.fields.record as { deviceToken: string }).deviceToken);
+/** Waits until `ready` holds, yielding to the event loop between looks: a condition, not a clock. */
+async function until(ready: () => boolean) {
+  for (let i = 0; i < 10_000 && !ready(); i++) await new Promise((done) => setTimeout(done, 0));
+  expect(ready()).toBe(true);
+}
+const asked = (name: string) => () => calls.some((c) => c.name === name);
+const joinedRound = () => syncing().length === 1;
 
 afterEach(async () => {
   // Leave the account here only, so the next test starts with none.
@@ -54,14 +60,14 @@ afterEach(async () => {
 
 test("a create in flight keeps a pairing from being confirmed, and joins with its own account", async () => {
   const creating = sync.createAccount("https://sync.example", "Desk", "");
-  await settled();
+  await until(asked("createSyncAccount"));
   expect(calls.map((c) => c.name)).toEqual(["createSyncAccount"]);
   // The pairing's Yes comes while the create waits for its answer: refused before any join.
   expect(sync.claimPairing()).toBeNull();
   expect(sync.mayPair()).toBe(false);
   calls[0]?.answer(account("created"));
   await creating;
-  await settled();
+  await until(joinedRound);
   expect(syncing()).toEqual(["created"]);
 });
 
@@ -73,7 +79,7 @@ test("a confirmed pairing keeps a create from starting, and joins with the paire
   expect((refused as { code?: string }).code).toBe("joining");
   expect(calls.filter((c) => c.name === "createSyncAccount")).toEqual([]);
   expect(sync.joinPaired(account("paired"), claim as symbol)).toBe(true);
-  await settled();
+  await until(joinedRound);
   expect(syncing()).toEqual(["paired"]);
 });
 
@@ -82,18 +88,18 @@ test("an answer that no longer owns the slot is dropped", async () => {
   const old = sync.claimPairing() as symbol;
   sync.endPairing(old);
   const creating = sync.createAccount("https://sync.example", "Desk", "");
-  await settled();
+  await until(asked("createSyncAccount"));
   // The old pairing's record arrives late: it joins nothing.
   expect(sync.joinPaired(account("late"), old)).toBe(false);
   calls.find((c) => c.name === "createSyncAccount")?.answer(account("created"));
   await creating;
-  await settled();
+  await until(joinedRound);
   expect(syncing()).toEqual(["created"]);
 });
 
 test("a failed start frees the slot", async () => {
   const creating = sync.createAccount("https://sync.example", "Desk", "").catch(() => "failed");
-  await settled();
+  await until(asked("createSyncAccount"));
   calls[0]?.fail(new Error("http status 502"));
   expect(await creating).toBe("failed");
   const claim = sync.claimPairing();
