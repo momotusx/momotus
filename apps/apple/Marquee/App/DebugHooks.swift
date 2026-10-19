@@ -63,6 +63,7 @@ enum DebugHooks {
         case "kit": return .kit
         case "compare": return .compare
         case "trakt": return .trakt
+        case "streamChoice": return .streamChoice
         default: break
         }
         return pairedPreview ? .pairing : nil

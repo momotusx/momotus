@@ -49,6 +49,15 @@ enum DeviceCaps {
         VersionWords.device(screen: displayWords, decoders: decoders, containers: containers)
     }
 
+    /// The screen as the stream choice words name it: "4K HDR, about 42 Mbit/s on Wi-Fi".
+    @MainActor static func conditionsLine(_ c: StreamConditions?, account: Bool) -> String {
+        StreamChoice.conditionsLine(
+            screenClass: StreamChoice.screenClass(lines: displayHeight()), hdr: AVPlayer.eligibleForHDRPlayback,
+            network: c?.network ?? network,
+            speed: c.map { StreamChoice.speed(http: $0.http, p2p: $0.p2p, engine: $0.engine, account: account) } ?? Speed(mbps: 0, samples: 0),
+            freeBytes: c?.freeBytes)
+    }
+
     /// "4K, HDR", "1080p": the display as the setup check names it.
     @MainActor static var displayWords: String {
         let lines = displayHeight()
@@ -57,7 +66,7 @@ enum DeviceCaps {
     }
 
     /// The display's short side in pixels: what a landscape video fills.
-    @MainActor private static func displayHeight() -> Int {
+    @MainActor static func displayHeight() -> Int {
         #if os(macOS)
         guard let screen = NSScreen.main else { return 1080 }
         return Int(min(screen.frame.width, screen.frame.height) * screen.backingScaleFactor)

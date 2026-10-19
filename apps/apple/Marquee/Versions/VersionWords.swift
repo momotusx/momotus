@@ -94,9 +94,10 @@ enum VersionWords {
         .joined(separator: ", ")
     }
 
-    /// Why there is no pick once every addon has answered.
+    /// Why there is no pick once every addon has answered; blocked versions say what would let them play.
     static func none(_ snapshot: VersionsSnapshot) -> String {
-        snapshot.hidden.count > 0
+        if let blocked = snapshot.blocked, let words = StreamChoice.blockedWords(blocked) { return words.text }
+        return snapshot.hidden.count > 0
             ? "No version plays here: \(hidden(snapshot.hidden))"
             : "No version found: your addons have no source for this"
     }
@@ -107,6 +108,8 @@ enum VersionWords {
         if !s.pendingAddons.isEmpty { return ("Asking \(s.pendingAddons.joined(separator: ", "))", .warn) }
         if !s.slowAddons.isEmpty { return ("\(s.slowAddons.joined(separator: ", ")) is slow, still waiting", .warn) }
         if !s.failedAddons.isEmpty { return ("\(s.failedAddons.joined(separator: ", ")) did not answer", .bad) }
+        // Found, but none listed: how many there are, as a warning.
+        if let blocked = s.blocked { return (StreamChoice.counted("versions", blocked.count), .warn) }
         let count = s.rows.count + (s.recommended == nil ? 0 : 1)
         return (count == 1 ? "1 version" : "\(count) versions", .ok)
     }

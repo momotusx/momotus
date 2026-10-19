@@ -9,6 +9,7 @@ enum SettingsPage: Hashable {
     case kit
     case compare
     case trakt
+    case streamChoice
 }
 
 /// Sources (addons) and the few playback choices worth making; everything
@@ -116,6 +117,12 @@ struct SettingsScreen: View {
                 .buttonStyle(.row)
                 if let p = prefs.snapshot {
                     section("Playback").padding(.top, Theme.Space.s)
+                    NavigationLink {
+                        StreamChoiceScreen(core: core)
+                    } label: {
+                        SettingsRow(symbol: "layers", title: StreamChoice.words.settings.title, detail: StreamChoice.summary(p.streams))
+                    }
+                    .buttonStyle(.row)
                     playback(p)
                 }
                 if let failure = prefs.failure ?? addons.failure {
@@ -150,6 +157,7 @@ struct SettingsScreen: View {
             case .kit: RecoveryKitScreen()
             case .compare: ForkReviewScreen()
             case .trakt: TraktScreen()
+            case .streamChoice: StreamChoiceScreen(core: core)
             }
         }
     }
@@ -176,38 +184,14 @@ struct SettingsScreen: View {
         return streams.isEmpty ? "\(count) No stream source yet." : "\(count) Streams from \(streams.joined(separator: ", "))."
     }
 
+    /// The quality, size and audio choices live on Stream choice; subtitles and Up next stay here.
     private func playback(_ p: Prefs) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            pick(p)
-            resolution(p)
-            audio(p)
             subtitles(p)
             upNext(p)
             Text("Languages are listed in the order you turn them on; the first one wins.")
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
-        }
-    }
-
-    private func pick(_ p: Prefs) -> ChipRow<String> {
-        let chips = [Chip(id: "best", title: "Best quality"), Chip(id: "balanced", title: "Balanced"), Chip(id: "dataSaver", title: "Data saver")]
-        return ChipRow(label: "Pick", chips: chips, isSelected: { $0 == p.streams.quality }) { value in
-            set(["streams": ["quality": value] as [String: any Sendable]])
-        }
-    }
-
-    private func resolution(_ p: Prefs) -> ChipRow<Int> {
-        let chips = [Chip(id: 0, title: "Any resolution"), Chip(id: 2160, title: "4K"), Chip(id: 1080, title: "1080p"), Chip(id: 720, title: "720p")]
-        return ChipRow(label: "Up to", chips: chips, isSelected: { $0 == (p.streams.maxHeight ?? 0) }) { value in
-            let height: any Sendable = value == 0 ? NSNull() : value
-            set(["streams": ["maxHeight": height] as [String: any Sendable]])
-        }
-    }
-
-    private func audio(_ p: Prefs) -> ChipRow<String> {
-        let chips = Language.all.map { Chip(id: $0.audio, title: $0.name) }
-        return ChipRow(label: "Audio", chips: chips, isSelected: { p.streams.languages.contains($0) }) { value in
-            set(["streams": ["languages": toggled(p.streams.languages, value)] as [String: any Sendable]])
         }
     }
 

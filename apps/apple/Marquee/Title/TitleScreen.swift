@@ -22,6 +22,7 @@ struct TitleScreen: View {
     @State private var showVersions = false
     @State private var showEpisodeVersions = false
     @State private var showAddons = false
+    @State private var showAccount = false
     /// The episode whose version is being found, and why the last one could not start.
     @State private var starting: String?
     @State private var startFailure: EpisodeFailure?
@@ -75,6 +76,7 @@ struct TitleScreen: View {
             }
         }
         .navigationDestination(isPresented: $showAddons) { AddonsPage(core: core, sourcesOnly: true) }
+        .navigationDestination(isPresented: $showAccount) { DebridScreen(core: core) }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -241,7 +243,7 @@ struct TitleScreen: View {
                             Task { playing = await versions?.settledPick() }
                         }
                     },
-                    addSource: { showAddons = true }, focus: $primaryFocused)
+                    addSource: { showAddons = true }, addAccount: { showAccount = true }, focus: $primaryFocused)
                 actions(details)
             } else if case .failed(let reason) = model.header?.state {
                 StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
@@ -473,12 +475,21 @@ private struct PlayBlock: View {
     let wide: Bool
     let play: () -> Void
     let addSource: () -> Void
+    /// Versions that play only through a streaming service account (stream choice 3.11).
+    let addAccount: () -> Void
     /// TV: the page enters on this block's primary.
     var focus: FocusState<Bool>.Binding
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if versions?.done == true, versions?.recommended == nil {
+            if versions?.done == true, versions?.recommended == nil, versions?.blocked?.reason == "needsAccount" {
+                Button(action: addAccount) {
+                    Label(StreamChoice.words.blocked.needsAccount.action, glyph: "key-round")
+                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
+                }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .focused(focus)
+            } else if versions?.done == true, versions?.recommended == nil {
                 Button(action: addSource) {
                     Label("Add a source", glyph: "plus")
                         .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)

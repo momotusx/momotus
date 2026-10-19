@@ -190,3 +190,16 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     let old = try JSONDecoder().decode(VersionRow.self, from: Data((base + "}").utf8))
     #expect(StreamChoice.spoken(old) == "720p, Torrent, 7 seeds, via Torrentio")
 }
+
+@Test func theResolutionChoiceAndTheScreenClassReadAsTheWebsDo() {
+    #expect(StreamChoice.screenClass(lines: 2160) == 2160)
+    #expect(StreamChoice.screenClass(lines: 1179) == 1080)
+    #expect(StreamChoice.screenClass(lines: 720) == 720)
+    #expect(StreamChoice.screenClass(lines: 640) == 480)
+    // "This screen's" for no cap and for a 4K cap; else the cap itself.
+    #expect(StreamChoice.resolutionPicked(nil, maxHeight: nil))
+    #expect(StreamChoice.resolutionPicked(nil, maxHeight: 2160))
+    #expect(!StreamChoice.resolutionPicked(nil, maxHeight: 1080))
+    #expect(StreamChoice.resolutionPicked(1080, maxHeight: 1080))
+    #expect(!StreamChoice.resolutionPicked(720, maxHeight: 1080))
+}

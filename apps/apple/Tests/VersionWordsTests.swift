@@ -118,3 +118,12 @@ private func snapshot(
     #expect(WideLayout.titleOverArt(wide: true, window: 0))
     #expect(!WideLayout.titleOverArt(wide: false, window: 900))
 }
+
+@Test func blockedVersionsSayWhyInsteadOfNoSource() throws {
+    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "nothingPlaysHere", "count": 3, "rows": []}"#.utf8))
+    let s = VersionsSnapshot(
+        recommended: nil, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
+        failedAddons: [], done: true, frozen: false, conditions: nil, blocked: blocked, note: nil)
+    #expect(VersionWords.none(s) == "Found 3 versions, but none plays on this device.")
+    #expect(VersionWords.progress(s) == ("3 versions", .warn))
+}

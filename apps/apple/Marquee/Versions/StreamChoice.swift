@@ -376,6 +376,18 @@ enum StreamChoice {
         return s.summary.replacingOccurrences(of: "{size}", with: size).replacingOccurrences(of: "{people}", with: people)
     }
 
+    /// The display's lines to the core's screen class (3.3): an iPhone (1179
+    /// lines) and a 1440 phone are 1080.
+    static func screenClass(lines: Int) -> Int {
+        lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : lines >= 700 ? 720 : 480
+    }
+
+    /// The Resolution choice that reads as picked: the screen's for no cap,
+    /// and for a 4K cap, which is the screen's on every screen the apps run on.
+    static func resolutionPicked(_ value: Int?, maxHeight: Int?) -> Bool {
+        value == nil ? maxHeight == nil || (maxHeight ?? 0) >= 2160 : maxHeight == value
+    }
+
     /// "Measure again" has something to clear: either speed was measured.
     static func measured(_ c: StreamConditions) -> Bool {
         c.http.samples > 0 || c.p2p.samples > 0
