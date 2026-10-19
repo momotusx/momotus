@@ -142,7 +142,8 @@ struct HomeScreen: View {
 
     /// "New recommended addons", once per profile and list version.
     @ViewBuilder private var offerCard: some View {
-        if let names = model.offer.names(kids: profiles.snapshot?.current?.kids == true) {
+        // An empty Home offers the same addons through Set up Marquee.
+        if !model.needsSetup, let names = model.offer.names(kids: profiles.snapshot?.current?.kids == true) {
             RecommendedCard(
                 names: names,
                 review: {
