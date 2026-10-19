@@ -103,9 +103,7 @@ impl AllowedRow {
             }
         }
         while json_len(&self.name) + json_len(&names) > NAMES_BYTES && names.pop().is_some() {}
-        while json_len(&self.name) + json_len(&names) > NAMES_BYTES {
-            self.name.pop();
-        }
+        while json_len(&self.name) + json_len(&names) > NAMES_BYTES && self.name.pop().is_some() {}
         self.names = names;
         self.poster = self.poster.filter(|p| {
             p.starts_with("https://") && p.len() <= 512 && !p.chars().any(char::is_control)
