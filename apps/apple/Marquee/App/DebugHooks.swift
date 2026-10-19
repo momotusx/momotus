@@ -57,12 +57,43 @@ enum DebugHooks {
         switch UserDefaults.standard.string(forKey: "MQOpenScreen") {
         case "findAddons": return .findAddons
         case "sync": return .sync
+        case "kit": return .kit
+        case "compare": return .compare
         default: break
         }
         return pairedPreview ? .pairing : nil
     }
 
     @MainActor private static var settingsPageTaken = false
+
+    /// `-MQKitPreview YES`: a made-up kit, never an account's, held at launch
+    /// and shown on Make a recovery kit (`-MQOpenScreen kit`) without the OS
+    /// prompt, for a Mac walk where nobody can answer the prompt. A kit made
+    /// for real still waits for the prompt.
+    static var kitPreview: Bool { UserDefaults.standard.bool(forKey: "MQKitPreview") }
+    static let previewKit = HeldKit(id: "", kit: "TEST-ONLY-MADE-UPKT-TEST-ONLY-MADE-UPKT")
+
+    /// `-MQForkPreview YES`: the compare page (`-MQOpenScreen compare`) shows a
+    /// made-up different list instead of asking the core: two kits of the same
+    /// name, a device only on the server's list, and one only this device knew.
+    static var forkPreview: ForkPreview? {
+        guard UserDefaults.standard.bool(forKey: "MQForkPreview") else { return nil }
+        let json = #"""
+        {"mine": [
+          {"id": "m", "kit": false, "name": "Walk Mac", "sponsor": null, "addedMs": 1760850000000, "thisDevice": true},
+          {"id": "p", "kit": false, "name": "Phone", "sponsor": "m", "addedMs": 1760853600000, "thisDevice": false},
+          {"id": "k0", "kit": true, "name": null, "sponsor": "m", "addedMs": 1760857200000, "thisDevice": false}],
+         "server": [
+          {"id": "m", "kit": false, "name": "Walk Mac", "sponsor": null, "addedMs": 1760850000000, "thisDevice": true},
+          {"id": "p", "kit": false, "name": "Phone", "sponsor": "m", "addedMs": 1760853600000, "thisDevice": false},
+          {"id": "t", "kit": false, "name": "Tablet", "sponsor": "p", "addedMs": 1760860800000, "thisDevice": false},
+          {"id": "k1", "kit": true, "name": null, "sponsor": "p", "addedMs": 1760864400000, "thisDevice": false},
+          {"id": "k2", "kit": true, "name": null, "sponsor": "t", "addedMs": 1760868000000, "thisDevice": false}],
+         "drops": [], "kits": [{"device": "p", "kits": ["k1"]}, {"device": "t", "kits": ["k2"]}],
+         "onServer": true, "head": "preview"}
+        """#
+        return try? JSONDecoder().decode(ForkPreview.self, from: Data(json.utf8))
+    }
 
     /// `-MQKillCoreAfter 12`: that many seconds after launch the app gets the
     /// message a panicking core sends, to walk a core death and its restart.
@@ -95,7 +126,8 @@ enum DebugHooks {
             view.cacheDisplay(in: view.bounds, to: rep)
             let url = URL.temporaryDirectory.appending(path: "marquee-window-\(index).png")
             try? rep.representation(using: .png, properties: [:])?.write(to: url)
-            coreLog.notice("snapshot \(url.path(percentEncoded: false), privacy: .public)")
+            // `sharingType` none: screen capture and recording leave the window out (a kit on it).
+            coreLog.notice("snapshot \(url.path(percentEncoded: false), privacy: .public) sharing=\(window.sharingType.rawValue, privacy: .public)")
         }
     }
     #endif

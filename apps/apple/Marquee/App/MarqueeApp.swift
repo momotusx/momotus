@@ -26,6 +26,9 @@ struct MarqueeApp: App {
         _system = State(initialValue: SystemEvents(core: core))
         let sync = SyncModel(core: core)
         _sync = State(initialValue: sync)
+        #if DEBUG
+        if DebugHooks.kitPreview { sync.kits.hold(DebugHooks.previewKit) }
+        #endif
         _profiles = State(initialValue: ProfileSession(core: core, sync: sync))
         _debrid = State(initialValue: DebridSession(core: core))
         #if DEBUG && os(macOS)

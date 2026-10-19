@@ -30,6 +30,9 @@ struct OpenTabAction {
 
 extension EnvironmentValues {
     @Entry var openTab = OpenTabAction { _ in }
+    /// The tab this view is in is the one on screen. On a phone every opened
+    /// tab stays alive behind the shown one, so its pages never disappear.
+    @Entry var tabShown = true
 }
 
 /// The floating glass navigation: a bar at the bottom on iPhone and iPad, a
@@ -163,6 +166,7 @@ struct MainShell: View {
         ZStack {
             ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
                 screen(item)
+                    .environment(\.tabShown, item == tab)
                     .opacity(item == tab ? 1 : 0)
                     .allowsHitTesting(item == tab)
                     .accessibilityHidden(item != tab)

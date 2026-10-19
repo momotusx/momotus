@@ -6,6 +6,8 @@ enum SettingsPage: Hashable {
     case findAddons
     case pairing
     case sync
+    case kit
+    case compare
 }
 
 /// Sources (addons) and the few playback choices worth making; everything
@@ -130,6 +132,8 @@ struct SettingsScreen: View {
             case .findAddons: FindAddonsScreen(core: core)
             case .pairing: PairingScreen(core: core)
             case .sync: SyncScreen()
+            case .kit: RecoveryKitScreen()
+            case .compare: ForkReviewScreen()
             }
         }
     }

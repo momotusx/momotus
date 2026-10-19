@@ -354,6 +354,7 @@ struct RecoveryKitScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
+    @Environment(\.tabShown) private var tabShown
     /// The held kit may show: just made here, or the OS prompt said it is the owner.
     @State private var revealed = false
     @State private var asking = false
@@ -386,15 +387,30 @@ struct RecoveryKitScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .topScrim()
-        .onAppear { sync.kitPage(open: true) }
+        .onAppear {
+            sync.kitPage(open: true)
+            #if DEBUG
+            // Only the made-up preview kit ever shows without the prompt.
+            if DebugHooks.kitPreview, sync.kits.held == DebugHooks.previewKit { revealed = true }
+            #endif
+        }
         .onDisappear {
             revealed = false
             sync.kitPage(open: false)
+        }
+        // Another tab over this one is leaving the page: the hold runs, and coming back asks again.
+        .onChange(of: tabShown) { _, shown in
+            if !shown { revealed = false }
+            sync.kitPage(open: shown)
         }
         // Back to the app (from the switcher, another app or the lock screen): the OS prompt again.
         .onChange(of: phase) { _, now in
             if KitRules.covers(now) { revealed = false }
         }
+        #if os(iOS)
+        // The scene phase can come late or not at all for a quick visit away.
+        .onReceive(NotificationCenter.default.publisher(for: UIScene.willDeactivateNotification)) { _ in revealed = false }
+        #endif
         // Leaving keeps the kit (the model holds it), but while it shows the way out is I saved it.
         #if !os(macOS)
         .navigationBarBackButtonHidden(shown != nil)
@@ -538,6 +554,11 @@ private struct SecureLayer<Content: View>: UIViewRepresentable {
 
     final class Coordinator {
         var host: UIHostingController<Content>?
+        var leaving: (any NSObjectProtocol)?
+
+        deinit {
+            if let leaving { NotificationCenter.default.removeObserver(leaving) }
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -564,6 +585,11 @@ private struct SecureLayer<Content: View>: UIViewRepresentable {
             host.view.bottomAnchor.constraint(equalTo: canvas.bottomAnchor),
         ])
         context.coordinator.host = host
+        // Leaving the front hides it at once, in the same frame: the app
+        // switcher's picture never waits for the page to change.
+        context.coordinator.leaving = NotificationCenter.default.addObserver(forName: UIScene.willDeactivateNotification, object: nil, queue: .main) { [weak canvas] _ in
+            MainActor.assumeIsolated { canvas?.isHidden = true }
+        }
         return canvas
     }
 
@@ -945,6 +971,12 @@ struct ForkReviewScreen: View {
 
     private func load() async {
         loadError = nil
+        #if DEBUG
+        if let fixture = DebugHooks.forkPreview {
+            preview = fixture
+            return
+        }
+        #endif
         do {
             preview = try await sync.forkPreview()
         } catch {
