@@ -88,7 +88,7 @@ private let preview = ForkPreview(
         #expect(words(nil, "network: x", .leave).hasPrefix("This device still syncs."))
         #expect(words(nil, "network: x", .compare).hasPrefix("The lists could not be compared."))
         // The core's own sentence for a code of a device the account already has.
-        #expect(words(nil, "pairing: this device is already in the account", .approve) == "This device is already in the account.")
+        #expect(words(nil, "pairing: this code belongs to a device already in the account", .approve) == "This code belongs to a device already in the account.")
     }
 
     @Test func leavingSaysWhatIsLost() {

@@ -133,6 +133,9 @@ private struct JoinedSync: View {
                     .disabled(sync.syncing)
                 if let problem = sync.problem { fixes(problem) }
             }
+            // The sync server will not let this device leave (a different list it may not
+            // settle, another server, lost entries): stopping here only is the way out.
+            if let code = sync.problem?.code, ["fork", "wrongRelay", "relayBehind", "notJoined"].contains(code) { LeaveHere() }
             if let fingerprint {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
                     Text(caps: W.compareLabel)
@@ -182,10 +185,6 @@ private struct JoinedSync: View {
             // The server's list is never taken unseen: both lists first, on their own page.
             NavigationLink { ForkReviewScreen() } label: { Label(W.compare, glyph: "monitor-smartphone") }
                 .buttonStyle(PillButtonStyle())
-            LeaveHere()
-        case "wrongRelay", "relayBehind", "notJoined":
-            // The sync server will not let this device leave: only stopping here helps.
-            LeaveHere()
         default:
             EmptyView()
         }
