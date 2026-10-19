@@ -309,6 +309,93 @@ fn explain(corpus: &str, n: usize, profile: &str, ranked: &Ranked, plan: Option<
     }
 }
 
+/// Profiles whose user never chose anything (3.8): the owner's rule holds
+/// on them.
+fn default_user(corpus: &str, profile: &str) -> bool {
+    match corpus {
+        "shipped" => ["A", "B", "D", "G"].contains(&profile),
+        _ => ["A", "B"].contains(&profile),
+    }
+}
+
+/// Code review r1 P2-1: the owner's rule, from each row's own facts, so a
+/// wrong pick fails however the table was written. Among the visible rows:
+/// a real release when there is one, a wanted language when there is one,
+/// at most 5 GB (an episode of a pack) when a real one fits, at least 50
+/// seeders when a fitting real one has them, and no row of the pick's
+/// playability or better in a higher seeder band.
+fn owner_rule(ranked: &Ranked, prefs: &StreamPrefs, c: &Conditions) -> Vec<String> {
+    use mq_relparse::Quality::{Cam, Screener, Telesync};
+    let Some(pick) = ranked.best() else {
+        return Vec::new();
+    };
+    let real = |r: &RankedRow| !matches!(r.stream.release.quality, Cam | Telesync | Screener);
+    let lang = |r: &RankedRow| {
+        let l = &r.stream.release.languages;
+        l.is_empty() || prefs.languages.iter().any(|w| l.contains(w))
+    };
+    let torrent = |r: &RankedRow| matches!(r.class, SourceClass::Swarm | SourceClass::Unknown);
+    let fits = |r: &RankedRow| {
+        let episode = match (r.bitrate_mbps, c.runtime_s) {
+            (Some(mbps), Some(s)) => Some((mbps as f64 * s as f64 / 8.0 * 1e6) as u64),
+            _ => r.stream.size_bytes,
+        };
+        let limit = prefs.size_limit_bytes.map(|l| l as f64 * 1.1);
+        !torrent(r)
+            || matches!((episode, limit), (Some(b), Some(l)) if b as f64 <= l)
+            || limit.is_none()
+            || episode.is_none()
+    };
+    let seeds = |r: &RankedRow| {
+        if torrent(r) {
+            r.stream.seeders.unwrap_or(0)
+        } else {
+            u32::MAX
+        }
+    };
+    let band = |r: &RankedRow| {
+        let (n, min) = (seeds(r), prefs.min_seeders);
+        match n {
+            u32::MAX => 4,
+            n if n >= min * 4 => 3,
+            n if n >= min => 2,
+            n if n >= 5 => 1,
+            _ => 0,
+        }
+    };
+    let rows = &ranked.rows;
+    let mut out = Vec::new();
+    let mut need = |holds: bool, any: bool, what: &str| {
+        if any && !holds {
+            out.push(what.to_owned());
+        }
+    };
+    need(
+        real(pick),
+        rows.iter().any(real),
+        "a copy over a real release",
+    );
+    need(lang(pick), rows.iter().any(lang), "a language not wanted");
+    let good: Vec<&RankedRow> = rows.iter().filter(|r| real(r) && lang(r)).collect();
+    need(fits(pick), good.iter().any(|r| fits(r)), "over 5 GB");
+    let fitting: Vec<&&RankedRow> = good.iter().filter(|r| fits(r)).collect();
+    need(
+        seeds(pick) >= prefs.min_seeders,
+        fitting.iter().any(|r| seeds(r) >= prefs.min_seeders),
+        "under 50 seeders",
+    );
+    let better = fitting.iter().find(|r| {
+        r.key.playability >= pick.key.playability
+            && r.key.year_ok
+            && r.key.sustains
+            && band(r) > band(pick)
+    });
+    if let Some(r) = better {
+        out.push(format!("a higher seeder band: {}", describe(&r.stream)));
+    }
+    out
+}
+
 /// One line per corpus, title and profile, and the expectations that fail.
 fn table() -> (String, Vec<String>, (u32, u32)) {
     let expected: serde_json::Value = read("expected.json");
@@ -339,6 +426,16 @@ fn table() -> (String, Vec<String>, (u32, u32)) {
                     conditions: &conditions,
                 };
                 let ranked = rank(streams.clone(), &input);
+                if default_user(corpus, p.name) {
+                    for broken in owner_rule(&ranked, &p.prefs, &conditions) {
+                        failures.push(format!(
+                            "{corpus} #{} {} on {}: owner's rule: {broken}",
+                            n + 1,
+                            t.name,
+                            p.name
+                        ));
+                    }
+                }
                 let best = ranked.best();
                 let line = best.map(|r| kind_of(&r.line));
                 let got = best.map_or("no pick".into(), |r| {
