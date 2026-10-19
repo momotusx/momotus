@@ -214,7 +214,7 @@ function TitlePage(props: { kind: string; id: string }) {
                 </div>
                 {/* Phone reads top to bottom: episodes before the details. */}
                 <Show when={series() && form() === "phone"}>
-                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} />
+                  <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
                 </Show>
                 <dl class="facts">
                   <Fact label="Starring" value={x().cast.slice(0, 3).join(", ")} />
@@ -224,7 +224,7 @@ function TitlePage(props: { kind: string; id: string }) {
                 </dl>
               </section>
               <Show when={series() && form() !== "phone"}>
-                <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} />
+                <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
               </Show>
             </>
           )}
@@ -325,7 +325,9 @@ function VersionLine(props: { snap: VersionsSnapshot | null }) {
   );
 }
 
-function Episodes(props: { view: TitleView; kind: string; id: string; runtime: number | null }) {
+/** `art` is the series' backdrop, else its poster: an episode without a
+ * still (none named, or it fails to load) shows it, never a dark box. */
+function Episodes(props: { view: TitleView; kind: string; id: string; runtime: number | null; art: string | null }) {
   const header = () => props.view.state.header;
   const seasons = () => {
     const all = header()?.seasons ?? [];
@@ -381,14 +383,28 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
       </header>
       <ol class="toc" data-vscroll data-fgroup="episodes">
         <For each={props.view.state.episodes}>
-          {(e) => (
+          {(e) => {
+            const [broken, setBroken] = createSignal(false);
+            const still = () => (!broken() && e.thumbnail) || props.art;
+            return (
             <li class="ep" classList={{ seen: e.watched, now: e.progress !== null, later: !released(e) }}>
               <A class="ep-main" href={playPath(props.kind, props.id, e.videoId)} data-f={`ep:${e.videoId}`}>
                 {/* A card: the still with its number, then the title, the time
                     and two lines of synopsis. */}
                 <span class="ep-still" aria-hidden="true">
-                  <Show when={e.thumbnail}>
-                    <img src={e.thumbnail ?? undefined} alt="" loading="lazy" decoding="async" class="fade" onLoad={(ev) => ev.currentTarget.classList.add("in")} />
+                  <Show when={still()} keyed>
+                    {(src) => (
+                      <img
+                        src={src}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        class="fade"
+                        classList={{ "stand-in": src !== e.thumbnail }}
+                        onLoad={(ev) => ev.currentTarget.classList.add("in")}
+                        onError={() => src === e.thumbnail && setBroken(true)}
+                      />
+                    )}
                   </Show>
                   <b class="ep-n num">{e.episode}</b>
                   <Show when={e.watched}>
@@ -430,7 +446,8 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                 </button>
               </div>
             </li>
-          )}
+            );
+          }}
         </For>
       </ol>
     </section>
