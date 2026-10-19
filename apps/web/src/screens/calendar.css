@@ -23,6 +23,7 @@
 .cal-seen { display: inline-flex; align-items: center; gap: 6px; font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
 .cal-seen svg { width: 20px; height: 20px; }
 .cal-day.past .cal-art { opacity: .78; }
+.cal-skel-day { width: 180px; height: 76px; border-radius: var(--radius-m); }
 .cal-card:focus-visible, [data-form="tv"] .cal-card:focus { outline: none; box-shadow: none; transform: scale(var(--focus-scale-card)); }
 .cal-card:focus-visible .cal-art, [data-form="tv"] .cal-card:focus .cal-art {
   outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); opacity: 1; }
@@ -38,6 +39,7 @@
 [data-form="phone"] .cal-track { flex-direction: column; gap: 12px; overflow: visible; padding: 0; margin: 0; }
 [data-form="phone"] .cal-card { width: auto; grid-template-columns: 128px minmax(0, 1fr); align-items: center; gap: 12px; }
 [data-form="phone"] .cal-art { width: 128px; height: 72px; border-radius: 8px; }
+[data-form="phone"] .cal-skel-day { width: 160px; height: 26px; }
 [data-form="phone"] .cal-name { padding: 0 8px; font-size: 13px; }
 [data-form="phone"] .cal-text b { font-size: 15px; }
 [data-form="phone"] .cal-ep, [data-form="phone"] .cal-seen { font-size: 13px; }

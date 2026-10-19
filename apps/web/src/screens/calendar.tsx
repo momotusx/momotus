@@ -139,6 +139,18 @@ export default function CalendarScreen() {
         </p>
       </Show>
 
+      {/* Nothing has arrived yet: the shape of the agenda, not a blank page. */}
+      <Show when={view.state.status.state !== "failed" && !s()?.days.length && (!s() || (s()?.pending ?? 0) > 0)}>
+        <For each={[0, 1, 2]}>
+          {() => (
+            <div class="cal-day" aria-hidden="true">
+              <div class="skel cal-skel-day" />
+              <div class="skel cal-art" />
+            </div>
+          )}
+        </For>
+      </Show>
+
       <For each={s()?.days ?? []}>{(day) => <Day day={day} today={s()?.today ?? sent} first={day.date === target()?.date} />}</For>
     </main>
   );
