@@ -16,7 +16,8 @@ async function open(browser: Browser, path: string, viewport: { width: number; h
 }
 
 /** The focused element, its 4 px ring at a 4 px offset included, inside its
- * list and above the list's fade (canvas pixels, scaled like the page). */
+ * list, below its group's pinned heading if it has one, and above the list's
+ * fade (canvas pixels, scaled like the page). */
 const clearOfFade = (page: Page, fade: number) =>
   page.evaluate((fade) => {
     const el = document.activeElement as HTMLElement;
@@ -26,15 +27,17 @@ const clearOfFade = (page: Page, fade: number) =>
     const k = l.height / list.offsetHeight || 1;
     const e = el.getBoundingClientRect();
     const ring = 8 * k;
-    const why = `ring ${Math.round(e.top - ring)} to ${Math.round(e.bottom + ring)}, list ${Math.round(l.top)} to ${Math.round(l.bottom)}, fade from ${Math.round(l.bottom - fade * k)}`;
-    return { key: el.dataset.f, ok: e.top - ring >= l.top - 1 && e.bottom + ring <= l.bottom - fade * k + 1, why, left: false };
+    const head = el.closest(".vgroup")?.querySelector("h3")?.getBoundingClientRect();
+    const top = Math.max(l.top, head ? head.bottom : l.top);
+    const why = `ring ${Math.round(e.top - ring)} to ${Math.round(e.bottom + ring)}, clear from ${Math.round(top)} to ${Math.round(l.bottom - fade * k)}`;
+    return { key: el.dataset.f, ok: e.top - ring >= top - 1 && e.bottom + ring <= l.bottom - fade * k + 1, why, left: false };
   }, fade);
 
-/** Presses Down until focus stops moving or leaves the list, checking every stop. */
-async function walkDown(page: Page, fade: number, max: number) {
+/** Presses a key until focus stops moving or leaves the list, checking every stop. */
+async function walk(page: Page, key: "ArrowDown" | "ArrowUp", fade: number, max: number) {
   const seen: string[] = [];
   for (let i = 0; i < max; i++) {
-    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press(key);
     const at = await clearOfFade(page, fade);
     if (at.left || (at.key && seen.at(-1) === at.key)) break;
     seen.push(at.key ?? "");
@@ -48,26 +51,32 @@ test("TV: the last episode of a season, focused, sits clear of the list's fade",
   const first = page.locator('[data-f="ep:tt0944947:1:1"]');
   await expect(first).toBeVisible({ timeout: 30_000 });
   await first.focus();
-  const seen = await walkDown(page, 56, 14);
+  const seen = await walk(page, "ArrowDown", 56, 14);
   // Down from the last card goes on to its actions; it got there clear too.
   expect(seen).toContain("ep:tt0944947:1:10");
   await context.close();
 });
 
-test("desktop: a version row in a group taller than the list stays in view", async ({ browser }) => {
-  // A short window: the list shows less than a two-row group with its
-  // focused row's release line, so the row, not the group, is revealed.
-  const { context, page } = await open(browser, `/title/series/${GOT.id}/versions/${GOT.resume}?form=desktop`, { width: 1440, height: 360 });
-  const rows = page.locator(".vrow");
-  await expect(rows.first()).toBeVisible({ timeout: 30_000 });
-  // The first key puts the keyboard in charge (focus lands on Play); then
-  // the walk starts at the list's first row.
-  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
-  await page.keyboard.press("ArrowDown");
-  await expect.poll(focused, { timeout: 30_000 }).toBe("versions:play");
-  await rows.first().focus();
-  const seen = await walkDown(page, 48, 12);
-  expect(seen.length).toBeGreaterThanOrEqual(1);
+test("TV: rows of a group taller than the list clear its pinned heading and the fade, down and up", async ({ browser }) => {
+  const { context, page } = await open(browser, `/title/series/${GOT.id}/versions/${GOT.resume}?form=tv`, { width: 1920, height: 1080 });
+  const first = page.locator(".vrow").first();
+  await expect(first).toBeVisible({ timeout: 30_000 });
+  // Every addon has answered, so the list no longer changes under the copies.
+  await expect(page.locator(".vstate .live")).toHaveCount(0, { timeout: 60_000 });
+  // Live groups hold a row or two: copies of the first row make its group
+  // taller than the list. Focus and scrolling read the DOM, not the data.
+  await first.evaluate((row) => {
+    for (let i = 0; i < 14; i++) {
+      const copy = row.cloneNode(true) as HTMLElement;
+      copy.dataset.f = `v:copy:${i}`;
+      row.after(copy);
+    }
+  });
+  await first.focus();
+  const down = await walk(page, "ArrowDown", 48, 20);
+  expect(down.length).toBeGreaterThanOrEqual(14);
+  const up = await walk(page, "ArrowUp", 48, 20);
+  expect(up.length).toBeGreaterThanOrEqual(14);
   await context.close();
 });
 

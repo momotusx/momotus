@@ -42,7 +42,7 @@
 .vgroup { scroll-margin-top: 12px; }
 /* Group headers stay pinned while their rows scroll, so every group always
  * shows its label. */
-.vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 6px; padding: 12px 22px; border-radius: 10px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
+.vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 10px; padding: 12px 22px; border-radius: 10px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
   font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; }
 .vgroup h3 .num { color: var(--muted); }
 .vrow { width: 100%; min-height: 64px; padding: 10px 22px; border-radius: var(--radius-m); border-bottom: 1px solid var(--line);
@@ -107,5 +107,8 @@
 .alist { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); }
 /* A focused row (or a group that fits) stays clear of the 48 px fade; the
  * trailing padding lets the last row get there. */
-.alist [data-f], .alist [data-row] { scroll-margin: 12px 0 64px; }
+.alist [data-row] { scroll-margin: 12px 0 64px; }
+/* A focused row also clears its group's pinned heading (47 px) and its own
+ * ring: 60 px above it. */
+.alist [data-f] { scroll-margin: 60px 0 64px; }
 [data-form="phone"] .alist { -webkit-mask-image: none; mask-image: none; }
