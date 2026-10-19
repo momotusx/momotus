@@ -421,18 +421,74 @@ fn a_single_episode_row_takes_its_own_episode_from_the_archive() {
         ("Show.S01E06.srt", &says("e6")[..]),
     ]);
     assert_eq!(pick(&both, e6, &none), Ok(says("e6")));
-    // No name says an episode: the file is the row's.
-    let plain = zip(&[("altyazi.srt", CUE)]);
+    // No name says an episode: the best file is the row's.
+    let plain = zip(&[("altyazi.srt", CUE), ("altyazi.ass", b"[Events]\n")]);
     assert_eq!(pick(&plain, e6, &none), Ok(CUE.to_vec()));
-    // Names that say only other episodes: none of them.
+    // One file is the row's, whatever its name says: the site's numbering
+    // and the release's may differ.
     let other = zip(&[("Show.S01E05.srt", CUE)]);
+    assert_eq!(pick(&other, e6, &none), Ok(CUE.to_vec()));
+    // Several that all say other episodes: none of them.
+    let others = zip(&[("Show.S01E05.srt", CUE), ("Show.S01E07.srt", CUE)]);
     assert_eq!(
-        pick(&other, e6, &none),
+        pick(&others, e6, &none),
         Err(ArchiveFault::NoEpisode {
             season: 1,
             episode: 6
         })
     );
+}
+
+#[test]
+fn dotted_turkish_names_and_a_number_that_stands_alone() {
+    let (e5, e6) = (says("e5"), says("e6"));
+    for (five, six, season) in [
+        ("Show.S02.Bolum.05.srt", "Show.S02.Bolum.06.srt", 2),
+        ("Sezon.2.Bolum.5.srt", "Sezon.2.Bolum.6.srt", 2),
+        (
+            "Kurtlar.Vadisi.Bolum.05.srt",
+            "Kurtlar.Vadisi.Bolum.06.srt",
+            1,
+        ),
+        ("Show_2_Sezon_5_Bölüm.srt", "Show_2_Sezon_6_Bölüm.srt", 2),
+    ] {
+        let pack = zip(&[(five, &e5), (six, &e6)]);
+        assert_eq!(from_several(&pack, season, 5), Ok(e5.clone()), "{five}");
+        assert_eq!(from_several(&pack, season, 6), Ok(e6.clone()), "{six}");
+    }
+    // S01E05 is read before a later number: "Bölüm 1080p" is no episode.
+    let hd = zip(&[
+        ("Show S01E05 Bölüm 1080p.srt", &e5[..]),
+        ("Show S01E06 Bölüm 1080p.srt", &e6[..]),
+    ]);
+    assert_eq!(from_several(&hd, 1, 5), Ok(e5.clone()));
+    // A pack that also counts the series' episodes: S01E05 says which.
+    let counted = zip(&[
+        ("Show.S01E05.Bolum.12.srt", &e5[..]),
+        ("Show.S01E06.Bolum.12.srt", &e6[..]),
+    ]);
+    assert_eq!(from_several(&counted, 1, 6), Ok(e6));
+}
+
+#[test]
+fn one_file_in_two_formats_is_not_unclear() {
+    let list = zip(&[
+        ("Show.S05E16E17.srt", CUE),
+        ("Show.S05E16E17.ass", &b"[Events]\n"[..]),
+    ]);
+    assert_eq!(from_several(&list, 5, 17), Ok(CUE.to_vec()));
+}
+
+#[test]
+fn an_unreadable_text_file_hides_nothing_behind_it() {
+    let mut archive = zip_with(
+        &[(b"a-notu.txt", b"Iyi seyirler"), (b"b-altyazi.txt", CUE)],
+        STORED,
+    );
+    // The first file's bytes no longer match its CRC.
+    let data = find(&archive, b"PK\x03\x04") + 30 + b"a-notu.txt".len();
+    archive[data] ^= 0xff;
+    assert_eq!(single(&archive), Ok(CUE.to_vec()));
 }
 
 #[test]

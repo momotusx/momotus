@@ -35,24 +35,29 @@ pub struct Track {
 }
 
 /// The Turkish rows that fit `target`, ranked against `playing`: the
-/// playing group first, then the same source family (a WEB-DL's timing is
-/// a WEBRip's, a BluRay's a BDRip's), then the same cut, then the same
-/// frame rate, then an episode's own file before a few episodes before a
-/// season pack, then the more downloaded, then the newer. With the frame
-/// rate unknown, the most common one among the fitting rows stands in.
+/// playing group first, then the measured frame rate, then the same source
+/// family (a WEB-DL's timing is a WEBRip's, a BluRay's a BDRip's), then
+/// the same cut, then, with the frame rate unknown, the most common one
+/// among the fitting rows, then an episode's own file before a few
+/// episodes before a season pack, then the more downloaded, then the newer.
 pub fn tracks(rows: &[Row], target: Target, playing: &Playing) -> Vec<Track> {
     let mut fit: Vec<&Row> = rows
         .iter()
         .filter(|r| r.lang == Lang::Turkish && fits(&r.kind, target))
         .collect();
-    let fps = playing.fps.or_else(|| usual_fps(&fit));
+    // A measured frame rate outranks the source family (a wrong rate drifts
+    // whatever the source); the stand-in only follows the cut.
+    let measured = playing.fps;
+    let usual = usual_fps(&fit);
     let source = family(playing.source);
-    fit.sort_by_key(|r| {
+    // Parsed once per row: a page has up to 2000.
+    fit.sort_by_cached_key(|r| {
         (
             !same_group(&r.release, playing.group),
+            measured.is_some() && !same_fps(r.fps, measured),
             source.is_none() || r.source.and_then(source_family) != source,
             !same_cut(mq_relparse::parse(&r.release).cut, playing.cut),
-            !same_fps(r.fps, fps),
+            measured.is_none() && !same_fps(r.fps, usual),
             spread(&r.kind),
             Reverse(r.downloads),
             Reverse(r.altid),

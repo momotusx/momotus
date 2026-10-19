@@ -1044,3 +1044,33 @@ async fn a_list_row_whose_files_name_no_episode_is_refused_never_guessed() {
         }
     ));
 }
+
+#[tokio::test]
+async fn a_challenge_page_with_its_header_during_a_download_is_the_site() {
+    let fake = Fake::new();
+    fake.route(|r| {
+        (r.method == "POST")
+            .then(|| reply("200 OK", &[("cf-mitigated", "challenge")], b"<html></html>"))
+    });
+    let site = fake.site();
+    let listed = tracks(site.list("0903747", S01E01, &Playing::default()).await);
+    let track = row(&listed, 108735);
+    assert_eq!(
+        site.fetch(&track, S01E01, &Playing::default()).await,
+        Fetched::Problem(Problem::Blocked)
+    );
+    // The same on the subtitle page.
+    let fake = Fake::new();
+    fake.route(|r| {
+        r.path
+            .starts_with("/sub/")
+            .then(|| reply("200 OK", &[("cf-mitigated", "challenge")], b"<html></html>"))
+    });
+    let site = fake.site();
+    let listed = tracks(site.list("0903747", S01E01, &Playing::default()).await);
+    assert_eq!(
+        site.fetch(&row(&listed, 108735), S01E01, &Playing::default())
+            .await,
+        Fetched::Problem(Problem::Blocked)
+    );
+}

@@ -26,16 +26,23 @@ const EXTENSIONS: [&str; 4] = [".srt", ".vtt", ".ass", ".ssa"];
 /// subtitle; translator notes are `.txt` too.
 const TXT_TRIES: usize = 4;
 
-/// Turkish names: `2. Sezon 7. Bölüm`, `Bölüm 05`, `Sezon 2`. The vowels
-/// may be another code page's bytes, read as U+FFFD.
-static TR_SEASON: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:(\d{1,2})\s*\.\s*sezon|sezon\s*(\d{1,2}))").expect("pattern")
-});
-static TR_EPISODE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)(?:(\d{1,3})\s*\.\s*b[oö\x{FFFD}]l[uü\x{FFFD}]m|b[oö\x{FFFD}]l[uü\x{FFFD}]m\s*(\d{1,3}))",
-    )
-    .expect("pattern")
+/// Turkish names, tried in this order: `2. Sezon 7. Bölüm` (ordinals),
+/// `Sezon.2.Bolum.5`, then the episode alone (`Bölüm 05`, then `7. Bölüm`)
+/// with a season alone (`Sezon 2`, then `2. Sezon`). Separators may be
+/// spaces, dots, dashes or underscores; the vowels may be another code
+/// page's bytes, read as U+FFFD. A number stands alone (`Bölüm 1080p` is no
+/// episode).
+static TR_NAMES: LazyLock<[Regex; 6]> = LazyLock::new(|| {
+    let (sep, ep) = (r"[\s._-]*", r"b[oö\x{FFFD}]l[uü\x{FFFD}]m");
+    [
+        format!(r"\b(\d{{1,2}}){sep}sezon{sep}(\d{{1,3}}){sep}{ep}"),
+        format!(r"sezon{sep}(\d{{1,2}}){sep}{ep}{sep}(\d{{1,3}})\b"),
+        format!(r"{ep}{sep}(\d{{1,3}})\b"),
+        format!(r"\b(\d{{1,3}}){sep}{ep}"),
+        format!(r"sezon{sep}(\d{{1,2}})\b"),
+        format!(r"\b(\d{{1,2}}){sep}sezon"),
+    ]
+    .map(|pattern| Regex::new(&format!("(?i){pattern}")).expect("pattern"))
 });
 
 /// Which file of the archive is wanted.
@@ -103,7 +110,8 @@ pub fn pick(archive: &[u8], want: Want, playing: &Playing) -> Result<Vec<u8>, Ar
         return Err(ArchiveFault::NoSubtitle);
     }
     let mut fitting = fitting(subtitles, want)?;
-    fitting.sort_by_key(|e| {
+    // Parsed once per file: a hostile archive has 200 long names.
+    fitting.sort_by_cached_key(|e| {
         (
             !same_group(base(&e.name), playing.group),
             !same_cut(mq_relparse::parse(base(&e.name)).cut, playing.cut),
@@ -115,8 +123,10 @@ pub fn pick(archive: &[u8], want: Want, playing: &Playing) -> Result<Vec<u8>, Ar
         return inflate(fitting[0]);
     }
     for entry in fitting.into_iter().take(TXT_TRIES) {
-        let bytes = inflate(entry)?;
-        if bytes.windows(3).any(|w| w == b"-->") {
+        // A note that cannot be read hides nothing behind it.
+        if let Ok(bytes) = inflate(entry)
+            && bytes.windows(3).any(|w| w == b"-->")
+        {
             return Ok(bytes);
         }
     }
@@ -133,9 +143,19 @@ fn fitting<'e, 'a>(
         Want::Episode { season, episode } => (season, episode, false),
         Want::FromSeveral { season, episode } => (season, episode, true),
     };
+    // A single episode's one file is the row's, whatever its name says
+    // (the site's numbering and a release's may differ): names only choose
+    // among several.
+    if !several && subtitles.len() == 1 {
+        return Ok(subtitles);
+    }
     let named: Vec<(Vec<u32>, Vec<u32>)> = subtitles.iter().map(|e| named(base(&e.name))).collect();
+    // Two formats of one file (`.srt` beside `.ass`) are one name.
+    let mut stems: Vec<String> = subtitles.iter().map(|e| stem(base(&e.name))).collect();
+    stems.sort_unstable();
+    stems.dedup();
     if several
-        && subtitles.len() > 1
+        && stems.len() > 1
         && !named[0].1.is_empty()
         && named.iter().all(|n| n.1 == named[0].1)
     {
@@ -158,20 +178,36 @@ fn fitting<'e, 'a>(
     Ok(fit)
 }
 
-/// The seasons and episodes a file name gives: Turkish words first, then
-/// the release parser.
+/// The seasons and episodes a file name gives: the release parser when it
+/// reads a season and an episode (`S01E05`), else the Turkish words (with
+/// the parser's season, as in `Show.S02.Bolum.05`), else the parser.
 fn named(name: &str) -> (Vec<u32>, Vec<u32>) {
-    let number = |c: regex::Captures| c.iter().skip(1).flatten().next()?.as_str().parse().ok();
-    if let Some(episode) = TR_EPISODE.captures(name).and_then(number) {
-        let seasons = TR_SEASON
-            .captures(name)
-            .and_then(number)
-            .into_iter()
-            .collect();
+    let release = mq_relparse::parse(name);
+    if !release.seasons.is_empty() && !release.episodes.is_empty() {
+        return (release.seasons, release.episodes);
+    }
+    let [ordinal, words, after, before, season_after, season_before] = &*TR_NAMES;
+    let read = |re: &Regex, at: usize| -> Option<u32> {
+        re.captures(name)?.get(at)?.as_str().parse().ok()
+    };
+    for both in [ordinal, words] {
+        if let (Some(season), Some(episode)) = (read(both, 1), read(both, 2)) {
+            return (vec![season], vec![episode]);
+        }
+    }
+    if let Some(episode) = read(after, 1).or_else(|| read(before, 1)) {
+        let season = read(season_after, 1).or_else(|| read(season_before, 1));
+        let seasons = season.map_or(release.seasons, |season| vec![season]);
         return (seasons, vec![episode]);
     }
-    let release = mq_relparse::parse(name);
     (release.seasons, release.episodes)
+}
+
+/// The name without its last extension, for telling files apart.
+fn stem(name: &str) -> String {
+    name.rsplit_once('.')
+        .map_or(name, |(stem, _)| stem)
+        .to_lowercase()
 }
 
 /// One file of the archive, as the central directory and its local header

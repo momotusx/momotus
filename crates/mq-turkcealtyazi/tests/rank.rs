@@ -320,3 +320,41 @@ fn a_label_names_the_source_once() {
     assert_eq!(label(row("", Some(Source::WebDl))), "WEB-DL");
     assert_eq!(label(row("TOPAZ", None)), "TOPAZ");
 }
+
+#[test]
+fn a_measured_frame_rate_outranks_the_source_and_the_stand_in_ties_to_the_first() {
+    let row = |altid: u32, source, fps: f32, downloads: u32| Row {
+        altid,
+        path: format!("/sub/{altid}/x.html"),
+        lang: Lang::Turkish,
+        kind: Kind::Movie { discs: 1 },
+        release: format!("R{altid}"),
+        source,
+        fps: Some(fps),
+        downloads,
+        translator: None,
+        hearing_impaired: false,
+    };
+    let rows = [
+        row(1, Some(Source::DvdRip), 25.0, 10),
+        row(2, Some(Source::WebDl), 23.976, 500),
+    ];
+    let at = |fps| {
+        ids(&tracks(
+            &rows,
+            Target::Movie,
+            &Playing {
+                source: Quality::WebDl,
+                fps,
+                ..Playing::default()
+            },
+        ))
+    };
+    // Measured at 25 fps: the 25 fps DVDRip leads the WEB-DL at 23.976.
+    assert_eq!(at(Some(25.0)), [1, 2]);
+    // Unmeasured: the source family leads; the stand-in (a tie, so the
+    // first seen, 25) comes after it.
+    assert_eq!(at(None), [2, 1]);
+    let plain = tracks(&rows, Target::Movie, &Playing::default());
+    assert_eq!(ids(&plain), [1, 2], "the first seen rate stands in");
+}
