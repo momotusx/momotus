@@ -409,6 +409,7 @@ fn fill_gaps(base: &mut ParsedRelease, other: &ParsedRelease) {
     base.proper |= other.proper;
     base.repack |= other.repack;
     base.extended |= other.extended;
+    base.cut = base.cut.or(other.cut);
     base.hardcoded_subs |= other.hardcoded_subs;
     base.dubbed |= other.dubbed;
     base.three_d |= other.three_d;

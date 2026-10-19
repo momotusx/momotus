@@ -2,9 +2,22 @@
 
 use crate::custom::slice;
 use crate::engine::{Ctx, F};
-use crate::model::{Audio, Hdr, ParsedRelease, Quality, Resolution, VideoCodec};
+use crate::model::{Audio, Cut, Hdr, ParsedRelease, Quality, Resolution, VideoCodec};
 use crate::title::clean_title;
 use crate::transform::Val;
+
+/// The cut among the editions the rules name; another edition (Remastered,
+/// Collectors, Anniversary) is no cut. A named edition wins over "Unrated".
+fn cut(edition: Option<&str>, unrated: bool) -> Option<Cut> {
+    match edition {
+        Some("Extended Edition") => Some(Cut::Extended),
+        Some("Directors Cut") => Some(Cut::Directors),
+        Some("Uncut") => Some(Cut::Uncut),
+        Some("Theatrical") => Some(Cut::Theatrical),
+        Some("IMAX") => Some(Cut::Imax),
+        _ => unrated.then_some(Cut::Unrated),
+    }
+}
 
 pub(crate) fn finish(ctx: &Ctx, end: usize) -> ParsedRelease {
     let quality = str_of(ctx, F::Quality);
@@ -34,6 +47,7 @@ pub(crate) fn finish(ctx: &Ctx, end: usize) -> ParsedRelease {
         proper: ctx.has(F::Proper),
         repack: ctx.has(F::Repack),
         extended: str_of(ctx, F::Edition) == Some("Extended Edition"),
+        cut: cut(str_of(ctx, F::Edition), ctx.has(F::Unrated)),
         hardcoded_subs: ctx.has(F::Hardcoded),
         dubbed: ctx.has(F::Dubbed),
         three_d: ctx.has(F::ThreeD),
@@ -197,5 +211,46 @@ mod tests {
         assert_eq!(resolution_from("640x360"), Resolution::R360p);
         assert_eq!(resolution_from("480p"), Resolution::R480p);
         assert_eq!(resolution_from("144p"), Resolution::Unknown);
+    }
+
+    #[test]
+    fn cut_words_name_the_cut_and_other_editions_do_not() {
+        let cut = |name: &str| crate::parse(name).cut;
+        assert_eq!(
+            cut("Movie.2008.Extended.1080p.BluRay.x264-GRP"),
+            Some(Cut::Extended)
+        );
+        assert_eq!(
+            cut("Movie.2008.Directors.Cut.1080p.BluRay-GRP"),
+            Some(Cut::Directors)
+        );
+        assert_eq!(
+            cut("Movie.2008.Extended.Directors.Cut.BluRay-GRP"),
+            Some(Cut::Directors)
+        );
+        assert_eq!(
+            cut("Movie.2008.UNRATED.1080p.WEB-DL-GRP"),
+            Some(Cut::Unrated)
+        );
+        assert_eq!(cut("Movie.2008.UNCUT.720p.HDTV-GRP"), Some(Cut::Uncut));
+        assert_eq!(
+            cut("Movie.2008.Theatrical.1080p.BluRay-GRP"),
+            Some(Cut::Theatrical)
+        );
+        assert_eq!(cut("Movie.2008.IMAX.2160p.WEB-DL-GRP"), Some(Cut::Imax));
+        // A named cut wins over Unrated; other editions are no cut.
+        assert_eq!(
+            cut("Movie.2008.Extended.Unrated.1080p-GRP"),
+            Some(Cut::Extended)
+        );
+        for none in [
+            "Movie.2008.REMASTERED.1080p.BluRay-GRP",
+            "Movie.2008.Collectors.Edition.BluRay-GRP",
+            "Movie.2008.1080p.BluRay.x264-GRP",
+        ] {
+            assert_eq!(cut(none), None, "{none}");
+        }
+        // A release line as TurkceAltyazi.org writes one.
+        assert_eq!(cut("Director's Cut"), Some(Cut::Directors));
     }
 }

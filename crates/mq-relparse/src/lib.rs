@@ -38,7 +38,9 @@ mod rules;
 mod title;
 mod transform;
 
-pub use model::{AddonStreamFacts, Audio, Hdr, ParsedRelease, Quality, Resolution, VideoCodec};
+pub use model::{
+    AddonStreamFacts, Audio, Cut, Hdr, ParsedRelease, Quality, Resolution, VideoCodec,
+};
 
 pub use addon::parse_addon_stream;
 

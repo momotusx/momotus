@@ -47,6 +47,9 @@ fn release_summary(r: &ParsedRelease) -> String {
     if let Some(c) = &r.container {
         put("container", c.clone());
     }
+    if let Some(cut) = r.cut {
+        put("cut", format!("{cut:?}"));
+    }
     let flags = [
         ("complete", r.complete),
         ("remux", r.remux),

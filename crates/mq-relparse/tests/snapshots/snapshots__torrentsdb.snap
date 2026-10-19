@@ -19,7 +19,7 @@ tt0068646 "TorrentsDB\n1080p"
 tt0468569 "TorrentsDB\n2160p"
     seeders=Some(47) size=Some(23160611143) site=Some("rargb") cached=None service=None | title="The Dark Knight" year=2008 res=R2160p q=BluRay codec=H265 bits=10 hdr=[Hdr10] audio=[DtsHdMa] ch=5.1 group="IAMABLE" container=mkv
 tt0468569 "TorrentsDB\n2160p"
-    seeders=Some(10) size=Some(24567212933) site=Some("knaben") cached=None service=None | title="The Dark Knight" year=2008 res=R2160p q=BluRay codec=H265 hdr=[Hdr10] audio=[Ac3] ch=5.1 lang=en group="DTOne" container=mkv
+    seeders=Some(10) size=Some(24567212933) site=Some("knaben") cached=None service=None | title="The Dark Knight" year=2008 res=R2160p q=BluRay codec=H265 hdr=[Hdr10] audio=[Ac3] ch=5.1 lang=en group="DTOne" container=mkv cut=Imax
 tt0468569 "TorrentsDB\n1080p"
     seeders=Some(32) size=Some(5658619412) site=Some("rargb") cached=None service=None | title="The Dark Knight" year=2008 res=R1080p q=BluRay codec=H264 audio=[Dts] ch=5.1 group="RG" container=mkv
 tt0133093 "TorrentsDB\n2160p"
@@ -57,19 +57,19 @@ tt0110912 "TorrentsDB\n1080p"
 tt0110912 "TorrentsDB\n1080p"
     seeders=Some(17) size=Some(4305704714) site=Some("knaben") cached=None service=None | title="Pulp Fiction" year=1994 res=R1080p q=BluRay codec=H265 bits=10 group="MkvCage" container=mkv
 tt0816692 "TorrentsDB\n2160p"
-    seeders=Some(50) size=Some(5551245230) site=Some("knaben") cached=None service=None | title="Interstellar" year=2014 res=R2160p q=Unknown codec=H265 hdr=[Hdr10] audio=[Ac3] ch=5.1 lang=en,it group="MIRCrew" container=mkv
+    seeders=Some(50) size=Some(5551245230) site=Some("knaben") cached=None service=None | title="Interstellar" year=2014 res=R2160p q=Unknown codec=H265 hdr=[Hdr10] audio=[Ac3] ch=5.1 lang=en,it group="MIRCrew" container=mkv cut=Imax
 tt0816692 "TorrentsDB\n1080p"
     seeders=Some(44) size=Some(13883481784) site=Some("rargb") cached=None service=None | title="Interstellar" year=2014 res=R1080p q=BluRay codec=H265 bits=10 audio=[DtsHdMa] ch=5.1 container=mkv
 tt0816692 "TorrentsDB\n1080p"
     seeders=Some(14) size=Some(8536247500) site=Some("rargb") cached=None service=None | title="Interstellar" year=2014 res=R1080p q=BluRay codec=H265 bits=10 audio=[Ac3] ch=5.1 group="POIASD" container=mkv
 tt0120737 "TorrentsDB\n2160p"
-    seeders=Some(216) size=Some(193445327011) site=Some("knaben") cached=None service=None | title="1. Братство кольца" year=2001 res=R2160p q=Remux codec=Unknown bits=10 hdr=[DolbyVision, Hdr10] lang=ru,en group="prodigy1201" container=mkv remux=1 extended=1 dubbed=1
+    seeders=Some(216) size=Some(193445327011) site=Some("knaben") cached=None service=None | title="1. Братство кольца" year=2001 res=R2160p q=Remux codec=Unknown bits=10 hdr=[DolbyVision, Hdr10] lang=ru,en group="prodigy1201" container=mkv cut=Extended remux=1 extended=1 dubbed=1
 tt0120737 "TorrentsDB\n2160p"
-    seeders=Some(20) size=Some(32094143119) site=Some("rutor") cached=None service=None | title="The Lord of the Rings - The Fellowship of the Ring" year=2001 res=R2160p q=Unknown codec=Unknown hdr=[Hdr10] lang=ru container=mkv complete=1 extended=1
+    seeders=Some(20) size=Some(32094143119) site=Some("rutor") cached=None service=None | title="The Lord of the Rings - The Fellowship of the Ring" year=2001 res=R2160p q=Unknown codec=Unknown hdr=[Hdr10] lang=ru container=mkv cut=Extended complete=1 extended=1
 tt0120737 "TorrentsDB\n1080p"
-    seeders=Some(36) size=Some(162231652188) site=Some("knaben") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=Remux codec=Unknown lang=ru,en eps=[2001] container=mkv remux=1 extended=1
+    seeders=Some(36) size=Some(162231652188) site=Some("knaben") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=Remux codec=Unknown lang=ru,en eps=[2001] container=mkv cut=Extended remux=1 extended=1
 tt0120737 "TorrentsDB\n720p"
-    seeders=Some(14) size=Some(1836098519) site=Some("ThePirateBay") cached=None service=None | title="Lord of the Rings Fellowship of the Ring Ext" year=2001 res=R720p q=Unknown codec=Unknown ch=5.1 container=mp4 complete=1 extended=1
+    seeders=Some(14) size=Some(1836098519) site=Some("ThePirateBay") cached=None service=None | title="Lord of the Rings Fellowship of the Ring Ext" year=2001 res=R720p q=Unknown codec=Unknown ch=5.1 container=mp4 cut=Extended complete=1 extended=1
 tt1130884 "TorrentsDB\n2160p"
     seeders=Some(11) size=Some(42294690447) site=Some("rargb") cached=None service=None | title="Shutter Island" year=2010 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] lang=en,it group="NAHOM" container=mkv remux=1
 tt1130884 "TorrentsDB\n1080p"
@@ -87,7 +87,7 @@ tt15398776 "TorrentsDB\n2160p"
 tt15398776 "TorrentsDB\n1080p"
     seeders=Some(392) size=Some(19316615413) site=Some("rutor") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=Unknown lang=ru container=mkv
 tt15398776 "TorrentsDB\n1080p"
-    seeders=Some(63) size=Some(12745315450) site=Some("rargb") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=H264 audio=[Dts, Ac3] group="MgB" container=mkv
+    seeders=Some(63) size=Some(12745315450) site=Some("rargb") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=H264 audio=[Dts, Ac3] group="MgB" container=mkv cut=Imax
 tt15398776 "TorrentsDB\n720p"
     seeders=Some(100) size=Some(1739461754) site=Some("knaben") cached=None service=None | title="Oppenheimer" year=2023 res=R720p q=BluRay codec=H264 audio=[Aac] group="YTS" container=mp4
 tt1160419 "TorrentsDB\n1080p"
@@ -97,9 +97,9 @@ tt1160419 "TorrentsDB\n1080p"
 tt1160419 "TorrentsDB\n1080p"
     seeders=Some(7) size=Some(3715146711) site=Some("ThePirateBay") cached=None service=None | title="Dune" year=2021 res=R1080p q=Unknown codec=H264 audio=[Ac3] container=mp4
 tt0087843 "TorrentsDB\n2160p"
-    seeders=Some(30) size=Some(93930934763) site=Some("limetorrent") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] lang=it group="NAHOM" container=mkv remux=1 extended=1
+    seeders=Some(30) size=Some(93930934763) site=Some("limetorrent") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] lang=it group="NAHOM" container=mkv cut=Extended remux=1 extended=1
 tt0087843 "TorrentsDB\n1080p"
-    seeders=Some(46) size=Some(2662879723) site=Some("rargb") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R1080p q=BluRay codec=Av1 ch=5.1 group="RAV1NE" container=mkv extended=1
+    seeders=Some(46) size=Some(2662879723) site=Some("rargb") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R1080p q=BluRay codec=Av1 ch=5.1 group="RAV1NE" container=mkv cut=Extended extended=1
 tt0087843 "TorrentsDB\n1080p"
     seeders=Some(7) size=Some(7934952079) site=Some("ThePirateBay") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=5.1 group="PiRaTeS" container=mkv
 tt0114369 "TorrentsDB\n2160p"
@@ -145,9 +145,9 @@ tt0076759 "TorrentsDB\n1080p"
 tt0172495 "TorrentsDB\n2160p"
     seeders=Some(152) size=Some(18779744501) site=Some("Torrent9") cached=None service=None | title="Gladiator II" year=2024 res=R2160p q=WebDl codec=H265 hdr=[Hdr10] lang=fr group="FW" container=mkv dubbed=1
 tt0172495 "TorrentsDB\n1080p"
-    seeders=Some(109) size=Some(2126008811) site=Some("knaben") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=BluRay codec=H265 ch=5.1 container=mkv extended=1
+    seeders=Some(109) size=Some(2126008811) site=Some("knaben") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=BluRay codec=H265 ch=5.1 container=mkv cut=Extended extended=1
 tt0172495 "TorrentsDB\n1080p"
-    seeders=Some(19) size=Some(10884218) site=Some("ThePirateBay") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=BluRay codec=H264 audio=[DtsHd] group="Grym" container=mkv complete=1 extended=1
+    seeders=Some(19) size=Some(10884218) site=Some("ThePirateBay") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=BluRay codec=H264 audio=[DtsHd] group="Grym" container=mkv cut=Extended complete=1 extended=1
 tt0172495 "TorrentsDB\n1080p"
     seeders=Some(5) size=Some(4552665333) site=Some("ThePirateBay") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=WebDl codec=H264 audio=[Ac3] ch=5.1 group="PiRaTeS" container=mkv
 tt0120689 "TorrentsDB\n2160p"
@@ -167,9 +167,9 @@ tt1745960 "TorrentsDB\n2160p"
 tt1745960 "TorrentsDB\n1080p"
     seeders=Some(445) size=Some(6098853560) site=Some("rargb") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=WebDl codec=H264 audio=[Aac] group="EVO" container=mkv
 tt1745960 "TorrentsDB\n1080p"
-    seeders=Some(24) size=Some(5830418104) site=Some("rargb") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=5.1 group="EVO" container=mkv
+    seeders=Some(24) size=Some(5830418104) site=Some("rargb") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=5.1 group="EVO" container=mkv cut=Imax
 tt1745960 "TorrentsDB\n720p"
-    seeders=Some(5) size=Some(3500398346) site=Some("rutor") cached=None service=None | title="Top Gun Maverick" year=2022 res=R720p q=BluRay codec=Unknown lang=ru container=mkv
+    seeders=Some(5) size=Some(3500398346) site=Some("rutor") cached=None service=None | title="Top Gun Maverick" year=2022 res=R720p q=BluRay codec=Unknown lang=ru container=mkv cut=Imax
 tt0361748 "TorrentsDB\n2160p"
     seeders=Some(8) size=Some(61557618769) site=Some("rargb") cached=None service=None | title="Inglourious Basterds" year=2009 res=R2160p q=Remux codec=H265 audio=[DtsHdMa] ch=5.1 group="FraMeSToR" container=mkv remux=1
 tt0361748 "TorrentsDB\n1080p"
@@ -177,9 +177,9 @@ tt0361748 "TorrentsDB\n1080p"
 tt0361748 "TorrentsDB\n1080p"
     seeders=Some(9) size=Some(2866890670) site=Some("knaben") cached=None service=None | title="Inglourious Basterds" year=2009 res=R1080p q=BluRay codec=H265 audio=[Ac3] group="D3FiL3R" container=mkv
 tt0167260 "TorrentsDB\n2160p"
-    seeders=Some(59) size=Some(52645561630) site=Some("rargb") cached=None service=None | title="The Lord of the Rings The Return Of The King" year=2003 res=R2160p q=BluRay codec=H265 lang=en,it group="MeM" container=mkv extended=1
+    seeders=Some(59) size=Some(52645561630) site=Some("rargb") cached=None service=None | title="The Lord of the Rings The Return Of The King" year=2003 res=R2160p q=BluRay codec=H265 lang=en,it group="MeM" container=mkv cut=Extended extended=1
 tt0167260 "TorrentsDB\n1080p"
-    seeders=Some(48) size=Some(22312355102) site=Some("yggtorrent") cached=None service=None | title="the lord of the rings the return of the king" year=2001 res=R1080p q=BluRay codec=H264 container=mkv extended=1 dubbed=1
+    seeders=Some(48) size=Some(22312355102) site=Some("yggtorrent") cached=None service=None | title="the lord of the rings the return of the king" year=2001 res=R1080p q=BluRay codec=H264 container=mkv cut=Extended extended=1 dubbed=1
 tt0167260 "TorrentsDB\n1080p"
     seeders=Some(7) size=Some(11531987189) site=Some("sktorrent") cached=None service=None | title="Pán prstenů Návrat krále" year=2003 res=R1080p q=WebDl codec=Unknown container=mp4
 tt0482571 "TorrentsDB\n2160p"
@@ -195,7 +195,7 @@ tt1853728 "TorrentsDB\n1080p"
 tt1853728 "TorrentsDB\n1080p"
     seeders=Some(24) size=Some(12176232284) site=Some("ThePirateBay") cached=None service=None | title="Django Unchained" year=2012 res=R1080p q=WebDl codec=H264 audio=[Eac3] ch=5.1 group="GPRS" container=mkv
 tt1853728 "TorrentsDB\n1080p"
-    seeders=Some(12) size=Some(4692251770) site=Some("rutor") cached=None service=None | title="Rango" year=2011 res=R1080p q=BluRay codec=Unknown lang=ru container=mkv extended=1
+    seeders=Some(12) size=Some(4692251770) site=Some("rutor") cached=None service=None | title="Rango" year=2011 res=R1080p q=BluRay codec=Unknown lang=ru container=mkv cut=Extended extended=1
 tt0102926 "TorrentsDB\n2160p"
     seeders=Some(42) size=Some(82753282375) site=Some("knaben") cached=None service=None | title="The Silence of the Lambs" year=1991 res=R2160p q=Remux codec=H265 hdr=[DolbyVision] audio=[DtsHdMa] ch=5.1 group="FraMeSToR" container=mkv remux=1 proper=1
 tt0102926 "TorrentsDB\n1080p"
@@ -219,7 +219,7 @@ tt0903747:1:1 "TorrentsDB\n1080p"
 tt0386676:2:5 "TorrentsDB\n1080p"
     seeders=Some(74) size=Some(343335239) site=Some("ThePirateBay") cached=None service=None | title="The Office" year=2005 res=R1080p q=WebDl codec=H265 seasons=[2] eps=[5] container=mkv
 tt0386676:2:5 "TorrentsDB\n1080p"
-    seeders=Some(3) size=Some(126017863) site=Some("limetorrent") cached=None service=None | title="Halloween" year=2005 res=R1080p q=BluRay codec=H265 bits=10 audio=[Eac3] ch=5.1 seasons=[2] eps=[5] container=mkv extended=1
+    seeders=Some(3) size=Some(126017863) site=Some("limetorrent") cached=None service=None | title="Halloween" year=2005 res=R1080p q=BluRay codec=H265 bits=10 audio=[Eac3] ch=5.1 seasons=[2] eps=[5] container=mkv cut=Extended extended=1
 tt0386676:2:5 "TorrentsDB\nwebrip"
     seeders=Some(1) size=Some(229816401) site=Some("ilcorsaronero") cached=None service=None | title="The Office" res=Unknown q=WebRip codec=H264 lang=it seasons=[2] eps=[5] group="NST" container=mkv
 tt0108778:1:1 "TorrentsDB\n2160p"
@@ -291,7 +291,7 @@ tt2560140:1:1 "TorrentsDB\n1080p"
 tt2560140:1:1 "TorrentsDB\n1080p"
     seeders=Some(7) size=Some(1159641169) site=Some("animetosho") cached=None service=None | title="To You, Years" year=2000 res=R1080p q=Unknown codec=H265 lang=en,ja,it seasons=[1] eps=[1] group="1" container=mkv dubbed=1
 tt0877057:1:1 "TorrentsDB\n1080p"
-    seeders=Some(24) size=Some(1170378588) site=Some("animetosho") cached=None service=None | title="Death Note" res=R1080p q=WebDl codec=H264 lang=en seasons=[1] eps=[1] group="FUNi" container=mkv
+    seeders=Some(24) size=Some(1170378588) site=Some("animetosho") cached=None service=None | title="Death Note" res=R1080p q=WebDl codec=H264 lang=en seasons=[1] eps=[1] group="FUNi" container=mkv cut=Uncut
 tt0877057:1:1 "TorrentsDB\n720p"
     seeders=Some(112) size=Some(123994112) site=Some("nyaa") cached=None service=None | title="Death Note - Creditless Opening 01" year=2006 res=R720p q=BluRay codec=H264 bits=10 audio=[Flac] ch=2.0 seasons=[1] eps=[1] group="Arid" container=mkv dubbed=1
 tt0877057:1:1 "TorrentsDB\n720p"

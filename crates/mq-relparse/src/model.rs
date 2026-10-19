@@ -101,6 +101,18 @@ pub enum Audio {
     Pcm,
 }
 
+/// The cut a release names: subtitle timings follow it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Cut {
+    Extended,
+    Directors,
+    Unrated,
+    Uncut,
+    Theatrical,
+    Imax,
+}
+
 /// Structured facts parsed from a release name.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -129,6 +141,10 @@ pub struct ParsedRelease {
     pub proper: bool,
     pub repack: bool,
     pub extended: bool,
+    /// The cut named: Extended, Director's, Unrated, Uncut, Theatrical or
+    /// IMAX. `None` names no cut (most releases are the theatrical one
+    /// without saying so).
+    pub cut: Option<Cut>,
     pub hardcoded_subs: bool,
     pub dubbed: bool,
     pub three_d: bool,

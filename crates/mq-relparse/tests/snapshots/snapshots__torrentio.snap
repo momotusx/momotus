@@ -17,7 +17,7 @@ tt0068646 "Torrentio\n1080p"
 tt0068646 "Torrentio\n1080p"
     seeders=Some(6) size=Some(16342350561) site=Some("Rutor") cached=None service=None | title="Крёстный отец" year=1972 res=R1080p q=BluRay codec=Unknown lang=ru,en container=mkv complete=1
 tt0468569 "Torrentio\n4k DV | HDR"
-    seeders=Some(34) size=Some(6098853560) site=Some("1337x") cached=None service=None | title="The Dark Knight" year=2008 res=R2160p q=BluRay codec=H265 bits=10 hdr=[DolbyVision, Hdr10] group="PSA" container=mkv
+    seeders=Some(34) size=Some(6098853560) site=Some("1337x") cached=None service=None | title="The Dark Knight" year=2008 res=R2160p q=BluRay codec=H265 bits=10 hdr=[DolbyVision, Hdr10] group="PSA" container=mkv cut=Imax
 tt0468569 "Torrentio\n4k"
     seeders=Some(31) size=Some(68493990952) site=Some("TorrentGalaxy") cached=None service=None | title="The Dark Knight" year=2008 res=R2160p q=Remux codec=H265 audio=[DtsHdMa] ch=5.1 group="FGT" container=mkv remux=1 proper=1
 tt0468569 "Torrentio\n1080p"
@@ -57,19 +57,19 @@ tt0110912 "Torrentio\n1080p"
 tt0110912 "Torrentio\n1080p"
     seeders=Some(6) size=Some(3253437726) site=Some("Torrent9") cached=None service=None | title="Pulp Fiction" year=1994 res=R1080p q=BluRay codec=H264 lang=fr container=mkv complete=1 dubbed=1
 tt0816692 "Torrentio\n4k HDR"
-    seeders=Some(19) size=Some(42788611686) site=Some("ThePirateBay") cached=None service=None | title="Interstellar" year=2014 res=R2160p q=BluRay codec=H265 hdr=[Hdr10] audio=[DtsHdMa] ch=5.1 group="andrehsa" container=mkv dubbed=1
+    seeders=Some(19) size=Some(42788611686) site=Some("ThePirateBay") cached=None service=None | title="Interstellar" year=2014 res=R2160p q=BluRay codec=H265 hdr=[Hdr10] audio=[DtsHdMa] ch=5.1 group="andrehsa" container=mkv cut=Imax dubbed=1
 tt0816692 "Torrentio\n1080p"
-    seeders=Some(99) size=Some(4284229877) site=Some("TorrentGalaxy") cached=None service=None | title="Interstellar" year=2014 res=R1080p q=BluRay codec=H265 ch=5.1 container=mkv
+    seeders=Some(99) size=Some(4284229877) site=Some("TorrentGalaxy") cached=None service=None | title="Interstellar" year=2014 res=R1080p q=BluRay codec=H265 ch=5.1 container=mkv cut=Imax
 tt0816692 "Torrentio\n1080p"
     seeders=Some(7) size=Some(45387066900) site=Some("Rutracker") cached=None service=None | title="Interstellar" year=2014 res=R1080p q=BluRay codec=Unknown lang=en,ru,zh,uk,tr dubbed=1
 tt0120737 "Torrentio\n4k DV | HDR"
-    seeders=Some(269) size=Some(193445327011) site=Some("Rutracker") cached=None service=None | title="1. Братство кольца" year=2001 res=R2160p q=Remux codec=Unknown bits=10 hdr=[DolbyVision, Hdr10] lang=ru,en group="prodigy1201" container=mkv remux=1 extended=1 dubbed=1
+    seeders=Some(269) size=Some(193445327011) site=Some("Rutracker") cached=None service=None | title="1. Братство кольца" year=2001 res=R2160p q=Remux codec=Unknown bits=10 hdr=[DolbyVision, Hdr10] lang=ru,en group="prodigy1201" container=mkv cut=Extended remux=1 extended=1 dubbed=1
 tt0120737 "Torrentio\n4k"
     seeders=Some(6) size=Some(55834574848) site=Some("ThePirateBay") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R2160p q=BluRay codec=H265 ch=7.1 container=mkv upscaled=1
 tt0120737 "Torrentio\n1080p"
-    seeders=Some(15) size=Some(3822520893) site=Some("RARBG") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=BluRay codec=H265 group="RARBG" container=mp4 extended=1
+    seeders=Some(15) size=Some(3822520893) site=Some("RARBG") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=BluRay codec=H265 group="RARBG" container=mp4 cut=Extended extended=1
 tt0120737 "Torrentio\n720p"
-    seeders=Some(7) size=Some(1610612736) site=Some("ThePirateBay") cached=None service=None | title="Lord Of The Rings The Fellowship of the Ring" year=2001 res=R720p q=Unknown codec=Unknown eps=[264] group="YIFY" container=mp4 extended=1
+    seeders=Some(7) size=Some(1610612736) site=Some("ThePirateBay") cached=None service=None | title="Lord Of The Rings The Fellowship of the Ring" year=2001 res=R720p q=Unknown codec=Unknown eps=[264] group="YIFY" container=mp4 cut=Extended extended=1
 tt1130884 "Torrentio\n4k DV | HDR"
     seeders=Some(7) size=Some(42294690447) site=Some("1337x") cached=None service=None | title="Shutter Island" year=2010 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] lang=en,it group="NAHOM" container=mkv remux=1
 tt1130884 "Torrentio\n1080p DV | HDR"
@@ -87,7 +87,7 @@ tt15398776 "Torrentio\n4k HDR"
 tt15398776 "Torrentio\n4k HDR"
     seeders=Some(5) size=Some(25479893483) site=Some("1337x") cached=None service=None | title="Oppenheimer" year=2023 res=R2160p q=BluRay codec=H265 hdr=[Hdr10] lang=en,it group="CYBER" container=mkv
 tt15398776 "Torrentio\n1080p"
-    seeders=Some(20) size=Some(2469606195) site=Some("TorrentGalaxy") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=H265 audio=[Aac] ch=5.1 group="GYPSY"
+    seeders=Some(20) size=Some(2469606195) site=Some("TorrentGalaxy") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=H265 audio=[Aac] ch=5.1 group="GYPSY" cut=Imax
 tt15398776 "Torrentio\n1080p"
     seeders=Some(5) size=Some(3285649981) site=Some("TorrentGalaxy") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=H265 group="KONTRAST" container=mp4
 tt1160419 "Torrentio\n4k HDR"
@@ -101,7 +101,7 @@ tt0087843 "Torrentio\n4k DV | HDR10+"
 tt0087843 "Torrentio\n1080p"
     seeders=Some(28) size=Some(12766790287) site=Some("ThePirateBay") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R1080p q=Unknown codec=H264 audio=[Ac3] container=mkv
 tt0087843 "Torrentio\n1080p"
-    seeders=Some(11) size=Some(36539434270) site=Some("1337x") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R1080p q=Remux codec=H264 lang=en,it group="NAHOM" container=mkv remux=1 extended=1
+    seeders=Some(11) size=Some(36539434270) site=Some("1337x") cached=None service=None | title="Once Upon a Time in America" year=1984 res=R1080p q=Remux codec=H264 lang=en,it group="NAHOM" container=mkv cut=Extended remux=1 extended=1
 tt0114369 "Torrentio\n4k DV"
     seeders=Some(44) size=Some(3886945402) site=Some("ilCorSaRoNeRo") cached=None service=None | title="Seven - Se7en" year=1995 res=R2160p q=BluRay codec=H265 hdr=[DolbyVision] audio=[Ac3] ch=5.1 lang=en,it group="Licdom" container=mkv
 tt0114369 "Torrentio\n4k"
@@ -143,11 +143,11 @@ tt0076759 "Torrentio\n1080p"
 tt0076759 "Torrentio\n1080p 3D HSBS"
     seeders=Some(10) size=Some(4327179550) site=Some("TorrentGalaxy") cached=None service=None | title="Star Wars" year=1977 res=R1080p q=BluRay codec=H264 audio=[Ac3] ch=5.1 eps=[4] container=mp4 3d=1
 tt0172495 "Torrentio\n4k DV | HDR"
-    seeders=Some(119) size=Some(82517059174) site=Some("Rutracker") cached=None service=None | title="Гладиатор" year=2000 res=R2160p q=Remux codec=Unknown bits=10 hdr=[DolbyVision, Hdr10] lang=ru,en,ko container=mkv remux=1 extended=1 dubbed=1
+    seeders=Some(119) size=Some(82517059174) site=Some("Rutracker") cached=None service=None | title="Гладиатор" year=2000 res=R2160p q=Remux codec=Unknown bits=10 hdr=[DolbyVision, Hdr10] lang=ru,en,ko container=mkv cut=Extended remux=1 extended=1 dubbed=1
 tt0172495 "Torrentio\n4k"
-    seeders=Some(12) size=Some(73723113635) site=Some("TorrentGalaxy") cached=None service=None | title="Gladiator" year=2000 res=R2160p q=Remux codec=H265 audio=[DtsX] ch=7.1 group="FGT" container=mkv remux=1 proper=1 extended=1
+    seeders=Some(12) size=Some(73723113635) site=Some("TorrentGalaxy") cached=None service=None | title="Gladiator" year=2000 res=R2160p q=Remux codec=H265 audio=[DtsX] ch=7.1 group="FGT" container=mkv cut=Extended remux=1 proper=1 extended=1
 tt0172495 "Torrentio\n1080p"
-    seeders=Some(17) size=Some(8632884264) site=Some("TorrentGalaxy") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=BluRay codec=H265 audio=[Eac3] ch=5.1 eps=[2020] group="EDGE2020" container=mkv extended=1
+    seeders=Some(17) size=Some(8632884264) site=Some("TorrentGalaxy") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=BluRay codec=H265 audio=[Eac3] ch=5.1 eps=[2020] group="EDGE2020" container=mkv cut=Extended extended=1
 tt0172495 "Torrentio\n1080p"
     seeders=Some(6) size=Some(92470645882) site=Some("Rutracker") cached=None service=None | title="Gladiator" year=2000 res=R1080p q=BluRay codec=Unknown lang=ru,en,ja
 tt0120689 "Torrentio\n4k DV | HDR"
@@ -167,7 +167,7 @@ tt1745960 "Torrentio\n4k HDR"
 tt1745960 "Torrentio\n4k DV | HDR"
     seeders=Some(5) size=Some(75376676044) site=Some("EXT") cached=None service=None | title="Top Gun Maverick" year=2022 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, TrueHd] lang=en,de group="NIMA4K" container=mkv remux=1
 tt1745960 "Torrentio\n1080p"
-    seeders=Some(24) size=Some(65682800) site=Some("Comando") cached=None service=None | title="Top Gun - Maverick" year=2022 res=R1080p q=WebDl codec=Unknown ch=5.1 lang=en,pt container=mp4 dubbed=1
+    seeders=Some(24) size=Some(65682800) site=Some("Comando") cached=None service=None | title="Top Gun - Maverick" year=2022 res=R1080p q=WebDl codec=Unknown ch=5.1 lang=en,pt container=mp4 cut=Imax dubbed=1
 tt1745960 "Torrentio\n1080p"
     seeders=Some(6) size=Some(2974264852) site=Some("ThePirateBay") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=Unknown codec=H265 container=mkv
 tt0361748 "Torrentio\n4k"
@@ -177,9 +177,9 @@ tt0361748 "Torrentio\n1080p"
 tt0361748 "Torrentio\n1080p"
     seeders=Some(5) size=Some(2555505541) site=Some("TorrentGalaxy") cached=None service=None | title="Inglourious Basterds" year=2009 res=R1080p q=BluRay codec=H265 eps=[2009] group="RARBG" container=mp4
 tt0167260 "Torrentio\n4k DV"
-    seeders=Some(30) size=Some(141121887928) site=Some("1337x") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R2160p q=Remux codec=H265 hdr=[DolbyVision] audio=[Atmos, TrueHd] ch=7.1 group="FraMeSToR" container=mkv remux=1 extended=1
+    seeders=Some(30) size=Some(141121887928) site=Some("1337x") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R2160p q=Remux codec=H265 hdr=[DolbyVision] audio=[Atmos, TrueHd] ch=7.1 group="FraMeSToR" container=mkv cut=Extended remux=1 extended=1
 tt0167260 "Torrentio\n4k"
-    seeders=Some(6) size=Some(34370475786) site=Some("RARBG") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R2160p q=BluRay codec=H265 bits=10 hdr=[Sdr] audio=[DtsHdMa, Atmos, TrueHd] ch=7.1 group="SWTYBLZ" container=mkv extended=1
+    seeders=Some(6) size=Some(34370475786) site=Some("RARBG") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R2160p q=BluRay codec=H265 bits=10 hdr=[Sdr] audio=[DtsHdMa, Atmos, TrueHd] ch=7.1 group="SWTYBLZ" container=mkv cut=Extended extended=1
 tt0167260 "Torrentio\n1080p"
     seeders=Some(18) size=Some(20325932728) site=Some("1337x") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R1080p q=BluRay codec=H264 audio=[Dts, Ac3] group="3Li" container=mkv
 tt0482571 "Torrentio\n4k HDR"
@@ -219,7 +219,7 @@ tt0903747:1:1 "Torrentio\n480p"
 tt0386676:2:5 "Torrentio\n1080p"
     seeders=Some(75) size=Some(343335239) site=Some("1337x") cached=None service=None | title="The Office" year=2005 res=R1080p q=WebDl codec=H265 bits=10 audio=[Aac] ch=5.1 seasons=[2] eps=[5] container=mkv repack=1
 tt0386676:2:5 "Torrentio\n1080p"
-    seeders=Some(18) size=Some(525441433) site=Some("ThePirateBay") cached=None service=None | title="The Office" res=R1080p q=WebRip codec=H265 seasons=[2] eps=[5] group="RARBG" container=mp4 extended=1
+    seeders=Some(18) size=Some(525441433) site=Some("ThePirateBay") cached=None service=None | title="The Office" res=R1080p q=WebRip codec=H265 seasons=[2] eps=[5] group="RARBG" container=mp4 cut=Extended extended=1
 tt0386676:2:5 "Torrentio\n1080p"
     seeders=Some(4) size=Some(700459253) site=Some("BestTorrents") cached=None service=None | title="The Office" res=R1080p q=WebDl codec=H264 lang=en,pl seasons=[2] eps=[5] container=mkv complete=1
 tt0108778:1:1 "Torrentio\n4k DV | HDR"

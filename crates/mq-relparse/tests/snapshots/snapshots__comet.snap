@@ -63,11 +63,11 @@ tt0816692 "[TORRENT🧲] Comet 1080p"
 tt0816692 "[TORRENT🧲] Comet unknown"
     seeders=None size=Some(4509715660) site=Some("StremThru") cached=None service=None | title="INTERSTELLAR" year=2014 res=Unknown q=Unknown codec=Unknown audio=[Ac3] ch=2.0
 tt0120737 "[TORRENT🧲] Comet 2160p"
-    seeders=None size=Some(124661425766) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10Plus] audio=[Atmos, TrueHd] ch=7.1 group="tarunk9c" container=mkv remux=1 extended=1
+    seeders=None size=Some(124661425766) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10Plus] audio=[Atmos, TrueHd] ch=7.1 group="tarunk9c" container=mkv cut=Extended remux=1 extended=1
 tt0120737 "[TORRENT🧲] Comet 1080p"
-    seeders=None size=Some(5046586572) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=WebDl codec=H265 audio=[Atmos, Eac3] ch=5.1 group="GDRK" container=mkv
+    seeders=None size=Some(5046586572) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=WebDl codec=H265 audio=[Atmos, Eac3] ch=5.1 group="GDRK" container=mkv cut=Theatrical
 tt0120737 "[TORRENT🧲] Comet 1080p"
-    seeders=None size=Some(3435973836) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=BluRay codec=H264 container=mp4 extended=1
+    seeders=None size=Some(3435973836) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Fellowship of the Ring" year=2001 res=R1080p q=BluRay codec=H264 container=mp4 cut=Extended extended=1
 tt0120737 "[TORRENT🧲] Comet unknown"
     seeders=None size=Some(8375186227) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings - The Fellowship of the Ring" res=Unknown q=Unknown codec=Unknown container=mkv
 tt1130884 "[TORRENT🧲] Comet 1080p"
@@ -83,9 +83,9 @@ tt6751668 "[TORRENT🧲] Comet 1080p"
 tt6751668 "[TORRENT🧲] Comet 720p"
     seeders=Some(1) size=Some(835295641) site=Some("TorBox|psa") cached=None service=None | title="Parasite A K A Gisaengchung" year=2019 res=R720p q=BluRay codec=H265 lang=ko group="PSA" container=mkv
 tt15398776 "[TORRENT🧲] Comet 2160p"
-    seeders=None size=Some(92771293593) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, TrueHd] ch=7.1 group="DRX" container=mkv remux=1
+    seeders=None size=Some(92771293593) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R2160p q=Remux codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, TrueHd] ch=7.1 group="DRX" container=mkv cut=Imax remux=1
 tt15398776 "[TORRENT🧲] Comet 2160p"
-    seeders=None size=Some(11703785881) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R2160p q=BluRay codec=H265 audio=[Aac] lang=en,ta,kn,es,hi container=mkv
+    seeders=None size=Some(11703785881) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R2160p q=BluRay codec=H265 audio=[Aac] lang=en,ta,kn,es,hi container=mkv cut=Imax
 tt15398776 "[TORRENT🧲] Comet 1080p"
     seeders=None size=Some(19219978649) site=Some("StremThru") cached=None service=None | title="Oppenheimer" year=2023 res=R1080p q=BluRay codec=H265 lang=fr,es group="Slay3R" container=mkv dubbed=1
 tt15398776 "[TORRENT🧲] Comet unknown"
@@ -143,11 +143,11 @@ tt0076759 "[TORRENT🧲] Comet 1080p"
 tt0076759 "[TORRENT🧲] Comet 720p"
     seeders=None size=Some(13099650252) site=Some("StremThru") cached=None service=None | title="Star Wars Episode IV - A New Hope" year=1977 res=R720p q=Hdtv codec=Unknown lang=en container=mkv
 tt0172495 "[TORRENT🧲] Comet 2160p"
-    seeders=None size=Some(72370198937) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10] audio=[DtsX, Eac3] ch=7.1 lang=en,hi,es group="LUMiX" container=mkv remux=1 extended=1
+    seeders=None size=Some(72370198937) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10] audio=[DtsX, Eac3] ch=7.1 lang=en,hi,es group="LUMiX" container=mkv cut=Extended remux=1 extended=1
 tt0172495 "[TORRENT🧲] Comet 1080p"
     seeders=None size=Some(12240656793) site=Some("StremThru") cached=None service=None | title="高清影视之家发布" year=2000 res=R1080p q=WebDl codec=H264 audio=[Ac3] ch=5.1 lang=zh group="BATWEB"
 tt0172495 "[TORRENT🧲] Comet 720p"
-    seeders=None size=Some(1717986918) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=R720p q=BluRay codec=H264 lang=en,hi,te,ta,es container=mkv extended=1
+    seeders=None size=Some(1717986918) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=R720p q=BluRay codec=H264 lang=en,hi,te,ta,es container=mkv cut=Extended extended=1
 tt0172495 "[TORRENT🧲] Comet unknown"
     seeders=None size=Some(783600844) site=Some("StremThru") cached=None service=None | title="Gladiator" year=2000 res=Unknown q=Dvd codec=Unknown container=avi
 tt0120689 "[TORRENT🧲] Comet 1080p"
@@ -163,9 +163,9 @@ tt4154796 "[TORRENT🧲] Comet 1080p"
 tt4154796 "[TORRENT🧲] Comet 720p"
     seeders=None size=Some(1181116006) site=Some("StremThru") cached=None service=None | title="Avengers Endgame" year=2019 res=R720p q=BluRay codec=Unknown lang=en,hi,te,ta,es group="1" container=mkv
 tt1745960 "[TORRENT🧲] Comet 2160p"
-    seeders=None size=Some(72692321484) site=Some("StremThru") cached=None service=None | title="Top Gun Maverick" year=2022 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10Plus] audio=[Atmos, TrueHd] ch=7.1 group="jennaortegaUHD" remux=1
+    seeders=None size=Some(72692321484) site=Some("StremThru") cached=None service=None | title="Top Gun Maverick" year=2022 res=R2160p q=Remux codec=H265 bits=10 hdr=[DolbyVision, Hdr10Plus] audio=[Atmos, TrueHd] ch=7.1 group="jennaortegaUHD" cut=Imax remux=1
 tt1745960 "[TORRENT🧲] Comet 1080p"
-    seeders=None size=Some(15569256448) site=Some("StremThru") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=BluRay codec=H264 audio=[Atmos, TrueHd] ch=7.1 group="EVO"
+    seeders=None size=Some(15569256448) site=Some("StremThru") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=BluRay codec=H264 audio=[Atmos, TrueHd] ch=7.1 group="EVO" cut=Imax
 tt1745960 "[TORRENT🧲] Comet 1080p"
     seeders=Some(3) size=Some(6657199308) site=Some("TorBox|unknown") cached=None service=None | title="Top Gun Maverick" year=2022 res=R1080p q=WebRip codec=H264 audio=[Ac3] lang=en,ko,es container=mkv
 tt1745960 "[TORRENT🧲] Comet unknown"
@@ -177,9 +177,9 @@ tt0361748 "[TORRENT🧲] Comet 1080p"
 tt0361748 "[TORRENT🧲] Comet unknown"
     seeders=None size=Some(735576064) site=Some("StremThru|The Pirate Bay") cached=None service=None | title="Inglourious Basterds" year=2009 res=Unknown q=Unknown codec=Unknown
 tt0167260 "[TORRENT🧲] Comet 2160p"
-    seeders=None size=Some(59807419596) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R2160p q=WebDl codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, TrueHd] ch=7.1 group="FLUX" container=mkv extended=1
+    seeders=None size=Some(59807419596) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R2160p q=WebDl codec=H265 hdr=[DolbyVision, Hdr10] audio=[Atmos, TrueHd] ch=7.1 group="FLUX" container=mkv cut=Extended extended=1
 tt0167260 "[TORRENT🧲] Comet 1080p"
-    seeders=None size=Some(7301444403) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R1080p q=BluRay codec=H264 audio=[Dts] extended=1
+    seeders=None size=Some(7301444403) site=Some("StremThru") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R1080p q=BluRay codec=H264 audio=[Dts] cut=Extended extended=1
 tt0167260 "[TORRENT🧲] Comet 720p"
     seeders=Some(0) size=Some(3758096384) site=Some("StremThru|Knaben") cached=None service=None | title="The Lord of the Rings The Return of the King" year=2003 res=R720p q=BluRay codec=H264 group="x0r" container=mkv
 tt0482571 "[TORRENT🧲] Comet 2160p"
