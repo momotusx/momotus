@@ -690,7 +690,8 @@ impl<'a> Round<'a> {
 /// Whether a history answer acknowledges `sent`: its counts and its
 /// `not_found` lists are there, every item it lists as not found is one
 /// that was sent, and for adds every item sent is either counted as added
-/// or listed as not found. Anything else keeps the batch.
+/// or updated (a play Trakt had already, sent again) or listed as not
+/// found. Anything else keeps the batch.
 fn acknowledged(answer: &Value, sent: &Value, removes: bool) -> Result<(), String> {
     let counts = &answer[if removes { "deleted" } else { "added" }];
     let missing = &answer["not_found"];
@@ -709,7 +710,9 @@ fn acknowledged(answer: &Value, sent: &Value, removes: bool) -> Result<(), Strin
         if distinct.len() != lost.len() {
             return Err("Trakt's answer named an item twice".into());
         }
-        if !removes && counted + lost.len() as u64 != sent.len() as u64 {
+        // Absent in older answers: none updated.
+        let updated = answer["updated"][list].as_u64().unwrap_or(0);
+        if !removes && counted + updated + lost.len() as u64 != sent.len() as u64 {
             return Err("Trakt's answer did not count the writes".into());
         }
     }
@@ -811,5 +814,24 @@ mod tests {
                            "not_found": {"movies": [],
                                          "episodes": [{"ids": {"tvdb": 1}}, {"ids": {"tvdb": 1}}]}});
         assert!(acknowledged(&twice, &sent, false).is_err());
+    }
+
+    /// A play Trakt had already, sent again, is counted as updated (the
+    /// live answer's shape, 2026-10-19): the batch is acknowledged.
+    #[test]
+    fn a_play_trakt_counts_as_updated_acknowledges_its_write() {
+        let sent = json!({"movies": [{"ids": {"imdb": "tt1"}, "watched_at": "2026-10-19T00:00:00.000Z"}],
+                          "episodes": [{"ids": {"tvdb": 1}}, {"ids": {"tvdb": 2}}]});
+        let answer = json!({"added": {"movies": 0, "episodes": 1},
+                            "updated": {"movies": 1, "episodes": 0},
+                            "not_found": {"movies": [], "shows": [], "seasons": [],
+                                          "episodes": [{"ids": {"tvdb": 2}}],
+                                          "people": [], "users": []}});
+        assert_eq!(acknowledged(&answer, &sent, false), Ok(()));
+        // Still every item: an updated count too high counts one never sent.
+        let over = json!({"added": {"movies": 0, "episodes": 1},
+                          "updated": {"movies": 2, "episodes": 0},
+                          "not_found": {"movies": [], "episodes": [{"ids": {"tvdb": 2}}]}});
+        assert!(acknowledged(&over, &sent, false).is_err());
     }
 }
