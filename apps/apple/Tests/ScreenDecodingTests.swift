@@ -77,3 +77,18 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(text.contains("18446744073709551615"))
     #expect(try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)) == record)
 }
+
+
+// TurkceAltyazi.org built into Marquee (plans/m13-turkcealtyazi.md 3.7).
+
+@Test func aBuiltInSourceSaysSoInsteadOfAHost() throws {
+    let base = #"{"url": "https://5a0d1888fa64-turkcealtyaziorg.baby-beamup.club/addon/manifest.json", "host": "5a0d1888fa64-turkcealtyaziorg.baby-beamup.club", "name": "TurkceAltyazi.org", "description": null, "logo": null, "version": "1.1.1", "enabled": true, "provides": ["subtitles"], "types": ["movie", "series"], "configurable": false, "configureUrl": null"#
+    let builtIn = try JSONDecoder().decode(AddonInfo.self, from: Data((base + #", "builtIn": true}"#).utf8))
+    #expect(builtIn.hostLine == "Built into Marquee, runs on this device")
+    #expect(builtIn.configureUrl == nil)
+    let fetched = try JSONDecoder().decode(AddonInfo.self, from: Data((base + #", "builtIn": false}"#).utf8))
+    #expect(fetched.hostLine == "5a0d1888fa64-turkcealtyaziorg.baby-beamup.club")
+    // An older core sends no field: the host, as before.
+    let older = try JSONDecoder().decode(AddonInfo.self, from: Data((base + "}").utf8))
+    #expect(older.builtIn == nil && older.hostLine == older.host)
+}

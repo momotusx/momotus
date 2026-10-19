@@ -230,7 +230,10 @@ private struct AddonCard: View {
                         Text(addon.name).font(.text(Theme.type.headline + 1, weight: .semibold, relativeTo: .headline))
                         Text(addon.version).font(.text(Theme.type.caption + 1, relativeTo: .caption)).foregroundStyle(Theme.Palette.muted)
                     }
-                    Text(addon.host).font(.mono(Theme.type.caption + 1)).foregroundStyle(Theme.Palette.muted)
+                    // A source Marquee runs itself has no host to name.
+                    Text(addon.hostLine)
+                        .font(addon.builtIn == true ? .text(Theme.type.caption + 1, relativeTo: .caption) : .mono(Theme.type.caption + 1))
+                        .foregroundStyle(Theme.Palette.muted)
                     if let description = addon.description {
                         Text(description)
                             .font(.text(Theme.type.callout, relativeTo: .callout))

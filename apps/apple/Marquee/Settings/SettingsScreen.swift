@@ -133,6 +133,10 @@ struct SettingsScreen: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                 // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
+                Text("Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1.")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
