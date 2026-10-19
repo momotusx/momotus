@@ -11,6 +11,12 @@
 #            a local fake on this machine, `MQ_DEV_TRAKT`), in its own target dir, with
 #            the macOS and iOS simulator slices only: for tests and simulator walks.
 #            The app refuses it outside Debug (it greps every slice for the hook).
+#
+# Each slice is built as a staticlib alone (`cargo rustc --crate-type staticlib`): with
+# mq-ffi's three crate types cargo passes no `-C lto`, so the profile's thin LTO never
+# applied. The Swift bindings are read from the macOS staticlib by the pinned generator
+# the Android script uses (installed once):
+#   cargo install --path apps/android/tools/uniffi-bindgen --locked --target-dir <scratch>
 set -euo pipefail
 
 apple="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,23 +48,16 @@ export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$dev_assertions
 export MACOSX_DEPLOYMENT_TARGET=15.0 IPHONEOS_DEPLOYMENT_TARGET=18.0 TVOS_DEPLOYMENT_TARGET=18.0
 
 cd "$root"
-# The macOS slice is built with the bindgen tool in the same pass, so the
-# tool's dependencies share this build. The extra code is never linked into the
-# app: nothing in the library references it and the linker strips it.
-echo "building mq-ffi and uniffi-bindgen for aarch64-apple-darwin"
-CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 \
-  cargo build -p mq-ffi --release --target aarch64-apple-darwin -j 4 \
-  --features bindgen --lib --bin uniffi-bindgen
-for target in "${targets[@]}"; do
+for target in aarch64-apple-darwin "${targets[@]}"; do
   echo "building mq-ffi for $target"
   CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 \
-    cargo build -p mq-ffi --lib --release --target "$target" -j 4
+    cargo rustc -p mq-ffi --lib --release --target "$target" -j 4 --crate-type staticlib
 done
 
 gen="$(mktemp -d)"
 trap 'rm -rf "$gen"' EXIT
 mac="$target_dir/aarch64-apple-darwin/release"
-"$mac/uniffi-bindgen" generate --library "$mac/libmarquee_core.dylib" --language swift --out-dir "$gen"
+uniffi-bindgen generate --library "$mac/libmarquee_core.a" --language swift --out-dir "$gen"
 
 mkdir -p "$gen/include"
 cp "$gen/marquee_coreFFI.h" "$gen/include/"
