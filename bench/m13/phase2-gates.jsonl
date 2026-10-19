@@ -1,0 +1,2 @@
+{"date":"2026-10-19","milestone":"M13","phase":"2","what":"mq-runtime --features torrent --no-fail-fast, 20 runs in a row on a loaded host (feat/m13-phase2 at 54df9872, own target dir)","runs":20,"passed_each":334,"failed":0,"seconds_per_run":"83 to 125"}
+{"date":"2026-10-19","milestone":"M13","phase":"2","what":"web e2e headless (bun run e2e, MQ_E2E_PORT_OFFSET=400) against the feat/m13-phase2 bridge at 54df9872","passed":185,"failed":0,"flaky":0,"minutes":6.9}
