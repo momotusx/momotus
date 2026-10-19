@@ -526,20 +526,26 @@ pub mod test_dns {
 
     /// A listener counting what reaches it, for tests that prove a check
     /// ran: hostile addresses are built from its own, so a check that does
-    /// not run lets them through. It fails loudly if it cannot bind.
+    /// not run lets them through. It fails loudly if it cannot bind, and
+    /// dropping it ends its thread and frees its port.
     pub struct Canary {
         addr: std::net::SocketAddr,
         hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        udp: bool,
     }
 
     impl Canary {
         /// Counts accepted TCP connections on `ip`; `port` 0 picks one.
         pub fn tcp(ip: IpAddr, port: u16) -> Canary {
             let listener = std::net::TcpListener::bind((ip, port)).expect("the canary must bind");
-            let canary = Canary::at(listener.local_addr().expect("bound"));
-            let hits = canary.hits.clone();
+            let canary = Canary::at(listener.local_addr().expect("bound"), false);
+            let (hits, stop) = (canary.hits.clone(), canary.stop.clone());
             std::thread::spawn(move || {
                 for _ in listener.incoming().flatten() {
+                    if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                        break;
+                    }
                     hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 }
             });
@@ -549,11 +555,14 @@ pub mod test_dns {
         /// Counts UDP datagrams received on `ip`; `port` 0 picks one.
         pub fn udp(ip: IpAddr, port: u16) -> Canary {
             let socket = std::net::UdpSocket::bind((ip, port)).expect("the canary must bind");
-            let canary = Canary::at(socket.local_addr().expect("bound"));
-            let hits = canary.hits.clone();
+            let canary = Canary::at(socket.local_addr().expect("bound"), true);
+            let (hits, stop) = (canary.hits.clone(), canary.stop.clone());
             std::thread::spawn(move || {
                 let mut buf = [0u8; 2048];
                 while socket.recv_from(&mut buf).is_ok() {
+                    if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                        break;
+                    }
                     hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 }
             });
@@ -572,10 +581,12 @@ pub mod test_dns {
             Canary::tcp(ip, port)
         }
 
-        fn at(addr: std::net::SocketAddr) -> Canary {
+        fn at(addr: std::net::SocketAddr, udp: bool) -> Canary {
             Canary {
                 addr,
                 hits: Default::default(),
+                stop: Default::default(),
+                udp,
             }
         }
 
@@ -597,6 +608,25 @@ pub mod test_dns {
                 hosts.push(format!("[::ffff:{v4}]:{port}"));
             }
             hosts
+        }
+    }
+
+    impl Drop for Canary {
+        /// Wakes the thread once more so it sees `stop` and drops its socket.
+        fn drop(&mut self) {
+            self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+            if self.udp {
+                let from = if self.addr.is_ipv4() {
+                    "127.0.0.1:0"
+                } else {
+                    "[::1]:0"
+                };
+                if let Ok(socket) = std::net::UdpSocket::bind(from) {
+                    let _ = socket.send_to(b"stop", self.addr);
+                }
+            } else {
+                let _ = std::net::TcpStream::connect(self.addr);
+            }
         }
     }
 

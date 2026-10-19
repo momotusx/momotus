@@ -1346,6 +1346,22 @@ fn canaries_count_what_reaches_them() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!((tcp.hits(), udp.hits()), (1, 1));
+    // Dropped, each frees its port for the next fixture.
+    let (tcp_addr, udp_addr) = (tcp.addr(), udp.addr());
+    drop(Canary::tcp(LOOPBACK, 0));
+    let again = Canary::tcp(LOOPBACK, 0);
+    drop((tcp, udp));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let rebound = loop {
+        let both = std::net::TcpListener::bind(tcp_addr).is_ok()
+            && std::net::UdpSocket::bind(udp_addr).is_ok();
+        if both || Instant::now() > deadline {
+            break both;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert!(rebound, "a dropped canary frees its port");
+    let tcp = again;
     let hosts = tcp.hosts("canary.hosts.c27.test");
     let port = tcp.addr().port();
     assert_eq!(
