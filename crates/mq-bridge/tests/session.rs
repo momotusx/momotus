@@ -380,6 +380,18 @@ async fn sync_account_then_two_devices_share_preferences() {
     let cancelled = next(&mut rx_a).await;
     assert_eq!(cancelled["result"]["keys"]["epoch"], 1, "{cancelled}");
 
+    // A made-up record (another account's) wipes nothing: refused with its own code.
+    a.handle_text(
+        &json!({"id": 14, "op": "createSyncAccount", "server": server, "name": "Other"})
+            .to_string(),
+    )
+    .await;
+    let other = next(&mut rx_a).await["result"].clone();
+    a.handle_text(&json!({"id": 15, "op": "signOut", "record": other, "local": true}).to_string())
+        .await;
+    let refused = next(&mut rx_a).await;
+    assert_eq!(refused["code"], "wrongRecord", "{refused}");
+
     // Leaving here only answers without any relay: this record names a dead one.
     let mut dead = record.clone();
     dead["server"] = json!("http://127.0.0.1:9");

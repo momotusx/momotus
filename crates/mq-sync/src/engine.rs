@@ -194,6 +194,8 @@ pub enum SyncError {
     RelayBehind,
     #[error("some changes are not sent yet; sync again or sign out anyway")]
     Unsent,
+    #[error("this record is not this device's sync account")]
+    WrongRecord,
     #[error("the relay's roster changed since it was shown; compare again")]
     RosterChanged,
 }
@@ -209,6 +211,7 @@ impl SyncError {
             SyncError::WrongRelay => "wrongRelay",
             SyncError::RelayBehind => "relayBehind",
             SyncError::Unsent => "unsent",
+            SyncError::WrongRecord => "wrongRecord",
             SyncError::RosterChanged => "rosterChanged",
             _ => return None,
         })
@@ -1646,7 +1649,17 @@ pub async fn fork_preview(
 /// device the relay will not let leave (off its list, a lost token, a fork
 /// it cannot settle); the relay lists it until another device removes it.
 /// The library stays, and pairing again merges it.
-pub fn leave_here(library: &Library) -> Result<(), SyncError> {
+///
+/// Only with this device's own record: its member must be one the roster
+/// this device stores ever admitted, which a caller without the record's
+/// member secret cannot fake. Anything else is `WrongRecord` and wipes
+/// nothing (any page that can reach the core could otherwise send one).
+pub fn leave_here(library: &Library, config: &SyncConfig) -> Result<(), SyncError> {
+    let stored = stored_entries(library, &genesis_key(&config.keys))?;
+    let mine = rebuild(&stored).map_err(roster_error)?;
+    if stored.is_empty() || !mine.admitted(&config.secret().id()) {
+        return Err(SyncError::WrongRecord);
+    }
     library.forget_sync()?;
     Ok(())
 }

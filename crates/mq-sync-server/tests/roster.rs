@@ -1752,7 +1752,7 @@ async fn a_forked_device_leaves_here_and_pairs_again() {
         .unwrap_err();
     assert!(matches!(err, SyncError::Fork), "{err:?}");
 
-    mq_sync::leave_here(&phone.library).unwrap();
+    mq_sync::leave_here(&phone.library, &phone.record).unwrap();
     // The same library pairs again through the TV and syncs.
     let joining = start_pairing(&http(), &restored.url).await.unwrap();
     let (_, record) = approve_pairing(&tv.library, &http(), &tv.record, &tv.clock, &joining.qr)
@@ -1764,4 +1764,39 @@ async fn a_forked_device_leaves_here_and_pairs_again() {
     phone.sync().await;
     tv.sync().await;
     assert_eq!(tv.record.keys, phone.record.keys);
+}
+
+/// Leaving here wipes this device's sync state, so it takes only a record
+/// whose member this device's roster admitted: a made-up one (another
+/// account's, or this account's keys with a member of its own) is refused
+/// and wipes nothing.
+#[tokio::test]
+async fn a_local_leave_refuses_a_record_that_is_not_this_devices() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    phone.sync().await;
+    let stranger = Device::first(&relay).await;
+    let genesis = hex::encode(phone.record.keys.genesis.0);
+    let kept = phone.library.roster_entries(&genesis).unwrap();
+    assert!(!kept.is_empty());
+    let made_up = [
+        stranger.record.clone(),
+        SyncConfig {
+            member: stranger.record.member,
+            ..phone.record.clone()
+        },
+    ];
+    for record in made_up {
+        let err = mq_sync::leave_here(&phone.library, &record).unwrap_err();
+        assert!(matches!(err, SyncError::WrongRecord), "{err:?}");
+        assert_eq!(err.code(), Some("wrongRecord"));
+        assert_eq!(
+            phone.library.roster_entries(&genesis).unwrap(),
+            kept,
+            "nothing wiped"
+        );
+    }
+    phone.sync().await;
+    mq_sync::leave_here(&phone.library, &phone.record).unwrap();
+    assert!(phone.library.roster_entries(&genesis).unwrap().is_empty());
 }

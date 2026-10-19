@@ -684,7 +684,7 @@ impl Session {
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     if local {
-                        return mq_sync::leave_here(core.library()).map(|()| json!({}));
+                        return mq_sync::leave_here(core.library(), &record).map(|()| json!({}));
                     }
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     mq_sync::sign_out(library, http, &record, clock, force)
