@@ -1,7 +1,11 @@
 package app.marquee.core.client
 
+import app.marquee.core.model.Episode
+import app.marquee.core.model.Network
+import app.marquee.core.model.TitleDetails
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -42,8 +46,9 @@ object CoreTimeouts {
  * `dts_hd`, `true_hd`, `atmos`, `dts_x`; hdr `dolby_vision`, `hdr10`, `hdr10_plus`, `hlg`;
  * containers `mkv`, `mp4`, `webm`, `ts`, ... A release plays directly only when its video codec,
  * audio and container all fit; otherwise it needs the fallback engine. [language] is the device's
- * (ISO 639-1) and stands in for audio languages the user has not chosen. Left out means a 1080p
- * SDR stick.
+ * (ISO 639-1) and stands in for audio languages the user has not chosen. [network] is the default
+ * network's type, for the speed the ranking reads (plans/m13-stream-choice.md 4.3). Left out means a
+ * 1080p SDR stick.
  */
 data class DeviceCapsParams(
     val displayHeight: Int,
@@ -55,6 +60,7 @@ data class DeviceCapsParams(
     val containers: List<String>? = null,
     val language: String? = null,
     val hasFallbackEngine: Boolean? = null,
+    val network: Network? = null,
 ) {
     fun toJson(): Map<String, JsonElement> =
         buildMap {
@@ -67,8 +73,70 @@ data class DeviceCapsParams(
             containers?.let { put("containers", JsonArray(it.map(::JsonPrimitive))) }
             language?.let { put("language", JsonPrimitive(it)) }
             hasFallbackEngine?.let { put("hasFallbackEngine", JsonPrimitive(it)) }
+            network?.let { put("network", JsonPrimitive(it.wire)) }
         }
 }
+
+/**
+ * The title as the app knows it, for the bitrate and the year checks (plans/m13-stream-choice.md 4.3):
+ * the runtime ("142 min"), the release info ("2002", "2022-"), the episode's date ("2013-09-16") and
+ * how many episodes its season has. The core reads the meta for what is left out.
+ */
+data class TitleFacts(
+    val runtime: String? = null,
+    val releaseInfo: String? = null,
+    val released: String? = null,
+    val episodesInSeason: Int? = null,
+) {
+    companion object {
+        /** By video id: what a title page knows of the video Play starts and of each episode it lists. */
+        fun of(
+            details: TitleDetails?,
+            playVideoId: String?,
+            episodes: List<Episode>,
+        ): Map<String, TitleFacts> {
+            if (details == null) return emptyMap()
+            val title = TitleFacts(details.runtime, details.releaseInfo)
+            val inSeason = episodes.groupingBy { it.season }.eachCount()
+            return buildMap {
+                playVideoId?.let { put(it, title) }
+                for (e in episodes) {
+                    put(
+                        e.videoId,
+                        title.copy(released = e.released, episodesInSeason = inSeason[e.season]),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The `versions` subscription's params: the video, what the device plays, and what the app knows of the title. */
+fun versionsParams(
+    kind: String,
+    videoId: String,
+    title: String,
+    caps: DeviceCapsParams,
+    season: Int? = null,
+    episode: Int? = null,
+    bingeGroup: String? = null,
+    facts: TitleFacts? = null,
+): JsonObject =
+    JsonObject(
+        buildMap {
+            put("kind", JsonPrimitive(kind))
+            put("videoId", JsonPrimitive(videoId))
+            put("title", JsonPrimitive(title))
+            season?.let { put("season", JsonPrimitive(it)) }
+            episode?.let { put("episode", JsonPrimitive(it)) }
+            bingeGroup?.let { put("bingeGroup", JsonPrimitive(it)) }
+            facts?.runtime?.let { put("runtime", JsonPrimitive(it)) }
+            facts?.releaseInfo?.let { put("releaseInfo", JsonPrimitive(it)) }
+            facts?.released?.let { put("released", JsonPrimitive(it)) }
+            facts?.episodesInSeason?.let { put("episodesInSeason", JsonPrimitive(it)) }
+            putAll(caps.toJson())
+        },
+    )
 
 /** Where the app's logging goes; the app points it at logcat, tests leave it silent. */
 object CoreLog {

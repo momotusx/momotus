@@ -2,6 +2,7 @@ package app.marquee.android
 
 import androidx.compose.runtime.mutableStateMapOf
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.TitleFacts
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.VersionsView
 import kotlinx.coroutines.CancellationException
@@ -37,6 +38,13 @@ class VersionsHolder(
     private val opening = HashMap<VersionsKey, Job>()
     private val recent = ArrayList<VersionsKey>()
 
+    /** What the open title page knows of its videos (runtime, dates), sent when a view for one of them opens. */
+    private var facts: Map<String, TitleFacts> = emptyMap()
+
+    fun know(facts: Map<String, TitleFacts>) {
+        this.facts = facts
+    }
+
     /** The open view for [key], or null while the device capabilities are read or before [use]. Read by composables. */
     fun view(key: VersionsKey): VersionsView? = views[key]
 
@@ -59,6 +67,8 @@ class VersionsHolder(
                     season = key.season,
                     episode = key.episode,
                     bingeGroup = key.bingeGroup,
+                    // Read once at open: what arrives later is the core's to read from the meta.
+                    facts = facts[key.videoId],
                 )
             opening.remove(key)
         } catch (e: CancellationException) {

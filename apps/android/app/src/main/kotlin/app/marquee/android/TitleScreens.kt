@@ -15,6 +15,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
 import app.marquee.core.VersionsCopy
+import app.marquee.core.client.TitleFacts
 import app.marquee.core.model.Episode
 import app.marquee.core.model.VersionRow
 import app.marquee.core.route.Route
@@ -97,7 +98,12 @@ fun TitleScreen(
     val videoId = header?.playTarget?.videoId
     // The line under Play is the recommended version of what Play starts, so open it early.
     val playKey = if (videoId != null && name != null) keyFor(route.kind, videoId, name) else null
-    LaunchedEffect(playKey) { playKey?.let(app.versions::use) }
+    // The runtime and dates go with each video's view, so the bitrate and year checks need not wait for the meta.
+    val facts = TitleFacts.of(header?.details, videoId, holder.view.episodes.toList())
+    LaunchedEffect(playKey, facts) {
+        app.versions.know(facts)
+        playKey?.let(app.versions::use)
+    }
     val versions = playKey?.let(app.versions::view)
     val snapshot = versions?.snapshot
     val failed = versions?.status is ViewStatus.Failed

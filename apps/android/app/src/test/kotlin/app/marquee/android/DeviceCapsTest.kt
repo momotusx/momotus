@@ -1,7 +1,9 @@
 package app.marquee.android
 
 import android.media.AudioFormat
+import android.net.NetworkCapabilities
 import app.marquee.core.client.DeviceCapsParams
+import app.marquee.core.model.Network
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import java.util.Locale
@@ -112,5 +114,36 @@ class DeviceCapsTest {
         )
         assertEquals(JsonArray(listOf(JsonPrimitive("mkv"))), json["containers"])
         assertEquals(JsonPrimitive("tr"), json["language"])
+    }
+
+    @Test
+    fun `the network type comes from the default network's transports`() {
+        fun type(vararg on: Int) = DeviceCaps.networkType { it in on }
+        assertEquals(Network.Wifi, type(NetworkCapabilities.TRANSPORT_WIFI))
+        assertEquals(Network.Ethernet, type(NetworkCapabilities.TRANSPORT_ETHERNET))
+        assertEquals(Network.Cellular, type(NetworkCapabilities.TRANSPORT_CELLULAR))
+        // A VPN over Wi-Fi is Wi-Fi; a VPN alone or Bluetooth tethering is another network.
+        assertEquals(Network.Wifi, type(NetworkCapabilities.TRANSPORT_VPN, NetworkCapabilities.TRANSPORT_WIFI))
+        assertEquals(Network.Other, type(NetworkCapabilities.TRANSPORT_VPN))
+        assertEquals(Network.Other, type(NetworkCapabilities.TRANSPORT_BLUETOOTH))
+        assertEquals(
+            "wifi",
+            DeviceCapsParams(1080, emptyList(), network = Network.Wifi).toJson()["network"]?.let {
+                (it as JsonPrimitive).content
+            },
+        )
+    }
+
+    @Test
+    fun `a new default network is a change with its type, the one at start and a repeat are not`() {
+        val sent = mutableListOf<Network>()
+        val default = DefaultNetwork { sent += it }
+        default.seen("net-1", Network.Wifi)
+        default.seen("net-1", Network.Wifi)
+        assertEquals(emptyList(), sent, "the network current at registration is no change")
+        default.seen("net-2", Network.Cellular)
+        default.seen("net-2", Network.Cellular)
+        default.seen("net-3", Network.Wifi)
+        assertEquals(listOf(Network.Cellular, Network.Wifi), sent)
     }
 }

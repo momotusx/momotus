@@ -9,10 +9,13 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.view.Display
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
+import app.marquee.core.model.Network
 import java.util.Locale
 
 /** What one decoder can decode, reduced to what the capability mapping needs (testable without a device). */
@@ -130,8 +133,27 @@ object DeviceCaps {
             containers = containers,
             language = deviceLanguage(Locale.getDefault()),
             hasFallbackEngine = false,
+            network = network(context),
         )
     }
+
+    /** The default network's type, as the core names it; none, or one it cannot read, is `other`. */
+    fun network(context: Context): Network {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return Network.Other
+        val caps =
+            runCatching { connectivity.getNetworkCapabilities(connectivity.activeNetwork) }.getOrNull()
+                ?: return Network.Other
+        return networkType(caps::hasTransport)
+    }
+
+    /** A network's transports to its type: a VPN reads as the network it runs over. */
+    internal fun networkType(has: (Int) -> Boolean): Network =
+        when {
+            has(NetworkCapabilities.TRANSPORT_ETHERNET) -> Network.Ethernet
+            has(NetworkCapabilities.TRANSPORT_WIFI) -> Network.Wifi
+            has(NetworkCapabilities.TRANSPORT_CELLULAR) -> Network.Cellular
+            else -> Network.Other
+        }
 
     /** When even the scan failed: a 1080p SDR screen, H.264 and PCM, no fallback engine. */
     fun baseline() =

@@ -11,6 +11,8 @@ import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
+import app.marquee.core.client.TitleFacts
+import app.marquee.core.client.versionsParams
 import app.marquee.core.ffi.CoreListener
 import app.marquee.core.ffi.MarqueeCore
 import app.marquee.core.model.DebridRecord
@@ -265,17 +267,13 @@ class CoreSession(
         season: Int? = null,
         episode: Int? = null,
         bingeGroup: String? = null,
-    ): VersionsView {
-        val params = HashMap<String, kotlinx.serialization.json.JsonElement>()
-        params["kind"] = JsonPrimitive(kind)
-        params["videoId"] = JsonPrimitive(videoId)
-        params["title"] = JsonPrimitive(title)
-        season?.let { params["season"] = JsonPrimitive(it) }
-        episode?.let { params["episode"] = JsonPrimitive(it) }
-        bingeGroup?.let { params["bingeGroup"] = JsonPrimitive(it) }
-        params.putAll(caps.toJson())
-        return VersionsView(client, scope, JsonObject(params)).also { it.open() }
-    }
+        facts: TitleFacts? = null,
+    ): VersionsView =
+        VersionsView(
+            client,
+            scope,
+            versionsParams(kind, videoId, title, caps, season, episode, bingeGroup, facts),
+        ).also { it.open() }
 
     /** Starts playback of one row of an open Versions view; the Versions view must stay open until this one is. */
     suspend fun playback(

@@ -3,6 +3,7 @@ package app.marquee.android
 import android.app.Application
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -10,6 +11,7 @@ import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreSession
 import app.marquee.core.session.LifecycleEvent
 import coil3.SingletonImageLoader
+import app.marquee.core.model.Network as NetworkType
 
 /**
  * What the OS says about the app, forwarded to the core as `lifecycle` events and to the image
@@ -49,18 +51,15 @@ class AppLifecycle(
 
     private fun watchNetwork() {
         val connectivity = app.getSystemService(ConnectivityManager::class.java) ?: return
-        var first = true
+        val default = DefaultNetwork { session.ops.lifecycle(LifecycleEvent.NetworkChanged, it) }
         try {
             connectivity.registerDefaultNetworkCallback(
                 object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        // The system reports the current network right at registration; that is not a change.
-                        if (first) {
-                            first = false
-                            return
-                        }
-                        session.ops.lifecycle(LifecycleEvent.NetworkChanged)
-                    }
+                    // Follows onAvailable with the new network's transports.
+                    override fun onCapabilitiesChanged(
+                        network: Network,
+                        caps: NetworkCapabilities,
+                    ) = default.seen(network, DeviceCaps.networkType(caps::hasTransport))
                 },
             )
         } catch (e: SecurityException) {
@@ -72,5 +71,24 @@ class AppLifecycle(
         // ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL and TRIM_MEMORY_BACKGROUND
         const val RUNNING_CRITICAL = 15
         const val BACKGROUND = 40
+    }
+}
+
+/**
+ * The default network as the callbacks report it, on their one thread: each new network, and not the
+ * one current at registration, is a change, sent once with its type.
+ */
+internal class DefaultNetwork(
+    private val send: (NetworkType) -> Unit,
+) {
+    private var current: Any? = null
+
+    fun seen(
+        network: Any,
+        type: NetworkType,
+    ) {
+        val was = current
+        current = network
+        if (was != null && was != network) send(type)
     }
 }

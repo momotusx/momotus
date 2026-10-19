@@ -11,11 +11,14 @@ import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.InstalledAddon
 import app.marquee.core.model.KeystoreRecord
+import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.LostPreview
+import app.marquee.core.model.Network
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RecoveryKitResult
 import app.marquee.core.model.RestoreAnswer
+import app.marquee.core.model.StreamConditions
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
 import app.marquee.core.model.TraktReport
@@ -66,9 +69,19 @@ class CoreOps(
 
     /**
      * The app's life as the OS reports it, sent without waiting for the answer. `memoryPressure`
-     * frees the core's in-memory caches; the others are accepted today and need no action.
+     * frees the core's in-memory caches; `networkChanged` drops pooled connections and, with [network],
+     * says which speed estimate applies now.
      */
-    fun lifecycle(event: LifecycleEvent) = client.post("lifecycle", mapOf("event" to text(event.wire)))
+    fun lifecycle(
+        event: LifecycleEvent,
+        network: Network? = null,
+    ) = client.post(
+        "lifecycle",
+        buildMap {
+            put("event", text(event.wire))
+            network?.let { put("network", text(it.wire)) }
+        },
+    )
 
     /**
      * A link whose settings carry a sign-in is refused with code `tokenInLink` before anything is
@@ -204,6 +217,27 @@ class CoreOps(
 
     /** Nested objects merge, e.g. `{"streams": {"languages": ["tr"]}}`. Returns the full prefs. */
     suspend fun setPrefs(patch: JsonObject): Prefs = call("setPrefs", mapOf("patch" to patch), Prefs.serializer())
+
+    /** This device's network, measured speeds and free space, for Settings' "This device". */
+    suspend fun streamConditions(): StreamConditions =
+        call("streamConditions", emptyMap(), StreamConditions.serializer())
+
+    /** "Measure again": the current network's speeds go back to their estimates. */
+    suspend fun resetSpeed(): StreamConditions = call("resetSpeed", emptyMap(), StreamConditions.serializer())
+
+    /** Undo of a learned note: that choice on that screen class goes back to zero and no longer learns. */
+    suspend fun undoLearned(
+        screenClass: Int,
+        choice: LearnedChoice,
+    ): Prefs =
+        call(
+            "undoLearned",
+            mapOf("screenClass" to JsonPrimitive(screenClass), "choice" to text(choice.wire)),
+            Prefs.serializer(),
+        )
+
+    /** "Forget what was learned": every counter of the profile reads as zero from now on. */
+    suspend fun forgetLearned(): Prefs = call("forgetLearned", emptyMap(), Prefs.serializer())
 
     /** At start, before any view: what the keystore holds. The answer names tombstones the app may drop. */
     suspend fun restoreDebrid(
