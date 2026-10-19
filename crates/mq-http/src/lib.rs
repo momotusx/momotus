@@ -651,10 +651,37 @@ pub mod test_dns {
         names.get(&name.to_ascii_lowercase()).cloned()
     }
 
+    /// A request `https_requests` received.
+    #[derive(Debug, Clone)]
+    pub struct Request {
+        pub method: String,
+        pub path: String,
+        /// Lowercased names, in order.
+        pub headers: Vec<(String, String)>,
+        pub body: Vec<u8>,
+    }
+
+    impl Request {
+        pub fn header(&self, name: &str) -> Option<&str> {
+            let name = name.to_ascii_lowercase();
+            self.headers
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, v)| v.as_str())
+        }
+    }
+
     /// An https origin on loopback, with the self-signed certificate test
     /// builds accept: every request gets `answer(path)` as its whole
     /// response, then the connection closes. Returns its port.
     pub fn https(answer: impl Fn(&str) -> String + Send + Sync + 'static) -> u16 {
+        https_requests(move |request| answer(&request.path).into_bytes())
+    }
+
+    /// `https` for tests that check a request's method, headers or body, or
+    /// answer with bytes: `answer` gets the whole request and returns the
+    /// whole response.
+    pub fn https_requests(answer: impl Fn(&Request) -> Vec<u8> + Send + Sync + 'static) -> u16 {
         use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
         use std::io::{Read, Write};
         let cert = CertificateDer::from(&include_bytes!("../tests/fixtures/tls/cert.der")[..]);
@@ -686,9 +713,38 @@ pub mod test_dns {
                             Ok(n) => head.extend_from_slice(&buf[..n]),
                         }
                     }
+                    let split = head
+                        .windows(4)
+                        .position(|w| w == b"\r\n\r\n")
+                        .map_or(head.len(), |at| at + 4);
+                    let mut body = head.split_off(split);
                     let head = String::from_utf8_lossy(&head).into_owned();
-                    let path = head.split(' ').nth(1).unwrap_or_default();
-                    let _ = tls.write_all(answer(path).as_bytes());
+                    let mut lines = head.lines();
+                    let mut first = lines.next().unwrap_or_default().split(' ');
+                    let method = first.next().unwrap_or_default().to_owned();
+                    let path = first.next().unwrap_or_default().to_owned();
+                    let headers: Vec<(String, String)> = lines
+                        .filter_map(|line| line.split_once(':'))
+                        .map(|(n, v)| (n.trim().to_ascii_lowercase(), v.trim().to_owned()))
+                        .collect();
+                    let length = headers
+                        .iter()
+                        .find(|(n, _)| n == "content-length")
+                        .and_then(|(_, v)| v.parse::<usize>().ok())
+                        .unwrap_or(0);
+                    while body.len() < length {
+                        match tls.read(&mut buf) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => body.extend_from_slice(&buf[..n]),
+                        }
+                    }
+                    let request = Request {
+                        method,
+                        path,
+                        headers,
+                        body,
+                    };
+                    let _ = tls.write_all(&answer(&request));
                     tls.conn.send_close_notify();
                     let _ = tls.flush();
                 });
