@@ -24,6 +24,8 @@ export const DEFAULTS_PORT = 17810 + shift;
 export const NOTES_PORT = 17811 + shift;
 /** The subtitle languages spec's own: a core whose stream names subtitles in many languages. */
 export const LANGS_PORT = 17812 + shift;
+/** The next version spec's own: a core whose first versions cannot play here. */
+export const NEXT_PORT = 17813 + shift;
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");

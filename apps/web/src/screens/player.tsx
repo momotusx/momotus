@@ -27,7 +27,7 @@ import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, sourceStart } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
 import { byLanguage, trackDetail } from "../lib/subtitles";
-import { blockedWords, languageName, qualityCell, qualityText, subtitleNote } from "../lib/words";
+import { blockedWords, languageName, nextVersion, qualityCell, qualityText, subtitleNote } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -71,7 +71,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       onCleanup(() => clearTimeout(t));
     }
   });
-  const key = createMemo<string | null>((prev) => prev ?? props.chosen ?? (settled() ? (versions()?.recommended?.key ?? null) : null), null);
+  // The failure card's offer (`PlaybackSnapshot.offer`) plays here, from
+  // the same Versions view.
+  const [offered, setOffered] = createSignal<string | null>(null);
+  const key = createMemo<string | null>((prev) => offered() ?? prev ?? props.chosen ?? (settled() ? (versions()?.recommended?.key ?? null) : null), null);
 
   const playback = createMemo(() => {
     const view = ctx.versions();
@@ -391,6 +394,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (s?.phase === "ready") return null;
     if (s?.phase === "failed") return { tone: "bad", text: "None of the sources could be played", busy: false };
     if (s?.phase === "resolving") {
+      // The recommendation failed for a reason of its own: the core moved on.
+      if (s.trying) return { tone: "warn", text: nextVersion.trying(s.trying.label), busy: true };
       const r = playing();
       return { tone: "warn", text: r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting", busy: true };
     }
@@ -465,7 +470,28 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   </ul>
                 </Show>
                 <div class="acts">
-                  <A class="btn primary big" href={versionsPath(props.kind, props.id, props.videoId)} data-f="player:versions" data-autofocus>
+                  {/* A version picked by hand failed for a reason of its
+                      own: the ranking's next one, first and focused. */}
+                  <Show when={snap()?.offer}>
+                    {(o) => (
+                      <button
+                        class="btn primary big"
+                        data-f="player:offer"
+                        data-autofocus
+                        onClick={() => setOffered(o().key)}
+                      >
+                        <Play aria-hidden />
+                        {nextVersion.play(o().label)}
+                      </button>
+                    )}
+                  </Show>
+                  <A
+                    class="btn big"
+                    classList={{ primary: !snap()?.offer }}
+                    href={versionsPath(props.kind, props.id, props.videoId)}
+                    data-f="player:versions"
+                    data-autofocus={snap()?.offer ? undefined : ""}
+                  >
                     <Layers aria-hidden />
                     Choose a version
                   </A>

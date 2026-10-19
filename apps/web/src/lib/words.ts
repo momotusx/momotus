@@ -193,6 +193,14 @@ export const addonHost = (a: { builtIn: boolean; host: string }) => (a.builtIn ?
 /** Settings, About: the built-in source's credit (plans/m13-turkcealtyazi.md 7). */
 export const turkceAltyaziCredit = "Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.";
 
+/** When a version fails for a reason of its own (no picture here, a dead
+ * swarm, the wrong file), the core moves on or offers the next one
+ * (`PlaybackSnapshot.trying`, `offer`). */
+export const nextVersion = {
+  trying: (label: string) => `Trying the next version: ${label}`,
+  play: (label: string) => `Play ${label}`,
+};
+
 export const tokenInLink = {
   warn: "This link carries a sign-in: a token or a key. Whoever has it uses that account. Install it only if it is yours.",
   confirm: "It is mine, install",
