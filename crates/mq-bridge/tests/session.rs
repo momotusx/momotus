@@ -380,6 +380,28 @@ async fn sync_account_then_two_devices_share_preferences() {
     let cancelled = next(&mut rx_a).await;
     assert_eq!(cancelled["result"]["keys"]["epoch"], 1, "{cancelled}");
 
+    // A kit's reply names its own entry in the device list.
+    a.handle_text(
+        &json!({"id": 16, "op": "createRecoveryKit", "record": cancelled["result"]}).to_string(),
+    )
+    .await;
+    let made = next(&mut rx_a).await;
+    let kit_id = made["result"]["id"].clone();
+    a.handle_text(
+        &json!({"id": 17, "op": "syncDevices", "record": made["result"]["record"]}).to_string(),
+    )
+    .await;
+    let listed = next(&mut rx_a).await;
+    let members = listed["result"]["members"]
+        .as_array()
+        .expect("a device list");
+    assert!(
+        members
+            .iter()
+            .any(|m| m["id"] == kit_id && m["kit"] == true),
+        "{kit_id} not a kit in {listed}"
+    );
+
     // A made-up record (another account's) wipes nothing: refused with its own code.
     a.handle_text(
         &json!({"id": 14, "op": "createSyncAccount", "server": server, "name": "Other"})

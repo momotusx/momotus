@@ -499,14 +499,15 @@ pub async fn cancel_pairing(
 }
 
 /// Makes a recovery kit and adds it to the account's roster with a box of
-/// the current key. Returns the kit (show it once, then forget it) and this
-/// device's record to store.
+/// the current key. Returns the kit (show it once, then forget it), its id
+/// in the roster (the `id` of its `syncDevices` entry), and this device's
+/// record to store.
 pub async fn make_kit(
     library: &Library,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
-) -> Result<(String, SyncConfig), SyncError> {
+) -> Result<(String, Id, SyncConfig), SyncError> {
     let kit = new_recovery_kit();
     let keys = kit_keys(&kit)?;
     let lookup = hex::decode(&keys.lookup).expect("hex we made");
@@ -526,7 +527,7 @@ pub async fn make_kit(
         })
         .await?;
     let record = session.changed().unwrap_or_else(|| session.record.clone());
-    Ok((kit, record))
+    Ok((kit, keys.member.id(), record))
 }
 
 /// Joins the account a recovery kit belongs to, as a new device named

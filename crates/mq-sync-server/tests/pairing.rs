@@ -222,10 +222,21 @@ async fn a_blob_sealed_to_another_key_does_not_open() {
 async fn a_recovery_kit_follows_key_rotations() {
     let (server, _) = relay().await;
     let mut phone = Device::first(&server, "Phone").await;
-    let (kit, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (kit, id, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
+    // The id answered is the kit's own entry in the device list, made by this phone.
+    let devices = mq_sync::devices(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    let entry = devices
+        .members
+        .iter()
+        .find(|m| m.id == id)
+        .expect("the kit is listed");
+    assert!(entry.kit);
+    assert_eq!(entry.sponsor, Some(phone.record.secret().id()));
 
     let laptop = recover(&http(), &server, &kit.to_lowercase(), "Laptop")
         .await
@@ -263,7 +274,7 @@ async fn reporting_a_lost_phone_after_recovering_keeps_what_the_user_holds() {
     let mut phone = Device::first(&server, "Phone").await;
     let mut tv = phone.pair(&server, "TV").await;
     tv.sync().await;
-    let (kit, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (kit, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;

@@ -153,9 +153,10 @@ pub async fn approve(core: &Core, data: &Path, qr: &str) -> Result<(), String> {
 /// Makes a recovery kit and prints it once.
 pub async fn kit(core: &Core, data: &Path) -> Result<(), String> {
     let record = read(data)?;
-    let (kit, record) = mq_sync::pair::make_kit(core.library(), core.http(), &record, core.clock())
-        .await
-        .map_err(failed(data))?;
+    let (kit, _, record) =
+        mq_sync::pair::make_kit(core.library(), core.http(), &record, core.clock())
+            .await
+            .map_err(failed(data))?;
     save(data, &record)?;
     super::emit(json!({ "event": "recovery_kit", "kit": kit }));
     Ok(())

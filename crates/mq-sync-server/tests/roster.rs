@@ -343,7 +343,7 @@ async fn a_relay_that_lost_entries_gets_them_back_and_a_fork_is_caught() {
     let mut phone = Device::first(&relay).await;
     let mut tv = phone.pair(&relay, "TV").await;
     tv.sync().await;
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -388,7 +388,7 @@ async fn a_relay_that_lost_entries_gets_them_back_and_a_fork_is_caught() {
 async fn tokens_that_have_not_joined_can_only_join() {
     let relay = Relay::new().await;
     let mut phone = Device::first(&relay).await;
-    let (kit, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (kit, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -458,7 +458,7 @@ fn kit_secret(kit: &str) -> hkdf::Hkdf<sha2::Sha256> {
 async fn a_kit_cannot_sign_for_a_token() {
     let relay = Relay::new().await;
     let mut phone = Device::first(&relay).await;
-    let (kit, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (kit, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -533,7 +533,7 @@ async fn a_dropped_device_reads_its_removal_and_keeps_its_library() {
     tv.watch("v2", 400);
     phone.remove(vec![tv.id()]).await;
     let removal = relay.rows();
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -567,7 +567,7 @@ async fn fetch(relay: &Relay, with: &str) -> (usize, Option<mq_sync::wire::Roste
 async fn an_identical_entry_sent_again_after_the_head_moved_is_accepted() {
     let relay = Relay::new().await;
     let mut phone = Device::first(&relay).await;
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -872,7 +872,7 @@ async fn after_a_fork_the_servers_roster_is_taken_and_the_drops_redone() {
     }
     // The TV rotates on the restored relay and makes a kit there.
     tv.remove(vec![]).await;
-    let (_, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+    let (_, _, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
         .await
         .unwrap();
     tv.record = record;
@@ -932,7 +932,7 @@ async fn a_fork_preview_shows_both_sides_and_writes_nothing() {
         device.record.server = restored.url.clone();
     }
     tv.remove(vec![]).await;
-    let (_, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+    let (_, _, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
         .await
         .unwrap();
     tv.record = record;
@@ -1036,7 +1036,7 @@ async fn a_ticked_device_takes_its_kits_and_a_roster_moved_since_the_preview_is_
     let mut phone = Device::first(&relay).await;
     let mut tv = phone.pair(&relay, "TV").await;
     let mut laptop = phone.pair(&relay, "Laptop").await;
-    let (_, record) = make_kit(&laptop.library, &http(), &laptop.record, &laptop.clock)
+    let (_, _, record) = make_kit(&laptop.library, &http(), &laptop.record, &laptop.clock)
         .await
         .unwrap();
     laptop.record = record;
@@ -1045,7 +1045,7 @@ async fn a_ticked_device_takes_its_kits_and_a_roster_moved_since_the_preview_is_
     }
     let before = relay.snapshot();
     // The phone's kit is lost with the restore; the TV rotates there instead.
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -1081,7 +1081,7 @@ async fn a_ticked_device_takes_its_kits_and_a_roster_moved_since_the_preview_is_
     );
 
     // The TV makes a kit after the preview: the roster moved past what was shown.
-    let (_, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+    let (_, _, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
         .await
         .unwrap();
     tv.record = record;
@@ -1142,7 +1142,7 @@ async fn a_preview_says_when_this_device_is_off_the_servers_side() {
         device.sync().await;
     }
     let before = relay.snapshot();
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -1215,7 +1215,7 @@ async fn a_journal_missing_lines_is_completed_at_startup() {
     let relay = Relay::new().await;
     let mut phone = Device::first(&relay).await;
     let before = relay.snapshot();
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -1528,7 +1528,7 @@ async fn a_capped_token_reads_nothing_past_its_members_removal() {
     }
     phone.remove(vec![tv.id()]).await;
     let through_removal = relay.rows() as usize;
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -1548,7 +1548,7 @@ async fn a_journal_missing_a_middle_line_is_rewritten_at_startup() {
     let mut phone = Device::first(&relay).await;
     let before = relay.snapshot();
     for _ in 0..2 {
-        let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+        let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
             .await
             .unwrap();
         phone.record = record;
@@ -1590,7 +1590,7 @@ async fn a_roster_moving_during_the_adoption_append_is_refused() {
         device.sync().await;
     }
     let before = relay.snapshot();
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;
@@ -1632,7 +1632,7 @@ async fn a_roster_moving_during_the_adoption_append_is_refused() {
                 .await
                 .expect("the append reaches the relay");
             // The TV adds a kit while the phone's append is held.
-            let (_, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+            let (_, _, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
                 .await
                 .unwrap();
             tv.record = record;
@@ -1734,7 +1734,7 @@ async fn a_forked_device_leaves_here_and_pairs_again() {
         device.sync().await;
     }
     let before = relay.snapshot();
-    let (_, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
         .await
         .unwrap();
     phone.record = record;

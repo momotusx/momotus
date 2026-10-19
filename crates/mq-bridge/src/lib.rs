@@ -628,7 +628,7 @@ impl Session {
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     mq_sync::pair::make_kit(library, http, &record, clock)
                         .await
-                        .map(|(kit, record)| json!({ "kit": kit, "record": record }))
+                        .map(|(kit, id, record)| json!({ "kit": kit, "id": id, "record": record }))
                 });
             }
             Request::Recover {
