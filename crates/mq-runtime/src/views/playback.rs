@@ -1378,7 +1378,7 @@ fn note_trouble(snapshot: &mut PlaybackSnapshot, url: &str, trouble: SubtitleTro
             problem: SubtitleProblem::Unreachable,
         },
         SubtitleTrouble::Unreadable => SubtitleNote {
-            source: snapshot.subtitles[at].source.clone(),
+            source: snapshot.subtitles.remove(at).source,
             problem: SubtitleProblem::TrackFailed,
         },
     };

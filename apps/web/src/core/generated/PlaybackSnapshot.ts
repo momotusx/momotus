@@ -3,6 +3,7 @@ import type { Attempt } from "./Attempt";
 import type { NextEpisode } from "./NextEpisode";
 import type { PlaybackPhase } from "./PlaybackPhase";
 import type { Segment } from "./Segment";
+import type { SubtitleNote } from "./SubtitleNote";
 import type { SubtitleTrack } from "./SubtitleTrack";
 import type { TraktPlayback } from "./TraktPlayback";
 
@@ -44,6 +45,11 @@ subtitles: Array<SubtitleTrack>,
  * Subtitles addons are still being asked.
  */
 subtitlesPending: boolean, 
+/**
+ * Subtitle sources that gave nothing this time, each once, shown under
+ * the subtitle list (plans/m13-turkcealtyazi.md 4.2).
+ */
+subtitleNotes: Array<SubtitleNote>, 
 /**
  * The next released episode, for an Up Next card.
  */

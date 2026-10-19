@@ -879,6 +879,8 @@ data class PlaybackSnapshot(
     val subtitles: List<SubtitleTrack> = emptyList(),
     /** Subtitles addons are still being asked. */
     val subtitlesPending: Boolean,
+    /** Subtitle sources that gave nothing this time, each once, shown under the subtitle list (plans/m13-turkcealtyazi.md 4.2). */
+    val subtitleNotes: List<SubtitleNote> = emptyList(),
     /** The next released episode, for an Up Next card. */
     val next: NextEpisode? = null,
     /** The playing stream's binge group; pass it as `bingeGroup` when opening Versions for the next episode so the same release line is picked. */
@@ -1212,6 +1214,29 @@ data class StreamPrefs(
     /** Learn from the user's picks (applied by the runtime). */
     val learn: Boolean,
 )
+
+@Serializable
+data class SubtitleNote(
+    /** As `SubtitleTrack::source`: the addon name. */
+    val source: String,
+    val problem: SubtitleProblem,
+)
+
+@Serializable(with = SubtitleProblem.Serializer::class)
+enum class SubtitleProblem(
+    val wire: String,
+) {
+    Unreachable("unreachable"),
+    Blocked("blocked"),
+    Changed("changed"),
+    TrackFailed("trackFailed"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SubtitleProblem>("SubtitleProblem", SubtitleProblem.entries, SubtitleProblem::wire, Unknown)
+}
 
 @Serializable
 data class SubtitleTrack(

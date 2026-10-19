@@ -1,7 +1,9 @@
-use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
+use mq_http::{ClientConfig, HttpClient, RequestOptions};
 use mq_library::{AddonRow, CachedResponse};
 use mq_protocol::decode_streams;
-use mq_runtime::{Core, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView};
+use mq_runtime::{
+    Core, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleProblem,
+};
 use mq_streams::{ParsedStream, normalize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -271,6 +273,93 @@ async fn subtitle_tracks_take_their_reach_from_their_install() {
     }
 }
 
+/// A loopback origin with a one-byte video, `/down.srt` and `/down2.srt`
+/// answering 502, and anything else 200 with no cues.
+async fn failing_subtitles() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let (status, body) = if head.starts_with("GET /video.mkv") {
+                    ("206 Partial Content\r\nContent-Range: bytes 0-0/10", "M")
+                } else if head.starts_with("GET /down") {
+                    ("502 Bad Gateway", "")
+                } else {
+                    ("200 OK", "no cues in here")
+                };
+                let reply = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    base
+}
+
+/// A subtitle the route cannot serve leaves one note per source and
+/// problem: a file that did not answer keeps its track, one that cannot be
+/// read leaves the list. The notes belong to the playing source.
+#[tokio::test]
+async fn a_failing_subtitle_leaves_a_note() {
+    let base = failing_subtitles().await;
+    let core = Core::temporary("p").unwrap();
+    let stream = format!(
+        r#"{{"url":"{base}/video.mkv","subtitles":[
+            {{"id":"a","lang":"eng","url":"{base}/down.srt"}},
+            {{"id":"b","lang":"fre","url":"{base}/down2.srt"}},
+            {{"id":"c","lang":"tur","url":"{base}/garbage.srt"}}]}}"#
+    );
+    let streams = format!(r#"{{"streams":[{stream},{stream}]}}"#);
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let s = settled(&view).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    assert_eq!(s.subtitles.len(), 3, "{s:?}");
+    assert!(s.subtitle_notes.is_empty());
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    for track in &s.subtitles {
+        let served = http.get(&track.url, &local).await.unwrap();
+        assert_eq!(&served.body[..], b"WEBVTT\n\n", "{}", track.lang);
+    }
+    let after = view.snapshot();
+    let langs: Vec<_> = after.subtitles.iter().map(|t| t.lang.as_str()).collect();
+    assert_eq!(langs, ["eng", "fre"], "the unreadable file left");
+    let notes: Vec<_> = after
+        .subtitle_notes
+        .iter()
+        .map(|n| (n.source.as_str(), n.problem))
+        .collect();
+    assert_eq!(
+        notes,
+        [
+            ("Local", SubtitleProblem::Unreachable),
+            ("Local", SubtitleProblem::TrackFailed)
+        ]
+    );
+
+    view.fail_over(None, None, None, "decoder error");
+    let mut next = view.snapshot();
+    for _ in 0..200 {
+        if next.phase == PlaybackPhase::Ready && next.attempt == s.attempt + 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        next = view.snapshot();
+    }
+    assert_eq!(next.attempt, s.attempt + 1, "{next:?}");
+    assert!(next.subtitle_notes.is_empty(), "{next:?}");
+    assert_eq!(next.subtitles.len(), 3);
+}
+
 /// A loopback origin whose video ignores `Range` (so no subtitle hash is
 /// sent and the subtitles request has no extras) and which serves
 /// `/pub.srt`, counting requests for it.
@@ -356,10 +445,14 @@ async fn a_public_subtitles_answer_gets_no_reach() {
         allow_private: true,
         ..Default::default()
     };
-    let served = http.get(&track.url, &local).await;
-    assert!(
-        matches!(served, Err(HttpError::Status { status: 502, .. })),
-        "{served:?}"
+    // Refused: an empty track, and a note that the file could not be read.
+    let served = http.get(&track.url, &local).await.unwrap();
+    assert_eq!(&served.body[..], b"WEBVTT\n\n");
+    let notes = view.snapshot().subtitle_notes;
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert_eq!(
+        (notes[0].source.as_str(), notes[0].problem),
+        ("pubsubs", SubtitleProblem::TrackFailed)
     );
     assert_eq!(
         srt.load(Ordering::SeqCst),

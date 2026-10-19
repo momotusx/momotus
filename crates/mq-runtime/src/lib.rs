@@ -45,7 +45,8 @@ pub use views::kids::{
 pub use views::library::{KindCount, LibrarySnapshot, LibrarySort, LibraryView};
 pub use views::pairing::{PairingSnapshot, PairingView};
 pub use views::playback::{
-    Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleTrack,
+    Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleNote,
+    SubtitleProblem, SubtitleTrack,
 };
 pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionState};
 pub use views::search::{SearchSnapshot, SearchView};
