@@ -194,3 +194,24 @@ struct DeviceKits: Decodable, Hashable, Sendable {
     let device: String
     let kits: [String]
 }
+
+/// `createRecoveryKit`'s answer: the kit (shown once, kept nowhere), its own
+/// entry in the device list, and the record to store. A core that answers no
+/// id still hands over the kit (its id is then unknown, never a lost kit).
+struct MadeKit: Decodable, Sendable {
+    let kit: String
+    let id: String
+    let record: JSONValue
+
+    private enum Key: String, CodingKey { case kit, id, record }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        kit = try c.decode(String.self, forKey: .kit)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        record = try c.decode(JSONValue.self, forKey: .record)
+    }
+
+    /// The kit to hold until "I saved it", by its id.
+    var held: HeldKit { HeldKit(id: id, kit: kit) }
+}

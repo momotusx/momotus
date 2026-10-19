@@ -146,6 +146,16 @@ enum TraktRules {
         }
     }
 
+    /// What VoiceOver hears when a sign-in reaches a phase: each end once
+    /// (connected, expired, denied, failed, not set up). The code is said by
+    /// itself, when it shows; starting says nothing.
+    static func loginAnnouncement(_ login: TraktLoginSnapshot?) -> String? {
+        switch login {
+        case .done?, .expired?, .denied?, .failed?, .notConfigured?: loginLine(login!)
+        default: nil
+        }
+    }
+
     /// A sign-in that ended without connecting offers a new code (never a build without Trakt).
     static func loginRetry(_ login: TraktLoginSnapshot) -> Bool {
         switch login {

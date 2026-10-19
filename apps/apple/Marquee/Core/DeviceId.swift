@@ -42,11 +42,12 @@ enum Keychain {
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    /// Removes the value; false when the Keychain refused (an absent value is removed already).
+    /// Removes the value; false when the Keychain refused (an absent value is
+    /// removed already, and so is one a build without the Keychain never stored).
     @discardableResult
     static func delete(_ account: String) -> Bool {
         let status = SecItemDelete(query(account) as CFDictionary)
-        return status == errSecSuccess || status == errSecItemNotFound
+        return status == errSecSuccess || status == errSecItemNotFound || status == errSecMissingEntitlement
     }
 
     /// The names of the app's items that start with `prefix`. Throws when the

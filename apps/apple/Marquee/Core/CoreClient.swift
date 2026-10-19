@@ -189,10 +189,32 @@ final class CoreClient {
     }
 
     /// `lifecycle background`, awaited: the core answers once running Trakt
-    /// scrobbles are sent, or after 4 s. False when it did not answer.
+    /// scrobbles are sent, or after 4 s. False when it did not answer within
+    /// `limit` (the app's time in the background is short: it never waits longer).
     @discardableResult
-    func lifecycleBackground() async -> Bool {
-        (try? await request("lifecycle", ["event": "background"]) { _ in }) != nil
+    func lifecycleBackground(within limit: Duration = .milliseconds(4500)) async -> Bool {
+        await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            let first = FirstAnswer(done)
+            Task { first.give((try? await self.request("lifecycle", ["event": "background"]) { _ in }) != nil) }
+            Task {
+                try? await Task.sleep(for: limit)
+                first.give(false)
+            }
+        }
+    }
+
+    /// The first of several answers resumes; the others are dropped.
+    @MainActor private final class FirstAnswer {
+        private var done: CheckedContinuation<Bool, Never>?
+
+        init(_ done: CheckedContinuation<Bool, Never>) {
+            self.done = done
+        }
+
+        func give(_ answer: Bool) {
+            done?.resume(returning: answer)
+            done = nil
+        }
     }
 
     /// Tells the core about app and system events (`foreground`, `background`,

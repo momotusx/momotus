@@ -49,11 +49,32 @@ final class TraktModel {
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let keystore: TraktKeystore
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private(set) var session: Session?
 
-    init(core: CoreClient, keystore: TraktKeystore = .keychain) {
+    init(core: CoreClient, keystore: TraktKeystore = .keychain, defaults: UserDefaults = .standard) {
         self.core = core
         self.keystore = keystore
+        self.defaults = defaults
+    }
+
+    /// Profiles signed out whose record the Keychain kept: kept across
+    /// launches (ids only), never loaded or sent, and deleted again at every begin.
+    private var signedOut: Set<String> {
+        get { Set(defaults.stringArray(forKey: Self.signedOutKey) ?? []) }
+        set { defaults.set(newValue.sorted(), forKey: Self.signedOutKey) }
+    }
+
+    static let signedOutKey = "traktSignedOut"
+
+    /// Deletes `profile`'s record; when the Keychain refuses, it stays marked
+    /// signed out (never sent) until a delete works. True when it is gone.
+    @discardableResult
+    private func forget(_ profile: String) -> Bool {
+        memory[profile] = nil
+        let gone = keystore.delete(profile)
+        if gone { signedOut.remove(profile) } else { signedOut.insert(profile) }
+        return gone
     }
 
     /// The running profile's sign-in lasts for this session only: the Keychain refused it.
@@ -63,7 +84,8 @@ final class TraktModel {
     /// the session is locked), then the view.
     func begin(profile: String) async {
         end()
-        deleteFailed = false
+        // A sign-out whose delete was refused: tried again, and its record is never sent.
+        deleteFailed = signedOut.contains(profile) && !forget(profile)
         let session = Session(profile: profile)
         self.session = session
         if let record = record(of: profile) {
@@ -101,6 +123,8 @@ final class TraktModel {
         session.acked = record
         if keystore.store(session.profile, record) {
             memory[session.profile] = nil
+            // A new sign-in took the place of a record whose delete was refused.
+            signedOut.remove(session.profile)
         } else {
             memory[session.profile] = record
             coreLog.error("trakt: the Keychain did not keep the sign-in; it lasts for this session")
@@ -129,26 +153,25 @@ final class TraktModel {
     func signOut() async throws {
         guard let session else { return }
         try await core.perform("traktSignOut")
-        memory[session.profile] = nil
         session.acked = nil
-        deleteFailed = !keystore.delete(session.profile)
+        deleteFailed = !forget(session.profile)
     }
 
     /// Deletes a record the Keychain kept after signing out.
     func deleteAgain() {
         guard let session else { return }
-        deleteFailed = !keystore.delete(session.profile)
+        deleteFailed = !forget(session.profile)
     }
 
     /// A profile removed (here or on another device): its record goes too.
     func profileGone(_ profile: String) {
-        memory[profile] = nil
-        _ = keystore.delete(profile)
+        forget(profile)
     }
 
     /// The record this device holds for `profile`: this session's, else the
     /// Keychain's. A Keychain that does not answer holds none here.
     private func record(of profile: String) -> JSONValue? {
+        guard !signedOut.contains(profile) else { return nil }
         if let held = memory[profile] { return held }
         return (try? keystore.load(profile)) ?? nil
     }

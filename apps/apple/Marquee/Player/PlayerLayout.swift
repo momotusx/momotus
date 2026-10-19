@@ -4,6 +4,14 @@ import CoreGraphics
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
 enum PlayerLayout {
+    /// What `progress` tells Trakt when the player's state changes: a pause, or a
+    /// play after one, from anywhere (the Lock Screen, a call); buffering is
+    /// neither. Nil when there is nothing new to say.
+    static func traktPaused(paused: Bool, buffering: Bool, was: Bool) -> Bool? {
+        guard !buffering, paused != was else { return nil }
+        return paused
+    }
+
     /// Below this the transport joins the actions' row, so the controls stay
     /// clear of the title and the status line; from it the transport keeps its
     /// centered place above the scrubber.

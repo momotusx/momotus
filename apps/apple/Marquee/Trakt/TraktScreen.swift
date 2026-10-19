@@ -30,6 +30,7 @@ struct TraktScreen: View {
                 if trakt.memoryOnly { Said(tone: .warn, text: W.memoryOnly) }
                 if trakt.deleteFailed {
                     Said(tone: .bad, text: W.deleteFailed)
+                        .onAppear { announce(W.deleteFailed) }
                     Button { trakt.deleteAgain() } label: { Label(W.tryAgain, glyph: "refresh-cw") }
                         .buttonStyle(PillButtonStyle())
                 }
@@ -77,9 +78,8 @@ struct TraktScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                 .accessibilityElement(children: .combine)
-                #if os(tvOS)
-                .focusable()
-                #endif
+                // TV: each row takes focus with the accent ring, so the remote scrolls to it.
+                .modifier(ReadableOnTV())
             }
         }
     }
@@ -125,9 +125,15 @@ private struct TraktCard: View {
         .padding(Theme.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        // TV: a card with nothing to press (not set up) still takes focus, ringed.
+        .modifier(OptionalReadable(on: card.actions.isEmpty))
         #if os(tvOS)
         .focusSection()
         #endif
+        .onChange(of: said?.text) { _, now in
+            // The sync's result and Signed out, said once each.
+            if let now { announce(now) }
+        }
         .confirmationDialog(W.signOut, isPresented: $asking, titleVisibility: .visible) {
             Button(W.signOut, role: .destructive) { Task { await signOut() } }
             Button(W.cancel, role: .cancel) {}
@@ -243,6 +249,9 @@ private struct TraktConnect: View {
             login = view
             view.start()
         }
+        .onChange(of: login?.snapshot) { _, now in
+            if let words = TraktRules.loginAnnouncement(now) { announce(words) }
+        }
         .onChange(of: code) { _, now in
             // Said once when it shows (a new code says itself again).
             if let now, now != saidCode {
@@ -318,7 +327,7 @@ private struct TraktConnect: View {
             }
         }
         FlowRow(spacing: Theme.Space.xs) {
-            #if os(iOS)
+            #if !os(tvOS)
             if let page = URL(string: url) {
                 Button { openURL(page) } label: { Label(W.openPage, glyph: "external-link") }
                     .buttonStyle(PillButtonStyle(prominent: true))
@@ -364,5 +373,14 @@ struct TraktMark: View {
 enum TraktClock {
     static func time(_ ms: Int64) -> String {
         Date(timeIntervalSince1970: TimeInterval(ms) / 1000).formatted(date: .omitted, time: .shortened)
+    }
+}
+
+/// `ReadableOnTV` only when `on`.
+private struct OptionalReadable: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on { content.modifier(ReadableOnTV()) } else { content }
     }
 }

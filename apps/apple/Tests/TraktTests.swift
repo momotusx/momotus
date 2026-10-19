@@ -53,6 +53,36 @@ private func status(_ json: String) throws -> TraktStatus {
         #expect(TraktRules.spokenCode("AB12") == "Code A B 1 2")
     }
 
+    @Test func eachEndOfASignInIsSaidOnce() throws {
+        let decode = { (json: String) in try JSONDecoder().decode(TraktLoginSnapshot.self, from: Data(json.utf8)) }
+        #expect(TraktRules.loginAnnouncement(try decode(#"{"phase":"done","user":"ana"}"#)) == "Connected as ana")
+        #expect(TraktRules.loginAnnouncement(try decode(#"{"phase":"expired"}"#)) == W.expired)
+        #expect(TraktRules.loginAnnouncement(try decode(#"{"phase":"denied"}"#)) == W.denied)
+        #expect(TraktRules.loginAnnouncement(try decode(#"{"phase":"failed","reason":"no answer"}"#)) == "The sign-in did not finish: no answer.")
+        #expect(TraktRules.loginAnnouncement(try decode(#"{"phase":"notConfigured"}"#)) == W.notConfigured)
+        // Starting says nothing; the code is said by itself.
+        #expect(TraktRules.loginAnnouncement(try decode(#"{"phase":"starting"}"#)) == nil)
+        #expect(TraktRules.loginAnnouncement(try decode(#"{"phase":"code","userCode":"A","url":"u","qr":"q","expiresMs":1}"#)) == nil)
+        #expect(TraktRules.loginAnnouncement(nil) == nil)
+    }
+
+    @Test func aPauseOrAPlayReachesTraktAndBufferingDoesNot() {
+        #expect(PlayerLayout.traktPaused(paused: true, buffering: false, was: false) == true)
+        #expect(PlayerLayout.traktPaused(paused: false, buffering: false, was: true) == false)
+        // Buffering is neither a pause nor a play; no change says nothing.
+        #expect(PlayerLayout.traktPaused(paused: false, buffering: true, was: false) == nil)
+        #expect(PlayerLayout.traktPaused(paused: false, buffering: true, was: true) == nil)
+        #expect(PlayerLayout.traktPaused(paused: true, buffering: false, was: true) == nil)
+    }
+
+    @Test func aNewKitIsHeldByTheIdTheCoreAnswers() throws {
+        let made = try JSONDecoder().decode(MadeKit.self, from: Data(#"{"kit":"AAAA-BBBB","id":"k9","record":{"revision":1}}"#.utf8))
+        #expect(made.held == HeldKit(id: "k9", kit: "AAAA-BBBB"))
+        // A core that answers no id still hands over the kit: its id is unknown, the kit is not lost.
+        let older = try JSONDecoder().decode(MadeKit.self, from: Data(#"{"kit":"CCCC","record":{"revision":1}}"#.utf8))
+        #expect(older.held == HeldKit(id: "", kit: "CCCC"))
+    }
+
     @Test func thePlayerMarkSaysAWarningOnScreen() {
         #expect(TraktRules.playbackMark(.on)! == (false, W.playerOn))
         #expect(TraktRules.playbackMark(.unmapped)! == (true, W.playerUnmapped))
@@ -101,13 +131,24 @@ final class FakeTraktKeystore: @unchecked Sendable {
     }()
 }
 
-@Suite(.serialized) @MainActor struct TraktWiringTests {
+/// Whether the linked core carries the loopback Trakt hook (a --dev build): the wiring tests need it.
+enum DevCore {
+    static let linked: Bool = {
+        let lib = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appending(path: "../Core/MarqueeCore.xcframework/macos-arm64/libmarquee_core.a")
+        guard let data = try? Data(contentsOf: lib, options: .alwaysMapped) else { return false }
+        return data.range(of: Data("MQ_DEV_TRAKT".utf8)) != nil
+    }()
+}
+
+@Suite(.serialized, .enabled(if: DevCore.linked, "needs the --dev core: apps/apple/scripts/build-core.sh --dev"))
+@MainActor struct TraktWiringTests {
     /// A core whose profile connects through the fake's sign-in, with a model that stored the record.
-    private func connected(_ keys: FakeTraktKeystore = FakeTraktKeystore()) async throws -> (RealCore, TraktModel) {
+    private func connected(_ keys: FakeTraktKeystore = FakeTraktKeystore(), defaults: UserDefaults? = nil) async throws -> (RealCore, TraktModel) {
         let fake = TraktFake.shared
         let core = RealCore()
         #expect(await core.ready())
-        let model = TraktModel(core: core.client, keystore: keys.keystore)
+        let model = TraktModel(core: core.client, keystore: keys.keystore, defaults: try defaults ?? fresh())
         await model.begin(profile: "default")
         #expect(await eventually(10) { model.status?.state == .off })
         let login = LiveRecord<TraktLoginSnapshot>("traktLogin", core: core.client)
@@ -138,11 +179,11 @@ final class FakeTraktKeystore: @unchecked Sendable {
         // A new core (a restart, another launch): the stored record goes before the view opens.
         let core = RealCore()
         #expect(await core.ready())
-        let model = TraktModel(core: core.client, keystore: keys.keystore)
+        let model = TraktModel(core: core.client, keystore: keys.keystore, defaults: try fresh())
         await model.begin(profile: "default")
         #expect(await eventually(10) { model.status?.state == .connected })
         // A model that holds no record for the profile never ends the connection with setTrakt(null).
-        let empty = TraktModel(core: core.client, keystore: FakeTraktKeystore().keystore)
+        let empty = TraktModel(core: core.client, keystore: FakeTraktKeystore().keystore, defaults: try fresh())
         model.end()
         await empty.begin(profile: "default")
         #expect(await eventually(10) { empty.status != nil })
@@ -159,7 +200,7 @@ final class FakeTraktKeystore: @unchecked Sendable {
         let core = RealCore()
         #expect(await core.ready())
         let fresh = FakeTraktKeystore()
-        let model = TraktModel(core: core.client, keystore: fresh.keystore)
+        let model = TraktModel(core: core.client, keystore: fresh.keystore, defaults: try self.fresh())
         await model.begin(profile: "default")
         #expect(await eventually(10) { model.status?.state == .off })
         let old = try #require(model.session)
@@ -199,7 +240,7 @@ final class FakeTraktKeystore: @unchecked Sendable {
         let core = RealCore()
         #expect(await core.ready())
         let keys = FakeTraktKeystore()
-        let trakt = TraktModel(core: core.client, keystore: keys.keystore)
+        let trakt = TraktModel(core: core.client, keystore: keys.keystore, defaults: try fresh())
         let session = ProfileSession(core: core.client, sync: SyncModel(core: core.client, records: FakeKeychain().record,
                                                                          defaults: try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))), trakt: trakt)
         #expect(await eventually { session.snapshot != nil })
@@ -219,5 +260,37 @@ final class FakeTraktKeystore: @unchecked Sendable {
         let start = ContinuousClock.now
         #expect(await core.client.lifecycleBackground())
         #expect(ContinuousClock.now - start < .seconds(5))
+        // A core that cannot answer: false, at once, so the app is never held on it.
+        let file = FileManager.default.temporaryDirectory.appending(path: "mq-test-\(UUID().uuidString)")
+        try Data().write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let dead = CoreClient(directory: file.appending(path: "data", directoryHint: .isDirectory))
+        #expect(await !dead.lifecycleBackground(within: .seconds(2)))
+    }
+
+    @Test func aSignOutWhoseDeleteWasRefusedIsNeverUndone() async throws {
+        let keys = FakeTraktKeystore()
+        let store = try fresh()
+        let (first, model) = try await connected(keys, defaults: store)
+        keys.deleteFails = true
+        try await model.signOut()
+        #expect(model.deleteFailed && keys.held["default"] != nil)
+        #expect(await eventually(10) { model.status?.state == .off })
+        // A switch and back, or the next launch: the kept record is never sent again.
+        let again = TraktModel(core: first.client, keystore: keys.keystore, defaults: store)
+        model.end()
+        await again.begin(profile: "default")
+        #expect(again.deleteFailed)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(again.status?.state == .off)
+        // The delete is tried again at the next begin, and once it works the warning goes.
+        keys.deleteFails = false
+        await again.begin(profile: "default")
+        #expect(!again.deleteFailed && keys.held["default"] == nil)
+        #expect(store.stringArray(forKey: TraktModel.signedOutKey) == [])
+    }
+
+    private func fresh() throws -> UserDefaults {
+        try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))
     }
 }

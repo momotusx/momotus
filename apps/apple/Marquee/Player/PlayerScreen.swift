@@ -88,6 +88,17 @@ struct PlayerScreen: View {
                     lastTouch = .now
                 }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 })
                     .transition(.opacity)
+            } else if model.playback?.phase != "failed", let trakt = model.playback?.trakt, TraktRules.playbackMark(trakt)?.warn == true {
+                // A Trakt warning stays in sight with the controls hidden: it often comes after they hid.
+                TraktMark(trakt: trakt)
+                    .padding(.horizontal, Theme.Space.s)
+                    .padding(.vertical, Theme.Space.xs)
+                    .background(Capsule().fill(.black.opacity(0.55)))
+                    .frame(maxWidth: 520, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(Theme.Space.m)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
             if let segment = model.segment, model.playback?.phase != "failed", !model.showEndCard {
                 // Netflix places it bottom right on the controls' top line, and it
@@ -117,6 +128,10 @@ struct PlayerScreen: View {
         .animation(Theme.Motion.panel, value: model.showNext)
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
+        // A Trakt warning is said once, when it arrives.
+        .onChange(of: model.playback?.trakt) { _, now in
+            if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }
+        }
         .navigationDestination(isPresented: $showVersions) {
             if let versions = model.versions {
                 VersionsScreen(model: versions, heading: model.route.target.title, core: core)

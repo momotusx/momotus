@@ -445,8 +445,8 @@ final class PlayerModel {
                     self.publishNowPlaying()
                     // A pause or a play from anywhere (the Lock Screen, a call) reaches Trakt at once;
                     // buffering is neither.
-                    if status != .waitingToPlayAtSpecifiedRate, (status == .paused) != self.paused {
-                        self.paused = status == .paused
+                    if let paused = PlayerLayout.traktPaused(paused: status == .paused, buffering: status == .waitingToPlayAtSpecifiedRate, was: self.paused) {
+                        self.paused = paused
                         self.report()
                     }
                 }
