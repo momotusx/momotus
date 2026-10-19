@@ -73,12 +73,12 @@ import Testing
         "blocked": NSNull(), "fingerprint": "ABCDEFGHIJKL", "record": NSNull(), "again": false,
     ]
     let one = try JSONDecoder().decode(SyncReport.self, from: JSONSerialization.data(withJSONObject: fields)).notes
-    #expect(one.contains("1 edit waits for the sync server's clock to catch up."))
-    #expect(one.contains("1 record waits for a key this device does not have yet."))
-    #expect(one.contains("Changes wait 1 minute after a sync server restore."))
+    #expect(one.contains("1 edit waits for the sync server's clock to catch up. Nothing is lost."))
+    #expect(one.contains("1 change from another device waits until this device catches up with a device change."))
+    #expect(one.contains { $0.hasPrefix("Edits wait 1 minute more") })
     fields["waiting"] = 2
     let two = try JSONDecoder().decode(SyncReport.self, from: JSONSerialization.data(withJSONObject: fields)).notes
-    #expect(two.contains("2 edits wait for the sync server's clock to catch up."))
+    #expect(two.contains("2 edits wait for the sync server's clock to catch up. Nothing is lost."))
 }
 
 @Test func startFreshTurnsAnInstalledButOffCatalogBackOn() {

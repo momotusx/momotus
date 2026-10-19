@@ -5,6 +5,7 @@ import SwiftUI
 enum SettingsPage: Hashable {
     case findAddons
     case pairing
+    case sync
 }
 
 /// Sources (addons) and the few playback choices worth making; everything
@@ -90,21 +91,12 @@ struct SettingsScreen: View {
                 }
                 .buttonStyle(.row)
                 section("Devices and sync").padding(.top, Theme.Space.s)
-                if sync.joined {
-                    NavigationLink {
-                        SyncScreen()
-                    } label: {
-                        SettingsRow(symbol: "refresh-cw", title: "Sync", detail: syncSummary)
-                    }
-                    .buttonStyle(.row)
-                } else {
-                    NavigationLink {
-                        PairingScreen(core: core)
-                    } label: {
-                        SettingsRow(symbol: "qr-code", title: "Pair this device", detail: "Show a code here, then approve this device from one that already syncs.")
-                    }
-                    .buttonStyle(.row)
+                NavigationLink {
+                    SyncScreen()
+                } label: {
+                    SettingsRow(symbol: sync.joined ? "refresh-cw" : "qr-code", title: SyncWords.title, detail: syncSummary)
                 }
+                .buttonStyle(.row)
                 if let p = prefs.snapshot {
                     section("Playback").padding(.top, Theme.Space.s)
                     playback(p)
@@ -137,6 +129,7 @@ struct SettingsScreen: View {
             switch page {
             case .findAddons: FindAddonsScreen(core: core)
             case .pairing: PairingScreen(core: core)
+            case .sync: SyncScreen()
             }
         }
     }
@@ -151,8 +144,9 @@ struct SettingsScreen: View {
     /// "Synced 14:02" or the problem in words.
     private var syncSummary: String {
         if let problem = sync.problem { return problem.words }
-        if let at = sync.lastSynced { return "Synced \(at.formatted(date: .omitted, time: .shortened)). Devices, recovery kit, leaving." }
-        return "Devices, recovery kit, leaving."
+        guard sync.joined else { return "Keep your library, progress and addons the same on every device. Pair, start an account or use a recovery kit." }
+        if let at = sync.lastSynced { return "Synced \(at.formatted(date: .omitted, time: .shortened)). Devices, recovery kit, stopping." }
+        return "Devices, recovery kit, stopping."
     }
 
     /// "4 installed. Streams from Torrentio, Sample Source."

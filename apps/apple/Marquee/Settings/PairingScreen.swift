@@ -13,6 +13,9 @@ struct PairingScreen: View {
     @State private var name = DeviceName.current
     /// The address had a user name or password: it was not kept or sent.
     @State private var badAddress = false
+    /// This device already syncs: a join replaces its account, so it asks first.
+    @State private var replacing = false
+    @State private var copied = false
     /// tvOS: the answer of the step on screen has focus.
     @FocusState private var answer: Bool
     /// The field being typed in.
@@ -51,6 +54,12 @@ struct PairingScreen: View {
         .topScrim()
         // Opens it again after a core restart; the model started it already.
         .task(id: sync.pairing?.taskId) { sync.pairing?.start() }
+        .confirmationDialog(SyncWords.replaceAsk, isPresented: $replacing, titleVisibility: .visible) {
+            Button(SyncWords.replaceButton, role: .destructive) { start(confirmed: true) }
+            Button(SyncWords.cancel, role: .cancel) {}
+        } message: {
+            Text(SyncWords.replaceText)
+        }
         #if os(tvOS)
         // Each step's answer takes focus, so the remote is never left on the form below.
         .onChange(of: answerStep, initial: true) { _, step in answer = step != nil }
@@ -87,14 +96,7 @@ struct PairingScreen: View {
             field("Sync server", text: $server, prompt: "https://sync.example.org")
             field("This device's name", text: $name, prompt: "Living room")
             Button {
-                // The keyboard goes, so the answer (a code, or why not) is in view.
-                typing = nil
-                let trimmed = server.trimmingCharacters(in: .whitespaces)
-                // An address with a user name or password is never kept or sent.
-                badAddress = !PairingWords.plainAddress(trimmed)
-                guard !badAddress else { return }
-                UserDefaults.standard.set(trimmed, forKey: "syncServer")
-                sync.startPairing(server: trimmed, name: name)
+                start(confirmed: false)
             } label: {
                 Label("Show pairing code", glyph: "qr-code")
             }
@@ -104,6 +106,19 @@ struct PairingScreen: View {
                 StateLine(symbol: "triangle-alert", text: "Enter the address without a user name or password.")
             }
         }
+    }
+
+    private func start(confirmed: Bool) {
+        // The keyboard goes, so the answer (a code, or why not) is in view.
+        typing = nil
+        let trimmed = server.trimmingCharacters(in: .whitespaces)
+        // An address with a user name or password is never kept or sent.
+        badAddress = !PairingWords.plainAddress(trimmed)
+        guard !badAddress else { return }
+        // A live account is replaced only after the user says so.
+        if sync.joined, !confirmed { replacing = true; return }
+        UserDefaults.standard.set(trimmed, forKey: "syncServer")
+        sync.startPairing(server: trimmed, name: name)
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {
@@ -142,6 +157,19 @@ struct PairingScreen: View {
                 Text("The code works until \(expires.formatted(date: .omitted, time: .shortened)).")
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
+                #if !os(tvOS)
+                // No camera on the other side: the code goes over by paste, on this device only, until it expires.
+                Text(SyncWords.copyHelp)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    copied = Clipboard.copy(qr, lifetime: max(30, expires.timeIntervalSinceNow), localOnly: false)
+                } label: {
+                    Label(copied ? SyncWords.copied : SyncWords.copyCode, glyph: copied ? "check" : "copy")
+                }
+                .buttonStyle(PillButtonStyle())
+                #endif
             }
         case .confirm(let code)?:
             VStack(alignment: .leading, spacing: Theme.Space.s) {

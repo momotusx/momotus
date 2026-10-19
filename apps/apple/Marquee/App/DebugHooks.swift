@@ -46,7 +46,7 @@ enum DebugHooks {
     /// stored and no sync starts: a live join needs a second device and a relay.
     static var pairedPreview: Bool { UserDefaults.standard.bool(forKey: "MQPairedPreview") }
 
-    /// The Settings page to open once at launch: `-MQOpenScreen findAddons`
+    /// The Settings page to open once at launch: `-MQOpenScreen findAddons` or `sync`
     /// (SwiftUI menus do not open under idb's synthetic taps), or the pairing
     /// preview. It goes on the Settings stack's path, as `-MQOpenTitle` does on
     /// Home's: an `isPresented` destination turned on from Settings' first
@@ -54,7 +54,11 @@ enum DebugHooks {
     @MainActor static func takeSettingsPage() -> SettingsPage? {
         guard !settingsPageTaken else { return nil }
         settingsPageTaken = true
-        if UserDefaults.standard.string(forKey: "MQOpenScreen") == "findAddons" { return .findAddons }
+        switch UserDefaults.standard.string(forKey: "MQOpenScreen") {
+        case "findAddons": return .findAddons
+        case "sync": return .sync
+        default: break
+        }
         return pairedPreview ? .pairing : nil
     }
 

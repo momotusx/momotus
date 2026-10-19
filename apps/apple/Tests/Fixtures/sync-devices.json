@@ -1,0 +1,48 @@
+{
+ "epoch": 0,
+ "fingerprint": "TMWCVWE8WXVX",
+ "members": [
+  {
+   "addedMs": 1792369837143,
+   "id": "2d2a40be5179a9c5ee42db19d199800a",
+   "kit": false,
+   "name": "Phone",
+   "sponsor": "e843644d3721ad2bf19d91e35b6300ec",
+   "thisDevice": false
+  },
+  {
+   "addedMs": 1792369837196,
+   "id": "674c8f13d2948c80d7bc74e249d8c903",
+   "kit": true,
+   "name": null,
+   "sponsor": "e843644d3721ad2bf19d91e35b6300ec",
+   "thisDevice": false
+  },
+  {
+   "addedMs": 1792369835021,
+   "id": "d67adc45513a73915b6ca6648b81fcf9",
+   "kit": true,
+   "name": null,
+   "sponsor": "da1087d3056d012d6fe1c25eff560742",
+   "thisDevice": false
+  },
+  {
+   "addedMs": 1792369832916,
+   "id": "da1087d3056d012d6fe1c25eff560742",
+   "kit": false,
+   "name": "Desk",
+   "sponsor": null,
+   "thisDevice": true
+  },
+  {
+   "addedMs": 1792369834966,
+   "id": "e843644d3721ad2bf19d91e35b6300ec",
+   "kit": false,
+   "name": "Tablet",
+   "sponsor": "da1087d3056d012d6fe1c25eff560742",
+   "thisDevice": false
+  }
+ ],
+ "record": null,
+ "rotationPending": false
+}

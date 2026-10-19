@@ -1,0 +1,18 @@
+{
+ "again": false,
+ "applied": 0,
+ "blocked": null,
+ "clockGapMs": 1,
+ "fingerprint": "TMWCVWE8WXVX",
+ "newer": 0,
+ "oldEpochWrites": 0,
+ "parked": 0,
+ "pulled": 0,
+ "pushed": 0,
+ "record": null,
+ "refused": 0,
+ "rotationWaitMs": 0,
+ "stale": 0,
+ "unreadable": 0,
+ "waiting": 0
+}

@@ -72,7 +72,8 @@ targets:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSFaceIDUsageDescription: Creating a recovery kit for your sync account checks that it is you.
+        INFOPLIST_KEY_NSFaceIDUsageDescription: Making a recovery kit, removing a device or reporting one lost checks that it is you.
+        INFOPLIST_KEY_NSCameraUsageDescription: The camera reads the code a new device shows, to add it to your sync account.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         # Dark only (design v2), from the launch screen on.
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark

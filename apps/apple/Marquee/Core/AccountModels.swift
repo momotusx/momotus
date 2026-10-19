@@ -161,3 +161,10 @@ enum JSONValue: Codable, Hashable, Sendable {
         }
     }
 }
+
+/// What reporting a device lost drops by default (LostPreview.ts): the devices
+/// it vouched for, ticked for the user to untick, and the kits that always go.
+struct LostPreview: Decodable, Hashable, Sendable {
+    let devices: [String]
+    let kits: [String]
+}
