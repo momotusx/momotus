@@ -168,3 +168,26 @@ struct LostPreview: Decodable, Hashable, Sendable {
     let devices: [String]
     let kits: [String]
 }
+
+/// Both sides of a different device list (ForkPreview.ts), read only: this
+/// device's members, the sync server's, what taking the server's drops on its
+/// own, the kits each server-side device made, whether this device is on the
+/// server's side, and the head the preview showed.
+struct ForkPreview: Decodable, Hashable, Sendable {
+    let mine: [MemberInfo]
+    let server: [MemberInfo]
+    /// Members of the server's side that go whatever the user ticks.
+    let drops: [String]
+    /// The kits each device of the server's side made: they go with it when ticked.
+    let kits: [DeviceKits]
+    /// This device is on the server's side; when not, it cannot take it.
+    let onServer: Bool
+    /// The server's last entry as shown; continuing hands it back.
+    let head: String
+}
+
+/// A device and the recovery kits it made (DeviceKits.ts).
+struct DeviceKits: Decodable, Hashable, Sendable {
+    let device: String
+    let kits: [String]
+}

@@ -63,12 +63,35 @@ enum SyncWords {
     static let leaveButton = "Stop syncing"
     static let leaveAnyway = "Stop anyway"
     static let syncAgain = "Sync again"
-    static let useServer = "Use the server's device list"
-    static let useServerAsk = "Use the server's device list?"
-    static let useServerText = "This device and the sync server list different devices. Using the server's list lets sync go on; any device this device knew that the server does not is no longer in the list. Check the list right after, and remove any device you do not know."
-    static let useServerDone = "This device now uses the server's list. Check it below, and remove any device you do not know."
+    // A different device list: the compare page
+    static let compare = "Compare device lists"
+    static let forkTitle = "Compare device lists"
+    static let forkLede = "The sync server lists different devices than this device knows. That happens when the server was restored from a backup, or when someone changed it. Check its list, tick anything you do not recognise, then keep syncing with it."
+    static let forkLoading = "Asking the sync server for its list"
+    static let forkServer = "On the sync server's list"
+    static let forkServerHelp = "Ticked devices are removed when you continue. Those marked as going are removed anyway: this device had removed them, or they are recovery kits only the server knows."
+    static let forkGoes = "Removed anyway"
+    static let goesWithTicked = "Goes with {name}"
+    static let onlyOnServer = "Only on the server's list"
+    static let forkMine = "Only this device knew these"
+    static let forkMineHelp = "They are not on the server's list, so they are gone once you continue. A device among them pairs again to come back; make a new recovery kit if one of them was yours."
+    static let forkSame = "Both lists name the same devices."
+    static let forkGo = "Continue with the server's list"
+    static let forkGoing = "Continuing"
+    static let forkOffList = "The sync server's list no longer includes this device: it was removed there. Pair this device again from one that still syncs."
+    static let forkChanged = "The sync server's list changed while you looked. Here it is again; check it before you continue."
+    static let forkTokenLost = "This device cannot read the sync server's list: the server no longer knows it. Sync from another of your devices, or pair this one again."
+    static let forkNone = "This device and the sync server list the same devices. There is nothing to compare."
+    static let forkDone = "This device now syncs with the server's list."
+    // Leaving here only
+    static let left = "This device no longer syncs. Your library stays here."
+    static let leaveHere = "Stop syncing here only"
+    static let leaveHereAsk = "Stop syncing here only?"
+    static let leaveHereText = "This device forgets the account without telling the sync server, which lists it until another device removes it. Your library stays here, and you can pair this device again."
+    static let leftHere = "This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again."
+    static let wrongRecord = "This device does not hold this sync account any more, so there is nothing to stop syncing here. Forget it on this device to clear it."
     static let forgetHere = "Forget it on this device"
-    static let forgetHereText = "Forgetting needs no sync server and keeps your library. Your other devices still list this one until you remove it there."
+    static let forgetHereText = "This device deletes the account's key from its Keychain. Your library stays here."
     // Add a device
     static let addLede = "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code."
     static let addWarning = "Approve only a code on a screen in front of you. Whoever controls that screen gets your account."
@@ -83,6 +106,10 @@ enum SyncWords {
     static let approving = "Approving"
     static let approvedStep = "The new device now shows six digits. They must be these:"
     static let approvedHelp = "If they match, confirm on the new device. If they differ, say so there, and nothing is added."
+    static let reviewAsk = "Approve a new device?"
+    static let reviewText = "Approve it only if the new device is in front of you and shows the code you scanned. Whoever confirms the six digits next joins your account."
+    static let differ = "They differ"
+    static let differEnded = "The approval ended and your sync key changed: whoever answered cannot join with it, and a device that already did is removed, with any device it added."
     static let done = "Done"
     // The joining device's side
     static let copyCode = "Copy the code"
@@ -96,8 +123,8 @@ enum SyncWords {
     static let kitShown = "Your recovery kit"
     static let kitWarning = "Save it now. It is not shown again, and anyone who has it can join your account."
     static let copyKit = "Copy"
-    static let copyKitHelp = "Copying puts it on this device's clipboard for 2 minutes, never on your other devices. Paste it into your password manager right away."
-    static let kitCopied = "Copied for 2 minutes. Paste it into your password manager now."
+    static let copyKitHelp = "Copying puts it on this device's clipboard for 1 minute, never on your other devices. Paste it into your password manager right away."
+    static let kitCopied = "Copied for 1 minute. Paste it into your password manager now."
     static let savedKit = "I saved it"
     // Remove and report lost
     static let removeKitAsk = "Remove this recovery kit? It stops working."
@@ -111,6 +138,10 @@ enum SyncWords {
     static let authRemove = "remove a device from your sync account"
     static let authLost = "report a device lost"
     static let authKit = "make a recovery kit"
+    static let authApprove = "approve a new device"
+    static let authDiffer = "end the approval of a device"
+    static let authServerList = "keep syncing with the sync server's device list"
+    static let authLeave = "stop syncing on this device"
 
     /// Fills `{name}` in a sync line.
     static func named(_ line: String, _ name: String) -> String {
@@ -128,8 +159,15 @@ enum SyncWords {
     }
 
     /// The step before approving a code: which sync server it joins through.
-    static func approveAsk(host: String) -> String {
-        "Approve a device from \(host)?"
+    /// The button that continues with the server's list, naming what goes.
+    static func forkButton(devices: Int, kits: Int) -> String {
+        let parts = [devices > 0 ? count(devices, "device", "devices") : nil, kits > 0 ? count(kits, "recovery kit", "recovery kits") : nil].compactMap { $0 }
+        return parts.isEmpty ? forkGo : "Continue and remove \(parts.joined(separator: " and "))"
+    }
+
+    /// On a ticked row of the server's list: the kits that go with it.
+    static func goesWith(_ kits: Int) -> String {
+        kits == 1 ? "Its recovery kit goes with it." : "Its \(kits) recovery kits go with it."
     }
 
     /// The button that confirms a lost report: it names how many devices go.
@@ -156,7 +194,7 @@ enum SyncWords {
 /// 403 when starting is an invite, a 404 on a kit an unknown kit, a 404 on a
 /// code a used one).
 enum SyncAction: Equatable, Sendable {
-    case round, start, recover, approve, devices, kit, remove, lost, leave
+    case round, start, recover, approve, devices, kit, remove, lost, leave, differ, compare, serverList
 }
 
 /// A sync failure in plain words; `code` names the ones with a fix.
@@ -180,7 +218,9 @@ struct SyncProblem: Equatable {
     var words: String {
         switch code {
         case "dropped": return "This device was removed from your sync account. Your library stays here as local data."
-        case "fork": return "The sync server lists different devices than this device knows. Use the server's list to keep syncing."
+        case "fork": return "The sync server lists different devices than this device knows. Compare the lists to keep syncing."
+        case "rosterChanged": return SyncWords.forkChanged
+        case "wrongRecord": return SyncWords.wrongRecord
         case "wrongRelay": return "This is not the sync server this device joined. Try again, or forget the account here and pair again."
         case "relayBehind": return "The sync server lost device changes it cannot get back. Pair this device again from one that still syncs."
         case "notJoined": return "This device has not joined a sync account yet."
@@ -188,7 +228,8 @@ struct SyncProblem: Equatable {
         case "insecure": return "The sync server address must start with https."
         // The app's own: the Keychain kept a new record from it, so nothing is sent until it is stored.
         case "storage": return "This device could not store the sync account's key, so sync is paused. Free some storage, then sync again."
-        case "unconfirmed": return "Nothing changed: this device did not confirm it is you."
+        case "unconfirmed":
+            return action == .differ ? "The approval is still open: this device did not confirm it is you." : "Nothing changed: this device did not confirm it is you."
         case "noPasscode": return "Set a device passcode first: Marquee asks for it before changing your devices or making a kit."
         default: break
         }
@@ -202,11 +243,20 @@ struct SyncProblem: Equatable {
         for kept in ["pairing: ", "invalid url", "blocked private address", "the relay must use https"] where message.hasPrefix(kept) {
             return PairingWords.problem(message)
         }
-        switch action {
-        case .round: return "The sync server did not answer. Your changes wait here and go out on the next sync."
-        case .devices: return "The sync server did not answer, so this list may be out of date. Try again in a moment."
-        default: return "The sync server did not answer. Try again in a moment."
+        if action == .compare, message == "http status 401" { return SyncWords.forkTokenLost }
+        if action == .round { return "The sync server did not answer. Your changes wait here and go out on the next sync." }
+        if action == .devices { return "The sync server did not answer, so this list may be out of date. Try again in a moment." }
+        let notDone = switch action {
+        case .round, .devices, .serverList: "Nothing changed."
+        case .approve: "Nothing was approved."
+        case .kit: "No kit was made."
+        case .remove, .lost: "Nothing was removed."
+        case .leave: "This device still syncs."
+        case .differ: "The approval is still open."
+        case .compare: "The lists could not be compared."
+        case .start, .recover: "This device did not join."
         }
+        return "\(notDone) The sync server did not answer. Try again in a moment."
     }
 }
 
@@ -281,14 +331,6 @@ enum SyncRules {
         text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("marquee:pair?")
     }
 
-    /// The sync server a pairing code joins through, for the step before
-    /// approving it; nil when the code names none.
-    static func pairingHost(_ code: String) -> String? {
-        let items = URLComponents(string: code.trimmingCharacters(in: .whitespacesAndNewlines))?.queryItems ?? []
-        guard let server = items.first(where: { $0.name == "s" })?.value, let host = URL(string: server)?.host(), !host.isEmpty else { return nil }
-        return host
-    }
-
     /// "VW4BV9DJD5EZ" to "VW4B V9DJ D5EZ", for reading aloud.
     static func fingerprintGroups(_ fingerprint: String) -> String {
         stride(from: 0, to: fingerprint.count, by: 4).map { start in
@@ -351,6 +393,52 @@ enum SyncRules {
             LostRow(id: $0, name: SyncWords.unknown, detail: SyncWords.unknownDetail)
         }
         return known + unknown
+    }
+
+    /// The devices only one side of a different device list has, by id.
+    static func forkSides(mine: [MemberInfo], server: [MemberInfo]) -> (serverOnly: [MemberInfo], mineOnly: [MemberInfo]) {
+        let here = Set(mine.map(\.id)), there = Set(server.map(\.id))
+        return (server.filter { !here.contains($0.id) }, mine.filter { !there.contains($0.id) })
+    }
+
+    /// What continuing with the server's list removes besides its own drops:
+    /// the user's ticks among its members, never this device.
+    static func forkDrop(server: [MemberInfo], drops: [String], ticked: Set<String>) -> [String] {
+        server.filter { !$0.thisDevice && !drops.contains($0.id) && ticked.contains($0.id) }.map(\.id)
+    }
+
+    /// The kits a device of the server's list made that go with it when ticked
+    /// (not those that go anyway).
+    static func forkKits(of device: String, in preview: ForkPreview) -> [String] {
+        (preview.kits.first { $0.device == device }?.kits ?? []).filter { !preview.drops.contains($0) }
+    }
+
+    /// How a row of the server's list reads.
+    enum ForkRow: Equatable {
+        case thisDevice
+        /// Removed whatever the user ticks.
+        case goes
+        /// A kit whose maker is ticked: it goes with it.
+        case withTicked(String)
+        /// The user decides.
+        case tickable
+    }
+
+    static func forkRow(_ member: MemberInfo, in preview: ForkPreview, ticked: Set<String>) -> ForkRow {
+        if member.thisDevice { return .thisDevice }
+        if preview.drops.contains(member.id) { return .goes }
+        if member.kit, let maker = member.sponsor, ticked.contains(maker) {
+            return .withTicked((preview.server + preview.mine).first { $0.id == maker }.map(memberName) ?? "a removed device")
+        }
+        return .tickable
+    }
+
+    /// The button's counts: ticked devices, and every kit that goes with the ticks.
+    static func forkCounts(_ preview: ForkPreview, ticked: Set<String>) -> (devices: Int, kits: Int) {
+        let drop = forkDrop(server: preview.server, drops: preview.drops, ticked: ticked)
+        let isKit = { (id: String) in preview.server.contains { $0.id == id && $0.kit } }
+        let kits = Set(drop.filter(isKit) + drop.flatMap { forkKits(of: $0, in: preview) })
+        return (drop.filter { !isKit($0) }.count, kits.count)
     }
 
     /// The record's revision (`SyncConfig.revision`); 0 when it has none.

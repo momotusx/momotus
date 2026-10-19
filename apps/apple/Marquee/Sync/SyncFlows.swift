@@ -130,6 +130,7 @@ struct SyncField: View {
                 }
             }
             field
+                .hiddenWhenWatched(secret)
                 .focused(typing, equals: label)
                 .textFieldStyle(.plain)
                 .font(mono ? .mono(Theme.type.body) : .text(Theme.type.body))
@@ -172,6 +173,10 @@ struct AddDeviceScreen: View {
     @State private var busy = false
     @State private var error: String?
     @State private var digits: String?
+    /// The code the digits belong to: They differ ends its approval.
+    @State private var approvedCode: String?
+    /// They differ ended the approval: its words replace the digits.
+    @State private var ended = false
     @FocusState private var typing: String?
 
     var body: some View {
@@ -236,7 +241,7 @@ struct AddDeviceScreen: View {
     /// A scanned or pasted code goes to the step that names its sync server first; never straight to approving.
     private func take(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard SyncRules.isPairingCode(trimmed), SyncRules.pairingHost(trimmed) != nil else {
+        guard SyncRules.isPairingCode(trimmed) else {
             error = W.notACode
             return
         }
@@ -247,11 +252,15 @@ struct AddDeviceScreen: View {
 
     private func review(_ qr: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            Text(W.approveAsk(host: SyncRules.pairingHost(qr) ?? ""))
+            // The code is for the user's own sync server (the core refuses any other): the question is the device.
+            Text(W.reviewAsk)
                 .display(Theme.type.title3)
                 .foregroundStyle(Theme.Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
-            Callout(glyph: "shield-alert", text: W.addWarning)
+            Text(W.reviewText)
+                .font(.text(Theme.type.body))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
             if let error { Said(tone: .bad, text: error) }
             FlowRow(spacing: Theme.Space.xs) {
                 Button { approve(qr) } label: { Label(busy ? W.approving : W.approve, glyph: "check") }
@@ -272,6 +281,8 @@ struct AddDeviceScreen: View {
             defer { busy = false }
             do {
                 digits = try await sync.approvePairing(qr)
+                approvedCode = qr
+                ended = false
                 code = ""
                 reviewing = nil
             } catch {
@@ -282,31 +293,62 @@ struct AddDeviceScreen: View {
 
     private func approved(_ digits: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            Text(W.approvedStep)
-                .font(.text(Theme.type.body))
-                .foregroundStyle(Theme.Palette.text)
-            Text(digits)
-                .font(.mono(Theme.type.hero + 8))
-                .tracking(8)
-                .foregroundStyle(Theme.Palette.text)
-                .accessibilityLabel("Code \(digits.map(String.init).joined(separator: " "))")
-            Text(W.approvedHelp)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
-                .foregroundStyle(Theme.Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            Button { dismiss() } label: { Label(W.done, glyph: "check") }
-                .buttonStyle(PillButtonStyle(prominent: true))
+            if ended {
+                // The old digits and "confirm on the new device" go: they no longer apply.
+                Said(tone: .warn, text: W.differEnded)
+            } else {
+                Text(W.approvedStep)
+                    .font(.text(Theme.type.body))
+                    .foregroundStyle(Theme.Palette.text)
+                Text(digits)
+                    .font(.mono(Theme.type.hero + 8))
+                    .tracking(8)
+                    .foregroundStyle(Theme.Palette.text)
+                    .accessibilityLabel("Code \(digits.map(String.init).joined(separator: " "))")
+                Text(W.approvedHelp)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let error { Said(tone: .bad, text: error) }
+            FlowRow(spacing: Theme.Space.xs) {
+                Button { dismiss() } label: { Label(W.done, glyph: "check") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                // The digits differ: whoever confirmed them is not the device in front of the user.
+                if !ended {
+                    Button { theyDiffer() } label: { Label(W.differ, glyph: "x") }
+                        .buttonStyle(PillButtonStyle())
+                        .disabled(busy)
+                }
+            }
+        }
+    }
+
+    /// Ends the approval whether or not the device joined yet; a cancelled
+    /// prompt or a failed call changes nothing, and the button stays.
+    private func theyDiffer() {
+        guard !busy, let qr = approvedCode else { return }
+        busy = true
+        error = nil
+        Task {
+            defer { busy = false }
+            do {
+                try await sync.cancelPairing(qr)
+                ended = true
+                announce(W.differEnded)
+            } catch {
+                self.error = SyncProblem(error, action: .differ).words
+            }
         }
     }
 }
 
 /// Make a recovery kit, behind the OS prompt: shown once, kept nowhere, and
-/// copied only to this device's clipboard for two minutes. Not on a TV.
+/// copied only to this device's clipboard for a minute. Not on a TV.
 struct RecoveryKitScreen: View {
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var phase
     /// The kit lives here only, for as long as the page is open.
     @State private var kit: String?
     @State private var busy = false
@@ -332,6 +374,10 @@ struct RecoveryKitScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .onDisappear { kit = nil }
+        // The kit is not lost on Back: the only way out while it shows (or is being made) is I saved it.
+        #if !os(macOS)
+        .navigationBarBackButtonHidden(kit != nil || busy)
+        #endif
     }
 
     private var ask: some View {
@@ -381,7 +427,7 @@ struct RecoveryKitScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: Theme.Radius.s).fill(Theme.Palette.surface))
                 // The app switcher's picture of this page shows no kit.
-                .blur(radius: phase == .active ? 0 : 16)
+                .hiddenWhenWatched()
                 .accessibilityLabel("\(W.kitShown): \(kit.map(String.init).joined(separator: " "))")
             Callout(glyph: "triangle-alert", text: W.kitWarning)
             Text(copied ? W.kitCopied : W.copyKitHelp)
@@ -398,13 +444,41 @@ struct RecoveryKitScreen: View {
     }
 }
 
+extension View {
+    /// A recovery kit on screen: blurred while the app is not in front (its
+    /// picture in the app switcher) and while the screen is recorded or mirrored.
+    func hiddenWhenWatched(_ secret: Bool = true) -> some View {
+        modifier(HiddenWhenWatched(secret: secret))
+    }
+}
+
+private struct HiddenWhenWatched: ViewModifier {
+    let secret: Bool
+    @Environment(\.scenePhase) private var phase
+    #if os(iOS)
+    @State private var captured = UIScreen.main.isCaptured
+    #else
+    private let captured = false
+    #endif
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: secret && (phase != .active || captured) ? 16 : 0)
+            #if os(iOS)
+            .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
+                captured = UIScreen.main.isCaptured
+            }
+            #endif
+    }
+}
+
 /// The clipboard for a secret (a recovery kit) or a pairing code: this device
 /// only, and gone after a while.
 enum Clipboard {
     /// How long a copied kit stays.
-    static let secretLifetime: TimeInterval = 120
+    static let secretLifetime: TimeInterval = 60
 
-    /// Copies a kit for two minutes, this device only (no Universal
+    /// Copies a kit for a minute, this device only (no Universal
     /// Clipboard). True when it was copied.
     @MainActor @discardableResult
     static func copySecret(_ text: String) -> Bool {
@@ -703,3 +777,183 @@ final class CameraController: UIViewController, AVCaptureMetadataOutputObjectsDe
     }
 }
 #endif
+
+/// After the sync server showed a different device list: both lists from
+/// `forkPreview`, the user's ticks, then the server's list as the page showed
+/// it (its `head`), never before the user saw it. A list that moved meanwhile
+/// is shown again with nothing ticked. A device not on the server's list, or
+/// one the server no longer knows, cannot take it: it can only stop here.
+struct ForkReviewScreen: View {
+    @Environment(SyncModel.self) private var sync
+    @Environment(\.metrics) private var metrics
+    @Environment(\.dismiss) private var dismiss
+    @State private var preview: ForkPreview?
+    @State private var loadError: SyncProblem?
+    @State private var ticked: Set<String> = []
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                ScreenTitle(text: W.forkTitle)
+                Text(W.forkLede)
+                    .font(.text(Theme.type.body))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let loadError {
+                    Said(tone: .bad, text: loadError.words)
+                    // A server that no longer knows this device's token: stopping here is the way out.
+                    if loadError.code == nil, loadError.message == "http status 401" { LeaveHere() }
+                    FlowRow(spacing: Theme.Space.xs) {
+                        Button { Task { await load() } } label: { Label(W.retry, glyph: "refresh-cw") }.buttonStyle(PillButtonStyle(prominent: true))
+                        Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())
+                    }
+                } else if let preview {
+                    if preview.onServer { compare(preview) } else { offList }
+                } else {
+                    Said(tone: .warn, text: W.forkLoading)
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.gutter)
+            .padding(.vertical, Theme.Space.l)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.bg)
+        .topScrim()
+        .task { await load() }
+    }
+
+    private func load() async {
+        loadError = nil
+        do {
+            preview = try await sync.forkPreview()
+        } catch {
+            loadError = SyncProblem(error, action: .compare)
+        }
+    }
+
+    private var offList: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Said(tone: .bad, text: W.forkOffList)
+            Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())
+            LeaveHere()
+        }
+    }
+
+    @ViewBuilder private func compare(_ preview: ForkPreview) -> some View {
+        let sides = SyncRules.forkSides(mine: preview.mine, server: preview.server)
+        let all = preview.server + preview.mine
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text(W.forkServer).display(Theme.type.title3).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
+            Text(W.forkServerHelp)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(SyncRules.sortMembers(preview.server)) { member in
+                serverRow(member, preview: preview, all: all, onlyThere: sides.serverOnly.contains(member))
+            }
+        }
+        if sides.mineOnly.isEmpty {
+            if sides.serverOnly.isEmpty { Said(tone: .idle, text: W.forkSame) }
+        } else {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                Text(W.forkMine).display(Theme.type.title3).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
+                Text(W.forkMineHelp)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(SyncRules.sortMembers(sides.mineOnly)) { member in
+                    plainRow(name: SyncRules.memberName(member),
+                             detail: W.addedLine(kit: member.kit, addedMs: member.addedMs, by: SyncRules.sponsorName(member, in: all)), tag: nil)
+                }
+            }
+        }
+        if let error { Said(tone: .bad, text: error) }
+        let counts = SyncRules.forkCounts(preview, ticked: ticked)
+        FlowRow(spacing: Theme.Space.xs) {
+            Button { go(preview) } label: {
+                Label(busy ? W.forkGoing : W.forkButton(devices: counts.devices, kits: counts.kits), glyph: "monitor-smartphone")
+            }
+            .buttonStyle(PillButtonStyle(prominent: counts.devices + counts.kits == 0))
+            .disabled(busy)
+            Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())
+        }
+    }
+
+    @ViewBuilder private func serverRow(_ member: MemberInfo, preview: ForkPreview, all: [MemberInfo], onlyThere: Bool) -> some View {
+        let name = SyncRules.memberName(member) + (onlyThere ? " (\(W.onlyOnServer.lowercased()))" : "")
+        let detail = W.addedLine(kit: member.kit, addedMs: member.addedMs, by: SyncRules.sponsorName(member, in: all))
+        switch SyncRules.forkRow(member, in: preview, ticked: ticked) {
+        case .thisDevice: plainRow(name: name, detail: detail, tag: W.thisDevice)
+        case .goes: plainRow(name: name, detail: detail, tag: W.forkGoes)
+        case .withTicked(let maker): plainRow(name: name, detail: detail, tag: W.named(W.goesWithTicked, maker))
+        case .tickable:
+            let on = ticked.contains(member.id)
+            let kits = SyncRules.forkKits(of: member.id, in: preview).count
+            Button {
+                if on { ticked.remove(member.id) } else { ticked.insert(member.id) }
+            } label: {
+                HStack(alignment: .top, spacing: Theme.Space.s) {
+                    Glyph(on ? "circle-check" : "circle-dashed").foregroundStyle(on ? Theme.Palette.bad : Theme.Palette.muted)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        Text(detail).font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+                        // A ticked device's kits are named on its row: they go with it.
+                        if on, kits > 0 { Text(W.goesWith(kits)).font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout)) }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(Theme.Palette.text)
+                .padding(Theme.Space.s)
+                .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            }
+            .buttonStyle(.row)
+            .accessibilityLabel(name)
+            .accessibilityValue(on ? (kits > 0 ? "Removed when you continue. \(W.goesWith(kits))" : "Removed when you continue") : "Kept")
+            .accessibilityAddTraits(on ? .isSelected : [])
+        }
+    }
+
+    private func plainRow(name: String, detail: String, tag: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: Theme.Space.xs) {
+                Text(name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                if let tag {
+                    Text(tag).font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption)).foregroundStyle(Theme.Palette.muted)
+                }
+            }
+            Text(detail).font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+        }
+        .foregroundStyle(Theme.Palette.text)
+        .padding(Theme.Space.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Only the list the user saw: one that moved since is refused, then shown again with nothing ticked.
+    private func go(_ shown: ForkPreview) {
+        guard !busy else { return }
+        busy = true
+        error = nil
+        let drop = SyncRules.forkDrop(server: shown.server, drops: shown.drops, ticked: ticked)
+        Task {
+            defer { busy = false }
+            do {
+                try await sync.useServerRoster(drop: drop, head: shown.head)
+                announce(W.forkDone)
+                dismiss()
+            } catch {
+                let problem = SyncProblem(error, action: .serverList)
+                self.error = problem.words
+                if problem.code == "rosterChanged" {
+                    ticked = []
+                    await load()
+                }
+            }
+        }
+    }
+}

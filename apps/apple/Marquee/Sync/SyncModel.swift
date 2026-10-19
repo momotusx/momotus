@@ -25,6 +25,8 @@ final class SyncModel {
     private(set) var devices: SyncDevices?
     /// What went wrong in the last round, in words, and what the user can do about it.
     private(set) var problem: SyncProblem?
+    /// What the last leave did, for the page that follows it.
+    private(set) var notice: String?
     /// The pairing attempt. It belongs here, not to the page, so its join is
     /// stored the moment it arrives, whether or not the page is on screen.
     private(set) var pairing: LiveRecord<PairingSnapshot>?
@@ -148,6 +150,7 @@ final class SyncModel {
         unstored = stored ? nil : record
         joinStored = stored
         joined = true
+        notice = nil
         self.recovered = recovered
         lastReport = nil
         lastSynced = nil
@@ -169,12 +172,28 @@ final class SyncModel {
 
     /// Vouches for the device that shows `qr` and hands it the account.
     /// Returns the six digits the new device must show too.
+    /// Behind the OS prompt: whoever confirms the digits next joins the account.
     func approvePairing(_ qr: String) async throws -> String {
+        try await confirmOwner(SyncWords.authApprove)
         struct Approved: Decodable, Sendable { let code: String; let record: JSONValue }
         let approved: Approved = try await withRecord("approvePairing", ["qr": qr]) { $0.record }
         // The new device joins once it confirms; the list catches up on the next look.
         try? await loadDevices()
         return approved.code
+    }
+
+    /// The digits on the new device differ: the approval of `qr` ends now, with
+    /// a key rotation that drops the device if it joined meanwhile (and every
+    /// device it let in). Behind the OS prompt; a cancelled prompt changes nothing.
+    func cancelPairing(_ qr: String) async throws {
+        try await confirmOwner(SyncWords.authDiffer)
+        let _: JSONValue = try await withRecord("cancelPairing", ["qr": qr]) { $0 }
+        try? await loadDevices()
+    }
+
+    /// Both sides of a different device list, read only.
+    func forkPreview() async throws -> ForkPreview {
+        try await withRecord("forkPreview") { (_: ForkPreview) in nil }
     }
 
     /// A recovery kit, to show once: nothing here keeps it. Behind the OS
@@ -214,16 +233,33 @@ final class SyncModel {
 
     /// Leaves the account. Without `force` the core refuses while edits are unsent.
     func signOut(force: Bool) async throws {
+        try await confirmOwner(SyncWords.authLeave)
         let _: JSONValue = try await withRecord("signOut", ["force": force]) { _ in nil }
         forget()
         problem = nil
+        notice = SyncWords.left
     }
 
-    /// After `fork`: the sync server's device list wins over this device's.
-    func useServerRoster() async throws {
-        let _: JSONValue = try await withRecord("useServerRoster", ["drop": [String]()]) { $0 }
+    /// Stops syncing on this device only: nothing is sent and the sync server
+    /// still lists it; the core takes only this device's own record
+    /// (`wrongRecord` otherwise). The way out when the server will not let it leave.
+    func leaveHere() async throws {
+        try await confirmOwner(SyncWords.authLeave)
+        let _: JSONValue = try await withRecord("signOut", ["force": true, "local": true]) { _ in nil }
+        forget()
+        problem = nil
+        notice = SyncWords.leftHere
+    }
+
+    /// After `fork`: the sync server's device list, as the compare page showed
+    /// it (`head`), without the devices the user ticked. A list that moved since
+    /// is refused with `rosterChanged`.
+    func useServerRoster(drop: [String], head: String) async throws {
+        try await confirmOwner(SyncWords.authServerList)
+        let _: JSONValue = try await withRecord("useServerRoster", ["drop": drop, "head": head]) { $0 }
         problem = nil
         request()
+        try? await loadDevices()
     }
 
     /// Drops the account record here only, when the relay cannot take this

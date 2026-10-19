@@ -103,14 +103,14 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         #expect(W.addedLine(kit: true, addedMs: noon, by: "Desk").hasSuffix(" on Desk"))
     }
 
-    @Test func onlyAPairingCodeIsTakenAndItsServerIsNamed() {
+    @Test func onlyAPairingCodeIsTakenAndTheQuestionIsTheDevice() {
         let code = "marquee:pair?v=2&p=slot&s=https%3A%2F%2Fsync.example.org&k=AAAA&g=BBBB"
         #expect(SyncRules.isPairingCode("  \(code)\n"))
         #expect(!SyncRules.isPairingCode("https://example.org/manifest.json"))
         #expect(!SyncRules.isPairingCode("marquee:pairing"))
-        #expect(SyncRules.pairingHost(code) == "sync.example.org")
-        #expect(SyncRules.pairingHost("marquee:pair?v=2&p=slot") == nil)
-        #expect(W.approveAsk(host: "sync.example.org") == "Approve a device from sync.example.org?")
+        // The code is always for the user's own sync server: the question names no host.
+        #expect(W.reviewAsk == "Approve a new device?")
+        #expect(!W.reviewText.contains("sync.example.org"))
     }
 
     @Test func theTwelveCharactersReadInGroups() {
@@ -140,7 +140,7 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         // A 404 while making a kit, removing or reporting is no expired code.
         for action in [SyncAction.kit, .remove, .lost, .devices, .leave] {
             #expect(!words("http status 404", action).contains("code expired"), "\(action)")
-            #expect(words("http status 404", action).hasPrefix("The sync server did not answer"), "\(action)")
+            #expect(words("http status 404", action).contains("The sync server did not answer"), "\(action)")
         }
         #expect(words("http status 403", .recover) != words("http status 403", .start))
         // The core's own sentences are kept, an address never shows.
@@ -152,7 +152,7 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
     }
 
     @Test func everyCodeHasPlainWords() {
-        for code in ["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "storage", "unconfirmed", "noPasscode"] {
+        for code in ["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "storage", "unconfirmed", "noPasscode", "rosterChanged", "wrongRecord"] {
             let words = SyncProblem(code: code, message: "raw").words
             // No protocol name in the words ("storage" is a plain word there).
             #expect(words != "raw" && (code == "storage" || !words.contains(code)), "\(code)")

@@ -38,7 +38,11 @@ private struct NotJoined: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
-            if let problem = sync.problem { Said(tone: .bad, text: problem.words) }
+            if let problem = sync.problem {
+                Said(tone: .bad, text: problem.words)
+            } else if let notice = sync.notice {
+                Said(tone: .ok, text: notice)
+            }
             NavigationLink { PairingScreen(core: core) } label: {
                 SettingsRow(symbol: "qr-code", title: W.pairTitle, detail: W.pairText)
             }
@@ -65,8 +69,6 @@ private struct JoinedSync: View {
     /// A line under the list or a member: what just happened.
     @State private var said: (id: String, tone: StatusDot.Tone, text: String)?
     @State private var busy = false
-    /// The server's device list waits on this second step.
-    @State private var adopting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -79,22 +81,6 @@ private struct JoinedSync: View {
             LeaveSync()
         }
         .task { await load() }
-        .confirmationDialog(W.useServerAsk, isPresented: $adopting, titleVisibility: .visible) {
-            Button(W.useServer) {
-                Task {
-                    do {
-                        try await sync.useServerRoster()
-                        await load()
-                        said = ("list", .warn, W.useServerDone)
-                    } catch {
-                        said = ("list", .bad, SyncProblem(error, action: .devices).words)
-                    }
-                }
-            }
-            Button(W.cancel, role: .cancel) {}
-        } message: {
-            Text(W.useServerText)
-        }
         .confirmationDialog(
             removing.map { "\(W.remove) \(SyncRules.memberName($0))?" } ?? "",
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
@@ -193,12 +179,13 @@ private struct JoinedSync: View {
     @ViewBuilder private func fixes(_ problem: SyncProblem) -> some View {
         switch problem.code {
         case "fork":
-            // A second step that says what it means; the list it brings shows right after, to check.
-            Button { adopting = true } label: { Label(W.useServer, glyph: "monitor-smartphone") }
+            // The server's list is never taken unseen: both lists first, on their own page.
+            NavigationLink { ForkReviewScreen() } label: { Label(W.compare, glyph: "monitor-smartphone") }
                 .buttonStyle(PillButtonStyle())
+            LeaveHere()
         case "wrongRelay", "relayBehind", "notJoined":
-            // Forgetting is destructive, so it reads as such and never wears the accent.
-            Button(W.forgetHere) { sync.forgetHere() }.buttonStyle(DestructiveTextStyle())
+            // The sync server will not let this device leave: only stopping here helps.
+            LeaveHere()
         default:
             EmptyView()
         }
@@ -291,8 +278,8 @@ private struct JoinedSync: View {
 private struct LeaveSync: View {
     @Environment(SyncModel.self) private var sync
     @State private var unsent = false
-    /// Leaving needs the sync server; when it cannot be reached, the account can be forgotten here only.
-    @State private var unreachable = false
+    /// The sync server would not or could not let it leave: stopping here only still works.
+    @State private var refused = false
     @State private var error: String?
     @State private var busy = false
 
@@ -312,19 +299,10 @@ private struct LeaveSync: View {
                 } else {
                     Button { Task { await leave(force: false) } } label: { Label(W.leaveButton, glyph: "log-out") }
                         .buttonStyle(DestructiveTextStyle())
-                    if unreachable {
-                        Button { sync.forgetHere() } label: { Label(W.forgetHere, glyph: "trash") }
-                            .buttonStyle(DestructiveTextStyle())
-                    }
                 }
             }
             .disabled(busy)
-            if unreachable {
-                Text(W.forgetHereText)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
-                    .foregroundStyle(Theme.Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            if refused { LeaveHere() }
         }
     }
 
@@ -338,7 +316,64 @@ private struct LeaveSync: View {
         } catch {
             let problem = SyncProblem(error, action: .leave)
             unsent = problem.code == "unsent"
-            unreachable = problem.code == nil
+            // Not for edits that wait or a prompt the user cancelled.
+            refused = problem.code != "unsent" && problem.code != "unconfirmed" && problem.code != "noPasscode"
+            self.error = problem.words
+        }
+    }
+}
+
+/// Stop syncing here only: nothing sent, this device forgets the account,
+/// after a step that says what is lost. When the core says this device does
+/// not hold the account any more (`wrongRecord`), only forgetting its key here is left.
+struct LeaveHere: View {
+    @Environment(SyncModel.self) private var sync
+    @State private var asking = false
+    @State private var forgetting = false
+    @State private var error: String?
+    @State private var notHere = false
+    @State private var busy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            Text(notHere ? W.forgetHereText : W.leaveHereText)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let error { Said(tone: .bad, text: error) }
+            if notHere {
+                Button { forgetting = true } label: { Label(W.forgetHere, glyph: "trash") }
+                    .buttonStyle(DestructiveTextStyle())
+            } else {
+                Button { asking = true } label: { Label(W.leaveHere, glyph: "log-out") }
+                    .buttonStyle(DestructiveTextStyle())
+                    .disabled(busy)
+            }
+        }
+        .confirmationDialog(W.leaveHereAsk, isPresented: $asking, titleVisibility: .visible) {
+            Button(W.leaveHere, role: .destructive) { Task { await go() } }
+            Button(W.cancel, role: .cancel) {}
+        } message: {
+            Text(W.leaveHereText)
+        }
+        .confirmationDialog(W.forgetHere + "?", isPresented: $forgetting, titleVisibility: .visible) {
+            Button(W.forgetHere, role: .destructive) { sync.forgetHere() }
+            Button(W.cancel, role: .cancel) {}
+        } message: {
+            Text(W.forgetHereText)
+        }
+    }
+
+    private func go() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        error = nil
+        do {
+            try await sync.leaveHere()
+        } catch {
+            let problem = SyncProblem(error, action: .leave)
+            notHere = problem.code == "wrongRecord"
             self.error = problem.words
         }
     }
