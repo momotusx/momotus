@@ -61,7 +61,7 @@ class PlayerHolder(
 
     val controller =
         PlaybackController(
-            host = host,
+            player = host.player,
             scope = viewModelScope,
             title = route.title,
             episode = Format.parseVideo(route.videoId)?.let { Format.episodeLabel(it.season, it.episode) },

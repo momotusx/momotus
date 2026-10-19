@@ -261,4 +261,34 @@ class PlayerLogicTest {
         assertEquals(listOf(subs[1]), upfrontSubtitles(subs, pickLanguage = "en", pickUrl = "gone"))
         assertEquals(emptyList(), upfrontSubtitles(subs, pickLanguage = "de", pickUrl = "gone"))
     }
+
+    @Test
+    fun `a carried language takes its best file, not whatever came first`() {
+        fun sub(
+            url: String,
+            lang: String,
+            forced: Boolean = false,
+            hearingImpaired: Boolean = false,
+        ) = SubtitleTrack(
+            url = url,
+            lang = lang,
+            source = "SubSense",
+            forced = forced,
+            hearingImpaired = hearingImpaired,
+        )
+        // The core's order within Turkish: a forced file first, then a hearing-impaired one, then two full files.
+        val subs =
+            listOf(
+                sub("eng", "eng"),
+                sub("forced", "tur", forced = true),
+                sub("hi", "tur", hearingImpaired = true),
+                sub("full1", "tur"),
+                sub("full2", "tur"),
+            )
+        assertEquals(listOf(subs[3]), upfrontSubtitles(subs, pickLanguage = "tr", pickUrl = "gone"))
+        // With no full file, a hearing-impaired one beats a forced one.
+        assertEquals(subs[2], bestInLanguage(subs.take(3), "tur"))
+        assertEquals(subs[1], bestInLanguage(subs.take(2), "tur"))
+        assertNull(bestInLanguage(subs, ""))
+    }
 }

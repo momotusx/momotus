@@ -2,6 +2,7 @@ package app.marquee.player
 
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.Util
+import androidx.media3.datasource.HttpDataSource
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
@@ -247,8 +248,42 @@ fun upfrontSubtitles(
 ): List<SubtitleTrack> {
     val carried =
         subs.firstOrNull { pickUrl != null && it.url == pickUrl }
-            ?: subs.firstOrNull { !pickLanguage.isNullOrEmpty() && sameLanguage(it.lang, pickLanguage) }
+            ?: bestInLanguage(subs, pickLanguage)
     return listOfNotNull(carried)
+}
+
+/**
+ * The best track in [language]: the core lists each language's tracks in its own ranking (addon order),
+ * and a full regular file beats a hearing-impaired one, which beats a forced file (only the lines in other
+ * languages). Ties keep the core's order.
+ */
+fun bestInLanguage(
+    subs: List<SubtitleTrack>,
+    language: String?,
+): SubtitleTrack? {
+    if (language.isNullOrEmpty()) return null
+    return subs
+        .filter { sameLanguage(it.lang, language) }
+        .minByOrNull { (if (it.forced) 2 else 0) + (if (it.hearingImpaired) 1 else 0) }
+}
+
+/**
+ * The side-loaded subtitle behind a player error, or null when the error is the video's. Media3 turns a
+ * subtitle file that does not load (the addon answered 502, timed out) into an error of the whole item;
+ * the HTTP failure in its causes names the file.
+ */
+fun failedSubtitle(
+    error: Throwable,
+    loaded: List<SubtitleTrack>,
+): SubtitleTrack? {
+    val uri =
+        generateSequence(error) { it.cause }
+            .filterIsInstance<HttpDataSource.HttpDataSourceException>()
+            .firstOrNull()
+            ?.dataSpec
+            ?.uri
+            ?.toString() ?: return null
+    return loaded.firstOrNull { it.url == uri }
 }
 
 /** A subtitle the viewer chose, as [findPick] looks for it again when the tracks change. */

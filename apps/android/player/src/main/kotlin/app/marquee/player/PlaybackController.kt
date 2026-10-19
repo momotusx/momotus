@@ -52,7 +52,7 @@ import kotlinx.coroutines.launch
  * @param openedAtMs [SystemClock.elapsedRealtime] when Play was chosen, for the time to first frame.
  */
 class PlaybackController(
-    private val host: PlayerHost,
+    val player: Player,
     private val scope: CoroutineScope,
     val title: String,
     /** "S1:E2", or null for a movie. */
@@ -61,8 +61,6 @@ class PlaybackController(
     private val openedAtMs: Long,
 ) {
     enum class Stage { Opening, Buffering, Playing, Paused, Ended, Failed }
-
-    val player: Player get() = host.player
 
     var stage by mutableStateOf(Stage.Opening)
         private set
@@ -156,6 +154,9 @@ class PlaybackController(
     private var handlingFailure = false
     private var lastPositionMs = 0L
     private var pick: TextPick? = null
+
+    /** Addon subtitle files that did not load in this play: not side-loaded or offered again. */
+    private val dead = HashSet<String>()
     private var released = false
     private var durationSentFor: String? = null
     private var reloadedAt = 0L
@@ -204,7 +205,7 @@ class PlaybackController(
         }
 
     init {
-        host.player.addListener(listener)
+        player.addListener(listener)
         ticker = scope.launch { tickLoop() }
     }
 
@@ -294,7 +295,7 @@ class PlaybackController(
         val from = if (again) lastPositionMs else s.resumeMs ?: 0L
         loadedUrl = url
         val carried = pick?.takeIf { it.external }
-        loadedSubs = upfrontSubtitles(s.subtitles, carried?.language, carried?.url)
+        loadedSubs = upfrontSubtitles(s.subtitles.filterNot { it.url in dead }, carried?.language, carried?.url)
         playingKey = s.key
         playingAttempt = s.attempt
         durationMs = 0L
@@ -410,6 +411,11 @@ class PlaybackController(
         // A late error from a source already given up on must not fail the next one.
         val playback = view
         if (handlingFailure || playback == null || released) return
+        // A subtitle file that did not load costs that track, never the video.
+        failedSubtitle(error, loadedSubs)?.let {
+            dropSubtitle(it)
+            return
+        }
         val cause = error.cause as? HttpDataSource.InvalidResponseCodeException
         val failure = classifyFailure(error.errorCode, cause?.responseCode)
         CoreLog.w("playback error ${error.errorCodeName}: ${failure.message}")
@@ -420,6 +426,20 @@ class PlaybackController(
         stage = Stage.Buffering
         status = "${failure.message}, trying the next source"
         playback.failOver(failure.message, playingAttempt, failure.kind.wire, failure.status)
+    }
+
+    /** Sets the item again without [sub] at the same position, and says so for a few seconds. */
+    private fun dropSubtitle(sub: SubtitleTrack) {
+        CoreLog.w("a subtitle file from ${sub.source} did not load: dropped, the video goes on")
+        dead += sub.url
+        // The viewer's language stays wanted: another file in it can still be found.
+        pick = pick?.takeIf { it.url == sub.url }?.copy(url = null) ?: pick
+        val url = loadedUrl ?: return
+        val at = player.currentPosition.coerceAtLeast(0L)
+        loadedSubs = loadedSubs.filter { it.url != sub.url }
+        player.setMediaItem(item(url, loadedSubs), at)
+        player.prepare()
+        announce("Subtitles from ${sub.source} did not load")
     }
 
     private suspend fun tickLoop() {
@@ -640,7 +660,7 @@ class PlaybackController(
         }
         loadedSubs.forEach { loaded += it.url }
         val late =
-            snapshotSubs.filter { it.url !in loaded }.map {
+            snapshotSubs.filter { it.url !in loaded && it.url !in dead }.map {
                 val name = languageName(it.lang) ?: it.label ?: "Subtitles"
                 TrackChoice(
                     "$LATE${it.url}",
@@ -722,7 +742,7 @@ class PlaybackController(
         released = true
         ticker?.cancel()
         noticeJob?.cancel()
-        host.player.removeListener(listener)
+        player.removeListener(listener)
         view?.close()
         view = null
     }
