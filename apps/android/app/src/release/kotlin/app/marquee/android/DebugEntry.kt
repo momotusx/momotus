@@ -16,5 +16,5 @@ object DebugEntry {
     fun destroy() = Unit
 
     @Suppress("UNUSED_PARAMETER")
-    fun devTrakt(context: android.content.Context) = Unit
+    fun devFakes(context: android.content.Context) = Unit
 }

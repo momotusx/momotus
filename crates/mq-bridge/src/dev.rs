@@ -32,6 +32,24 @@ pub fn dev_trakt(core: &Core) {
 #[cfg(not(debug_assertions))]
 pub fn dev_trakt(_: &Core) {}
 
+/// Development builds only, on the same rule: `MQ_DEV_CINEMETA=<loopback
+/// manifest url>` reads Find addons' two lists from a local fake (walks of
+/// the empty and filter-empty states, which the live lists never show).
+#[cfg(debug_assertions)]
+pub(crate) fn catalog_source() -> Option<String> {
+    let url = std::env::var("MQ_DEV_CINEMETA").ok()?;
+    if loopback_url(&url) {
+        return Some(url);
+    }
+    tracing::warn!("MQ_DEV_CINEMETA ignored: only an http URL on this machine is taken");
+    None
+}
+
+#[cfg(not(debug_assertions))]
+pub(crate) fn catalog_source() -> Option<String> {
+    None
+}
+
 /// `http://` to `localhost` or a loopback address, with no user part.
 #[cfg_attr(not(any(debug_assertions, test)), allow(dead_code))]
 fn loopback_url(url: &str) -> bool {

@@ -530,13 +530,14 @@ impl Session {
         }
     }
 
-    /// Cinemeta, where `addonCatalog` reads its lists.
+    /// Cinemeta, where `addonCatalog` reads its lists (a debug build's local
+    /// fake when `MQ_DEV_CINEMETA` names one).
     fn catalog_source(&self) -> String {
         #[cfg(test)]
         if let Some(source) = &self.catalog_source {
             return source.clone();
         }
-        mq_runtime::CINEMETA.to_owned()
+        dev::catalog_source().unwrap_or_else(|| mq_runtime::CINEMETA.to_owned())
     }
 
     fn core(&self) -> Core {

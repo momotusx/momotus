@@ -66,8 +66,8 @@ class MarqueeApp :
                 else -> if (debuggable) Log.d(TAG, message)
             }
         }
-        // Debug builds only: Trakt from a local fake, read by a dev build of the core library.
-        DebugEntry.devTrakt(this)
+        // Debug builds only: local fakes (Trakt, Find addons' lists), read by a dev build of the core library.
+        DebugEntry.devFakes(this)
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
         sync = SyncController(session, this).also { it.start() }

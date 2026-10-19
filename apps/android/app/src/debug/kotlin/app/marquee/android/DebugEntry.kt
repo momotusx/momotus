@@ -95,20 +95,23 @@ object DebugEntry {
     }
 
     /**
-     * Points Trakt at a local fake for emulator walks: the base URL in `files/dev-trakt` (written with
-     * `adb shell run-as`), an http URL on this device, read only by a core library built with debug
-     * assertions (`build-core.sh dev`), which only debug builds package. No file, no change.
+     * Local fakes for emulator walks: Trakt's base URL in `files/dev-trakt`, Find addons' source manifest
+     * in `files/dev-cinemeta` (written with `adb shell run-as`), each an http URL on this device, read only
+     * by a core library built with debug assertions (`build-core.sh dev`), which only debug builds package.
+     * No file, no change.
      */
-    fun devTrakt(context: android.content.Context) {
-        val url =
-            java.io
-                .File(context.filesDir, "dev-trakt")
-                .takeIf { it.exists() }
-                ?.readText()
-                ?.trim()
-                ?.ifEmpty { null } ?: return
-        android.system.Os.setenv("MQ_DEV_TRAKT", url, true)
-        CoreLog.w("debug: MQ_DEV_TRAKT is $url (the core takes it only as an http URL on this device)")
+    fun devFakes(context: android.content.Context) {
+        for ((file, name) in listOf("dev-trakt" to "MQ_DEV_TRAKT", "dev-cinemeta" to "MQ_DEV_CINEMETA")) {
+            val url =
+                java.io
+                    .File(context.filesDir, file)
+                    .takeIf { it.exists() }
+                    ?.readText()
+                    ?.trim()
+                    ?.ifEmpty { null } ?: continue
+            android.system.Os.setenv(name, url, true)
+            CoreLog.w("debug: $name is $url (the core takes it only as an http URL on this device)")
+        }
     }
 }
 
