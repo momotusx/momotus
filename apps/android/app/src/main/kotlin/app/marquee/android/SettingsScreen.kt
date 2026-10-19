@@ -58,13 +58,13 @@ import app.marquee.core.DebridCopy
 import app.marquee.core.DefaultsCopy
 import app.marquee.core.FindAddonsCopy
 import app.marquee.core.LinkInstall
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.SyncCopy
 import app.marquee.core.TraktCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
-import app.marquee.core.model.QualityPref
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.AddonsView
 import app.marquee.core.views.SettingsView
@@ -92,7 +92,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -149,6 +148,8 @@ fun SettingsScreen(
     onTrakt: () -> Unit,
     onHomeRows: () -> Unit,
     onFindAddons: () -> Unit,
+    /** Settings > Stream choice; null where it is not offered (the sources page). */
+    onStreamChoice: (() -> Unit)? = null,
     /** The recommended addons step with every switch; null where it is not offered (the sources page). */
     onDefaults: (() -> Unit)? = null,
     /** Opened from "Add a source": the link field first and only the source addons, as on Apple. */
@@ -413,6 +414,17 @@ fun SettingsScreen(
             )
         }
         item(key = "playback-head") { Kicker("Playback") }
+        onStreamChoice?.let { open ->
+            item(key = "stream-choice") {
+                val streams = holder.prefs.snapshot?.streams
+                LinkRow(
+                    Icons.SlidersHorizontal,
+                    StreamChoiceCopy.TITLE,
+                    streams?.let(StreamChoiceCopy::summary) ?: StreamChoiceCopy.LEDE,
+                    open,
+                )
+            }
+        }
         item(key = "playback") { Playback(holder, busy != null) { what, op -> run(what, Place.Playback, op = op) } }
         said?.takeIf { it.place == Place.Playback }?.let { item(key = "playback-said") { SaidLine(it) } }
         item(key = "about-head") { Kicker("About") }
@@ -708,7 +720,6 @@ internal fun InstallField(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Playback(
     holder: SettingsHolder,
@@ -719,54 +730,6 @@ private fun Playback(
     val ops = holder.session.ops
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            MqText("Quality", role = TextRole.Headline, weight = FontWeight.Bold)
-            // Wraps on a narrow phone rather than squeezing the last chip.
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            ) {
-                for ((value, label) in QUALITIES) {
-                    Chip(label, selected = prefs.streams.quality == value, onClick = {
-                        if (!busy) {
-                            run("Changing the quality") {
-                                ops.setPrefs(
-                                    buildJsonObject { put("streams", buildJsonObject { put("quality", wire(value)) }) },
-                                )
-                            }
-                        }
-                    })
-                }
-            }
-            MqText("Up to", role = TextRole.Headline, weight = FontWeight.Bold)
-            // Wraps on a narrow phone rather than squeezing the last chip.
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            ) {
-                for ((value, label) in HEIGHTS) {
-                    Chip(label, selected = prefs.streams.maxHeight == value, onClick = {
-                        if (!busy) {
-                            run("Changing the resolution") {
-                                val height = value?.let(::JsonPrimitive) ?: JsonNull
-                                ops.setPrefs(
-                                    buildJsonObject { put("streams", buildJsonObject { put("maxHeight", height) }) },
-                                )
-                            }
-                        }
-                    })
-                }
-            }
-            // Several may be on; the list keeps the order they were turned on in, the first wins.
-            MqText("Audio", role = TextRole.Headline, weight = FontWeight.Bold)
-            Languages(LANGS.map { it.first }, prefs.streams.languages) { list ->
-                if (!busy) {
-                    run("Changing the audio languages") {
-                        ops.setPrefs(
-                            buildJsonObject { put("streams", buildJsonObject { put("languages", json(list)) }) },
-                        )
-                    }
-                }
-            }
             MqText("Subtitles", role = TextRole.Headline, weight = FontWeight.Bold)
             Languages(LANGS.map { it.second }, prefs.subtitleLanguages) { list ->
                 if (!busy) {
@@ -797,17 +760,8 @@ private fun Playback(
     }
 }
 
-private val QUALITIES =
-    listOf(
-        QualityPref.Best to "Best",
-        QualityPref.Balanced to "Balanced",
-        QualityPref.DataSaver to "Data saver",
-    )
-
-private val HEIGHTS = listOf(null to "Any resolution", 2160 to "4K", 1080 to "1080p", 720 to "720p")
-
 /** The web's languages: the audio code (ISO 639-1) and the subtitle code addons use (ISO 639-2). */
-private val LANGS =
+internal val LANGS =
     listOf(
         "en" to "eng",
         "tr" to "tur",
@@ -824,7 +778,7 @@ private fun json(list: List<String>) = JsonArray(list.map(::JsonPrimitive))
 /** A chip per language, each on or off on its own; turning one on puts it last, so the order is the user's. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Languages(
+internal fun Languages(
     codes: List<String>,
     chosen: List<String>,
     onChange: (List<String>) -> Unit,
@@ -844,9 +798,6 @@ private fun Languages(
         }
     }
 }
-
-/** The wire name of a quality ("dataSaver"). */
-private fun wire(value: QualityPref): String = value.name.replaceFirstChar { it.lowercase() }
 
 @Composable
 private fun About() {

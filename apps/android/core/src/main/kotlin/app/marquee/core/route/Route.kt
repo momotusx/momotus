@@ -85,6 +85,14 @@ sealed interface Route : NavKey {
     @Serializable
     data object HomeRows : Route
 
+    /** How Marquee picks the version to play (plans/m13-stream-choice.md 4.4). */
+    @Serializable
+    data object StreamChoice : Route
+
+    /** The one question of a first run, after the recommended addons: start fast or best quality (4.5). */
+    @Serializable
+    data object StreamQuestion : Route
+
     /**
      * "Add a source" from a title: the link field first, then the source addons. Pushed over the
      * title, so Back returns to it, and its versions follow the install.

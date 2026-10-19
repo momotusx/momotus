@@ -52,6 +52,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DefaultsCopy
 import app.marquee.core.DefaultsStep
 import app.marquee.core.InstallCards
+import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.StreamChoiceSettings
 import app.marquee.core.model.DefaultAddonInfo
 import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
@@ -164,6 +166,79 @@ fun OnboardingScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** The question's write for the page's life. */
+class StreamQuestionHolder(
+    session: CoreSession,
+) : ViewModel() {
+    val page = StreamChoiceSettings(session.ops, viewModelScope)
+}
+
+/**
+ * The one question of a first run, after the recommended addons (plans/m13-stream-choice.md 4.5): how
+ * Marquee should pick what to play. Start fast has focus; each answer writes its patch, then [onDone].
+ * Skip writes nothing, since the defaults are Start fast's.
+ */
+@Composable
+fun StreamQuestionScreen(
+    session: CoreSession,
+    onDone: () -> Unit,
+) {
+    val holder =
+        viewModel<StreamQuestionHolder>(
+            key = "stream-question",
+            factory = viewModelFactory { initializer { StreamQuestionHolder(session) } },
+        )
+    val page = holder.page
+    val tv = Marquee.form == Form.Tv
+    val fast = remember { FocusRequester() }
+    AutoFocus(fast)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.l),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            SkipLink(StreamChoiceCopy.SKIP, onDone)
+        }
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
+        ) {
+            MqText(StreamChoiceCopy.QUESTION_TITLE, role = if (tv) TextRole.Title1 else TextRole.Title2)
+            MqText(StreamChoiceCopy.QUESTION_LEAD, role = TextRole.Body, color = Marquee.colors.muted)
+            val doors: @Composable (Modifier) -> Unit = { door ->
+                Door(
+                    StreamChoiceCopy.FAST.label,
+                    StreamChoiceCopy.FAST.text,
+                    Icons.Zap,
+                    { page.answer(StreamChoiceCopy.FAST, onDone) },
+                    door,
+                    fast,
+                )
+                Door(
+                    StreamChoiceCopy.BEST.label,
+                    StreamChoiceCopy.BEST.text,
+                    Icons.Gem,
+                    { page.answer(StreamChoiceCopy.BEST, onDone) },
+                    door,
+                    null,
+                )
+            }
+            if (tv) {
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
+                    doors(Modifier.weight(1f).fillMaxHeight())
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) { doors(Modifier.fillMaxWidth()) }
+            }
+            page.problem?.let { StatusWord("Could not save the choice: $it", Status.Bad) }
         }
     }
 }

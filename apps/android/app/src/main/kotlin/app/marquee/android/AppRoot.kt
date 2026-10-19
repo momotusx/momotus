@@ -256,11 +256,14 @@ private fun AppNav(
                     entry<Route.Defaults> { route ->
                         DefaultsScreen(session, route.mode, onDone = {
                             when (route.mode) {
-                                DefaultsMode.FirstRun, DefaultsMode.AfterImport -> arrive()
+                                // A first run asks the one question (plans/m13-stream-choice.md 4.5).
+                                DefaultsMode.FirstRun, DefaultsMode.AfterImport -> backStack.add(Route.StreamQuestion)
+
                                 DefaultsMode.Review, DefaultsMode.Settings -> pop()
                             }
                         })
                     }
+                    entry<Route.StreamQuestion> { StreamQuestionScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
                         // An empty Home asks once whether catalogs exist and are all hidden.
                         val empty = app.home.status == ViewStatus.Open && app.home.rows.isEmpty()
@@ -365,6 +368,7 @@ private fun AppNav(
                             onHomeRows = { backStack.add(Route.HomeRows) },
                             onFindAddons = { backStack.add(Route.FindAddons) },
                             onDefaults = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
+                            onStreamChoice = { backStack.add(Route.StreamChoice) },
                             link = app.linkInstall,
                         )
                     }
@@ -401,6 +405,7 @@ private fun AppNav(
                         )
                     }
                     entry<Route.HomeRows> { HomeRowsScreen(session) }
+                    entry<Route.StreamChoice> { StreamChoiceScreen(session) }
                     entry<Route.Pairing> {
                         // From onboarding, a join is the way in: Done goes Home. From Settings it goes back.
                         PairingScreen(session, sync, onDone = {
