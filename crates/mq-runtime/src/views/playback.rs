@@ -286,6 +286,9 @@ struct State {
     /// Dead swarms waiting for proof the connection works (a peer or a
     /// source reached in this chain), so an outage marks none of them.
     dead: Dead,
+    /// The HTTP capacity sample was taken (once per view: at 30 s, or when
+    /// the view closes first, as a short trailer's does).
+    sampled: bool,
     last: Option<(u64, u64)>,
     saved_at: Option<Instant>,
     dirty: bool,
@@ -352,6 +355,7 @@ impl State {
             pick: None,
             patient: false,
             dead: Dead::default(),
+            sampled: false,
             last: None,
             saved_at: None,
             dirty: false,
@@ -730,9 +734,16 @@ impl Drop for PlaybackView {
         }
         self.save();
         // A task still running after the abort can never adopt a lease now.
-        let mut s = lock(&self.state);
-        s.closed = true;
-        release_all(&mut s);
+        let sample = {
+            let mut s = lock(&self.state);
+            let sample = take_http_sample(&mut s);
+            s.closed = true;
+            release_all(&mut s);
+            sample
+        };
+        if let Some(sample) = sample {
+            record_http_sample(&self.core, sample);
+        }
     }
 }
 
@@ -1515,30 +1526,43 @@ fn spawn_http_sample(core: &Core, state: &Arc<Mutex<State>>, attempt: u64) {
             return;
         };
         let sample = {
-            let s = lock(&state);
+            let mut s = lock(&state);
             if s.closed || s.snapshot.attempt != attempt {
                 return;
             }
-            s.lease.as_ref().and_then(Lease::sample)
+            take_http_sample(&mut s)
         };
-        let Some((bytes, busy)) = sample else {
-            return;
-        };
-        let sample = crate::speed::Sample {
-            kind: crate::speed::Kind::Http,
-            bytes,
-            busy,
-            seeders: None,
-        };
-        let min = core.prefs().streams.min_seeders;
-        crate::speed::record(
-            core.library(),
-            core.network(),
-            &sample,
-            min,
-            mq_library::hlc::now_ms(),
-        );
+        if let Some(sample) = sample {
+            record_http_sample(&core, sample);
+        }
     });
+}
+
+/// The playing HTTP source's capacity sample, once per view.
+fn take_http_sample(s: &mut State) -> Option<(u64, Duration)> {
+    if s.sampled {
+        return None;
+    }
+    let sample = s.lease.as_ref().and_then(Lease::sample)?;
+    s.sampled = true;
+    Some(sample)
+}
+
+fn record_http_sample(core: &Core, (bytes, busy): (u64, Duration)) {
+    let sample = crate::speed::Sample {
+        kind: crate::speed::Kind::Http,
+        bytes,
+        busy,
+        seeders: None,
+    };
+    let min = core.prefs().streams.min_seeders;
+    crate::speed::record(
+        core.library(),
+        core.network(),
+        &sample,
+        min,
+        mq_library::hlc::now_ms(),
+    );
 }
 
 /// True the first time this process samples `info_hash` on `network`.

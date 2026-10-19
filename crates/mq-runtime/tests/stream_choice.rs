@@ -442,3 +442,92 @@ async fn a_pick_while_the_recommendation_starts_waits_for_it() {
         "it started: a real choice"
     );
 }
+
+/// A loopback origin serving `len` bytes with `Range` support, about
+/// 12 MB/s, so a read is in flight long enough to count as a sample.
+async fn throttled_origin(len: usize) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut buf = [0u8; 2048];
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match socket.read(&mut buf).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => head.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let head = String::from_utf8_lossy(&head).to_ascii_lowercase();
+                let start: usize = head
+                    .split("range: bytes=")
+                    .nth(1)
+                    .and_then(|r| r.split('-').next()?.trim().parse().ok())
+                    .unwrap_or(0);
+                let body_len = len - start;
+                let answer = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Type: video/mp4\r\nContent-Range: bytes {start}-{}/{len}\r\nContent-Length: {body_len}\r\n\r\n",
+                    len - 1
+                );
+                if socket.write_all(answer.as_bytes()).await.is_err() {
+                    return;
+                }
+                let chunk = vec![0u8; 64 << 10];
+                let mut left = body_len;
+                while left > 0 {
+                    let n = left.min(chunk.len());
+                    if socket.write_all(&chunk[..n]).await.is_err() {
+                        return;
+                    }
+                    left -= n;
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            });
+        }
+    });
+    base
+}
+
+/// Android's finding: a short direct trailer never counted toward the
+/// speed. Now one playback's HTTP capacity sample is taken when the view
+/// closes before 30 s, and the first sample is the estimate.
+#[tokio::test]
+async fn one_short_playback_measures_the_connection() {
+    let base = throttled_origin(6 << 20).await;
+    let core = Core::temporary("p").unwrap();
+    assert_eq!(core.speed(mq_runtime::speed::Kind::Http).samples, 0);
+    let mut stream = mq_streams::normalize(
+        &mq_protocol::decode_streams(
+            format!(r#"{{"streams":[{{"url":"{base}/trailer.mp4"}}]}}"#).as_bytes(),
+        )
+        .unwrap()
+        .streams[0],
+        "t",
+        "T",
+        0,
+        0,
+    );
+    // Listed by an install on the same loopback host: its reach.
+    stream.addon_url = Some(url::Url::parse(&format!("{base}/manifest.json")).unwrap());
+    let view =
+        mq_runtime::PlaybackView::open(&core, vec![stream], mq_runtime::PlayTarget::default());
+    until("ready", || view.snapshot().url.is_some()).await;
+    // Read it whole, as a player does.
+    let url = view.snapshot().url.unwrap();
+    let loopback = mq_http::RequestOptions {
+        allow_private: true,
+        timeout: Duration::from_secs(60),
+        ..Default::default()
+    };
+    let body = core.http().get(&url, &loopback).await.unwrap();
+    assert_eq!(body.body.len(), 6 << 20);
+    drop(view);
+    let speed = core.speed(mq_runtime::speed::Kind::Http);
+    assert_eq!(speed.samples, 1, "{speed:?}");
+    assert!(speed.mbps > 1.0, "{speed:?}");
+}

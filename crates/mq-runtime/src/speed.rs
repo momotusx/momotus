@@ -118,11 +118,13 @@ fn stored(lib: &Library, network: Network, kind: Kind, now_ms: u64) -> Option<St
         .filter(|s| now_ms.saturating_sub(s.at) <= EXPIRES_MS)
 }
 
-/// The estimate for `kind` on `network`: the prior until two samples, or
-/// when the last one is older than 30 days.
+/// The estimate for `kind` on `network`: what the samples measured, from
+/// the first one on (a measured line beats a guess; the second sample
+/// averages with it and later ones move it by 30%), else the prior, also
+/// when the last sample is older than 30 days.
 pub fn estimate(lib: &Library, network: Network, kind: Kind, now_ms: u64) -> Speed {
     match stored(lib, network, kind, now_ms) {
-        Some(s) if s.n >= 2 => Speed {
+        Some(s) if s.n >= 1 => Speed {
             mbps: s.mbps,
             samples: s.n,
         },
@@ -242,15 +244,15 @@ mod tests {
     }
 
     #[test]
-    fn priors_hold_until_two_samples_then_they_average_then_move_by_30_percent() {
+    fn the_first_sample_replaces_the_prior_then_two_average_then_move_by_30_percent() {
         let lib = Library::temporary().unwrap();
         let wifi = Network::Wifi;
         assert_eq!(estimate(&lib, wifi, Kind::Http, 0), prior(Kind::Http));
         assert!(record(&lib, wifi, &sample(Kind::Http, 100, 2.0), 50, 0));
-        assert_eq!(
-            mbps(&lib, wifi, Kind::Http, 0),
-            15.0,
-            "one sample: the prior"
+        let one = estimate(&lib, wifi, Kind::Http, 0);
+        assert!(
+            (one.mbps - 100.0).abs() < 0.5 && one.samples == 1,
+            "{one:?}"
         );
         assert!(record(&lib, wifi, &sample(Kind::Http, 60, 2.0), 50, 0));
         let two = estimate(&lib, wifi, Kind::Http, 0);
@@ -326,7 +328,7 @@ mod tests {
         }
         assert!((mbps(&lib, net, Kind::Http, EXPIRES_MS) - 90.0).abs() < 0.5);
         assert_eq!(mbps(&lib, net, Kind::Http, EXPIRES_MS + 1), 15.0);
-        // An expired estimate starts over: one new sample is not enough.
+        // An expired estimate starts over from the new sample.
         assert!(record(
             &lib,
             net,
@@ -334,7 +336,7 @@ mod tests {
             50,
             EXPIRES_MS + 1
         ));
-        assert_eq!(mbps(&lib, net, Kind::Http, EXPIRES_MS + 1), 15.0);
+        assert!((mbps(&lib, net, Kind::Http, EXPIRES_MS + 1) - 30.0).abs() < 0.5);
 
         for _ in 0..2 {
             assert!(record(&lib, net, &sample(Kind::P2p, 40, 3.0), 50, 0));
