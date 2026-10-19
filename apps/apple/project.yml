@@ -41,17 +41,21 @@ targetTemplates:
       - sdk: Security.framework
       - sdk: SystemConfiguration.framework
     preBuildScripts:
-      # build-core.sh --dev marks its core (debug assertions, the loopback Trakt hook):
-      # it never goes into a Release build or an archive.
+      # A core built with debug assertions (build-core.sh --dev) carries the loopback
+      # Trakt hook, read from MQ_DEV_TRAKT: it never goes into a Release build or an archive.
+      # Checked on the libraries themselves, every slice.
       - name: Refuse a dev core outside Debug
         basedOnDependencyAnalysis: false
         inputFiles:
           - $(SRCROOT)/Core/MarqueeCore.xcframework/Info.plist
         script: |
-          if [ "$CONFIGURATION" != "Debug" ] && [ -e "$SRCROOT/Core/MarqueeCore.xcframework/DEV" ]; then
-            echo "error: Core/MarqueeCore.xcframework is a --dev build (debug assertions, the loopback Trakt hook). Run apps/apple/scripts/build-core.sh without --dev first."
-            exit 1
-          fi
+          [ "$CONFIGURATION" = "Debug" ] && exit 0
+          for lib in "$SRCROOT"/Core/MarqueeCore.xcframework/*/libmarquee_core.a; do
+            if grep -aq MQ_DEV_TRAKT "$lib"; then
+              echo "error: $lib is a --dev core (debug assertions, the loopback Trakt hook). Run apps/apple/scripts/build-core.sh without --dev first."
+              exit 1
+            fi
+          done
     settings:
       base:
         PRODUCT_NAME: Marquee

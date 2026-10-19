@@ -10,7 +10,7 @@
 #   --dev    debug assertions on, which compiles the bridge's dev hooks in (Trakt from
 #            a local fake on this machine, `MQ_DEV_TRAKT`), in its own target dir, with
 #            the macOS and iOS simulator slices only: for tests and simulator walks.
-#            Never for a device, TestFlight or store build: build those without it.
+#            The app refuses it outside Debug (it greps every slice for the hook).
 set -euo pipefail
 
 apple="$(cd "$(dirname "$0")/.." && pwd)"
@@ -63,10 +63,6 @@ done
 rm -rf "$out/MarqueeCore.xcframework"
 mkdir -p "$out"
 xcodebuild -create-xcframework "${args[@]}" -output "$out/MarqueeCore.xcframework" >/dev/null
-# The app's build phase refuses a marked core outside Debug: it never ships.
-if [[ "$dev_assertions" == true ]]; then
-  echo "built with --dev: debug assertions and the loopback Trakt hook" > "$out/MarqueeCore.xcframework/DEV"
-fi
 # The libraries are 140 MB or more each: hard-link them instead of keeping copies.
 for lib in "$out"/MarqueeCore.xcframework/*/libmarquee_core.a; do
   case "$(basename "$(dirname "$lib")")" in
