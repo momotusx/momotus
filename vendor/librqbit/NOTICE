@@ -46,3 +46,5 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   handed to the UDP tracker client; with it the session's tracker HTTP
   client uses no proxy, follows no redirect, keeps no idle connection and
   resolves names through the policy. `tracker_comms` is re-exported.
+- src/session.rs: `Destinations::dht`, the DHT's check, handed to both DHT
+  constructors (persisted and not).

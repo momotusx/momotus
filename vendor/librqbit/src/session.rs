@@ -431,6 +431,8 @@ pub struct Destinations {
     /// Every tracker announce: HTTP literals and UDP datagrams at each send,
     /// names through its resolver.
     pub trackers: tracker_comms::Policy,
+    /// Every DHT datagram: bootstrap, routing, replies.
+    pub dht: dht::Permits,
 }
 
 pub struct SessionOptions {
@@ -627,6 +629,8 @@ impl Session {
             };
 
             let dht = if let Some(dht_config) = opts.dht.take() {
+                // Marquee fork (C27): both constructors get the DHT's check.
+                let dht_permits = opts.destinations.as_ref().map(|d| d.dht.clone());
                 let dht = if let Some(persistence_config) = dht_config.persistence {
                     PersistentDht::create(
                         persistence_config,
@@ -635,6 +639,7 @@ impl Session {
                         dht_config.bootstrap_addrs,
                         Some(token.clone()),
                         bind_device.as_ref(),
+                        dht_permits,
                     )
                     .await
                     .context("error initializing persistent DHT")?
@@ -645,6 +650,7 @@ impl Session {
                         cancellation_token: Some(token.child_token()),
                         bind_device: bind_device.as_ref(),
                         listen_addr: Some(listen_addr),
+                        permits: dht_permits,
                         ..Default::default()
                     })
                     .await

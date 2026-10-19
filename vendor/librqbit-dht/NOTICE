@@ -11,5 +11,12 @@ What was taken: src/, resources/, examples/, README.md, Cargo.toml.orig and
 the Cargo.toml published to crates.io for 9.0.1, plus an empty [workspace]
 table.
 
-Marquee changes (each changed spot carries a "Marquee fork" comment): none
-yet.
+Marquee changes (each changed spot carries a "Marquee fork" comment), for
+the torrent address policy (plans/c27-torrent-policy.md, appendix A.4):
+
+- src/dht.rs: `Permits` and `DhtConfig::permits`. The worker checks every
+  datagram's destination (bootstrap, routing, replies) before `send_to`; a
+  refused query fails at once (`on_send_error`), so a lookup moves on.
+- src/persistence.rs: `PersistentDht::create` takes the check and passes it
+  into the DHT's config.
+- src/lib.rs: re-exports `Permits`.

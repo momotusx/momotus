@@ -1,6 +1,6 @@
 use std::{
     cmp::Reverse,
-    net::{Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     str::FromStr,
     sync::{
         Arc,
@@ -964,9 +964,13 @@ impl core::fmt::Debug for ResponseOrError {
     }
 }
 
+/// Marquee fork (C27): where the DHT may send.
+pub type Permits = Arc<dyn Fn(IpAddr) -> bool + Send + Sync>;
+
 struct DhtWorker {
     socket: UdpSocket,
     dht: Arc<DhtState>,
+    permits: Option<Permits>,
 }
 
 impl DhtWorker {
@@ -1159,6 +1163,16 @@ impl DhtWorker {
                 addr,
             }) = input_rx.recv().await
             {
+                // Marquee fork (C27): every datagram (bootstrap, routing,
+                // replies) is checked here; a refused query fails at once so
+                // the lookup moves on.
+                if self.permits.as_ref().is_some_and(|p| !p(addr.ip())) {
+                    if let Some(tid) = our_tid {
+                        let refused = std::io::ErrorKind::PermissionDenied.into();
+                        self.on_send_error(tid, addr, Error::Send(refused));
+                    }
+                    continue;
+                }
                 if our_tid.is_none() {
                     trace!("{}: sending {:?}", addr, &message);
                 }
@@ -1283,6 +1297,8 @@ pub struct DhtConfig<'a> {
     pub peer_store: Option<PeerStore>,
     pub cancellation_token: Option<CancellationToken>,
     pub bind_device: Option<&'a BindDevice>,
+    /// Marquee fork (C27): every datagram's destination must pass this.
+    pub permits: Option<Permits>,
 }
 
 impl DhtState {
@@ -1321,6 +1337,7 @@ impl DhtState {
                 .unwrap_or_else(|| crate::DHT_BOOTSTRAP.iter().map(|v| v.to_string()).collect());
 
             let token = config.cancellation_token.take().unwrap_or_default();
+            let permits = config.permits.take();
 
             let (in_tx, in_rx) = unbounded_channel();
             let state = Arc::new(Self::new_internal(
@@ -1340,7 +1357,11 @@ impl DhtState {
                 {
                     let state = state.clone();
                     async move {
-                        let worker = DhtWorker { socket, dht: state };
+                        let worker = DhtWorker {
+                            socket,
+                            dht: state,
+                            permits,
+                        };
                         worker.start(in_rx, &bootstrap_addrs).await
                     }
                 },
