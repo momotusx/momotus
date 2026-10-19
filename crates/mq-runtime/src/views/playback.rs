@@ -546,6 +546,13 @@ impl PlaybackView {
         self.spawn_resolve();
     }
 
+    /// Tests: whether a swarm that falls short would be cut at its first
+    /// window now.
+    #[doc(hidden)]
+    pub fn may_cut_early(&self) -> bool {
+        may_cut_early(&lock(&self.state))
+    }
+
     /// A kids policy refused the target at open.
     pub fn denied(&self) -> bool {
         self.denied
@@ -1288,6 +1295,19 @@ async fn shows_picture(
 /// The recommendation moves on by itself at most this many times.
 const HOPS: u8 = 2;
 
+/// A swarm that falls short may be cut at its first window when something
+/// else can play instead: another source of this version, or, for the
+/// recommendation with moves left, the version the ranking picks next.
+/// Never after "Try again".
+fn may_cut_early(s: &State) -> bool {
+    let next_version = || {
+        s.pick
+            .as_ref()
+            .is_some_and(|p| p.recommended() && s.hops < HOPS && p.next_version(&s.tried).is_some())
+    };
+    !s.patient && (s.next < s.candidates.len() || next_version())
+}
+
 /// Every source of the version failed. When it failed for a reason of its
 /// own, the ranking's next version follows: by itself when the
 /// recommendation started (at most `HOPS` times, `trying` names it), as the
@@ -1506,12 +1526,7 @@ async fn open_torrent(
                 unchoked: s.unchoked_ms.is_some(),
             })
         };
-        // Cut early only when another candidate can play instead, and never
-        // after "Try again".
-        let others = {
-            let s = lock(state);
-            !s.patient && s.next < s.candidates.len()
-        };
+        let others = may_cut_early(&lock(state));
         let ready = watch_start(head.ready(), progress, STALL, others, TORRENT_READY_TIMEOUT).await;
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };

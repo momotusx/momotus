@@ -800,6 +800,46 @@ async fn only_a_failure_of_the_versions_own_moves_on() {
     );
 }
 
+/// A swarm that falls short is cut at its first window when something else
+/// can play: for the recommendation with moves left, the next version. A
+/// version picked by hand, or one with nothing after it, gets the full
+/// deadline.
+#[tokio::test]
+async fn a_next_version_lets_the_recommendation_cut_a_dead_swarm_early() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let recommended = play(&core, &view, &keys[0]);
+    until("ready", || recommended.snapshot().url.is_some()).await;
+    assert!(recommended.may_cut_early(), "the next version waits");
+    let by_hand = play(&core, &view, &keys[1]);
+    until("ready", || by_hand.snapshot().url.is_some()).await;
+    assert!(
+        !by_hand.may_cut_early(),
+        "picked by hand: the full deadline"
+    );
+
+    let (core, _server, keys) = direct_rows(vec![(
+        "Show.S01E01.1080p.WEB-DL.x264-ONE",
+        media_fixture("h264.mp4"),
+    )])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let only = play(&core, &view, &keys[0]);
+    until("ready", || only.snapshot().url.is_some()).await;
+    assert!(!only.may_cut_early(), "nothing after it: the full deadline");
+}
+
 /// After a restart the core reads the network the app last reported, not
 /// "other", until the app reports one again.
 #[tokio::test]
