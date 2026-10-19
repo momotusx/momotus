@@ -1070,6 +1070,10 @@ sealed interface ReasonLine {
     data object NoPicture : ReasonLine
 
     @Serializable
+    @SerialName("didNotPlay")
+    data object DidNotPlay : ReasonLine
+
+    @Serializable
     @SerialName("large")
     data class Large(
         val sizeBytes: Long,

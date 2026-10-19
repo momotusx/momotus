@@ -266,6 +266,14 @@ class StreamChoiceCopyTest {
             ),
             line(ReasonLine.NoPicture),
         )
+        assertEquals(
+            StreamChoiceCopy.Line(
+                bad,
+                "Did not play on this device",
+                "This device could not decode it when it last tried",
+            ),
+            line(ReasonLine.DidNotPlay),
+        )
         assertEquals(StreamChoiceCopy.Line(warn, "May start slowly", "31 seeders"), line(ReasonLine.Few(31)))
         assertEquals(
             StreamChoiceCopy.Line(ok, "Starts right away", "Ready on TorBox, 7.4 GB"),

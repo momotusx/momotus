@@ -207,6 +207,11 @@ const KEPT: usize = 200;
 const DEAD_KEY: &str = "dead_swarms";
 /// A file does not change: kept until the list is full.
 const NO_PICTURE_KEY: &str = "no_picture";
+const DID_NOT_PLAY_KEY: &str = "did_not_play";
+/// How long a version the player could not decode stays demoted.
+// ponytail: 30 days, as a decoder rarely changes; a one-off decode error
+// demotes a version for that long, never hides it.
+const DID_NOT_PLAY_FOR_MS: u64 = 30 * 86_400_000;
 
 /// The entries of the stamped list `store_key` younger than `keep_ms`.
 fn stamped(lib: &Library, store_key: &str, keep_ms: u64, now_ms: u64) -> Vec<String> {
@@ -264,6 +269,22 @@ pub fn no_picture(lib: &Library) -> Vec<String> {
 /// The file of `stream_key` showed no picture on this device.
 pub fn record_no_picture(lib: &Library, stream_key: &str, now_ms: u64) {
     stamp(lib, NO_PICTURE_KEY, stream_key.to_owned(), u64::MAX, now_ms);
+}
+
+/// Stream keys this device's player could not decode in the last 30 days.
+pub fn did_not_play(lib: &Library, now_ms: u64) -> Vec<String> {
+    stamped(lib, DID_NOT_PLAY_KEY, DID_NOT_PLAY_FOR_MS, now_ms)
+}
+
+/// The player could not decode the stream `stream_key`.
+pub fn record_did_not_play(lib: &Library, stream_key: &str, now_ms: u64) {
+    stamp(
+        lib,
+        DID_NOT_PLAY_KEY,
+        stream_key.to_owned(),
+        DID_NOT_PLAY_FOR_MS,
+        now_ms,
+    );
 }
 
 #[cfg(test)]

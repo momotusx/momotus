@@ -551,6 +551,7 @@ impl VersionsView {
             dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
             limit_chosen: core.size_limit_chosen(),
             no_picture: crate::speed::no_picture(core.library()),
+            did_not_play: crate::speed::did_not_play(core.library(), mq_library::hlc::now_ms()),
         };
         let item_id = item_id.map_or_else(
             || {

@@ -1408,6 +1408,35 @@ fn a_file_that_showed_no_picture_here_is_not_started_first() {
     assert_eq!(bare.line, ReasonLine::NoPicture);
 }
 
+/// A version this device's player could not decode last time is not
+/// started first again, on any device, and says why (Android walk NV-F2).
+#[test]
+fn a_version_the_player_could_not_decode_is_not_started_first() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2020.2160p.WEB-DL.x265-EIGHT", 900, 4.0),
+            seeded(2, "Movie.2020.1080p.BluRay.x264-FINE", 60, 2.0),
+        ]
+    };
+    let mut case = Case::stick();
+    let failed = row(&case.rank(rows()), "Movie.2020.2160p")
+        .stream
+        .key
+        .clone();
+    case.conditions = Conditions {
+        did_not_play: vec![failed],
+        ..engine().clone()
+    };
+    let ranked = case.rank(rows());
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-FINE"
+    );
+    let failed = row(&ranked, "Movie.2020.2160p");
+    assert!(!failed.key.viable);
+    assert_eq!(failed.line, ReasonLine::DidNotPlay);
+}
+
 /// 3.7: a large file says whether the limit is one the user chose.
 #[test]
 fn a_large_file_says_whether_the_limit_was_chosen() {

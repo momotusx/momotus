@@ -70,8 +70,9 @@ struct LearnedNote: Decodable, Hashable, Sendable {
 /// The one thing to say about a version (plans/m13-stream-choice.md 3.7),
 /// with its numbers; the words live in apps/shared/stream-choice-words.json.
 struct ReasonLine: Decodable, Hashable, Sendable {
-    /// "copy", "fetch", "stalled", "noPicture", "veryFew", "otherYear",
-    /// "mayPause", "washedOut", "large", "few", "ready", "quick" or "should".
+    /// "copy", "fetch", "stalled", "noPicture", "didNotPlay", "veryFew",
+    /// "otherYear", "mayPause", "washedOut", "large", "few", "ready", "quick"
+    /// or "should".
     let kind: String
     var quality: String?
     var service: String?

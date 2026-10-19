@@ -26,6 +26,11 @@
       "text": "No picture on this device",
       "details": ["Its HEVC video is stored in a form this device cannot show"]
     },
+    "didNotPlay": {
+      "tone": "bad",
+      "text": "Did not play on this device",
+      "details": ["This device could not decode it when it last tried"]
+    },
     "veryFew": {
       "tone": "bad",
       "text": "May not start",

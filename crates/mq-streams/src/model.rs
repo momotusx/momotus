@@ -170,6 +170,9 @@ pub struct Conditions {
     /// Stream keys whose file showed no picture on this device (an `hev1`
     /// entry without parameter sets on an `hvc1_only` engine).
     pub no_picture: Vec<String>,
+    /// Stream keys this device's player could not decode when it last
+    /// played them.
+    pub did_not_play: Vec<String>,
 }
 
 impl Default for Conditions {
@@ -193,6 +196,7 @@ impl Default for Conditions {
             dead_swarms: Vec::new(),
             limit_chosen: false,
             no_picture: Vec::new(),
+            did_not_play: Vec::new(),
         }
     }
 }
@@ -407,6 +411,8 @@ pub enum ReasonLine {
     /// The file's video showed no picture on this device: it plays as
     /// sound alone.
     NoPicture,
+    /// This device's player could not decode it when it last tried.
+    DidNotPlay,
     #[serde(rename_all = "camelCase")]
     Large {
         #[cfg_attr(feature = "ts", ts(type = "number"))]

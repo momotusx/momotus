@@ -652,10 +652,15 @@ impl PlaybackView {
                 let attempt = attempt(stream, error);
                 s.snapshot.attempts.push(attempt);
             }
-            // The player shows no picture from it (Apple reports a frame
-            // that never came this way).
+            // The player could not decode it (Apple reports a frame that
+            // never came this way): the version's own failure, and this
+            // device remembers it.
             if kind == Some("decode") {
                 s.version_failed = true;
+                if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
+                    let now = mq_library::hlc::now_ms();
+                    crate::speed::record_did_not_play(self.core.library(), &stream.key, now);
+                }
             }
             if let Some(pick) = &s.pick {
                 pick.failed();

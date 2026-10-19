@@ -840,6 +840,52 @@ async fn a_next_version_lets_the_recommendation_cut_a_dead_swarm_early() {
     assert!(!only.may_cut_early(), "nothing after it: the full deadline");
 }
 
+/// Android walk NV-F2: a version the player could not decode was tried
+/// first again on every play. It is remembered on this device: the next
+/// Versions view ranks it below the versions that can start, with its
+/// line. A network failure is not remembered.
+#[tokio::test]
+async fn a_version_this_device_could_not_decode_is_not_tried_first_again() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let caps = DeviceCaps::basic_1080p();
+    let fail = |kind: &'static str| {
+        let (core, keys, caps) = (core.clone(), keys.clone(), caps.clone());
+        async move {
+            let view = versions_for(&core, caps).await;
+            let playback = play(&core, &view, &keys[0]);
+            until("ready", || playback.snapshot().url.is_some()).await;
+            playback.fail_over(None, Some(kind), None, "the player failed");
+            let moved = || playback.snapshot().attempts.len() == 1;
+            until("the failure", moved).await;
+        }
+    };
+    fail("network").await;
+    let view = versions_for(&core, caps.clone()).await;
+    assert_eq!(
+        view.snapshot().recommended.unwrap().key,
+        keys[0],
+        "a network failure is not kept"
+    );
+    drop(view);
+
+    fail("decode").await;
+    let view = versions_for(&core, caps).await;
+    let s = view.snapshot();
+    assert_eq!(s.recommended.unwrap().key, keys[1]);
+    let row = s.rows.iter().find(|r| r.key == keys[0]).unwrap();
+    assert_eq!(row.line, mq_streams::ReasonLine::DidNotPlay);
+}
+
 /// After a restart the core reads the network the app last reported, not
 /// "other", until the app reports one again.
 #[tokio::test]
