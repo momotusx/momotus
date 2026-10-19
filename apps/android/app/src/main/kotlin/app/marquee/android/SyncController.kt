@@ -36,20 +36,18 @@ class SyncController(
                 .putBoolean(RECOVERED, it)
                 .apply()
         },
-        pendingKitAtStart = context.prefs().getString(PENDING_KIT, null),
-        savePendingKit = {
+        pendingKitsAtStart =
+            context
+                .prefs()
+                .getString(PENDING_KITS, null)
+                ?.split(',')
+                ?.filter { it.isNotEmpty() }
+                .orEmpty(),
+        savePendingKits = {
             context
                 .prefs()
                 .edit()
-                .putString(PENDING_KIT, it)
-                .apply()
-        },
-        unknownUnseenAtStart = context.prefs().getBoolean(UNKNOWN_UNSEEN, false),
-        saveUnknownUnseen = {
-            context
-                .prefs()
-                .edit()
-                .putBoolean(UNKNOWN_UNSEEN, it)
+                .putString(PENDING_KITS, it.joinToString(","))
                 .apply()
         },
     ) {
@@ -85,8 +83,7 @@ class SyncController(
     private companion object {
         const val EVERY_MS = 5 * 60_000L
         const val RECOVERED = "syncRecovered"
-        const val PENDING_KIT = "syncUnseenKit"
-        const val UNKNOWN_UNSEEN = "syncUnknownUnseenKit"
+        const val PENDING_KITS = "syncPendingKits"
 
         fun Context.prefs() = getSharedPreferences("marquee", Context.MODE_PRIVATE)
     }

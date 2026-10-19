@@ -66,13 +66,15 @@ open class SyncAccount(
     recoveredAtStart: Boolean = false,
     /** Keeps [recovered] across launches. */
     private val saveRecovered: (Boolean) -> Unit = {},
-    /** The kit made in an earlier run whose "I saved it" never came: its id, or "" when the list did not show it. */
-    pendingKitAtStart: String? = null,
-    /** Keeps the id of the kit made and not yet saved across launches (never the kit itself). */
-    private val savePendingKit: (String?) -> Unit = {},
-    /** A kit went unseen and nobody could tell which: kept until the user checked the list. */
-    unknownUnseenAtStart: Boolean = false,
-    private val saveUnknownUnseen: (Boolean) -> Unit = {},
+    /**
+     * The kits made in earlier runs whose "I saved it" never came: their ids, [UNKNOWN] for one whose id
+     * could not be read.
+     */
+    pendingKitsAtStart: List<String> = emptyList(),
+    /** Keeps those ids across launches (never a kit itself). */
+    private val savePendingKits: (List<String>) -> Unit = {},
+    /** How long a made kit's letters stay in memory once its page is left. */
+    private val holdMs: Long = KIT_HOLD_MS,
 ) {
     /** A failure in words, with the core's code when it has one (the page offers a fix for some). */
     data class Problem(
@@ -121,6 +123,9 @@ open class SyncAccount(
     var problem: Problem? by mutableStateOf(null)
         private set
 
+    /** The last round ended where the server will not let this device leave: only stopping here helps. */
+    val stuck: Boolean get() = stuck(problem?.code)
+
     /** A join is being stored: the pairing page holds Done until it is. */
     var joining by mutableStateOf(false)
         private set
@@ -142,22 +147,31 @@ open class SyncAccount(
     }
 
     /**
-     * The kit made and not yet confirmed saved, in memory only (never on disk), for [KIT_HOLD_MS] at most:
-     * the kit page shows it again after the screen lock, until the user says it is saved. It goes when its
-     * row leaves the list.
+     * The kit made and not yet confirmed saved, in memory only (never on disk): the kit page shows it again
+     * after the screen lock, until the user says it is saved. Once its page is left it stays [holdMs] at
+     * most; it goes when its row leaves the list.
      */
     var heldKit: HeldKit? by mutableStateOf(null)
         private set
 
     /**
-     * A kit made whose letters went before the user said it was saved (the app ended, or the hold ran out):
-     * its id. Nobody holds it, so the next kit removes it.
+     * Every kit made and not yet said saved, held or not, by id ([UNKNOWN] when it could not be read): a
+     * list, so a new kit never hides an older one that went unseen.
      */
-    var unseenKit: String? by mutableStateOf(pendingKitAtStart?.takeIf { it.isNotEmpty() })
-        private set
+    private var pending by mutableStateOf(pendingKitsAtStart)
+
+    private val heldEntry get() = heldKit?.id?.ifEmpty { UNKNOWN }
+
+    private fun othersPending() = pending.toMutableList().apply { heldEntry?.let { remove(it) } }
+
+    /** Kits whose letters went before the user said they were saved: nobody holds them, the next kit removes them. */
+    val unseenKits: List<String> get() = othersPending().filter { it != UNKNOWN }
 
     /** Such a kit whose id nobody could read: the page asks the user to check the list, never claims it gone. */
-    var unknownUnseen by mutableStateOf(unknownUnseenAtStart || pendingKitAtStart?.isEmpty() == true)
+    val unknownUnseen: Boolean get() = UNKNOWN in othersPending()
+
+    /** The last kit to go unseen did so because its hold ran out (not because the app closed). */
+    var kitExpired by mutableStateOf(false)
         private set
 
     private var holdTimer: Job? = null
@@ -275,7 +289,8 @@ open class SyncAccount(
 
     /** After pairing: the join goes to the app, which stores it whatever the page does next. */
     fun didJoin(record: SyncRecord) {
-        // The keystore write happens off the main thread the pairing page calls from.
+        // Saving shows at once, so Done never flickers; the keystore write happens off the main thread.
+        joining = true
         scope.launch(io) { join(record) }
     }
 
@@ -344,95 +359,122 @@ open class SyncAccount(
     suspend fun createRecoveryKit(): String =
         scope
             .async {
-                val before =
-                    runCatching { loadDevices() }
-                        .getOrNull()
+                val before = runCatching { loadDevices() }.getOrNull()
+                val kitsBefore =
+                    before
                         ?.members
                         ?.filter { it.kit }
                         ?.map { it.id }
                         ?.toSet()
-                unseenKit?.let { id ->
+                for (id in unseenKits) {
                     when {
-                        before == null -> Unit
-                        id in before -> withRecord("removeDevice", { ops.removeDevice(it, id) }) { it }
-                        else -> Unit
+                        // The list could not say: the kit stays pending, never claimed gone.
+                        kitsBefore == null -> {
+                            Unit
+                        }
+
+                        id in kitsBefore -> {
+                            withRecord("removeDevice", { ops.removeDevice(it, id) }) { it }
+                            settle(id)
+                        }
+
+                        else -> {
+                            settle(id)
+                        }
                     }
-                    // Gone only when the list said so or the removal went through.
-                    if (before != null) clearUnseen()
                 }
                 val made = withRecord("createRecoveryKit", { ops.createRecoveryKit(it) }) { it.record }
                 recovered = false
                 saveRecovered(false)
                 val after = runCatching { loadDevices() }.getOrNull()
-                val id =
-                    after
-                        ?.members
-                        ?.firstOrNull { it.kit && before != null && it.id !in before }
-                        ?.id
-                        .orEmpty()
-                hold(HeldKit(id, made.kit))
+                hold(HeldKit(newKitId(before, after), made.kit))
                 made.kit
             }.await()
+
+    /**
+     * The id of the kit just made. The core answers the kit without it, so it comes from the lists read
+     * before and after, and only when it cannot be another's: a kit this device made (only this device's
+     * key adds kits as this device, one at a time) that the list before did not have, and only one such.
+     * Anything else stays unknown.
+     */
+    private fun newKitId(
+        before: Devices?,
+        after: Devices?,
+    ): String {
+        if (before == null || after == null) return ""
+        val me = after.members.firstOrNull { it.thisDevice }?.id ?: return ""
+        val known = before.members.map { it.id }.toSet()
+        return after.members
+            .filter { it.kit && it.sponsor == me && it.id !in known }
+            .singleOrNull()
+            ?.id
+            .orEmpty()
+    }
 
     /** The user saved the kit: it leaves memory, and nothing marks it pending. */
     fun kitSaved() {
         holdTimer?.cancel()
+        heldEntry?.let { entry -> pending = pending.toMutableList().apply { remove(entry) } }
         heldKit = null
-        savePendingKit(null)
+        savePendingKits(pending)
     }
 
     /** The user checked the list after a kit went unseen with no id. */
     fun dismissUnknownUnseen() {
-        unknownUnseen = false
-        saveUnknownUnseen(false)
+        val keep = heldEntry
+        pending = pending.filter { it != UNKNOWN } + listOfNotNull(keep?.takeIf { it == UNKNOWN })
+        savePendingKits(pending)
     }
 
-    private fun hold(kit: HeldKit) {
-        heldKit = kit
-        savePendingKit(kit.id)
+    /**
+     * The kit page is open, or was left: the hold never runs out while the kit can be on screen, and starts
+     * once the page is left.
+     */
+    fun kitPage(open: Boolean) {
         holdTimer?.cancel()
-        // ponytail: a fixed hold; the letters never outlive it, and the kit then counts as unseen.
+        val kit = heldKit ?: return
+        if (open) return
+        // ponytail: a fixed hold after the page; the letters never outlive it, and the kit then counts as unseen.
         holdTimer =
             scope.launch {
-                delay(KIT_HOLD_MS)
-                if (heldKit === kit) lose(kit)
+                delay(holdMs)
+                if (heldKit === kit) {
+                    heldKit = null
+                    kitExpired = true
+                }
             }
     }
 
-    /** The letters go unseen: the next kit removes this one, or the user checks the list when its id is unknown. */
-    private fun lose(kit: HeldKit) {
-        heldKit = null
-        if (kit.id.isEmpty()) {
-            unknownUnseen = true
-            saveUnknownUnseen(true)
-        } else {
-            unseenKit = kit.id
-        }
+    private fun hold(kit: HeldKit) {
+        holdTimer?.cancel()
+        heldKit = kit
+        kitExpired = false
+        pending = pending + kit.id.ifEmpty { UNKNOWN }
+        savePendingKits(pending)
     }
 
-    private fun clearUnseen() {
-        unseenKit = null
-        if (heldKit == null) savePendingKit(null)
+    /** A pending kit is settled (removed, or gone from the list): it leaves the list, and memory if held. */
+    private fun settle(id: String) {
+        if (heldKit?.id == id) {
+            holdTimer?.cancel()
+            heldKit = null
+        }
+        pending = pending.toMutableList().apply { remove(id) }
+        savePendingKits(pending)
     }
 
     /** A held or unseen kit whose row left the list is gone: nobody needs to save or remove it. */
     private fun followKits(list: Devices) {
         val ids = list.members.map { it.id }.toSet()
-        heldKit?.takeIf { it.id.isNotEmpty() && it.id !in ids }?.let {
-            holdTimer?.cancel()
-            heldKit = null
-            savePendingKit(null)
-        }
-        unseenKit?.takeIf { it !in ids }?.let { clearUnseen() }
+        for (id in pending.filter { it != UNKNOWN && it !in ids }) settle(id)
     }
 
     private fun dropKits() {
         holdTimer?.cancel()
         heldKit = null
-        unseenKit = null
-        unknownUnseen = false
-        savePendingKit(null)
-        saveUnknownUnseen(false)
+        kitExpired = false
+        pending = emptyList()
+        savePendingKits(pending)
     }
 
     /** What reporting [lost] would drop: its devices (ticked) and its kits (always). */
@@ -446,12 +488,7 @@ open class SyncAccount(
     suspend fun removeDevice(device: String) {
         withRecord("removeDevice", { ops.removeDevice(it, device) }) { it }
         // A held or unseen kit that was just removed needs no saving and no removing, list or no list.
-        if (heldKit?.id == device) {
-            holdTimer?.cancel()
-            heldKit = null
-            savePendingKit(null)
-        }
-        if (unseenKit == device) clearUnseen()
+        if (device in pending) settle(device)
         runCatching { loadDevices() }
     }
 
@@ -465,12 +502,15 @@ open class SyncAccount(
     }
 
     /** Leaves the account; the library stays. Without [force] the core refuses while edits are unsent (`unsent`). */
-    suspend fun signOut(force: Boolean) {
-        withRecord("signOut", { ops.signOut(it, force) }) { null }
-        forget()
-        problem = null
-        leftHere = false
-    }
+    suspend fun signOut(force: Boolean) =
+        scope
+            .async {
+                // All of it in the app's scope: Back while the core answers still forgets the account here.
+                withRecord("signOut", { ops.signOut(it, force) }) { null }
+                forget()
+                problem = null
+                leftHere = false
+            }.await()
 
     /** After `fork`: both device lists, read only, for the user to compare. */
     suspend fun forkPreview(): ForkPreview = withRecord("forkPreview", { ops.forkPreview(it) }) { null }
@@ -499,12 +539,15 @@ open class SyncAccount(
      * cursors and this device its record, so it can pair again. For a device the sync server will not let
      * leave (off its list, a lost token, a fork it cannot settle). The library stays.
      */
-    suspend fun leaveHere() {
-        withRecord("signOut", { ops.signOut(it, force = false, local = true) }) { null }
-        forget()
-        problem = null
-        leftHere = true
-    }
+    suspend fun leaveHere() =
+        scope
+            .async {
+                // All of it in the app's scope: Back while the core forgets the account still forgets it here.
+                withRecord("signOut", { ops.signOut(it, force = false, local = true) }) { null }
+                forget()
+                problem = null
+                leftHere = true
+            }.await()
 
     /**
      * Runs one op on the record, in turn, in the app's scope (the caller may go away; the op does
@@ -594,8 +637,16 @@ open class SyncAccount(
     companion object {
         private const val ROUNDS = 5
 
-        /** How long a made kit's letters stay in memory before it counts as unseen. */
+        /** How long a made kit's letters stay in memory after its page is left, before it counts as unseen. */
         const val KIT_HOLD_MS = 5 * 60_000L
+
+        /** A pending kit whose id could not be read. */
+        const val UNKNOWN = "?"
+
+        /** Codes after which the sync server will not let this device leave (the web's). */
+        private val STUCK = setOf("fork", "wrongRelay", "relayBehind", "notJoined")
+
+        fun stuck(code: String?) = code in STUCK
 
         /** A failure of [action] in words, with its code. */
         fun problemOf(

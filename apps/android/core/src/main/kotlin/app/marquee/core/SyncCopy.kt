@@ -191,9 +191,16 @@ object SyncCopy {
     const val KIT_WAITING = "Your new recovery kit is not saved yet. Show it again and save it."
     const val SHOW_KIT = "Show the kit"
     const val KIT_UNSEEN =
-        "A recovery kit was made here, but the app closed before you said you saved it, and it cannot be shown " +
-            "again. Make a new one: Marquee removes the unseen one."
+        "A recovery kit was made here and not said saved before Marquee let go of it (when the app closed, or " +
+            "five minutes after you left its page), so it cannot be shown again. Make a new one: Marquee removes " +
+            "the unseen one."
     const val MAKE_NEW_KIT = "Make a new kit"
+    const val KIT_EXPIRED =
+        "A recovery kit was made here and left unsaved for five minutes after you left its page, so Marquee let " +
+            "go of it and cannot show it again. Make a new one: Marquee removes the unseen one."
+    const val KIT_ID_UNKNOWN =
+        "Marquee could not tell which recovery kit in the device list is this one. If you do not save it, check " +
+            "the recovery kits in the list."
     const val KIT_UNSEEN_UNKNOWN =
         "A recovery kit was made here and never said saved, and Marquee cannot tell which one it is. Check the " +
             "recovery kits in the list and remove those you do not hold."

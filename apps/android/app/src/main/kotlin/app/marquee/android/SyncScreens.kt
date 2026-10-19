@@ -2,6 +2,8 @@ package app.marquee.android
 
 import android.Manifest
 import android.content.Context
+import android.view.View
+import android.widget.TextView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -43,7 +45,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -418,7 +420,8 @@ private fun LazyListScope.joined(
     } else {
         item(key = "kit") { LinkRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.KIT_TEXT, onKit) }
     }
-    block("leave") { Leave(sync, onLeft) }
+    // A stuck device's way out is in the state card; a plain stop would only fail again.
+    if (!sync.stuck) block("leave") { Leave(sync, onLeft) }
 }
 
 /** This device: the state, every fact of the last round, Sync now and a fix, and the 12 characters. */
@@ -472,25 +475,30 @@ private fun StateCard(
             // A refused or unreadable change stays listed until the user dismisses it.
             val failedSince = SyncCopy.failedSince(sync.failed.refused, sync.failed.unreadable, sync.failed.newer)
             val notes = report?.let(SyncCopy::notes).orEmpty()
-            // The warnings are read out once each time they change (a background round too), never the time
-            // of every round. ponytail: the platform announcement, since a Compose live region on this card
-            // reached TalkBack only as a change of its parent (API 34); revisit when Compose sends it.
             val warnings = (listOfNotNull(problem?.words) + notes + listOfNotNull(failedSince)).joinToString(" ")
-            val view = LocalView.current
-            var heard by remember { mutableStateOf<String?>(null) }
-            LaunchedEffect(warnings) {
-                @Suppress("DEPRECATION")
-                if (heard != null && warnings.isNotEmpty() && warnings != heard) view.announceForAccessibility(warnings)
-                heard = warnings
-            }
-            if (warnings.isNotEmpty()) {
-                Column(
-                    Modifier.semantics(mergeDescendants = true) {},
-                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                ) {
-                    problem?.let { Said(it.words, Status.Bad) }
-                    for (note in notes) Note(note, side = 0.dp)
-                    failedSince?.let { Note(it, failed = true, side = 0.dp) }
+            // The warnings, read out once each time they change (a background round too), never the time of
+            // every round: a native live region carries them, since a Compose one on this card reached
+            // TalkBack only as a change of its parent. The visible lines are drawn over it and not read twice.
+            Box {
+                AndroidView(
+                    factory = { context ->
+                        TextView(context).apply {
+                            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                            setTextColor(android.graphics.Color.TRANSPARENT)
+                        }
+                    },
+                    update = { it.text = warnings },
+                    modifier = Modifier.matchParentSize(),
+                )
+                if (warnings.isNotEmpty()) {
+                    Column(
+                        Modifier.clearAndSetSemantics {},
+                        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                    ) {
+                        problem?.let { Said(it.words, Status.Bad) }
+                        for (note in notes) Note(note, side = 0.dp)
+                        failedSince?.let { Note(it, failed = true, side = 0.dp) }
+                    }
                 }
             }
             FlowRow(
@@ -516,7 +524,7 @@ private fun StateCard(
                 }
             }
             // Forgetting is for a relay that cannot take this device back: it keeps the library.
-            if (problem?.code in STUCK) LeaveHere(sync)
+            if (sync.stuck) LeaveHere(sync)
             // From whichever answer came last, a round or the list; the device list says when it is stale.
             sync.fingerprint?.let { Fingerprint(it) }
         }
@@ -555,23 +563,24 @@ private fun DeviceList(
             .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
+        // Shown until the user says it is saved: nobody holds it yet.
+        if (sync.heldKit != null) {
+            Callout(Icons.KeyRound, SyncCopy.KIT_WAITING)
+            SecondaryButton(SyncCopy.SHOW_KIT, onKit, icon = Icons.KeyRound)
+        }
+        // A kit is listed, but nobody holds it: the page never reads as if one were saved.
+        if (sync.unseenKits.isNotEmpty()) {
+            Callout(Icons.TriangleAlert, if (sync.kitExpired) SyncCopy.KIT_EXPIRED else SyncCopy.KIT_UNSEEN)
+            if (!tv && sync.heldKit == null) SecondaryButton(SyncCopy.MAKE_NEW_KIT, onKit, icon = Icons.KeyRound)
+        }
+        // Which kit went unseen is not known: the user checks the list, and says so.
+        if (sync.unknownUnseen) {
+            Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN_UNKNOWN)
+            SecondaryButton(SyncCopy.CHECKED, sync::dismissUnknownUnseen, icon = Icons.Check)
+        }
         when {
-            // Shown until the user says it is saved: nobody holds it yet.
-            sync.heldKit != null -> {
-                Callout(Icons.KeyRound, SyncCopy.KIT_WAITING)
-                SecondaryButton(SyncCopy.SHOW_KIT, onKit, icon = Icons.KeyRound)
-            }
-
-            // A kit is listed, but nobody holds it: the page never reads as if one were saved.
-            sync.unseenKit != null -> {
-                Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN)
-                if (!tv) SecondaryButton(SyncCopy.MAKE_NEW_KIT, onKit, icon = Icons.KeyRound)
-            }
-
-            // Which kit went unseen is not known: the user checks the list, and says so.
-            sync.unknownUnseen -> {
-                Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN_UNKNOWN)
-                SecondaryButton(SyncCopy.CHECKED, sync::dismissUnknownUnseen, icon = Icons.Check)
+            sync.heldKit != null || sync.unseenKits.isNotEmpty() || sync.unknownUnseen -> {
+                Unit
             }
 
             sync.recovered || noKit -> {
@@ -803,7 +812,7 @@ private fun Leave(
             } catch (e: Exception) {
                 val problem = SyncAccount.problemOf(e, Action.Leave)
                 unsent = problem.code == "unsent"
-                unreachable = problem.code == null || problem.code in STUCK
+                unreachable = problem.code == null || SyncAccount.stuck(problem.code)
                 error = problem.words
             } finally {
                 busy = false
@@ -836,11 +845,8 @@ private fun Leave(
         }
     }
     // The state card offers it already when a round said why.
-    if (unreachable && sync.problem?.code !in STUCK) LeaveHere(sync)
+    if (unreachable && !sync.stuck) LeaveHere(sync)
 }
-
-/** Codes after which the sync server will not let this device leave: only stopping here helps (the web's). */
-private val STUCK = setOf("fork", "wrongRelay", "relayBehind", "notJoined")
 
 /**
  * Stop syncing here only: nothing is sent, the core forgets the account on this device, which can pair
@@ -1343,7 +1349,12 @@ fun RecoveryKitScreen(
     // A kit on screen: no screenshot, screen recording or recents thumbnail of this page.
     SecureWindow()
     DisposableEffect(Unit) {
-        onDispose { SyncClipboard.clearKit(context) }
+        // The hold never runs out while the kit can be on screen: it starts when the page is left.
+        sync.kitPage(open = true)
+        onDispose {
+            sync.kitPage(open = false)
+            SyncClipboard.clearKit(context)
+        }
     }
 
     fun make() {
@@ -1409,7 +1420,9 @@ fun RecoveryKitScreen(
                 } else if (shown == null) {
                     MqText(SyncCopy.KIT_LEDE, color = Marquee.colors.muted)
                     MqText(SyncCopy.KIT_ONCE, role = TextRole.Callout, color = Marquee.colors.muted)
-                    if (sync.unseenKit != null) Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN)
+                    if (sync.unseenKits.isNotEmpty()) {
+                        Callout(Icons.TriangleAlert, if (sync.kitExpired) SyncCopy.KIT_EXPIRED else SyncCopy.KIT_UNSEEN)
+                    }
                     if (sync.unknownUnseen) Callout(Icons.TriangleAlert, SyncCopy.KIT_UNSEEN_UNKNOWN)
                     error?.let { Said(it, Status.Bad) }
                     FlowRow(
@@ -1419,7 +1432,7 @@ fun RecoveryKitScreen(
                         PrimaryButton(
                             when {
                                 busy -> SyncCopy.MAKING_KIT
-                                sync.unseenKit != null -> SyncCopy.MAKE_NEW_KIT
+                                sync.unseenKits.isNotEmpty() -> SyncCopy.MAKE_NEW_KIT
                                 else -> SyncCopy.MAKE_KIT
                             },
                             ::make,
@@ -1429,6 +1442,7 @@ fun RecoveryKitScreen(
                     }
                 } else {
                     Kicker(SyncCopy.KIT_SHOWN, side = 0.dp)
+                    if (held?.id.isNullOrEmpty()) Said(SyncCopy.KIT_ID_UNKNOWN, Status.Warn)
                     MqText(
                         SyncRules.kitLines(shown),
                         modifier =
