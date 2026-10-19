@@ -26,8 +26,8 @@ use mq_runtime::{
     AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
     DebridTombstone, DebridView, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
     ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView,
-    SearchView, SessionState, SettingsView, StoreId, StremioEndpoints, TitleView, VersionsParams,
-    VersionsView,
+    SearchView, SessionState, SettingsView, StoreId, StremioEndpoints, TitleView, TraktLoginView,
+    TraktRecord, TraktView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -239,6 +239,23 @@ enum Request {
         id: u64,
         event: String,
     },
+    /// The profile's Trakt record from the keystore (right after `open` and
+    /// after a switch or unlock), or the acknowledgement of one the `trakt`
+    /// view offered; null when this device holds none.
+    SetTrakt {
+        id: u64,
+        #[serde(default)]
+        record: Option<TraktRecord>,
+    },
+    /// One Trakt round now ("Sync now"). Replies `TraktReport`.
+    TraktSync {
+        id: u64,
+    },
+    /// Signs this device out of Trakt for the profile; the app then deletes
+    /// its record.
+    TraktSignOut {
+        id: u64,
+    },
     /// The owner adds a profile (no PIN, the owner's addons copied once).
     /// Profile ops reply `ProfilesSnapshot`.
     CreateProfile {
@@ -336,6 +353,8 @@ enum View {
     Profiles { _view: ProfilesView },
     Debrid { _view: DebridView },
     DebridLogin { _view: DebridLoginView },
+    Trakt { _view: TraktView },
+    TraktLogin { _view: TraktLoginView },
 }
 
 impl View {
@@ -357,6 +376,8 @@ impl View {
             View::Profiles { .. } => "profiles",
             View::Debrid { .. } => "debrid",
             View::DebridLogin { .. } => "debridLogin",
+            View::Trakt { .. } => "trakt",
+            View::TraktLogin { .. } => "traktLogin",
         }
     }
 }
@@ -661,6 +682,24 @@ impl Session {
                 });
             }
             Request::Ping { id } => self.reply(json!(id), Ok(json!({}))),
+            Request::SetTrakt { id, record } => {
+                self.spawn_fenced(id, async move {
+                    core.set_trakt(record).await.map_err(trakt_failure)?;
+                    Ok::<_, Failure>(json!({}))
+                });
+            }
+            Request::TraktSync { id } => {
+                self.spawn_fenced(id, async move {
+                    let report = core.trakt_sync().await.map_err(trakt_failure)?;
+                    to_value(&report).map_err(Failure::from)
+                });
+            }
+            Request::TraktSignOut { id } => {
+                self.spawn_fenced(id, async move {
+                    core.trakt_sign_out().await.map_err(trakt_failure)?;
+                    Ok::<_, Failure>(json!({}))
+                });
+            }
             Request::HomeCatalogs { id } => {
                 let catalogs = core.home_catalogs();
                 self.reply(json!(id), Ok(json!(catalogs)))
@@ -679,6 +718,13 @@ impl Session {
                     .map_err(|e| e.to_string());
                 self.reply(json!(id), result)
             }
+            // Replies once running scrobbles are paused, or after 4 s.
+            Request::Lifecycle { id, event } if event == "background" => {
+                self.spawn(id, async move {
+                    let _ = tokio::time::timeout(TRAKT_FLUSH, core.trakt_background()).await;
+                    Ok::<_, Failure>(json!({}))
+                });
+            }
             Request::Lifecycle { id, event } => {
                 let result = match event.as_str() {
                     "memoryPressure" => {
@@ -691,11 +737,9 @@ impl Session {
                     }
                     "foreground" => {
                         refresh_addons(&core);
+                        core.trakt_foreground();
                         Ok(json!({}))
                     }
-                    // ponytail: accepted and ignored until the core has work
-                    // for it (iOS listener reopen).
-                    "background" => Ok(json!({})),
                     other => Err(format!("unknown lifecycle event: {other}")),
                 };
                 self.reply(json!(id), result);
@@ -991,6 +1035,22 @@ impl Session {
                     forward,
                 )
             }
+            "trakt" => {
+                let trakt = TraktView::open(&core);
+                let (snapshot, updates) = trakt.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (View::Trakt { _view: trakt }, to_value(&snapshot)?, forward)
+            }
+            "traktLogin" => {
+                let login = TraktLoginView::open(&core);
+                let (snapshot, updates) = login.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (
+                    View::TraktLogin { _view: login },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
             "home" => {
                 let home = HomeView::open(&core);
                 let (snapshot, updates) = home.subscribe();
@@ -1175,7 +1235,11 @@ impl Session {
                         .and_then(Value::as_u64)
                         .ok_or(format!("{key} missing"))
                 };
-                playback.report_progress(ms("positionMs")?, ms("durationMs")?);
+                let paused = command
+                    .get("paused")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                playback.report_progress(ms("positionMs")?, ms("durationMs")?, paused);
             }
             (View::Playback(playback), "duration") => {
                 let duration_ms = command
@@ -1345,6 +1409,20 @@ async fn run<E: Into<Failure> + Send + 'static>(
     match tokio::spawn(work).await {
         Ok(result) => result.map_err(Into::into),
         Err(e) => Err(Failure::from(format!("internal error: {e}"))),
+    }
+}
+
+/// How long `lifecycle background` waits for scrobbles to be paused.
+const TRAKT_FLUSH: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// A Trakt op's failure: code `notConfigured` when this build has no Trakt
+/// app.
+fn trakt_failure(e: mq_runtime::CoreError) -> Failure {
+    match e {
+        mq_runtime::CoreError::TraktNotConfigured => {
+            Failure::coded("notConfigured", "Trakt is not set up in this build")
+        }
+        other => Failure::from(other.to_string()),
     }
 }
 
