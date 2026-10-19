@@ -60,6 +60,28 @@
 .vrow:focus-visible, [data-form="tv"] .vrow:focus { background: var(--raised); border-bottom-color: transparent; transform: scale(var(--focus-scale-tile)); }
 .vrow:focus-visible .more, [data-form="tv"] .vrow:focus .more { display: block; }
 @media (hover: hover) { [data-form="desktop"] .vrow:hover { background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); } }
+/* The line (3.7): a tone icon, its shape never color alone, and the words,
+ * up to two lines. Its details: under the row on focus (.more), in a glass
+ * tip on hover (desktop), in the opened row on a tap (phone). */
+.vrow .st.line { position: relative; align-items: flex-start; gap: 12px; overflow: visible; white-space: normal; color: var(--text); }
+.vrow .line .tone { width: 28px; height: 28px; flex: none; }
+.line.ok .tone { color: var(--ok); }
+.line.warn .tone { color: var(--warn); }
+.line.bad .tone { color: var(--bad); }
+.vrow .line .lt { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.22; }
+.vrow .more .detail { display: block; margin-bottom: 8px; font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--text); }
+.line .tip { position: absolute; z-index: 6; left: -16px; bottom: calc(100% + 10px); width: max-content; max-width: 480px; padding: 12px 16px;
+  border-radius: var(--radius-m); background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow);
+  font: 500 var(--type-caption) / 1.35 var(--font-text); color: var(--text); text-align: left; pointer-events: none;
+  opacity: 0; visibility: hidden; transform: translateY(4px);
+  transition: opacity var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease), visibility 0s linear var(--motion-focus); }
+/* A short rest before it shows, so a pointer passing over rows does not flash tips. */
+@media (hover: hover) {
+  [data-form="desktop"] .vrow:hover .line .tip { opacity: 1; visibility: visible; transform: none; transition-delay: 280ms, 280ms, 280ms; }
+}
+/* Keyboard focus shows the details under the row instead. */
+.vrow:focus-visible .line .tip, [data-form="tv"] .line .tip, [data-form="phone"] .line .tip { display: none; }
 .fold { display: inline-flex; align-items: center; gap: 12px; height: 54px; margin-top: 6px; padding: 0 22px; border-radius: 27px;
   font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); }
 .fold svg { width: 24px; height: 24px; transition: transform var(--motion-focus) var(--ease); }
@@ -104,6 +126,16 @@
 [data-form="phone"] .vgroup h3 { padding: 8px 10px; margin: 14px 0 4px; }
 [data-form="phone"] .fold { height: 40px; padding: 0 8px; }
 [data-form="phone"] .hidden-row { flex-wrap: wrap; gap: 8px; padding: 12px; }
+[data-form="phone"] .vrow .line .tone { width: 16px; height: 16px; margin-top: 1px; }
+[data-form="phone"] .vrow .st.line { gap: 6px; font-size: 13px; }
+/* A tapped row opens into one card with its details and Play. */
+[data-form="phone"] .vrow.open { background: var(--glass); border-bottom-color: transparent; border-radius: 12px 12px 0 0; }
+[data-form="phone"] .vrow-open { display: grid; gap: 6px; justify-items: start; margin-bottom: 8px; padding: 2px 8px 14px 80px; border-radius: 0 0 12px 12px; background: var(--glass); }
+[data-form="phone"] .vrow-open .detail { font: 600 14px / 1.35 var(--font-text); }
+[data-form="phone"] .vrow-open .rel { font: 400 12px / 1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+[data-form="phone"] .vrow-open .sub { font: 400 12px / 1.3 var(--font-text); color: var(--muted); }
+[data-form="phone"] .vrow-open .btn { height: 40px; margin-top: 6px; padding: 0 16px; gap: 8px; font-size: 15px; }
+[data-form="phone"] .vrow-open .btn svg { width: 16px; height: 16px; }
 
 .alist { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); }
 /* A focused row (or a group that fits) stays clear of the 48 px fade; the

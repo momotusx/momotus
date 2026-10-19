@@ -2,20 +2,38 @@ import { A, useNavigate, useParams } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
+import CircleCheck from "lucide-solid/icons/circle-check";
 import EyeOff from "lucide-solid/icons/eye-off";
 import MonitorCheck from "lucide-solid/icons/monitor-check";
+import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
 import { displayCaps } from "../core/client";
 import type { Group } from "../core/generated/Group";
 import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
+import { form } from "../form";
 import { bytes, decoded, playPath, releaseParts } from "../lib/format";
-import { groupLabel, groupOrder, hiddenSummary, languageName, qualityCell, qualityText, reasonText, statusText } from "../lib/words";
+import {
+  conditionsHeader,
+  type DeviceConditions,
+  groupLabel,
+  groupOrder,
+  hiddenSummary,
+  languageName,
+  lineWords,
+  qualityCell,
+  qualityText,
+  type ReasonLine,
+  reasonText,
+  statusText,
+} from "../lib/words";
 import "./versions.css";
 
 const SHOWN = 3;
@@ -52,12 +70,40 @@ function StatusWord(props: { row: VersionRow }) {
   );
 }
 
+// ponytail: `line` and `conditions` are optional until phase 2 regenerates
+// VersionRow and VersionsSnapshot; an older core keeps the status word.
+type Row = VersionRow & { line?: ReasonLine | null };
+type Snap = VersionsSnapshot & { rows: Row[]; conditions?: DeviceConditions | null };
+
+const toneIcon = { ok: CircleCheck, warn: TriangleAlert, bad: OctagonAlert };
+
+/** The row's line: a tone icon (its shape, never color alone) and the plain
+ * words. The details show on focus (TV), hover (desktop) or tap (phone). */
+function LineWord(props: { line: ReasonLine }) {
+  const w = () => lineWords(props.line);
+  return (
+    <span class={`st line ${w().tone}`}>
+      <Dynamic component={toneIcon[w().tone]} aria-hidden class="tone" />
+      <span class="lt">{w().text}</span>
+      <Show when={w().details}>
+        <span class="tip" aria-hidden="true">
+          {w().details}
+        </span>
+      </Show>
+    </span>
+  );
+}
+
 const languages = (r: VersionRow) => r.languages.map(languageName).join(", ");
+const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? `${r.failoverCount + 1} sources` : null].filter(Boolean).join(", ") || "Language not stated";
 
 function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   const navigate = useNavigate();
   const ctx = videoContext(props.kind, props.id, props.videoId);
-  const snap = (): VersionsSnapshot | null => ctx.versions()?.state.data ?? null;
+  const snap = (): Snap | null => (ctx.versions()?.state.data as Snap | undefined) ?? null;
+  // Phone: a tap on a row with a line opens it (its details and Play).
+  const [opened, setOpened] = createSignal<string | null>(null);
+  const tapRow = (r: Row) => (form() === "phone" && r.line ? setOpened(opened() === r.key ? null : r.key) : play(r.key));
   const pick = () => snap()?.recommended ?? null;
   const [open, setOpen] = createSignal<Set<Group>>(new Set());
   const play = (key: string) => navigate(`${playPath(props.kind, props.id, props.videoId)}?key=${encodeURIComponent(key)}`);
@@ -122,7 +168,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
             </span>
             <span class="device">
               <MonitorCheck aria-hidden />
-              {device}
+              {snap()?.conditions ? conditionsHeader(form(), snap()?.conditions as DeviceConditions) : device}
             </span>
           </p>
         </div>
@@ -235,28 +281,52 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                         <span class="num">{g.rows.length}</span>
                       </h3>
                       <For each={shown()}>
-                        {(r) => (
-                          <button class="vrow" data-f={`v:${r.key}`} onClick={() => play(r.key)}>
-                            <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
-                              {qualityCell(r.quality)}
-                            </span>
-                            <span class="chips">
-                              <For each={r.features}>{(f) => <span>{f}</span>}</For>
-                            </span>
-                            <span class="size num">{r.sizeBytes ? bytes(r.sizeBytes) : ""}</span>
-                            <StatusWord row={r} />
-                            <span class="via">{r.via}</span>
-                            <span class="more">
-                              <span class="rel">
-                                <Release name={r.releaseName} />
+                        {(r: Row) => (
+                          <>
+                            <button
+                              class="vrow"
+                              classList={{ open: opened() === r.key }}
+                              data-f={`v:${r.key}`}
+                              aria-expanded={form() === "phone" && r.line ? opened() === r.key : undefined}
+                              onClick={() => tapRow(r)}
+                            >
+                              <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
+                                {qualityCell(r.quality)}
                               </span>
-                              <span class="sub">
-                                {[languages(r) || null, r.failoverCount > 0 ? `${r.failoverCount + 1} sources` : null]
-                                  .filter(Boolean)
-                                  .join(", ") || "Language not stated"}
+                              <span class="chips">
+                                <For each={r.features}>{(f) => <span>{f}</span>}</For>
                               </span>
-                            </span>
-                          </button>
+                              <span class="size num">{r.sizeBytes ? bytes(r.sizeBytes) : ""}</span>
+                              <Show when={r.line} fallback={<StatusWord row={r} />}>
+                                {(l) => <LineWord line={l()} />}
+                              </Show>
+                              <span class="via">{r.via}</span>
+                              <span class="more">
+                                <Show when={r.line && lineWords(r.line).details}>
+                                  {(d) => <span class="detail">{d()}</span>}
+                                </Show>
+                                <span class="rel">
+                                  <Release name={r.releaseName} />
+                                </span>
+                                <span class="sub">{subLine(r)}</span>
+                              </span>
+                            </button>
+                            <Show when={form() === "phone" && opened() === r.key}>
+                              <div class="vrow-open">
+                                <Show when={r.line && lineWords(r.line).details}>
+                                  {(d) => <p class="detail">{d()}</p>}
+                                </Show>
+                                <p class="rel">
+                                  <Release name={r.releaseName} />
+                                </p>
+                                <p class="sub">{subLine(r)}</p>
+                                <button class="btn" data-f={`vplay:${r.key}`} onClick={() => play(r.key)}>
+                                  <Play aria-hidden class="fill" />
+                                  Play this version
+                                </button>
+                              </div>
+                            </Show>
+                          </>
                         )}
                       </For>
                       <Show when={g.rows.length > SHOWN}>
