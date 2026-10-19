@@ -9,7 +9,7 @@ import SwiftUI
 /// lead to the addons; joining never does. Settings opens the check step
 /// alone as a page.
 struct OnboardingScreen: View {
-    enum Step { case doors, defaults, check }
+    enum Step { case doors, defaults, question, check }
 
     let core: CoreClient
     /// Ends the flow (Browse first, Done); nil when the check is a page.
@@ -35,6 +35,8 @@ struct OnboardingScreen: View {
     @FocusState private var firstDoor: Bool
     /// TV: the addons step enters on Continue, so one press keeps them all.
     @FocusState private var onContinue: Bool
+    /// The question enters on Start fast, the default.
+    @FocusState private var onFast: Bool
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
 
@@ -53,6 +55,7 @@ struct OnboardingScreen: View {
                 switch step {
                 case .doors: doorsStep
                 case .defaults: defaultsStep
+                case .question: questionStep
                 case .check: checkStep
                 }
             }
@@ -85,6 +88,59 @@ struct OnboardingScreen: View {
     }
 
     // MARK: steps
+
+    /// "How should Marquee pick what to play?": Start fast (focused) or Best
+    /// quality, each a patch of the stream preferences from the shared words.
+    /// Skip writes nothing: the defaults are Start fast's.
+    private var questionStep: some View {
+        let q = StreamChoice.words.question
+        return VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack(alignment: .firstTextBaseline) {
+                Wordmark(size: 22)
+                Spacer()
+                Button(q.skip.label) { afterQuestion() }
+                    .buttonStyle(.textLink)
+                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+            }
+            stepHeading(q.title, q.lead)
+            let answers = Group {
+                Button { Task { await answer(q.fast) } } label: { Door(symbol: "zap", title: q.fast.label, text: q.fast.text) }
+                    .focused($onFast)
+                Button { Task { await answer(q.best) } } label: { Door(symbol: "gem", title: q.best.label, text: q.best.text) }
+            }
+            .buttonStyle(.row)
+            .disabled(busy != nil)
+            if metrics.wide {
+                HStack(alignment: .top, spacing: Theme.Space.s) { answers }
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 12) { answers }
+            }
+            if let note, !note.ok {
+                StatusDot(tone: .bad, text: note.text)
+            }
+        }
+        .defaultFocus($onFast, true)
+    }
+
+    private func answer(_ answer: StreamChoiceWords.Question.Answer) async {
+        guard busy == nil else { return }
+        busy = "question"
+        note = nil
+        defer { busy = nil }
+        do {
+            try await core.perform("setPrefs", ["patch": StreamChoice.patch(answer)])
+            afterQuestion()
+        } catch {
+            note = (false, "Could not save the choice: \(error.localizedDescription)")
+        }
+    }
+
+    /// Browse first goes Home; Start fresh and an import go to the setup check.
+    private func afterQuestion() {
+        if thenHome, let close { close() } else { step = .check }
+    }
 
     private var doorsStep: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -157,7 +213,8 @@ struct OnboardingScreen: View {
                 Button(defaults.busy ? "Adding" : "Continue") {
                     Task {
                         guard await defaults.install() else { return }
-                        if thenHome, let close { close() } else { step = .check }
+                        // A first run asks the one question next (stream choice 4.5).
+                        step = .question
                     }
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
