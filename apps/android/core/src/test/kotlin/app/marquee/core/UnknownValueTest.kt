@@ -15,7 +15,7 @@ class UnknownValueTest {
     // two new hide reasons, a new group and a new reason on the recommended row.
     private val snapshot =
         """{"done":true,"failedAddons":[],"frozen":false,""" +
-            """"hidden":{"byReason":[["needsDebrid",2],["tooLarge",1],["noSpace",1]],"count":4},"pendingAddons":[],""" +
+            """"hidden":{"byReason":[["geoBlocked",2],["tooLarge",1],["expired",1]],"count":4},"pendingAddons":[],""" +
             """"recommended":{"failoverCount":0,"features":[],"group":"cachedElsewhere",""" +
             """"key":"url:http://127.0.0.1:7780/hls/master.m3u8","languages":[],"quality":"1080p",""" +
             """"reasons":["playsDirectly","fastestSeeders"],"releaseName":"Sintel.2010.1080p.local.AES.m3u8",""" +
@@ -40,5 +40,12 @@ class UnknownValueTest {
     fun `a known value still goes out by its wire name`() {
         assertEquals("\"tooLarge\"", CoreJson.encodeToString(HideReason.TooLarge))
         assertEquals(HideReason.NotForKids, CoreJson.decodeFromString(HideReason.serializer(), "\"notForKids\""))
+        // M13's hide reasons are known, with their own words.
+        val m13 = snapshot.replace("geoBlocked", "needsDebrid").replace("expired", "noSpace")
+        val known = CoreJson.decodeFromString(VersionsSnapshot.serializer(), m13)
+        assertEquals(
+            "2 need a paid streaming service account, 1 is over your size limit, 1 is larger than the free space",
+            VersionsCopy.hiddenDetail(known.hidden),
+        )
     }
 }

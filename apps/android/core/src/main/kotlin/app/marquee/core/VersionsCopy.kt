@@ -202,6 +202,10 @@ object VersionsCopy {
 
             HideReason.NotForKids -> if (one) "is not for kids" else "are not for kids"
 
+            HideReason.NeedsDebrid -> "${if (one) "needs" else "need"} a paid streaming service account"
+
+            HideReason.NoSpace -> if (one) "is larger than the free space" else "are larger than the free space"
+
             // A reason from a newer core: still counted, in general words.
             HideReason.Unknown -> if (one) "is hidden for another reason" else "are hidden for another reason"
         }
