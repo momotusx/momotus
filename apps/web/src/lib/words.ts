@@ -658,3 +658,31 @@ export function learnedNote(counter: keyof Omit<typeof choice.learned, "undo">, 
   const height = fields.height === undefined ? undefined : (c.screens[String(fields.height) as keyof typeof c.screens] ?? `${fields.height}p`);
   return part(choice.learned[counter][up ? "up" : "down"], { device: deviceName(f), limit: fields.limit === undefined ? undefined : bytes(fields.limit), height });
 }
+
+/** The v2 stream preferences the Settings page and the question write
+ * (`StreamPrefs` in crates/mq-streams/src/model.rs); missing on an older
+ * core, so each reads with its default (3.8). */
+// ponytail: local shape until phase 2 regenerates StreamPrefs.ts.
+export interface StreamChoicePrefs {
+  sizeLimitBytes?: number | null;
+  minSeeders?: number;
+  hdr?: boolean;
+  preferReady?: boolean;
+  learn?: boolean;
+}
+
+export const choiceDefaults = { sizeLimitBytes: choice.question.fast.patch.sizeLimitBytes as number | null, minSeeders: choice.question.fast.patch.minSeeders, hdr: true, preferReady: true, learn: true };
+
+/** "Up to 5 GB, shared by at least 50 people": the Settings row's line. */
+export function choiceSummary(p: StreamChoicePrefs): string {
+  const s = choice.settings;
+  const size = p.sizeLimitBytes === undefined ? choiceDefaults.sizeLimitBytes : p.sizeLimitBytes;
+  const seeders = p.minSeeders ?? choiceDefaults.minSeeders;
+  const sizeLabel = s.size.choices.find((x) => x.value === size)?.label ?? s.size.custom.replace("{size}", bytes(size ?? 0));
+  const people = s.seeders.choices.find((x) => x.value === seeders)?.label ?? s.seeders.custom.replace("{n}", seeders.toLocaleString("en-US"));
+  return s.summary.replace("{size}", sizeLabel).replace("{people}", people);
+}
+
+/** `displayHeight` to the core's screen class (3.3): an iPhone (1179 lines)
+ * and a 1440 phone are 1080. */
+export const screenClass = (lines: number) => (lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : lines >= 700 ? 720 : 480);

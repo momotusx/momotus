@@ -23,6 +23,7 @@ import Debrid from "./screens/debrid";
 import Discover from "./screens/discover";
 import Home from "./screens/home";
 import HomeRows from "./screens/home-rows";
+import StreamChoice from "./screens/stream-choice";
 import Import from "./screens/import";
 import Library from "./screens/library";
 import Onboarding, { RecommendedAddons } from "./screens/onboarding";
@@ -47,7 +48,7 @@ const destinations: Destination[] = [
   { path: "/settings", label: "Settings", icon: Settings, tool: true },
 ];
 // Settings sub-pages keep the rail and light up Settings.
-const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-addons", "/import", "/pair", "/home-rows", "/debrid", "/sync", "/trakt"];
+const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-addons", "/import", "/pair", "/home-rows", "/stream-choice", "/debrid", "/sync", "/trakt"];
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
@@ -275,6 +276,7 @@ export function App() {
       <Route path="/sync/lost/:id" component={ReportLost} />
       <Route path="/sync/fork" component={ForkReview} />
       <Route path="/home-rows" component={HomeRows} />
+      <Route path="/stream-choice" component={StreamChoice} />
       <Route path="/debrid" component={Debrid} />
       <Route path="/trakt" component={TraktScreen} />
       <Route path="/profiles" component={ProfilesScreen} />

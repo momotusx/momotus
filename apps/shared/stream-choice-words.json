@@ -117,13 +117,18 @@
         "minSeeders": 20
       }
     },
-    "skip": "fast"
+    "skip": {
+      "label": "Skip",
+      "means": "fast"
+    }
   },
   "settings": {
     "title": "Stream choice",
     "lede": "How Marquee picks the version to play. Every version stays in the list, so you can always pick another.",
+    "summary": "{size}, shared by at least {people}",
     "size": {
       "label": "File size",
+      "custom": "Up to {size}",
       "choices": [
         {
           "label": "Up to 2 GB",
@@ -150,6 +155,7 @@
     "seeders": {
       "label": "Shared by at least",
       "help": "Files shared by more people start faster.",
+      "custom": "{n} people",
       "choices": [
         {
           "label": "10 people",
@@ -214,7 +220,8 @@
       ]
     },
     "audio": {
-      "label": "Audio"
+      "label": "Audio",
+      "help": "Listed in the order you turn them on; the first one wins."
     },
     "learn": {
       "label": "Learn from my picks",

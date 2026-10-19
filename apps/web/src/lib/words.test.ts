@@ -47,7 +47,7 @@ test("a subtitle note names its source and what to do", () => {
 });
 
 import shared from "../../../shared/stream-choice-words.json";
-import { blockedWords, choiceWords, conditionsHeader, conditionsLine, counted, learnedNote, lineWords, type ReasonLine } from "./words";
+import { blockedWords, choiceDefaults, choiceSummary, choiceWords, screenClass, conditionsHeader, conditionsLine, counted, learnedNote, lineWords, type ReasonLine } from "./words";
 
 const GiB = 1024 ** 3;
 
@@ -121,5 +121,16 @@ test("a learned note names the device and the new limit", () => {
 test("the onboarding patches are the plan's, and Skip is Start fast", () => {
   expect(shared.question.fast.patch).toEqual({ sizeLimitBytes: 5 * GiB, minSeeders: 50 });
   expect(shared.question.best.patch).toEqual({ sizeLimitBytes: null, minSeeders: 20 });
-  expect(shared.question.skip).toBe("fast");
+  expect(shared.question.skip).toEqual({ label: "Skip", means: "fast" });
+  expect(choiceDefaults).toEqual({ ...shared.question.fast.patch, hdr: true, preferReady: true, learn: true });
+});
+
+test("the Settings row sums up the size and the seeders as the chips say them", () => {
+  expect(choiceSummary({})).toBe("Up to 5 GB, shared by at least 50 people");
+  expect(choiceSummary({ sizeLimitBytes: null, minSeeders: 20 })).toBe("Any size, shared by at least 20 people");
+  expect(choiceSummary({ sizeLimitBytes: 2.5 * GiB, minSeeders: 35 })).toBe("Up to 2.5 GB, shared by at least 35 people");
+});
+
+test("a display's lines fall into the core's screen classes", () => {
+  expect([2160, 2000, 1440, 1179, 1000, 720, 700, 576].map(screenClass)).toEqual([2160, 2160, 1080, 1080, 1080, 720, 720, 480]);
 });

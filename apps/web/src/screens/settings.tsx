@@ -8,16 +8,16 @@ import Puzzle from "lucide-solid/icons/puzzle";
 import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Radio from "lucide-solid/icons/radio";
 import Rows3 from "lucide-solid/icons/rows-3";
+import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Sparkle from "lucide-solid/icons/sparkle";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, type JSX, Show } from "solid-js";
 import { liveView, op, prefsView, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { Prefs } from "../core/generated/Prefs";
-import type { QualityPref } from "../core/generated/QualityPref";
 import { chooseForm, type Form, form } from "../form";
 import { defaultsWords } from "../lib/defaults";
-import { findAddons, languageName, syncSummary, syncWords } from "../lib/words";
+import { choiceSummary, choiceWords, findAddons, languageName, type StreamChoicePrefs, syncSummary, syncWords } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
 import { rowLine, traktWords } from "../lib/trakt";
@@ -33,7 +33,7 @@ import { inUse } from "../lib/debrid";
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 // ISO 639-1 for audio (stream prefs) and 639-2 for subtitles, as the core expects.
-const LANGS: [iso1: string, iso2: string][] = [
+export const LANGS: [iso1: string, iso2: string][] = [
   ["en", "eng"],
   ["tr", "tur"],
   ["es", "spa"],
@@ -44,8 +44,10 @@ const LANGS: [iso1: string, iso2: string][] = [
   ["ja", "jpn"],
 ];
 
-function Choice<T>(props: {
+export function Choice<T>(props: {
   label: string;
+  /** A line under the label (the Stream choice page's rows). */
+  help?: string;
   group: string;
   items: { value: T; label: string }[];
   isOn: (v: T) => boolean;
@@ -55,7 +57,12 @@ function Choice<T>(props: {
 }) {
   return (
     <div class="chips-row wrap-row" role={props.multi ? "group" : "radiogroup"} aria-label={props.label} data-fgroup={props.group}>
-      <span class="kicker">{props.label}</span>
+      <span class="kicker">
+        {props.label}
+        <Show when={props.help}>
+          <small>{props.help}</small>
+        </Show>
+      </span>
       <div class="chips-track wrap">
         <For each={props.items}>
           {(item, i) => (
@@ -205,38 +212,16 @@ export default function SettingsScreen() {
         {(x) => (
           <section class="set">
             <h2>Playback</h2>
+            <div class="links">
+              <LinkRow
+                href="/stream-choice"
+                fkey="settings:stream-choice"
+                icon={<SlidersHorizontal aria-hidden />}
+                title={choiceWords.settings.title}
+                text={choiceSummary(x().streams as StreamChoicePrefs)}
+              />
+            </div>
             <div class="filters">
-              <Choice<QualityPref>
-                label="Pick"
-                group="pref-quality"
-                items={[
-                  { value: "best", label: "Best quality" },
-                  { value: "balanced", label: "Balanced" },
-                  { value: "dataSaver", label: "Data saver" },
-                ]}
-                isOn={(v) => x().streams.quality === v}
-                onPick={(v) => patch({ streams: { quality: v } })}
-              />
-              <Choice<number | null>
-                label="Up to"
-                group="pref-height"
-                items={[
-                  { value: null, label: "Any resolution" },
-                  { value: 2160, label: "4K" },
-                  { value: 1080, label: "1080p" },
-                  { value: 720, label: "720p" },
-                ]}
-                isOn={(v) => x().streams.maxHeight === v}
-                onPick={(v) => patch({ streams: { maxHeight: v } })}
-              />
-              <Choice<string>
-                multi
-                label="Audio"
-                group="pref-audio"
-                items={LANGS.map(([iso1]) => ({ value: iso1, label: languageName(iso1) }))}
-                isOn={(v) => x().streams.languages.includes(v)}
-                onPick={(v) => patch({ streams: { languages: toggle(x().streams.languages, v) } })}
-              />
               <Choice<string>
                 multi
                 label="Subtitles"
