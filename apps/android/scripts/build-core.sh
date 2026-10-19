@@ -16,6 +16,8 @@
 #   dev turns debug assertions on, which compiles the bridge's dev hooks in (Trakt from a local fake on
 #   this machine, `MQ_DEV_TRAKT`, for emulator walks), in its own target dir, into src/debug/jniLibs:
 #   only debug builds of the app package it. The plain build has no debug assertions and so no hook.
+# MQ_FEATURES=torrent builds the torrent engine in (the `full` variant, never a store build); its
+# size is measured against its own budget (plans/core-backlog.md C11). Unset, the core has no engine.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -52,7 +54,7 @@ PACKED="-C link-arg=-Wl,--pack-dyn-relocs=android"
 CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS=$PACKED CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_RUSTFLAGS=$PACKED \
 CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none ANDROID_NDK_HOME=$NDK \
   CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$DEV_ASSERTIONS \
-  cargo ndk "${ABIS[@]}" --platform 24 build --release -p mq-ffi -j 4
+  cargo ndk "${ABIS[@]}" --platform 24 build --release -p mq-ffi -j 4 ${MQ_FEATURES:+--features "$MQ_FEATURES"}
 
 UNSTRIPPED=$TARGET/aarch64-linux-android/release/libmarquee_core.so
 rm -rf "$OUT/generated"
