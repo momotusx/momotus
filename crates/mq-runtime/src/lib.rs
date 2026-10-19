@@ -6,9 +6,11 @@
 mod core;
 mod debrid;
 pub mod defaults;
+pub mod learn;
 pub mod live;
 mod profiles;
 pub mod segments;
+pub mod speed;
 mod trakt;
 pub mod views;
 
@@ -49,4 +51,7 @@ pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionSt
 pub use views::search::{SearchSnapshot, SearchView};
 pub use views::settings::{HomeRows, Prefs, SettingsView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
-pub use views::versions::{VersionRow, VersionsParams, VersionsSnapshot, VersionsView};
+pub use views::versions::{
+    BlockedReason, BlockedVersions, TitleFacts, VersionRow, VersionsConditions, VersionsParams,
+    VersionsSnapshot, VersionsView,
+};

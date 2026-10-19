@@ -33,6 +33,11 @@ pub struct Prefs {
     /// The default addons list version this profile was last offered
     /// (`defaultAddons`): below the current one, Home offers the new ones once.
     pub defaults_seen: u32,
+    /// What the user's picks taught, by screen class (plans/m13-stream-choice.md 3.9).
+    pub learned: crate::learn::LearnedByClass,
+    /// Raised by "Forget what was learned"; a counter stamped with an older
+    /// epoch reads as zero.
+    pub learned_epoch: u32,
 }
 
 /// Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`).
@@ -59,6 +64,8 @@ impl Default for Prefs {
             autoplay_next: true,
             home_rows: HomeRows::default(),
             defaults_seen: 0,
+            learned: crate::learn::LearnedByClass::default(),
+            learned_epoch: 0,
         }
     }
 }

@@ -433,6 +433,7 @@ async fn play(
             caps: DeviceCaps::basic_1080p(),
             prefs: core.prefs().streams,
             last_binge_group: None,
+            facts: Default::default(),
         },
     );
     let snapshot = until(Duration::from_secs(15), || {

@@ -123,6 +123,11 @@ impl Default for StreamPrefs {
 
 /// A connection's speed for one kind of source, in Mbit/s, and how many
 /// playbacks measured it (0: the prior).
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Speed {
@@ -235,6 +240,11 @@ pub struct ParsedStream {
     pub raw_description: String,
 }
 
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Playability {
@@ -306,6 +316,11 @@ pub enum HideReason {
 /// Lexicographic sort key (plans/m13-stream-choice.md 3.5): earlier fields
 /// always win, so no score can lift a stream past a better field. Higher is
 /// better.
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RankKey {

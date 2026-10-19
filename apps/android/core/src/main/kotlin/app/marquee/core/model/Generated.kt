@@ -84,6 +84,29 @@ enum class Blocked(
     object Serializer : FallbackEnumSerializer<Blocked>("Blocked", Blocked.entries, Blocked::wire, Unknown)
 }
 
+@Serializable(with = BlockedReason.Serializer::class)
+enum class BlockedReason(
+    val wire: String,
+) {
+    NeedsAccount("needsAccount"),
+    NoSpace("noSpace"),
+    NothingPlaysHere("nothingPlaysHere"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<BlockedReason>("BlockedReason", BlockedReason.entries, BlockedReason::wire, Unknown)
+}
+
+/** Why nothing is listed (3.11), how many versions were found, and those rows ranked as they would be once the reason is fixed ("Show them"). */
+@Serializable
+data class BlockedVersions(
+    val reason: BlockedReason,
+    val count: Int,
+    val rows: List<VersionRow> = emptyList(),
+)
+
 @Serializable
 data class CalendarDay(
     val date: String,
@@ -599,6 +622,58 @@ data class KindCount(
     val count: Int,
 )
 
+/** The counters of one screen class, each in -5..5. A counter stamped with an older epoch than the profile's reads as zero. */
+@Serializable
+data class Learned(
+    val ready: Int,
+    val height: Int,
+    val hdr: Int,
+    val size: Int,
+    /** Picks counted in this class. */
+    val picks: Int,
+    val epoch: Int,
+    /** The last move, for the decay of 1 per 60 days. */
+    val atMs: Long,
+    /** Choices the user undid: they no longer learn. */
+    val muted: List<LearnedChoice> = emptyList(),
+)
+
+/** Counters by screen class (3.3): 2160, 1080, 720 and 480 lines. Each is its own synced leaf (`learned.uhd`), so two devices learning on different screens both keep their counts. */
+@Serializable
+data class LearnedByClass(
+    val uhd: Learned,
+    val fhd: Learned,
+    val hd: Learned,
+    val sd: Learned,
+)
+
+/** What a pick that differs from the recommendation says the user wants. */
+@Serializable(with = LearnedChoice.Serializer::class)
+enum class LearnedChoice(
+    val wire: String,
+) {
+    Ready("ready"),
+    Height("height"),
+    Hdr("hdr"),
+    Size("size"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<LearnedChoice>("LearnedChoice", LearnedChoice.entries, LearnedChoice::wire, Unknown)
+}
+
+/** The one-time note when a counter crosses 3: what changed, for which screen class, and the preferences now in effect there. Undo mutes it. */
+@Serializable
+data class LearnedNote(
+    val screenClass: Int,
+    val choice: LearnedChoice,
+    /** Toward more (bigger files, more lines, ready files, HDR). */
+    val up: Boolean,
+    val prefs: StreamPrefs,
+)
+
 @Serializable
 data class LibrarySnapshot(
     /** The type filter, `None` for everything. */
@@ -686,6 +761,23 @@ data class MemberInfo(
     val thisDevice: Boolean,
 )
 
+/** The network type the app reports. */
+@Serializable(with = Network.Serializer::class)
+enum class Network(
+    val wire: String,
+) {
+    Wifi("wifi"),
+    Ethernet("ethernet"),
+    Cellular("cellular"),
+    Other("other"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Network>("Network", Network.entries, Network::wire, Unknown)
+}
+
 @Serializable
 data class NextEpisode(
     val videoId: String,
@@ -733,6 +825,22 @@ sealed interface PairingSnapshot {
     data class Failed(
         val reason: String,
     ) : PairingSnapshot
+}
+
+@Serializable(with = Playability.Serializer::class)
+enum class Playability(
+    val wire: String,
+) {
+    NeedsTranscode("needsTranscode"),
+    NeedsFallbackEngine("needsFallbackEngine"),
+    Unstated("unstated"),
+    Native("native"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Playability>("Playability", Playability.entries, Playability::wire, Unknown)
 }
 
 @Serializable(with = PlaybackPhase.Serializer::class)
@@ -803,6 +911,10 @@ data class Prefs(
     val homeRows: HomeRows,
     /** The default addons list version this profile was last offered (`defaultAddons`): below the current one, Home offers the new ones once. */
     val defaultsSeen: Int = 0,
+    /** What the user's picks taught, by screen class (plans/m13-stream-choice.md 3.9). */
+    val learned: LearnedByClass,
+    /** Raised by "Forget what was learned"; a counter stamped with an older epoch reads as zero. */
+    val learnedEpoch: Int,
 )
 
 @Serializable
@@ -849,6 +961,29 @@ enum class QualityPref(
     object Serializer : FallbackEnumSerializer<QualityPref>("QualityPref", QualityPref.entries, QualityPref::wire, Unknown)
 }
 
+/** Lexicographic sort key (plans/m13-stream-choice.md 3.5): earlier fields always win, so no score can lift a stream past a better field. Higher is better. */
+@Serializable
+data class RankKey(
+    /** False only when the release names its languages and none is wanted: a ready file in a language the user does not speak is no pick. */
+    val language: Boolean,
+    /** Not a cam, telesync, telecine or screener copy. */
+    val legit: Boolean,
+    /** It can start at all: not a swarm under 5 seeders, not a fetch. A row that may never start loses to every row that can, however it plays (code review r2 P2-3). */
+    val viable: Boolean,
+    /** No year in the name, or one within 3 years of the title's or the episode's. */
+    val yearOk: Boolean,
+    /** The bitrate is unknown or within the safe speed of its kind. */
+    val sustains: Boolean,
+    val playability: Playability,
+    /** A torrent within 1.1 x the size limit; a ready file always is. */
+    val sizeOk: Boolean,
+    /** Ready 4 (3 when not preferred); a torrent 3 at 4 x the wanted seeders, 2 at the wanted seeders, 1 at 5 or none stated, 0 under 5. */
+    val start: Int,
+    val binge: Boolean,
+    val effectiveHeight: Int,
+    val within: Int,
+)
+
 @Serializable(with = Reason.Serializer::class)
 enum class Reason(
     val wire: String,
@@ -865,6 +1000,84 @@ enum class Reason(
     ;
 
     object Serializer : FallbackEnumSerializer<Reason>("Reason", Reason.entries, Reason::wire, Unknown)
+}
+
+/** What a row tells the user, first that applies by tone (bad, warn, ok), with the numbers the details show. */
+@Serializable
+@JsonClassDiscriminator("kind")
+sealed interface ReasonLine {
+    @Serializable
+    @SerialName("copy")
+    data class Copy(
+        val quality: String,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("fetch")
+    data class Fetch(
+        val service: String? = null,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("veryFew")
+    data class VeryFew(
+        val seeders: Int,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("otherYear")
+    data class OtherYear(
+        val year: Int,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("mayPause")
+    data class MayPause(
+        val needMbps: Float,
+        val haveMbps: Float,
+        /** Playbacks that measured `have_mbps`; 0 is the estimate. */
+        val samples: Int,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("washedOut")
+    data object WashedOut : ReasonLine
+
+    @Serializable
+    @SerialName("large")
+    data class Large(
+        val sizeBytes: Long,
+        val limitBytes: Long,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("few")
+    data class Few(
+        val seeders: Int,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("ready")
+    data class Ready(
+        val service: String? = null,
+        val sizeBytes: Long? = null,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("quick")
+    data class Quick(
+        val seeders: Int? = null,
+        val sizeBytes: Long? = null,
+    ) : ReasonLine
+
+    @Serializable
+    @SerialName("should")
+    data class Should(
+        val seeders: Int? = null,
+        val sizeBytes: Long? = null,
+        /** The service it may be ready on (`Unknown`). */
+        val service: String? = null,
+    ) : ReasonLine
 }
 
 @Serializable
@@ -936,17 +1149,64 @@ enum class SegmentKind(
     object Serializer : FallbackEnumSerializer<SegmentKind>("SegmentKind", SegmentKind.entries, SegmentKind::wire, Unknown)
 }
 
+/** How a stream starts (plans/m13-stream-choice.md 3.2). */
+@Serializable(with = SourceClass.Serializer::class)
+enum class SourceClass(
+    val wire: String,
+) {
+    Ready("ready"),
+    Unknown("unknown"),
+    Swarm("swarm"),
+    Fetch("fetch"),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SourceClass>("SourceClass", SourceClass.entries, SourceClass::wire, Unknown)
+}
+
+/** A connection's speed for one kind of source, in Mbit/s, and how many playbacks measured it (0: the prior). */
+@Serializable
+data class Speed(
+    val mbps: Float,
+    val samples: Int,
+)
+
+/** What the core knows of this device's connection and disk, for Settings ("This device") and the `streamConditions` op. */
+@Serializable
+data class StreamConditions(
+    val network: Network,
+    /** Debrid and direct links; `samples` 0 is the prior. */
+    val http: Speed,
+    /** The torrent engine. */
+    val p2p: Speed,
+    /** Free space where torrents are kept; null without the engine. */
+    val freeBytes: Long? = null,
+    /** This build has the torrent engine. */
+    val engine: Boolean,
+)
+
 /** The user's profile preferences for picking streams. */
 @Serializable
 data class StreamPrefs(
+    /** Read once and mapped to the fields below (plans/m13-stream-choice.md 4.1); the ranking does not read it. */
     val quality: QualityPref,
     /** Never pick above this many lines (720, 1080, 2160), whatever the screen. */
     val maxHeight: Int? = null,
+    /** The old hard limit: larger streams are hidden. No UI writes it. */
     val maxSizeBytes: Long? = null,
     /** ISO 639-1 audio language preferences, most wanted first. */
     val languages: List<String> = emptyList(),
     /** Lowercase terms that hide a stream when its name contains them. */
     val avoid: List<String> = emptyList(),
+    /** The soft limit: a torrent above 1.1 x this ranks below the ones that fit. `None` is no limit. */
+    val sizeLimitBytes: Long? = null,
+    /** Seeders that make a torrent start well; 4 x this starts quickly. */
+    val minSeeders: Int,
+    /** Prefer HDR where the screen shows it. */
+    val hdr: Boolean,
+    /** A file ready on a streaming service starts before every torrent. */
+    val preferReady: Boolean,
+    /** Learn from the user's picks (applied by the runtime). */
+    val learn: Boolean,
 )
 
 @Serializable
@@ -1253,10 +1513,44 @@ data class VersionRow(
     val reasons: List<Reason> = emptyList(),
     val group: Group,
     val failoverCount: Int,
+    /** What the row tells the user, with its numbers (3.7). */
+    val line: ReasonLine,
+    /** How it starts (3.2). */
+    val sourceClass: SourceClass,
+    /** Size over runtime after the pack guard; null when either is unknown. */
+    val bitrateMbps: Float? = null,
+    /** The sort key, for a details panel and tests. */
+    val score: RankKey,
+)
+
+/** What the ranking read for this view, for the header "This TV: 4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */
+@Serializable
+data class VersionsConditions(
+    /** 2160, 1080, 720 or 480 (3.3). */
+    val screenClass: Int,
+    /** The screen shows HDR and the user wants it. */
+    val hdr: Boolean,
+    val network: Network,
+    val http: Speed,
+    val p2p: Speed,
+    val freeBytes: Long? = null,
+    val runtimeMin: Int? = null,
+    val sizeLimitBytes: Long? = null,
+    val minSeeders: Int,
+    /** This build has the torrent engine. */
+    val engine: Boolean,
+    /** The profile has a streaming service account. */
+    val account: Boolean,
 )
 
 @Serializable
 data class VersionsSnapshot(
+    /** What the ranking read: the screen, the connection, the disk, the title and the preferences in effect (4.2). */
+    val conditions: VersionsConditions,
+    /** Every addon answered, nothing is listed, and the hidden rows say why (3.11). */
+    val blocked: BlockedVersions? = null,
+    /** The one-time note when a pick taught Marquee something (3.9). */
+    val note: LearnedNote? = null,
     val recommended: VersionRow? = null,
     val rows: List<VersionRow> = emptyList(),
     val hidden: HiddenSummary,

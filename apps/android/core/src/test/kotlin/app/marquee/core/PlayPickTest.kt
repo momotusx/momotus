@@ -24,6 +24,9 @@ class PlayPickTest {
             reasons = listOf(Reason.PlaysDirectly),
             group = Group.Best,
             failoverCount = 0,
+            line = VersionsFixtures.line,
+            sourceClass = VersionsFixtures.sourceClass,
+            score = VersionsFixtures.score,
         )
 
     private fun snapshot(
@@ -33,6 +36,7 @@ class PlayPickTest {
         frozen: Boolean = false,
         pending: List<String> = emptyList(),
     ) = VersionsSnapshot(
+        conditions = VersionsFixtures.conditions,
         recommended = best,
         rows = rows,
         hidden = HiddenSummary(0, emptyList()),

@@ -169,6 +169,7 @@ fn params(kind: &str, video_id: &str, title: &str) -> VersionsParams {
         caps: DeviceCaps::basic_1080p(),
         prefs: StreamPrefs::default(),
         last_binge_group: None,
+        facts: Default::default(),
     }
 }
 

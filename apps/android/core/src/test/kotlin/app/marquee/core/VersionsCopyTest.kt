@@ -29,6 +29,9 @@ class VersionsCopyTest {
         reasons = listOf(Reason.ReadyNow),
         group = Group.Best,
         failoverCount = 0,
+        line = VersionsFixtures.line,
+        sourceClass = VersionsFixtures.sourceClass,
+        score = VersionsFixtures.score,
     )
 
     private fun snapshot(
@@ -38,6 +41,7 @@ class VersionsCopyTest {
         slow: List<String> = emptyList(),
         failed: List<String> = emptyList(),
     ) = VersionsSnapshot(
+        conditions = VersionsFixtures.conditions,
         recommended = recommended,
         rows = emptyList(),
         hidden = HiddenSummary(0, emptyList()),

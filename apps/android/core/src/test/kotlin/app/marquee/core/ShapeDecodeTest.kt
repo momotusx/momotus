@@ -57,16 +57,21 @@ class ShapeDecodeTest {
                 VersionsSnapshot.serializer(),
                 """{"recommended":{"key":"k1","quality":"4K","features":["Dolby Vision","Atmos"],"sizeBytes":18253611008,
                       "status":{"kind":"ready","service":"Real-Debrid"},"via":"Real-Debrid","releaseName":"A.2160p.mkv",
-                      "languages":["en"],"reasons":["readyNow","matchesScreen"],"group":"best","failoverCount":2},
+                      "languages":["en"],"reasons":["readyNow","matchesScreen"],"group":"best","failoverCount":2,
+                      ${VersionsFixtures.ROW_JSON}},
                    "rows":[
                      {"key":"k2","quality":"1080p","features":[],"sizeBytes":null,"status":{"kind":"torrent","seeds":120},
-                      "via":"Torrentio","releaseName":"B.1080p","languages":[],"reasons":[],"group":"smallerFaster","failoverCount":0},
+                      "via":"Torrentio","releaseName":"B.1080p","languages":[],"reasons":[],"group":"smallerFaster","failoverCount":0,
+                      ${VersionsFixtures.ROW_JSON}},
                      {"key":"k3","quality":"720p","features":[],"sizeBytes":1,"status":{"kind":"needsDownload","service":null},
-                      "via":"X","releaseName":"C","languages":["tr"],"reasons":["yourLanguage"],"group":"otherLanguages","failoverCount":0},
+                      "via":"X","releaseName":"C","languages":["tr"],"reasons":["yourLanguage"],"group":"otherLanguages","failoverCount":0,
+                      ${VersionsFixtures.ROW_JSON}},
                      {"key":"k4","quality":"SD","features":[],"sizeBytes":2,"status":{"kind":"direct"},
-                      "via":"Y","releaseName":"D","languages":[],"reasons":["playsDirectly"],"group":"needsDownload","failoverCount":0}],
+                      "via":"Y","releaseName":"D","languages":[],"reasons":["playsDirectly"],"group":"needsDownload","failoverCount":0,
+                      ${VersionsFixtures.ROW_JSON}}],
                    "hidden":{"count":5,"byReason":[["wrongTitle",3],["tooLarge",2]]},
-                   "pendingAddons":["Slow"],"slowAddons":[],"failedAddons":["Broken"],"done":false,"frozen":true}""",
+                   "pendingAddons":["Slow"],"slowAddons":[],"failedAddons":["Broken"],"done":false,"frozen":true,
+                   ${VersionsFixtures.SNAPSHOT_JSON}}""",
             )
         assertEquals(18_253_611_008L, snapshot.recommended?.sizeBytes)
         assertEquals(VersionStatus.Ready("Real-Debrid"), snapshot.recommended?.status)

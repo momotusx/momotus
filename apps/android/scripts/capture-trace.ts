@@ -3,7 +3,8 @@
  * The Kotlin tests decode every line strictly, so a protocol change fails them.
  *
  * Needs: a running bridge (`MQ_DATA=<empty dir> MQ_BRIDGE_PORT=7790 mq-bridge`) and the local
- * test addon (`bun scripts/sintel-addon.ts`). Run: bun scripts/capture-trace.ts */
+ * test addon (`bun scripts/sintel-addon.ts`). Run: bun scripts/capture-trace.ts
+ * ONLY=settings,versions-playback writes just those files (the others still run, unsaved). */
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import { join } from "node:path";
 const bridge = process.env.MQ_BRIDGE ?? "ws://127.0.0.1:7790/ws";
 const addon = process.env.TEST_ADDON ?? "http://127.0.0.1:7780/manifest.json";
 const outDir = join(import.meta.dir, "../core/src/test/resources/traces");
+const only = process.env.ONLY?.split(",");
 
 type Json = Record<string, any>;
 interface Line {
@@ -78,7 +80,7 @@ async function trace(name: string, body: () => Promise<void>) {
   lines = [];
   started = performance.now();
   await body();
-  save(name);
+  if (!only || only.includes(name)) save(name);
 }
 
 // Refuse to record from a bridge that holds anyone's data: addon URLs can hold API keys and the

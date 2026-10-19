@@ -152,6 +152,9 @@ class TitleCopyTest {
             reasons = emptyList(),
             group = Group.Best,
             failoverCount = 0,
+            line = VersionsFixtures.line,
+            sourceClass = VersionsFixtures.sourceClass,
+            score = VersionsFixtures.score,
         )
 
     private fun snapshot(
@@ -159,6 +162,7 @@ class TitleCopyTest {
         rows: List<VersionRow> = emptyList(),
         done: Boolean = false,
     ) = VersionsSnapshot(
+        conditions = VersionsFixtures.conditions,
         recommended = recommended,
         rows = rows,
         hidden = HiddenSummary(0, emptyList()),

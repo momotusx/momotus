@@ -64,6 +64,7 @@ fn params() -> VersionsParams {
         caps: DeviceCaps::basic_1080p(),
         prefs: StreamPrefs::default(),
         last_binge_group: None,
+        facts: Default::default(),
     }
 }
 

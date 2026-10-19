@@ -4,7 +4,7 @@
 //!
 //! Requests: `{"id", "op": "subscribe" | "unsubscribe" | "command" | "installAddon" |
 //! "installListed" | "removeAddon" | "moveAddon" | "setAddonEnabled" | "defaultAddons" |
-//! "installDefaults" | "setPrefs" | "setDebridKeys" |
+//! "installDefaults" | "setPrefs" | "streamConditions" | "resetSpeed" | "setDebridKeys" |
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "cancelPairing" |
@@ -27,8 +27,8 @@ use mq_runtime::{
     AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
     DebridTombstone, DebridView, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
     ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView,
-    SearchView, SessionState, SettingsView, StoreId, StremioEndpoints, TitleView, TraktLoginView,
-    TraktRecord, TraktView, VersionsParams, VersionsView,
+    SearchView, SessionState, SettingsView, StoreId, StremioEndpoints, TitleFacts, TitleView,
+    TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -242,6 +242,16 @@ enum Request {
         id: u64,
         patch: Value,
     },
+    /// This device's network, measured speeds and free space, for Settings
+    /// ("This device"). Replies `StreamConditions`.
+    StreamConditions {
+        id: u64,
+    },
+    /// "Measure again": the current network's speeds go back to their
+    /// estimates. Replies `StreamConditions`.
+    ResetSpeed {
+        id: u64,
+    },
     /// Answers at once from the request loop: the core is alive.
     Ping {
         id: u64,
@@ -267,10 +277,13 @@ enum Request {
     },
     /// The app's life as the OS reports it: `foreground`, `background`,
     /// `memoryPressure` (frees caches) or `networkChanged` (drops pooled
-    /// connections).
+    /// connections; `network` is the new type when the app knows it:
+    /// `wifi`, `ethernet`, `cellular` or `other`).
     Lifecycle {
         id: u64,
         event: String,
+        #[serde(default)]
+        network: Option<mq_runtime::speed::Network>,
     },
     /// The profile's Trakt record from the keystore (right after `open` and
     /// after a switch or unlock), or the acknowledgement of one the `trakt`
@@ -795,20 +808,20 @@ impl Session {
                 self.reply(json!(id), result)
             }
             // Replies once running scrobbles are paused, or after 4 s.
-            Request::Lifecycle { id, event } if event == "background" => {
+            Request::Lifecycle { id, event, .. } if event == "background" => {
                 self.spawn(id, async move {
                     let _ = tokio::time::timeout(TRAKT_FLUSH, core.trakt_background()).await;
                     Ok::<_, Failure>(json!({}))
                 });
             }
-            Request::Lifecycle { id, event } => {
+            Request::Lifecycle { id, event, network } => {
                 let result = match event.as_str() {
                     "memoryPressure" => {
                         core.on_memory_pressure();
                         Ok(json!({}))
                     }
                     "networkChanged" => {
-                        core.on_network_changed();
+                        core.on_network_changed(network);
                         Ok(json!({}))
                     }
                     "foreground" => {
@@ -818,6 +831,14 @@ impl Session {
                     }
                     other => Err(format!("unknown lifecycle event: {other}")),
                 };
+                self.reply(json!(id), result);
+            }
+            Request::StreamConditions { id } => {
+                let result = to_value(&core.stream_conditions());
+                self.reply(json!(id), result);
+            }
+            Request::ResetSpeed { id } => {
+                let result = to_value(&core.reset_speed());
                 self.reply(json!(id), result);
             }
             Request::SetPrefs { id, patch } => {
@@ -1155,6 +1176,9 @@ impl Session {
                 (View::Title(title), to_value(&snapshot)?, forward)
             }
             "versions" => {
+                if let Some(network) = versions_network(params)? {
+                    core.set_network(network);
+                }
                 let versions =
                     VersionsView::open(&core, versions_params(params, core.prefs().streams)?);
                 let (snapshot, updates) = versions.subscribe();
@@ -1625,6 +1649,11 @@ async fn watch_gone(
 /// `passthrough` and `audioDecoders` ("aac", "ac3", "eac3", "dts",
 /// "true_hd", "atmos", ...), `containers` ("mkv", "mp4", ...) and
 /// `hasFallbackEngine`. What is left out keeps a 1080p SDR stick's default.
+/// The title as the app knows it (plans/m13-stream-choice.md 4.3): `runtime`
+/// ("142 min"), `releaseInfo` ("2002", "2022-"), the episode's `released`
+/// ("2013-09-16") and `episodesInSeason`; the core reads the meta for what
+/// is left out. `network` (`wifi`, `ethernet`, `cellular`, `other`) is
+/// read by `versions_network`.
 /// `language` (ISO 639-1, the device's) stands in for audio preferences the
 /// user has not set: that language first, then English.
 fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsParams, String> {
@@ -1674,7 +1703,18 @@ fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsPar
             .get("bingeGroup")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        facts: TitleFacts::read(
+            field::<String>(params, "runtime")?.as_deref(),
+            field::<String>(params, "releaseInfo")?.as_deref(),
+            field::<String>(params, "released")?.as_deref(),
+            num("episodesInSeason"),
+        ),
     })
+}
+
+/// The network type a `versions` subscription names, if any.
+fn versions_network(params: &Value) -> Result<Option<mq_runtime::speed::Network>, String> {
+    field(params, "network")
 }
 
 #[cfg(test)]
@@ -1688,7 +1728,8 @@ mod tests {
             "decoders": ["h264", "h265", "av1"], "tenBitHevc": false,
             "passthrough": ["eac3", "atmos"], "hasFallbackEngine": false,
             "audioDecoders": ["aac", "opus"], "containers": ["MP4", "webm"],
-            "language": "tr"
+            "language": "tr", "runtime": "52 min", "releaseInfo": "2008-2013",
+            "released": "2013-09-29", "episodesInSeason": 16, "network": "wifi"
         });
         let parsed = versions_params(&params, StreamPrefs::default()).unwrap();
         let caps = parsed.caps;
@@ -1698,6 +1739,19 @@ mod tests {
         assert_eq!(json!(caps.passthrough), json!(["eac3", "atmos"]));
         assert_eq!(json!(caps.audio_decoders), json!(["aac", "opus"]));
         assert_eq!(caps.containers, ["mp4", "webm"]);
+        let facts = &parsed.facts;
+        assert_eq!(
+            (facts.runtime_s, facts.title_year),
+            (Some(52 * 60), Some(2008))
+        );
+        assert_eq!(
+            (facts.episode_year, facts.episodes_in_season),
+            (Some(2013), Some(16))
+        );
+        assert_eq!(
+            versions_network(&params).unwrap(),
+            Some(mq_runtime::speed::Network::Wifi)
+        );
         assert_eq!(
             parsed.prefs.languages,
             ["tr", "en"],

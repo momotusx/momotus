@@ -6,7 +6,9 @@
 //! (`freeze`), so late addon results never swap the row under the cursor.
 
 use crate::Core;
+use crate::learn::LearnedNote;
 use crate::live::{FRAME, coalesce};
+use crate::speed::Network;
 use crate::views::addons_changed;
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
@@ -14,8 +16,8 @@ use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_library::{Policy, Table};
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_streams::{
-    Conditions, DeviceCaps, Group, HideReason, ParsedStream, RankInput, Ranked, RankedRow, Reason,
-    StreamPrefs, Target, normalize, rank,
+    Conditions, DeviceCaps, Group, HideReason, ParsedStream, RankInput, RankKey, Ranked, RankedRow,
+    Reason, ReasonLine, SourceClass, Speed, StreamPrefs, Target, normalize, rank, screen_class,
 };
 use serde::Serialize;
 use std::pin::Pin;
@@ -47,6 +49,14 @@ pub struct VersionRow {
     pub reasons: Vec<Reason>,
     pub group: Group,
     pub failover_count: u16,
+    /// What the row tells the user, with its numbers (3.7).
+    pub line: ReasonLine,
+    /// How it starts (3.2).
+    pub source_class: SourceClass,
+    /// Size over runtime after the pack guard; null when either is unknown.
+    pub bitrate_mbps: Option<f32>,
+    /// The sort key, for a details panel and tests.
+    pub score: RankKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -83,6 +93,14 @@ pub struct HiddenSummary {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct VersionsSnapshot {
+    /// What the ranking read: the screen, the connection, the disk, the
+    /// title and the preferences in effect (4.2).
+    pub conditions: VersionsConditions,
+    /// Every addon answered, nothing is listed, and the hidden rows say
+    /// why (3.11).
+    pub blocked: Option<BlockedVersions>,
+    /// The one-time note when a pick taught Marquee something (3.9).
+    pub note: Option<LearnedNote>,
     pub recommended: Option<VersionRow>,
     pub rows: Vec<VersionRow>,
     pub hidden: HiddenSummary,
@@ -93,7 +111,68 @@ pub struct VersionsSnapshot {
     pub frozen: bool,
 }
 
+/// What the ranking read for this view, for the header "This TV: 4K HDR,
+/// about 42 Mbit/s on Wi-Fi, 61 GB free".
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionsConditions {
+    /// 2160, 1080, 720 or 480 (3.3).
+    pub screen_class: u32,
+    /// The screen shows HDR and the user wants it.
+    pub hdr: bool,
+    pub network: Network,
+    pub http: Speed,
+    pub p2p: Speed,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub free_bytes: Option<u64>,
+    pub runtime_min: Option<u32>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub size_limit_bytes: Option<u64>,
+    pub min_seeders: u32,
+    /// This build has the torrent engine.
+    pub engine: bool,
+    /// The profile has a streaming service account.
+    pub account: bool,
+}
+
+/// Why nothing is listed (3.11), how many versions were found, and those
+/// rows ranked as they would be once the reason is fixed ("Show them").
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedVersions {
+    pub reason: BlockedReason,
+    pub count: u32,
+    pub rows: Vec<VersionRow>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum BlockedReason {
+    /// Torrents this build opens only through a paid streaming service.
+    NeedsAccount,
+    /// Torrents larger than the free space.
+    NoSpace,
+    /// Nothing found plays on this device.
+    NothingPlaysHere,
+}
+
 struct State {
+    conditions: VersionsConditions,
     streams: Vec<ParsedStream>,
     ranked: Ranked,
     recommended: Option<RankedRow>,
@@ -206,6 +285,72 @@ pub struct VersionsParams {
     pub caps: DeviceCaps,
     pub prefs: StreamPrefs,
     pub last_binge_group: Option<String>,
+    /// What the app knows of the title; the meta fills the rest (4.3).
+    pub facts: TitleFacts,
+}
+
+/// The title's runtime and years and the season's size, as the app sends
+/// them with `versions` (4.3).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TitleFacts {
+    pub runtime_s: Option<u32>,
+    pub title_year: Option<u16>,
+    /// The episode's air date's year.
+    pub episode_year: Option<u16>,
+    pub episodes_in_season: Option<u32>,
+}
+
+impl TitleFacts {
+    /// From the strings the apps and Cinemeta use: a runtime of "142 min"
+    /// or "2h 22min", a release info of "2002", "2022-" or "2005–2013", and
+    /// an air date of "2013-09-16".
+    pub fn read(
+        runtime: Option<&str>,
+        release_info: Option<&str>,
+        released: Option<&str>,
+        episodes_in_season: Option<u32>,
+    ) -> Self {
+        Self {
+            runtime_s: runtime.and_then(minutes).map(|m| m * 60),
+            title_year: release_info.and_then(year),
+            episode_year: released.and_then(year),
+            episodes_in_season: episodes_in_season.filter(|n| *n > 0),
+        }
+    }
+}
+
+/// "142 min" is 142, "2h 22min" is 142, "1 h" is 60; a bare number is
+/// minutes.
+fn minutes(text: &str) -> Option<u32> {
+    let mut total = 0;
+    let mut found = false;
+    let mut rest = text.trim();
+    while let Some(start) = rest.find(|c: char| c.is_ascii_digit()) {
+        let digits: String = rest[start..]
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        rest = &rest[start + digits.len()..];
+        let n: u32 = digits.parse().ok()?;
+        let hours = rest.trim_start().starts_with(['h', 'H']);
+        total += if hours { n * 60 } else { n };
+        found = true;
+    }
+    (found && total > 0).then_some(total)
+}
+
+/// The first year in `text`.
+fn year(text: &str) -> Option<u16> {
+    let digits: String = text
+        .trim()
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits
+        .get(..4)?
+        .parse()
+        .ok()
+        .filter(|y| (1870..=2200).contains(y))
 }
 
 impl VersionsView {
@@ -250,7 +395,17 @@ impl VersionsView {
             extra: vec![],
         };
         let eligible = eligible(core, &path);
+        // ponytail: phase 2 of plans/m13-stream-choice.md reads the
+        // engine, runtime, years, speed and free space. Until the
+        // blocked state exists the engine is assumed, so torrents stay
+        // listed as before.
+        let conditions = Conditions {
+            engine: true,
+            debrid: core.debrid().is_some(),
+            ..Conditions::default()
+        };
         let state = Arc::new(Mutex::new(State {
+            conditions: view_conditions(core, &params, &conditions),
             streams: Vec::new(),
             ranked: Ranked::default(),
             recommended: None,
@@ -269,15 +424,7 @@ impl VersionsView {
         let ranking = Arc::new(Ranking {
             kids: verified.as_ref().map(|v| v.names.clone()),
             params,
-            // ponytail: phase 2 of plans/m13-stream-choice.md reads the
-            // engine, runtime, years, speed and free space. Until the
-            // blocked state exists the engine is assumed, so torrents stay
-            // listed as before.
-            conditions: Conditions {
-                engine: true,
-                debrid: core.debrid().is_some(),
-                ..Conditions::default()
-            },
+            conditions,
         });
         tasks.spawn(supervise(
             core.clone(),
@@ -302,6 +449,7 @@ impl VersionsView {
 
     fn denied_view(core: &Core, params: &VersionsParams) -> Self {
         let state = State {
+            conditions: view_conditions(core, params, &Conditions::default()),
             streams: Vec::new(),
             ranked: Ranked::default(),
             recommended: None,
@@ -630,6 +778,24 @@ fn rerank(s: &mut State, ranking: &Ranking) {
     }
 }
 
+/// What the snapshot says the ranking read (4.2).
+fn view_conditions(core: &Core, params: &VersionsParams, c: &Conditions) -> VersionsConditions {
+    let prefs = &params.prefs;
+    VersionsConditions {
+        screen_class: screen_class(params.caps.display_height),
+        hdr: prefs.hdr && !params.caps.display_hdr.is_empty(),
+        network: core.network(),
+        http: c.http,
+        p2p: c.p2p,
+        free_bytes: c.free_bytes,
+        runtime_min: c.runtime_s.map(|s| s / 60),
+        size_limit_bytes: prefs.size_limit_bytes,
+        min_seeders: prefs.min_seeders,
+        engine: core.has_engine(),
+        account: core.debrid().is_some(),
+    }
+}
+
 fn names(installs: &[(Url, String)]) -> Vec<String> {
     installs.iter().map(|(_, name)| name.clone()).collect()
 }
@@ -651,6 +817,9 @@ fn render(s: &State) -> VersionsSnapshot {
         }
     }
     VersionsSnapshot {
+        conditions: s.conditions.clone(),
+        blocked: None,
+        note: None,
         recommended: s.recommended.as_ref().map(row_dto),
         rows,
         hidden: HiddenSummary {
@@ -687,6 +856,10 @@ fn row_dto(r: &RankedRow) -> VersionRow {
         reasons: r.reasons.clone(),
         group: r.group,
         failover_count: r.failover.len() as u16,
+        line: r.line.clone(),
+        source_class: r.class,
+        bitrate_mbps: r.bitrate_mbps,
+        score: r.key,
     }
 }
 
@@ -797,6 +970,28 @@ fn first_line(description: &str, name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn title_facts_read_the_strings_apps_and_cinemeta_send() {
+        let f = TitleFacts::read(Some("142 min"), Some("2002"), None, None);
+        assert_eq!((f.runtime_s, f.title_year), (Some(142 * 60), Some(2002)));
+        let f = TitleFacts::read(
+            Some("2h 22min"),
+            Some("2005–2013"),
+            Some("2013-09-16"),
+            Some(16),
+        );
+        assert_eq!(f.runtime_s, Some(142 * 60));
+        assert_eq!((f.title_year, f.episode_year), (Some(2005), Some(2013)));
+        assert_eq!(f.episodes_in_season, Some(16));
+        let f = TitleFacts::read(Some("45"), Some("2022-"), Some("soon"), Some(0));
+        assert_eq!((f.runtime_s, f.title_year), (Some(45 * 60), Some(2022)));
+        assert_eq!((f.episode_year, f.episodes_in_season), (None, None));
+        assert_eq!(
+            TitleFacts::read(Some("N/A"), None, None, None),
+            TitleFacts::default()
+        );
+    }
 
     #[test]
     fn a_device_plays_hls_when_its_caps_list_m3u8() {

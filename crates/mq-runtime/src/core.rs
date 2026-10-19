@@ -123,6 +123,9 @@ struct Inner {
     debrid: Arc<crate::debrid::Accounts>,
     /// Skip segment lookups and their session cache.
     segments: crate::segments::Finder,
+    /// The network type the app last reported (`versions`, `networkChanged`):
+    /// speed is measured and read per type.
+    network: std::sync::Mutex<crate::speed::Network>,
 }
 
 /// What is one per data directory however often it is opened: the library
@@ -239,6 +242,7 @@ impl Core {
                 engine: OnceCell::new(),
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
+                network: std::sync::Mutex::default(),
             }),
             profile: profile.into(),
         })
@@ -331,9 +335,58 @@ impl Core {
     }
 
     /// The device's network changed: connections pooled on the old one are
-    /// dropped (each would hold a request until its timeout).
-    pub fn on_network_changed(&self) {
+    /// dropped (each would hold a request until its timeout). `network` is
+    /// its type, when the app knows it.
+    pub fn on_network_changed(&self, network: Option<crate::speed::Network>) {
         self.http().network_changed();
+        if let Some(network) = network {
+            self.set_network(network);
+        }
+    }
+
+    /// The network type speed is measured and read for.
+    pub fn network(&self) -> crate::speed::Network {
+        *self.inner.network.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    pub fn set_network(&self, network: crate::speed::Network) {
+        *self.inner.network.lock().unwrap_or_else(|p| p.into_inner()) = network;
+    }
+
+    /// This build has the torrent engine.
+    pub fn has_engine(&self) -> bool {
+        cfg!(feature = "torrent")
+    }
+
+    /// Free space where the engine keeps torrents; `None` without the
+    /// engine or where it cannot be read.
+    pub fn free_bytes(&self) -> Option<u64> {
+        // ponytail: wired in phase 2 of plans/m13-stream-choice.md (statvfs).
+        None
+    }
+
+    /// The measured speed of `kind` on the current network, or its prior.
+    pub fn speed(&self, kind: crate::speed::Kind) -> mq_streams::Speed {
+        let now = mq_library::hlc::now_ms();
+        crate::speed::estimate(self.library(), self.network(), kind, now)
+    }
+
+    /// This device's connection and disk, for Settings.
+    pub fn stream_conditions(&self) -> crate::speed::StreamConditions {
+        crate::speed::StreamConditions {
+            network: self.network(),
+            http: self.speed(crate::speed::Kind::Http),
+            p2p: self.speed(crate::speed::Kind::P2p),
+            free_bytes: self.free_bytes(),
+            engine: self.has_engine(),
+        }
+    }
+
+    /// "Measure again": the current network's estimates go back to their
+    /// priors.
+    pub fn reset_speed(&self) -> crate::speed::StreamConditions {
+        crate::speed::reset(self.library(), self.network());
+        self.stream_conditions()
     }
 
     /// The clock that stamps this device's writes (sync and roster calls

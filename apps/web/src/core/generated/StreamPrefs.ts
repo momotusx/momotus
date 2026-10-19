@@ -4,11 +4,20 @@ import type { QualityPref } from "./QualityPref";
 /**
  * The user's profile preferences for picking streams.
  */
-export type StreamPrefs = { quality: QualityPref, 
+export type StreamPrefs = { 
+/**
+ * Read once and mapped to the fields below (plans/m13-stream-choice.md
+ * 4.1); the ranking does not read it.
+ */
+quality: QualityPref, 
 /**
  * Never pick above this many lines (720, 1080, 2160), whatever the screen.
  */
-maxHeight: number | null, maxSizeBytes: number | null, 
+maxHeight: number | null, 
+/**
+ * The old hard limit: larger streams are hidden. No UI writes it.
+ */
+maxSizeBytes: number | null, 
 /**
  * ISO 639-1 audio language preferences, most wanted first.
  */
@@ -16,4 +25,25 @@ languages: Array<string>,
 /**
  * Lowercase terms that hide a stream when its name contains them.
  */
-avoid: Array<string>, };
+avoid: Array<string>, 
+/**
+ * The soft limit: a torrent above 1.1 x this ranks below the ones that
+ * fit. `None` is no limit.
+ */
+sizeLimitBytes: number | null, 
+/**
+ * Seeders that make a torrent start well; 4 x this starts quickly.
+ */
+minSeeders: number, 
+/**
+ * Prefer HDR where the screen shows it.
+ */
+hdr: boolean, 
+/**
+ * A file ready on a streaming service starts before every torrent.
+ */
+preferReady: boolean, 
+/**
+ * Learn from the user's picks (applied by the runtime).
+ */
+learn: boolean, };
