@@ -1,6 +1,7 @@
 //! Subtitles for players: whatever an addon serves (SRT, WebVTT or ASS, in
 //! any common charset, gzipped or not) becomes UTF-8 WebVTT, the one format
-//! every player here reads with a known MIME type.
+//! every player here reads with a known MIME type. Adverts a subtitle site
+//! put in the first or last minute are left out.
 
 use encoding_rs::Encoding;
 use std::io::Read;
@@ -8,10 +9,37 @@ use std::io::Read;
 /// Largest subtitle after unpacking; real ones are well under 1 MB.
 const MAX_TEXT: u64 = 16 * 1024 * 1024;
 
+/// Text that marks a cue as an advert the subtitle site added, lowercase,
+/// as found in real files (tests/corpus/subtitles). A cue holding any of
+/// them is left out when it is in the first or last minute: dialogue never
+/// names these sites, and the phrases are the adverts' own words.
+const AD_MARKERS: &[&str] = &[
+    // OpenSubtitles (dl.opensubtitles.org, through SubSense): a cue at 6 s
+    // and a minute-long one after the last line, in the file's language.
+    "opensubtitles.org",
+    "opensubtitles.com",
+    "osdb.link",
+    "advertise your product or brand here",
+    "support us and become vip member",
+    "watch online movies and series for free",
+    // Wyzie (through SubSense): the first six seconds.
+    "wyzie.io",
+    "you're on the free plan",
+    // A site's watermark as the first cue.
+    "tvsubtitles.net",
+];
+
+/// How far from either end of the file an advert is looked for.
+const AD_WINDOW_MS: u64 = 60_000;
+
 /// UTF-8 WebVTT for `bytes`, or `None` when they are not a subtitle format
 /// we know. `lang` (ISO 639-2, as addons give it) picks the legacy charset
 /// for files that are neither UTF-8 nor marked with a BOM.
 pub fn to_vtt(bytes: &[u8], lang: &str) -> Option<String> {
+    converted(bytes, lang).map(without_ads)
+}
+
+fn converted(bytes: &[u8], lang: &str) -> Option<String> {
     let text = decode(&unpack(bytes)?, lang);
     let text = text.replace("\r\n", "\n").replace('\r', "\n");
     let text = text.trim_start_matches('\u{feff}').trim_start();
@@ -24,6 +52,55 @@ pub fn to_vtt(bytes: &[u8], lang: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// The WebVTT without the advert cues near its ends (`AD_MARKERS`).
+/// Unchanged, byte for byte, when there are none.
+fn without_ads(vtt: String) -> String {
+    let blocks: Vec<&str> = vtt.split("\n\n").filter(|b| !b.trim().is_empty()).collect();
+    let cues: Vec<Option<(u64, u64, &str)>> = blocks.iter().map(|b| cue(b)).collect();
+    let last = cues.iter().flatten().map(|c| c.1).max().unwrap_or(0);
+    // The closing advert runs a whole minute: it counts by where it ends.
+    let advert = |c: &Option<(u64, u64, &str)>| {
+        c.is_some_and(|(start, end, text)| {
+            (start < AD_WINDOW_MS || end + AD_WINDOW_MS >= last) && is_advert(text)
+        })
+    };
+    if !cues.iter().any(advert) {
+        return vtt;
+    }
+    let kept: Vec<&str> = blocks
+        .iter()
+        .zip(&cues)
+        .filter(|(_, c)| !advert(c))
+        .map(|(b, _)| *b)
+        .collect();
+    kept.join("\n\n") + "\n"
+}
+
+/// A cue block's start, end and text.
+fn cue(block: &str) -> Option<(u64, u64, &str)> {
+    let at = block.find("-->")?;
+    let line_start = block[..at].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = block[at..].find('\n').map_or(block.len(), |i| at + i);
+    let end = block[at + 3..line_end].split_whitespace().next()?;
+    let start = millis(&block[line_start..at])?;
+    Some((start, millis(end)?, block.get(line_end + 1..).unwrap_or("")))
+}
+
+fn is_advert(text: &str) -> bool {
+    let mut plain = String::with_capacity(text.len());
+    let mut in_tag = false;
+    for c in text.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' if in_tag => in_tag = false,
+            _ if !in_tag => plain.extend(c.to_lowercase()),
+            _ => {}
+        }
+    }
+    let plain = plain.split_whitespace().collect::<Vec<_>>().join(" ");
+    AD_MARKERS.iter().any(|m| plain.contains(m))
 }
 
 fn unpack(bytes: &[u8]) -> Option<Vec<u8>> {
@@ -273,6 +350,127 @@ mod tests {
             vtt,
             "WEBVTT\n\n00:00:01.000 --> 00:00:02.500\nFirst\nline two\n\n00:00:05.200 --> 00:00:07.000\nSecond, with a comma\n"
         );
+    }
+
+    fn corpus(name: &str) -> Vec<u8> {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/corpus/subtitles/");
+        std::fs::read(format!("{dir}{name}")).unwrap()
+    }
+
+    /// Every advert found in real files (OpenSubtitles through SubSense,
+    /// Wyzie, a site watermark), one row each: it goes, the lines around
+    /// it stay.
+    #[test]
+    fn each_known_advert_is_left_out_and_the_dialogue_stays() {
+        let cases: [(&str, &str, &str, &[&str]); 9] = [
+            (
+                "sintel-opensubtitles-advertise.srt",
+                "eng",
+                "Advertise your product or brand here",
+                &["This blade has a dark past."],
+            ),
+            (
+                "sintel-opensubtitles-advertise.srt",
+                "eng",
+                "www.osdb.link/lm",
+                &["Scales..."],
+            ),
+            (
+                "sintel-opensubtitles-vip.srt",
+                "eng",
+                "Watch Online Movies and Series for FREE",
+                &["This blade has a dark past."],
+            ),
+            (
+                "sintel-opensubtitles-vip.srt",
+                "eng",
+                "Support us and become VIP member",
+                &["Scales..."],
+            ),
+            (
+                "opensubtitles-tur-cp1254-a.srt",
+                "tur",
+                "reklamını burada yapın",
+                &["Benim adım Walter Hartwell White."],
+            ),
+            (
+                "opensubtitles-tur-cp1254-a.srt",
+                "tur",
+                "ai.OpenSubtitles.com",
+                &["Walter, Bu sen miydin?", "Çeviri: F471H"],
+            ),
+            (
+                "opensubtitles-tur-cp1254-b.srt",
+                "tur",
+                "OpenSubtitles.org",
+                &["Aman Tanrım.", "Walt, bu sen misin?"],
+            ),
+            (
+                "wyzie-eng.srt",
+                "eng",
+                "store.wyzie.io",
+                &["Oh, my god.", "Oh, Walt, is that you?"],
+            ),
+            (
+                "tvsubtitles-fre.srt",
+                "fre",
+                "tvsubtitles.net",
+                &["Oh, bon sang.", "Seigneur !"],
+            ),
+        ];
+        for (file, lang, advert, dialogue) in cases {
+            let raw = converted(&corpus(file), lang).unwrap();
+            assert!(raw.contains(advert), "{file}: the fixture has {advert}");
+            let vtt = to_vtt(&corpus(file), lang).unwrap();
+            assert!(!vtt.contains(advert), "{file}: {advert} left in\n{vtt}");
+            for line in dialogue {
+                assert!(vtt.contains(line), "{file}: {line} lost\n{vtt}");
+            }
+            assert!(vtt.starts_with("WEBVTT\n\n"), "{vtt}");
+        }
+        // The real Sintel file keeps all 26 lines of dialogue.
+        let vtt = to_vtt(&corpus("sintel-opensubtitles-advertise.srt"), "eng").unwrap();
+        assert_eq!(vtt.matches(" --> ").count(), 26, "{vtt}");
+    }
+
+    /// Words that adverts use, in ordinary lines near the ends, and an
+    /// advert's text in the middle of the film: all kept.
+    #[test]
+    fn dialogue_with_advert_words_and_mid_film_text_stay() {
+        let lines = [
+            "I support you, whatever happens.",
+            "...that performs as advertised. No adulterants.",
+            "We're on the free plan, Dad.",
+            "Become a VIP member? Of what?",
+            "Watch the movies with me tonight.",
+        ];
+        let mut srt = String::new();
+        for (i, line) in lines.iter().enumerate() {
+            srt.push_str(&format!(
+                "{}\n00:00:{:02},000 --> 00:00:{:02},500\n{line}\n\n",
+                i + 1,
+                i * 5 + 1,
+                i * 5 + 3
+            ));
+        }
+        srt.push_str(
+            "6\n00:20:00,000 --> 00:20:02,000\nIt was on www.opensubtitles.org, he said.\n\n",
+        );
+        for (i, line) in lines.iter().enumerate() {
+            srt.push_str(&format!(
+                "{}\n00:40:{:02},000 --> 00:40:{:02},500\n{line}\n\n",
+                i + 7,
+                i * 5 + 1,
+                i * 5 + 3
+            ));
+        }
+        let vtt = to_vtt(srt.as_bytes(), "eng").unwrap();
+        assert_eq!(
+            vtt,
+            converted(srt.as_bytes(), "eng").unwrap(),
+            "nothing removed"
+        );
+        assert_eq!(vtt.matches(" --> ").count(), 11);
     }
 
     #[test]
