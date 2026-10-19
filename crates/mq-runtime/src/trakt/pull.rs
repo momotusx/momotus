@@ -7,6 +7,7 @@
 use super::map::{self, Look, Mapper, Miss, PlaceMiss, TraktIds};
 use super::{Bind, Conn, Trakt};
 use crate::Core;
+use crate::core::MetaMiss;
 use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
 use mq_library::hlc::now_ms;
 use mq_library::{ImportedPlay, ImportedResume, Intent, IntentOp, TrackerKey};
@@ -301,9 +302,14 @@ impl<'a> Round<'a> {
                 Ok(Some(position)) => position,
                 // No runtime anywhere: nothing to place it on.
                 Ok(None) => continue,
-                Err(reason) => {
+                // No addon answered at all (offline): read again, not a look.
+                Err(miss) if miss.unreached => {
+                    self.left = Some(miss.reason);
+                    continue;
+                }
+                Err(miss) => {
                     let (at, item) = (self.at(), &placed.item_id);
-                    match map::failed(self.core, at, Look::Runtime, item, reason) {
+                    match map::failed(self.core, at, Look::Runtime, item, miss.reason) {
                         Miss::Transient(reason) => self.left = Some(reason),
                         Miss::Permanent(_) => {}
                     }
@@ -366,7 +372,7 @@ impl<'a> Round<'a> {
         &self,
         placed: &map::Mapped,
         percent: f64,
-    ) -> Result<Option<(i64, i64)>, String> {
+    ) -> Result<Option<(i64, i64)>, MetaMiss> {
         let local = self
             .core
             .library()
@@ -377,7 +383,10 @@ impl<'a> Round<'a> {
         if let Some((_, duration)) = local {
             return Ok(Some(((percent / 100.0 * duration as f64) as i64, duration)));
         }
-        let (meta, _) = self.core.fetch_meta(&placed.kind, &placed.item_id).await?;
+        let meta = self
+            .core
+            .fetch_meta_or_miss(&placed.kind, &placed.item_id)
+            .await?;
         map::succeeded(self.core, self.at(), Look::Runtime, &placed.item_id);
         let runtime = meta.preview.runtime.as_deref().and_then(runtime_ms);
         Ok(runtime.map(|runtime| {

@@ -2780,3 +2780,33 @@ async fn an_offline_round_is_not_time_passing_for_failed_looks() {
     core.trakt_sync().await.unwrap();
     assert_eq!(unmapped_ids(&core), [SHOW]);
 }
+
+#[tokio::test]
+async fn a_runtime_no_addon_answers_is_not_a_look() {
+    let (core, fake) = signed_in("a-resume-off").await;
+    let lasted = json!({"first": now() - 2 * 86_400_000, "last": now() - 3_600_000,
+                        "looks": 3});
+    core.library()
+        .set_tracker_state(
+            key("a-resume-off"),
+            "failing:runtime:tt200",
+            &lasted.to_string(),
+        )
+        .unwrap();
+    fake.meta_silent.store(true, Ordering::SeqCst);
+    let mut item = movie_row(MOVIE, now());
+    item["progress"] = json!(40.0);
+    item["paused_at"] = json!(iso(now()));
+    fake.list("/sync/playback", vec![item]);
+    let moved = activities(&iso(now()));
+    *fake.activities.lock().unwrap() = moved.clone();
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        state(&core, "a-resume-off", "failing:runtime:tt200"),
+        Some(lasted.to_string()),
+        "not counted"
+    );
+    let stored: Option<Value> =
+        state(&core, "a-resume-off", "activities").map(|s| serde_json::from_str(&s).unwrap());
+    assert_ne!(stored, Some(moved), "read again next round");
+}

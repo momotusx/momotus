@@ -27,6 +27,15 @@ pub enum TvdbMiss {
     Unreached(String),
 }
 
+/// Why no addon gave a title's details (`Core::fetch_meta_or_miss`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MetaMiss {
+    /// In a sentence the title page shows as is.
+    pub reason: String,
+    /// No addon answered at all, as with `TvdbMiss::Unreached`.
+    pub unreached: bool,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
     #[error(transparent)]
@@ -365,8 +374,18 @@ impl Core {
     /// Stremio; later addons are asked only when earlier ones fail. Returns the
     /// meta and the name of the addon that gave it.
     pub async fn fetch_meta(&self, kind: &str, id: &str) -> Result<(MetaItem, String), String> {
-        let (_, meta, name) = self.fetch_meta_body(kind, id).await?;
+        let (_, meta, name) = self.fetch_meta_body(kind, id).await.map_err(|m| m.reason)?;
         Ok((meta, name))
+    }
+
+    /// As `fetch_meta`; a failure also says whether no addon answered.
+    pub(crate) async fn fetch_meta_or_miss(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<MetaItem, MetaMiss> {
+        let (_, meta, _) = self.fetch_meta_body(kind, id).await?;
+        Ok(meta)
     }
 
     /// Each episode's TVDB id by video id, from every meta addon in order
@@ -447,17 +466,23 @@ impl Core {
         &self,
         kind: &str,
         id: &str,
-    ) -> Result<(bytes::Bytes, MetaItem, String), String> {
+    ) -> Result<(bytes::Bytes, MetaItem, String), MetaMiss> {
         let path = ResourcePath {
             resource: "meta".into(),
             r#type: kind.to_owned(),
             id: id.to_owned(),
             extra: vec![],
         };
-        let addons = self.installed_addons().map_err(|e| e.to_string())?;
+        let addons = self.installed_addons().map_err(|e| MetaMiss {
+            reason: e.to_string(),
+            unreached: false,
+        })?;
         let mut last_error = "None of your addons has details for this title".to_owned();
+        // Addons asked, and those that gave no answer at all.
+        let (mut asked, mut silent) = (0, 0);
         for addon in addons.iter().filter(|a| a.supports(&path)) {
             let name = &addon.manifest.name;
+            asked += 1;
             match self.addons().fetch(addon, &path, META_TIMEOUT).await {
                 Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
                     Ok(ResourceResponse::Meta { meta }) => {
@@ -477,11 +502,15 @@ impl Core {
                         }
                         other => tracing::debug!("{name} gave no details: {other}"),
                     }
+                    silent += usize::from(unanswered(&e));
                     last_error = meta_failure(name, &e);
                 }
             }
         }
-        Err(last_error)
+        Err(MetaMiss {
+            reason: last_error,
+            unreached: asked > 0 && silent == asked,
+        })
     }
 
     /// Fetches the manifest and appends the addon to the profile's list, on.
