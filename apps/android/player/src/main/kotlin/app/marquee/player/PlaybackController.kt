@@ -684,9 +684,8 @@ class PlaybackController(
 
     private fun refreshTracks(tracks: Tracks = player.currentTracks) {
         val audioRows = ArrayList<TrackChoice>()
-        val textRows = ArrayList<TrackChoice>()
-        val loaded = HashSet<String>()
-        var textSelected = false
+        val fileRows = ArrayList<TrackChoice>()
+        val loaded = HashMap<String, TrackChoice>()
         tracks.groups.forEachIndexed { gi, group ->
             for (ti in 0 until group.length) {
                 if (!group.isTrackSupported(ti)) continue
@@ -699,50 +698,24 @@ class PlaybackController(
                     }
 
                     C.TRACK_TYPE_TEXT -> {
-                        textRows += textChoice(id, format, selected).let { row -> externalDetail(row, format.id) }
-                        textSelected = textSelected || selected
+                        // A side-loaded file is one of the core's tracks: listed with them, by its address.
+                        val url = externalUrl(format.id)
+                        if (url != null) {
+                            loaded[url] = TrackChoice(id, "", selected = selected)
+                        } else {
+                            fileRows += textChoice(id, format, selected)
+                        }
                     }
                 }
             }
         }
-        loadedSubs.forEach { loaded += it.url }
-        val late =
-            snapshotSubs.filter { it.url !in loaded && it.url !in dead }.map {
-                val name = languageName(it.lang) ?: it.label ?: "Subtitles"
-                TrackChoice(
-                    "$LATE${it.url}",
-                    name,
-                    listOfNotNull(
-                        it.label?.takeIf { l ->
-                            l != name
-                        },
-                        it.source,
-                        "loads when chosen",
-                    ).joinToString(", "),
-                )
-            }
+        // The snapshot's order, then a loaded file the snapshot no longer lists (it leaves with the next reload).
+        val core = snapshotSubs + loadedSubs.filter { sub -> snapshotSubs.none { it.url == sub.url } }
+        // Left out: files that did not load, and side-loaded ones the player has not listed yet.
+        val hidden = dead + loadedSubs.map { it.url }.filter { it !in loaded }
         audio = audioRows
-        text = listOf(TrackChoice(TRACK_OFF, "Off", selected = !textSelected)) + textRows + late
+        text = subtitleRows(core, loaded, hidden, fileRows, LATE)
         applyPick(tracks)
-    }
-
-    /** An external row says whose it is (the addon) instead of a codec the viewer cannot act on. */
-    private fun externalDetail(
-        row: TrackChoice,
-        formatId: String?,
-    ): TrackChoice {
-        val index = externalIndex(formatId) ?: return row
-        val source = loadedSubs.getOrNull(index) ?: return row
-        val detail =
-            listOfNotNull(
-                row.detail,
-                source.source,
-                "forced".takeIf {
-                    source.forced &&
-                        row.detail?.contains("forced") != true
-                },
-            ).joinToString(", ")
-        return row.copy(detail = detail)
     }
 
     /** The address of the addon subtitle file behind a loaded track's `ext:N` id, or null. */

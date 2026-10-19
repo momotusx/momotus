@@ -5,6 +5,7 @@ import androidx.media3.common.Format
 import androidx.media3.common.util.Util
 import app.marquee.core.model.SubtitleNote
 import app.marquee.core.model.SubtitleProblem
+import app.marquee.core.model.SubtitleTrack
 import java.util.Locale
 
 /** One row of the audio or subtitles menu. */
@@ -14,21 +15,80 @@ data class TrackChoice(
     /** Under the name: codec, channels, source, or why choosing it takes a moment. */
     val detail: String? = null,
     val selected: Boolean = false,
+    /** The heading of the run of rows it belongs to: a core track's language, or [IN_THE_FILE]; null for Off and audio. */
+    val section: String? = null,
 )
 
 const val TRACK_OFF = "off"
 
+/** The heading over the subtitle tracks inside the video file, after the core's languages. */
+const val IN_THE_FILE = "In the file"
+
 /** What the Subtitles action says under its name: the chosen language, or how many were found ("None found" for zero). */
-fun PlaybackController.subtitlesDetail(): String {
-    val found = text.size - 1
-    return text.firstOrNull { it.selected && it.id != TRACK_OFF }?.name
-        ?: if (subtitlesPending) {
+fun PlaybackController.subtitlesDetail(): String = subtitlesDetail(text, subtitlesPending)
+
+internal fun subtitlesDetail(
+    rows: List<TrackChoice>,
+    pending: Boolean,
+): String {
+    val found = rows.size - 1
+    val chosen = rows.firstOrNull { it.selected && it.id != TRACK_OFF }
+    // A core track says its language ("Portuguese (Brazil)"), a track in the file its own name.
+    return chosen?.let { it.section?.takeIf { s -> s != IN_THE_FILE } ?: it.name }
+        ?: if (pending) {
             "Searching"
         } else if (found == 0) {
             "None found"
         } else {
             "Off, $found found"
         }
+}
+
+/**
+ * The subtitles menu (plans/m13-subtitle-languages.md 2): Off, then the core's tracks in the snapshot's
+ * order (the profile's languages first), each under its language and named by what tells it from the
+ * others; then the tracks inside the file. A side-loaded track takes its player row's id and state from
+ * [loaded] (by URL); one not loaded yet loads when chosen; one in [hidden] is left out.
+ */
+internal fun subtitleRows(
+    core: List<SubtitleTrack>,
+    loaded: Map<String, TrackChoice>,
+    hidden: Set<String>,
+    inFile: List<TrackChoice>,
+    late: String,
+): List<TrackChoice> {
+    val coreRows =
+        core.mapNotNull { t ->
+            val row = loaded[t.url]
+            if (row == null && t.url in hidden) return@mapNotNull null
+            val name = t.name.ifEmpty { t.label ?: t.source }
+            // An older core sends no name or heading: the code's language stands in.
+            val section = t.languageName.ifEmpty { languageName(t.lang) ?: t.lang }
+            val detail = listOfNotNull(trackDetail(t, name), "loads when chosen".takeIf { row == null })
+            TrackChoice(
+                row?.id ?: "$late${t.url}",
+                name,
+                detail.filter { it.isNotEmpty() }.joinToString(", ").ifEmpty { null },
+                row?.selected == true,
+                section,
+            )
+        }
+    val files = inFile.map { it.copy(section = IN_THE_FILE) }
+    val rows = coreRows + files
+    return listOf(TrackChoice(TRACK_OFF, "Off", selected = rows.none { it.selected })) + rows
+}
+
+/** Under a core track's name: its source when the name does not already say it, then what kind of file it is. */
+internal fun trackDetail(
+    t: SubtitleTrack,
+    name: String,
+): String {
+    val source = t.source.takeIf { name != it && !name.startsWith("$it ") }
+    return listOfNotNull(
+        source,
+        "Forced".takeIf { t.forced },
+        "For the hard of hearing".takeIf { t.hearingImpaired },
+    ).joinToString(", ")
 }
 
 /** "Still asking subtitle addons": under the subtitle list while the core still waits for some. */

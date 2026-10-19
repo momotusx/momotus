@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -215,45 +214,72 @@ fun TrackPanel(
             contentPadding = PaddingValues(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
-                val shape = RoundedCornerShape(Marquee.radius.m)
-                // The chosen row is a filled row with a check; the ring is for focus alone.
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .focusRequester(requesters[index])
-                        // Focus stays in the panel while it is open: the ends of the list and the sides go nowhere.
-                        .focusProperties {
-                            left = FocusRequester.Cancel
-                            right = FocusRequester.Cancel
-                            if (index == 0) up = FocusRequester.Cancel
-                            if (index == rows.lastIndex) down = FocusRequester.Cancel
-                        }.marqueeFocus(Marquee.radius.m, scale = 1.02f)
-                        .clip(shape)
-                        .background(if (row.selected) colors.raised else Color.Transparent)
-                        .semantics {
-                            selected = row.selected
-                            contentDescription = listOfNotNull(row.name, row.detail).joinToString(", ")
-                        }.focusClickable({ onPick(row.id) }, Role.RadioButton)
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 16.dp, vertical = if (tv) 12.dp else 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(if (tv) 30.dp else 18.dp)) {
-                        if (row.selected) MqIcon(Icons.Check, tint = colors.text)
-                    }
-                    Column {
-                        MqText(row.name, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-                        row.detail?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
+            rows.forEachIndexed { index, row ->
+                // A run of one language (or the file's own tracks) under its heading, which focus skips.
+                if (row.section != null && row.section != rows.getOrNull(index - 1)?.section) {
+                    item(key = "section:$index") {
+                        MqText(
+                            row.section,
+                            role = TextRole.Caption,
+                            color = colors.muted,
+                            weight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 16.dp, top = 8.dp).semantics { heading() },
+                        )
                     }
                 }
+                item(key = row.id) { TrackRow(row, index, rows.lastIndex, requesters[index], onPick) }
             }
             if (note != null) {
                 item(key = "note") {
                     MqText(note, role = TextRole.Caption, color = colors.muted, modifier = Modifier.padding(16.dp))
                 }
             }
+        }
+    }
+}
+
+/** One track: its name and what it is, the chosen one filled and checked; focus stays in the panel. */
+@Composable
+private fun TrackRow(
+    row: TrackChoice,
+    index: Int,
+    last: Int,
+    requester: FocusRequester,
+    onPick: (String) -> Unit,
+) {
+    val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(Marquee.radius.m)
+    // The chosen row is a filled row with a check; the ring is for focus alone.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .focusRequester(requester)
+            // Focus stays in the panel while it is open: the ends of the list and the sides go nowhere.
+            .focusProperties {
+                left = FocusRequester.Cancel
+                right = FocusRequester.Cancel
+                if (index == 0) up = FocusRequester.Cancel
+                if (index == last) down = FocusRequester.Cancel
+            }.marqueeFocus(Marquee.radius.m, scale = 1.02f)
+            .clip(shape)
+            .background(if (row.selected) colors.raised else Color.Transparent)
+            .semantics {
+                selected = row.selected
+                contentDescription = listOfNotNull(row.name, row.detail).joinToString(", ")
+            }.focusClickable({ onPick(row.id) }, Role.RadioButton)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = if (tv) 12.dp else 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(if (tv) 30.dp else 18.dp)) {
+            if (row.selected) MqIcon(Icons.Check, tint = colors.text)
+        }
+        Column {
+            MqText(row.name, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
+            row.detail?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
         }
     }
 }
