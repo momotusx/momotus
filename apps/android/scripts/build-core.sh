@@ -51,10 +51,15 @@ cd "$ROOT"
 # Android's packed relocations (APS2, read by the loader since API 23; minSdk is 24): the relocation
 # table drops from 538,776 to 72,626 bytes, which keeps the library inside its 12 MB budget.
 PACKED="-C link-arg=-Wl,--pack-dyn-relocs=android"
+# `rustc --crate-type cdylib`: with mq-ffi's three crate types (lib, staticlib, cdylib) cargo passes
+# no `-C lto`, so the profile's thin LTO never applied; the cdylib alone gets it. At 39e3b7ae the
+# store library went from 12,123,488 to 10,989,256 bytes and the full one from 15,362,864 to
+# 13,977,216 (bench/torrent/size.jsonl).
 CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS=$PACKED CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_RUSTFLAGS=$PACKED \
 CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none ANDROID_NDK_HOME=$NDK \
   CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$DEV_ASSERTIONS \
-  cargo ndk "${ABIS[@]}" --platform 24 build --release -p mq-ffi -j 4 ${MQ_FEATURES:+--features "$MQ_FEATURES"}
+  cargo ndk "${ABIS[@]}" --platform 24 rustc --release -p mq-ffi -j 4 --crate-type cdylib \
+  ${MQ_FEATURES:+--features "$MQ_FEATURES"}
 
 UNSTRIPPED=$TARGET/aarch64-linux-android/release/libmarquee_core.so
 rm -rf "$OUT/generated"
