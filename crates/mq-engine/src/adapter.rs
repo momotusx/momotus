@@ -78,6 +78,11 @@ pub(crate) struct Snapshot {
     /// the first 30 s.
     pub sample_bytes: u64,
     pub sample_busy_us: u64,
+    /// Payload bytes received from peers, whether or not their piece has
+    /// verified yet: a piece verifies only whole, so this moves first.
+    pub received_bytes: u64,
+    /// Microseconds from adapter start to the first peer unchoking us.
+    pub unchoked_us: Option<u64>,
 }
 
 /// The capacity sample covers the adapter's first 30 s.
@@ -106,6 +111,8 @@ pub(crate) struct Translator {
     actions: Vec<Action>,
     sample_bytes: u64,
     sample_busy_us: u64,
+    received_bytes: u64,
+    unchoked_us: Option<u64>,
 }
 
 impl Translator {
@@ -146,6 +153,8 @@ impl Translator {
             actions: Vec::new(),
             sample_bytes: 0,
             sample_busy_us: 0,
+            received_bytes: 0,
+            unchoked_us: None,
         }
     }
 
@@ -159,6 +168,8 @@ impl Translator {
             dwh: self.sched.as_ref().map(|s| s.stats().clone()),
             sample_bytes: self.sample_bytes,
             sample_busy_us: self.sample_busy_us,
+            received_bytes: self.received_bytes,
+            unchoked_us: self.unchoked_us,
         }
     }
 
@@ -256,6 +267,7 @@ impl Translator {
                             self.sent.retain(|k, _| k.0 != id);
                             self.feed(Event::PeerChoked { peer: id })
                         } else {
+                            self.unchoked_us.get_or_insert(self.now_us);
                             self.feed(Event::PeerUnchoked { peer: id })
                         }
                     }
@@ -270,7 +282,11 @@ impl Translator {
                 let block = geo.block_at(piece, begin);
                 let payload = u64::from(geo.block_len(block));
                 s.bytes += payload;
-                if self.now_us <= SAMPLE_WINDOW_US {
+                self.received_bytes += payload;
+                // Capacity counts only while a request is out: a block that
+                // comes after its cancel, with nothing in flight, is not the
+                // line's speed.
+                if self.now_us <= SAMPLE_WINDOW_US && !self.sent.is_empty() {
                     self.sample_bytes += payload;
                 }
                 if let Some(sent) = self.sent.remove(&(s.id, block)) {
@@ -664,6 +680,62 @@ mod tests {
         let s = tr.snapshot();
         assert_eq!(s.sample_bytes, 16 * KIB);
         assert!(s.sample_busy_us < 30_000_000);
+    }
+
+    /// A block that comes after its request was given up on, with nothing
+    /// in flight, is not capacity; it is still received payload.
+    #[test]
+    fn a_late_block_with_nothing_in_flight_is_not_capacity() {
+        let mut tr = translator(true);
+        tr.tick(1_000);
+        open(&mut tr, 1, 0);
+        tr.on_ext(ExtEvent::PeerConnected {
+            peer: addr(1),
+            bitfield: vec![0xff, 0xff],
+        });
+        let out = tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(1) });
+        tr.on_ext(ExtEvent::PeerChoked { peer: addr(1) });
+        assert!(tr.sent.is_empty());
+        tr.tick(51_000);
+        tr.on_ext(ExtEvent::Block {
+            peer: addr(1),
+            piece: out[0].piece,
+            begin: out[0].begin,
+        });
+        let s = tr.snapshot();
+        assert_eq!(s.sample_bytes, 0);
+        assert_eq!(s.received_bytes, 16 * KIB);
+    }
+
+    /// The stall rule's inputs: every payload block counts at once, before
+    /// any piece verifies, and the first unchoke's time stays the first.
+    #[test]
+    fn received_payload_and_the_first_unchoke_are_reported() {
+        let mut tr = translator(true);
+        tr.tick(1_000);
+        open(&mut tr, 1, 0);
+        for p in 1..=2 {
+            tr.on_ext(ExtEvent::PeerConnected {
+                peer: addr(p),
+                bitfield: vec![0xff, 0xff],
+            });
+        }
+        assert_eq!(tr.snapshot().unchoked_us, None, "connected, still choked");
+        tr.tick(3_001_000);
+        let out = tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(1) });
+        tr.tick(4_001_000);
+        tr.on_ext(ExtEvent::PeerUnchoked { peer: addr(2) });
+        for w in &out[..3] {
+            tr.on_ext(ExtEvent::Block {
+                peer: addr(1),
+                piece: w.piece,
+                begin: w.begin,
+            });
+        }
+        let s = tr.snapshot();
+        assert_eq!(s.unchoked_us, Some(3_001_000));
+        assert_eq!(s.received_bytes, 48 * KIB);
+        assert!(!tr.have.iter().any(|h| *h), "no piece verified yet");
     }
 
     #[test]
