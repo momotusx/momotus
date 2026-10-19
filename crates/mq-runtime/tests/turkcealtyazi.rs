@@ -57,6 +57,9 @@ fn site(
     let loopback = [IpAddr::V4(Ipv4Addr::LOCALHOST)];
     test_dns::set_public(SITE, &loopback);
     test_dns::set_public(COPY, &loopback);
+    // The default's own addon host: were it asked, nothing leaves the machine.
+    let default = Url::parse(&built_in_row().transport_url).unwrap();
+    test_dns::set_public(default.host_str().unwrap(), &loopback);
     let seen = Arc::new(Mutex::new(Vec::new()));
     let log = seen.clone();
     let (title, form, zip) = (
