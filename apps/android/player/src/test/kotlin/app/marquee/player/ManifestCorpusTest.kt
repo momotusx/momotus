@@ -114,6 +114,24 @@ class ManifestCorpusTest {
         assertEquals(0L, count("", 90_000))
     }
 
+    /**
+     * Media3 parses each Period-level `SegmentTemplate` with no parent (`parsePeriod` passes
+     * null), so a second one without a timescale is at 1, not the first one's
+     * (`dash_timelines_are_bounded`): over 2 s it builds 2 elements, not 100.
+     */
+    @Test
+    fun `Media3 gives a Period-level template no parent timescale`() {
+        val mpd =
+            """<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static"
+                mediaPresentationDuration="PT200S"><Period duration="PT2S"><SegmentTemplate timescale="50"/>
+                <SegmentTemplate media="s-${'$'}Time${'$'}.m4s"><SegmentTimeline><S t="0" d="1" r="-1"/>
+                </SegmentTimeline></SegmentTemplate><AdaptationSet mimeType="video/mp4">
+                <Representation id="v" bandwidth="1"/></AdaptationSet></Period></MPD>"""
+        val manifest = DashManifestParser().parse(Uri.parse("https://cdn.example/m.mpd"), mpd.byteInputStream())
+        val representation = manifest.getPeriod(0).adaptationSets[0].representations[0]
+        assertEquals(2L, representation.index!!.getSegmentCount(C.TIME_UNSET))
+    }
+
     private fun corpus(
         format: String,
         sub: String,

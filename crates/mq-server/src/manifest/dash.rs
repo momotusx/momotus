@@ -768,11 +768,15 @@ impl Rewrite<'_> {
         let mut timescale = 1;
         match kept.name {
             "SegmentTemplate" | "SegmentList" => {
-                // Media3 inherits it from the last template or list of this
+                // Media3 parses one in a Period with no parent (`parsePeriod`
+                // passes null), so it is at 1 unless it says; below the
+                // Period it inherits from the last template or list of its
                 // level, else of the levels above, in document order.
                 let own = attrs.iter().find(|(n, _)| n == "timescale");
+                let in_period = self.stack.last().is_some_and(|f| f.kept.name == "Period");
                 timescale = match own {
                     Some((_, v)) => v.parse::<i64>().map_err(|_| "a bad timescale")?,
+                    None if in_period => 1,
                     None => self
                         .stack
                         .iter()
@@ -2112,6 +2116,22 @@ mod tests {
         assert!(rewrite(&period("", "1", last)).is_err());
         let live = "<S t=\"1000\" d=\"2000\" r=\"-1\"/>";
         assert!(rewrite(&period("", "1000", live)).is_err());
+        // Media3 parses each Period-level template with no parent, so a
+        // second one without a timescale is at 1, never the first one's:
+        // with no Period@duration that is 1,511,828,488 elements, and over
+        // 99,999 s it is 99,999 (at the first one's 2 it would be 199,998).
+        let second = |duration: &str, first: &str, own: &str| {
+            mpd(&format!(
+                "<Period{duration}><SegmentTemplate timescale=\"{first}\"/>\
+                 <SegmentTemplate media=\"s-$Time$.m4s\"{own}><SegmentTimeline>{last}</SegmentTimeline>\
+                 </SegmentTemplate><AdaptationSet><Representation id=\"v\" bandwidth=\"1\"/>\
+                 </AdaptationSet></Period>"
+            ))
+        };
+        assert!(rewrite(&second("", "90000", "")).is_err());
+        accepted(&second("", "90000", " timescale=\"90000\""));
+        accepted(&second(" duration=\"PT99999S\"", "2", ""));
+        assert!(rewrite(&second(" duration=\"PT99999S\"", "2", " timescale=\"2\"")).is_err());
         // A duration Media3 reads as hours with parseDouble: refused.
         assert!(rewrite(&period("100", "1", last)).is_err());
         // Followed by an S with no t, Media3 counts to C.TIME_UNSET, wrapping:
