@@ -48,10 +48,12 @@ export function startBridge(port = PORTS.bridge): Promise<{ proc: ChildProcess; 
   return ready(proc, "bridge_ready", data);
 }
 
-/** A sync server (crates/mq-sync-server) on loopback, where plain http is allowed, with a database of its own. */
-export function startRelay(port: number): Promise<{ proc: ChildProcess; data: string }> {
-  const data = mkdtempSync(join(tmpdir(), "mq-relay-"));
-  const proc = spawn(binary("mq-sync-server", "MQ_SYNC_SERVER_BIN"), ["--db", join(data, "relay.sqlite"), "--listen", `127.0.0.1:${port}`], {
+/** A sync server (crates/mq-sync-server) on loopback, where plain http is
+ * allowed, with a database of its own in `data` (`relay.sqlite` and its
+ * roster journal `relay.roster.jsonl`). `args` adds flags such as
+ * `--new-generation` for a restore. */
+export function startRelay(port: number, data = mkdtempSync(join(tmpdir(), "mq-relay-")), args: string[] = []): Promise<{ proc: ChildProcess; data: string }> {
+  const proc = spawn(binary("mq-sync-server", "MQ_SYNC_SERVER_BIN"), ["--db", join(data, "relay.sqlite"), "--listen", `127.0.0.1:${port}`, ...args], {
     stdio: ["ignore", "pipe", "inherit"],
   });
   return ready(proc, "sync_server_ready", data);

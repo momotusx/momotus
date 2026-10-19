@@ -1,17 +1,20 @@
-/** This device's sync account (plans/core-protocol.md, the sync ops). A
- * browser has no keystore that can hold the record safely, so it lives in this
- * tab's memory, as the debrid records do. Every op that takes the record runs
- * in turn, and a record an answer carries is stored before the next one runs. */
+/** This device's sync account (plans/core-protocol.md, the sync ops). The
+ * record lives in this tab's memory; with "Remember this browser" it is also
+ * sealed under a passkey (src/core/vault.ts). Every op that takes the record
+ * runs in turn, and a record an answer carries is stored before the next one
+ * runs. Nothing here logs, and no record travels a link that is not private. */
 
 import { createSignal } from "solid-js";
-import { keepNewer, type SyncRecord } from "../lib/sync";
-import { plainAddress, syncProblem } from "../lib/words";
 import { form } from "../form";
+import { keepNewer, type SyncRecord } from "../lib/sync";
+import { outcomeOf, plainAddress, syncProblem, syncWords } from "../lib/words";
 import { BridgeError } from "./bridge";
-import { op } from "./client";
+import { op, privateLink } from "./client";
 import type { Devices } from "./generated/Devices";
+import type { ForkPreview } from "./generated/ForkPreview";
 import type { LostPreview } from "./generated/LostPreview";
 import type { SyncReport } from "./generated/SyncReport";
+import * as vault from "./vault";
 
 let record: SyncRecord | null = null;
 /** Bumped by every join and sign-out: an answer from before it stores nothing. */
@@ -21,16 +24,32 @@ const [joined, setJoined] = createSignal(false);
 const [report, setReport] = createSignal<SyncReport | null>(null);
 const [syncedAt, setSyncedAt] = createSignal<number | null>(null);
 const [syncing, setSyncing] = createSignal(false);
+/** Rounds finished since the page opened, whatever their outcome (for "this round is done"). */
+const [rounds, setRounds] = createSignal(0);
 const [problem, setProblem] = createSignal<{ code?: string; words: string } | null>(null);
+/** What the last action here did, when it ended the account on purpose ("no longer syncs"). */
+const [notice, setNotice] = createSignal<string | null>(null);
 const [devices, setDevices] = createSignal<Devices | null>(null);
+/** The 12 characters from whichever answer came last: a round or the device list. */
+const [fingerprint, setFingerprint] = createSignal<string | null>(null);
 /** Joined with a recovery kit and no new kit made since: the screen asks for one. */
 const [recovered, setRecovered] = createSignal(false);
-export { devices, joined, problem, recovered, report, syncedAt, syncing };
+/** Changes that failed since this device joined, until the user dismisses them. */
+const [failed, setFailed] = createSignal({ refused: 0, unreadable: 0 });
+/** This browser remembers an account that the passkey has not opened yet. */
+const [locked, setLocked] = createSignal(false);
+const [remembered, setRemembered] = createSignal(false);
+export { devices, failed, fingerprint, joined, locked, notice, problem, recovered, remembered, report, rounds, syncedAt, syncing };
 
-export const problemOf = (e: unknown) => ({
-  code: e instanceof BridgeError ? e.code : undefined,
-  words: syncProblem(e instanceof BridgeError ? e.code : undefined, e instanceof Error ? e.message : String(e)),
-});
+export const dismissFailed = () => setFailed({ refused: 0, unreadable: 0 });
+
+const code = (e: unknown) => (e instanceof BridgeError || e instanceof vault.VaultError ? e.code : undefined);
+export const problemOf = (e: unknown) => ({ code: code(e), words: syncProblem(code(e), e instanceof Error ? e.message : String(e)) });
+
+/** The record never travels a link that is neither encrypted nor on this machine. */
+function guardLink() {
+  if (!privateLink) throw new BridgeError(syncWords.plainLink, "plainLink");
+}
 
 let queue: Promise<unknown> = Promise.resolve();
 function inTurn<T>(work: () => Promise<T>): Promise<T> {
@@ -39,16 +58,22 @@ function inTurn<T>(work: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** Runs an op on the record, in turn. A record in the answer is stored at once;
- * `dropped` (this device was removed) forgets the account here. */
+function store(next: SyncRecord) {
+  record = keepNewer(record, next);
+  if (vault.active()) void vault.save(record).catch(() => undefined);
+}
+
+/** Runs an op on the record, in turn. A record in the answer is stored at
+ * once; `dropped` (this device was removed) forgets the account here. */
 function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: (result: T) => SyncRecord | null | undefined): Promise<T> {
   return inTurn(async () => {
+    guardLink();
     const mine = account;
     if (!record) throw new BridgeError("this device has not joined the account", "notJoined");
     try {
       const result = await op<T>(name, { ...fields, record });
       const next = recordIn(result);
-      if (next && mine === account) record = keepNewer(record, next);
+      if (next && mine === account) store(next);
       return result;
     } catch (e) {
       if (mine === account && e instanceof BridgeError && (e.code === "dropped" || e.code === "fork")) {
@@ -60,20 +85,40 @@ function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: 
   });
 }
 
-function forget() {
+/** Drops the account from this page's memory; what this browser remembers stays. */
+function reset() {
   account++;
   record = null;
   setJoined(false);
   setReport(null);
   setSyncedAt(null);
   setDevices(null);
+  setFingerprint(null);
   setRecovered(false);
+  setFailed({ refused: 0, unreadable: 0 });
 }
 
-/** A new account record (created, paired or recovered) replaces any before it; its first round runs at once. */
+/** The account is gone here (left, or this device was removed): the sealed copy goes too. */
+function forget() {
+  reset();
+  setLocked(false);
+  setRemembered(false);
+  void vault.clear();
+}
+
+/** A new account record replaces none: a device that syncs (or remembers an
+ * account) leaves first, so an account never keeps a ghost of this browser. */
+function refuseSecond() {
+  if (record || locked()) throw new BridgeError(syncWords.alreadyJoined, "alreadyJoined");
+}
+
+/** A new account record (created, paired or recovered); its first round runs at once. */
 export function join(next: SyncRecord, recoveredWithKit = false) {
-  forget();
+  reset();
   record = next;
+  setNotice(null);
+  // Opened from this browser's passkey: it stays remembered.
+  setRemembered(vault.active());
   setJoined(true);
   setProblem(null);
   setRecovered(recoveredWithKit);
@@ -90,7 +135,7 @@ export function syncNow(): Promise<void> {
     setSyncing(true);
     while (more) {
       more = false;
-      await rounds();
+      await roundsOnce();
     }
     setSyncing(false);
     running = null;
@@ -99,21 +144,29 @@ export function syncNow(): Promise<void> {
 }
 
 /** A round that changed the record publishes nothing until it is stored:
- * go again while the core asks to. */
-async function rounds() {
-  for (let i = 0; i < 5 && record; i++) {
-    const mine = account;
-    try {
-      const r = await withRecord<SyncReport>("syncNow", {}, (x) => x.record);
-      if (mine !== account) return;
-      setReport(r);
-      setSyncedAt(Date.now());
-      setProblem(null);
-      if (!r.again) return;
-    } catch (e) {
-      if (mine === account || !record) setProblem(problemOf(e));
-      return;
+ * go again while the core asks to (at most five times; the last report then
+ * says it stopped before it finished). */
+async function roundsOnce() {
+  try {
+    for (let i = 0; i < 5 && record; i++) {
+      const mine = account;
+      try {
+        const r = await withRecord<SyncReport>("syncNow", {}, (x) => x.record);
+        if (mine !== account) return;
+        setReport(r);
+        setFingerprint(r.fingerprint);
+        setSyncedAt(Date.now());
+        setProblem(null);
+        if (r.refused || r.unreadable) setFailed((f) => ({ refused: f.refused + r.refused, unreadable: f.unreadable + r.unreadable }));
+        if (!r.again) return;
+      } catch (e) {
+        // A removal (dropped) or a different list (fork) was said by withRecord already.
+        if (mine === account) setProblem(problemOf(e));
+        return;
+      }
     }
+  } finally {
+    setRounds((n) => n + 1);
   }
 }
 
@@ -122,52 +175,108 @@ async function rounds() {
 setInterval(() => joined() && !document.hidden && void syncNow(), 60_000);
 document.addEventListener("visibilitychange", () => joined() && !document.hidden && void syncNow());
 
+/** The device list, always read again from the sync server. */
 export async function loadDevices(): Promise<Devices> {
   const list = await withRecord<Devices>("syncDevices", {}, (d) => d.record);
   setDevices(list);
+  setFingerprint(list.fingerprint);
   return list;
 }
 
-export const createAccount = async (server: string, name: string, invite: string) =>
+export async function createAccount(server: string, name: string, invite: string) {
+  refuseSecond();
+  guardLink();
   join(await op<SyncRecord>("createSyncAccount", { server, name, ...(invite ? { invite } : {}) }));
+}
 
-export const recover = async (server: string, kit: string, name: string) => join(await op<SyncRecord>("recover", { server, kit, name }), true);
+export async function recover(server: string, kit: string, name: string) {
+  refuseSecond();
+  guardLink();
+  join(await op<SyncRecord>("recover", { server, kit, name }), true);
+}
+
+/** Pairing may start here: nothing syncs or waits to be unlocked, and the link is private. */
+export const mayPair = () => !record && !locked() && privateLink;
+
+/** Before a change that cannot be undone: the passkey when this browser remembers the account. */
+async function gate() {
+  if (vault.active()) await vault.verify();
+}
 
 /** Vouches for the device that shows `qr`; returns the six digits it must show too. */
 export const approvePairing = async (qr: string) => (await withRecord<{ code: string; record: SyncRecord }>("approvePairing", { qr }, (r) => r.record)).code;
 
 /** The kit, to show once: nothing here keeps it. */
 export async function makeKit(): Promise<string> {
+  await gate();
   const made = await withRecord<{ kit: string; record: SyncRecord }>("createRecoveryKit", {}, (r) => r.record);
   setRecovered(false);
+  setFingerprint(null);
   return made.kit;
 }
 
 export const lostPreview = (lost: string) => withRecord<LostPreview>("lostPreview", { lost }, () => null);
 
+/** Removes a device. The list is not read again here: a failed refresh never turns a done removal into a failure. */
 export async function removeDevice(device: string) {
+  await gate();
   await withRecord<SyncRecord>("removeDevice", { device }, (r) => r);
-  await loadDevices();
+  setFingerprint(null);
 }
 
 export async function reportLost(lost: string, keep: string[]) {
+  await gate();
   await withRecord<SyncRecord>("reportLost", { lost, keep }, (r) => r);
-  await loadDevices();
+  setFingerprint(null);
 }
 
 /** Leaves the account; the library stays. Without `force` the core refuses while edits are unsent (`unsent`). */
 export async function signOut(force: boolean) {
+  const mine = account;
   await withRecord("signOut", { force }, () => null);
+  if (mine !== account) return;
   forget();
   setProblem(null);
+  setNotice(syncWords.left);
 }
 
-/** After `fork`: the server's device list wins over this device's. */
-export async function useServerRoster() {
-  await withRecord<SyncRecord>("useServerRoster", { drop: [] }, (r) => r);
+/** Both sides of a different device list, read only. */
+export const forkPreview = () => withRecord<ForkPreview>("forkPreview", {}, () => null);
+
+/** After `fork`: the server's device list wins, dropping what it drops on its own and `drop`. */
+export async function useServerRoster(drop: string[]) {
+  await gate();
+  await withRecord<SyncRecord>("useServerRoster", { drop }, (r) => r);
   setProblem(null);
+  setFingerprint(null);
   await syncNow();
 }
+
+/** Seals the record under a new passkey for this browser. */
+export async function remember() {
+  const r = record;
+  if (!r) throw new BridgeError("this device has not joined the account", "notJoined");
+  await vault.enable(r);
+  setRemembered(true);
+}
+
+/** Stops remembering: the sealed copy goes; a joined page keeps syncing until it closes. */
+export async function forgetBrowser() {
+  await vault.clear();
+  setRemembered(false);
+  setLocked(false);
+}
+
+/** Opens what this browser remembers, with the passkey, then syncs. */
+export async function unlock() {
+  const opened = await vault.unlock();
+  setLocked(false);
+  join(opened);
+}
+
+void vault.stored().then((has) => {
+  if (has && !record) setLocked(true);
+});
 
 const SERVER_KEY = "mq.syncServer";
 const NAME_KEY = "mq.syncName";
@@ -184,7 +293,7 @@ export function rememberedServer(): string {
 }
 
 /** The server and this device's name, for the next pairing or kit: neither is a secret. */
-export function remember(server: string, name: string) {
+export function rememberJoin(server: string, name: string) {
   try {
     localStorage.setItem(SERVER_KEY, server);
     localStorage.setItem(NAME_KEY, name);
@@ -203,3 +312,4 @@ export function defaultDeviceName(): string {
   }
   return `Marquee ${form() === "tv" ? "TV" : form() === "phone" ? "phone" : "desktop"}`;
 }
+export const passkeyAvailable = vault.available;

@@ -30,7 +30,7 @@ import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/p
 import Player from "./screens/player";
 import Search from "./screens/search";
 import SettingsScreen from "./screens/settings";
-import SyncScreen, { AddDevice, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
+import SyncScreen, { AddDevice, ForkReview, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
 import { Stub } from "./screens/stub";
 import Title from "./screens/title";
 import Versions from "./screens/versions";
@@ -240,6 +240,7 @@ export function App() {
       <Route path="/sync/add" component={AddDevice} />
       <Route path="/sync/kit" component={MakeKit} />
       <Route path="/sync/lost/:id" component={ReportLost} />
+      <Route path="/sync/fork" component={ForkReview} />
       <Route path="/home-rows" component={HomeRows} />
       <Route path="/debrid" component={Debrid} />
       <Route path="/profiles" component={ProfilesScreen} />

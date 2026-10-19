@@ -6,6 +6,7 @@ import { batch, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { Bridge, BridgeError, ipcTransport, shellPost, webSocketTransport } from "./bridge";
 import { applyDiffs } from "./diff";
+import { isPrivateLink } from "../lib/sync";
 import type { Episode } from "./generated/Episode";
 import type { Hero } from "./generated/Hero";
 import type { HomeRow } from "./generated/HomeRow";
@@ -27,6 +28,8 @@ const shellHandler = window.__MQ_SHELL__ ? shellPost() : null;
 let shellCaps: DeviceCaps | null = null;
 const transport = shellHandler ? ipcTransport(shellHandler, (r) => (shellCaps = asCaps(r.caps))) : webSocketTransport(bridgeUrl);
 export const bridge = new Bridge(transport);
+/** Whether the sync record may travel this link: the shell's IPC, or a socket that is encrypted or stays on this machine. */
+export const privateLink = shellHandler !== null || isPrivateLink(bridgeUrl);
 
 export type Link = "connecting" | "open" | "closed";
 const [link, setLink] = createSignal<Link>("connecting");

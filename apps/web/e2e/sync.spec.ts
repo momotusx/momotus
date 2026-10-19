@@ -1,30 +1,45 @@
 /** Multi-device sync through the web screens, for real: a local sync server
  * (crates/mq-sync-server) and three cores of their own, one per device, each
  * page reaching its core through a routed WebSocket. The shared core of the
- * other specs never joins an account. The kit read and shown here belongs to
- * this run's throwaway server and is gone when the run ends.
+ * other specs never joins an account. Kits read and shown here belong to this
+ * run's throwaway server and are gone when the run ends.
  *
- * Desk (desktop) starts the account; Phone pairs by a pasted code and makes a
- * kit; Living room TV joins with that kit; Desk reports Phone lost, keeping
- * the TV, then removes the TV; both learn they were removed. */
+ * Desk (desktop, on localhost with a virtual passkey and a fake camera)
+ * starts the account and remembers it; Phone pairs by a scanned code and
+ * makes a kit; Living room TV joins with that kit; Desk reports Phone lost
+ * and keeps the TV; Phone pairs again (once removed for digits that differ,
+ * once rejected); a restored sync server shows Desk a different list, which
+ * Desk compares before continuing; Desk removes the TV and stops syncing.
+ * Every secret that crossed a socket is then looked for in storage, history,
+ * the URL and the console. */
 
-import { type Browser, chromium, expect, type Page, test } from "@playwright/test";
+import { type Browser, type CDPSession, chromium, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encode } from "uqr";
 import { Client, PORTS, startBridge, startRelay, SYNC_PORTS } from "./core";
 
 const SERVER = `http://127.0.0.1:${SYNC_PORTS.relay}`;
-const procs: { proc: ChildProcess; data: string }[] = [];
+const RELAY_FILES = ["relay.sqlite", "relay.sqlite-wal", "relay.sqlite-shm", "relay.roster.jsonl"];
+const bridges: { proc: ChildProcess; data: string }[] = [];
+let relay: { proc: ChildProcess; data: string };
 let desk: Page;
 let phone: Page;
 let tv: Page;
+let passkey: { cdp: CDPSession; id: string };
 let kit = "";
 const errors: string[] = [];
+const consoleLines: string[] = [];
+/** Every secret that crossed a socket: record fields and kits. */
+const secrets = new Set<string>();
+/** The next request of this op from the page on a core's port is answered as a relay failure. */
+const failOnce = new Map<number, string>();
 /** Desk's fake camera films this file (Chromium reads it when the camera opens). */
 let camera = "";
+let scratch = "";
 let deskBrowser: Browser;
 
 /** A Y4M video of `text` as a QR code, black on white, for the fake camera. */
@@ -41,6 +56,30 @@ function film(text: string) {
   writeFileSync(camera, Buffer.concat([Buffer.from(`YUV4MPEG2 W${width} H${height} F10:1 Ip A1:1 C420jpeg\n`), frame, frame]));
 }
 
+/** Collects the secrets in one protocol message: every long string under an
+ * object that carries a device token (the sync record), and every kit. */
+function collect(text: string) {
+  let message: unknown;
+  try {
+    message = JSON.parse(text);
+  } catch {
+    return;
+  }
+  const leaves = (v: unknown) => {
+    if (typeof v === "string") {
+      if (v.length >= 16 && !v.startsWith("http")) secrets.add(v);
+    } else if (v && typeof v === "object") for (const x of Object.values(v)) leaves(x);
+  };
+  const walk = (v: unknown) => {
+    if (!v || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    if ("deviceToken" in o) leaves(o);
+    if (typeof o.kit === "string" && /^([0-9A-Za-z]{4}-?){8}$/.test(o.kit)) secrets.add(o.kit.toUpperCase());
+    for (const x of Object.values(o)) walk(x);
+  };
+  walk(message);
+}
+
 const FORMS = {
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
   phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
@@ -48,8 +87,8 @@ const FORMS = {
 };
 
 /** A browser context whose page talks to the core on `port`. */
-async function device(browser: Browser, port: number, form: keyof typeof FORMS): Promise<Page> {
-  const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+async function device(browser: Browser, port: number, form: keyof typeof FORMS, host = "127.0.0.1"): Promise<Page> {
+  const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", baseURL: `http://${host}:${PORTS.vite}` });
   await context.grantPermissions(["clipboard-read", "clipboard-write", "camera"]);
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const core = new WebSocket(`ws://127.0.0.1:${port}/ws`);
@@ -57,20 +96,51 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS):
     core.addEventListener("open", () => {
       for (const m of early.splice(0)) core.send(m);
     });
-    core.addEventListener("message", (e) => ws.send(String(e.data)));
+    core.addEventListener("message", (e) => {
+      collect(String(e.data));
+      ws.send(String(e.data));
+    });
     core.addEventListener("close", () => ws.close());
-    ws.onMessage((m) => (core.readyState === WebSocket.OPEN ? core.send(String(m)) : early.push(String(m))));
+    ws.onMessage((m) => {
+      collect(String(m));
+      const asked = JSON.parse(String(m)) as { id?: number; op?: string };
+      if (asked.op && asked.op === failOnce.get(port)) {
+        failOnce.delete(port);
+        ws.send(JSON.stringify({ id: asked.id, ok: false, error: "http status 502" }));
+        return;
+      }
+      if (core.readyState === WebSocket.OPEN) core.send(String(m));
+      else early.push(String(m));
+    });
     ws.onClose(() => core.close());
   });
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(`${form}: ${e.message}`));
+  page.on("console", (m) => consoleLines.push(m.text()));
   await page.goto(`/settings?form=${form}`);
   return page;
 }
 
-const synced = (page: Page) => expect(page.locator(".sync-state .st").first()).toContainText("Synced at", { timeout: 30_000 });
-const member = (page: Page, name: string) => page.locator(".sync-member").filter({ has: page.getByRole("heading", { name }) });
+const card = (page: Page) => page.locator(".sync-card");
+const state = (page: Page) => page.locator(".sync-state .st").first();
+/** The first round after joining has ended. */
+async function synced(page: Page) {
+  await expect(card(page)).toBeVisible();
+  await expect(card(page)).not.toHaveAttribute("data-syncing", "", { timeout: 30_000 });
+  await expect(state(page)).toContainText("Synced at");
+}
+/** Presses Sync now and waits for that round, not an earlier one, to end. */
+async function syncNow(page: Page, remote = false) {
+  const before = Number(await card(page).getAttribute("data-round"));
+  if (remote) {
+    await page.locator('[data-f="sync:now"]').focus();
+    await page.keyboard.press("Enter");
+  } else await page.locator('[data-f="sync:now"]').click();
+  await expect.poll(async () => Number((await card(page).getAttribute("data-round")) ?? "Infinity"), { timeout: 30_000 }).toBeGreaterThan(before);
+}
+const member = (page: Page, name: string) => page.locator(".sync-member").filter({ has: page.getByRole("heading", { name, exact: false }) });
 const names = (page: Page) => page.locator(".sync-members h3").evaluateAll((hs) => hs.map((h) => h.firstChild?.textContent ?? ""));
+const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
 const shot = async (page: Page, name: string) => {
   await page.waitForTimeout(500);
   await page.screenshot({ path: `e2e/shots/${name}.jpg`, type: "jpeg", quality: 80 });
@@ -83,21 +153,67 @@ const go = async (page: Page, path: string) => {
   }, path);
   await expect(page).toHaveURL(new RegExp(`${path.replace(/[/?]/g, "\\$&")}$`));
 };
+const signCount = async () => {
+  const { credentials } = (await passkey.cdp.send("WebAuthn.getCredentials", { authenticatorId: passkey.id })) as { credentials: { signCount: number }[] };
+  return credentials.map((c) => c.signCount);
+};
+
+/** Everything a page keeps where other code could read it, as text: the URL,
+ * history.state, both web storages and every IndexedDB store (bytes as base64
+ * and as text). */
+async function kept(page: Page): Promise<{ text: string; dbs: string[] }> {
+  return page.evaluate(async () => {
+    const out: string[] = [location.href, JSON.stringify(history.state)];
+    for (const s of [localStorage, sessionStorage]) for (let i = 0; i < s.length; i++) out.push(String(s.key(i)), String(s.getItem(String(s.key(i)))));
+    const bytes = (v: unknown) => (v instanceof ArrayBuffer ? new Uint8Array(v) : ArrayBuffer.isView(v) ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength) : null);
+    const dbs = (await indexedDB.databases()).map((d) => d.name ?? "");
+    for (const name of dbs) {
+      const db = await new Promise<IDBDatabase>((ok, fail) => {
+        const r = indexedDB.open(name);
+        r.onsuccess = () => ok(r.result);
+        r.onerror = () => fail(r.error);
+      });
+      for (const store of Array.from(db.objectStoreNames)) {
+        const rows = await new Promise<unknown[]>((ok, fail) => {
+          const r = db.transaction(store).objectStore(store).getAll();
+          r.onsuccess = () => ok(r.result);
+          r.onerror = () => fail(r.error);
+        });
+        out.push(
+          JSON.stringify(rows, (_, v) => {
+            const b = bytes(v);
+            return b ? `${btoa(String.fromCharCode(...b))} ${new TextDecoder().decode(b)}` : v;
+          }),
+        );
+      }
+      db.close();
+    }
+    return { text: out.join("\n"), dbs };
+  });
+}
+
+async function noSecretKept(page: Page) {
+  const { text } = await kept(page);
+  expect(secrets.size).toBeGreaterThan(5);
+  for (const secret of secrets) expect(text.includes(secret), `a secret is kept on ${page.url()}`).toBe(false);
+}
 
 test.describe.serial("sync across three devices", () => {
   test.beforeAll(async ({ browser }) => {
-    procs.push(await startRelay(SYNC_PORTS.relay));
-    for (const port of [SYNC_PORTS.a, SYNC_PORTS.b, SYNC_PORTS.c]) procs.push(await startBridge(port));
+    scratch = mkdtempSync(join(tmpdir(), "mq-sync-e2e-"));
+    camera = join(scratch, "camera.y4m");
+    relay = await startRelay(SYNC_PORTS.relay);
+    for (const port of [SYNC_PORTS.a, SYNC_PORTS.b, SYNC_PORTS.c]) bridges.push(await startBridge(port));
     // Something of Desk's to see on Phone: the local sample addon.
     const c = new Client(`ws://127.0.0.1:${SYNC_PORTS.a}/ws`);
     await c.req("installAddon", { url: `http://127.0.0.1:${PORTS.source}/manifest.json` });
     c.close();
-    camera = join(mkdtempSync(join(tmpdir(), "mq-camera-")), "camera.y4m");
     film("nothing to see yet");
     deskBrowser = await chromium.launch({
       args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${camera}`],
     });
-    desk = await device(deskBrowser, SYNC_PORTS.a, "desktop");
+    // A passkey needs a host name: Desk opens Marquee on localhost.
+    desk = await device(deskBrowser, SYNC_PORTS.a, "desktop", "localhost");
     phone = await device(browser, SYNC_PORTS.b, "phone");
     tv = await device(browser, SYNC_PORTS.c, "tv");
   });
@@ -105,16 +221,16 @@ test.describe.serial("sync across three devices", () => {
   test.afterAll(async () => {
     for (const p of [desk, phone, tv]) await p?.context().close();
     await deskBrowser?.close();
-    if (camera) rmSync(join(camera, ".."), { recursive: true, force: true });
-    for (const { proc, data } of procs) {
-      proc.kill();
-      rmSync(data, { recursive: true, force: true });
+    relay?.proc.kill();
+    for (const { proc, data } of [...bridges, relay]) {
+      proc?.kill();
+      if (data) rmSync(data, { recursive: true, force: true });
     }
+    if (scratch) rmSync(scratch, { recursive: true, force: true });
   });
 
-  test("Desk starts an account from Settings", async () => {
+  test("Desk starts an account from Settings and is asked for its kit next", async () => {
     await desk.locator('[data-f="settings:sync"]').click();
-    await expect(desk.locator('[data-f="settings:sync"]')).toHaveCount(0);
     await desk.locator('[data-f="sync:start"]').click();
     await desk.locator('[data-f="sync-form:server"]').fill(`${SERVER.replace("http://", "http://me:pw@")}`);
     await desk.locator('[data-f="sync-form:go"]').click();
@@ -122,16 +238,53 @@ test.describe.serial("sync across three devices", () => {
     await desk.locator('[data-f="sync-form:server"]').fill(SERVER);
     await desk.locator('[data-f="sync-form:name"]').fill("Desk");
     await desk.locator('[data-f="sync-form:go"]').click();
+    await expect(desk).toHaveURL(/\/sync\/kit\?first=1$/);
+    await expect(desk.locator(".lede")).toHaveText("Your account is ready. Make its recovery kit now: without one, losing this device means losing what it syncs.");
+    await desk.locator('[data-f="sync-kit:cancel"]').click();
     await expect(desk).toHaveURL(/\/sync$/);
     await synced(desk);
     await expect(member(desk, "Desk")).toContainText("This device");
     await expect(member(desk, "Desk")).toContainText(", the first device");
-    // No kit yet: the page asks for one.
     await expect(desk.locator(".sync-callout")).toContainText("This account has no recovery kit");
     await expect(desk.locator(".sync-fp")).toHaveText(/^[0-9A-Z]{4} [0-9A-Z]{4} [0-9A-Z]{4}$/);
+    // A second account cannot start over a live one.
+    await go(desk, "/sync/start");
+    await expect(desk.locator(".problem")).toContainText("This device already syncs.");
+    await expect(desk.locator('[data-f="sync-form:go"]')).toHaveCount(0);
+    await go(desk, "/pair");
+    await expect(desk.locator(".problem")).toContainText("This device already syncs.");
+    await expect(desk.locator(".qrbox")).toHaveCount(0);
+    await go(desk, "/sync");
   });
 
-  test("Phone pairs: Desk scans its code with the camera", async () => {
+  test("Desk remembers this browser with a passkey and opens it again after a reload", async () => {
+    passkey = { cdp: await desk.context().newCDPSession(desk), id: "" };
+    await passkey.cdp.send("WebAuthn.enable", { enableUI: false });
+    const added = (await passkey.cdp.send("WebAuthn.addVirtualAuthenticator", {
+      options: { protocol: "ctap2", ctap2Version: "ctap2_1", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true },
+    } as never)) as { authenticatorId: string };
+    passkey.id = added.authenticatorId;
+    const fp = await desk.locator(".sync-fp").textContent();
+    await desk.locator('[data-f="sync:remember"]').click();
+    await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
+    expect(await signCount()).toHaveLength(1);
+    const { dbs } = await kept(desk);
+    expect(dbs).toContain("marquee-vault");
+    await noSecretKept(desk);
+
+    await desk.reload();
+    await expect(desk.locator('[data-f="sync:unlock"]')).toBeVisible();
+    await expect(desk.locator(".sync-card")).toHaveCount(0);
+    await shot(desk, "sync-locked-desktop");
+    await desk.locator('[data-f="sync:unlock"]').click();
+    await synced(desk);
+    // The same device, not a new one, and the same 12 characters.
+    await expect.poll(() => names(desk)).toEqual(["Desk"]);
+    await expect(desk.locator(".sync-fp")).toHaveText(fp ?? "");
+    await expect(desk.getByText("Remembered in this browser, locked with a passkey.")).toBeVisible();
+  });
+
+  test("Phone pairs: Desk scans its code, reads where it is from, then approves", async () => {
     await go(phone, "/pair");
     await phone.locator('[data-f="pair:server"]').fill(SERVER);
     await phone.locator('[data-f="pair:name"]').fill("Phone");
@@ -148,14 +301,17 @@ test.describe.serial("sync across three devices", () => {
     await desk.locator('[data-f="sync-add:code"]').fill("hello");
     await desk.locator('[data-f="sync-add:approve"]').click();
     await expect(desk.locator("main .st.bad")).toHaveText("Not a pairing code.");
-    // The camera films the code the phone shows; the page approves what it reads.
+    // The camera films the code the phone shows; nothing is approved before the question.
     film(code);
     await desk.locator('[data-f="sync-add:scan"]').click();
+    await expect(desk.locator("#sync-review")).toHaveText("Approve a device from 127.0.0.1?");
+    await expect(desk.locator(".code")).toHaveCount(0);
+    await shot(desk, "sync-review-desktop");
+    await desk.locator('[data-f="sync-add:review-approve"]').click();
     const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
     expect(digits).toMatch(/^\d{6}$/);
     await shot(desk, "sync-add-desktop");
 
-    // Both screens show the same six digits; only the new device confirms.
     await expect(phone.locator(".confirm .code")).toHaveText(digits);
     await phone.locator('[data-f="pair:yes"]').click();
     await expect(phone.locator(".summary h2")).toHaveText("This device joined the account");
@@ -166,6 +322,24 @@ test.describe.serial("sync across three devices", () => {
     await expect(member(desk, "Phone")).toContainText("through Desk");
   });
 
+  test("the camera stops when the page is left", async () => {
+    await go(desk, "/sync/add");
+    film("nothing to see yet");
+    await desk.locator('[data-f="sync-add:scan"]').click();
+    await desk.waitForFunction(() => (document.querySelector("video")?.readyState ?? 0) >= 2);
+    const live = await desk.evaluate(() => {
+      const track = (document.querySelector("video")?.srcObject as MediaStream).getVideoTracks()[0];
+      (window as unknown as { seen: MediaStreamTrack }).seen = track as MediaStreamTrack;
+      return track?.readyState;
+    });
+    expect(live).toBe("live");
+    // A QR that is no pairing code is never taken.
+    await expect(desk.locator("#sync-review")).toHaveCount(0);
+    await go(desk, "/sync");
+    expect(await desk.evaluate(() => (window as unknown as { seen: MediaStreamTrack }).seen.readyState)).toBe("ended");
+    await synced(desk);
+  });
+
   test("what Desk had arrives on Phone", async () => {
     await go(phone, "/addons");
     await expect(phone.locator(".addon h2", { hasText: "Sample Source" })).toBeVisible({ timeout: 30_000 });
@@ -173,7 +347,7 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator('[data-f="settings:sync"]')).toContainText(/On\. Synced at/);
   });
 
-  test("Phone makes a recovery kit, shown once", async () => {
+  test("Phone makes a recovery kit, shown once, and the clipboard is emptied after", async () => {
     await go(phone, "/sync");
     await phone.locator('[data-f="sync:kit"]').click();
     await expect(phone.locator(".lede")).toContainText("Anyone who has it can join your account");
@@ -183,50 +357,58 @@ test.describe.serial("sync across three devices", () => {
     await expect(phone.locator(".sync-kit .sync-callout")).toContainText("It is not shown again");
     await phone.locator('[data-f="sync-kit:copy"]').click();
     await expect(phone.locator('[data-f="sync-kit:copy"]')).toHaveText("Copied");
+    await expect(phone.locator(".sync-kit .st.warn")).toContainText("Marquee empties the clipboard when you leave this page.");
     expect(await phone.evaluate(() => navigator.clipboard.readText())).toBe(kit);
     // A throwaway kit of this run's own server.
     await shot(phone, "sync-kit-phone");
     await phone.locator('[data-f="sync-kit:saved"]').click();
     await expect(phone).toHaveURL(/\/sync$/);
-    // Nothing on the page keeps it, and the kit now counts.
+    await expect.poll(() => phone.evaluate(() => navigator.clipboard.readText())).toBe("");
     expect(await phone.content()).not.toContain(kit);
     await expect(member(phone, "Recovery kit")).toContainText("on Phone");
     await expect(phone.locator(".sync-callout")).toHaveCount(0);
     await shot(phone, "sync-phone");
   });
 
-  test("the TV joins with the kit, typed with the remote", async () => {
+  test("the TV joins with the kit, masked until shown, typed with the remote", async () => {
     await go(tv, "/sync");
-    await expect.poll(() => tv.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBeTruthy();
-    for (let i = 0; i < 4 && (await tv.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)) !== "sync:recover"; i++) await tv.keyboard.press("ArrowDown");
+    await expect.poll(() => focused(tv)).toBeTruthy();
+    for (let i = 0; i < 4 && (await focused(tv)) !== "sync:recover"; i++) await tv.keyboard.press("ArrowDown");
     await tv.keyboard.press("Enter");
     await expect(tv).toHaveURL(/\/sync\/recover$/);
     await tv.locator('[data-f="sync-form:server"]').fill(SERVER);
+    const field = tv.locator('[data-f="sync-form:kit"]');
+    await expect(field).toHaveAttribute("type", "password");
+    await expect(field).toHaveAttribute("autocorrect", "off");
+    await field.fill("AAAA-AAAA-AAAA-AAAA-AAAA-AAAA-AAAA-AAAA");
     await shot(tv, "sync-recover-tv");
-    await tv.locator('[data-f="sync-form:kit"]').fill("AAAA-AAAA-AAAA-AAAA-AAAA-AAAA-AAAA-AAAA");
+    await tv.locator('[data-f="sync-form:kit:reveal"]').focus();
+    await tv.keyboard.press("Enter");
+    await expect(field).toHaveAttribute("type", "text");
+    await tv.keyboard.press("Enter");
+    await expect(field).toHaveAttribute("type", "password");
     await tv.locator('[data-f="sync-form:go"]').focus();
     await tv.keyboard.press("Enter");
     await expect(tv.locator(".sync-form .st.bad")).toHaveText("The sync server does not know this kit. Check the letters and try again.");
-    await tv.locator('[data-f="sync-form:kit"]').fill(kit.toLowerCase());
+    await field.fill(kit.toLowerCase());
     await tv.locator('[data-f="sync-form:name"]').fill("Living room TV");
     await tv.locator('[data-f="sync-form:go"]').focus();
     await tv.keyboard.press("Enter");
     await expect(tv).toHaveURL(/\/sync$/);
     await synced(tv);
-    await expect(tv.locator(".sync-callout")).toContainText("You joined with a recovery kit. Make a new one now");
+    // A TV cannot make kits: the callout says where to.
+    await expect(tv.locator(".sync-callout")).toHaveText("You joined with a recovery kit. Make a new one on your phone or computer, and remove the device you lost.");
     await expect(member(tv, "Living room TV")).toContainText("through Recovery kit");
-    // On a TV, adding devices and making kits say where to do them.
     await expect(tv.locator('[data-f="sync:add"]')).toContainText("a TV has no camera");
     await expect(tv.locator('[data-f="sync:kit"]')).toContainText("on a TV, anyone in the room");
-    await expect.poll(() => tv.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("sync:now");
+    await expect.poll(() => focused(tv)).toBe("sync:now");
     await shot(tv, "sync-tv");
   });
 
   test("on the TV every action is reachable with the remote", async () => {
-    const focused = () => tv.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
     const seen = new Set<string>();
-    for (let i = 0; i < 16; i++) {
-      seen.add(await focused());
+    for (let i = 0; i < 18; i++) {
+      seen.add(await focused(tv));
       await tv.keyboard.press("ArrowDown");
     }
     expect([...seen].join(" ")).toMatch(/sync:[0-9a-f]+:remove/);
@@ -236,21 +418,27 @@ test.describe.serial("sync across three devices", () => {
     const row = member(tv, "Phone");
     await row.locator('[data-f$=":remove"]').focus();
     await tv.keyboard.press("ArrowRight");
-    await expect.poll(focused).toBe(await row.locator('[data-f$=":lost"]').getAttribute("data-f"));
+    await expect.poll(() => focused(tv)).toBe(await row.locator('[data-f$=":lost"]').getAttribute("data-f"));
     await tv.keyboard.press("Enter");
     await expect(tv).toHaveURL(/\/sync\/lost\//);
-    await expect.poll(focused).toBe("sync-lost:cancel");
+    await expect.poll(() => focused(tv)).toBe("sync-lost:cancel");
     await tv.keyboard.press("Escape");
     await expect(tv).toHaveURL(/\/sync$/);
   });
 
-  test("Desk reports Phone lost and keeps the TV", async () => {
-    await go(desk, "/settings");
-    await go(desk, "/sync");
-    await synced(desk);
-    await expect(member(desk, "Living room TV")).toBeVisible();
+  test("Desk reports Phone lost from a list it read before the TV joined, and keeps the TV", async () => {
+    // Desk's page still shows the list from before the kit and the TV.
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
+    const before = (await signCount())[0] ?? 0;
+    const fp = await desk.locator(".sync-fp").textContent();
+    // The first read fails: the page says so and offers to try again or leave.
+    failOnce.set(SYNC_PORTS.a, "lostPreview");
     await member(desk, "Phone").locator('[data-f$=":lost"]').click();
+    await expect(desk.locator(".problem .st.bad")).toHaveText("The device list did not load. The sync server did not answer. Try again in a moment.");
+    await expect(desk.locator('[data-f="sync-lost:cancel"]')).toBeVisible();
+    await desk.locator('[data-f="sync-lost:retry"]').click();
     await expect(desk.locator("h1")).toHaveText("Report lost: Phone");
+    // The page read the list again: the TV that joined since is there to untick.
     const tvRow = desk.locator(".sync-check", { hasText: "Living room TV" });
     await expect(tvRow).toHaveAttribute("aria-checked", "true");
     await expect(tvRow).toContainText("through Recovery kit");
@@ -259,12 +447,15 @@ test.describe.serial("sync across three devices", () => {
     await tvRow.click();
     await expect(tvRow).toHaveAttribute("aria-checked", "false");
     await expect(desk.locator('[data-f="sync-lost:go"]')).toHaveText("Remove 1 device");
-    // The kit Phone made goes whatever is kept.
-    await expect(desk.locator(".sync-callout")).toContainText("1 recovery kit");
+    await expect(desk.getByText("This asks for your passkey first.")).toBeVisible();
     await shot(desk, "sync-lost-desktop");
     await desk.locator('[data-f="sync-lost:go"]').click();
     await expect(desk).toHaveURL(/\/sync$/);
     await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
+    // The 12 characters follow the new list at once, not the last round's.
+    await expect.poll(() => desk.locator(".sync-fp").textContent()).not.toBe(fp);
+    // The passkey confirmed the report.
+    expect((await signCount())[0]).toBeGreaterThan(before);
   });
 
   test("Phone learns it was removed; the TV's edit reaches Desk in one Sync now", async () => {
@@ -280,19 +471,16 @@ test.describe.serial("sync across three devices", () => {
     const c = new Client(`ws://127.0.0.1:${SYNC_PORTS.c}/ws`);
     await c.req("setPrefs", { patch: { autoplayNext: false } });
     c.close();
-    await expect(tv.locator('[data-f="sync:now"]')).toBeFocused();
-    await tv.keyboard.press("Enter");
-    await synced(tv);
-    await desk.locator('[data-f="sync:now"]').click();
-    await synced(desk);
+    await syncNow(tv, true);
+    await expect(state(tv)).toHaveText(/^Synced at [\d:]+\s[AP]M$/);
+    await syncNow(desk);
     await expect.poll(async () => (await tv.locator(".sync-fp").textContent()) === (await desk.locator(".sync-fp").textContent())).toBe(true);
-    await shot(desk, "sync-desktop");
     await go(desk, "/settings");
     await expect(desk.locator('[data-f="pref-next:false"]')).toHaveAttribute("aria-checked", "true");
     await go(desk, "/sync");
   });
 
-  test("Phone, found again, pairs with a pasted code", async () => {
+  test("Phone, found again: digits that differ remove the device that answered", async () => {
     await phone.locator('[data-f="sync:pair"]').click();
     // The server is remembered: the code shows at once.
     await phone.locator('[data-f="pair:copy"]').click();
@@ -301,34 +489,153 @@ test.describe.serial("sync across three devices", () => {
     await desk.locator('[data-f="sync-add:code"]').fill(code);
     await desk.locator('[data-f="sync-add:approve"]').click();
     const digits = (await desk.locator(".confirm .code").textContent()) ?? "";
+    // Someone else's screen confirms the code Desk approved.
     await expect(phone.locator(".confirm .code")).toHaveText(digits);
+    await phone.locator('[data-f="pair:yes"]').click();
+    await expect(phone.locator(".summary h2")).toHaveText("This device joined the account");
+    await desk.locator('[data-f="sync-add:differ"]').click();
+    await expect(desk.locator(".confirm .st")).toHaveText("The device that answered showed other digits, so it was removed. Nothing else changed.");
+    await phone.locator('[data-f="pair:done"]').click();
+    // Its first round may already have read the removal; else the next one does.
+    const removed = phone.locator("main > .st.bad");
+    await expect(async () => {
+      const now = phone.locator('[data-f="sync:now"]');
+      if (await now.isVisible()) await now.click({ timeout: 1000 }).catch(() => undefined);
+      await expect(removed).toContainText("This device was removed from your sync account.", { timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
+    await desk.locator('[data-f="sync-add:done"]').click();
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
+  });
+
+  test("Phone pairs again; a code it rejects adds nothing", async () => {
+    await phone.locator('[data-f="sync:pair"]').click();
+    await phone.locator('[data-f="pair:copy"]').click();
+    let code = await phone.evaluate(() => navigator.clipboard.readText());
+    await go(desk, "/sync/add");
+    await desk.locator('[data-f="sync-add:code"]').fill(code);
+    await desk.locator('[data-f="sync-add:approve"]').click();
+    await expect(phone.locator(".confirm .code")).toHaveText((await desk.locator(".confirm .code").textContent()) ?? "");
+    await phone.locator('[data-f="pair:no"]').click();
+    await expect(phone.locator(".problem h2")).toHaveText("Pairing stopped");
+    await go(desk, "/sync");
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV"]);
+
+    await phone.locator('[data-f="pair:again"]').click();
+    await phone.locator('[data-f="pair:copy"]').click();
+    await expect.poll(() => phone.evaluate(() => navigator.clipboard.readText())).not.toBe(code);
+    code = await phone.evaluate(() => navigator.clipboard.readText());
+    await go(desk, "/sync/add");
+    await desk.locator('[data-f="sync-add:code"]').fill(code);
+    await desk.locator('[data-f="sync-add:approve"]').click();
+    await expect(phone.locator(".confirm .code")).toHaveText((await desk.locator(".confirm .code").textContent()) ?? "");
     await phone.locator('[data-f="pair:yes"]').click();
     await phone.locator('[data-f="pair:done"]').click();
     await synced(phone);
     await desk.locator('[data-f="sync-add:done"]').click();
     await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV", "Phone"]);
-    // A new member: Phone shows the same 12 characters as Desk once both synced.
-    await desk.locator('[data-f="sync:now"]').click();
-    await synced(desk);
-    await phone.locator('[data-f="sync:now"]').click();
-    await synced(phone);
-    await expect.poll(async () => (await phone.locator(".sync-fp").textContent()) === (await desk.locator(".sync-fp").textContent())).toBe(true);
   });
 
-  test("Desk removes the TV, then stops syncing", async () => {
+  test("a restored sync server shows Desk a different list, which Desk compares before continuing", async () => {
+    const snapshot = join(scratch, "snapshot");
+    const stop = async () => {
+      relay.proc.kill();
+      await once(relay.proc, "exit");
+    };
+    await stop();
+    mkdirSync(snapshot, { recursive: true });
+    for (const f of RELAY_FILES) if (existsSync(join(relay.data, f))) copyFileSync(join(relay.data, f), join(snapshot, f));
+    relay = await startRelay(SYNC_PORTS.relay, relay.data);
+
+    // Desk makes a kit; then the operator restores the backup from before it.
+    await go(desk, "/sync/kit");
+    await desk.locator('[data-f="sync-kit:make"]').click();
+    await expect(desk.locator(".sync-kit-text")).toBeVisible();
+    await desk.locator('[data-f="sync-kit:saved"]').click();
+    await stop();
+    for (const f of RELAY_FILES) rmSync(join(relay.data, f), { force: true });
+    for (const f of RELAY_FILES) if (existsSync(join(snapshot, f))) copyFileSync(join(snapshot, f), join(relay.data, f));
+    relay = await startRelay(SYNC_PORTS.relay, relay.data, ["--new-generation"]);
+
+    // Phone, which never saw Desk's kit, makes one of its own at the same place.
+    await go(phone, "/sync/kit");
+    await phone.locator('[data-f="sync-kit:make"]').click();
+    await expect(phone.locator(".sync-kit-text")).toBeVisible();
+    await phone.locator('[data-f="sync-kit:saved"]').click();
+
+    await go(desk, "/sync");
+    await syncNow(desk);
+    await expect(state(desk)).toHaveText("The sync server lists different devices than this device knows. Compare the lists to keep syncing.");
+    await desk.locator('[data-f="sync:server-list"]').click();
+    await expect(desk).toHaveURL(/\/sync\/fork$/);
+    // Phone's kit is only on the server's list and goes; Desk's own kit only Desk knew.
+    await expect(desk.locator(".sync-member", { hasText: "on Phone" })).toContainText("Goes");
+    const mineOnly = desk.locator(".set", { has: desk.locator("h2", { hasText: "Only this device knew these" }) });
+    await expect(mineOnly.locator(".sync-member")).toHaveCount(1);
+    await expect(mineOnly.locator(".sync-member")).toContainText("on Desk");
+    const tvTick = desk.locator(".sync-check", { hasText: "Living room TV" });
+    await expect(tvTick).toHaveAttribute("aria-checked", "false");
+    await tvTick.click();
+    await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveText("Continue and remove 1 device");
+    await tvTick.click();
+    await expect(desk.locator('[data-f="sync-fork:go"]')).toHaveText("Continue with the server's list");
+    await shot(desk, "sync-fork-desktop");
+    await desk.locator('[data-f="sync-fork:go"]').click();
+    await expect(desk).toHaveURL(/\/sync$/);
+    await expect(desk.locator(".sync-card")).not.toHaveAttribute("data-syncing", "", { timeout: 30_000 });
+    await expect(state(desk)).toContainText("Synced at");
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Living room TV", "Phone"]);
+    await syncNow(phone);
+    await expect(state(phone)).toContainText("Synced at");
+    await expect.poll(async () => (await phone.locator(".sync-fp").textContent()) === (await desk.locator(".sync-fp").textContent())).toBe(true);
+    await shot(desk, "sync-desktop");
+  });
+
+  test("Desk removes the TV, then stops syncing, and forgets this browser", async () => {
     const row = member(desk, "Living room TV");
     await row.locator('[data-f$=":remove"]').click();
     await expect(row.locator(".sync-ask")).toContainText("Remove Living room TV? It stops syncing");
+    // The removal lands; reading the list after it fails: the removal still counts.
+    failOnce.set(SYNC_PORTS.a, "syncDevices");
     await row.locator('[data-f$=":confirm"]').click();
+    await expect(desk.getByText("Removed: Living room TV. Done, but the device list did not refresh. Try again to see it.")).toBeVisible();
+    await syncNow(desk);
     await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
     await tv.locator('[data-f="sync:now"]').focus();
     await tv.keyboard.press("Enter");
     await expect(tv.locator("main > .st.bad")).toContainText("This device was removed from your sync account.");
 
+    // A kit made and then removed stops being listed.
+    await go(desk, "/sync/kit");
+    await desk.locator('[data-f="sync-kit:make"]').click();
+    await desk.locator('[data-f="sync-kit:saved"]').click();
+    const kitRow = member(desk, "Recovery kit");
+    await expect(kitRow).toContainText("on Desk");
+    await kitRow.locator('[data-f$=":remove"]').click();
+    await expect(kitRow.locator(".sync-ask")).toContainText("Remove this recovery kit? It stops working.");
+    await kitRow.locator('[data-f$=":confirm"]').click();
+    await expect.poll(() => names(desk)).toEqual(["Desk", "Phone"]);
+
     await desk.locator('[data-f="sync:leave"]').click();
     await expect(desk.locator('[data-f="sync:start"]')).toBeVisible();
+    await expect(desk.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
+    expect((await kept(desk)).text).not.toContain("credential");
     await go(desk, "/settings");
     await expect(desk.locator('[data-f="settings:sync"]')).toContainText("Keep your library, progress and addons the same on every device.");
+  });
+
+  test("Phone reloads without remembering: the page no longer holds the account", async () => {
+    await go(phone, "/sync");
+    await expect(phone.getByText("This browser cannot lock the sync key with a passkey")).toBeVisible();
+    await phone.reload();
+    await expect(phone.locator('[data-f="sync:pair"]')).toBeVisible();
+    await expect(phone.locator(".sync-card")).toHaveCount(0);
+    await expect(phone.getByText("A browser has no safe place for this device's sync key")).toBeVisible();
+  });
+
+  test("nothing secret reaches storage, history, the URL or the console", async () => {
+    for (const page of [desk, phone, tv]) await noSecretKept(page);
+    const logged = consoleLines.join("\n");
+    for (const secret of secrets) expect(logged.includes(secret), "a secret reached the console").toBe(false);
     expect(errors).toEqual([]);
   });
 });

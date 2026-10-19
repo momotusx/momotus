@@ -79,3 +79,16 @@
 /* Forms stack their fields: server, kit or invite, then this device's name. */
 .sync-form { max-width: 1100px; }
 .sync-form .field-line { flex: 1 1 100%; }
+
+/* A field with its own button (the kit's Show and Hide). */
+.field-row { display: flex; gap: 12px; align-items: center; }
+.field-row input { flex: 1; min-width: 0; }
+.btn.reveal { flex: none; width: 72px; padding: 0; justify-content: center; }
+[data-form="phone"] .btn.reveal { width: 48px; height: 48px; }
+/* Failures since joining: kept until dismissed. */
+.sync-note.bad { align-items: center; flex-wrap: wrap; }
+.sync-note.bad svg { color: var(--bad); }
+.sync-note.bad span { flex: 1 1 360px; }
+.sync-note .btn { height: 52px; padding: 0 20px; font-size: var(--type-callout); }
+[data-form="phone"] .sync-note .btn { height: 38px; padding: 0 14px; }
+.sync-tag.bad { color: var(--bg); background: var(--bad); box-shadow: none; }

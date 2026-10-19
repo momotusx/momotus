@@ -8,7 +8,7 @@ import X from "lucide-solid/icons/x";
 import { createEffect, createSignal, Match, on, Show, Switch } from "solid-js";
 import { Qr } from "../components/qr";
 import { A } from "@solidjs/router";
-import { liveView } from "../core/client";
+import { liveView, privateLink } from "../core/client";
 import { autoFocus } from "../focus/dom";
 import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapshot";
 import { form } from "../form";
@@ -98,9 +98,10 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
         {(c) => (
           <section class="confirm">
             <p class="step">Does the other device show the same six digits?</p>
-            <p class="code" aria-label={`Code ${c().code.split("").join(" ")}`}>
+            <p class="code" aria-hidden="true">
               {c().code}
             </p>
+            <p class="sr">{`Code ${c().code.split("").join(" ")}`}</p>
             <div class="acts">
               <button class="btn primary" data-f="pair:yes" data-autofocus onClick={() => void view.command({ type: "confirm" })}>
                 <Check aria-hidden />
@@ -148,9 +149,12 @@ export default function PairingScreen() {
   // server is known yet.
   // A remembered address with a user name or password (an older version saved it) is not used.
   const known = sync.rememberedServer();
+  // A device that syncs, or remembers an account, pairs nothing new: that would leave a
+  // ghost of it in the old account. Read once, so this page's own join keeps its summary.
+  const allowed = sync.mayPair();
   const [server, setServer] = createSignal(known);
   const [name, setName] = createSignal(sync.defaultDeviceName());
-  const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known ? { server: known, name: name(), n: 1 } : null);
+  const [run, setRun] = createSignal<{ server: string; name: string; n: number } | null>(known && allowed ? { server: known, name: name(), n: 1 } : null);
   const [advanced, setAdvanced] = createSignal(!known);
   // Once joined, the page is the result and Done: no second pairing starts from it.
   const [joined, setJoined] = createSignal(false);
@@ -161,13 +165,24 @@ export default function PairingScreen() {
     // An address with a user name or password is never kept or sent.
     setBad(s !== "" && !plainAddress(s));
     if (!s || bad()) return;
-    sync.remember(s, name().trim() || "Marquee");
+    sync.rememberJoin(s, name().trim() || "Marquee");
     setRun({ server: s, name: name().trim() || "Marquee", n: (run()?.n ?? 0) + 1 });
   };
   return (
     <main class="browse page settings-page" data-vscroll>
       <h1>Pair this device</h1>
       <p class="lede">Joins your sync account so library, progress and addons follow you. Nothing is kept until both screens show the same code.</p>
+      <Show
+        when={allowed}
+        fallback={
+          <section class="problem">
+            <p>{privateLink ? syncWords.alreadyJoined : syncWords.plainLink}</p>
+            <A class="btn primary" href="/sync" data-f="pair:back" data-autofocus>
+              {syncWords.title}
+            </A>
+          </section>
+        }
+      >
       <Show when={run()} keyed>
         {(r) => <Session server={r.server} name={r.name} onDone={() => setRun({ ...r, n: r.n + 1 })} onJoined={() => setJoined(true)} />}
       </Show>
@@ -183,11 +198,11 @@ export default function PairingScreen() {
         <form class="install" onSubmit={start}>
           <label class="field-line">
             <span class="kicker">Sync server</span>
-            <input type="url" placeholder="https://sync.example.org" value={server()} onInput={(e) => setServer(e.currentTarget.value)} data-f="pair:server" autocomplete="off" spellcheck={false} />
+            <input type="url" placeholder="https://sync.example.org" value={server()} onInput={(e) => setServer(e.currentTarget.value)} data-f="pair:server" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck={false} />
           </label>
           <label class="field-line">
             <span class="kicker">This device</span>
-            <input type="text" value={name()} onInput={(e) => setName(e.currentTarget.value)} data-f="pair:name" autocomplete="off" />
+            <input type="text" value={name()} onInput={(e) => setName(e.currentTarget.value)} data-f="pair:name" autocomplete="off" autocorrect="off" />
           </label>
           <Show when={bad()}>
             <p class="st bad" role="status">
@@ -200,6 +215,7 @@ export default function PairingScreen() {
             Show a code
           </button>
         </form>
+      </Show>
       </Show>
       </Show>
     </main>

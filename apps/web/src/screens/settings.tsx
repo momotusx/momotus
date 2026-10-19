@@ -14,7 +14,7 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { Prefs } from "../core/generated/Prefs";
 import type { QualityPref } from "../core/generated/QualityPref";
 import { chooseForm, type Form, form } from "../form";
-import { findAddons, languageName, syncWords } from "../lib/words";
+import { findAddons, languageName, syncSummary, syncWords } from "../lib/words";
 import * as sync from "../core/sync";
 import "./browse.css";
 import "./settings.css";
@@ -99,12 +99,17 @@ export default function SettingsScreen() {
   const count = () => addons.state.data?.addons.length ?? 0;
   const sources = () => addons.state.data?.addons.filter((a) => a.enabled && a.provides.includes("stream")).map((a) => a.name) ?? [];
   const me = () => profiles()?.profiles.find((x) => x.id === profiles()?.active);
-  const syncLine = () => {
-    if (!sync.joined()) return syncWords.offLine;
-    const at = sync.syncedAt();
-    if (sync.problem()) return sync.problem()?.words ?? "";
-    return at ? `On. Synced at ${new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.` : "On.";
-  };
+  // Warnings show here too, not only on the sync page: what failed or waits, then the time.
+  const syncLine = () =>
+    syncSummary({
+      locked: sync.locked(),
+      problem: sync.problem()?.words ?? null,
+      joined: sync.joined(),
+      refused: sync.failed().refused,
+      unreadable: sync.failed().unreadable,
+      report: sync.report(),
+      time: sync.syncedAt() ? new Date(sync.syncedAt() as number).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null,
+    });
 
   return (
     <main class="browse page settings-page" data-vscroll>

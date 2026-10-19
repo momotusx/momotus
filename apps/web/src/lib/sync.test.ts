@@ -1,10 +1,42 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type { MemberInfo } from "../core/generated/MemberInfo";
-import { fingerprintGroups, isPairingCode, keepNewer, kitsGoing, lostDrop, memberName, sortMembers, sponsorName } from "./sync";
-import { addedLine, joinProblem, lostButton, lostKits, removeDeviceAsk, reportNotes, syncProblem, syncWords } from "./words";
+import {
+  fingerprintGroups,
+  forkDrop,
+  forkSides,
+  isPairingCode,
+  isPrivateLink,
+  keepNewer,
+  kitsGoing,
+  lostDrop,
+  lostRows,
+  memberName,
+  pairingHost,
+  pairingMember,
+  sortMembers,
+  sponsorName,
+  watchForCode,
+} from "./sync";
+import {
+  addedLine,
+  failedSince,
+  forkButton,
+  lostButton,
+  lostKits,
+  outcomeLine,
+  outcomeOf,
+  removeDeviceAsk,
+  reportNotes,
+  reviewAsk,
+  stepProblem,
+  syncProblem,
+  syncSummary,
+  syncWords,
+} from "./words";
 
 const member = (id: string, o: Partial<MemberInfo> = {}): MemberInfo => ({ id, kit: false, name: id.toUpperCase(), sponsor: null, addedMs: 0, thisDevice: false, ...o });
-const quiet = { clockGapMs: 0, waiting: 0, parked: 0, oldEpochWrites: 0, rotationWaitMs: 0, blocked: null } as const;
+const quiet = { clockGapMs: 0, waiting: 0, parked: 0, oldEpochWrites: 0, rotationWaitMs: 0, blocked: null, refused: 0, unreadable: 0, newer: 0, again: false } as const;
 
 test("the record with the highest revision is kept", () => {
   const held = { revision: 3, token: "a" };
@@ -20,6 +52,49 @@ test("only a pairing code is taken from the camera", () => {
   expect(isPairingCode(" marquee:pair?v=2&s=x&p=y ")).toBe(true);
   expect(isPairingCode("https://example.org/marquee:pair?")).toBe(false);
   expect(isPairingCode("")).toBe(false);
+});
+
+test("a look that ends after Cancel approves nothing", async () => {
+  let stopped = false;
+  const found: string[] = [];
+  // The camera sees a code, but the user cancels while the reader works.
+  const detect = async () => {
+    stopped = true;
+    return ["marquee:pair?v=2&s=https%3A%2F%2Fsync.example.org&p=1"];
+  };
+  await watchForCode(detect, () => stopped, (c) => found.push(c), async () => undefined);
+  expect(found).toEqual([]);
+  // Without the cancel the same look approves, and other codes are skipped.
+  let looks = 0;
+  const seen = [["https://example.org"], [" marquee:pair?v=2&p=2 "]];
+  await watchForCode(
+    async () => seen[looks++] ?? [],
+    () => false,
+    (c) => found.push(c),
+    async () => undefined,
+  );
+  expect(found).toEqual(["marquee:pair?v=2&p=2"]);
+});
+
+test("a scanned code names its sync server's host, and the device it belongs to", async () => {
+  const sign = Buffer.alloc(32, 7);
+  const g = sign.toString("base64url");
+  const code = `marquee:pair?v=2&s=${encodeURIComponent("https://sync.example.org:8443")}&p=abc&k=x&g=${g}`;
+  expect(pairingHost(code)).toBe("sync.example.org");
+  expect(pairingHost("marquee:pair?v=2")).toBeNull();
+  expect(pairingHost("nonsense")).toBeNull();
+  expect(reviewAsk("sync.example.org")).toBe("Approve a device from sync.example.org?");
+  expect(reviewAsk(null)).toBe("Approve this device?");
+  // As the core derives a member id: SHA-256 of the signing key, first 16 bytes.
+  const want = createHash("sha256").update(sign).digest().subarray(0, 16).toString("hex");
+  expect(await pairingMember(code)).toBe(want);
+  expect(await pairingMember("marquee:pair?v=2&g=AAAA")).toBeNull();
+  expect(await pairingMember("marquee:pair?v=2")).toBeNull();
+});
+
+test("the record goes only over an encrypted link or one on this machine", () => {
+  for (const ok of ["ws://127.0.0.1:7777/ws", "ws://localhost:7777/ws", "ws://[::1]:7777/ws", "wss://tv.local/ws"]) expect(isPrivateLink(ok)).toBe(true);
+  for (const bad of ["ws://192.168.1.20:7777/ws", "ws://tv.local:7777/ws", "not a url"]) expect(isPrivateLink(bad)).toBe(false);
 });
 
 test("the 12 characters read in groups of four", () => {
@@ -57,6 +132,42 @@ test("a lost report drops what the user left ticked, and the kits of what goes",
   expect(kitsGoing(["k4"], [...members, member("k4", { kit: true, sponsor: "gone" })], ["b"])).toEqual(["k4"]);
 });
 
+test("every device a lost report drops has a row, also one the list does not know yet", () => {
+  const rows = lostRows(["c", "tablet"], [member("c")]);
+  expect(rows.map((r) => [r.id, r.member?.name ?? null])).toEqual([
+    ["c", "C"],
+    ["tablet", null],
+  ]);
+});
+
+test("both sides of a different list, and what continuing removes", () => {
+  const mine = [member("me", { thisDevice: true }), member("tv"), member("kit1", { kit: true })];
+  const server = [member("me", { thisDevice: true }), member("tv"), member("laptop"), member("kit2", { kit: true })];
+  const sides = forkSides(mine, server);
+  expect(sides.both.map((m) => m.id)).toEqual(["me", "tv"]);
+  expect(sides.serverOnly.map((m) => m.id)).toEqual(["laptop", "kit2"]);
+  expect(sides.mineOnly.map((m) => m.id)).toEqual(["kit1"]);
+  // The server's own drops go anyway; ticks add to them; this device never.
+  expect(forkDrop(server, ["kit2"], new Set(["laptop", "me", "kit2"]))).toEqual(["laptop"]);
+  expect(forkDrop(server, ["kit2"], new Set())).toEqual([]);
+  expect(forkButton(0)).toBe("Continue with the server's list");
+  expect(forkButton(2)).toBe("Continue and remove 2 devices");
+});
+
+test("a round is complete, waiting or failed, never green while changes failed", () => {
+  expect(outcomeOf(quiet)).toBe("complete");
+  for (const pending of [{ waiting: 1 }, { parked: 1 }, { newer: 1 }, { blocked: "notActive" as const }, { rotationWaitMs: 5 }, { again: true }])
+    expect(outcomeOf({ ...quiet, ...pending })).toBe("pending");
+  expect(outcomeOf({ ...quiet, refused: 1, waiting: 3 })).toBe("failed");
+  expect(outcomeOf({ ...quiet, unreadable: 2 })).toBe("failed");
+  expect(outcomeLine("complete", "2:05 PM")).toBe("Synced at 2:05 PM");
+  expect(outcomeLine("pending", "2:05 PM")).toBe("Synced at 2:05 PM. Some changes still wait.");
+  expect(outcomeLine("failed", "2:05 PM")).toBe("Synced at 2:05 PM. Some changes did not sync.");
+  expect(failedSince(0, 0)).toBeNull();
+  expect(failedSince(1, 0)).toBe("Since this device joined, 1 edit from this device could not be sent and stays here only.");
+  expect(failedSince(2, 3)).toBe("Since this device joined, 2 edits from this device could not be sent and stay here only, and 3 changes from other devices could not be read.");
+});
+
 test("each fact of a sync round has its sentence, and a quiet round has none", () => {
   expect(reportNotes(quiet)).toEqual([]);
   expect(reportNotes({ ...quiet, clockGapMs: 600_000 })).toEqual([]);
@@ -70,31 +181,46 @@ test("each fact of a sync round has its sentence, and a quiet round has none", (
   expect(reportNotes({ ...quiet, blocked: "rotationPending" })).toEqual(["Edits wait until the account finishes a device change."]);
   expect(reportNotes({ ...quiet, blocked: "notActive" })[0]).toContain("does not take edits from this device");
   expect(reportNotes({ ...quiet, blocked: "relayDisagrees" })[0]).toContain("disagrees about your device list");
+  expect(reportNotes({ ...quiet, refused: 1 })[0]).toBe("1 edit from this device could not be sent: the sync server does not take it, so it stays on this device only.");
+  expect(reportNotes({ ...quiet, refused: 2 })[0]).toContain("does not take them, so they stay");
+  expect(reportNotes({ ...quiet, unreadable: 1 })[0]).toBe("1 change from another device could not be read and was skipped.");
+  expect(reportNotes({ ...quiet, newer: 3 })[0]).toBe("3 changes come from a newer version of Marquee. Update Marquee here to see them.");
+  expect(reportNotes({ ...quiet, again: true })[0]).toContain("stopped before it finished");
 });
 
-test("sync failures read by code, and never show the server's address", () => {
+test("sync failures read by code and by action, and never show the server's address", () => {
   expect(syncProblem("dropped", "this device was removed from the account")).toStartWith("This device was removed from your sync account.");
-  expect(syncProblem("fork", "x")).toContain("Use the server's list");
+  expect(syncProblem("fork", "x")).toContain("Compare the lists");
   expect(syncProblem("unsent", "x")).toContain("stop anyway");
+  expect(syncProblem("passkey", "x")).toBe("The passkey did not confirm it, so nothing changed.");
+  expect(syncProblem("plainLink", "x")).toBe(syncWords.plainLink);
+  expect(syncProblem("alreadyJoined", "x")).toBe(syncWords.alreadyJoined);
   expect(syncProblem(undefined, "roster: this device cannot report itself")).toBe("This device cannot report itself.");
   expect(syncProblem(undefined, "pairing: not a pairing code")).toBe("Not a pairing code.");
+  const steps = ["start", "recover", "approve", "load", "kit", "remove", "lost", "leave", "serverList", "unlock"] as const;
   for (const raw of ["network: error sending request for url (http://user:secret@relay.example/v1/push)", "http status 502", "timed out after 10s"]) {
-    for (const words of [syncProblem(undefined, raw), joinProblem(undefined, raw, "start"), joinProblem(undefined, raw, "recover"), joinProblem(undefined, raw, "approve")]) {
+    for (const words of [syncProblem(undefined, raw), ...steps.map((s) => stepProblem(undefined, raw, s))]) {
       expect(words.includes("relay.example") || words.includes("secret") || words.includes("http")).toBe(false);
     }
   }
-  expect(joinProblem(undefined, "http status 403", "start")).toContain("invite code");
-  expect(joinProblem(undefined, "http status 404", "recover")).toBe(syncWords.wrongKit);
-  expect(joinProblem(undefined, "http status 404", "approve")).toContain("expired or was used");
-  expect(joinProblem(undefined, "pairing: the code is for another sync server", "approve")).toBe("The code is for another sync server.");
-  expect(joinProblem("insecure", "the relay must use https unless it is on this network", "start")).toBe("The sync server address must start with https.");
+  expect(stepProblem(undefined, "http status 403", "start")).toContain("invite code");
+  expect(stepProblem(undefined, "http status 404", "recover")).toBe(syncWords.wrongKit);
+  expect(stepProblem(undefined, "http status 404", "approve")).toContain("expired or was used");
+  // A 404 elsewhere is no expired code: each action says what did not happen.
+  expect(stepProblem(undefined, "http status 404", "kit")).toBe("No kit was made. The sync server did not answer. Try again in a moment.");
+  expect(stepProblem(undefined, "http status 502", "remove")).toStartWith("Nothing was removed.");
+  expect(stepProblem(undefined, "http status 502", "load")).toStartWith("The device list did not load.");
+  expect(stepProblem(undefined, "http status 502", "leave")).toStartWith("This device still syncs.");
+  expect(stepProblem(undefined, "pairing: the code is for another sync server", "approve")).toBe("The code is for another sync server.");
+  expect(stepProblem("insecure", "the relay must use https unless it is on this network", "start")).toBe("The sync server address must start with https.");
 });
 
-test("device lines name the day and the device that added it", () => {
+test("device lines name the day, the time and the device that added it", () => {
   const day = Date.UTC(2026, 9, 19, 12);
-  expect(addedLine(false, day, null)).toBe("Added Oct 19, 2026, the first device");
-  expect(addedLine(false, day, "Marquee phone")).toBe("Added Oct 19, 2026 through Marquee phone");
-  expect(addedLine(true, day, "Marquee phone")).toBe("Made Oct 19, 2026 on Marquee phone");
+  const time = String.raw`\d{1,2}:\d{2}\s[AP]M`;
+  expect(addedLine(false, day, null)).toMatch(new RegExp(`^Added Oct 19, 2026, ${time}, the first device$`));
+  expect(addedLine(false, day, "Marquee phone")).toMatch(new RegExp(`^Added Oct 19, 2026, ${time} through Marquee phone$`));
+  expect(addedLine(true, day, "Marquee phone")).toMatch(new RegExp(`^Made Oct 19, 2026, ${time} on Marquee phone$`));
   expect(lostButton(1)).toBe("Remove 1 device");
   expect(lostButton(3)).toBe("Remove 3 devices");
   expect(lostKits(1)).toStartWith("1 recovery kit made on these devices stops working.");
@@ -104,13 +230,25 @@ test("device lines name the day and the device that added it", () => {
 test("sync copy uses no protocol words, dashes or emoji", () => {
   const lines = [
     ...Object.values(syncWords),
-    ...reportNotes({ clockGapMs: 9e6, waiting: 2, parked: 2, oldEpochWrites: 1, rotationWaitMs: 1, blocked: "relayDisagrees" }),
-    ...["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure"].map((c) => syncProblem(c, "")),
+    ...reportNotes({ clockGapMs: 9e6, waiting: 2, parked: 2, oldEpochWrites: 1, rotationWaitMs: 1, blocked: "relayDisagrees", refused: 1, unreadable: 1, newer: 1, again: true }),
+    ...["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "passkey"].map((c) => syncProblem(c, "")),
     removeDeviceAsk("TV"),
     lostKits(2),
+    failedSince(2, 2) ?? "",
   ];
   // The long and short dash by code point, so this file holds neither.
   const dashes = String.fromCharCode(0x2013, 0x2014);
-  const banned = new RegExp(`epoch|roster|fingerprint|keystore|relay|token|record|member|[${dashes}]|--|\\p{Extended_Pictographic}`, "iu");
+  const banned = new RegExp(`\\b(epoch|roster|fingerprint|keystore|relay|token|record|member)s?\\b|[${dashes}]|--|\\p{Extended_Pictographic}`, "iu");
   for (const line of lines) expect(line).not.toMatch(banned);
+});
+
+test("Settings names what failed or waits before the time, and a lock or a problem before that", () => {
+  const base = { locked: false, problem: null, joined: true, refused: 0, unreadable: 0, report: quiet, time: "2:05 PM" };
+  expect(syncSummary(base)).toBe("On. Synced at 2:05 PM.");
+  expect(syncSummary({ ...base, report: { ...quiet, blocked: "notActive" } })).toBe("The sync server does not take edits from this device yet, so they were not sent.");
+  expect(syncSummary({ ...base, report: { ...quiet, refused: 1 } })).toStartWith("1 edit from this device could not be sent");
+  expect(syncSummary({ ...base, refused: 2 })).toStartWith("Since this device joined, 2 edits");
+  expect(syncSummary({ ...base, problem: "The sync server did not answer." })).toBe("The sync server did not answer.");
+  expect(syncSummary({ ...base, joined: false })).toBe(syncWords.offLine);
+  expect(syncSummary({ ...base, joined: false, locked: true })).toBe(syncWords.locked);
 });
