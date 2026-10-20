@@ -245,9 +245,9 @@ struct SubtitleNote: Decodable, Hashable, Sendable {
 }
 
 /// Where a source starts: where the last one stopped when a failover
-/// replaced it, else the saved position.
-func sourceStart(stoppedAt: Double?, resumeMs: Int64?) -> Double {
-    stoppedAt ?? Double(resumeMs ?? 0) / 1000
+/// replaced it, else the saved position, or the beginning for Start over.
+func sourceStart(stoppedAt: Double?, resumeMs: Int64?, fromStart: Bool = false) -> Double {
+    stoppedAt ?? (fromStart ? 0 : Double(resumeMs ?? 0) / 1000)
 }
 
 /// Where a failed source stopped: its start while the seek to it has not
@@ -609,6 +609,8 @@ struct PlayRoute: Hashable, Identifiable {
     let target: PlayTargetInfo
     /// When the user asked to play, for time to first frame.
     let tapped: ContinuousClock.Instant
+    /// Start over: the first source starts at the beginning, not the saved position.
+    var fromStart = false
 
     var id: String { "\(versionsSub):\(key)" }
 }

@@ -31,7 +31,7 @@ struct ImportScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
                 phase
                 if let failure = importer.failure {
-                    StateLine(symbol: "triangle-alert", text: failure)
+                    StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", restart))
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -48,9 +48,12 @@ struct ImportScreen: View {
     @ViewBuilder private var phase: some View {
         switch importer.snapshot {
         case nil, .starting?:
-            Label("Asking Stremio for a sign-in code", glyph: "clock")
-                .font(.text(Theme.type.body))
-                .foregroundStyle(Theme.Palette.muted)
+            // Not while the view could not open: the reason and Try again show instead.
+            if importer.failure == nil {
+                Label("Asking Stremio for a sign-in code", glyph: "clock")
+                    .font(.text(Theme.type.body))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
         case .waitingForLink(let code, let link, _)?:
             HStack(alignment: .top, spacing: Theme.Space.l) {
                 VStack(alignment: .leading, spacing: Theme.Space.s) {

@@ -15,6 +15,8 @@ struct VersionsScreen: View {
     @State private var undone = false
     @Environment(\.metrics) private var metrics
     @State private var expanded: Set<String> = []
+    /// Phone: the one row a tap has opened (its details and Play).
+    @State private var opened: String?
     /// TV: the page enters on the pick's Play.
     @FocusState private var pickFocused: Bool
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -204,7 +206,7 @@ struct VersionsScreen: View {
                     .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                     let shown = expanded.contains(group) ? rows : Array(rows.prefix(3))
                     ForEach(shown) { row in
-                        VersionRowView(row: row, wide: columns) {
+                        VersionRowView(row: row, wide: columns, tapped: opened == row.key, openRow: { opened = row.key }) {
                             playing = model.play(row.key)
                         }
                         Rectangle().fill(Theme.Palette.line.opacity(0.6)).frame(height: 1)
@@ -396,11 +398,13 @@ private struct ColumnHeadings: View {
 private struct VersionRowView: View {
     let row: VersionRow
     let wide: Bool
+    /// Phone: the first tap opens the row (its details and Play), as on the
+    /// web; one row is open at a time, so a tap on another closes this one.
+    let tapped: Bool
+    let openRow: () -> Void
     let play: () -> Void
     @State private var hovered = false
     @FocusState private var focused: Bool
-    /// Phone: the first tap opens the row (its details and Play), as on the web.
-    @State private var tapped = false
 
     #if os(tvOS)
     // Beside the 600 pt pick the table has 960 pt: these leave Features about 150.
@@ -412,7 +416,7 @@ private struct VersionRowView: View {
     private var open: Bool { hovered || focused }
 
     var body: some View {
-        Button(action: { if wide || tapped { play() } else { tapped = true } }) {
+        Button(action: { if wide || tapped { play() } else { openRow() } }) {
             VStack(alignment: .leading, spacing: 6) {
                 if wide {
                     HStack(spacing: 16) {
@@ -477,6 +481,9 @@ private struct VersionRowView: View {
         .onHover { hovered = $0 }
         #endif
         .accessibilityLabel(StreamChoice.spoken(row))
+        // The label already says the details: one activation plays.
+        .accessibilityAction { play() }
+        .accessibilityHint("Plays this version")
     }
 
     /// The core's line in words, else (an older core) the status.

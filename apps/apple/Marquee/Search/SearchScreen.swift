@@ -15,7 +15,9 @@ struct SearchScreen: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: metrics.rowSpacing) {
+                #if !os(tvOS)
                 field.padding(.horizontal, metrics.gutter)
+                #endif
                 if let failure = search.failure {
                     StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", search.retry)).padding(.horizontal, metrics.gutter)
                 }
@@ -26,7 +28,7 @@ struct SearchScreen: View {
                         .padding(.horizontal, metrics.gutter)
                 }
                 ForEach(search.snapshot?.rows ?? [], id: \.rowId) { row in
-                    RowView(row: row, retry: { setQuery(query) }, onOpen: { search.command(["type": "remember"]) })
+                    RowView(row: row, retry: { setQuery(query) })
                 }
             }
             .padding(.vertical, Theme.Space.l)
@@ -37,11 +39,24 @@ struct SearchScreen: View {
         #endif
         .background(Theme.Palette.bg)
         .topScrim()
+        #if os(tvOS)
+        // The system's inline keyboard with the results live under it, and
+        // dictation, as the TV's own apps search (review apple-journey P2-8).
+        .searchable(text: $query, prompt: Self.prompt)
+        .searchSuggestions {
+            ForEach(search.snapshot?.recent ?? [], id: \.self) { Label($0, glyph: "history").searchCompletion($0) }
+        }
+        #endif
         .task(id: search.taskId) { search.start() }
         .onChange(of: query) { _, value in setQuery(value) }
+        // A title opened from the results covers this page: the query goes into
+        // Recent, however the tile was chosen (a tap, VoiceOver, a keyboard, a remote).
+        .onDisappear { if !query.trimmingCharacters(in: .whitespaces).isEmpty { search.command(["type": "remember"]) } }
         // The keyboard opens on the first visit, not over the results on the way back from a title.
         .onAppear { if query.isEmpty { fieldFocused = true } }
     }
+
+    private static let prompt = "Search titles"
 
     private func setQuery(_ value: String) {
         search.command(["type": "setQuery", "query": value])
@@ -50,7 +65,7 @@ struct SearchScreen: View {
     private var field: some View {
         HStack(spacing: 12) {
             Glyph("search").foregroundStyle(Theme.Palette.muted)
-            TextField("Movies, series, people", text: $query)
+            TextField(Self.prompt, text: $query)
                 .textFieldStyle(.plain)
                 .font(.text(Theme.type.headline + 2, relativeTo: .title3))
                 .foregroundStyle(Theme.Palette.text)
@@ -83,6 +98,8 @@ struct SearchScreen: View {
         if recent.isEmpty {
             StateLine(symbol: "search", text: "Search finds titles in every catalog your addons offer.")
         } else {
+            // On TV the recent searches are the keyboard's suggestions.
+            #if !os(tvOS)
             VStack(alignment: .leading, spacing: 10) {
                 Text(caps: "Recent")
                     .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
@@ -95,6 +112,7 @@ struct SearchScreen: View {
                     }
                 }
             }
+            #endif
         }
     }
 }

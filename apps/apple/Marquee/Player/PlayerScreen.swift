@@ -24,6 +24,7 @@ struct PlayerScreen: View {
     @State private var controlsHeight: CGFloat = 200
     #if os(iOS)
     @State private var pip = PictureInPicture()
+    @Environment(FloatingPlayer.self) private var floating
     #endif
     let core: CoreClient
 
@@ -31,6 +32,15 @@ struct PlayerScreen: View {
         _model = State(initialValue: PlayerModel(route: route, versions: versions, core: core))
         self.core = core
     }
+
+    #if os(iOS)
+    /// The film brought back from Picture in Picture, with its own player and window.
+    init(held: FloatingPlayer.Held, core: CoreClient) {
+        _model = State(initialValue: held.model)
+        _pip = State(initialValue: held.pip)
+        self.core = core
+    }
+    #endif
 
     var body: some View {
         ZStack {
@@ -60,6 +70,10 @@ struct PlayerScreen: View {
             Color.clear
                 .contentShape(Rectangle())
                 .ignoresSafeArea()
+                #if os(macOS)
+                // A double click fills the screen, as in every Mac player.
+                .onTapGesture(count: 2) { NSApp.keyWindow?.toggleFullScreen(nil) }
+                #endif
                 .onTapGesture { touched(toggle: true) }
                 // With the controls hidden, VoiceOver finds one element that brings them back.
                 .accessibilityElement()
@@ -167,7 +181,7 @@ struct PlayerScreen: View {
         #if !os(tvOS)
         .onContinuousHover { _ in touched(toggle: false) }
         #endif
-        .task(id: model.taskId) { await model.run() }
+        .task(id: model.taskId) { await model.drive() }
         .task { await autoHide() }
         // VoiceOver: a two-finger double tap plays or pauses; the scrub gesture leaves.
         #if !os(macOS)
@@ -178,6 +192,7 @@ struct PlayerScreen: View {
             immersion.active = true
             #if os(iOS)
             PlayerOrientation.enter()
+            float()
             #endif
         }
         .onDisappear {
@@ -185,7 +200,8 @@ struct PlayerScreen: View {
             #if os(iOS)
             PlayerOrientation.leave()
             #endif
-            model.close()
+            // A film floating in Picture in Picture plays on with its page gone.
+            if !model.floating { model.close() }
         }
         .preferredColorScheme(.dark)
         .navigationBarBackButtonHidden()
@@ -193,6 +209,17 @@ struct PlayerScreen: View {
         .toolbar(.hidden, for: .navigationBar, .tabBar)
         .statusBarHidden(!controls)
         .persistentSystemOverlays(.hidden)
+        // A hardware keyboard on iPad: the Mac's player keys, listed when Command is held.
+        .background {
+            Group {
+                Button("Play or Pause") { model.togglePlay() }.keyboardShortcut(.space, modifiers: [])
+                Button("Back 10 Seconds") { model.skip(-10) }.keyboardShortcut(.leftArrow, modifiers: [])
+                Button("Forward 10 Seconds") { model.skip(10) }.keyboardShortcut(.rightArrow, modifiers: [])
+                Button("Close Player") { close() }.keyboardShortcut(.escape, modifiers: [])
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
         #elseif os(macOS)
         .toolbarVisibility(.hidden, for: .windowToolbar)
         .focusable()
@@ -201,6 +228,7 @@ struct PlayerScreen: View {
         .onKeyPress(.leftArrow) { model.skip(-10); return .handled }
         .onKeyPress(.rightArrow) { model.skip(10); return .handled }
         .onKeyPress(.escape) { close(); return .handled }
+        .focusedSceneValue(\.playerKeys, PlayerKeys(model: model, close: close))
         #elseif os(tvOS)
         // Back one step at a time, as Leanback and the Android TV app do: an
         // open menu closes itself first, then the controls hide, then the player leaves.
@@ -223,6 +251,25 @@ struct PlayerScreen: View {
         nil
         #endif
     }
+
+    #if os(iOS)
+    /// Picture in Picture leaves the page for the places with the film playing
+    /// on; bringing it back shows the player again over them; the window's X
+    /// ends the film as Back does. A film started here closes a floating one.
+    private func float() {
+        let (model, pip, floating, sync, dismiss) = (self.model, self.pip, self.floating, self.sync, self.dismiss)
+        floating.end(except: model)
+        pip.on(start: {
+            floating.float(.init(model: model, pip: pip))
+            dismiss()
+        }, restore: floating.restore, stop: {
+            if !floating.stopped(model) {
+                model.end()
+                sync.schedule()
+            }
+        })
+    }
+    #endif
 
     private var pipControl: PipControl? {
         #if os(iOS)
@@ -264,6 +311,11 @@ struct PlayerScreen: View {
             try? await Task.sleep(for: .milliseconds(500))
             if controls, model.playing, !menuOpen, !assistiveTechRunning, ContinuousClock.now - lastTouch > .seconds(3) {
                 withAnimation(Theme.Motion.panel) { controls = false }
+                #if os(macOS)
+                // The pointer goes with the controls and comes back with them on the next move;
+                // never while another app is in front.
+                if NSApp.isActive { NSCursor.setHiddenUntilMouseMoves(true) }
+                #endif
             }
         }
     }

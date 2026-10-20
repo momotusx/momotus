@@ -47,6 +47,8 @@ struct RootView: View {
     @Environment(DebridSession.self) private var debrid
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// A film playing on in Picture in Picture while the viewer browses.
+    @State private var floating = FloatingPlayer()
     #endif
 
     var body: some View {
@@ -80,6 +82,11 @@ struct RootView: View {
         // The profiles view, again after a core restart.
         .task(id: profiles.view.taskId) { profiles.view.start() }
         .onAppear(perform: Launch.firstFrame)
+        #if os(iOS)
+        .environment(floating)
+        // A profile switch or a lock closes the floating window with the screens.
+        .onChange(of: [profiles.epoch, profiles.open ? 1 : 0]) { floating.end() }
+        #endif
         .overlay {
             if let failure = core.failure {
                 CoreStopped(message: failure, reopen: core.restart)
@@ -106,22 +113,29 @@ struct MainShell: View {
     @State private var tab = AppTab.home
     @State private var homePath: [TitleRoute] = []
     @State private var settingsPath: [SettingsPage] = []
+    /// The title pages over Search, Discover, Library and Calendar.
+    @State private var titlePaths: [AppTab: [TitleRoute]] = [:]
     @State private var immersion = Immersion()
     @Environment(ProfileSession.self) private var profiles
     /// Home has scrolled off its top row (TV Back takes it there first).
     @State private var homeScrolled = false
     /// Bumped to send Home's focus back to its top row.
     @State private var homeTop = 0
-    #if os(tvOS)
+    #if !os(iOS)
+    /// The profile picker, from the avatar at the end of the pill.
     @State private var showProfiles = false
+    #endif
+    #if os(tvOS)
     /// Places whose root page has another page over it: Back pops that first.
     @State private var covered: Set<AppTab> = []
     #endif
+    /// Places opened so far, kept alive so each keeps its place (a query, a
+    /// catalog and its scroll, a filter, an open title) as a tab bar does.
+    @State private var opened: Set<AppTab> = [.home]
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
-    /// Tabs opened so far, kept alive so each keeps its place as a tab bar does.
-    @State private var opened: Set<AppTab> = [.home]
     @State private var typing = false
+    @Environment(FloatingPlayer.self) private var floating
     #endif
 
     init(core: CoreClient) {
@@ -163,15 +177,7 @@ struct MainShell: View {
 
     @ViewBuilder private var content: some View {
         #if os(iOS)
-        ZStack {
-            ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
-                screen(item)
-                    .environment(\.tabShown, item == tab)
-                    .opacity(item == tab ? 1 : 0)
-                    .allowsHitTesting(item == tab)
-                    .accessibilityHidden(item != tab)
-            }
-        }
+        places
         // The bar's inset below does not reach scroll views inside the tabs'
         // navigation stacks (a page's end stayed under the bar): every page,
         // pushed or not, keeps the bar's height free at its end.
@@ -184,13 +190,41 @@ struct MainShell: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in typing = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in typing = false }
+        // The film brought back from Picture in Picture, over whichever place is open.
+        .fullScreenCover(item: Bindable(floating).shown) { held in
+            NavigationStack { PlayerScreen(held: held, core: core) }
+        }
+        .overlay(alignment: .top) {
+            if let note = floating.note {
+                Text(note)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                    .padding(.horizontal, Theme.Space.m)
+                    .padding(.vertical, Theme.Space.s)
+                    .glass(Capsule(), shadow: true)
+                    .padding(.top, Theme.Space.s)
+                    .transition(.opacity)
+            }
+        }
+        .animation(Theme.Motion.panel, value: floating.note)
         #elseif os(macOS)
-        screen(tab)
+        places
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
-            .toolbar { NavToolbar(selection: tab, select: select) }
+            .toolbar { NavToolbar(selection: tab, select: select, profiles: { showProfiles = true }) }
+            .modifier(FullScreen(isPresented: $showProfiles) {
+                NavigationStack {
+                    ProfilePicker(mode: .push, core: core)
+                        // A sheet: Escape or Done leaves it as it was.
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showProfiles = false } } }
+                }
+                .environment(profiles)
+                .environment(\.metrics, metrics)
+            })
+            // The Go menu and its keys, off while the player covers the places.
+            .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { select($0) })
         #else
-        screen(tab).safeAreaInset(edge: .top, spacing: 0) {
+        places.safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
                 TopNav(selection: tab, select: select, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
@@ -225,9 +259,41 @@ struct MainShell: View {
 
     private func select(_ item: AppTab) {
         #if os(iOS)
-        opened.insert(item)
+        // The current tab again goes back to its first page, as a tab bar does.
+        if item == tab { popToRoot(item) }
         #endif
+        opened.insert(item)
         tab = item
+    }
+
+    private func popToRoot(_ item: AppTab) {
+        switch item {
+        case .home: homePath = []
+        case .settings: settingsPath = []
+        default: titlePaths[item] = []
+        }
+    }
+
+    private func titlePath(_ item: AppTab) -> Binding<[TitleRoute]> {
+        Binding { titlePaths[item] ?? [] } set: { titlePaths[item] = $0 }
+    }
+
+    /// Every opened place, the current one shown. The others stay alive but
+    /// out of sight, touch, VoiceOver and (on TV) focus, so leaving a place
+    /// and coming back finds it as it was (review apple-journey P2-2).
+    private var places: some View {
+        ZStack {
+            ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
+                screen(item)
+                    .environment(\.tabShown, item == tab)
+                    .opacity(item == tab ? 1 : 0)
+                    .allowsHitTesting(item == tab)
+                    .accessibilityHidden(item != tab)
+                    #if os(tvOS)
+                    .disabled(item != tab)
+                    #endif
+            }
+        }
     }
 
     @ViewBuilder private func screen(_ tab: AppTab) -> some View {
@@ -242,13 +308,13 @@ struct MainShell: View {
                     #endif
             }
         case .search:
-            NavigationStack { SearchScreen(core: core).root(of: .search, covered: coveredBinding).withTitleRoutes(core: core) }
+            NavigationStack(path: titlePath(.search)) { SearchScreen(core: core).root(of: .search, covered: coveredBinding).withTitleRoutes(core: core) }
         case .discover:
-            NavigationStack { DiscoverScreen(core: core).root(of: .discover, covered: coveredBinding).withTitleRoutes(core: core) }
+            NavigationStack(path: titlePath(.discover)) { DiscoverScreen(core: core).root(of: .discover, covered: coveredBinding).withTitleRoutes(core: core) }
         case .library:
-            NavigationStack { LibraryScreen(core: core).root(of: .library, covered: coveredBinding).withTitleRoutes(core: core) }
+            NavigationStack(path: titlePath(.library)) { LibraryScreen(core: core).root(of: .library, covered: coveredBinding).withTitleRoutes(core: core) }
         case .calendar:
-            NavigationStack { CalendarScreen(core: core).root(of: .calendar, covered: coveredBinding).withTitleRoutes(core: core) }
+            NavigationStack(path: titlePath(.calendar)) { CalendarScreen(core: core).root(of: .calendar, covered: coveredBinding).withTitleRoutes(core: core) }
         case .settings:
             NavigationStack(path: $settingsPath) { SettingsScreen(core: core).root(of: .settings, covered: coveredBinding) }
         }
@@ -359,13 +425,14 @@ private struct TabBar: View {
 private struct NavToolbar: ToolbarContent {
     let selection: AppTab
     let select: (AppTab) -> Void
+    let profiles: () -> Void
 
     var body: some ToolbarContent {
         if #available(macOS 26, *) {
-            ToolbarItem(placement: .principal) { TopNav(selection: selection, select: select) }
+            ToolbarItem(placement: .principal) { TopNav(selection: selection, select: select, profiles: profiles) }
                 .sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .principal) { TopNav(selection: selection, select: select) }
+            ToolbarItem(placement: .principal) { TopNav(selection: selection, select: select, profiles: profiles) }
         }
     }
 }
@@ -378,7 +445,7 @@ private struct NavToolbar: ToolbarContent {
 private struct TopNav: View {
     let selection: AppTab
     let select: (AppTab) -> Void
-    /// TV: the active profile's avatar at the end, opening the picker.
+    /// The active profile's avatar at the end, opening the picker.
     var profiles: (() -> Void)?
     /// Which link has focus: Up from a page enters on the current place, not the nearest link.
     @FocusState private var focused: AppTab?
@@ -501,7 +568,7 @@ extension View {
     /// scrim keeps the status bar readable once content scrolls under it.
     func fullBleedTop() -> some View {
         #if os(macOS)
-        return self.ignoresSafeArea(edges: .top).toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        return modifier(FullBleedTop())
         #elseif os(iOS)
         // No scrim of its own: each backdrop puts one between its art and its
         // words, and `topScrim` takes over once content scrolls under the bar.
@@ -511,6 +578,20 @@ extension View {
         #endif
     }
 }
+
+#if os(macOS)
+/// The window toolbar is one for every place: a place kept alive out of sight
+/// must not clear its background for the one on screen.
+private struct FullBleedTop: ViewModifier {
+    @Environment(\.tabShown) private var shown
+
+    func body(content: Content) -> some View {
+        content
+            .ignoresSafeArea(edges: .top)
+            .toolbarBackgroundVisibility(shown ? .hidden : .automatic, for: .windowToolbar)
+    }
+}
+#endif
 
 #if os(iOS)
 /// iOS 26 and later: the system's hard scroll-edge material, shown only once

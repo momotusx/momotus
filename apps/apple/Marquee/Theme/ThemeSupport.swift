@@ -142,7 +142,7 @@ struct Metrics: Sendable {
 
     static let tv = Metrics(
         poster: Theme.Poster.tv, gutter: Theme.safeArea.side, rowSpacing: Theme.Space.l, wide: true,
-        cardName: Theme.type.caption, cardInfo: Theme.type.caption - 2, chip: 20)
+        cardName: Theme.type.caption, cardInfo: Theme.type.caption, chip: 20)
     static let regular = Metrics(
         poster: CGSize(width: 160, height: 240), gutter: Theme.Space.l, rowSpacing: Theme.Space.l, wide: true,
         cardName: 15, cardInfo: 13, chip: 12)

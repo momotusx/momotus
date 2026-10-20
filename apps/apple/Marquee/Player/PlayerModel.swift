@@ -103,6 +103,10 @@ final class PlayerModel {
     /// The Lock Screen and Control Center side of this playback.
     @ObservationIgnored private let nowPlaying = NowPlaying()
     @ObservationIgnored private var publishedDuration: Double = 0
+    /// Picture in Picture holds the film with its page gone: leaving the page keeps it playing.
+    @ObservationIgnored var floating = false
+    /// The run of the view and the task id it runs for, outliving a page while the film floats.
+    @ObservationIgnored private var running: (id: [String], task: Task<Void, Never>)?
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         self.route = route
@@ -254,6 +258,30 @@ final class PlayerModel {
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
         selectSubtitle(nil)
+    }
+
+    /// The page's run of the view. A page shown again over a floating film
+    /// joins the run already going; a page leaving ends the run unless the
+    /// film floats (review apple-journey P2-4).
+    func drive() async {
+        let id = taskId
+        if running?.id != id {
+            running?.task.cancel()
+            running = (id, Task { await run() })
+        }
+        guard let task = running?.task else { return }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            Task { @MainActor in if !self.floating { task.cancel() } }
+        }
+    }
+
+    /// The floating window closed with its X: the film ends as Back ends it.
+    func end() {
+        floating = false
+        close()
+        running?.task.cancel()
     }
 
     func run() async {
@@ -432,9 +460,11 @@ final class PlayerModel {
             }
             // The first source starts at the saved position; a failover resumes where the last one stopped.
             var start = loadedURL == nil
-                ? sourceStart(stoppedAt: stoppedAt, resumeMs: snapshot.resumeMs)
+                ? sourceStart(stoppedAt: stoppedAt, resumeMs: snapshot.resumeMs, fromStart: route.fromStart)
                 : stoppedPosition(pendingStart: pendingStart, position: position)
             stoppedAt = nil
+            // Start over holds for the first source only: a later reopen resumes.
+            if route.fromStart { route.fromStart = false }
             #if DEBUG
             if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
             #endif
@@ -459,6 +489,9 @@ final class PlayerModel {
         notice = nil
         itemBag = []
         (pictureShown, loadStart, playingSince) = (false, start, nil)
+        // An AirPlay receiver would be handed this URL and ask itself for it:
+        // a loopback stream stays on this device (mirroring still works).
+        player.allowsExternalPlayback = PlayerLayout.allowsExternalPlayback(address)
         let item = AVPlayerItem(url: address)
         item.publisher(for: \.status)
             .receive(on: DispatchQueue.main)

@@ -3,8 +3,8 @@ import SwiftUI
 /// Episodes as glass cards: a still with the number and a Watched chip, the
 /// title, "57 min · Feb 18, 2022" (or the time left) and two lines of
 /// synopsis. Selecting an episode plays it; choosing a version and the
-/// watched mark are the secondary actions (long press, right click, or a
-/// long press of select on tvOS).
+/// watched mark sit beside it, and in its long press or right click menu.
+/// An episode still to air is shown but cannot be selected.
 struct EpisodeList: View {
     let seasons: [Int]
     let selected: Int?
@@ -30,24 +30,31 @@ struct EpisodeList: View {
             SeasonPicker(seasons: seasons, selected: selected, select: select)
             LazyVStack(spacing: metrics.wide ? 14 : 10) {
                 ForEach(episodes, id: \.videoId) { episode in
-                    EpisodeRow(
-                        episode: episode,
-                        current: episode.videoId == current,
-                        minutes: minutes(runtime),
-                        status: status(episode)
-                    ) {
-                        play(episode)
-                    }
-                    .contextMenu {
-                        Button("Choose a version", glyph: "layers") { chooseVersion(episode) }
-                        Button(episode.watched ? "Mark as unwatched" : "Mark as watched",
-                               glyph: episode.watched ? "eye-off" : "check") {
-                            setWatched(episode.videoId, !episode.watched)
+                    let unaired = airsLater(episode.released)
+                    HStack(spacing: metrics.wide ? 14 : 8) {
+                        EpisodeRow(
+                            episode: episode,
+                            current: episode.videoId == current,
+                            minutes: minutes(runtime),
+                            status: status(episode)
+                        ) {
+                            play(episode)
                         }
-                    }
-                    .accessibilityAction(named: "Choose a version") { chooseVersion(episode) }
-                    .accessibilityAction(named: episode.watched ? "Mark as unwatched" : "Mark as watched") {
-                        setWatched(episode.videoId, !episode.watched)
+                        // "Airs Oct 21": nothing to play yet.
+                        .disabled(unaired)
+                        .contextMenu {
+                            Button("Choose a version", glyph: "layers") { chooseVersion(episode) }
+                            Button(episode.watched ? "Mark as not watched" : "Mark as watched",
+                                   glyph: episode.watched ? "eye-off" : "check") {
+                                setWatched(episode.videoId, !episode.watched)
+                            }
+                        }
+                        // The same two actions beside the row, as on the web.
+                        if !unaired {
+                            EpisodeActions(watched: episode.watched, chooseVersion: { chooseVersion(episode) }) {
+                                setWatched(episode.videoId, !episode.watched)
+                            }
+                        }
                     }
                     // A reason is never the end: the way forward sits under it.
                     if let failure, failure.videoId == episode.videoId {
@@ -154,6 +161,53 @@ private struct SeasonFocus: ViewModifier {
     }
 }
 
+/// Choose a version and the watched mark: icons over their words on a wide
+/// screen, icons alone on a phone, where the row leaves little width (the
+/// words are still spoken).
+private struct EpisodeActions: View {
+    let watched: Bool
+    let chooseVersion: () -> Void
+    let toggleWatched: () -> Void
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        if metrics.wide {
+            HStack(spacing: Theme.Space.s) {
+                Button(action: chooseVersion) { Label("Choose a version", glyph: "layers") }
+                    .buttonStyle(RoundButtonStyle())
+                    .frame(maxWidth: 104)
+                watchedToggle { Label(watched ? "Watched" : "Mark as watched", glyph: "check") }
+                    .buttonStyle(RoundButtonStyle(on: watched))
+                    .frame(maxWidth: 104)
+            }
+        } else {
+            VStack(spacing: 8) {
+                Button(action: chooseVersion) { circle("layers", on: false) }
+                    .buttonStyle(.round)
+                    .accessibilityLabel("Choose a version")
+                watchedToggle { circle("check", on: watched) }
+                    .buttonStyle(.round)
+            }
+        }
+    }
+
+    /// A state, spoken as one: "Watched, toggle, on".
+    private func watchedToggle<Words: View>(@ViewBuilder label: () -> Words) -> some View {
+        Button(action: toggleWatched, label: label)
+            .accessibilityLabel("Watched")
+            .accessibilityAddTraits(.isToggle)
+            .accessibilityValue(watched ? "On" : "Off")
+    }
+
+    private func circle(_ glyph: String, on: Bool) -> some View {
+        Glyph(glyph)
+            .foregroundStyle(Theme.Palette.text)
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
+            .overlay(Circle().strokeBorder(on ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: 1))
+    }
+}
+
 private struct EpisodeRow: View {
     let episode: Episode
     /// The play target: its card holds the time left.
@@ -204,7 +258,7 @@ private struct EpisodeRow: View {
         .buttonStyle(CardButtonStyle(radius: Theme.Radius.card, scale: Theme.Focus.scaleTile))
         .accessibilityElement(children: .combine)
         .accessibilityValue(episode.watched ? "Watched" : "")
-        .accessibilityHint("Plays this episode")
+        .accessibilityHint(airsLater(episode.released) ? "" : "Plays this episode")
     }
 
     /// The still with the number at its bottom left, a Watched chip at its

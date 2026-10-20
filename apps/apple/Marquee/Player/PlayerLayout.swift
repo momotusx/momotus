@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// Where the phone player puts its parts, as Android settled after three
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
@@ -56,6 +57,19 @@ enum PlayerLayout {
     }
 
     static let cannotOpenHeadline = "This version could not be opened"
+
+    /// AirPlay may take a stream only when another device can reach it: never
+    /// the core's loopback server (review apple-journey P2-5).
+    static func allowsExternalPlayback(_ url: URL) -> Bool {
+        guard let host = url.host()?.lowercased() else { return false }
+        return !(host == "localhost" || host == "::1" || host == "[::1]" || host.hasPrefix("127."))
+    }
+
+    /// Picture in Picture shows the picture only: an addon's subtitles are
+    /// drawn over the page, which has left. Said once per film.
+    static func pipSubtitleNote(addonSubtitle: Bool, told: Bool) -> String? {
+        addonSubtitle && !told ? "Addon subtitles do not show in Picture in Picture" : nil
+    }
 
     /// The core took a Try again: `retries` rose within one view. The first
     /// snapshot of a view counts nothing (review r2 P3-6).

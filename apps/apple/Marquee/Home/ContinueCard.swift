@@ -18,7 +18,7 @@ struct ContinueCard: View {
             CardCaption(name: tile.name, info: caption).frame(width: size.width)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(tile.name), \(caption)")
+        .accessibilityLabel("\(tile.name), \(spokenCodes(caption))")
     }
 
     private var size: CGSize {

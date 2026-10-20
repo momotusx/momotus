@@ -29,6 +29,15 @@ import Testing
     #expect(spokenEpisode(season: 2, episode: 3) == "Season 2, Episode 3")
 }
 
+@Test func episodeCodesInTheCoreLinesAreSaidAsWords() {
+    #expect(spokenCodes("S2:E3 \u{B7} 36 min left") == "Season 2, Episode 3 \u{B7} 36 min left")
+    #expect(spokenCodes("Resume S10:E12") == "Resume Season 10, Episode 12")
+    #expect(spokenCodes("Next: S1:E2") == "Next: Season 1, Episode 2")
+    // Nothing to change in a line with no code, or one inside a word.
+    #expect(spokenCodes("36 min left") == "36 min left")
+    #expect(spokenCodes("MS1:E2") == "MS1:E2")
+}
+
 @Test func aLongSynopsisSplitsIntoWholeSentencesWithNothingLost() {
     let text = "One sentence here. Another one follows! A third asks why? " + String(repeating: "word ", count: 80) + "end."
     let blocks = readingBlocks(text, size: 50)
@@ -53,4 +62,14 @@ import Testing
     #expect(dayHeading("2026-11-01", today: "2026-11-01", viewer: newYork, locale: english) == "Today")
     let tokyo = try #require(TimeZone(identifier: "Asia/Tokyo"))
     #expect(dayHeading("2026-10-20", today: "2026-10-21", viewer: tokyo, locale: english) == "Yesterday")
+}
+
+@Test func anEpisodeStillToAirCannotBePlayed() throws {
+    let now = try #require(releaseDate("2026-10-20"))
+    // Its day is after today: "Airs Oct 21", not a button.
+    #expect(airsLater("2026-10-21", now: now))
+    // Out today or before, or with no date, it plays.
+    #expect(!airsLater("2026-10-20", now: now))
+    #expect(!airsLater("2026-09-01", now: now))
+    #expect(!airsLater(nil, now: now))
 }

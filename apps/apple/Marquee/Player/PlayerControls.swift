@@ -178,6 +178,8 @@ struct PlayerControls: View {
                 }
                 .tint(.white)
                 .accessibilityLabel("Position")
+                // As on TV: "12:04 of 45:10", not raw seconds.
+                .accessibilityValue("\(timecode(scrub ?? model.position)) of \(timecode(model.duration))")
                 Text("-" + timecode(max(0, model.duration - (scrub ?? model.position)))).monospacedDigit()
             }
             .font(.text(Theme.type.callout, relativeTo: .callout))

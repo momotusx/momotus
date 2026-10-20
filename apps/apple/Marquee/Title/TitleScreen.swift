@@ -235,12 +235,17 @@ struct TitleScreen: View {
                 PlayBlock(
                     target: model.header?.playTarget, runtime: details.runtime, versions: versions?.snapshot,
                     failure: versions?.failure, wide: metrics.wide,
-                    play: {
-                        if let route = versions?.play() {
+                    play: { fromStart in
+                        if var route = versions?.play() {
+                            route.fromStart = fromStart
                             playing = route
                         } else {
                             // Sources still answering: play the pick once it settles.
-                            Task { playing = await versions?.settledPick() }
+                            Task {
+                                var route = await versions?.settledPick()
+                                route?.fromStart = fromStart
+                                playing = route
+                            }
                         }
                     },
                     addSource: { showAddons = true }, addAccount: { showAccount = true }, focus: $primaryFocused)
@@ -473,12 +478,14 @@ private struct PlayBlock: View {
     let versions: VersionsSnapshot?
     let failure: String?
     let wide: Bool
-    let play: () -> Void
+    /// Plays the pick; true starts over from the beginning.
+    let play: (_ fromStart: Bool) -> Void
     let addSource: () -> Void
     /// Versions that play only through a streaming service account (stream choice 3.11).
     let addAccount: () -> Void
     /// TV: the page enters on this block's primary.
     var focus: FocusState<Bool>.Binding
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -497,20 +504,33 @@ private struct PlayBlock: View {
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .focused(focus)
             } else {
-                Button(action: play) {
-                    HStack(spacing: 10) {
-                        Glyph("play-fill")
-                        Text(target?.label ?? "Play")
-                        if let resume = target?.resumeMs, resume > 0 {
-                            Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(Font.Weight.regular.legible).opacity(0.8)
+                // Start over beside Resume, under it at the accessibility sizes.
+                let row = wide || !typeSize.isAccessibilitySize ? AnyLayout(HStackLayout(spacing: 10)) : AnyLayout(VStackLayout(spacing: 10))
+                row {
+                    Button { play(false) } label: {
+                        HStack(spacing: 10) {
+                            Glyph("play-fill")
+                            Text(target?.label ?? "Play")
+                            if let resume = target?.resumeMs, resume > 0 {
+                                Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(Font.Weight.regular.legible).opacity(0.8)
+                            }
                         }
+                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
                     }
-                    .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .focused(focus)
+                    // The reason shows right under it.
+                    .disabled(failure != nil)
+                    .accessibilityLabel(playWords)
+                    if let resume = target?.resumeMs, resume > 0 {
+                        Button { play(true) } label: {
+                            Label("Start over", glyph: "rotate-ccw")
+                                .frame(maxWidth: wide || !typeSize.isAccessibilitySize ? nil : .infinity)
+                        }
+                        .buttonStyle(PillButtonStyle())
+                        .disabled(failure != nil)
+                    }
                 }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .focused(focus)
-                // The reason shows right under it.
-                .disabled(failure != nil)
             }
             Group {
                 if let failure {
@@ -524,6 +544,13 @@ private struct PlayBlock: View {
             .font(.text(Theme.type.callout, relativeTo: .callout))
             .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// "Resume Season 2, Episode 3, 36 min left": the code said as words.
+    private var playWords: String {
+        let label = spokenCodes(target?.label ?? "Play")
+        guard let resume = target?.resumeMs, resume > 0 else { return label }
+        return "\(label), \(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime))"
     }
 }
 

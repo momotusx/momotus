@@ -85,14 +85,19 @@ struct DiscoverScreen: View {
         case .loading:
             ProgressView().controlSize(.large).frame(maxWidth: .infinity).padding(Theme.Space.l)
         case .failed(let reason):
-            StateLine(symbol: "triangle-alert", text: "This catalog did not answer: \(reason)", action: ("Try again", {
+            StateLine(symbol: "triangle-alert", text: "\(catalogName(s)) did not answer: \(reason)", action: ("Try again", {
                 discover.command(["type": "loadMore"])
             }))
         case .end where s.items.isEmpty && !s.kinds.isEmpty:
-            StateLine(symbol: "inbox", text: "Nothing in this catalog.")
+            StateLine(symbol: "inbox", text: "Nothing in \(catalogName(s)) for this choice.")
         case .ready, .end:
             EmptyView()
         }
+    }
+
+    /// The open catalog by its name, as the web and Android say it.
+    private func catalogName(_ s: DiscoverSnapshot) -> String {
+        s.catalogs.first { $0.id == s.catalog }?.name ?? "this catalog"
     }
 
     private func select(_ fields: [String: any Sendable]) {

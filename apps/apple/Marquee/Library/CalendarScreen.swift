@@ -110,11 +110,17 @@ private struct DaySection: View {
 private struct CalendarRow: View {
     let item: CalendarItem
     @State private var hovered = false
+    /// The episode still, the size of an episode row's on TV beside its larger text.
+    #if os(tvOS)
+    private static let still = CGSize(width: 224, height: 126)
+    #else
+    private static let still = CGSize(width: 128, height: 72)
+    #endif
 
     var body: some View {
         HStack(spacing: Theme.Space.s) {
             ArtImage(url: item.still ?? item.poster, maxPixels: 480, fallback: item.name)
-                .frame(width: 128, height: 72)
+                .frame(width: Self.still.width, height: Self.still.height)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.name)
@@ -124,6 +130,7 @@ private struct CalendarRow: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                     .lineLimit(2)
+                    .accessibilityLabel(spokenCodes(episode))
             }
             Spacer(minLength: 0)
             if item.watched {

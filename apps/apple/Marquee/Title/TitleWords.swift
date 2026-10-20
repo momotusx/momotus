@@ -88,6 +88,14 @@ func spokenEpisode(season: Int, episode: Int) -> String {
     "Season \(season), Episode \(episode)"
 }
 
+/// Every "S2:E3" in a line the core wrote, said as words (a Continue Watching
+/// caption, a Calendar row, "Resume S2:E3").
+func spokenCodes(_ text: String) -> String {
+    text.replacing(/\bS(\d+):E(\d+)/) { match in
+        spokenEpisode(season: Int(match.1) ?? 0, episode: Int(match.2) ?? 0)
+    }
+}
+
 /// What Resume says after its label: "36 min left" from what the file has
 /// left (Continue Watching's figure), else from the runtime when it is known,
 /// else the position ("from 21:00").
@@ -101,4 +109,10 @@ func resumeText(resumeMs: Int64, leftMs: Int64? = nil, runtime: String?) -> Stri
 /// Whole minutes rounded up, as the core words Continue Watching.
 func minutesLeft(ms: Int64) -> String {
     "\(max(1, (ms + 59_999) / 60_000)) min left"
+}
+
+/// An episode whose release day is still to come: it shows "Airs Oct 21" and
+/// cannot be played yet.
+func airsLater(_ released: String?, now: Date = .now) -> Bool {
+    releaseDate(released).map { $0 > now } ?? false
 }

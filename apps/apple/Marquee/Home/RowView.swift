@@ -4,8 +4,6 @@ import SwiftUI
 struct RowView: View {
     let row: HomeRow
     let retry: () -> Void
-    /// Called when a tile is opened (Search remembers the query then).
-    var onOpen: (() -> Void)?
     /// TV: this row is Home's start; its first tile is the scope's default focus.
     var startScope: Namespace.ID?
     @Environment(\.metrics) private var metrics
@@ -17,7 +15,7 @@ struct RowView: View {
             case .loading, .slow:
                 SkeletonStrip()
             case .empty:
-                StateLine(symbol: "inbox", text: "Nothing in this catalog right now.")
+                StateLine(symbol: "inbox", text: "\(row.source) has nothing in this catalog right now.")
                     .padding(.horizontal, metrics.gutter)
             case .failed(let reason):
                 // Secondary: the page's primary is the hero's Play, or the one Try again when nothing answered.
@@ -50,7 +48,6 @@ struct RowView: View {
                         }
                     }
                     .buttonStyle(CardButtonStyle())
-                    .simultaneousGesture(TapGesture().onEnded { onOpen?() })
                     // TV: Home's start row enters on its first tile.
                     .modifier(StartFocus(scope: key == tiles.first?.key ? startScope : nil))
                 }

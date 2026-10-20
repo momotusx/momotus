@@ -88,6 +88,10 @@ final class NowPlaying {
         if duration > 0 { info[MPMediaItemPropertyPlaybackDuration] = duration }
         if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        #if os(macOS)
+        // The Mac routes the media keys by this, not by the rate.
+        MPNowPlayingInfoCenter.default().playbackState = rate > 0 ? .playing : .paused
+        #endif
     }
 
     /// The poster, once, for the Lock Screen.
@@ -109,5 +113,8 @@ final class NowPlaying {
         for (command, token) in targets { command.removeTarget(token) }
         targets = []
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        #if os(macOS)
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        #endif
     }
 }

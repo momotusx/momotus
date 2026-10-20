@@ -185,6 +185,9 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(sourceStart(stoppedAt: nil, resumeMs: 30_000) == 30)
     #expect(sourceStart(stoppedAt: 312.5, resumeMs: 30_000) == 312.5)
     #expect(sourceStart(stoppedAt: nil, resumeMs: nil) == 0)
+    // Start over begins at 0; a failover after it still resumes where the last source stopped.
+    #expect(sourceStart(stoppedAt: nil, resumeMs: 30_000, fromStart: true) == 0)
+    #expect(sourceStart(stoppedAt: 312.5, resumeMs: 30_000, fromStart: true) == 312.5)
 }
 
 @Test func onlyALandedStartSeekHandsOver() {
@@ -567,4 +570,21 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     let values = try torrents.resourceValues(forKeys: [.isExcludedFromBackupKey, .isDirectoryKey])
     #expect(values.isDirectory == true)
     #expect(values.isExcludedFromBackup == true)
+}
+
+@Test func airPlayIsNotHandedALoopbackStream() throws {
+    // The core serves every stream on 127.0.0.1: a receiver would ask itself for it.
+    #expect(!PlayerLayout.allowsExternalPlayback(try #require(URL(string: "http://127.0.0.1:52011/s/token/Sintel.mp4"))))
+    #expect(!PlayerLayout.allowsExternalPlayback(try #require(URL(string: "http://localhost:8080/v.mp4"))))
+    #expect(!PlayerLayout.allowsExternalPlayback(try #require(URL(string: "http://[::1]:8080/v.mp4"))))
+    // A stream another device can reach may go to AirPlay.
+    #expect(PlayerLayout.allowsExternalPlayback(try #require(URL(string: "https://cdn.example.org/v.m3u8"))))
+}
+
+@Test func pictureInPictureSaysOnceThatAddonSubtitlesStayBehind() {
+    // An addon's track is drawn over the page, which leaves as the window floats.
+    #expect(PlayerLayout.pipSubtitleNote(addonSubtitle: true, told: false) == "Addon subtitles do not show in Picture in Picture")
+    // Once per film, and nothing to say with no addon track on.
+    #expect(PlayerLayout.pipSubtitleNote(addonSubtitle: true, told: true) == nil)
+    #expect(PlayerLayout.pipSubtitleNote(addonSubtitle: false, told: false) == nil)
 }

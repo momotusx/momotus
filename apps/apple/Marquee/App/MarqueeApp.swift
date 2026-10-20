@@ -37,6 +37,10 @@ struct MarqueeApp: App {
         #if DEBUG && os(macOS)
         DebugHooks.listenForSnapshots()
         #endif
+        #if os(macOS)
+        // One window on one core: no tab bar, whose "+" would open a second copy.
+        NSWindow.allowsAutomaticWindowTabbing = false
+        #endif
         #if DEBUG
         // Said at launch, before anything can play: a walk checks it first.
         coreLog.notice("debug: players start \(DebugHooks.mute ? "muted" : "with sound", privacy: .public)")
@@ -80,6 +84,7 @@ struct MarqueeApp: App {
         #if os(macOS)
         .defaultSize(width: 1440, height: 900)
         .windowToolbarStyle(.unified(showsTitle: false))
+        .commands { AppCommands() }
         #endif
     }
 }
