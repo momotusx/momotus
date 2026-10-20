@@ -2,7 +2,8 @@
 //! the disk while readers, writers and pauses go on, and the bitfield on
 //! disk never claims a piece whose bytes are gone. The swarm is a 37,000
 //! byte `.nfo` then a 5 MiB video in 256 KiB pieces, so every piece edge in
-//! the video sits 3,960 bytes into a 4 KiB block.
+//! the video sits 3,960 bytes into a 4 KiB block. The leecher runs as a
+//! window does: upload off, DWH driving.
 
 #![cfg(feature = "test-hooks")]
 
@@ -25,6 +26,9 @@ const FS_BLOCK: u64 = 4096;
 
 struct Leech {
     s: support::Swarm,
+    /// The leecher, upload off; it stops before its folder goes.
+    engine: Engine,
+    root: tempfile::TempDir,
     t: TorrentHandle,
     file: usize,
     _seeders: Vec<support::Seeder>,
@@ -32,12 +36,18 @@ struct Leech {
 
 impl Leech {
     fn engine(&self) -> &Engine {
-        &self.s.leecher
+        &self.engine
     }
 
-    /// The torrent's folder, which every hook of this test is keyed by.
+    /// The leecher's data folder: the torrent's folder and its bitfield.
+    fn root(&self) -> &Path {
+        self.root.path()
+    }
+
+    /// The torrent's folder, which a round's and a stream's holds are
+    /// keyed by.
     fn dir(&self) -> PathBuf {
-        self.s.leech_dir.join(&self.s.info_hash)
+        self.root().join(&self.s.info_hash)
     }
 
     fn movie_path(&self) -> PathBuf {
@@ -126,11 +136,11 @@ impl Leech {
     /// The sync log of the leecher's folder (its bitfield beside the
     /// torrent's folder included) from `from` on.
     fn log(&self, from: usize) -> Vec<Event> {
-        sync_log::under(&self.s.leech_dir).split_off(from)
+        sync_log::under(self.root()).split_off(from)
     }
 
     fn log_len(&self) -> usize {
-        sync_log::under(&self.s.leech_dir).len()
+        sync_log::under(self.root()).len()
     }
 
     /// The movie file's punched ranges from `from` on.
@@ -154,18 +164,17 @@ async fn chosen(seeders: usize) -> Leech {
     }
     let mut peers = vec![s.seeder_addr];
     peers.extend(extra.iter().map(|x| x.addr));
-    let t = s
-        .leecher
-        .add_magnet(&s.info_hash, &[], &peers)
-        .await
-        .unwrap();
-    let file = s
-        .leecher
+    let root = tempfile::tempdir().unwrap();
+    let engine = engine_on(root.path()).await;
+    let t = engine.add_magnet(&s.info_hash, &[], &peers).await.unwrap();
+    let file = engine
         .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
         .await
         .unwrap();
     Leech {
         s,
+        engine,
+        root,
         t,
         file,
         _seeders: extra,
@@ -359,7 +368,7 @@ async fn a_late_block_during_a_round_is_dropped() {
 async fn the_unclaim_is_synced_before_the_punch() {
     let l = std::sync::Arc::new(leeched().await);
     let mark = l.log_len();
-    let hold = hold(&l.s.leech_dir, Point::Fsync);
+    let hold = hold(l.root(), Point::Fsync);
     let round = tokio::spawn({
         let l = l.clone();
         async move { l.evict(&[8]).await }
@@ -380,42 +389,143 @@ async fn the_unclaim_is_synced_before_the_punch() {
     );
 }
 
-/// f. A crash at each step (the folder copied while the round waits
-/// there) leaves a bitfield whose every claimed piece has its bytes.
+/// The child of test f: `<step> <folder> <seeder> <info hash>`.
+const CRASH: &str = "MQ_WINDOW_CRASH";
+
+/// f. A process killed at each step of a round. The child (this binary,
+/// `crash_child`) leeches the video, holds a round of pieces 3, 4, 5 and 9
+/// at the step, writes the bitfield its last fsync made durable, and waits
+/// to be killed. Then every piece claimed by the bitfield on disk (what a
+/// killed process leaves) and by the durable one (what a power cut leaves)
+/// has its bytes, and a relaunch reads every claimed piece back.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_crash_at_each_step_leaves_only_true_claims() {
-    for point in [Point::Gated, Point::Acked, Point::Punched] {
-        let l = std::sync::Arc::new(leeched().await);
-        let hold = hold(&l.dir(), point);
-        let round = tokio::spawn({
-            let l = l.clone();
-            async move { l.evict(&[3, 4, 5, 9]).await }
-        });
-        reached(&hold).await;
-        let copy = tempfile::tempdir().unwrap();
-        let have_path = l.s.leech_dir.join(format!("{}.have", l.s.info_hash));
-        let have = std::fs::read(&have_path).unwrap();
-        let nfo = std::fs::read(l.dir().join("a.nfo")).unwrap_or_default();
-        let movie = std::fs::read(l.movie_path()).unwrap();
-        std::fs::write(copy.path().join("have"), &have).unwrap();
-        hold.open();
-        within(30, round).await.unwrap();
-        let mut disk = nfo;
-        disk.resize(NFO as usize, 0);
-        disk.extend(movie);
-        let mut source = vec![b'n'; NFO as usize];
-        source.extend(&l.s.movie);
-        let claimed: Vec<u32> = (0..21).filter(|&p| claims(&have, p)).collect();
-        assert!(!claimed.is_empty(), "{point:?}: the bitfield claims pieces");
-        for p in claimed {
-            let a = u64::from(p) * PIECE;
-            let b = (a + PIECE).min(source.len() as u64);
+async fn a_killed_round_leaves_only_true_claims() {
+    for step in ["gated", "acked", "punched"] {
+        let s = support::swarm(true).await;
+        let root = tempfile::tempdir().unwrap();
+        let ready = root.path().join("ready");
+        let spec = format!(
+            "{step} {} {} {}",
+            root.path().display(),
+            s.seeder_addr,
+            s.info_hash
+        );
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "crash_child", "--nocapture"])
+            .env(CRASH, spec)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let waited = Instant::now();
+        while !ready.exists() {
             assert!(
-                disk.get(a as usize..b as usize) == Some(&source[a as usize..b as usize]),
-                "{point:?}: piece {p} claimed over missing bytes"
+                waited.elapsed() < Duration::from_secs(90),
+                "{step}: child ready"
             );
+            assert!(
+                child.try_wait().unwrap().is_none(),
+                "{step}: the child died"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        child.kill().unwrap();
+        child.wait().unwrap();
+
+        let folder = root.path().join(&s.info_hash);
+        let mut disk = std::fs::read(folder.join("a.nfo")).unwrap();
+        disk.extend(std::fs::read(folder.join("movie.mkv")).unwrap());
+        let mut source = vec![b'n'; NFO as usize];
+        source.extend(&s.movie);
+        let have = std::fs::read(root.path().join(format!("{}.have", s.info_hash))).unwrap();
+        let durable = std::fs::read(root.path().join("durable.have")).unwrap();
+        for (view, bits) in [("killed", &have), ("power cut", &durable)] {
+            let claimed: Vec<u32> = (0..21).filter(|&p| claims(bits, p)).collect();
+            assert!(claimed.len() >= 17, "{step} {view}: {claimed:?}");
+            for p in claimed {
+                let a = u64::from(p) * PIECE;
+                let b = (a + PIECE).min(source.len() as u64);
+                assert!(
+                    disk.get(a as usize..b as usize) == Some(&source[a as usize..b as usize]),
+                    "{step} {view}: piece {p} claimed over missing bytes"
+                );
+            }
+        }
+        // The relaunch, through its fast resume.
+        let engine = engine_on(root.path()).await;
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let file = engine
+            .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+            .await
+            .unwrap();
+        for p in (1..21).filter(|&p| claims(&have, p)) {
+            let a = (u64::from(p) * PIECE - NFO) as usize;
+            let b = ((u64::from(p) + 1) * PIECE - NFO).min(s.movie.len() as u64) as usize;
+            let reader = engine.open_reader(t, "default", file).await.unwrap();
+            let mut range = reader.range(a as u64, Some(b as u64)).await.unwrap();
+            within(30, range.ready()).await.unwrap();
+            let mut got = Vec::new();
+            within(30, range.read_to_end(&mut got)).await.unwrap();
+            assert!(got == s.movie[a..b], "{step}: piece {p} after the relaunch");
         }
     }
+}
+
+/// The child of test f; a passing no-op in a normal run.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn crash_child() {
+    let Ok(spec) = std::env::var(CRASH) else {
+        return;
+    };
+    let parts: Vec<&str> = spec.split(' ').collect();
+    let (step, root, seeder, hash) = (parts[0], Path::new(parts[1]), parts[2], parts[3]);
+    let engine = engine_on(root).await;
+    let t = engine
+        .add_magnet(hash, &[], &[seeder.parse().unwrap()])
+        .await
+        .unwrap();
+    let file = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let len = engine.files(t).unwrap()[file].len;
+    let reader = engine.open_reader(t, "default", file).await.unwrap();
+    let mut range = reader.range(0, Some(len)).await.unwrap();
+    range.ready().await.unwrap();
+    range.read_to_end(&mut Vec::new()).await.unwrap();
+    until("every piece verified", || async {
+        let s = engine.stats(t).await.unwrap();
+        s.pieces_total > 0 && s.pieces_have == s.pieces_total
+    })
+    .await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let point = match step {
+        "gated" => Point::Gated,
+        "acked" => Point::Acked,
+        _ => Point::Punched,
+    };
+    let hold = sync_log::hold(root, point);
+    let round = tokio::spawn({
+        let engine = engine.clone();
+        async move { engine.evict_pieces(t, &[3, 4, 5, 9]).await }
+    });
+    reached(&hold).await;
+    let have_path = root.join(format!("{hash}.have"));
+    let durable = sync_log::under(root)
+        .into_iter()
+        .filter_map(|e| match e {
+            Event::HaveSynced { path, pieces } if path == have_path => Some(pieces),
+            _ => None,
+        })
+        .next_back()
+        .expect("a synced bitfield");
+    std::fs::write(root.join("durable.have"), durable).unwrap();
+    std::fs::write(root.join("ready"), b"").unwrap();
+    // Killed here.
+    let _ = round.await;
 }
 
 /// g. Each flusher failure (data sync, bitfield write, fsync): nothing is
@@ -427,7 +537,7 @@ async fn a_flusher_failure_keeps_the_piece_and_wakes_its_reader() {
         let l = std::sync::Arc::new(leeched().await);
         let mark = l.log_len();
         let hold = hold(&l.dir(), Point::Gated);
-        sync_log::fail(&l.s.leech_dir, fail, 1);
+        sync_log::fail(l.root(), fail, 1);
         let round = tokio::spawn({
             let l = l.clone();
             async move { l.evict(&[8]).await }
@@ -486,10 +596,11 @@ async fn an_orphan_is_punched_and_fetched_again() {
     assert!(l.piece_matches(8).await);
 }
 
-/// j. A storage that refuses punches: the probe says no, and a round
-/// keeps every piece.
+/// j. A punch that fails (here after freeing its first block, as neither
+/// call promises all or nothing): the probe says no, and a round's pieces
+/// leave unclaimed and are fetched again, never claimed over a hole.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_storage_that_refuses_punches_keeps_every_piece() {
+async fn a_failed_punch_never_claims_its_pieces_again() {
     let ok = tempfile::tempdir().unwrap();
     assert!(mq_engine::librqbit::punch_supported(ok.path()));
     let refused = tempfile::tempdir().unwrap();
@@ -497,12 +608,16 @@ async fn a_storage_that_refuses_punches_keeps_every_piece() {
     assert!(!mq_engine::librqbit::punch_supported(refused.path()));
 
     let l = leeched().await;
-    sync_log::fail(&l.s.leech_dir, Fail::Punch, usize::MAX);
+    sync_log::fail(l.root(), Fail::Punch, usize::MAX);
     let r = l.evict(&[5, 6]).await;
-    assert_eq!((r.kept, r.evicted), (vec![5, 6], vec![]));
+    assert_eq!((r.kept, r.evicted), (vec![], vec![5, 6]));
     assert!(r.error.is_some() && r.punched_bytes == 0);
-    assert_eq!(l.have().await.0, 21);
-    assert!(l.piece_matches(5).await);
+    assert_eq!(
+        l.have().await.0,
+        19,
+        "pieces 5 and 6 claimed after the punch"
+    );
+    assert!(l.piece_matches(5).await && l.piece_matches(6).await);
 }
 
 /// k. Unaligned piece edges: a block shared with a piece that is not gated
@@ -558,7 +673,7 @@ async fn an_orphan_is_never_claimed_over_a_hole() {
 
     // Behind the read above, so its readahead left it alone.
     l.request(3, 0..8).await;
-    sync_log::fail(&l.s.leech_dir, Fail::Punch, 1);
+    sync_log::fail(l.root(), Fail::Punch, 1);
     let r = l.evict(&[3]).await;
     assert_eq!(r.evicted, [3]);
     assert!(r.error.is_some() && r.punched_bytes == 0);
@@ -661,15 +776,109 @@ async fn a_sparse_folder_starts_with_nothing_claimed() {
     assert!(bits.iter().all(|b| *b == 0), "{bits:?}");
 }
 
+/// A round needs upload off and DWH driving (plan 2.3): otherwise it gates
+/// nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_round_needs_upload_off_and_drive_mode() {
+    let s = support::swarm(true).await;
+    let stock = tempfile::tempdir().unwrap();
+    let stock = engine_with(stock.path(), false).await;
+    for engine in [&s.leecher, &stock] {
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let file = engine
+            .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+            .await
+            .unwrap();
+        let reader = engine.open_reader(t, "default", file).await.unwrap();
+        let mut range = reader.range(0, Some(PIECE)).await.unwrap();
+        within(30, range.ready()).await.unwrap();
+        let have = engine.stats(t).await.unwrap().pieces_have;
+        let r = engine.evict_pieces(t, &[0, 1]).await;
+        assert!(r.is_err(), "a round ran: {r:?}");
+        assert_eq!(engine.stats(t).await.unwrap().pieces_have, have);
+    }
+}
+
+/// A piece verified just before a round takes it: its `PieceChecked`
+/// reaches the scheduler before the round's `PieceEvicted`, so the piece
+/// is fetched again when read (review b P2-1).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_piece_verified_just_before_a_round_is_fetched_again() {
+    let l = std::sync::Arc::new(chosen(1).await);
+    let checked = hold(&l.dir(), Point::Checked);
+    tokio::spawn({
+        let l = l.clone();
+        async move { l.request(8, 0..16).await }
+    });
+    reached(&checked).await;
+    assert_eq!(l.evict(&[8]).await.evicted, [8]);
+    checked.open();
+    assert!(l.piece_matches(8).await, "piece 8 fetched again");
+}
+
+/// A round dropped mid-way (its task aborted while it waits for the
+/// bitfield's fsync) releases its pieces: a read gets them again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_dropped_round_releases_its_pieces() {
+    let l = std::sync::Arc::new(leeched().await);
+    let fsync = hold(l.root(), Point::Fsync);
+    let gated = hold(&l.dir(), Point::Gated);
+    let round = tokio::spawn({
+        let l = l.clone();
+        async move { l.evict(&[5, 9]).await }
+    });
+    reached(&gated).await;
+    round.abort();
+    gated.open();
+    until("the round dropped", || async { round.is_finished() }).await;
+    fsync.open();
+    assert_eq!(l.have().await.0, 19, "pieces 5 and 9 claimed again");
+    assert!(l.piece_matches(5).await && l.piece_matches(9).await);
+}
+
+/// A pause that skips the keeper (as librqbit's own on a fatal error)
+/// during a round releases the gated pieces and tells the scheduler: after
+/// the resume they read back.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_pause_mid_round_releases_the_gated_pieces() {
+    let l = std::sync::Arc::new(leeched().await);
+    let gated = hold(&l.dir(), Point::Gated);
+    let round = tokio::spawn({
+        let l = l.clone();
+        async move { l.engine().evict_pieces(l.t, &[5, 9]).await }
+    });
+    reached(&gated).await;
+    test_hooks::pause_skipping_the_keeper(l.engine(), l.t).await;
+    gated.open();
+    let _ = within(30, round).await.unwrap();
+    assert!(l.piece_matches(5).await && l.piece_matches(9).await);
+}
+
 async fn engine_on(dir: &Path) -> Engine {
+    engine_with(dir, true).await
+}
+
+/// An engine on `dir` with upload off, DWH driving or not; the one before
+/// on `dir` (a killed child) may still hold the folder for a moment.
+async fn engine_with(dir: &Path, dwh: bool) -> Engine {
     let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
-    Engine::start(mq_engine::EngineConfig {
+    let config = || mq_engine::EngineConfig {
         discovery: false,
+        upload: false,
+        dwh,
         ..mq_engine::EngineConfig::new(
             dir,
             http.torrent_scope(&[std::net::Ipv4Addr::LOCALHOST.into()]),
         )
-    })
-    .await
-    .unwrap()
+    };
+    for _ in 0..40 {
+        if let Ok(engine) = Engine::start(config()).await {
+            return engine;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Engine::start(config()).await.unwrap()
 }

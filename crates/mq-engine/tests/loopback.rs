@@ -564,6 +564,12 @@ async fn a_contradicted_have_bitfield_is_cleared_at_once() {
     let forged = dir.path().join("forged");
     std::fs::write(&forged, vec![0xff; (LEN / PIECE / 8) as usize]).unwrap();
     std::fs::rename(&forged, &have).unwrap();
+    // Dense enough that the start runs the full check (a sparse folder
+    // with no bitfield would store an empty one at once).
+    let data = find(dir.path(), "big.mkv").expect("the data file");
+    let file = std::fs::OpenOptions::new().write(true).open(&data).unwrap();
+    std::os::unix::fs::FileExt::write_all_at(&file, &vec![0xab; 40 << 20], 0).unwrap();
+    drop(file);
     let engine = engine_on(dir.path()).await;
     let t = engine.add_torrent_bytes(torrent, &[]).await.unwrap();
     engine

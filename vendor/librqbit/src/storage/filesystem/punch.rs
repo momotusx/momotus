@@ -23,15 +23,18 @@ pub(crate) fn punch_file(
     len: u64,
 ) -> io::Result<Range<u64>> {
     let _ = path;
-    #[cfg(feature = "sync-log")]
-    if crate::bitv::sync_log::failing(path, crate::bitv::sync_log::Fail::Punch) {
-        return Err(io::Error::from(io::ErrorKind::Unsupported));
-    }
     let block = block_size(file)?;
     let start = offset.div_ceil(block) * block;
     let end = (offset + len) / block * block;
     if end <= start {
         return Ok(start..start);
+    }
+    // A test's failure punches the first block, then fails: neither call
+    // promises all or nothing.
+    #[cfg(feature = "sync-log")]
+    if crate::bitv::sync_log::failing(path, crate::bitv::sync_log::Fail::Punch) {
+        sys_punch(file, start, block)?;
+        return Err(io::Error::other("injected after one block"));
     }
     sys_punch(file, start, end - start)?;
     #[cfg(feature = "sync-log")]
@@ -65,8 +68,18 @@ fn off(v: u64) -> io::Result<i64> {
     i64::try_from(v).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
 }
 
-#[cfg(target_vendor = "apple")]
+/// The punch, retried while a signal interrupts it.
 fn sys_punch(file: &File, offset: u64, len: u64) -> io::Result<()> {
+    loop {
+        match punch_once(file, offset, len) {
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            r => return r,
+        }
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+fn punch_once(file: &File, offset: u64, len: u64) -> io::Result<()> {
     use std::os::fd::AsRawFd;
     let arg = libc::fpunchhole_t {
         fp_flags: 0,
@@ -82,7 +95,7 @@ fn sys_punch(file: &File, offset: u64, len: u64) -> io::Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn sys_punch(file: &File, offset: u64, len: u64) -> io::Result<()> {
+fn punch_once(file: &File, offset: u64, len: u64) -> io::Result<()> {
     use std::os::fd::AsRawFd;
     let mode = libc::FALLOC_FL_PUNCH_HOLE | libc::FALLOC_FL_KEEP_SIZE;
     // SAFETY: fallocate takes plain values.
@@ -97,7 +110,7 @@ fn sys_punch(file: &File, offset: u64, len: u64) -> io::Result<()> {
 }
 
 #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
-fn sys_punch(_file: &File, _offset: u64, _len: u64) -> io::Result<()> {
+fn punch_once(_file: &File, _offset: u64, _len: u64) -> io::Result<()> {
     Err(io::Error::from(io::ErrorKind::Unsupported))
 }
 

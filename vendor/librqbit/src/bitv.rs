@@ -85,6 +85,8 @@ pub mod sync_log {
         Released,
         /// A bitfield write, before its fsync.
         Fsync,
+        /// A piece just verified, after its claim and `PieceChecked`.
+        Checked,
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -180,6 +182,30 @@ pub mod sync_log {
             .cloned()
             .collect()
     }
+}
+
+/// Marquee fork: the bitfield's fsync, and with `sync-log` its log entry
+/// (the bitfield's bytes), in one call: a flusher that skips the fsync
+/// logs nothing, which the window tests see.
+fn fsync_have(
+    file: &std::fs::File,
+    _path: &Path,
+    _snapshot: &BitSlice<u8, Msb0>,
+) -> std::io::Result<()> {
+    #[cfg(feature = "sync-log")]
+    {
+        sync_log::pass(_path, sync_log::Point::Fsync);
+        if sync_log::failing(_path, sync_log::Fail::HaveFsync) {
+            return Err(std::io::Error::other("injected"));
+        }
+    }
+    file.sync_all()?;
+    #[cfg(feature = "sync-log")]
+    sync_log::push(sync_log::Event::HaveSynced {
+        path: _path.to_owned(),
+        pieces: _snapshot.to_bitvec().into_vec(),
+    });
+    Ok(())
 }
 
 /// A bitfield claiming `claimed` pieces was written to `path`.
@@ -367,14 +393,7 @@ impl DiskBackedBitV {
 
                     if let Err(e) = spawner
                         .block_in_place_with_semaphore(|| {
-                            #[cfg(feature = "sync-log")]
-                            {
-                                sync_log::pass(&filename, sync_log::Point::Fsync);
-                                if sync_log::failing(&filename, sync_log::Fail::HaveFsync) {
-                                    return Err(std::io::Error::other("injected"));
-                                }
-                            }
-                            flushed.sync_all()
+                            fsync_have(&flushed, &filename, &req.snapshot)
                         })
                         .await
                     {
@@ -382,11 +401,6 @@ impl DiskBackedBitV {
                         answer(acks, Err(format!("bitfield fsync: {e}")));
                         continue;
                     }
-                    #[cfg(feature = "sync-log")]
-                    sync_log::push(sync_log::Event::HaveSynced {
-                        path: filename.clone(),
-                        pieces: req.snapshot.as_raw_slice().to_vec(),
-                    });
                     answer(acks, Ok(()));
                 }
 

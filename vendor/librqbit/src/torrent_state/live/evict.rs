@@ -19,10 +19,17 @@
 //! A partly written piece (an orphan) gets every chunk bit in step 1 and
 //! skips step 2: it was never claimed.
 //!
-//! Every exit after step 1 leaves a piece in one of two states. No byte of
-//! it was punched: a verified piece is claimed again and its waiting
-//! streams are woken. Otherwise, and for every orphan: bits cleared,
-//! queued, `PieceEvicted`.
+//! Every exit after step 1 leaves a piece in one of two states. No punch
+//! was tried on its bytes (the flusher failed, or no whole block lies in
+//! them): a verified piece is claimed again and its waiting streams are
+//! woken. Otherwise, a failed punch included (it may have freed part of its
+//! range), and for every orphan: bits cleared, queued, `PieceEvicted`. A
+//! round that stops early (its future dropped, a panic, a failed release)
+//! takes the second exit for every gated piece, through a guard.
+//!
+//! Preconditions: upload off (the fork then sends no BITFIELD or HAVE, and
+//! serves no piece a round could punch under a peer's read) and drive mode
+//! (librqbit's own picker could reserve a gated piece).
 
 use std::ops::Range;
 use std::sync::atomic::Ordering;
@@ -59,6 +66,10 @@ impl TorrentStateLive {
     /// One eviction round over `pieces` (2.5). The caller keeps rounds
     /// and pauses apart.
     pub async fn evict_pieces(&self, pieces: &[u32]) -> anyhow::Result<Evicted> {
+        anyhow::ensure!(
+            self.shared.options.disable_upload() && self.ext_drives(),
+            "eviction needs upload off and drive mode"
+        );
         let mut out = Evicted::default();
         let (gated, ack) = {
             let mut g = self.lock_write("evict_gate");
@@ -92,6 +103,10 @@ impl TorrentStateLive {
         if gated.is_empty() {
             return Ok(out);
         }
+        let mut guard = Abandoned {
+            live: self,
+            pieces: gated.iter().map(|g| g.0).collect(),
+        };
         // The torrent needs these pieces again: a finished one dropped its
         // seeders as not needed.
         self.reconnect_all_not_needed_peers();
@@ -130,6 +145,7 @@ impl TorrentStateLive {
                     out.evicted.push(idx.get());
                 }
             }
+            guard.pieces.clear();
         }
         self.hook(Point::Released);
         Ok(out)
@@ -175,8 +191,11 @@ impl TorrentStateLive {
                     freed.push((file, r));
                 }
                 Ok(_) => {}
+                // A failed call may have freed part of its range: its
+                // pieces leave as if punched, never claimed again.
                 Err(e) => {
                     out.error.get_or_insert_with(|| format!("punch: {e:#}"));
+                    freed.push((file, a..b));
                 }
             }
         }
@@ -202,6 +221,33 @@ impl TorrentStateLive {
 
     #[cfg(not(feature = "sync-log"))]
     fn hook(&self, _point: Point) {}
+}
+
+/// The second exit for every piece still listed when dropped: a round that
+/// stops before its release (future dropped, panic, failed release). It
+/// never claims a piece again, since a punch may have touched it.
+struct Abandoned<'a> {
+    live: &'a TorrentStateLive,
+    pieces: Vec<ValidPieceIndex>,
+}
+
+impl Drop for Abandoned<'_> {
+    fn drop(&mut self) {
+        if self.pieces.is_empty() {
+            return;
+        }
+        let mut g = self.live.lock_write("evict_abandoned");
+        let Ok(pt) = g.get_pieces_mut() else {
+            // Paused or failed: the pause released them.
+            return;
+        };
+        let ct = pt.chunks_mut();
+        for &idx in &self.pieces {
+            ct.release_evicted(idx);
+            self.live
+                .ext_emit(ExtEvent::PieceEvicted { piece: idx.get() });
+        }
+    }
 }
 
 #[cfg(feature = "sync-log")]

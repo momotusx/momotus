@@ -91,3 +91,10 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
 - src/torrent_state/initializing.rs: with no bitfield and files holding
   under an eighth of their selected length, nothing is claimed and no full
   check runs.
+- src/torrent_state/live/evict.rs, src/torrent_state/live/mod.rs,
+  src/chunk_tracker.rs: a round refuses with upload on or out of drive
+  mode; a failed punch releases its pieces unclaimed; a round that stops
+  early, and a pause that finds a gated piece, release it unclaimed;
+  `PieceChecked(ok)`, the per-file count and `have_bytes` move under the
+  lock that sets `have`.
+- src/storage/filesystem/punch.rs: the punch is retried on EINTR.

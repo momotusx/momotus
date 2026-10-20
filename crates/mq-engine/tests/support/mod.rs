@@ -16,9 +16,7 @@ pub struct Swarm {
     pub info_hash: String,
     pub seeder_addr: SocketAddr,
     pub movie: Vec<u8>,
-    /// The leecher's data folder, and the torrent (the window tests).
-    #[allow(dead_code)]
-    pub leech_dir: std::path::PathBuf,
+    /// The torrent (the window tests' extra seeders).
     #[allow(dead_code)]
     pub torrent: Vec<u8>,
     _dirs: (tempfile::TempDir, tempfile::TempDir),
@@ -168,7 +166,6 @@ async fn swarm_of(
         info_hash,
         seeder_addr: SocketAddr::new(ip, port),
         movie,
-        leech_dir: leech_dir.path().to_owned(),
         torrent: created.as_bytes().unwrap().to_vec(),
         _dirs: (seed_dir, leech_dir),
     }

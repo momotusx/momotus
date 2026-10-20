@@ -786,10 +786,16 @@ impl TorrentStateLive {
         // It should be impossible to make a fatal error after pausing.
         g.fatal_errors_tx.take();
 
-        let piece_tracker = g
+        let mut piece_tracker = g
             .pieces
             .take()
             .context("bug: pausing already paused torrent")?;
+        // Marquee fork (streaming window phase 1 review): a piece an
+        // eviction round left gated is released, never claimed again (a
+        // punch may have touched it), and the scheduler told.
+        for idx in piece_tracker.chunks_mut().release_all_evicting() {
+            self.ext_emit(ExtEvent::PieceEvicted { piece: idx.get() });
+        }
         // into_chunks() will requeue any in-flight pieces
         let chunk_tracker = piece_tracker.into_chunks();
 
@@ -855,19 +861,6 @@ impl TorrentStateLive {
         }
         let mut g = self.lock_write("on_piece_completed");
         let locked = &mut **g;
-        let pieces = locked.get_pieces_mut()?;
-
-        // if we have all the pieces of the file, reopen it read only
-        for (idx, file_info) in self
-            .metadata
-            .file_infos
-            .iter()
-            .enumerate()
-            .skip_while(|(_, fi)| !fi.piece_range.contains(&id.get()))
-            .take_while(|(_, fi)| fi.piece_range.contains(&id.get()))
-        {
-            let _remaining = pieces.update_file_have_on_piece_completed(id, idx, file_info);
-        }
 
         self.streams
             .wake_streams_on_piece_completed(id, self.metadata.lengths());
@@ -894,6 +887,21 @@ impl TorrentStateLive {
             }
         }
         Ok(())
+    }
+
+    /// The piece's bytes in each file's have count (moved here from
+    /// `on_piece_completed`, so the count changes under the claim's lock).
+    fn count_in_files(&self, pieces: &mut PieceTracker, id: ValidPieceIndex) {
+        for (idx, file_info) in self
+            .metadata
+            .file_infos
+            .iter()
+            .enumerate()
+            .skip_while(|(_, fi)| !fi.piece_range.contains(&id.get()))
+            .take_while(|(_, fi)| fi.piece_range.contains(&id.get()))
+        {
+            let _remaining = pieces.update_file_have_on_piece_completed(id, idx, file_info);
+        }
     }
 
     fn disconnect_all_peers_that_have_full_torrent(&self) {
@@ -1992,14 +2000,33 @@ impl PeerHandler {
                 .with_context(|| format!("error checking piece={index}"))?
             {
                 true => {
+                    let piece_len = state.lengths.piece_length(chunk_info.piece_index) as u64;
                     {
+                        // Marquee fork (streaming window phase 1, review b
+                        // P2-1): the claim, the per-file count, `have_bytes`
+                        // and `PieceChecked` under the one lock, so an
+                        // eviction round that gates this piece next undoes
+                        // all of them and its `PieceEvicted` follows this.
                         let mut g = state.lock_write("mark_piece_downloaded");
-                        g.get_pieces_mut()?
-                            .mark_piece_hash_ok(chunk_info.piece_index);
+                        let pieces = g.get_pieces_mut()?;
+                        pieces.mark_piece_hash_ok(chunk_info.piece_index);
+                        state.count_in_files(pieces, chunk_info.piece_index);
+                        state
+                            .stats
+                            .have_bytes
+                            .fetch_add(piece_len, Ordering::Relaxed);
+                        state.ext_emit(ExtEvent::PieceChecked {
+                            piece: piece.index,
+                            ok: true,
+                        });
                     }
+                    #[cfg(feature = "sync-log")]
+                    crate::sync_log::pass(
+                        &state.shared.options.output_folder,
+                        crate::sync_log::Point::Checked,
+                    );
 
                     // Global piece counters.
-                    let piece_len = state.lengths.piece_length(chunk_info.piece_index) as u64;
                     state
                         .stats
                         .downloaded_and_checked_bytes
@@ -2012,10 +2039,6 @@ impl PeerHandler {
                         // This counter is used to compute "is_finished", so using
                         // stronger ordering.
                         .fetch_add(1, Ordering::Release);
-                    state
-                        .stats
-                        .have_bytes
-                        .fetch_add(piece_len, Ordering::Relaxed);
                     #[allow(clippy::cast_possible_truncation)]
                     state.stats.total_piece_download_ms.fetch_add(
                         full_piece_download_time.as_millis() as u64,
@@ -2031,10 +2054,6 @@ impl PeerHandler {
                     state.on_piece_completed(chunk_info.piece_index)?;
 
                     state.transmit_haves(chunk_info.piece_index);
-                    state.ext_emit(ExtEvent::PieceChecked {
-                        piece: piece.index,
-                        ok: true,
-                    });
                 }
                 false => {
                     warn!(

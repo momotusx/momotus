@@ -59,6 +59,19 @@ pub async fn request_block(
     state.ext_request(peer, piece, begin, len)
 }
 
+/// Pauses `h` without the keeper lock, as librqbit's own pause on a fatal
+/// error does, so a test can pause in the middle of a round.
+pub async fn pause_skipping_the_keeper(engine: &Engine, h: crate::TorrentHandle) {
+    let Ok(t) = engine.torrent(h) else {
+        return;
+    };
+    let live = t.live.lock().await;
+    if let Some(l) = live.as_ref() {
+        let _ = engine.inner.session.pause(&l.managed).await;
+        let _ = l.msgs.send(crate::adapter::Msg::Stopped);
+    }
+}
+
 pub(crate) async fn wait(engine: &Engine) {
     pass(&engine.inner.hold).await;
 }

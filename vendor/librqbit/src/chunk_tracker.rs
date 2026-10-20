@@ -387,6 +387,20 @@ impl ChunkTracker {
         self.evicting.set(id, false);
     }
 
+    /// Marquee fork: every piece still gated, released (a pause or an
+    /// abandoned round).
+    pub(crate) fn release_all_evicting(&mut self) -> Vec<ValidPieceIndex> {
+        let gated: Vec<ValidPieceIndex> = self
+            .evicting
+            .iter_ones()
+            .filter_map(|i| self.lengths.validate_piece_index(i as u32))
+            .collect();
+        for &idx in &gated {
+            self.release_evicted(idx);
+        }
+        gated
+    }
+
     // return true if the whole piece is marked downloaded
     pub fn mark_chunk_downloaded(
         &mut self,
