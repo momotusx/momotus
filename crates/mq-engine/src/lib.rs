@@ -1105,20 +1105,38 @@ fn iso_bmff(path: &str) -> bool {
     matches!(ext.as_deref(), Some("mp4" | "m4v" | "mov"))
 }
 
-/// The stream's own trackers first, then the defaults when `defaults`, each
-/// once. Discovery is off only in loopback tests, which keep exactly theirs.
+/// The defaults first when `defaults`, then at most `MAX_OWN` of the
+/// stream's own trackers, each once. Discovery is off only in loopback
+/// tests, which keep exactly theirs.
 fn magnet_uri(hash: &str, trackers: &[String], defaults: bool) -> String {
+    let extra = DEFAULT_TRACKERS.into_iter().filter(|_| defaults);
     let given = trackers
         .iter()
         .map(|t| t.strip_prefix("tracker:").unwrap_or(t))
         .filter(|t| t.contains("://"));
-    let extra = DEFAULT_TRACKERS.into_iter().filter(|_| defaults);
     let mut seen = std::collections::HashSet::new();
     let mut magnet = format!("magnet:?xt=urn:btih:{hash}");
-    for t in given.chain(extra) {
-        if seen.insert(t) {
+    let mut push = |t: &str| {
+        let new = seen.insert(t.to_owned());
+        if new {
             magnet.push_str("&tr=");
             magnet.push_str(&percent_encode(t));
+        }
+        new
+    };
+    for t in extra {
+        push(t);
+    }
+    // An addon's list is unbounded, and each tracker is a task that looks
+    // its name up on the shared blocking pool, again every minute: the
+    // scrape's cap holds here too (engine review r2, P2-3).
+    let mut own = 0;
+    for t in given {
+        if own == scrape::MAX_OWN {
+            break;
+        }
+        if push(t) {
+            own += 1;
         }
     }
     magnet
@@ -1153,9 +1171,17 @@ mod tests {
             "a default listed once"
         );
         assert!(
-            mixed.find("own.example") < mixed.find("stealth"),
-            "the stream's first"
+            mixed.find("stealth") < mixed.find("own.example"),
+            "the defaults first"
         );
+        // An addon may list any number: 16 of the stream's own, then no more
+        // (engine review r2, P2-3).
+        let many: Vec<String> = (0..100)
+            .map(|i| format!("udp://t{i}.example:80/announce"))
+            .collect();
+        let capped = magnet_uri(hash, &many, true);
+        assert_eq!(trs(&capped), DEFAULT_TRACKERS.len() + scrape::MAX_OWN);
+        assert!(capped.contains("t15.example") && !capped.contains("t16.example"));
         assert_eq!(
             trs(&magnet_uri(hash, &[], false)),
             0,
