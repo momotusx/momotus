@@ -213,6 +213,7 @@ CREATE TABLE IF NOT EXISTS recovery (
     auth_hash    BLOB NOT NULL,
     kit_id       BLOB NOT NULL
 );
+CREATE INDEX IF NOT EXISTS recovery_account ON recovery (account);
 CREATE TABLE IF NOT EXISTS token_nonce (
     nonce       BLOB PRIMARY KEY,
     expires_ms  INTEGER NOT NULL
@@ -316,10 +317,15 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
         let parsed = serde_json::from_slice::<JournalLine>(line);
         match (line.ends_with(b"\n"), parsed) {
             (true, Ok(JournalLine::Entry { account, entry })) => lines.push((account, entry)),
+            // A tombstone already here came with its purge in one transaction,
+            // and nothing creates rows for a gone account: only a database
+            // that lacks it (a restored backup) needs the purge.
             (true, Ok(JournalLine::Gone { gone, deleted_ms })) => {
-                let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-                purge(&tx, &hex::encode(gone.0), deleted_ms).map_err(|e| e.to_string())?;
-                tx.commit().map_err(|e| e.to_string())?;
+                if !is_gone(conn, &gone).map_err(|e| e.to_string())? {
+                    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+                    purge(&tx, &hex::encode(gone.0), deleted_ms).map_err(|e| e.to_string())?;
+                    tx.commit().map_err(|e| e.to_string())?;
+                }
             }
             // Torn while being written: the entry was never acknowledged.
             (false, _) => break,
@@ -399,8 +405,12 @@ fn rewrite_journal(path: &Path, conn: &Connection) -> std::io::Result<std::fs::F
     }
     file.sync_all()?;
     std::fs::rename(&temp, path)?;
-    let dir = path.parent().filter(|d| !d.as_os_str().is_empty());
-    std::fs::File::open(dir.unwrap_or(Path::new(".")))?.sync_all()?;
+    // Windows opens no directory as a file; its renames need no such step.
+    #[cfg(unix)]
+    {
+        let dir = path.parent().filter(|d| !d.as_os_str().is_empty());
+        std::fs::File::open(dir.unwrap_or(Path::new(".")))?.sync_all()?;
+    }
     std::fs::OpenOptions::new().append(true).open(path)
 }
 
@@ -645,6 +655,12 @@ fn journal_error(e: std::io::Error) -> Response {
 /// keeps only the tombstone, then the journal is written again without the
 /// account's lines and with its `gone` line, and the append handle moves to
 /// the new file. Every device of the account then gets 410 `accountGone`.
+///
+/// Once committed, the deletion stands and the answer is 200, also when the
+/// rewrite fails: a restart writes the journal again from the tables (the
+/// tombstone included), and until then roster writes stop and the old
+/// journal gets the `gone` line, so a backup restored before that restart
+/// cannot bring the account back.
 async fn delete_account(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let mut db = lock(&state);
     let auth = match active(authorize(&db, &headers)) {
@@ -654,25 +670,35 @@ async fn delete_account(State(state): State<AppState>, headers: HeaderMap) -> Re
     if let Some(stopped) = journal_stopped(&state) {
         return stopped;
     }
+    let now = state.now_ms();
     let deleted = (|| {
         let tx = db.transaction()?;
-        purge(&tx, &hex::encode(auth.account.0), state.now_ms())?;
+        purge(&tx, &hex::encode(auth.account.0), now)?;
         tx.commit()
     })();
     if let Err(e) = deleted {
         return storage_error("delete account", e);
     }
+    // `secure_delete` overwrites the database file only: the log goes too.
+    if let Err(e) = db.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())) {
+        tracing::warn!("checkpoint after a deletion: {e}");
+    }
     let mut file = state.journal.lock().unwrap_or_else(|p| p.into_inner());
     match rewrite_journal(&state.journal_path, &db) {
-        Ok(new) => {
-            *file = new;
-            Json(json!({})).into_response()
-        }
+        Ok(new) => *file = new,
         Err(e) => {
+            tracing::error!("roster journal rewrite after a deletion: {e}");
             state.journal_failed.store(true, Ordering::Relaxed);
-            journal_error(e)
+            let line = JournalLine::Gone {
+                gone: auth.account,
+                deleted_ms: now,
+            };
+            if let Err(e) = write_line(&mut file, &line).and_then(|()| file.sync_data()) {
+                tracing::error!("roster journal gone line: {e}");
+            }
         }
     }
+    Json(json!({})).into_response()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1051,13 +1077,15 @@ async fn replay_roster(
         return error(StatusCode::TOO_MANY_REQUESTS, "too many replays");
     }
     let mut db = lock(&state);
-    if let Some(stopped) = journal_stopped(&state) {
-        return stopped;
-    }
+    // A read that needs no journal: devices learn the account is gone also
+    // while roster writes are stopped.
     match is_gone(&db, &request.account) {
         Ok(true) => return account_gone(),
         Ok(false) => {}
         Err(e) => return storage_error("replay roster", e),
+    }
+    if let Some(stopped) = journal_stopped(&state) {
+        return stopped;
     }
     let exists: rusqlite::Result<Option<i64>> = db
         .query_row(
@@ -1854,6 +1882,90 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM account", [], |r| r.get(0))
             .unwrap();
         assert_eq!(accounts, 1, "the second was never stored");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A deletion whose journal rewrite fails still stands: 200, the
+    /// tombstone stored and the `gone` line on the old journal; roster writes
+    /// stop, a replay still hears the account is gone, and the next start on
+    /// this database and that journal keeps only the `gone` line.
+    #[tokio::test]
+    async fn a_deletion_whose_journal_rewrite_fails_still_stands() {
+        use mq_sync::roster::MemberSecret;
+        let dir = std::env::temp_dir().join(format!("mq-journal-{}", random_hex(8)));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("relay.roster.jsonl");
+        let conn = Connection::open_in_memory().unwrap();
+        let (conn, generation, since, relay_id) = open_database(conn, &Config::default()).unwrap();
+        let state = AppState {
+            journal: Arc::new(Mutex::new(open_journal(&path, &conn).unwrap())),
+            db: Arc::new(Mutex::new(conn)),
+            // The rewrite cannot make its temp file in a directory that is not there.
+            journal_path: Arc::new(dir.join("missing").join("relay.roster.jsonl")),
+            journal_failed: Arc::default(),
+            config: Arc::new(Config::default()),
+            generation: Arc::new(generation),
+            generation_since_ms: since,
+            relay_id,
+            limits: Arc::default(),
+            clock: Arc::default(),
+        };
+        let genesis =
+            || Roster::genesis_entry(&MemberSecret::generate(), Hex(random()), "a", now_ms()).0;
+        let create = |entry| {
+            create_account(
+                State(state.clone()),
+                HeaderMap::new(),
+                Json(AccountRequest { entry }),
+            )
+        };
+        let entry = genesis();
+        let account = entry.parse().unwrap().account;
+        let created = create(entry.clone()).await;
+        assert_eq!(created.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(created.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let token = serde_json::from_slice::<AccountResponse>(&body)
+            .unwrap()
+            .device_token;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+
+        assert_eq!(
+            delete_account(State(state.clone()), headers).await.status(),
+            StatusCode::OK
+        );
+        assert!(is_gone(&lock(&state), &account).unwrap());
+        let journal = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            journal.lines().last().unwrap().contains("\"gone\""),
+            "{journal}"
+        );
+        assert_eq!(
+            create(genesis()).await.status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        let peer = SocketAddr::from(([127, 0, 0, 1], 1));
+        let replay = replay_roster(
+            State(state.clone()),
+            ConnectInfo(peer),
+            HeaderMap::new(),
+            Json(ReplayRequest {
+                account,
+                entries: vec![entry],
+            }),
+        )
+        .await;
+        assert_eq!(replay.status(), StatusCode::GONE);
+
+        drop(open_journal(&path, &lock(&state)).unwrap());
+        let journal = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(journal.lines().count(), 1, "{journal}");
+        assert!(journal.contains("\"gone\""), "{journal}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
