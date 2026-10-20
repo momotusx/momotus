@@ -1047,11 +1047,12 @@ async fn serve(
             let main = hls.url.clone();
             cors(serve_playlist(&playback, hls, None, main, query).await)
         }
+        // A web page plays it in a `<video crossorigin>`, as it does the others.
         #[cfg(feature = "torrent")]
         Content::Torrent { claim, file } => {
             let released = playback.released.clone();
             let relabel = relabels(playback.clone());
-            torrent::serve(claim, *file, range.as_deref(), head_only, released, relabel).await
+            cors(torrent::serve(claim, *file, range.as_deref(), head_only, released, relabel).await)
         }
     }
 }

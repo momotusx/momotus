@@ -57,6 +57,8 @@ async fn serves_torrent_ranges_byte_for_byte() {
     );
     assert_eq!(head.header("content-type"), Some("video/x-matroska"));
     assert_eq!(head.header("accept-ranges"), Some("bytes"));
+    // A web page reads it in a `<video crossorigin>`.
+    assert_eq!(head.header("access-control-allow-origin"), Some("*"));
 
     // A seek, the container tail, then the whole file.
     let (a, n) = (2 * 1024 * 1024 + 99, 300_000u64);
@@ -67,6 +69,7 @@ async fn serves_torrent_ranges_byte_for_byte() {
         Some(format!("bytes {a}-{}/{len}", a + n - 1).as_str())
     );
     assert!(mid.body[..] == s.movie[a as usize..(a + n) as usize]);
+    assert_eq!(mid.header("access-control-allow-origin"), Some("*"));
     let tail = http
         .get_range(&url, len - 1000, 1000, &local())
         .await
