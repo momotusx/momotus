@@ -5,6 +5,7 @@
 #[allow(dead_code)] // the HTTP tracker only
 mod support;
 
+use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -96,6 +97,29 @@ fn http_tracker(seeders: u32) -> support::HttpTracker {
     support::HttpTracker::start(answer, false)
 }
 
+/// As `http_tracker`, each answer `delay` late; its URL.
+fn http_tracker_late(seeders: u32, delay: Duration) -> String {
+    let listener = std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0)).unwrap();
+    let url = format!("http://{}/announce", listener.local_addr().unwrap());
+    let mut body = b"d5:filesd20:".to_vec();
+    body.extend(bytes(HASH));
+    body.extend(format!("d8:completei{seeders}e10:downloadedi1e10:incompletei2eeee").as_bytes());
+    let mut answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    answer.extend(body);
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let _ = stream.read(&mut [0u8; 4096]);
+            std::thread::sleep(delay);
+            let _ = stream.write_all(&answer);
+        }
+    });
+    url
+}
+
 /// An HTTP tracker on `[::1]` whose scrape answer is `body`.
 fn http_tracker_with(body: Vec<u8>) -> support::HttpTracker {
     let mut answer = format!(
@@ -137,21 +161,27 @@ fn bytes(hash: &str) -> Vec<u8> {
 
 /// UDP and HTTP trackers answer together: each hash takes the tracker with
 /// the most seeders, whichever answers first, and one UDP scrape carries
-/// every hash. The UDP 7 comes first, then 150 ms late (under the 250 ms
-/// resend): the HTTP 12 counts either way (engine review r3, P2-1).
+/// every hash. The UDP 7 and the HTTP 12 each come 150 ms after the other
+/// (under the 250 ms resend): the 12 counts either way (engine review r3,
+/// P2-1).
 #[tokio::test]
 async fn the_tracker_with_the_most_seeders_counts() {
-    for late in [Duration::ZERO, Duration::from_millis(150)] {
-        let (udp, seen) = udp_tracker_late(7, 4, None, late);
-        let http = http_tracker(12);
+    let late = Duration::from_millis(150);
+    for (udp_late, http_late) in [(Duration::ZERO, late), (late, Duration::ZERO)] {
+        let (udp, seen) = udp_tracker_late(7, 4, None, udp_late);
+        let http = http_tracker_late(12, http_late);
         let (engine, _dir) = engine(&LOOPBACK).await;
-        let both = vec![format!("tracker:{udp}"), http.url.clone()];
+        let both = vec![format!("tracker:{udp}"), http];
         let one = vec![udp];
         let got = engine
             .scrape(&[(HASH, both.as_slice()), (OTHER, one.as_slice())])
             .await;
         let count = |seeders, leechers| Some(SwarmCount { seeders, leechers });
-        assert_eq!(got, vec![count(12, 2), count(7, 4)], "UDP {late:?} late");
+        assert_eq!(
+            got,
+            vec![count(12, 2), count(7, 4)],
+            "UDP {udp_late:?} late, HTTP {http_late:?} late"
+        );
         assert_eq!(seen.load(Ordering::SeqCst), 2, "one connect, one scrape");
     }
 }

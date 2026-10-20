@@ -281,11 +281,12 @@ async fn first_range(dir: &Path, torrent: &[u8]) -> (Engine, Duration) {
 
 /// A relaunch knows a torrent's pieces from its have-bitfield (the fork's
 /// fast resume) and checks only a sample of those it had, never every byte
-/// again: here 8 GiB of holes, seconds to hash (engine review r3, P2-2).
+/// again: here 1 GiB of holes, about 2 s to hash in a release build and
+/// half a minute in a debug one (engine review r3, P2-2).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_relaunch_skips_the_full_check() {
     const PIECE: u64 = 4 << 20;
-    const LEN: u64 = 8 << 30;
+    const LEN: u64 = 1 << 30;
     let hashes = (LEN / PIECE * 20) as usize;
     let mut torrent =
         format!("d4:infod6:lengthi{LEN}e4:name7:big.mkv12:piece lengthi{PIECE}e6:pieces{hashes}:")
