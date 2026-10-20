@@ -4,6 +4,7 @@
 
 import { A } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Star from "lucide-solid/icons/star";
 import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
@@ -166,7 +167,7 @@ export function TileCard(props: {
  * Home's row updates from the core. */
 export const removeFromContinue = (itemId: string) => op("removeFromContinue", { itemId });
 
-export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void; scope?: string }) {
+export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void; scope?: string; onRetry?: (rowId: string) => unknown }) {
   let section!: HTMLElement;
   let track: HTMLDivElement | undefined;
   const m = metrics;
@@ -238,10 +239,20 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                 </p>
                 <Why class="why" reason={props.row.state.state === "failed" ? props.row.state.reason : ""} />
               </div>
-              <A class="btn" href="/welcome?step=3" data-f={`fix:${id()}`}>
-                <Wrench aria-hidden />
-                Run setup check
-              </A>
+              <div class="row-acts">
+                <Show when={props.onRetry}>
+                  {(retry) => (
+                    <button class="btn" data-f={`retry:${id()}`} onClick={() => retry()(props.row.rowId)}>
+                      <RefreshCw aria-hidden />
+                      Try again
+                    </button>
+                  )}
+                </Show>
+                <A class="btn" href="/welcome?step=3" data-f={`fix:${id()}`}>
+                  <Wrench aria-hidden />
+                  Run setup check
+                </A>
+              </div>
             </div>
           </Match>
           <Match when={state() === "empty"}>

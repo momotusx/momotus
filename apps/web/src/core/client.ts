@@ -189,6 +189,10 @@ export function homeView(): HomeState {
   return state;
 }
 
+/** A failed Home row's Try again: the core asks that one catalog again (the
+ * row turns loading, then shows the answer or fails anew), not all of Home. */
+export const retryHomeRow = (rowId: string) => homeOpening?.then((s) => s?.command({ type: "retryRow", rowId }));
+
 export interface TitleState {
   status: ViewStatus;
   header: TitleHeader | null;

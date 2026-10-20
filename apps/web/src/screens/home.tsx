@@ -11,7 +11,7 @@ import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { separators } from "../components/separators";
 import { CONTINUE_ROW, Row } from "../components/row";
-import { homeView, liveView, op, prefsView } from "../core/client";
+import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { onProfileReset, profiles } from "../core/profiles";
@@ -219,7 +219,7 @@ export default function Home() {
               <For each={home.rows}>
                 {(row, i) => (
                   <>
-                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} />
+                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} onRetry={(rowId) => void retryHomeRow(rowId)?.catch(() => undefined)} />
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <DefaultsCard />
                     </Show>

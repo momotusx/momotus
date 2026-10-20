@@ -143,7 +143,7 @@ test.afterAll(() => {
   media?.close();
 });
 
-type Sent = { id?: number; op?: string; view?: string; event?: string; sub?: number };
+type Sent = { id?: number; op?: string; view?: string; event?: string; sub?: number; command?: { type?: string; rowId?: string } };
 
 /** A page on this spec's core; `sent` is what it asked, in order, and
  * `fake` may answer a message at the socket instead of the core (a reply's
@@ -847,4 +847,64 @@ test("the player, Calendar and Search say why they could not open in plain words
   await expect(p.locator(".palette-body")).toContainText("Search could not open.", { timeout: 30_000 });
   await expect(p.locator(".palette-body")).toContainText(plain);
   await context.close();
+});
+
+/** A catalog addon with a catalog that always answers and one whose first
+ * answer is an error (500), then its list: a catalog that failed once.
+ * `asked` counts the requests to that one. */
+async function flakyCatalog() {
+  let asked = 0;
+  const server = createServer((req, res) => {
+    const json = (status: number, body: unknown) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.url === "/manifest.json") {
+      const catalogs = [
+        { type: "movie", id: "jclassics", name: "Journey Classics" },
+        { type: "movie", id: "jpicks", name: "Journey Picks" },
+      ];
+      return json(200, { id: "dev.marquee.flaky", version: "1.0.0", name: "Flaky Catalog", resources: ["catalog"], types: ["movie"], idPrefixes: ["mqj"], catalogs });
+    }
+    // A catalog that always answers, so Home has rows besides the failed one.
+    if (req.url?.startsWith("/catalog/movie/jclassics")) return json(200, { metas: [{ id: "mqjv", type: "movie", name: "Journey Versions" }] });
+    if (req.url?.startsWith("/catalog/movie/jpicks")) {
+      asked += 1;
+      if (asked === 1) return json(500, { error: "busy" });
+      return json(200, { metas: [{ id: "mqjm", type: "movie", name: "Journey Film" }] });
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise<void>((ok) => server.listen(0, "127.0.0.1", () => ok()));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/manifest.json`, asked: () => asked, close: () => server.close() };
+}
+
+test("Home: Try again on a failed row asks that one catalog again, not all of Home", async ({ browser }) => {
+  const flaky = await flakyCatalog();
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  try {
+    await c.req("installAddon", { url: flaky.url });
+    const { context, page: p, sent } = await page(browser, { width: 1920, height: 1080 });
+    await p.goto("/?form=tv");
+    const row = p.locator('section.row[data-fgroup*="jpicks"]');
+    const retry = row.locator('[data-f^="retry:"]');
+    await expect(retry).toBeVisible({ timeout: 30_000 });
+    await expect(row.locator(".row-msg")).toContainText("It had an error on its side (500).");
+    const opened = () => sent.filter((m) => m.op === "subscribe" && m.view === "home").length;
+    const before = opened();
+    // By remote: the row's Try again.
+    await retry.focus();
+    await p.keyboard.press("Enter");
+    await expect(row.locator(".tile")).toHaveCount(1, { timeout: 30_000 });
+    expect(sent.filter((m) => m.op === "command" && m.command?.type === "retryRow").map((m) => m.command?.rowId)).toEqual([expect.stringContaining("jpicks")]);
+    // That catalog was asked once more; Home was not opened again.
+    expect(flaky.asked()).toBe(2);
+    expect(opened()).toBe(before);
+    await context.close();
+  } finally {
+    await c.req("removeAddon", { url: flaky.url }).catch(() => undefined);
+    c.close();
+    flaky.close();
+  }
 });
