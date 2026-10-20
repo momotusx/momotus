@@ -573,9 +573,14 @@ extension View {
     /// scrolls under them. Pages whose art runs under the bar pass `visible`
     /// once content scrolls there.
     /// `atRest`: shown before any scroll too, for a page whose words can start under the bar.
+    /// Every page has this top chrome, so on the Mac it also keeps the back
+    /// button of a page whose place is out of sight off the shared window
+    /// toolbar (review apple-journey round 2 P2-B).
     func topScrim(_ visible: Bool = true, atRest: Bool = false) -> some View {
         #if os(iOS)
         return modifier(TopScrim(visible: visible, atRest: atRest))
+        #elseif os(macOS)
+        return modifier(BackOnlyWhenShown())
         #else
         return self
         #endif
@@ -598,6 +603,16 @@ extension View {
 }
 
 #if os(macOS)
+/// The window toolbar is one for every place: a page of a place kept out of
+/// sight leaves no back button there, which would pop a page nobody sees.
+private struct BackOnlyWhenShown: ViewModifier {
+    @Environment(\.tabShown) private var shown
+
+    func body(content: Content) -> some View {
+        content.navigationBarBackButtonHidden(!shown)
+    }
+}
+
 /// The window toolbar is one for every place: a place kept alive out of sight
 /// must not clear its background for the one on screen.
 private struct FullBleedTop: ViewModifier {
