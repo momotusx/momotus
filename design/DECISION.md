@@ -1,5 +1,18 @@
 # Design decision
 
+## Owner direction for v3 (2026-10-21, before the pick)
+
+The owner's words, translated: every page, Settings included, must look ultra sleek, Apple level, Apple style. Study Apple's own design in detail (the Apple TV app on tvOS and iPhone, tv.apple.com) and keep its appeal. Color: monochrome, with one accent between blue and green; no red and no orange. Do not mix colors. Run the design through review rounds until it is perfect.
+
+What this sets for every v3 direction:
+- Monochrome: black, greys and white carry the whole interface; the one accent is a blue-green (teal, mint or cyan family) used sparingly (focus, progress, the active marker, a selected state), never a large fill.
+- No red or orange anywhere in the chrome. Delete and other destructive actions use the system's destructive style only where the platform requires one; the v2 accent #E5372A and the orange markers in the v3 exploration go.
+- Apple's real layouts, type scale, materials and focus effects are the reference; the brand rules stay (own wordmark and icons, no Apple logos or artwork).
+
+The pick between V1 to V5 is still the owner's; this block records the constraints all five must meet.
+
+## v2 (current until the v3 pick)
+
 Status: v2, the owner's pick on 2026-10-17: "go like flystream.net; 1 (Ember) is good". The study of the reference is `design/reference/flystream.md`; the six directions shown are `design/exploration/v2/index.html` (Ember is direction 1). v1 (warm black, Fraunces, amber) is retired; its history is in git.
 
 ## The language
