@@ -31,3 +31,5 @@ mq-http = { path = "../mq-http", features = ["test-dns"] }
 tokio = { workspace = true, features = ["process"] }
 # A datagram larger than macOS's default send buffer (the bencode depth test).
 socket2 = "0.6"
+# The uTP listener's socket options in a policy test (the vendored crate).
+librqbit-utp = "0.7"

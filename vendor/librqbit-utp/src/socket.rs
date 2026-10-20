@@ -580,6 +580,16 @@ impl<T: Transport, E: UtpEnvironment> Dispatcher<T, E> {
             return MatchSynWithAccept::Full(syn, accept);
         }
 
+        // Marquee fork (engine review r1, P3): a SYN cached while the streams
+        // were full is checked again, since the policy may refuse its source
+        // by now. It is dropped unanswered, as `on_recv` drops one.
+        if let Some(p) = &self.socket.opts.permits
+            && !(p.0)(syn.remote.ip())
+        {
+            trace!(remote = ?syn.remote, "dropping a waiting SYN from a refused source");
+            return MatchSynWithAccept::SynInvalid(accept);
+        }
+
         let recv_key = (syn.remote, syn.header.connection_id + 1);
         if self.streams.contains_key(&recv_key) {
             debug!(?recv_key, "SYN clashes with an existing stream, ignoring");

@@ -10,7 +10,7 @@ mod support;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use mq_engine::librqbit::{Session, SessionOptions};
@@ -296,6 +296,74 @@ async fn incoming_utp_from_an_allowed_source_connects() {
         .expect("no answer to an allowed source");
     assert_eq!(answer[0], 0x21, "an ST_STATE, version 1");
     assert_eq!(answer[18..20], 1u16.to_be_bytes(), "acknowledges seq 1");
+}
+
+/// A session listening on uTP with one stream slot, whose peer policy lets
+/// in 127.0.0.1 always and `[::1]` while `allow_v6` holds.
+async fn one_slot_utp_session(allow_v6: Arc<AtomicBool>) -> (Arc<Session>, tempfile::TempDir) {
+    use mq_engine::librqbit::{ListenerMode, ListenerOptions};
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let scope = http.torrent_scope(&[V4, V6]);
+    let mut destinations = mq_engine::destinations(&scope, &scope, &scope);
+    destinations.peers =
+        Arc::new(move |ip| ip == V4 || (ip == V6 && allow_v6.load(Ordering::SeqCst)));
+    let opts = SessionOptions {
+        dht: None,
+        disable_local_service_discovery: true,
+        listen: Some(ListenerOptions {
+            mode: ListenerMode::TcpAndUtp,
+            listen_addr: (Ipv6Addr::UNSPECIFIED, 0).into(),
+            utp_opts: Some(librqbit_utp::SocketOpts {
+                max_live_vsocks: std::num::NonZeroUsize::new(1),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        destinations: Some(destinations),
+        ..Default::default()
+    };
+    let session = Session::new_with_opts(dir.path().into(), opts)
+        .await
+        .unwrap();
+    (session, dir)
+}
+
+/// Engine review r1, P3: a SYN that waited while every uTP stream slot was
+/// taken is checked again when a slot frees, since the policy may refuse its
+/// source by then. One slot: 127.0.0.1 takes it, `[::1]` waits, the policy
+/// turns `[::1]` away, 127.0.0.1 resets: `[::1]` gets no answer. Control:
+/// still allowed, `[::1]` gets its SYN-ACK once the slot frees.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_waiting_utp_syn_is_checked_again_when_a_slot_frees() {
+    for control in [false, true] {
+        let allow_v6 = Arc::new(AtomicBool::new(true));
+        let (session, _dir) = one_slot_utp_session(allow_v6.clone()).await;
+        let port = session.listen_addr().unwrap().port();
+        let mut buf = [0u8; 1500];
+        let first = tokio::net::UdpSocket::bind((V4, 0)).await.unwrap();
+        first.send_to(&utp_syn(), (V4, port)).await.unwrap();
+        timeout(Duration::from_secs(1), first.recv_from(&mut buf))
+            .await
+            .expect("no SYN-ACK for the first stream")
+            .unwrap();
+        let waiting = tokio::net::UdpSocket::bind((V6, 0)).await.unwrap();
+        waiting.send_to(&utp_syn(), (V6, port)).await.unwrap();
+        settle().await;
+        if !control {
+            allow_v6.store(false, Ordering::SeqCst);
+        }
+        // ST_RESET on the first stream, whose id is the SYN's plus one.
+        let mut reset = utp_syn();
+        reset[0] = 0x31;
+        reset[2..4].copy_from_slice(&0x1235u16.to_be_bytes());
+        first.send_to(&reset, (V4, port)).await.unwrap();
+        let answered = timeout(Duration::from_secs(1), waiting.recv_from(&mut buf))
+            .await
+            .is_ok();
+        assert_eq!(answered, control, "a waiting SYN answered once refused");
+        session.stop().await;
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

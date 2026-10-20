@@ -2568,6 +2568,7 @@ dependencies = [
  "anyhow",
  "librqbit",
  "librqbit-bencode",
+ "librqbit-utp",
  "mq-engine-sched",
  "mq-http",
  "mq-relparse",
