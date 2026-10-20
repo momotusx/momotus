@@ -26,7 +26,7 @@ import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
 import { form } from "../form";
-import { bytes, decoded, playPath, releaseParts } from "../lib/format";
+import { bytes, decoded, playPath, playState, releaseParts } from "../lib/format";
 import {
   blockedWords,
   choiceWords,
@@ -141,7 +141,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   };
   const pick = () => snap()?.recommended ?? null;
   const [open, setOpen] = createSignal<Set<Group>>(new Set());
-  const play = (key: string) => navigate(`${playPath(props.kind, props.id, props.videoId)}?key=${encodeURIComponent(key)}`);
+  const play = (key: string) => navigate(playPath(props.kind, props.id, props.videoId), { state: playState(key) });
 
   // The pick under the cursor never changes once the user starts moving.
   const freeze = () => {

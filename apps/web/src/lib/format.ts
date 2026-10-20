@@ -41,6 +41,12 @@ export const titlePath = (kind: string, id: string) => `/title/${seg(kind)}/${se
 export const playPath = (kind: string, id: string, videoId: string) =>
   `/play/${seg(kind)}/${seg(id)}/${seg(videoId)}`;
 
+/** A version picked by hand rides in the history entry's state, never in
+ * the address: a stream key can carry an addon's account key, and the
+ * address bar and history are every profile's and sync with the browser.
+ * With no state (a shared link) the player plays the recommendation. */
+export const playState = (key: string) => ({ key });
+
 export const versionsPath = (kind: string, id: string, videoId: string) =>
   `${titlePath(kind, id)}/versions/${seg(videoId)}`;
 

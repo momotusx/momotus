@@ -1,14 +1,18 @@
 /** A version that cannot play here, on a core of its own: a local addon
- * lists Big Buck Bunny four times, the two best named files the real
- * film's head with every frame scrambled (it opens, and the decoder fails
- * on its first frame) and the other two the real film. The
- * recommendation moves on by itself and says so; a version picked by hand
- * ends on the card, which offers the next one first; a play at the same
- * address with another key replaces the one playing. */
+ * lists Big Buck Bunny four times. The best named is an HEVC MP4 (the
+ * fixture e2e/fixtures/hevc-160x90.mp4), which headless Chromium cannot
+ * play at all (MEDIA_ERR_SRC_NOT_SUPPORTED); the next is the real film's
+ * head with every frame scrambled, which opens and fails on its first
+ * frame (MEDIA_ERR_DECODE); the other two are the real film. The
+ * recommendation moves on by itself and says so, and the device remembers
+ * what did not play; a version picked by hand ends on the card, which
+ * offers the next one first; a hand-picked key rides in the history
+ * entry's state, never the address. */
 
 import { type Browser, expect, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { createReadStream, readFileSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, NEXT_PORT, PORTS, startBridge } from "./core";
@@ -62,9 +66,24 @@ function undecodable(): Buffer {
   return b;
 }
 
-// Two names that rank above the real files, which play.
-const BROKEN = ["Big.Buck.Bunny.2008.1080p.WEB.VP9.webm", "Big.Buck.Bunny.2008.720p.WEB.VP9.webm"];
+// Two names that rank above the real files, which play: an HEVC MP4 this
+// browser cannot play, and a WebM whose frames do not decode.
+const BROKEN = ["Big.Buck.Bunny.2008.1080p.WEB.mp4", "Big.Buck.Bunny.2008.720p.WEB.VP9.webm"];
+const HEVC = fileURLToPath(new URL("fixtures/hevc-160x90.mp4", import.meta.url));
 const REAL = ["Big.Buck.Bunny.2008.480p.WEB.VP9.webm", "Big.Buck.Bunny.2008.360p.WEB.VP9.webm"];
+
+/** `path` with Range support, as a file host answers. */
+function ranges(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, path: string, type: string) {
+  const size = statSync(path).size;
+  const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? "");
+  const start = m?.[1] ? Number(m[1]) : 0;
+  const end = m?.[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  const head = { "content-type": type, "accept-ranges": "bytes", "content-length": String(end - start + 1) };
+  if (m) res.writeHead(206, { ...head, "content-range": `bytes ${start}-${end}/${size}` });
+  else res.writeHead(200, head);
+  if (req.method === "HEAD") return void res.end();
+  createReadStream(path, { start, end }).pipe(res);
+}
 
 function versions(): Promise<Server> {
   const server = createServer((req, res) => {
@@ -74,33 +93,27 @@ function versions(): Promise<Server> {
       return res.end(JSON.stringify({ id: "dev.marquee.next", version: "1.0.0", name: "Next", resources: ["stream"], types: ["movie"], idPrefixes: ["tt"], catalogs: [] }));
     }
     if (req.url === `/stream/movie/${BBB_ID}.json`) {
-      res.writeHead(200, { "content-type": "application/json" });
+      // A moment late, as an addon is: a new Versions view lists nothing at first.
       const stream = (file: string) => ({ name: "Next", title: file, url: `${base}/media/${file}`, behaviorHints: { filename: file } });
-      return res.end(JSON.stringify({ streams: [...BROKEN, ...REAL].map(stream) }));
+      setTimeout(() => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ streams: [...BROKEN, ...REAL].map(stream) }));
+      }, 400);
+      return;
     }
     const file = decodeURIComponent(req.url?.replace("/media/", "") ?? "");
-    if (BROKEN.includes(file)) {
-      // Opens, then no frame decodes; the second one is slow to answer, so
-      // "Trying the next version" stays long enough to be read.
+    if (file === BROKEN[1]) {
+      // Opens, then no frame decodes; slow to answer, so "Trying the next
+      // version" stays long enough to be read.
       const body = SCRAMBLED ??= undecodable();
       setTimeout(() => {
         res.writeHead(200, { "content-type": "video/webm", "content-length": String(body.length) });
         res.end(body);
-      }, file === BROKEN[1] ? 1500 : 0);
+      }, 1500);
       return;
     }
-    if (REAL.includes(file)) {
-      const size = statSync(BBB_FILE).size;
-      const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? "");
-      const start = m?.[1] ? Number(m[1]) : 0;
-      const end = m?.[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
-      const head = { "content-type": "video/webm", "accept-ranges": "bytes", "content-length": String(end - start + 1) };
-      if (m) res.writeHead(206, { ...head, "content-range": `bytes ${start}-${end}/${size}` });
-      else res.writeHead(200, head);
-      if (req.method === "HEAD") return res.end();
-      createReadStream(BBB_FILE, { start, end }).pipe(res);
-      return;
-    }
+    if (file === BROKEN[0]) return ranges(req, res, HEVC, "video/mp4");
+    if (REAL.includes(file)) return ranges(req, res, BBB_FILE, "video/webm");
     res.writeHead(404);
     res.end();
   });
@@ -164,6 +177,8 @@ const mute = (p: import("@playwright/test").Page) =>
     const v = document.querySelector("video");
     if (v) v.muted = true;
   });
+// The key the history entry carries for the player.
+const chosen = (p: import("@playwright/test").Page) => p.evaluate(() => (history.state as { key?: string } | null)?.key ?? null);
 const keyOf = (file: string) => `url:http://127.0.0.1:${(addon?.address() as AddressInfo).port}/media/${file}`;
 
 test("the recommendation that cannot play here moves on and says so", async ({ browser }) => {
@@ -174,10 +189,15 @@ test("the recommendation that cannot play here moves on and says so", async ({ b
   await mute(p);
   await expect.poll(() => playing(p), { timeout: 60_000 }).toBeGreaterThan(1);
   await expect(p.locator(".endcard")).toHaveCount(0);
-  // The files that opened and did not decode were told as decode, and only so.
+  // Both were the files' own: one this browser cannot play (its source
+  // answered), one whose frames did not decode. Each was told as decode.
   const kinds = sent.filter((m) => m.command?.type === "failOver").map((m) => m.command?.kind);
-  expect(kinds.length).toBeGreaterThan(0);
-  expect(new Set(kinds)).toEqual(new Set(["decode"]));
+  expect(kinds).toEqual(["decode", "decode"]);
+  // This device remembers them: on Versions each says it did not play here.
+  await p.goto(`/title/movie/${BBB_ID}/versions/${BBB_ID}?form=desktop`);
+  await expect(p.locator(".vrow").first()).toBeVisible({ timeout: 60_000 });
+  for (const fold of await p.locator('.fold[aria-expanded="false"]').all()) await fold.click();
+  for (const file of BROKEN) await expect(p.locator(`[data-f="v:${keyOf(file)}"] .lt`)).toHaveText("Did not play on this device");
   await context.close();
 });
 
@@ -191,6 +211,9 @@ test("a version picked by hand that cannot play offers the next one first", asyn
   await expect(row).toBeVisible({ timeout: 60_000 });
   await row.dispatchEvent("click");
   await expect(p).toHaveURL(/\/play\/movie\//);
+  // The key rides in the history entry, never in the address.
+  expect(p.url()).not.toContain("key");
+  expect(await chosen(p)).toBe(key);
   const offer = p.locator('.endcard [data-f="player:offer"]');
   await expect(offer).toBeVisible({ timeout: 60_000 });
   await expect(offer).toHaveText(/^Play .+/);
@@ -205,10 +228,11 @@ test("a version picked by hand that cannot play offers the next one first", asyn
   // card goes, the picked file leaves the player, and the real file plays in
   // the end (an offer that fails too is a recommendation and moves on by itself).
   // Which version is offered depends on what this device already failed to
-  // decode (the core remembers it); the address is that version's own.
-  const offered = () => new URL(p.url()).searchParams.get("key");
-  await expect.poll(offered, { timeout: 30_000 }).not.toBe(key);
-  expect(offered()).toMatch(/^url:http:\/\/127\.0\.0\.1:\d+\/media\//);
+  // decode (the core remembers it); its key replaces the entry's, and the
+  // address still carries none.
+  await expect.poll(() => chosen(p), { timeout: 30_000 }).not.toBe(key);
+  expect(await chosen(p)).toMatch(/^url:http:\/\/127\.0\.0\.1:\d+\/media\//);
+  expect(p.url()).not.toContain("key");
   await expect(p.locator(".endcard")).toHaveCount(0, { timeout: 30_000 });
   await expect.poll(() => source(p), { timeout: 30_000 }).not.toContain(encodeURIComponent(BROKEN[1] ?? ""));
   await mute(p);
@@ -230,16 +254,15 @@ test("a new version at the same play address replaces the one playing", async ({
   await expect.poll(() => source(p), { timeout: 60_000 }).toContain(from);
   await mute(p);
   await expect.poll(() => playing(p), { timeout: 60_000 }).toBeGreaterThan(1);
-  // Any link in the app to this address with another key (the router's own
-  // navigation, as the failure card's offer and Up Next use it).
-  await p.evaluate((href) => {
-    const a = document.createElement("a");
-    a.href = href;
-    a.setAttribute("replace", "");
-    document.querySelector(".player-scr")?.append(a);
-    a.click();
-  }, `${new URL(p.url()).pathname}?key=${encodeURIComponent(keyOf(to))}`);
-  await expect.poll(() => new URL(p.url()).searchParams.get("key")).toBe(keyOf(to));
+  // Another entry of this address with another key, reached as Back and
+  // Forward reach it: the router reads the entry's state.
+  const address = p.url();
+  await p.evaluate((key) => {
+    history.pushState({ ...history.state, key }, "", location.href);
+    dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
+  }, keyOf(to));
+  expect(p.url()).toBe(address);
+  expect(await chosen(p)).toBe(keyOf(to));
   await expect.poll(() => source(p), { timeout: 30_000 }).toContain(to);
   await expect(p.locator("video")).toHaveCount(1);
   await mute(p);
@@ -281,5 +304,44 @@ test("a source that fails before its metadata is not a decode failure, and Try a
   await expect.poll(started, { timeout: 60_000 }).toBe(true);
   const from = await playing(p);
   await expect.poll(() => playing(p), { timeout: 30_000 }).toBeGreaterThan(from + 1);
+  await context.close();
+});
+
+test("a reload after a hand pick plays that version once Versions lists it again", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await p.goto(`/title/movie/${BBB_ID}/versions/${BBB_ID}?form=desktop`);
+  // A real file that is a row (the other may be the recommendation by now).
+  const rows = REAL.map((f) => p.locator(`[data-f="v:${keyOf(f)}"]`));
+  await expect.poll(async () => (await Promise.all(rows.map((r) => r.count()))).some((n) => n > 0), { timeout: 60_000 }).toBe(true);
+  const i = (await rows[0]?.count()) ? 0 : 1;
+  const file = REAL[i] ?? "";
+  await rows[i]?.dispatchEvent("click");
+  await expect.poll(() => source(p), { timeout: 60_000 }).toContain(file);
+  // A reload opens a new Versions view, which lists nothing at first; the
+  // entry still holds the key, and the play waits for it to be listed.
+  await p.reload();
+  expect(p.url()).not.toContain("key");
+  expect(await chosen(p)).toBe(keyOf(file));
+  await expect.poll(() => source(p), { timeout: 60_000 }).toContain(file);
+  await expect(p.locator(".endcard")).toHaveCount(0);
+  await mute(p);
+  await expect.poll(() => playing(p), { timeout: 60_000 }).toBeGreaterThan(0.5);
+  await context.close();
+});
+
+test("a version no longer listed shows its reason, Choose a version and Back", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await p.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 60_000 });
+  // An entry whose key the addon no longer lists, opened again.
+  await p.evaluate((key) => history.replaceState({ ...history.state, key }, ""), keyOf("Big.Buck.Bunny.2008.Gone.webm"));
+  await p.reload();
+  const card = p.locator(".endcard");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await expect(card.locator(".st")).toContainText("no longer listed");
+  await expect(card.locator(".acts > *")).toHaveCount(2);
+  await expect(card.locator(".acts > *").first()).toHaveAttribute("data-f", "player:versions");
+  await expect(card.locator(".acts > *").nth(1)).toHaveAttribute("data-f", "player:back");
+  await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:versions");
   await context.close();
 });

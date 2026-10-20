@@ -37,8 +37,8 @@ test("an HTTP status goes with its failure", () => {
 
 test("a video element's errors are sorted into what failed", () => {
   const error = (code: number) => ({ code, message: "MEDIA_ELEMENT_ERROR: Format error" });
-  // A source the element could not open is unreadable; only a decoder's failure is decode.
-  expect(mediaFailure(error(4)).kind).toBe("unreadable");
+  // A file this browser cannot play, or cannot decode, is the version's own.
+  expect(mediaFailure(error(4)).kind).toBe("decode");
   expect(mediaFailure(error(3)).kind).toBe("decode");
   expect(mediaFailure(error(2)).kind).toBe("network");
   expect(mediaFailure(error(1))).toEqual({ kind: "other", error: "MEDIA_ELEMENT_ERROR: Format error" });
@@ -85,6 +85,6 @@ test("an error before the metadata asks the source: a failed fetch is never deco
   expect((await earlyFailure("u", error, async () => Promise.reject(new TypeError("Failed to fetch")))).kind).toBe("network");
   const late = async () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError"));
   expect((await earlyFailure("u", error, late)).kind).toBe("timeout");
-  // The bytes came and still did not open: unreadable, never decode.
-  expect((await earlyFailure("u", error, answering(206))).kind).toBe("unreadable");
+  // The bytes came and the browser still cannot play them: the file's own.
+  expect((await earlyFailure("u", error, answering(206))).kind).toBe("decode");
 });

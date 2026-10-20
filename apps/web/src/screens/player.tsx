@@ -1,4 +1,4 @@
-import { A, useNavigate, useParams, useSearchParams } from "@solidjs/router";
+import { A, useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import AudioLines from "lucide-solid/icons/audio-lines";
 import Captions from "lucide-solid/icons/captions";
@@ -27,7 +27,7 @@ import { videoContext } from "../core/video";
 import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, sourceStart } from "../lib/failover";
-import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
+import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { byLanguage, offSummary, trackDetail } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, qualityCell, qualityText, subtitleNote } from "../lib/words";
 import "./player.css";
@@ -42,14 +42,19 @@ const SKIP: Record<SegmentKind, string> = { intro: "Skip intro", recap: "Skip re
 export default function Player() {
   const params = useParams();
   const [query] = useSearchParams();
+  const location = useLocation();
+  const chosen = () => {
+    const key = (location.state as { key?: unknown } | null)?.key;
+    return typeof key === "string" ? key : null;
+  };
   return (
     <KeyedPage
-      address={`${params.kind}/${params.id}/${params.videoId}/${query.key ?? ""}`}
+      address={`${params.kind}/${params.id}/${params.videoId}/${chosen() ?? ""}`}
       read={() => ({
         kind: decoded(params.kind),
         id: decoded(params.id),
         videoId: decoded(params.videoId),
-        chosen: typeof query.key === "string" ? query.key : null,
+        chosen: chosen(),
         binge: typeof query.binge === "string" ? query.binge : undefined,
       })}
       page={PlayerPage}
@@ -75,7 +80,16 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       onCleanup(() => clearTimeout(t));
     }
   });
-  const key = createMemo<string | null>((prev) => prev ?? props.chosen ?? (settled() ? (versions()?.recommended?.key ?? null) : null), null);
+  // A version picked by hand opens once Versions lists it or is done: after
+  // a reload the Versions view is new and has listed nothing yet.
+  const listed = (k: string) => {
+    const v = versions();
+    return !!v && (v.done || v.recommended?.key === k || v.rows.some((r) => r.key === k));
+  };
+  const key = createMemo<string | null>(
+    (prev) => prev ?? (props.chosen ? (listed(props.chosen) ? props.chosen : null) : settled() ? (versions()?.recommended?.key ?? null) : null),
+    null,
+  );
 
   const playback = createMemo(() => {
     const view = ctx.versions();
@@ -328,7 +342,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Another version of this video (the failure card's offer): a new play at
   // its own address, on the same Versions view (same binge group).
   const playKey = (key: string) =>
-    navigate(`${playPath(props.kind, props.id, props.videoId)}?${new URLSearchParams({ key, ...(props.binge ? { binge: props.binge } : {}) })}`, { replace: true });
+    navigate(`${playPath(props.kind, props.id, props.videoId)}${props.binge ? `?binge=${encodeURIComponent(props.binge)}` : ""}`, { replace: true, state: playState(key) });
   // Up Next takes focus when it appears, like Skip buttons on other players.
   createEffect(
     on(showNext, (shown, was) => {
@@ -398,6 +412,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const status = (): { tone: string; text: string; busy: boolean } | null => {
     const v = ctx.versions();
     if (v?.state.status.state === "failed") return { tone: "bad", text: (v.state.status as { reason: string }).reason, busy: false };
+    // The playback could not open (a version no longer listed): its reason, never a spinner.
+    const p = playback()?.state.status;
+    if (p?.state === "failed") return { tone: "bad", text: (p as { reason: string }).reason, busy: false };
     const s = snap();
     if (s?.phase === "ready") return null;
     if (s?.phase === "failed") return { tone: "bad", text: nextVersion.failed(!!s.offer), busy: false };

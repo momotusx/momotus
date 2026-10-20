@@ -14,17 +14,18 @@ const MEDIA_ERR_NETWORK = 2;
 const MEDIA_ERR_DECODE = 3;
 const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
-/** Sorts a `<video>` element's error into what failed. Only a decoder that
- * could not decode this file is `decode`, which the core can keep against
- * the version (plans/core-protocol.md); a source the element could not
- * open at all is `unreadable`. */
+/** Sorts a `<video>` element's error into what failed. A file this browser
+ * cannot play (MEDIA_ERR_SRC_NOT_SUPPORTED: its container or every codec,
+ * HEVC in Chromium, MKV in Safari) or cannot decode is `decode`, which the
+ * core keeps against the version on this device and moves on from
+ * (plans/core-protocol.md). A failed fetch raises the same code before the
+ * metadata, so `earlyFailure` asks the source first. */
 export function mediaFailure(error: { code: number; message: string } | null): PlayerFailure {
   const said = error?.message || "player error";
   switch (error?.code) {
     case MEDIA_ERR_DECODE:
-      return { kind: "decode", error: said };
     case MEDIA_ERR_SRC_NOT_SUPPORTED:
-      return { kind: "unreadable", error: said };
+      return { kind: "decode", error: said };
     case MEDIA_ERR_NETWORK:
       return { kind: "network", error: said };
     default:
@@ -35,9 +36,9 @@ export function mediaFailure(error: { code: number; message: string } | null): P
 /** A `<video>` error before the file's metadata loaded. The element calls a
  * failed fetch (a loopback 404, an upstream 5xx, a refused answer) a format
  * error too, so the source is asked once: an error answer or none is the
- * source's failure (`http`, `network`, `timeout`); bytes that came back and
- * still did not open are `unreadable` (`mediaFailure`). Never `decode`
- * before the metadata: no decoder has seen the file yet. */
+ * source's failure (`http`, `network`, `timeout`), never `decode`; bytes
+ * that came back and still did not play are the file's own (`mediaFailure`:
+ * a container or codec this browser cannot play is `decode`). */
 export async function earlyFailure(
   url: string,
   error: { code: number; message: string } | null,
