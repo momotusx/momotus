@@ -5,7 +5,12 @@
  * deleted after). Arms alternate A B B A per title (2 rounds).
  *
  * Run: bun bench/m13/race.ts <mq binary> [built_from]   appends to bench/m13/race.jsonl
- *      bun bench/m13/race.ts summary                     p50 and p90 first frame, success, stalls
+ *      bun bench/m13/race.ts summary [race]              p50 and p90 first frame, success, stalls
+ *
+ * Race 2 (plans/m13-stream-choice.md 6.4) adds live seeders, the moov start
+ * rule, the early cut, moving on and uTP: the recommended arm plays as the
+ * apps play a pick, Torrentio's first as a plain client. Rows carry `race`;
+ * race 1's rows have none.
  */
 
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -25,6 +30,7 @@ const TORRENTIO =
   "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/manifest.json";
 const ARMS = ["recommended", "first", "first", "recommended"] as const;
 const SECONDS = 120;
+const RACE = 2;
 
 type Json = Record<string, any>;
 
@@ -62,6 +68,7 @@ function race(mq: string, builtFrom: string) {
       const result = events.find((e) => e.event === "race") ?? {};
       const failure = events.find((e) => e.event === "error")?.message ?? r.error?.message ?? null;
       const row = {
+        race: RACE,
         date: new Date().toISOString().slice(0, 10),
         device: "mac",
         title: t.title,
@@ -81,6 +88,9 @@ function race(mq: string, builtFrom: string) {
         stallMs: result.stallMs ?? null,
         attempts: result.attempts ?? null,
         failures: result.failures ?? null,
+        played: result.played ?? null,
+        moved: result.moved ?? null,
+        versionsMs: result.versionsMs ?? null,
         ok: result.ok === true,
         error: result.ok ? null : failure,
         wallMs: Date.now() - started,
@@ -98,8 +108,12 @@ function pct(xs: number[], p: number): number | null {
   return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)];
 }
 
-function summary() {
-  const rows = readFileSync(out, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+function summary(race: number) {
+  const rows = readFileSync(out, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
+    .filter((r) => (r.race ?? 1) === race);
   for (const arm of ["recommended", "first"]) {
     const mine = rows.filter((r) => r.arm === arm);
     const ok = mine.filter((r) => r.ok);
@@ -108,8 +122,10 @@ function summary() {
     const stalls = ok.reduce((n, r) => n + (r.stalls ?? 0), 0);
     console.log(
       JSON.stringify({
+        race,
         arm,
         runs: mine.length,
+        moved: mine.filter((r) => r.moved).length,
         success: mine.length ? Math.round((ok.length / mine.length) * 100) : null,
         p50FirstFrameMs: pct(first, 50),
         p90FirstFrameMs: pct(first, 90),
@@ -120,6 +136,6 @@ function summary() {
 }
 
 const [first, builtFrom] = process.argv.slice(2);
-if (first === "summary") summary();
+if (first === "summary") summary(Number(builtFrom ?? RACE));
 else if (first) race(first, builtFrom ?? "unknown");
 else console.error("usage: bun bench/m13/race.ts <mq binary> [built_from] | summary");

@@ -472,12 +472,15 @@ async fn play(
             facts: Default::default(),
         },
     );
-    let snapshot = until(Duration::from_secs(15), || {
-        let s = versions.snapshot();
-        s.done.then_some(s)
+    until(Duration::from_secs(15), || {
+        versions.snapshot().done.then_some(())
     })
-    .await
-    .unwrap_or_else(|| versions.snapshot());
+    .await;
+    let versions_ms = ms(started.elapsed());
+    // Live seeders rank the rows about a second after `done` (two on a
+    // cold first scrape); a viewer reads the list for longer than that.
+    tokio::time::sleep(LIVE_SETTLE).await;
+    let snapshot = versions.snapshot();
     let key = match arm {
         Arm::Recommended => snapshot.recommended.as_ref().map(|r| r.key.clone()),
         Arm::First => versions.first_listed(),
@@ -495,23 +498,28 @@ async fn play(
         "pick": { "quality": pick.quality, "via": pick.via, "release": pick.release_name,
                   "reasons": pick.reasons, "failover": pick.failover_count,
                   "line": pick.line, "sizeBytes": pick.size_bytes, "bitrateMbps": pick.bitrate_mbps },
-        "ms": ms(started.elapsed()),
+        "versionsMs": versions_ms, "ms": ms(started.elapsed()),
     }));
 
     let opened = Instant::now();
-    let playback = PlaybackView::open(
-        core,
-        versions.candidates(&key),
-        PlayTarget {
-            kind,
-            item_id,
-            video_id: id,
-            name: details.as_ref().map(|d| d.name.clone()),
-            poster: details.and_then(|d| d.poster),
-            season,
-            episode,
-        },
-    );
+    let target = PlayTarget {
+        kind,
+        item_id,
+        video_id: id,
+        name: details.as_ref().map(|d| d.name.clone()),
+        poster: details.and_then(|d| d.poster),
+        season,
+        episode,
+    };
+    // The recommendation plays as the apps play a pick (moving on, the
+    // early cut); Torrentio's first plays as a plain client would, its
+    // sources only.
+    let playback = match arm {
+        Arm::Recommended => {
+            PlaybackView::open_picked(core, versions.pick(&key), target, &versions.plays())
+        }
+        Arm::First => PlaybackView::open(core, versions.candidates(&key), target),
+    };
     // The race's start timeout (plans/m13-stream-choice.md 6.4): 120 s.
     let ready = until(Duration::from_secs(120), || {
         let s = playback.snapshot();
@@ -522,7 +530,8 @@ async fn play(
     // One summary line per run for the race (6.4): first frame from Play.
     let race = |first_frame: Option<u64>,
                 played: &serde_json::Value,
-                attempts: &[mq_runtime::Attempt]| {
+                snap: &mq_runtime::PlaybackSnapshot| {
+        let attempts = &snap.attempts;
         let seeders = match &pick.status {
             mq_runtime::views::versions::VersionStatus::Torrent { seeds } => *seeds,
             _ => None,
@@ -533,20 +542,20 @@ async fn play(
             "line": pick.line, "readyMs": ready_ms, "firstFrameMs": first_frame.map(|f| ready_ms + f),
             "stalls": played["stalls"], "stallMs": played["stall_ms"], "attempts": attempts.len(),
             "failures": attempts.iter().map(|a| a.error.clone()).collect::<Vec<_>>(),
-            "ok": first_frame.is_some(),
+            "played": snap.key, "moved": snap.trying.as_ref().map(|t| &t.key),
+            "versionsMs": versions_ms, "ok": first_frame.is_some(),
         })
     };
     let Some(ready) = ready else {
-        emit(race(None, &json!({}), &playback.snapshot().attempts));
+        emit(race(None, &json!({}), &playback.snapshot()));
         return Err("playback did not resolve in 120 s".into());
     };
     emit(json!({
         "event": "resolved", "phase": ready.phase, "attempts": ready.attempts,
         "resume_ms": ready.resume_ms, "ms": ms(started.elapsed()),
     }));
-    let attempts = ready.attempts.clone();
     let Some(url) = ready.url.clone() else {
-        emit(race(None, &json!({}), &attempts));
+        emit(race(None, &json!({}), &ready));
         return Err("no source could be opened".into());
     };
     let played = play::play_url(
@@ -559,7 +568,7 @@ async fn play(
         },
     )
     .await?;
-    emit(race(played["first_frame_ms"].as_u64(), &played, &attempts));
+    emit(race(played["first_frame_ms"].as_u64(), &played, &ready));
     playback.report_progress(ready.resume_ms.unwrap_or(0) + seconds * 1000, 0, false);
     let subs = until(Duration::from_secs(10), || {
         let s = playback.snapshot();
@@ -600,6 +609,9 @@ async fn play(
     emit(json!({ "event": "done", "played": played, "total_ms": ms(started.elapsed()) }));
     Ok(())
 }
+
+/// How long the race reads Versions after `done` before it plays.
+const LIVE_SETTLE: Duration = Duration::from_millis(2500);
 
 /// Polls `f` every 10 ms until it returns a value or `within` passes.
 async fn until<T>(within: Duration, f: impl Fn() -> Option<T>) -> Option<T> {
