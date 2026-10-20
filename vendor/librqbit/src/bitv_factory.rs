@@ -42,7 +42,7 @@ impl BitVFactory for NonPersistentBitVFactory {
 /// Marquee fork (engine review r3, P2-2): fast resume with no session store.
 /// A torrent's have-bitfield is `<folder>/<info hash>.have`, beside its data
 /// folder (never in it: a torrent may name a file anything), so a relaunch
-/// checks a sample of the pieces it had instead of hashing every file again.
+/// hashes a sample of the pieces it had instead of every file again.
 /// A torrent known by id only keeps nothing.
 pub(crate) struct FolderBitVFactory {
     pub(crate) folder: PathBuf,

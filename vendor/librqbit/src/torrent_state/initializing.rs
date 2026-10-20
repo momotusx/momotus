@@ -154,7 +154,10 @@ impl TorrentStateInitializing {
                     })
                     .enumerate()
                 {
-                    if fo.check_piece(piece_id).is_err() {
+                    // Marquee fork (engine review r4, P1-1): a wrong hash is
+                    // broken too (`Ok(false)`), not only a read error: a
+                    // lost write reads back as zeros.
+                    if !matches!(fo.check_piece(piece_id), Ok(true)) {
                         return true;
                     }
 
@@ -176,7 +179,9 @@ impl TorrentStateInitializing {
                 info_hash = ?self.shared.info_hash,
                 "data corrupted, ignoring fastresume data"
             );
-            if let Err(e) = bitv_factory.clear(self.shared.id.into()).await {
+            // Marquee fork (engine review r4, P1-1): by info hash, as the
+            // folder store keys it.
+            if let Err(e) = bitv_factory.clear(self.shared.info_hash.into()).await {
                 warn!(id=?self.shared.id, info_hash = ?self.shared.info_hash, "error clearing bitfield: {e:#}");
             }
             self.checked_bytes.store(0, Ordering::Relaxed);
@@ -237,6 +242,26 @@ impl TorrentStateInitializing {
                     .unwrap_or(true)
             },
             &self.metadata.file_infos,
+        );
+
+        // Marquee fork (engine review r4, P1-1): the bitfield syncs these
+        // files before it claims a new piece in them.
+        let mut have_pieces = have_pieces;
+        have_pieces.sync_data_of(
+            self.metadata
+                .file_infos
+                .iter()
+                .filter(|fi| !fi.attrs.padding)
+                .map(|fi| {
+                    (
+                        self.shared
+                            .options
+                            .output_folder
+                            .join(&fi.relative_filename),
+                        fi.piece_range_usize(),
+                    )
+                })
+                .collect(),
         );
 
         let chunk_tracker = ChunkTracker::new(

@@ -5,6 +5,7 @@ mod support;
 
 use std::net::Ipv4Addr;
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use mq_engine::{Engine, FileHint, TorrentHandle};
@@ -184,12 +185,13 @@ async fn a_finished_file_with_upload_off_is_never_announced_complete() {
     assert!(!last.contains("event=completed"), "{last}");
 }
 
-/// A torrent that goes tells every tracker that took its announce
-/// (`stopped`), so a viewer who left is no longer in the swarm's counts
-/// (engine review r3, P3-6). Its have-bitfield goes with its data.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_removed_torrent_announces_stopped() {
-    let s = support::swarm(true).await;
+/// An engine on `dir` whose torrent of `s` announces to an HTTP tracker
+/// (an interval of 60 s, no peers), its movie read: the tracker, the
+/// engine, the torrent. Every request of the metadata fetch is in.
+async fn tracked(
+    s: &support::Swarm,
+    dir: &Path,
+) -> (support::HttpTracker, Engine, mq_engine::TorrentHandle) {
     let body = b"d8:intervali60e5:peers0:e";
     let mut answer = format!(
         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -198,7 +200,6 @@ async fn a_removed_torrent_announces_stopped() {
     .into_bytes();
     answer.extend(body);
     let tracker = support::HttpTracker::start(answer, false);
-    let dir = tempfile::tempdir().unwrap();
     let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
     let local = [
         Ipv4Addr::LOCALHOST.into(),
@@ -207,7 +208,7 @@ async fn a_removed_torrent_announces_stopped() {
     let engine = Engine::start(mq_engine::EngineConfig {
         discovery: false,
         upload: false,
-        ..mq_engine::EngineConfig::new(dir.path(), http.torrent_scope(&local))
+        ..mq_engine::EngineConfig::new(dir, http.torrent_scope(&local))
     })
     .await
     .unwrap();
@@ -224,27 +225,143 @@ async fn a_removed_torrent_announces_stopped() {
         .await
         .unwrap();
     read_range(&engine, t, movie, 0, 1 << 20).await;
-    let have = dir.path().join(format!("{}.have", s.info_hash));
-    assert!(have.exists(), "no have-bitfield beside the data");
-    // The metadata fetch announced and may have stopped too: every request
-    // so far is in before the count.
+    // The metadata fetch announced and may have stopped too.
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let stopped = |lines: Vec<String>| lines.iter().filter(|l| l.contains("event=stopped")).count();
-    let before = stopped(tracker.request_lines());
     assert!(tracker.requests() >= 1, "never announced");
-    engine.remove(t, false).await.unwrap();
+    (tracker, engine, t)
+}
+
+/// `stopped` announces the tracker took.
+fn stopped(tracker: &support::HttpTracker) -> usize {
+    tracker
+        .request_lines()
+        .iter()
+        .filter(|l| l.contains("event=stopped"))
+        .count()
+}
+
+/// Waits up to 3 s for more than `before` `stopped` announces.
+async fn stopped_after(tracker: &support::HttpTracker, before: usize) -> bool {
     for _ in 0..30 {
-        if stopped(tracker.request_lines()) > before {
-            break;
+        if stopped(tracker) > before {
+            return true;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+    false
+}
+
+/// A torrent that goes tells every tracker that took its announce
+/// (`stopped`), so a viewer who left is no longer in the swarm's counts
+/// (engine review r3, P3-6). Its have-bitfield goes with its data.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_removed_torrent_announces_stopped() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let (tracker, engine, t) = tracked(&s, dir.path()).await;
+    let have = dir.path().join(format!("{}.have", s.info_hash));
+    assert!(have.exists(), "no have-bitfield beside the data");
+    let before = stopped(&tracker);
+    engine.remove(t, false).await.unwrap();
     assert!(
-        stopped(tracker.request_lines()) > before,
+        stopped_after(&tracker, before).await,
         "no stopped announce: {:?}",
         tracker.request_lines()
     );
     assert!(!have.exists(), "the have-bitfield outlived the data");
+}
+
+/// A dropped engine stops its session: its torrents end with it (their
+/// trackers hear `stopped`), not go on writing into a folder the next
+/// engine owns (engine review r4, P3-3: the tracker stream held the session
+/// alive).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_dropped_engine_stops_its_torrents() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let (tracker, engine, _t) = tracked(&s, dir.path()).await;
+    let before = stopped(&tracker);
+    drop(engine);
+    assert!(
+        stopped_after(&tracker, before).await,
+        "the dropped engine's torrent went on: {:?}",
+        tracker.request_lines()
+    );
+}
+
+/// An engine on `dir` that may reach 127.0.0.1, once the one before let go
+/// of the folder.
+async fn engine_on(dir: &Path) -> Engine {
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let config = || mq_engine::EngineConfig {
+        discovery: false,
+        ..mq_engine::EngineConfig::new(dir, http.torrent_scope(&[Ipv4Addr::LOCALHOST.into()]))
+    };
+    for _ in 0..40 {
+        if let Ok(engine) = Engine::start(config()).await {
+            return engine;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Engine::start(config()).await.unwrap()
+}
+
+/// A relaunch whose have-bitfield claims a piece the file no longer holds
+/// (a write the disk lost to a power cut reads back as zeros) checks every
+/// piece and fetches that one again: the player never gets the zeros
+/// (engine review r4, P1-1: the sample counted read errors, not a wrong
+/// hash).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_relaunch_fetches_a_piece_the_disk_lost() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let head = 64 << 10;
+    let first = engine_on(dir.path()).await;
+    let t = first
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = first
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    read_range(&first, t, movie, 0, head as u64).await;
+    // Kept, with the bitfield that claims the head.
+    first.remove(t, true).await.unwrap();
+    drop(first);
+    let file = find(&dir.path().join(&s.info_hash), "movie.mkv").expect("the movie file");
+    let lost = std::fs::OpenOptions::new().write(true).open(&file).unwrap();
+    std::os::unix::fs::FileExt::write_all_at(&lost, &vec![0u8; head], 0).unwrap();
+    drop(lost);
+    let again = engine_on(dir.path()).await;
+    let t = again
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = again
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let got = read_range(&again, t, movie, 0, head as u64).await;
+    assert!(
+        got == s.movie[..head],
+        "the relaunch served the bytes the disk lost"
+    );
+}
+
+/// The file named `name` under `dir`, at any depth.
+fn find(dir: &Path, name: &str) -> Option<std::path::PathBuf> {
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let path = e.path();
+        if path.is_dir() {
+            if let Some(found) = find(&path, name) {
+                return Some(found);
+            }
+        } else if e.file_name() == name {
+            return Some(path);
+        }
+    }
+    None
 }
 
 /// The time from an engine's start to a torrent's first range, which waits
@@ -342,11 +459,17 @@ async fn a_removed_torrent_leaves_its_pieces_on_disk() {
         stats.pieces_have < stats.pieces_total && stats.downloaded_bytes < 16 << 20,
         "the file finished or 16 MiB came, which flushes on its own: {stats:?}"
     );
+    let synced = mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed);
     engine.remove(t, true).await.unwrap();
     let have = std::fs::read(dir.path().join(format!("{}.have", s.info_hash))).unwrap();
     assert!(
         have.iter().any(|b| *b != 0),
         "no piece on disk after the removal: {have:?}"
+    );
+    // Its data first (engine review r4, P1-1).
+    assert!(
+        mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed) > synced,
+        "the bitfield was written before its data synced"
     );
 }
 
@@ -380,5 +503,90 @@ async fn a_magnet_whose_peers_all_failed_says_why() {
     assert!(
         err.contains(&format!("error reading metainfo from {peer}")),
         "the cause is missing: {err}"
+    );
+}
+
+/// The flusher syncs a finished file's data before its bitfield claims it:
+/// when the `.have` on disk says the file is whole, its data was synced
+/// (engine review r4, P1-1: the bitfield was fsynced, the data never).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_finished_file_is_claimed_after_its_data_synced() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let engine = engine_on(dir.path()).await;
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let synced = mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed);
+    let whole = read_range(&engine, t, movie, 0, s.movie.len() as u64).await;
+    assert_eq!(whole, s.movie);
+    let path = dir.path().join(format!("{}.have", s.info_hash));
+    let mut claimed = false;
+    for _ in 0..50 {
+        claimed = std::fs::read(&path).is_ok_and(|have| have.first() == Some(&0xff));
+        if claimed {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(claimed, "the finished file was never claimed on disk");
+    assert!(
+        mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed) > synced,
+        "the bitfield claimed the file before its data synced"
+    );
+}
+
+/// A have-bitfield the data contradicts is cleared, by info hash, before
+/// the full check: a check cut short (a pause, a removal) must not leave
+/// it for the next launch (engine review r4, P1-1: the clear went by the
+/// torrent's id, which the folder store ignores). Here every piece is
+/// claimed over 256 MiB of holes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_contradicted_have_bitfield_is_cleared_at_once() {
+    const PIECE: u64 = 4 << 20;
+    const LEN: u64 = 256 << 20;
+    let hashes = (LEN / PIECE * 20) as usize;
+    let mut torrent =
+        format!("d4:infod6:lengthi{LEN}e4:name7:big.mkv12:piece lengthi{PIECE}e6:pieces{hashes}:")
+            .into_bytes();
+    torrent.extend(vec![0xab; hashes]);
+    torrent.extend(b"ee");
+    let dir = tempfile::tempdir().unwrap();
+    let (first, _) = first_range(dir.path(), &torrent).await;
+    drop(first);
+    let have = std::fs::read_dir(dir.path())
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.extension().is_some_and(|x| x == "have"))
+        .expect("a have-bitfield");
+    // A new file in its place: the first engine's flusher may still write
+    // its last state into the old one.
+    let forged = dir.path().join("forged");
+    std::fs::write(&forged, vec![0xff; (LEN / PIECE / 8) as usize]).unwrap();
+    std::fs::rename(&forged, &have).unwrap();
+    let engine = engine_on(dir.path()).await;
+    let t = engine.add_torrent_bytes(torrent, &[]).await.unwrap();
+    engine
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
+    let mut cleared = false;
+    for _ in 0..1500 {
+        if !have.exists() {
+            cleared = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    engine.remove(t, false).await.unwrap();
+    assert!(
+        cleared,
+        "the contradicted bitfield stayed through the check"
     );
 }

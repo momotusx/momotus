@@ -108,6 +108,10 @@ pub use torrent_state::peer::stats::snapshot::{
 };
 pub use type_aliases::FileInfos;
 
+/// Marquee fork (engine review r4, P1-1): data syncs before bitfield
+/// writes, for tests.
+#[doc(hidden)]
+pub use bitv::DATA_SYNCS;
 pub use buffers::*;
 pub use clone_to_owned::CloneToOwned;
 pub use librqbit_core::magnet::*;

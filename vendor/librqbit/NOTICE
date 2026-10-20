@@ -54,8 +54,14 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
 - src/bitv_factory.rs, src/session.rs: `FolderBitVFactory` and
   `SessionOptions::bitv_folder`, fast resume with no session store: each
   torrent's have-bitfield in `<folder>/<info hash>.have`, so a relaunch
-  checks a sample of its pieces instead of hashing every file.
+  hashes a sample of its pieces instead of every file.
 - src/bitv.rs: a disk-backed bitfield is also written at once when it is
   dropped (no fsync), for a process that ends right after.
 - src/dht_utils.rs, src/session.rs: a magnet whose peers all failed says
   why the last one did ("input address stream exhausted" carries it).
+- src/torrent_state/initializing.rs: the fast-resume sample counts a wrong
+  hash as broken (upstream counted only read errors), and a broken bitfield
+  is cleared by info hash.
+- src/bitv.rs: a disk-backed bitfield syncs the data files of the pieces it
+  newly claims before each write (the flusher's and the one on drop), so it
+  never claims a piece the disk lost.

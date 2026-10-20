@@ -214,8 +214,8 @@ fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
         ratelimits: cfg.limits,
         destinations: Some(destinations(&scopes.peers, &scopes.trackers, &scopes.dht)),
         // Fast resume: `<info hash>.have` beside each torrent's folder, so
-        // a relaunch checks a sample of its pieces, not every byte
-        // (engine review r3, P2-2).
+        // a relaunch hashes a sample of its pieces, not every byte (engine
+        // review r3, P2-2); a wrong hash means the full check (r4, P1-1).
         bitv_folder: Some(cfg.data_dir.clone()),
         ..Default::default()
     }

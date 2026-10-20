@@ -1,4 +1,11 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    ops::Range,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use anyhow::Context;
 use bitvec::{boxed::BitBox, order::Msb0, slice::BitSlice, vec::BitVec};
@@ -12,6 +19,9 @@ pub trait BitV: Send + Sync {
     fn into_dyn(self) -> Box<dyn BitV>;
     fn as_bytes(&self) -> &[u8];
     fn flush(&mut self, flush_async: bool) -> anyhow::Result<()>;
+    /// Marquee fork (engine review r4, P1-1): the torrent's data files, each
+    /// with its pieces, synced before a write that claims a new piece in it.
+    fn sync_data_of(&mut self, _files: Vec<(PathBuf, Range<usize>)>) {}
 }
 
 pub type BoxBitV = Box<dyn BitV>;
@@ -20,12 +30,54 @@ struct DiskFlushRequest {
     snapshot: BitBox<u8, Msb0>,
 }
 
+/// Marquee fork (engine review r4, P1-1): data syncs made before a bitfield
+/// write, for tests.
+pub static DATA_SYNCS: AtomicU64 = AtomicU64::new(0);
+
+/// Marquee fork (engine review r4, P1-1): what a bitfield write makes
+/// durable first. Every piece in a snapshot was written before the
+/// snapshot was taken, so with its files synced first the bitfield never
+/// claims a piece the disk lost (a power cut after a flush).
+#[derive(Default)]
+struct Written {
+    files: Vec<(PathBuf, Range<usize>)>,
+    /// The last state whose data was synced.
+    last: Option<BitBox<u8, Msb0>>,
+}
+
+impl Written {
+    /// Syncs every file with a piece `next` claims that the last state did
+    /// not. Blocking.
+    fn sync_data(&mut self, next: &BitSlice<u8, Msb0>) -> std::io::Result<()> {
+        let last = self.last.as_deref();
+        let new = |i: usize| {
+            next.get(i).is_some_and(|b| *b) && !last.and_then(|l| l.get(i)).is_some_and(|b| *b)
+        };
+        for (path, pieces) in &self.files {
+            if !pieces.clone().any(&new) {
+                continue;
+            }
+            match std::fs::File::open(path) {
+                Ok(f) => f.sync_data()?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+            }
+            DATA_SYNCS.fetch_add(1, Ordering::Relaxed);
+        }
+        self.last = Some(next.to_bitvec().into_boxed_bitslice());
+        Ok(())
+    }
+}
+
 pub struct DiskBackedBitV {
     bv: BitBox<u8, Msb0>,
     flush_tx: tokio::sync::mpsc::UnboundedSender<DiskFlushRequest>,
     /// Marquee fork (engine review r3, P2-2): the flusher's file, for the
     /// write on drop.
     file: Arc<std::fs::File>,
+    /// Marquee fork (engine review r4, P1-1).
+    written: Arc<parking_lot::Mutex<Written>>,
+    spawner: BlockingSpawner,
 }
 
 impl Drop for DiskBackedBitV {
@@ -34,8 +86,17 @@ impl Drop for DiskBackedBitV {
         // few hundred bytes into the page cache, no fsync): a process that
         // ends right after a torrent goes (the CLI) never runs the flusher
         // again. The snapshot below still follows any older one queued.
-        if let Err(e) = self.file.pwrite_all(0, self.bv.as_raw_slice()) {
-            tracing::warn!("error writing bitv on drop: {e:#}");
+        // The data it claims is synced first (engine review r4, P1-1).
+        let synced = self
+            .spawner
+            .block_in_place(|| self.written.lock().sync_data(&self.bv));
+        match synced {
+            Ok(()) => {
+                if let Err(e) = self.file.pwrite_all(0, self.bv.as_raw_slice()) {
+                    tracing::warn!("error writing bitv on drop: {e:#}");
+                }
+            }
+            Err(e) => tracing::warn!("bitv not written on drop, its data did not sync: {e:#}"),
         }
         if self
             .flush_tx
@@ -72,6 +133,11 @@ impl DiskBackedBitV {
             .with_context(|| format!("error opening {filename:?}"))?;
         let file = Arc::new(file);
         let flushed = file.clone();
+        let written = Arc::new(parking_lot::Mutex::new(Written {
+            files: Vec::new(),
+            last: Some(bv.clone()),
+        }));
+        let (to_sync, own_spawner) = (written.clone(), spawner.clone());
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DiskFlushRequest>();
         librqbit_core::spawn_utils::spawn(
@@ -84,6 +150,18 @@ impl DiskBackedBitV {
                     };
                     while let Ok(r) = rx.try_recv() {
                         req = r;
+                    }
+
+                    // Marquee fork (engine review r4, P1-1): the data first.
+                    if let Err(e) = spawner
+                        .block_in_place_with_semaphore(|| to_sync.lock().sync_data(&req.snapshot))
+                        .await
+                    {
+                        tracing::error!(
+                            ?filename,
+                            "torrent data did not sync, bitv not written: {e:#}"
+                        );
+                        continue;
                     }
 
                     if let Err(e) = spawner
@@ -114,6 +192,8 @@ impl DiskBackedBitV {
             bv,
             flush_tx: tx,
             file,
+            written,
+            spawner: own_spawner,
         })
     }
 }
@@ -154,6 +234,10 @@ impl BitV for DiskBackedBitV {
         self.bv.as_raw_slice()
     }
 
+    fn sync_data_of(&mut self, files: Vec<(PathBuf, Range<usize>)>) {
+        self.written.lock().files = files;
+    }
+
     fn flush(&mut self, _flush_async: bool) -> anyhow::Result<()> {
         let req = DiskFlushRequest {
             snapshot: self.bv.clone(),
@@ -181,6 +265,10 @@ impl BitV for Box<dyn BitV> {
 
     fn flush(&mut self, flush_async: bool) -> anyhow::Result<()> {
         (**self).flush(flush_async)
+    }
+
+    fn sync_data_of(&mut self, files: Vec<(PathBuf, Range<usize>)>) {
+        (**self).sync_data_of(files)
     }
 
     fn into_dyn(self) -> Box<dyn BitV> {
