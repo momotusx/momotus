@@ -28,6 +28,11 @@ impl Hold {
     }
 }
 
+/// The free space `engine` reads from now on (`None`: the volume's).
+pub fn set_free(engine: &Engine, free: Option<u64>) {
+    *lock(&engine.inner.free) = free;
+}
+
 /// Holds every range `engine` opens from now on at the barrier, until
 /// [`Hold::open`].
 pub fn hold_ranges(engine: &Engine) -> Arc<Hold> {

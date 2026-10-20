@@ -117,6 +117,16 @@ impl TorrentStreams {
         }
     }
 
+    /// Marquee fork (plans/streaming-window.md 2.4): every waiting stream
+    /// polls again (its owner ended the playback).
+    pub(crate) fn wake_all(&self) {
+        for mut w in self.streams.iter_mut() {
+            if let Some(waker) = w.value_mut().waker.take() {
+                waker.wake();
+            }
+        }
+    }
+
     fn drop_stream(&self, stream_id: StreamId) -> Option<StreamState> {
         debug!(stream_id, "dropping stream");
         self.streams.remove(&stream_id).map(|s| s.1)
@@ -333,6 +343,14 @@ impl ManagedTorrent {
             crate::ManagedTorrentState::Live(l) => Ok(l.streams.clone()),
             s => anyhow::bail!("streams: invalid state {}", s.name()),
         })
+    }
+
+    /// Marquee fork (plans/streaming-window.md 2.4): every waiting stream
+    /// polls again; its owner ended the playback.
+    pub fn ext_wake_streams(&self) {
+        if let Ok(streams) = self.streams() {
+            streams.wake_all();
+        }
     }
 
     fn maybe_reconnect_needed_peers_for_file(&self, file_id: usize) -> bool {

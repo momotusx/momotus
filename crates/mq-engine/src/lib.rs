@@ -20,6 +20,7 @@ mod reader;
 mod scrape;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks;
+mod window;
 
 pub use adapter::PeerTally;
 pub use check::PieceCheck;
@@ -28,6 +29,7 @@ pub use librqbit;
 pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
+pub use window::{RESERVE_BYTES, WindowInputs, WindowPlan, free_space, reclaimable, window_plan};
 
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
@@ -242,6 +244,15 @@ pub enum EngineError {
     /// folder would evict each other's data.
     #[error("the torrent data folder is in use by another engine")]
     DataInUse,
+    /// A window would not fit (plans/streaming-window.md 2.1): refused
+    /// before any write.
+    #[error("this device is full")]
+    DeviceFull,
+    /// A window or whole file ended its playback before a write could fail
+    /// (2.4): "storage full", or "this storage cannot free space while
+    /// playing".
+    #[error("{0}")]
+    Storage(String),
     #[error("torrent: {0:#}")]
     Torrent(#[from] anyhow::Error),
     #[error("io: {0}")]
@@ -319,6 +330,21 @@ pub struct TorrentStats {
     /// [`Engine::set_rate`]): bytes per second, and the readahead it gave.
     pub bytes_per_s: Option<u64>,
     pub readahead_bytes: Option<u64>,
+    /// The window's budget `W` while one plays ([`Engine::window`]).
+    pub window_bytes: Option<u64>,
+    /// What the scheduler counts as held: verified pieces and open ones at
+    /// full size (a window's only).
+    pub held_bytes: Option<u64>,
+}
+
+/// A windowed playback (plans/streaming-window.md 2.1): its plan, the
+/// file's rate, the network, and the position it resumes at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Window {
+    pub plan: WindowPlan,
+    pub bitrate: u64,
+    pub metered: bool,
+    pub resume_at: Option<u64>,
 }
 
 const KEEP_WARM: Duration = Duration::from_secs(60);
@@ -372,6 +398,12 @@ struct Inner {
     hold: Mutex<Option<Arc<test_hooks::Hold>>>,
     #[cfg(feature = "test-hooks")]
     evict_hold: Mutex<Option<Arc<test_hooks::Hold>>>,
+    /// Free space as the engine reads it, for tests of a full disk.
+    #[cfg(feature = "test-hooks")]
+    free: Mutex<Option<u64>>,
+    /// `R` and `C` as maintenance last counted them, for a ranking that
+    /// cannot wait (plans/streaming-window.md 3.1).
+    counted: Mutex<(u64, u64)>,
 }
 
 /// The session's tasks hang off its token, each torrent's as a child: a
@@ -415,6 +447,19 @@ pub(crate) struct Torrent {
     keeper: tokio::sync::Mutex<()>,
     /// The last rate set: file, bytes per second, readahead.
     rate: Mutex<Option<(usize, u64, u64)>>,
+    /// The window playing, if any (plans/streaming-window.md 2.1).
+    window: Mutex<Option<window::WindowState>>,
+    /// The adapter wakes the keeper with it when a round is due.
+    keeper_wake: Arc<tokio::sync::Notify>,
+    /// A keeper task runs.
+    keeping: std::sync::atomic::AtomicBool,
+    /// Why a window ended the playback; ranges fail with it until the next
+    /// window or file choice.
+    ended: Mutex<Option<String>>,
+    /// The player is paused (`Engine::set_paused`).
+    player_paused: std::sync::atomic::AtomicBool,
+    /// A whole file's readahead stopped under the reserve (2.4).
+    starved: std::sync::atomic::AtomicBool,
 }
 
 impl Torrent {
@@ -498,6 +543,9 @@ impl Drop for ClaimInner {
                 holds.claims.remove(&self.profile);
             }
         }
+        if holds.claims.is_empty() {
+            self.torrent.keeper_wake.notify_one();
+        }
     }
 }
 
@@ -541,6 +589,9 @@ impl Engine {
                 hold: Mutex::default(),
                 #[cfg(feature = "test-hooks")]
                 evict_hold: Mutex::default(),
+                #[cfg(feature = "test-hooks")]
+                free: Mutex::default(),
+                counted: Mutex::default(),
             }),
         };
         tokio::spawn(maintenance(Arc::downgrade(&engine.inner)));
@@ -717,6 +768,12 @@ impl Engine {
             last_used: Mutex::new(Instant::now()),
             keeper: tokio::sync::Mutex::new(()),
             rate: Mutex::new(None),
+            window: Mutex::new(None),
+            keeper_wake: Arc::default(),
+            keeping: Default::default(),
+            ended: Mutex::new(None),
+            player_paused: Default::default(),
+            starved: Default::default(),
         });
         let mut torrents = lock(&self.inner.torrents);
         if let Some((&h, _)) = torrents
@@ -770,8 +827,10 @@ impl Engine {
         // (engine review r4, P3-1).
         let starts = t.live.lock().await.is_none();
         if starts {
-            self.enforce_budget(Some(h)).await;
+            let need = self.free_for_whole(&t, t.files[idx].len).await;
+            self.enforce_budget(Some(h), need).await;
         }
+        lock(&t.ended).take();
         let mut live = t.live.lock().await;
         // A round between the two may have evicted it.
         if !lock(&self.inner.torrents).contains_key(&h) {
@@ -838,6 +897,7 @@ impl Engine {
             ext_rx,
             msg_rx,
             Arc::clone(&snapshot),
+            t.keeper_wake.clone(),
         ));
         *lock(&t.last_used) = Instant::now();
         *live = Some(Live {
@@ -963,6 +1023,8 @@ impl Engine {
         (s.sample_bytes, s.sample_busy_ms) = (snap.sample_bytes, snap.sample_busy_us / 1000);
         s.received_bytes = snap.received_bytes;
         (s.bytes_per_s, s.readahead_bytes) = (snap.rate.map(|r| r.1), snap.rate.map(|r| r.2));
+        s.window_bytes = lock(&t.window).map(|w| w.plan.budget);
+        s.held_bytes = snap.held_bytes;
         s.refetched_bytes = snap.refetched_bytes;
         s.unchoked_ms = snap.unchoked_us.map(|us| us / 1000);
         s.dwh = l.dwh;
@@ -1096,13 +1158,18 @@ impl Engine {
     ) -> Result<()> {
         let t = self.torrent(h)?;
         let sched = self.sched_config();
-        let readahead = readahead_for(
-            sched.readahead_bytes,
-            sched.playback_secs,
-            bytes_per_s,
-            metered,
-            self.inner.cfg.cache_budget_bytes,
-        );
+        let windowed = (*lock(&t.window)).filter(|w| w.file == file);
+        let readahead = match windowed {
+            // A window keeps the readahead its plan gave (2.2).
+            Some(w) => w.ahead(sched.readahead_bytes),
+            None => readahead_for(
+                sched.readahead_bytes,
+                sched.playback_secs,
+                bytes_per_s,
+                metered,
+                self.inner.cfg.cache_budget_bytes,
+            ),
+        };
         *lock(&t.rate) = Some((file, bytes_per_s, readahead));
         if let Some(l) = t.live.lock().await.as_ref() {
             let _ = l.msgs.send(adapter::Msg::Rate {
@@ -1112,6 +1179,228 @@ impl Engine {
             });
         }
         Ok(())
+    }
+
+    /// Free space on the data folder's volume.
+    pub fn free(&self) -> Option<u64> {
+        #[cfg(feature = "test-hooks")]
+        if let Some(free) = *lock(&self.inner.free) {
+            return Some(free);
+        }
+        free_space(&self.inner.cfg.data_dir)
+    }
+
+    /// The scheduler presets this engine runs with, for [`window_plan`].
+    pub fn device_class(&self) -> DeviceClass {
+        self.inner.cfg.device_class
+    }
+
+    /// The piece length of `h`, for [`WindowInputs`].
+    pub fn piece_len(&self, h: TorrentHandle) -> Result<u32> {
+        Ok(self.torrent(h)?.piece_len)
+    }
+
+    /// `R` (plans/streaming-window.md 2.1): what torrents with no reader,
+    /// claim or hold, and folders an earlier launch left, hold on disk.
+    pub async fn reclaimable(&self) -> u64 {
+        let idle: Vec<PathBuf> = lock(&self.inner.torrents)
+            .values()
+            .filter(|t| t.readers.load(Ordering::Relaxed) == 0 && !t.claimed())
+            .filter(|t| !lock(&t.hold).by_profile.values().any(|h| h.held))
+            .map(|t| t.dir.clone())
+            .collect();
+        let held: Vec<PathBuf> = lock(&self.inner.torrents)
+            .values()
+            .map(|t| t.dir.clone())
+            .collect();
+        let data_dir = self.inner.cfg.data_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            let held: Vec<&Path> = held.iter().map(PathBuf::as_path).collect();
+            let left: u64 = leftovers(&data_dir, &held).0.iter().map(|l| l.2).sum();
+            left + idle.iter().map(|d| allocated(d)).sum::<u64>()
+        })
+        .await
+        .unwrap_or(0)
+    }
+
+    /// `R` and `C` as maintenance last counted them (every few seconds).
+    pub fn counted(&self) -> (u64, u64) {
+        *lock(&self.inner.counted)
+    }
+
+    /// `C` (2.1): what the windows playing, but `except`'s, will still take
+    /// (`W` less what each holds).
+    pub async fn committed(&self, except: Option<TorrentHandle>) -> u64 {
+        let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
+            .iter()
+            .map(|(h, t)| (*h, t.clone()))
+            .collect();
+        let mut sum = 0;
+        for (h, t) in all {
+            let Some(w) = *lock(&t.window) else {
+                continue;
+            };
+            if Some(h) == except {
+                continue;
+            }
+            let held = t
+                .live
+                .lock()
+                .await
+                .as_ref()
+                .map_or(0, |l| lock(&l.snapshot).held_bytes.unwrap_or(0));
+            sum += w.plan.budget.saturating_sub(held);
+        }
+        sum
+    }
+
+    /// Plays `file` of `h` in a window (plans/streaming-window.md 2.1): a
+    /// budget round first deletes idle torrents, oldest first, until free
+    /// space is `W - held + reserve`; then the scheduler keeps the torrent
+    /// to the plan and a keeper task evicts what it may, until the last
+    /// claim drops and the keeper trims it. The file is selected first
+    /// (`NoFile` otherwise), and before its reader opens.
+    pub async fn window(&self, h: TorrentHandle, file: usize, w: Window) -> Result<()> {
+        let t = self.torrent(h)?;
+        if t.live.lock().await.is_none() {
+            return Err(EngineError::NoFile);
+        }
+        let dir = t.dir.clone();
+        let held = tokio::task::spawn_blocking(move || allocated(&dir))
+            .await
+            .unwrap_or(0);
+        let need = (w.plan.budget + RESERVE_BYTES).saturating_sub(held);
+        self.enforce_budget(Some(h), need).await;
+        lock(&t.ended).take();
+        let state = window::WindowState {
+            file,
+            plan: w.plan,
+            bitrate: w.bitrate,
+            metered: w.metered,
+            shortfall: 0,
+        };
+        *lock(&t.window) = Some(state);
+        let sched = self.sched_config();
+        *lock(&t.rate) = Some((file, w.bitrate, state.ahead(sched.readahead_bytes)));
+        self.send_window(&t, Some(state), w.resume_at).await;
+        if !t.keeping.swap(true, Ordering::AcqRel) {
+            tokio::spawn(window::keep(Arc::downgrade(&self.inner), h, t.clone()));
+        }
+        Ok(())
+    }
+
+    /// The player paused or plays again (`report_progress`): a paused
+    /// window's anchor keeps its readahead, and maintenance does not pause
+    /// the torrent (plans/streaming-window.md 2.3, 2.4).
+    pub async fn set_paused(&self, h: TorrentHandle, paused: bool) -> Result<()> {
+        let t = self.torrent(h)?;
+        t.player_paused.store(paused, Ordering::Relaxed);
+        if let Some(l) = t.live.lock().await.as_ref() {
+            let _ = l.msgs.send(adapter::Msg::Paused(paused));
+        }
+        Ok(())
+    }
+
+    /// The window `state` (or none) to the adapter's scheduler.
+    async fn send_window(
+        &self,
+        t: &Torrent,
+        state: Option<window::WindowState>,
+        resume_at: Option<u64>,
+    ) {
+        let sched = self.sched_config();
+        let floor = |bitrate| {
+            readahead_for(
+                sched.readahead_bytes,
+                sched.playback_secs,
+                bitrate,
+                false,
+                self.inner.cfg.cache_budget_bytes,
+            )
+        };
+        let msg = adapter::Msg::Window {
+            window: state.map(|s| s.sched(floor(s.bitrate))),
+            readahead: state.map_or(0, |s| s.ahead(sched.readahead_bytes)),
+            bitrate: state.map_or(0, |s| s.bitrate),
+            resume_at,
+        };
+        if let Some(l) = t.live.lock().await.as_ref() {
+            let _ = l.msgs.send(msg);
+        }
+    }
+
+    /// A question to the torrent's adapter; `None` when it is not live.
+    async fn ask<T>(
+        &self,
+        t: &Torrent,
+        msg: impl FnOnce(tokio::sync::oneshot::Sender<T>) -> adapter::Msg,
+    ) -> Option<T> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        t.live.lock().await.as_ref()?.msgs.send(msg(tx)).ok()?;
+        rx.await.ok()
+    }
+
+    /// The last claim dropped (2.4): the torrent keeps its pinned pieces and
+    /// `[position - B, position + 180 s × r]`, within the engine's budget,
+    /// and the window ends; what stays counts in `R`.
+    async fn trim(&self, h: TorrentHandle, t: &Torrent, w: window::WindowState) {
+        let pinned = 4 * u64::from(t.piece_len);
+        let room = self
+            .inner
+            .cfg
+            .cache_budget_bytes
+            .saturating_sub(w.plan.behind + pinned);
+        let ahead = (180 * w.bitrate).min(room);
+        if let Some(pieces) = self.ask(t, |tx| adapter::Msg::Trim { ahead, tx }).await
+            && !pieces.is_empty()
+            && let Err(e) = self.evict_pieces(h, &pieces).await
+        {
+            tracing::warn!("trimming {}: {e}", t.info_hash);
+        }
+        *lock(&t.window) = None;
+        self.send_window(t, None, None).await;
+    }
+
+    /// Ends a windowed playback before a write fails (2.4): fetching stops,
+    /// and every range fails with `why` until the next window or file
+    /// choice.
+    async fn end_window(&self, t: &Torrent, why: &str) {
+        tracing::warn!("{}: {why}", t.info_hash);
+        *lock(&t.ended) = Some(why.to_owned());
+        *lock(&t.window) = None;
+        let live = t.live.lock().await;
+        if let Some(l) = live.as_ref() {
+            if !l.managed.is_paused() {
+                let _round = t.keeper.lock().await;
+                if let Err(e) = self.inner.session.pause(&l.managed).await {
+                    tracing::warn!("pausing a full torrent: {e:#}");
+                }
+                let _ = l.msgs.send(adapter::Msg::Stopped);
+            }
+            l.managed.ext_wake_streams();
+        }
+    }
+
+    /// The free space a whole file needs before it starts (2.1): when it
+    /// fits only by counting `R`, `size - held + reserve`; else none (it
+    /// fits, or it plays in a window).
+    async fn free_for_whole(&self, t: &Torrent, size: u64) -> u64 {
+        let dir = t.dir.clone();
+        let data = self.inner.cfg.data_dir.clone();
+        let (held, free) =
+            tokio::task::spawn_blocking(move || (allocated(&dir), free_space(&data)))
+                .await
+                .unwrap_or((0, None));
+        #[cfg(feature = "test-hooks")]
+        let free = (*lock(&self.inner.free)).or(free);
+        let Some(free) = free else {
+            return 0;
+        };
+        let need = (size + RESERVE_BYTES).saturating_sub(held);
+        if need <= free || need > free + self.reclaimable().await {
+            return 0;
+        }
+        need
     }
 
     /// One eviction round over `pieces` of `h` (plans/streaming-window.md
@@ -1176,11 +1465,13 @@ impl Engine {
     }
 
     /// Deletes whole idle torrents, least recently used first, until the
-    /// allocated size fits the budget. `keep`, a torrent with a range open
-    /// and a claimed one are never deleted. Folders an earlier launch left
-    /// count too and go first, the oldest first: they were used before
-    /// anything this launch (engine review r2, P2-4).
-    async fn enforce_budget(&self, keep: Option<TorrentHandle>) {
+    /// allocated size fits the budget and the volume has `need_free` bytes
+    /// free (a window's or a whole file's round, plans/streaming-window.md
+    /// 2.1; 0 for none). `keep`, a torrent with a range open and a claimed
+    /// one are never deleted. Folders an earlier launch left count too and
+    /// go first, the oldest first: they were used before anything this
+    /// launch (engine review r2, P2-4).
+    async fn enforce_budget(&self, keep: Option<TorrentHandle>, need_free: u64) {
         let _round = self.inner.evicting.lock().await;
         let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
             .iter()
@@ -1206,23 +1497,33 @@ impl Engine {
         let Ok((mut used, left, trash)) = scan.await else {
             return;
         };
+        let free = if need_free > 0 {
+            self.free().unwrap_or(u64::MAX)
+        } else {
+            u64::MAX
+        };
+        let mut freed = 0u64;
+        let budget = self.inner.cfg.cache_budget_bytes;
+        let done =
+            |total: u64, freed: u64| total <= budget && free.saturating_add(freed) >= need_free;
         for dir in trash {
             let _ = tokio::fs::remove_dir_all(dir).await;
         }
         let mut total: u64 = used.iter().map(|u| u.2).sum();
         total += left.iter().map(|l| l.2).sum::<u64>();
         for (_, dir, bytes) in left {
-            if total <= self.inner.cfg.cache_budget_bytes {
+            if done(total, freed) {
                 break;
             }
             if let Some(trash) = self.set_aside(&dir) {
                 let _ = tokio::fs::remove_dir_all(&trash).await;
                 total -= bytes;
+                freed += bytes;
             }
         }
         used.sort_unstable_by_key(|u| u.0);
         for (_, h, bytes) in used {
-            if total <= self.inner.cfg.cache_budget_bytes {
+            if done(total, freed) {
                 break;
             }
             let Some(t) = all.iter().find(|(x, _)| *x == h).map(|(_, t)| t) else {
@@ -1244,7 +1545,10 @@ impl Engine {
                 torrents.remove(&h);
             }
             match self.drop_torrent(t, false).await {
-                Ok(()) => total -= bytes,
+                Ok(()) => {
+                    total -= bytes;
+                    freed += bytes;
+                }
                 Err(e) => tracing::warn!("evicting {}: {e}", t.info_hash),
             }
         }
@@ -1344,7 +1648,12 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
         let engine = Engine { inner };
         let torrents: Vec<Arc<Torrent>> = lock(&engine.inner.torrents).values().cloned().collect();
         for t in torrents {
-            if t.readers.load(Ordering::Relaxed) > 0 || lock(&t.last_used).elapsed() < KEEP_WARM {
+            // A paused player keeps filling its anchor's readahead
+            // (plans/streaming-window.md 2.4).
+            if t.readers.load(Ordering::Relaxed) > 0
+                || lock(&t.last_used).elapsed() < KEEP_WARM
+                || t.player_paused.load(Ordering::Relaxed)
+            {
                 continue;
             }
             let live = t.live.lock().await;
@@ -1356,7 +1665,10 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
                 let _ = l.msgs.send(adapter::Msg::Stopped);
             }
         }
-        engine.enforce_budget(None).await;
+        engine.enforce_budget(None, 0).await;
+        engine.guard_whole_files().await;
+        let counts = (engine.reclaimable().await, engine.committed(None).await);
+        *lock(&engine.inner.counted) = counts;
     }
 }
 
@@ -1602,7 +1914,7 @@ mod tests {
         }
         let next = tokio::spawn({
             let engine = engine.clone();
-            async move { engine.enforce_budget(None).await }
+            async move { engine.enforce_budget(None, 0).await }
         });
         tokio::time::sleep(Duration::from_millis(300)).await;
         assert!(older.exists(), "a round ran beside the running one");

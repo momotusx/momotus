@@ -102,6 +102,8 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   its own peer slot (upstream took a newer connection's state for its own
   when a peer disconnected as not needed was queued again before its old
   connection was gone, and could drop the peer for good).
+- src/torrent_state/streaming.rs: ext_wake_streams, every waiting stream
+  polls again (an owner that ended its playback fails them).
 - src/torrent_state/live/mod.rs: with an external scheduler driving, the
   download limit holds the read of each received block (upstream applies it
   on the request path, which an external scheduler never takes).

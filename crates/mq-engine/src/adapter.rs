@@ -47,6 +47,24 @@ pub(crate) enum Msg {
     },
     /// Every peer's tally, connected or gone (`Engine::peer_report`).
     Report(tokio::sync::oneshot::Sender<Vec<(SocketAddr, PeerTally)>>),
+    /// A window starts, changes (the space guard) or ends
+    /// (plans/streaming-window.md 2.1): the scheduler's window, the
+    /// readahead and rate of its file, and where a resume starts.
+    Window {
+        window: Option<mq_engine_sched::Window>,
+        readahead: u64,
+        bitrate: u64,
+        resume_at: Option<u64>,
+    },
+    /// The player paused or plays again.
+    Paused(bool),
+    /// The keeper's round: what to evict now.
+    ToEvict(tokio::sync::oneshot::Sender<Vec<u32>>),
+    /// The end of a playback: what the trim takes.
+    Trim {
+        ahead: u64,
+        tx: tokio::sync::oneshot::Sender<Vec<u32>>,
+    },
 }
 
 /// What one peer did for us since the file was chosen: counts only.
@@ -119,6 +137,8 @@ pub(crate) struct Snapshot {
     pub refetched_bytes: u64,
     /// The scheduler's rate: file, bytes per second, readahead.
     pub rate: Option<(usize, u64, u64)>,
+    /// What a window's scheduler counts as held.
+    pub held_bytes: Option<u64>,
 }
 
 /// The capacity sample covers the adapter's first 30 s.
@@ -145,6 +165,8 @@ pub(crate) struct Translator {
     verified_once: Vec<bool>,
     refetched_bytes: u64,
     rate: Option<(usize, u64, u64)>,
+    /// A window plays.
+    windowed: bool,
     demands: HashMap<DemandId, Demand>,
     now_us: u64,
     ready_us: Option<u64>,
@@ -239,6 +261,7 @@ impl Translator {
             verified_once: vec![false; num_pieces as usize],
             refetched_bytes: 0,
             rate: None,
+            windowed: false,
             demands: HashMap::new(),
             now_us: 0,
             ready_us: None,
@@ -321,7 +344,17 @@ impl Translator {
             unchoked_us: self.unchoked_us,
             refetched_bytes: self.refetched_bytes,
             rate: self.rate,
+            held_bytes: self
+                .sched
+                .as_ref()
+                .filter(|_| self.windowed)
+                .map(Scheduler::held_bytes),
         }
+    }
+
+    /// The keeper is due (plans/streaming-window.md 2.4).
+    pub fn keeper_due(&self) -> bool {
+        self.windowed && self.sched.as_ref().is_some_and(Scheduler::keeper_due)
     }
 
     pub fn tick(&mut self, now_us: u64) -> Vec<Wire> {
@@ -558,6 +591,54 @@ impl Translator {
                     now_us: self.now_us,
                 })
             }
+            Msg::Window {
+                window,
+                readahead,
+                bitrate,
+                resume_at,
+            } => {
+                if let Some(s) = self.sched.as_mut() {
+                    s.set_window(window);
+                    self.windowed = window.is_some();
+                    if let Some(w) = window {
+                        s.set_bitrate(w.file, bitrate);
+                        s.set_readahead(w.file, readahead);
+                        self.rate = Some((w.file, bitrate, readahead));
+                        if let Some(pos) = resume_at {
+                            s.seed_anchor(w.file, pos);
+                        }
+                    }
+                }
+                self.feed(Event::Tick {
+                    now_us: self.now_us,
+                })
+            }
+            Msg::Paused(paused) => {
+                if let Some(s) = self.sched.as_mut() {
+                    s.set_paused(paused);
+                }
+                self.feed(Event::Tick {
+                    now_us: self.now_us,
+                })
+            }
+            Msg::ToEvict(tx) => {
+                let _ = tx.send(
+                    self.sched
+                        .as_ref()
+                        .map(Scheduler::to_evict)
+                        .unwrap_or_default(),
+                );
+                Vec::new()
+            }
+            Msg::Trim { ahead, tx } => {
+                let _ = tx.send(
+                    self.sched
+                        .as_ref()
+                        .map(|s| s.trimmable(ahead))
+                        .unwrap_or_default(),
+                );
+                Vec::new()
+            }
         }
     }
 
@@ -711,6 +792,7 @@ pub(crate) async fn run(
     mut ext: mpsc::UnboundedReceiver<ExtEvent>,
     mut msgs: mpsc::UnboundedReceiver<Msg>,
     snapshot: Arc<Mutex<Snapshot>>,
+    keeper: Arc<tokio::sync::Notify>,
 ) {
     let started = Instant::now();
     let now = || started.elapsed().as_micros() as u64;
@@ -732,6 +814,9 @@ pub(crate) async fn run(
             execute(&torrent, &mut tr, more);
         }
         *snapshot.lock().unwrap_or_else(|p| p.into_inner()) = tr.snapshot();
+        if tr.keeper_due() {
+            keeper.notify_one();
+        }
         pending = tokio::select! {
             Some(ev) = ext.recv() => {
                 let mut out = tr.tick(now());

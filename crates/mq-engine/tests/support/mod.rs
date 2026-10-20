@@ -12,6 +12,7 @@ use mq_engine::{Engine, EngineConfig, FileHint, TorrentHandle};
 
 pub struct Swarm {
     pub _seeder: Engine,
+    #[allow(dead_code)] // the keeper's tests start leechers of their own
     pub leecher: Engine,
     pub info_hash: String,
     pub seeder_addr: SocketAddr,
@@ -95,6 +96,17 @@ pub async fn swarm_with(
         .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
         .collect();
     swarm_of(ip, seeder, leecher, piece_len, dwh, ("movie.mkv", movie)).await
+}
+
+/// The swarm on `127.0.0.1` with a `len`-byte video in `piece_len` pieces
+/// (the window keeper's tests).
+#[allow(dead_code)]
+pub async fn swarm_big(len: usize, piece_len: u32) -> Swarm {
+    let movie: Vec<u8> = (0..len as u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    let ip = Ipv4Addr::LOCALHOST.into();
+    swarm_of(ip, &[ip], &[ip], piece_len, true, ("movie.mkv", movie)).await
 }
 
 /// The swarm on `127.0.0.1` with `movie` as the video file, named `name`.
