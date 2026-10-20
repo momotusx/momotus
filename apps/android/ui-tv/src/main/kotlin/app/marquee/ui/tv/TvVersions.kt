@@ -170,7 +170,10 @@ fun TvVersions(
                 }
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                if (snapshot?.nobodySharing == true) GlassBar { NobodySharing() }
+                // Once per screen: the card says it right before Play; the list only when there is no such card.
+                if (snapshot?.nobodySharing == true && (failure != null || snapshot.recommended == null)) {
+                    GlassBar { NobodySharing() }
+                }
                 snapshot?.note?.let { LearnedLine(it, onUndo) }
                 Sources(
                     snapshot,
@@ -419,8 +422,8 @@ private fun Blocked(
 }
 
 /**
- * The core's `nobodySharing`: every version is a swarm with one seeder or none right now, said right before
- * Play on the card and over the list, as on the web.
+ * The core's `nobodySharing`: every version is a swarm with one seeder or none right now, said once: right
+ * before Play on the recommended card, or over the list when there is no such card (plans/m13-stream-choice.md).
  */
 @Composable
 private fun NobodySharing(modifier: Modifier = Modifier) {

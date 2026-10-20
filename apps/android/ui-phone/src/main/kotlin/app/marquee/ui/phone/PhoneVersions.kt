@@ -166,7 +166,8 @@ fun PhoneVersions(
                 }
             }
         }
-        if (snapshot?.nobodySharing == true) {
+        // Once per screen: the card says it right before Play; the list only when there is no such card.
+        if (snapshot?.nobodySharing == true && (failure != null || snapshot.recommended == null)) {
             item(key = "nobody") { GlassBar(Modifier.padding(bottom = Marquee.space.xs)) { NobodySharing() } }
         }
         snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
@@ -379,8 +380,8 @@ private fun Blocked(
 }
 
 /**
- * The core's `nobodySharing`: every version is a swarm with one seeder or none right now, said right before
- * Play on the card and over the list, as on the web.
+ * The core's `nobodySharing`: every version is a swarm with one seeder or none right now, said once: right
+ * before Play on the recommended card, or over the list when there is no such card (plans/m13-stream-choice.md).
  */
 @Composable
 private fun NobodySharing(modifier: Modifier = Modifier) {

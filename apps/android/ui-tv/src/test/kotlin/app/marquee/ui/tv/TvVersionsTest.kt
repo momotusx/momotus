@@ -245,11 +245,11 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `almost nobody sharing shows right before Play and over the list`() {
+    fun `almost nobody sharing shows once, right before Play`() {
         show(snapshot(row("best", ReasonLine.Few(1)), listOf(row("a", ReasonLine.Few(0))), nobodySharing = true))
-        // On the card and over the list, each with its details line.
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(2)
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(2)
+        // Once, on the card with its details line; not again over the list.
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(1)
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(1)
         // The card's line comes right before Play: above it, and nothing else between them.
         val lines = compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).fetchSemanticsNodes()
         val play =
@@ -260,5 +260,13 @@ class TvVersionsTest {
                 .boundsInRoot
         val card = lines.map { it.boundsInRoot }.filter { it.bottom <= play.top }.maxByOrNull { it.bottom }
         assertTrue(card != null && play.top - card.bottom < 64, "the line sits right over Play")
+    }
+
+    @Test
+    fun `almost nobody sharing shows once over the list when there is no recommended card`() {
+        show(snapshot(rows = listOf(row("a", ReasonLine.Few(0)), row("b", ReasonLine.Few(1))), nobodySharing = true))
+        compose.onAllNodesWithText("Play this version").assertCountEquals(0)
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(1)
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(1)
     }
 }
