@@ -528,6 +528,11 @@ impl Engine {
                     .iter()
                     .map(|t| t.strip_prefix("tracker:").unwrap_or(t))
                 {
+                    // The scraper keeps `MAX_OWN`: an addon's 8 MiB answer
+                    // can list 400,000 sources (engine review r2, P3-2).
+                    if own.len() == scrape::MAX_OWN {
+                        break;
+                    }
                     if t.contains("://") && !own.iter().any(|x| x == t) {
                         own.push(t.to_owned());
                     }

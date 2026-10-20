@@ -38,6 +38,16 @@ fn udp_tracker(
     leechers: u32,
     answer_from: Option<UdpSocket>,
 ) -> (String, Arc<AtomicUsize>) {
+    udp_tracker_late(seeders, leechers, answer_from, Duration::ZERO)
+}
+
+/// As `udp_tracker`, each answer `delay` late.
+fn udp_tracker_late(
+    seeders: u32,
+    leechers: u32,
+    answer_from: Option<UdpSocket>,
+    delay: Duration,
+) -> (String, Arc<AtomicUsize>) {
     let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let url = format!("udp://{}/announce", socket.local_addr().unwrap());
     let seen = Arc::new(AtomicUsize::new(0));
@@ -49,6 +59,7 @@ fn udp_tracker(
             if n < 16 {
                 continue;
             }
+            std::thread::sleep(delay);
             let (action, tid) = (&buf[8..12], &buf[12..16]);
             let mut answer = Vec::from(action);
             answer.extend(tid);
@@ -128,7 +139,10 @@ fn bytes(hash: &str) -> Vec<u8> {
 /// the most seeders, and one UDP scrape carries every hash.
 #[tokio::test]
 async fn the_tracker_with_the_most_seeders_counts() {
-    let (udp, seen) = udp_tracker(1, 4, None);
+    // 7 is over the ranking's floor, so it settles HASH where it comes
+    // first: here it comes 150 ms late (under the 250 ms resend), after the
+    // HTTP 12 (engine review r2, P2-2), and still counts for OTHER.
+    let (udp, seen) = udp_tracker_late(7, 4, None, Duration::from_millis(150));
     let http = http_tracker(12);
     let (engine, _dir) = engine(&LOOPBACK).await;
     let both = vec![format!("tracker:{udp}"), http.url.clone()];
@@ -137,7 +151,7 @@ async fn the_tracker_with_the_most_seeders_counts() {
         .scrape(&[(HASH, both.as_slice()), (OTHER, one.as_slice())])
         .await;
     let count = |seeders, leechers| Some(SwarmCount { seeders, leechers });
-    assert_eq!(got, vec![count(12, 2), count(1, 4)]);
+    assert_eq!(got, vec![count(12, 2), count(7, 4)]);
     assert_eq!(seen.load(Ordering::SeqCst), 2, "one connect, one scrape");
 }
 
@@ -211,4 +225,27 @@ async fn counts_stand_for_a_while() {
     let second = engine.scrape(&[(upper.as_str(), sources.as_slice())]).await;
     assert_eq!(second, first);
     assert_eq!(seen.load(Ordering::SeqCst), asked, "asked again");
+}
+
+/// An addon may list any number of sources for a stream; the scrape reads
+/// at most 16, so 50,000 cost no more than 16 (engine review r2, P3-2: the
+/// dedupe compared every source with every one kept).
+#[tokio::test]
+async fn fifty_thousand_sources_scrape_in_time() {
+    let (engine, _dir) = engine(&LOOPBACK).await;
+    // Private literals: refused at once, so the time is the dedupe's.
+    let sources: Vec<String> = (0..50_000u32)
+        .map(|i| {
+            format!(
+                "udp://10.{}.{}.{}:1/announce",
+                i >> 16,
+                (i >> 8) & 255,
+                i & 255
+            )
+        })
+        .collect();
+    let started = Instant::now();
+    assert_eq!(engine.scrape(&[(HASH, sources.as_slice())]).await, [None]);
+    let took = started.elapsed();
+    assert!(took < Duration::from_millis(500), "{took:?}");
 }
