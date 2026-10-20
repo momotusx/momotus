@@ -1,15 +1,24 @@
 package app.marquee.ui.tv
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasScrollToKeyAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import app.marquee.design.Form
@@ -61,5 +70,35 @@ class TrackPanelTest {
         compose.onNodeWithContentDescription("Spanish, SRT").assertIsFocused()
         // The list scrolled to it, and its heading came with it.
         heading("In the file")
+    }
+
+    @Test
+    fun `the Timing row moves this play's subtitles, and Down from the last track reaches it`() {
+        val shifts = mutableListOf<Long>()
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                var delay by remember { mutableLongStateOf(0L) }
+                TrackPanel(
+                    "Subtitles",
+                    rows,
+                    onPick = {},
+                    timing = delay,
+                    onShift = {
+                        shifts += it
+                        delay += it
+                    },
+                )
+            }
+        }
+        // The row sits under the list, past the panel's height here: scroll it into view to read it.
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("timing")
+        compose.onNodeWithText("On time").assertExists()
+        val last = compose.onNodeWithContentDescription("Spanish, SRT")
+        last.requestFocus()
+        last.performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNode(isFocused() and (hasText("Earlier") or hasText("Later"))).assertExists()
+        compose.onNodeWithText("Later").performClick()
+        compose.onNodeWithText("0.5 s later").assertExists()
+        compose.runOnIdle { kotlin.test.assertEquals(listOf(500L), shifts) }
     }
 }

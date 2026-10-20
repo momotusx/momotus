@@ -65,6 +65,19 @@ class AppState(
     var tvHome by mutableStateOf(TvHomeState())
         private set
 
+    /** "Remove from Continue Watching" on a held tile: Home follows the core's change by itself. */
+    fun removeFromContinue(itemId: String) {
+        viewModelScope.launch {
+            try {
+                session.ops.removeFromContinue(itemId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CoreLog.w("removeFromContinue failed: ${e.message}")
+            }
+        }
+    }
+
     /**
      * Where the screens' view models live: one profile's worth. A switch or a lock clears it, so
      * every screen's views close (the core switches only with the picker open).

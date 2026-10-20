@@ -27,6 +27,7 @@ import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SubtitleNote
+import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.SubtitleTrack
 import app.marquee.core.model.TraktPlayback
 import app.marquee.core.views.PlaybackView
@@ -62,6 +63,8 @@ class PlaybackController(
     val episode: String?,
     private val artwork: String?,
     private val openedAtMs: Long,
+    /** What the subtitle parsers read for this play's delay ([PlayerHost.subtitleDelay]). */
+    private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
 ) {
     enum class Stage { Opening, Buffering, Playing, Paused, Ended, Failed }
 
@@ -183,6 +186,13 @@ class PlaybackController(
 
     /** The quality of the version that plays ("1080p"), the Versions button's value; the screen sets it, as it knows the ranking. */
     var versionLabel: String? by mutableStateOf(null)
+
+    /** How big subtitles show, from the profile's settings; the screen sets it. */
+    var subtitleSize: SubtitleSize by mutableStateOf(SubtitleSize.Medium)
+
+    /** This play's subtitle delay (positive: later), from the subtitle menu's Timing row; it starts at zero. */
+    var subtitleDelayMs by mutableLongStateOf(0L)
+        private set
 
     private var view: PlaybackView? = null
     private var loadedUrl: String? = null
@@ -424,7 +434,8 @@ class PlaybackController(
         player.playWhenReady = false
         player.prepare()
         stage = Stage.Buffering
-        if (again) announce("Playing a different source")
+        if (again && !reopening) announce("Playing a different source")
+        reopening = false
     }
 
     private fun item(
@@ -858,6 +869,31 @@ class PlaybackController(
 
     /** Leaving the screen (Home, another app, the picture-in-picture window closing): stop the sound. */
     fun onStop() = pause()
+
+    /**
+     * Earlier or Later in the subtitle menu: the words move by [byMs] for the rest of this play. The
+     * parsers read the delay when the item is set, so it is set again at the same position.
+     */
+    fun shiftSubtitles(byMs: Long) {
+        val next = (subtitleDelayMs + byMs).coerceIn(-SUBTITLE_MAX_MS, SUBTITLE_MAX_MS)
+        if (next == subtitleDelayMs) return
+        subtitleDelayMs = next
+        subtitleDelay.ms = next
+        reloadWith(loadedSubs)
+    }
+
+    /**
+     * The core's stream server took another port while the app was away: the loaded address is gone, so
+     * the play is asked for again, and the new address loads where this one was.
+     */
+    fun serverMoved() {
+        if (loadedUrl == null || released) return
+        reopening = true
+        view?.retry()
+    }
+
+    // The same source at a new address (the server moved): nothing to announce when it loads.
+    private var reopening = false
 
     private fun find(
         type: Int,

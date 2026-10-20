@@ -1,5 +1,7 @@
 package app.marquee.player
 
+import android.content.Context
+import android.view.accessibility.CaptioningManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,12 +20,14 @@ import androidx.media3.common.text.CueGroup
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
+import app.marquee.core.model.SubtitleSize
 
 /**
  * The picture and its subtitles. The picture goes to a SurfaceView, which is what lets the
  * platform switch a TV to an HDR mode; a TextureView would tone-map everything to SDR. The frame
  * fits the picture to the screen at its own shape (black bars where the shapes differ). The
- * subtitles follow the system caption settings (size, color, edge) until the app has its own.
+ * subtitles follow the system caption settings (color, edge, and size), their size scaled by the
+ * profile's subtitle size ([subtitleScale]).
  *
  * On the emulator's phone screen a 1080p picture shows at its native 1920 px in the middle of a
  * 2400 px screen, with or without this frame doing the sizing (checked with a hand-sized
@@ -34,6 +38,7 @@ import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 fun PlayerVideo(
     player: Player,
     modifier: Modifier = Modifier,
+    subtitleSize: SubtitleSize = SubtitleSize.Medium,
 ) {
     Box(modifier.background(Color.Black)) {
         ContentFrame(
@@ -42,13 +47,23 @@ fun PlayerVideo(
             surfaceType = SURFACE_TYPE_SURFACE_VIEW,
             contentScale = ContentScale.Fit,
         )
-        Subtitles(player, Modifier.fillMaxSize())
+        Subtitles(player, subtitleScale(subtitleSize), Modifier.fillMaxSize())
     }
 }
+
+/** The profile's subtitle size as a factor on the system caption size (Medium leaves it as it is). */
+fun subtitleScale(size: SubtitleSize): Float =
+    when (size) {
+        SubtitleSize.Small -> 0.75f
+        SubtitleSize.Large -> 1.3f
+        SubtitleSize.ExtraLarge -> 1.6f
+        SubtitleSize.Medium, SubtitleSize.Unknown -> 1f
+    }
 
 @Composable
 private fun Subtitles(
     player: Player,
+    scale: Float,
     modifier: Modifier,
 ) {
     var view by remember { mutableStateOf<SubtitleView?>(null) }
@@ -56,9 +71,14 @@ private fun Subtitles(
         factory = { context ->
             SubtitleView(context).also {
                 it.setUserDefaultStyle()
-                it.setUserDefaultTextSize()
                 view = it
             }
+        },
+        // The system caption size (as setUserDefaultTextSize reads it) times the profile's size.
+        update = {
+            it.setFractionalTextSize(
+                SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captionScale(it.context) * scale,
+            )
         },
         modifier = modifier,
     )
@@ -74,4 +94,10 @@ private fun Subtitles(
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
     }
+}
+
+/** The system caption text size, 1 when captions are off in the system settings (as SubtitleView reads it). */
+private fun captionScale(context: Context): Float {
+    val captions = context.getSystemService(CaptioningManager::class.java) ?: return 1f
+    return if (captions.isEnabled) captions.fontScale else 1f
 }

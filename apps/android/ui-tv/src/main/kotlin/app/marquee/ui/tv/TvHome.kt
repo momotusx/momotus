@@ -24,7 +24,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -49,11 +53,13 @@ import app.marquee.core.model.playable
 import app.marquee.core.model.tileKeys
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
+import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
 import app.marquee.design.Eyebrow
 import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
+import app.marquee.design.MenuAction
 import app.marquee.design.MqText
 import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
@@ -71,6 +77,7 @@ import app.marquee.design.describe
 import app.marquee.design.laneHeight
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 private const val HERO_PLAY = "hero:play"
 private const val HERO_DETAILS = "hero:details"
@@ -107,9 +114,30 @@ fun TvHome(
     onHomeRows: () -> Unit = {},
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
     card: (@Composable () -> Unit)? = null,
+    /** "Remove from Continue Watching", from a held select on one of its tiles; null offers no menu. */
+    onRemove: ((Tile) -> Unit)? = null,
 ) {
     val safe = Marquee.safe
     val metrics = Marquee.tiles
+    // The held tile and its key, while its menu is open.
+    var menuFor by remember { mutableStateOf<Pair<Tile, String>?>(null) }
+    val scope = rememberCoroutineScope()
+    menuFor?.let { (tile, key) ->
+        ActionMenu(
+            title = tile.name,
+            actions =
+                listOf(
+                    MenuAction(TileCopy.REMOVE_CONTINUE, Icons.X) {
+                        // Focus goes on from the tile that leaves: the next one, the one before, or the next row.
+                        val next = focusAfterRemove(home.rows.toList(), key)
+                        onRemove?.invoke(tile)
+                        if (next != null) scope.launch { restoreFocus(home, state, next) }
+                    },
+                ),
+            onDismiss = { menuFor = null },
+        )
+    }
+    val hold: ((Tile, String) -> Unit)? = onRemove?.let { { tile, key -> menuFor = tile to key } }
     // Read from the snapshot, not in a SideEffect: lanes arrive without recomposing this function,
     // and a stale start row would make every Back refocus the same tile.
     LaunchedEffect(state) {
@@ -154,9 +182,9 @@ fun TvHome(
                 val rows = home.rows.toList()
                 val split = cardSplit(rows)
                 state.cardShown = card != null
-                items(rows.subList(0, split), key = { it.rowId }) { row -> TvRow(row, state, onOpen) }
+                items(rows.subList(0, split), key = { it.rowId }) { row -> TvRow(row, state, onOpen, hold) }
                 if (card != null) item(key = "card") { card() }
-                items(rows.subList(split, rows.size), key = { it.rowId }) { row -> TvRow(row, state, onOpen) }
+                items(rows.subList(split, rows.size), key = { it.rowId }) { row -> TvRow(row, state, onOpen, hold) }
             }
         }
     }
@@ -335,6 +363,7 @@ private fun TvRow(
     row: HomeRow,
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
+    onHold: ((Tile, String) -> Unit)?,
 ) {
     val inset = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -363,7 +392,7 @@ private fun TvRow(
             }
 
             null -> {
-                TileLane(row, state, onOpen)
+                TileLane(row, state, onOpen, onHold?.takeIf { TileCopy.removable(row.rowId) })
             }
         }
     }
@@ -397,6 +426,7 @@ private fun TileLane(
     row: HomeRow,
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
+    onHold: ((Tile, String) -> Unit)?,
 ) {
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
@@ -412,7 +442,7 @@ private fun TileLane(
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
         itemsIndexed(row.tiles, key = { index, _ -> keys[index] }) { index, tile ->
-            TvTile(row.rowId, keys[index], tile, shape, state, onOpen)
+            TvTile(row.rowId, keys[index], tile, shape, state, onOpen, onHold)
         }
     }
 }
@@ -425,6 +455,7 @@ private fun TvTile(
     shape: TileShape,
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
+    onHold: ((Tile, String) -> Unit)?,
 ) {
     val requester = remember { FocusRequester() }
     DisposableEffect(key, requester) {
@@ -442,6 +473,8 @@ private fun TvTile(
         rating = tile.rating.takeIf { shape == TileShape.Poster },
         focusRequester = requester,
         onFocusChange = { if (it) state.focus.arrived(rowId, key) else state.focus.lost(key) },
+        onLongClick = onHold?.let { { it(tile, key) } },
+        longClickLabel = "More options".takeIf { onHold != null },
     )
 }
 
@@ -495,6 +528,25 @@ private fun exists(
     hasHero: Boolean,
     key: String,
 ): Boolean = if (key.startsWith("hero:")) hasHero else rows.any { key in it.tileKeys() }
+
+/**
+ * Where focus goes when the tile [key] leaves its row (Remove from Continue Watching): the next tile, else
+ * the one before it, else the first tile of the next row with tiles, else of the row before; null when
+ * nothing is left.
+ */
+internal fun focusAfterRemove(
+    rows: List<HomeRow>,
+    key: String,
+): String? {
+    val at = rows.indexOfFirst { key in it.tileKeys() }
+    if (at < 0) return null
+    val keys = rows[at].tileKeys()
+    val index = keys.indexOf(key)
+    keys.getOrNull(index + 1)?.let { return it }
+    keys.getOrNull(index - 1)?.let { return it }
+    rows.drop(at + 1).firstNotNullOfOrNull { it.tileKeys().firstOrNull() }?.let { return it }
+    return rows.take(at).asReversed().firstNotNullOfOrNull { it.tileKeys().firstOrNull() }
+}
 
 /**
  * What gets focus on first entry: the first tile of Continue Watching when that lane leads, else

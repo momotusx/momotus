@@ -170,9 +170,19 @@ object TitleCopy {
         now: Long = System.currentTimeMillis(),
     ): String? {
         val at = releaseMillis(episode.released)?.takeIf { it > now } ?: return null
-        // A release is a date, not an instant: read in UTC, it stays the day it names west of UTC too.
-        return "Airs " + SimpleDateFormat("MMM d, yyyy", Locale.US).apply { timeZone = UTC }.format(Date(at))
+        return "Airs " + day(at)
     }
+
+    /**
+     * The line where Play would be when there is nothing to play: "Next episode airs Nov 3, 2026" while the
+     * next episode is not out (the core's `nextAirs`), else "Nothing to play yet".
+     */
+    fun nothingToPlay(nextAirs: String?): String =
+        releaseMillis(nextAirs)?.let { "Next episode airs ${day(it)}" } ?: "Nothing to play yet"
+
+    // A release is a date, not an instant: read in UTC, it stays the day it names west of UTC too.
+    private fun day(at: Long): String =
+        SimpleDateFormat("MMM d, yyyy", Locale.US).apply { timeZone = UTC }.format(Date(at))
 
     private val UTC = TimeZone.getTimeZone("UTC")
 

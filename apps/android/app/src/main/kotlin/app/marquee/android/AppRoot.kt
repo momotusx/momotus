@@ -348,6 +348,7 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
+                                onRemove = { app.removeFromContinue(it.id) },
                             )
                         } else {
                             PhoneHome(
@@ -359,6 +360,7 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
+                                onRemove = { app.removeFromContinue(it.id) },
                             )
                         }
                     }

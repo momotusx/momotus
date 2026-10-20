@@ -11,6 +11,7 @@ import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.InstalledAddon
 import app.marquee.core.model.KeystoreRecord
+import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.Network
@@ -29,6 +30,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -53,6 +55,7 @@ class CoreOps(
 ) {
     private val catalogs = ListSerializer(HomeCatalog.serializer())
     private val profilesSnap = ProfilesSnapshot.serializer()
+    private val languageList = ListSerializer(LanguageChoice.serializer())
 
     private suspend fun <T> call(
         op: String,
@@ -82,6 +85,28 @@ class CoreOps(
             network?.let { put("network", text(it.wire)) }
         },
     )
+
+    /**
+     * The app came to the front: as [lifecycle] with `foreground`, waiting for the answer. True when the
+     * core's stream server had to take another port while the app was away (the system took its
+     * listener): a loaded item must then be opened again. The core also locks a profile with a PIN that
+     * was away more than 30 minutes; the profiles view says so.
+     */
+    suspend fun foreground(): Boolean =
+        client
+            .request("lifecycle", mapOf("event" to text(LifecycleEvent.Foreground.wire)))
+            .let { it as? JsonObject }
+            ?.get("serverMoved")
+            ?.jsonPrimitive
+            ?.booleanOrNull == true
+
+    /** "Remove from Continue Watching": the title leaves it and Next Up on every synced device until it is played again. */
+    suspend fun removeFromContinue(itemId: String) {
+        client.request("removeFromContinue", mapOf("itemId" to text(itemId)))
+    }
+
+    /** Every language the core knows, by English name, for the subtitle and audio pickers. */
+    suspend fun languages(): List<LanguageChoice> = call("languages", emptyMap(), languageList)
 
     /**
      * A link whose settings carry a sign-in is refused with code `tokenInLink` before anything is

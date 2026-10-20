@@ -60,4 +60,10 @@ class TileCopyTest {
         assertEquals("2026", TileCopy.heroMeta(Hero(tile(releaseInfo = "2026"), "r")))
         assertEquals("Series", TileCopy.heroMeta(Hero(tile(kind = "series"), "r")))
     }
+
+    @Test
+    fun `only Continue Watching tiles (Next Up among them) offer Remove on a hold`() {
+        assertEquals(true, TileCopy.removable(TileCopy.CONTINUE_ROW))
+        assertEquals(false, TileCopy.removable("com.linvo.cinemeta:movie:top"))
+    }
 }

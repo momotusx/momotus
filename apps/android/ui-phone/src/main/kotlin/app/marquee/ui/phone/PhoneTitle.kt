@@ -377,7 +377,7 @@ private fun Info(
             }
         }
         if (target == null) {
-            StatusNote("Nothing to play yet")
+            StatusNote(TitleCopy.nothingToPlay(header.nextAirs))
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }

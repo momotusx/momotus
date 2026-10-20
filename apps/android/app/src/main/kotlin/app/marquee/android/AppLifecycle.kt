@@ -11,6 +11,8 @@ import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreSession
 import app.marquee.core.session.LifecycleEvent
 import coil3.SingletonImageLoader
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import app.marquee.core.model.Network as NetworkType
 
 /**
@@ -26,7 +28,7 @@ class AppLifecycle(
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
-                    session.ops.lifecycle(LifecycleEvent.Foreground)
+                    foreground()
                     sync.foreground()
                 }
 
@@ -37,6 +39,23 @@ class AppLifecycle(
             },
         )
         watchNetwork()
+    }
+
+    // The answer matters: when the system took the stream server's listener while the app was away, the
+    // server took another port, and an open player opens its play again where it was.
+    private fun foreground() {
+        session.scope.launch {
+            val moved =
+                try {
+                    session.ops.foreground()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    CoreLog.w("foreground: ${e.message}")
+                    false
+                }
+            if (moved) session.serverMoved.emit(Unit)
+        }
     }
 
     /** Called from `Application.onTrimMemory`. */

@@ -15,6 +15,7 @@ import app.marquee.core.route.Route
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.Tokens
+import app.marquee.player.WalkMute
 
 /**
  * The one activity. It decides the UI tree once (TV or phone, `FormFactor`), applies the theme
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
                 .toDrawable(),
         )
 
+        if (debuggable) WalkMute.read(this, intent)
         DebugEntry.launched(this)
         if (DebugEntry.show(this, form)) return
         val session = (application as MarqueeApp).session
@@ -56,6 +58,7 @@ class MainActivity : ComponentActivity() {
     // One activity (singleTask): a link opened while the app runs comes here.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) WalkMute.read(this, intent)
         addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
     }
 

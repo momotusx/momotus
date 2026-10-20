@@ -342,7 +342,7 @@ fun TvPlayer(
             }.focusProperties { exit = { FocusRequester.Cancel } }
             .focusable(),
     ) {
-        PlayerVideo(controller.player, Modifier.fillMaxSize())
+        PlayerVideo(controller.player, Modifier.fillMaxSize(), controller.subtitleSize)
 
         // Scrims run edge to edge (no box with an edge to see): 320 dp at the foot to 72% black,
         // 200 dp at the top to 60%, so the words over bright pictures hold their contrast.
@@ -439,6 +439,8 @@ fun TvPlayer(
                         closePanel()
                     },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
+                    timing = controller.subtitleDelayMs,
+                    onShift = controller::shiftSubtitles,
                 )
             }
 

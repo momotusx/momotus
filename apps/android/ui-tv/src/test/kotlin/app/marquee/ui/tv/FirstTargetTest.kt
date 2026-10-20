@@ -84,4 +84,19 @@ class FirstTargetTest {
     fun `a series hero has no single video to play, so its Details takes the focus`() {
         assertEquals("hero:details", firstTarget(listOf(row("b", RowState.Ready, "z")), seriesHero, patient = true))
     }
+
+    @Test
+    fun `after Remove focus goes to the next tile, the one before at the end, then the next row`() {
+        val cw = TileCopy.CONTINUE_ROW
+        val rows = listOf(row(cw, RowState.Ready, "a", "b", "c"), row("pop", RowState.Ready, "x"))
+        assertEquals("tile:$cw:b", focusAfterRemove(rows, "tile:$cw:a"))
+        assertEquals("tile:$cw:b", focusAfterRemove(rows, "tile:$cw:c"))
+        // The row empties: its neighbour below.
+        val alone = listOf(row(cw, RowState.Ready, "a"), row("empty", RowState.Empty), row("pop", RowState.Ready, "x"))
+        assertEquals("tile:pop:x", focusAfterRemove(alone, "tile:$cw:a"))
+        // Nothing below: the row above.
+        val last = listOf(row("pop", RowState.Ready, "x"), row(cw, RowState.Ready, "a"))
+        assertEquals("tile:pop:x", focusAfterRemove(last, "tile:$cw:a"))
+        assertNull(focusAfterRemove(listOf(row(cw, RowState.Ready, "a")), "tile:$cw:a"))
+    }
 }

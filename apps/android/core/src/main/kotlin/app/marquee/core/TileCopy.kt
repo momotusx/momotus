@@ -8,6 +8,12 @@ object TileCopy {
     /** Id of the Continue Watching row: its tiles are 16:9 stills with the logo on them. */
     const val CONTINUE_ROW = "continue-watching"
 
+    /** The hold menu of a Continue Watching tile (Next Up tiles live in the same row). */
+    const val REMOVE_CONTINUE = "Remove from Continue Watching"
+
+    /** Whether a hold on a tile of [rowId] opens the menu with [REMOVE_CONTINUE]. */
+    fun removable(rowId: String): Boolean = rowId == CONTINUE_ROW
+
     /**
      * What a row's source label says: the addon's name. Continue Watching has none: it comes from
      * what was played, not from an addon or the library.

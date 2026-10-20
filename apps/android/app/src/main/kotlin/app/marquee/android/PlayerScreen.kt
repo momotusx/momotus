@@ -16,6 +16,7 @@ import app.marquee.core.Format
 import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.VersionRow
 import app.marquee.core.pickVersion
 import app.marquee.core.route.Route
@@ -67,6 +68,7 @@ class PlayerHolder(
             episode = Format.parseVideo(route.videoId)?.let { Format.episodeLabel(it.season, it.episode) },
             artwork = null,
             openedAtMs = SystemClock.elapsedRealtime(),
+            subtitleDelay = host.subtitleDelay,
         )
 
     /** Start the next episode by itself when one ends. */
@@ -74,6 +76,14 @@ class PlayerHolder(
 
     init {
         viewModelScope.launch { start() }
+        // Subtitles show at the profile's size, and follow it when Settings change it.
+        viewModelScope.launch {
+            snapshotFlow {
+                prefs.snapshot?.subtitleSize
+            }.collect { controller.subtitleSize = it ?: SubtitleSize.Medium }
+        }
+        // The stream server moved while the app was away: the play opens again where it was.
+        viewModelScope.launch { session.serverMoved.collect { controller.serverMoved() } }
         // The Versions button names the quality of what plays, also after a failover.
         viewModelScope.launch {
             val key = keyFor(route.kind, route.videoId, route.title, route.binge)

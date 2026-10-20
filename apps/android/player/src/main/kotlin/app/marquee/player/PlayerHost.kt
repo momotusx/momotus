@@ -6,7 +6,9 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.session.MediaSession
 
 /**
@@ -15,7 +17,8 @@ import androidx.media3.session.MediaSession
  * Choices that matter on a TV stick, each from reading the alternatives:
  * - platform decoders first, with decoder fallback on, so a broken hardware codec tries the next one;
  * - tunneling stays off (it is device specific and stalls on underruns);
- * - subtitles start off (the viewer picks, as on the web player);
+ * - subtitles start off (the viewer picks, as on the web player), and their parsers take the play's
+ *   delay ([subtitleDelay]);
  * - audio focus and "becoming noisy" are handled, the screen and Wi-Fi stay awake while playing;
  * - playback starts after one second of buffer, a rebuffer waits three.
  *
@@ -26,6 +29,9 @@ class PlayerHost(
     audioLanguage: String?,
 ) {
     val player: ExoPlayer
+
+    /** The subtitle delay of this play, which the subtitle parsers read when an item is set. */
+    val subtitleDelay = SubtitleDelay()
 
     private val session: MediaSession
 
@@ -54,7 +60,10 @@ class PlayerHost(
                 .Builder(context, renderers)
                 .setTrackSelector(selector)
                 .setLoadControl(loadControl)
-                .setAudioAttributes(
+                .setMediaSourceFactory(
+                    DefaultMediaSourceFactory(context)
+                        .setSubtitleParserFactory(DelayedSubtitles(DefaultSubtitleParserFactory(), subtitleDelay)),
+                ).setAudioAttributes(
                     AudioAttributes
                         .Builder()
                         .setUsage(C.USAGE_MEDIA)
@@ -64,6 +73,7 @@ class PlayerHost(
                 ).setHandleAudioBecomingNoisy(true)
                 .setWakeMode(C.WAKE_MODE_NETWORK)
                 .build()
+        if (WalkMute.on) player.volume = 0f
         // Media keys and the system's now-playing card; no service, so nothing plays in the background.
         // The id is unique per host: a new player can start while the old one is still being cleared.
         session =

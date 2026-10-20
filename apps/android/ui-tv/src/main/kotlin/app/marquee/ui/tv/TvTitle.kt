@@ -377,7 +377,7 @@ private fun Info(
             }
         }
         if (target == null) {
-            StatusNote("Nothing to play yet", Modifier.widthIn(max = 640.dp))
+            StatusNote(TitleCopy.nothingToPlay(header.nextAirs), Modifier.widthIn(max = 640.dp))
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed), Modifier.widthIn(max = 760.dp))
         }

@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
@@ -118,6 +119,12 @@ class CoreSession(
 
     /** Completes when the core first opens, or fails with why it could not. */
     val ready = CompletableDeferred<Unit>()
+
+    /**
+     * The stream server took another port while the app was away (the `foreground` answer): a player
+     * with a loaded item opens its play again, where it was.
+     */
+    val serverMoved = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     /** What the UI shows when the core is not running. Written by the boot and state threads. */
     var health: CoreHealth by mutableStateOf(CoreHealth.Starting)

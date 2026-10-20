@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -57,14 +58,16 @@ import app.marquee.core.AddonsCopy
 import app.marquee.core.DebridCopy
 import app.marquee.core.DefaultsCopy
 import app.marquee.core.FindAddonsCopy
+import app.marquee.core.LanguagePicks
 import app.marquee.core.LinkInstall
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.SyncCopy
 import app.marquee.core.TraktCopy
-import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.AddonInfo
+import app.marquee.core.model.LanguageChoice
+import app.marquee.core.model.SubtitleSize
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.AddonsView
 import app.marquee.core.views.SettingsView
@@ -743,18 +746,37 @@ private fun Playback(
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
             MqText("Subtitles", role = TextRole.Headline, weight = FontWeight.Bold)
-            Languages(LANGS.map { it.second }, prefs.subtitleLanguages) { list ->
+            Languages(prefs.subtitleLanguages, ops::languages, { list ->
                 if (!busy) {
                     run("Changing the subtitle languages") {
                         ops.setPrefs(buildJsonObject { put("subtitleLanguages", json(list)) })
                     }
                 }
-            }
+            })
             MqText(
                 "Languages are listed in the order you turn them on; the first one wins.",
                 role = TextRole.Caption,
                 color = Marquee.colors.muted,
             )
+            MqText("Subtitle size", role = TextRole.Headline, weight = FontWeight.Bold)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                for ((size, words) in SUBTITLE_SIZES) {
+                    Chip(
+                        words,
+                        selected = prefs.subtitleSize == size,
+                        onClick = {
+                            if (!busy && prefs.subtitleSize != size) {
+                                run("Changing the subtitle size") {
+                                    ops.setPrefs(buildJsonObject { put("subtitleSize", JsonPrimitive(size.wire)) })
+                                }
+                            }
+                        },
+                    )
+                }
+            }
             MqText("Next episode", role = TextRole.Headline, weight = FontWeight.Bold)
             Chip(
                 if (prefs.autoplayNext) "Plays on its own" else "Waits for you",
@@ -772,41 +794,70 @@ private fun Playback(
     }
 }
 
-/** The web's languages: the audio code (ISO 639-1) and the subtitle code addons use (ISO 639-2). */
-internal val LANGS =
-    listOf(
-        "en" to "eng",
-        "tr" to "tur",
-        "es" to "spa",
-        "fr" to "fre",
-        "de" to "ger",
-        "it" to "ita",
-        "pt" to "por",
-        "ja" to "jpn",
-    )
-
 private fun json(list: List<String>) = JsonArray(list.map(::JsonPrimitive))
 
-/** A chip per language, each on or off on its own; turning one on puts it last, so the order is the user's. */
+/**
+ * A language picker over every language the core knows ([load]): the chosen ones first, in the order
+ * they were turned on (the first wins), each a press away from off; then a search by name, which
+ * offers the common ones before anything is typed. A pick clears the search.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun Languages(
-    codes: List<String>,
     chosen: List<String>,
+    load: suspend () -> List<LanguageChoice>,
     onChange: (List<String>) -> Unit,
+    /** Audio takes the base codes ("pt" for "pt-BR"); subtitles take the core's codes as they are. */
+    audio: Boolean = false,
 ) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-    ) {
-        for (code in codes) {
-            val on = code in chosen
-            Chip(
-                VersionsCopy.languageName(code),
-                selected = on,
-                onClick = { onChange(if (on) chosen - code else chosen + code) },
-                switch = true,
-            )
+    val all by produceState(emptyList<LanguageChoice>(), load) {
+        value =
+            try {
+                load().let { if (audio) LanguagePicks.audio(it) else it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
+    }
+    var query by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        if (chosen.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                for (code in chosen) {
+                    Chip(
+                        LanguagePicks.name(code, all),
+                        selected = true,
+                        onClick = { onChange(chosen - code) },
+                        switch = true,
+                    )
+                }
+            }
+        }
+        MqTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = "Find a language",
+            placeholder = "Polish, Korean, Arabic",
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            for (choice in LanguagePicks.search(all, query, chosen)) {
+                Chip(
+                    choice.name,
+                    selected = false,
+                    onClick = {
+                        onChange(chosen + choice.code)
+                        query = ""
+                    },
+                    switch = true,
+                )
+            }
         }
     }
 }
@@ -831,3 +882,12 @@ private fun About() {
         }
     }
 }
+
+/** The subtitle sizes Settings offers, in order (the profile's, on every device). */
+internal val SUBTITLE_SIZES =
+    listOf(
+        SubtitleSize.Small to "Small",
+        SubtitleSize.Medium to "Medium",
+        SubtitleSize.Large to "Large",
+        SubtitleSize.ExtraLarge to "Extra large",
+    )

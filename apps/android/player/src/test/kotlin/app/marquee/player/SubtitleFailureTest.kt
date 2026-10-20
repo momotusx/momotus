@@ -99,7 +99,10 @@ class SubtitleFailureTest {
     private val snapshot = snapshot()
 
     /** The core's view and a controller on a fake player, the stream loaded. */
-    private fun open(first: String = snapshot): Pair<FakePlayer, PlaybackController> {
+    private fun open(
+        first: String = snapshot,
+        delay: SubtitleDelay = SubtitleDelay(),
+    ): Pair<FakePlayer, PlaybackController> {
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             sent += msg
@@ -115,7 +118,7 @@ class SubtitleFailureTest {
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
         val player = FakePlayer()
-        val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
+        val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay)
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
         until("the stream loads") { player.items.size == 1 }
         return player to controller
@@ -591,11 +594,62 @@ class SubtitleFailureTest {
         controller.release()
     }
 
+    @Test
+    fun `Later moves this play's subtitles half a second and sets the item again where it was`() {
+        val delay = SubtitleDelay()
+        val (player, controller) = open(delay = delay)
+        player.position(42_000)
+        controller.shiftSubtitles(SUBTITLE_STEP_MS)
+        until("the item is set again") { player.items.size == 2 }
+        assertEquals(500L, controller.subtitleDelayMs)
+        assertEquals(500L, delay.ms, "the parsers read the new delay")
+        assertEquals(video, player.items.last().uri)
+        assertEquals(42_000L, player.items.last().startMs)
+        // Earlier twice: half a second before the file's own times.
+        controller.shiftSubtitles(-SUBTITLE_STEP_MS)
+        controller.shiftSubtitles(-SUBTITLE_STEP_MS)
+        until("set again twice more") { player.items.size == 4 }
+        assertEquals(-500L, delay.ms)
+        controller.release()
+    }
+
+    @Test
+    fun `a stream server that moved while the app was away opens the play again at its new address`() {
+        val moved = "http://127.0.0.1:7790/video.mp4"
+        val subscribes =
+            java.util.concurrent.atomic
+                .AtomicInteger()
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            sent += msg
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    val n = subscribes.incrementAndGet()
+                    """{"sub":${6 + n},"snapshot":${if (n == 1) snapshot else snapshot(url = moved)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val player = FakePlayer()
+        val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
+        controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
+        until("the stream loads") { player.items.size == 1 }
+        controller.serverMoved()
+        until("the play opens again at the new address") { player.items.size == 2 }
+        assertEquals(moved, player.items.last().uri)
+        assertEquals(2, subscribes.get())
+        assertNotEquals("Playing a different source", controller.notice)
+        controller.release()
+    }
+
     /** A player that records the items it is given and raises the errors a test hands it. */
     private class FakePlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         class Item(
             val uri: String,
             val subtitles: List<String>,
+            val startMs: Long = 0L,
         )
 
         val items = ArrayList<Item>()
@@ -676,7 +730,8 @@ class SubtitleFailureTest {
         ): ListenableFuture<*> {
             for (m in mediaItems) {
                 val local = m.localConfiguration!!
-                items += Item(local.uri.toString(), local.subtitleConfigurations.map { it.uri.toString() })
+                items +=
+                    Item(local.uri.toString(), local.subtitleConfigurations.map { it.uri.toString() }, startPositionMs)
             }
             current =
                 current

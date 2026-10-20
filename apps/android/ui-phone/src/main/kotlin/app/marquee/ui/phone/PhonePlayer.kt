@@ -216,7 +216,7 @@ fun PhonePlayer(
                 )
             },
     ) {
-        PlayerVideo(controller.player, Modifier.fillMaxSize())
+        PlayerVideo(controller.player, Modifier.fillMaxSize(), controller.subtitleSize)
 
         // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
         AnimatedVisibility(
@@ -355,6 +355,8 @@ fun PhonePlayer(
                         },
                         modifier = sheet,
                         note = controller.subtitlePanelNote,
+                        timing = controller.subtitleDelayMs,
+                        onShift = controller::shiftSubtitles,
                     )
                 }
 

@@ -56,11 +56,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.selected
@@ -184,10 +186,15 @@ fun TrackPanel(
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
     note: String? = null,
+    /** The subtitle panel's Timing row: this play's delay, and what Earlier and Later move it by. */
+    timing: Long? = null,
+    onShift: (Long) -> Unit = {},
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val requesters = remember(rows.size) { List(rows.size) { FocusRequester() } }
+    // With the Timing row under the tracks, Down from the last track goes on to it.
+    val last = if (timing != null) rows.size else rows.lastIndex
     val chosen = rows.indexOfFirst { it.selected }.coerceAtLeast(0)
     // The list starts at the chosen row, so its node exists to take focus (a list of 40 subtitle tracks
     // composes only the rows in view).
@@ -243,14 +250,58 @@ fun TrackPanel(
                         )
                     }
                 }
-                item(key = row.id) { TrackRow(row, index, rows.lastIndex, requesters[index], onPick) }
+                item(key = row.id) { TrackRow(row, index, last, requesters[index], onPick) }
             }
+            if (timing != null) item(key = "timing") { TimingRow(timing, onShift) }
             if (note != null) {
                 item(key = "note") {
                     MqText(note, role = TextRole.Caption, color = colors.muted, modifier = Modifier.padding(16.dp))
                 }
             }
         }
+    }
+}
+
+/**
+ * This play's subtitle timing: Earlier and Later move the words by half a second each, and the line says
+ * where they are now ("0.5 s later"). The panel stays open; focus stays in it.
+ */
+@Composable
+private fun TimingRow(
+    delayMs: Long,
+    onShift: (Long) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            MqText("Timing", role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
+            MqText(
+                timingWords(delayMs),
+                role = TextRole.Caption,
+                color = Marquee.colors.muted,
+                maxLines = 1,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+        SecondaryButton(
+            "Earlier",
+            { onShift(-SUBTITLE_STEP_MS) },
+            Modifier.focusProperties {
+                left = FocusRequester.Cancel
+                down = FocusRequester.Cancel
+            },
+        )
+        SecondaryButton(
+            "Later",
+            { onShift(SUBTITLE_STEP_MS) },
+            Modifier.focusProperties {
+                right = FocusRequester.Cancel
+                down = FocusRequester.Cancel
+            },
+        )
     }
 }
 

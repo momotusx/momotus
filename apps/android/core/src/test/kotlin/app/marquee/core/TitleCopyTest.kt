@@ -225,4 +225,10 @@ class TitleCopyTest {
         // Nothing an account fixes: a source is the way on.
         assertEquals(PrimaryAction.AddSource, TitleCopy.primary(target, blocked(BlockedReason.NothingPlaysHere)))
     }
+
+    @Test
+    fun `with the next episode not out, the page says when it airs where Play would be`() {
+        assertEquals("Next episode airs Nov 3, 2026", TitleCopy.nothingToPlay("2026-11-03"))
+        assertEquals("Nothing to play yet", TitleCopy.nothingToPlay(null))
+    }
 }

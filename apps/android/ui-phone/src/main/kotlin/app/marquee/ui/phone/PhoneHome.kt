@@ -27,7 +27,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,11 +55,13 @@ import app.marquee.core.model.playable
 import app.marquee.core.model.tileKeys
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
+import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
 import app.marquee.design.Eyebrow
 import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
+import app.marquee.design.MenuAction
 import app.marquee.design.MqText
 import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
@@ -87,7 +92,18 @@ fun PhoneHome(
     onHomeRows: () -> Unit = {},
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
     card: (@Composable () -> Unit)? = null,
+    /** "Remove from Continue Watching", from a press and hold on one of its tiles; null offers no menu. */
+    onRemove: ((Tile) -> Unit)? = null,
 ) {
+    var menuFor by remember { mutableStateOf<Tile?>(null) }
+    menuFor?.let { tile ->
+        ActionMenu(
+            title = tile.name,
+            actions = listOf(MenuAction(TileCopy.REMOVE_CONTINUE, Icons.X) { onRemove?.invoke(tile) }),
+            onDismiss = { menuFor = null },
+        )
+    }
+    val hold: ((Tile) -> Unit)? = onRemove?.let { { tile -> menuFor = tile } }
     val listState = rememberLazyListState()
     val hasHero = home.hero != null
     // The list keeps the first lane where it is when a hero arrives above it; someone who has not
@@ -111,9 +127,9 @@ fun PhoneHome(
         } else {
             val rows = home.rows.toList()
             val split = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
-            items(rows.subList(0, split), key = { it.rowId }) { row -> PhoneRow(row, onOpen) }
+            items(rows.subList(0, split), key = { it.rowId }) { row -> PhoneRow(row, onOpen, hold) }
             if (card != null) item(key = "card") { card() }
-            items(rows.subList(split, rows.size), key = { it.rowId }) { row -> PhoneRow(row, onOpen) }
+            items(rows.subList(split, rows.size), key = { it.rowId }) { row -> PhoneRow(row, onOpen, hold) }
         }
     }
 }
@@ -301,6 +317,7 @@ private fun shapeOf(row: HomeRow): TileShape =
 private fun PhoneRow(
     row: HomeRow,
     onOpen: (Tile) -> Unit,
+    hold: ((Tile) -> Unit)?,
 ) {
     val side = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -329,7 +346,7 @@ private fun PhoneRow(
             }
 
             null -> {
-                TileLane(row, onOpen)
+                TileLane(row, onOpen, hold?.takeIf { TileCopy.removable(row.rowId) })
             }
         }
     }
@@ -362,6 +379,7 @@ private const val SKELETON_TILES = 4
 private fun TileLane(
     row: HomeRow,
     onOpen: (Tile) -> Unit,
+    onHold: ((Tile) -> Unit)?,
 ) {
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
@@ -381,6 +399,8 @@ private fun TileLane(
                 progress = tile.progress,
                 caption = TileCopy.caption(row.rowId, tile) ?: tile.releaseInfo,
                 rating = tile.rating.takeIf { shape == TileShape.Poster },
+                onLongClick = onHold?.let { { it(tile) } },
+                longClickLabel = "More options".takeIf { onHold != null },
             )
         }
     }
