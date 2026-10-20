@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the Rust core for Android arm64 and generates the Kotlin bindings.
+# Builds the Rust core for Android (arm64-v8a and armeabi-v7a) and generates the Kotlin bindings.
 #
 # One cargo build, in this app's own target dir (cargo gives workspace crates the same artifact
 # names in every checkout, so a shared target dir mixes sources across worktrees):
@@ -11,8 +11,9 @@
 # UniFFI version of the core, installed once:
 #   cargo install --path apps/android/tools/uniffi-bindgen --locked --target-dir <scratch>
 #
-# Usage: build-core.sh [armv7|dev]
-#   armv7 adds the 32-bit ABI (size measurement only, no emulator run).
+# Usage: build-core.sh [arm64|armv7|dev]
+#   Both ABIs by default: phones are arm64, and many TV sticks (Fire TV, Chromecast with Google TV) run a
+#   32-bit userland (plans/m6-android.md D10). arm64 or armv7 builds one, for a walk on one device.
 #   dev turns debug assertions on, which compiles the bridge's dev hooks in (Trakt from a local fake on
 #   this machine, `MQ_DEV_TRAKT`, for emulator walks), in its own target dir, into src/debug/jniLibs:
 #   only debug builds of the app package it. The plain build has no debug assertions and so no hook.
@@ -33,18 +34,25 @@ TARGET=${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-android}
 NDK=${ANDROID_NDK_HOME:-/opt/homebrew/share/android-commandlinetools/ndk/27.1.12297006}
 STRIP=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip
 OUT=$ROOT/apps/android/core/src/main
-ABIS=(-t arm64-v8a)
-TRIPLES=(aarch64-linux-android:arm64-v8a)
+ABIS=(-t arm64-v8a -t armeabi-v7a)
+TRIPLES=(aarch64-linux-android:arm64-v8a armv7-linux-androideabi:armeabi-v7a)
 DEV_ASSERTIONS=false
 LIBS=$OUT/jniLibs
-if [ "${1:-}" = "armv7" ]; then
-  ABIS+=(-t armeabi-v7a)
-  TRIPLES+=(armv7-linux-androideabi:armeabi-v7a)
-elif [ "${1:-}" = "dev" ]; then
-  DEV_ASSERTIONS=true
-  TARGET=$TARGET-dev
-  LIBS=$ROOT/apps/android/core/src/debug/jniLibs
-fi
+case "${1:-}" in
+  arm64)
+    ABIS=(-t arm64-v8a)
+    TRIPLES=(aarch64-linux-android:arm64-v8a)
+    ;;
+  armv7)
+    ABIS=(-t armeabi-v7a)
+    TRIPLES=(armv7-linux-androideabi:armeabi-v7a)
+    ;;
+  dev)
+    DEV_ASSERTIONS=true
+    TARGET=$TARGET-dev
+    LIBS=$ROOT/apps/android/core/src/debug/jniLibs
+    ;;
+esac
 
 cd "$ROOT"
 
@@ -61,7 +69,8 @@ CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none AN
   cargo ndk "${ABIS[@]}" --platform 24 rustc --release -p mq-ffi -j 4 --crate-type cdylib \
   ${MQ_FEATURES:+--features "$MQ_FEATURES"}
 
-UNSTRIPPED=$TARGET/aarch64-linux-android/release/libmarquee_core.so
+# The bindings read the first ABI's library: the UniFFI metadata is the same in each.
+UNSTRIPPED=$TARGET/${TRIPLES[0]%%:*}/release/libmarquee_core.so
 rm -rf "$OUT/generated"
 uniffi-bindgen generate --library "$UNSTRIPPED" --language kotlin \
   --config "$ROOT/apps/android/uniffi.toml" --out-dir "$OUT/generated"

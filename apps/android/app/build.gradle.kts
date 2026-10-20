@@ -17,7 +17,18 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
-        ndk { abiFilters += "arm64-v8a" }
+    }
+
+    // One APK per ABI, so a device installs only its own core library (a TV stick has little room):
+    // arm64-v8a for phones, armeabi-v7a for the many TV sticks with a 32-bit userland (plans/m6-android.md
+    // D10). A store bundle splits by ABI by itself.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
     }
 
     buildTypes {
@@ -52,7 +63,7 @@ android {
     }
 
     lint {
-        // Deliberate: arm64 first (plans/m6-android.md D10), targetSdk 36 until 37 is tested,
+        // Deliberate: arm64 and armeabi-v7a, no x86 (plans/m6-android.md D10), targetSdk 36 until 37 is tested,
         // and the Gradle and AGP pins are decided in the plan.
         disable += listOf("ChromeOsAbiSupport", "OldTargetApi", "AndroidGradlePluginVersion", "GradleDependency")
     }

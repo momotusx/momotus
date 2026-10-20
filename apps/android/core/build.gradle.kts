@@ -11,7 +11,8 @@ android {
     defaultConfig {
         minSdk = 24
         consumerProguardFiles("consumer-rules.pro")
-        ndk { abiFilters += "arm64-v8a" }
+        // Phones are arm64; many TV sticks run a 32-bit userland (plans/m6-android.md D10).
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     compileOptions {
@@ -25,7 +26,7 @@ android {
     }
 
     lint {
-        // Deliberate: arm64 first (plans/m6-android.md D10), as the app.
+        // Deliberate: arm64 and armeabi-v7a, no x86 (plans/m6-android.md D10), as the app.
         disable += "ChromeOsAbiSupport"
     }
 }
