@@ -136,23 +136,24 @@ fn bytes(hash: &str) -> Vec<u8> {
 }
 
 /// UDP and HTTP trackers answer together: each hash takes the tracker with
-/// the most seeders, and one UDP scrape carries every hash.
+/// the most seeders, whichever answers first, and one UDP scrape carries
+/// every hash. The UDP 7 comes first, then 150 ms late (under the 250 ms
+/// resend): the HTTP 12 counts either way (engine review r3, P2-1).
 #[tokio::test]
 async fn the_tracker_with_the_most_seeders_counts() {
-    // 7 is over the ranking's floor, so it settles HASH where it comes
-    // first: here it comes 150 ms late (under the 250 ms resend), after the
-    // HTTP 12 (engine review r2, P2-2), and still counts for OTHER.
-    let (udp, seen) = udp_tracker_late(7, 4, None, Duration::from_millis(150));
-    let http = http_tracker(12);
-    let (engine, _dir) = engine(&LOOPBACK).await;
-    let both = vec![format!("tracker:{udp}"), http.url.clone()];
-    let one = vec![udp];
-    let got = engine
-        .scrape(&[(HASH, both.as_slice()), (OTHER, one.as_slice())])
-        .await;
-    let count = |seeders, leechers| Some(SwarmCount { seeders, leechers });
-    assert_eq!(got, vec![count(12, 2), count(7, 4)]);
-    assert_eq!(seen.load(Ordering::SeqCst), 2, "one connect, one scrape");
+    for late in [Duration::ZERO, Duration::from_millis(150)] {
+        let (udp, seen) = udp_tracker_late(7, 4, None, late);
+        let http = http_tracker(12);
+        let (engine, _dir) = engine(&LOOPBACK).await;
+        let both = vec![format!("tracker:{udp}"), http.url.clone()];
+        let one = vec![udp];
+        let got = engine
+            .scrape(&[(HASH, both.as_slice()), (OTHER, one.as_slice())])
+            .await;
+        let count = |seeders, leechers| Some(SwarmCount { seeders, leechers });
+        assert_eq!(got, vec![count(12, 2), count(7, 4)], "UDP {late:?} late");
+        assert_eq!(seen.load(Ordering::SeqCst), 2, "one connect, one scrape");
+    }
 }
 
 /// A tracker that never answers costs the budget, not the count.

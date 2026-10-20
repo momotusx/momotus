@@ -78,12 +78,6 @@ const ADDRESS_KEEP: Duration = Duration::from_secs(5 * 60);
 const CONNECTION_KEEP: Duration = Duration::from_secs(60);
 /// A warm-up gives up after this long.
 const WARM_BUDGET: Duration = Duration::from_secs(3);
-/// An answer with this many seeders settles its hash early; under it the
-/// scrape waits for every tracker asked, or the budget. Coupled to the
-/// ranking's floor, mq-streams rank.rs `FEW_SEEDERS`: under 5 a torrent "may
-/// not start", so an early count under it would sink a healthy swarm whose
-/// later trackers count more (engine review r2, P2-2). Keep the two equal.
-const SETTLES: u32 = 5;
 /// A default tracker's zero seeders count only with this many leechers: our
 /// own viewers announce as leechers to every default, so one or two of them
 /// must not zero a swarm that lives on the DHT (engine review r2, P2-5).
@@ -115,6 +109,39 @@ struct Reach {
     scope: AddressScope,
     http: reqwest::Client,
     trackers: Arc<Mutex<HashMap<String, Kept>>>,
+    /// Each tracker name's kept addresses, which the HTTP client's
+    /// resolver answers from: one lookup per scrape (engine review r3,
+    /// P3-7).
+    names: Names,
+}
+
+type Names = Arc<Mutex<HashMap<String, (Instant, Vec<IpAddr>)>>>;
+
+/// The HTTP client's resolver: a name the keep holds answers from it,
+/// each address checked against the policy again; any other goes to the
+/// policy's resolver.
+struct KeptResolver {
+    scope: AddressScope,
+    names: Names,
+}
+
+impl reqwest::dns::Resolve for KeptResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let kept = lock(&self.names)
+            .get(name.as_str())
+            .filter(|(at, _)| at.elapsed() < ADDRESS_KEEP)
+            .map(|(_, ips)| ips.clone());
+        let ips: Vec<SocketAddr> = kept
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|ip| self.scope.permits(*ip))
+            .map(|ip| SocketAddr::new(ip, 0))
+            .collect();
+        if ips.is_empty() {
+            return self.scope.resolver().resolve(name);
+        }
+        Box::pin(async move { Ok(Box::new(ips.into_iter()) as reqwest::dns::Addrs) })
+    }
 }
 
 /// A tracker's resolved addresses and BEP 15 connection id, kept between
@@ -177,11 +204,16 @@ impl Scraper {
     /// Trackers reached as the session reaches them (no proxy, no
     /// redirects, names through the scope's resolver).
     pub fn new(scope: AddressScope) -> Self {
+        let names = Names::default();
+        let resolver = KeptResolver {
+            scope: scope.clone(),
+            names: names.clone(),
+        };
         let http = reqwest::Client::builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .pool_max_idle_per_host(0)
-            .dns_resolver(scope.resolver())
+            .dns_resolver(Arc::new(resolver))
             .timeout(BUDGET)
             .build()
             .unwrap_or_default();
@@ -190,6 +222,7 @@ impl Scraper {
                 scope,
                 http,
                 trackers: Arc::default(),
+                names,
             },
             kept: Mutex::default(),
             last: Mutex::default(),
@@ -235,12 +268,12 @@ impl Scraper {
     /// One count per `(info hash, its own trackers)`, `None` when no answer
     /// told anything in time; `defaults` are asked for every hash too. An
     /// answer tells something when it comes from one of the hash's own
-    /// trackers or counts any seeder or leecher: a tracker that does not
-    /// track a hash answers 0/0, while one that counts leechers knows the
-    /// swarm. A count is the answer with the most seeders, then leechers. A
-    /// hash settles early on `SETTLES` seeders, or once every tracker asked
-    /// for it has answered or failed. At most `MAX_OWN` own trackers per
-    /// hash and `MAX_TRACKERS` per call.
+    /// trackers, counts any seeder, or counts `DEFAULT_ZERO_LEECHERS` or more
+    /// leechers: a tracker that does not track a hash answers 0/0, and one or
+    /// two leechers may be our own viewers. A count is the answer with the
+    /// most seeders, then leechers. The call ends once every tracker asked
+    /// has answered or failed, or at the budget. At most `MAX_OWN` own
+    /// trackers per hash and `MAX_TRACKERS` per call.
     pub async fn scrape(
         &self,
         torrents: &[(String, Vec<String>)],
@@ -283,11 +316,6 @@ impl Scraper {
             }
         }
         let by_tracker = capped(by_tracker, &order, defaults);
-        // Per hash, the trackers still out.
-        let mut out: HashMap<String, usize> = HashMap::new();
-        for hash in by_tracker.values().flatten() {
-            *out.entry(hash.clone()).or_default() += 1;
-        }
         lock(&self.reach.trackers).retain(|_, k| k.fresh());
         let mut asks = JoinSet::new();
         let mut traces = Vec::new();
@@ -303,15 +331,16 @@ impl Scraper {
             traces.push(trace.to.clone());
             asks.spawn(async move {
                 let counts = ask(&reach, &tracker, &hashes, &trace).await;
-                (tracker, hashes, counts)
+                (tracker, counts)
             });
         }
         let deadline = tokio::time::Instant::now() + BUDGET;
         let mut fresh: HashMap<String, SwarmCount> = HashMap::new();
-        while !out.is_empty()
-            && let Ok(Some(answer)) = tokio::time::timeout_at(deadline, asks.join_next()).await
-        {
-            let Ok((tracker, asked, counts)) = answer else {
+        // No early end: the ranking's start tiers sit at 5, `min_seeders` (50
+        // by default) and four times that, all over the floor, so only the
+        // most any tracker counts ranks right (engine review r3, P2-1).
+        while let Ok(Some(answer)) = tokio::time::timeout_at(deadline, asks.join_next()).await {
+            let Ok((tracker, counts)) = answer else {
                 continue;
             };
             for (hash, count) in counts {
@@ -319,20 +348,9 @@ impl Scraper {
                 if !own && count.seeders == 0 && count.leechers < DEFAULT_ZERO_LEECHERS {
                     continue; // a tracker that does not track it, or only us
                 }
-                if count.seeders >= SETTLES {
-                    out.remove(&hash);
-                }
                 let best = fresh.entry(hash).or_insert(count);
                 if (count.seeders, count.leechers) > (best.seeders, best.leechers) {
                     *best = count;
-                }
-            }
-            for hash in asked {
-                if let Some(n) = out.get_mut(&hash) {
-                    *n -= 1;
-                    if *n == 0 {
-                        out.remove(&hash);
-                    }
                 }
             }
         }
@@ -441,6 +459,13 @@ async fn addresses(reach: &Reach, url: &mq_http::Url) -> (Vec<SocketAddr>, bool)
 /// The name looked up afresh through the scope's resolver, IPv4 first, and
 /// kept (none found is kept too, for `FAILED_KEEP`).
 async fn resolve(reach: &Reach, url: &mq_http::Url, port: u16) -> Vec<SocketAddr> {
+    let addrs = lookup(reach, url, port).await;
+    keep_addrs(reach, url, &addrs);
+    addrs
+}
+
+/// The name looked up through the scope's resolver, IPv4 first.
+async fn lookup(reach: &Reach, url: &mq_http::Url, port: u16) -> Vec<SocketAddr> {
     let Some(name) = url
         .host_str()
         .and_then(|h| reqwest::dns::Name::from_str(h).ok())
@@ -452,11 +477,20 @@ async fn resolve(reach: &Reach, url: &mq_http::Url, port: u16) -> Vec<SocketAddr
         Err(_) => Vec::new(),
     };
     addrs.sort_by_key(SocketAddr::is_ipv6);
+    addrs
+}
+
+/// `addrs` kept for the tracker at `url`, and for its name.
+fn keep_addrs(reach: &Reach, url: &mq_http::Url, addrs: &[SocketAddr]) {
+    let now = Instant::now();
     lock(&reach.trackers)
         .entry(url.as_str().to_owned())
         .or_default()
-        .addrs = Some((Instant::now(), addrs.clone()));
-    addrs
+        .addrs = Some((now, addrs.to_vec()));
+    if let Some(host) = url.host_str().filter(|_| !addrs.is_empty()) {
+        let ips = addrs.iter().map(SocketAddr::ip).collect();
+        lock(&reach.names).insert(host.to_owned(), (now, ips));
+    }
 }
 
 /// The tracker's kept connection id while it stands, with the address it
@@ -528,10 +562,15 @@ async fn connect_or_move(
     }
     let moved = async {
         let port = addrs.first()?.port();
-        let fresh = resolve(reach, url, port).await;
-        if fresh.is_empty() || fresh == addrs {
+        // A failed lookup leaves the kept addresses standing (they may
+        // answer this very call), and the same addresses in another
+        // order are not new (engine review r3, P3-1).
+        let fresh = lookup(reach, url, port).await;
+        let same: std::collections::HashSet<&SocketAddr> = addrs.iter().collect();
+        if fresh.is_empty() || fresh.iter().all(|a| same.contains(a)) {
             return None;
         }
+        keep_addrs(reach, url, &fresh);
         connect(reach, key, &fresh).await
     };
     tokio::pin!(old, moved);
@@ -941,12 +980,11 @@ mod tests {
         assert_eq!(c, count(1, 9), "equal seeders, fewer leechers kept");
     }
 
-    /// A hash settles early on 2 or more seeders, or once every tracker
-    /// asked has answered or failed; a zero alone waits for the rest, since
-    /// a tracker that does not track a hash answers zero (engine review r1,
-    /// P1-2: the old rule settled on any own answer, even a zero).
+    /// A scrape ends once every tracker asked has answered or failed, else
+    /// at the budget: no number of seeders ends it sooner, since the
+    /// ranking's tiers sit at 5, 50 and 200 (engine review r3, P2-1).
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn a_hash_settles_on_seeders_or_once_every_tracker_is_in() {
+    async fn a_scrape_ends_when_every_tracker_is_in() {
         let seeders = |n| {
             Some(SwarmCount {
                 seeders: n,
@@ -956,50 +994,18 @@ mod tests {
         let early = BUDGET / 2;
         // A private address: the policy refuses it at once, a failure.
         let refused = "udp://10.0.0.1:6969/announce";
-        // Under the ranking's floor (5) a count waits for the rest: a
-        // later tracker may count the swarm healthy (engine review r2, P2-2).
-        let (count, took) = timed(&tracker(Some(4)), &tracker(None)).await;
-        assert_eq!(count, seeders(4));
+        let (count, took) = timed(&tracker(Some(60)), &tracker(None)).await;
+        assert_eq!(count, seeders(60));
         assert!(
             took >= BUDGET,
-            "4 seeders settled it with a tracker out: {took:?}"
-        );
-        let (count, took) = timed(&tracker(Some(5)), &tracker(None)).await;
-        assert_eq!(count, seeders(5));
-        assert!(
-            took < early,
-            "5 seeders waited for a silent tracker: {took:?}"
-        );
-        let (count, took) = timed(&tracker(Some(0)), &tracker(None)).await;
-        assert_eq!(count, seeders(0));
-        assert!(
-            took >= BUDGET,
-            "a zero settled it with a tracker out: {took:?}"
+            "60 seeders ended it with a tracker out: {took:?}"
         );
         let (count, took) = timed(&tracker(Some(0)), &tracker(Some(7))).await;
         assert_eq!(count, seeders(7), "the larger count lost");
-        assert!(took < early, "7 seeders did not settle it: {took:?}");
-        let (count, took) = timed(&tracker(Some(0)), &tracker(Some(0))).await;
-        assert_eq!(count, seeders(0));
-        assert!(took < early, "both answered, still waiting: {took:?}");
+        assert!(took < early, "every tracker in, still waiting: {took:?}");
         let (count, took) = timed(&tracker(Some(1)), refused).await;
         assert_eq!(count, seeders(1));
         assert!(took < early, "a failed tracker was waited for: {took:?}");
-        // Two hashes: the first has heard from every tracker (one failed),
-        // the second has seeders while a tracker of its own is still out.
-        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
-        let s = Scraper::new(http.torrent_scope(&[V4]));
-        let started = Instant::now();
-        let both = [
-            (H1.to_owned(), vec![tracker(Some(1)), refused.to_owned()]),
-            (H2.to_owned(), vec![tracker(Some(5)), tracker(None)]),
-        ];
-        assert_eq!(s.scrape(&both, &[]).await, [seeders(1), seeders(5)]);
-        let took = started.elapsed();
-        assert!(
-            took < early,
-            "a hash with every tracker in still out: {took:?}"
-        );
     }
 
     /// At most 16 own trackers per hash and 24 per call, the shared ones
@@ -1258,7 +1264,9 @@ mod tests {
         let s = loopback_scraper();
         // The first call's three connects are lost: the name stays kept with
         // no connection id.
-        let slow = Duration::from_millis(300);
+        // 270 ms: slower than the old quarter-second slice, with about
+        // 200 ms of the budget to spare (engine review r3, P3-8).
+        let slow = Duration::from_millis(270);
         let f = fake_at(V4, 0, "slow-kept.scrape.test", 4, 3, slow);
         mq_http::test_dns::set("slow-kept.scrape.test", &[V4]);
         assert_eq!(one(&s, &f.url, H1).await.0, None, "a lost connect counted");
@@ -1281,5 +1289,75 @@ mod tests {
         let (count, took) = one(&s, url, H2).await;
         assert_eq!(count, None);
         assert!(took < slow, "looked up again within a minute: {took:?}");
+    }
+
+    /// A parallel lookup that fails leaves the kept addresses standing: the
+    /// tracker answered on them, so it counts on the next call too (engine
+    /// review r3, P3-1: the empty answer was kept as a dead name).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_failed_parallel_lookup_keeps_a_tracker_that_answered() {
+        let s = loopback_scraper();
+        // 50 ms answers, so the failed lookup ends before the connect.
+        let f = fake_at(
+            V4,
+            0,
+            "flaky-dns.scrape.test",
+            4,
+            0,
+            Duration::from_millis(50),
+        );
+        mq_http::test_dns::set("flaky-dns.scrape.test", &[V4]);
+        assert_eq!(one(&s, &f.url, H1).await.0, Some(4));
+        // The tracker restarts (its kept id is refused, so the next call
+        // connects again, with a lookup alongside), and the name now
+        // resolves to nothing the policy permits.
+        f.id.store(8, Ordering::SeqCst);
+        let refused: IpAddr = "10.0.0.1".parse().unwrap();
+        mq_http::test_dns::set("flaky-dns.scrape.test", &[refused]);
+        assert_eq!(
+            one(&s, &f.url, H2).await.0,
+            Some(4),
+            "the kept address went unused"
+        );
+        let third = "3333333333333333333333333333333333333333";
+        assert_eq!(
+            one(&s, &f.url, third).await.0,
+            Some(4),
+            "the failed lookup marked it dead"
+        );
+    }
+
+    /// A cold HTTP tracker's name is looked up once per scrape: the HTTP
+    /// client resolves from the keep the scrape just filled (engine review
+    /// r3, P3-7: it was looked up twice).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_cold_http_tracker_is_looked_up_once() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind(("::1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let mut body = b"d5:filesd20:".to_vec();
+            body.extend([0x11u8; 20]);
+            body.extend(b"d8:completei6e10:incompletei1eeee");
+            let mut answer = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            answer.extend(body);
+            for mut stream in listener.incoming().flatten() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(&answer);
+            }
+        });
+        let slow = Duration::from_millis(300);
+        let v6: IpAddr = "::1".parse().unwrap();
+        mq_http::test_dns::set_slow("http-once.scrape.test", &[v6], slow);
+        let s = loopback_scraper();
+        let url = format!("http://http-once.scrape.test:{port}/announce");
+        let (count, took) = one(&s, &url, H1).await;
+        assert_eq!(count, Some(6));
+        assert!(took < 2 * slow, "the name was looked up twice: {took:?}");
     }
 }

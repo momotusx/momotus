@@ -513,12 +513,13 @@ impl Engine {
     /// addon's number. Each hash's own trackers, plus the default ones when
     /// the DHT is on (as for a bare hash), are scraped at once (BEP 15 UDP,
     /// BEP 48 HTTP) under the trackers' address policy; answers after about
-    /// a second are dropped. It returns sooner once every hash has 2 or more
-    /// seeders from a tracker, or has heard from every tracker asked for it
-    /// (a tracker that does not track a hash answers zero). A count is the
-    /// tracker with the most seeders; `None` when none answered. Counts
-    /// stand for five minutes per hash. At most 16 own trackers per hash
-    /// and 24 trackers per call.
+    /// a second are dropped, and it returns sooner once every tracker asked
+    /// has answered or failed. A count is the answer with the most seeders,
+    /// then leechers; `None` when no answer told anything (a default
+    /// tracker's zero needs 3 or more leechers: one that does not track a
+    /// hash answers 0/0, and one or two may be our own viewers). Counts
+    /// stand for five minutes per hash. At most 16 own trackers per hash and
+    /// 24 trackers per call.
     pub async fn scrape(&self, torrents: &[(&str, &[String])]) -> Vec<Option<SwarmCount>> {
         let asked: Vec<(String, Vec<String>)> = torrents
             .iter()
