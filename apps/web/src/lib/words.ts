@@ -495,6 +495,8 @@ export function syncProblem(code: string | undefined, message: string): string {
       return syncWords.forgetFailed;
     case "plainLink":
       return syncWords.plainLink;
+    case "kitUnknown":
+      return syncWords.wrongKit;
     case "alreadyJoined":
       return syncWords.alreadyJoined;
     case "rosterChanged":

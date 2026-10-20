@@ -242,6 +242,7 @@ test("sync failures read by code and by action, and never show the server's addr
   }
   expect(stepProblem(undefined, "http status 403", "start")).toContain("invite code");
   expect(stepProblem(undefined, "http status 404", "recover")).toBe(syncWords.wrongKit);
+  expect(stepProblem("kitUnknown", "this kit or passkey opens no account", "recover")).toBe(syncWords.wrongKit);
   expect(stepProblem(undefined, "http status 404", "approve")).toContain("expired or was used");
   // A 404 elsewhere is no expired code: each action says what did not happen.
   expect(stepProblem(undefined, "http status 404", "kit")).toBe("No kit was made. The sync server did not answer. Try again in a moment.");
