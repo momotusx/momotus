@@ -7,7 +7,7 @@
 //! time is never used, so a small file does not lock the estimate low.
 
 use mq_library::Library;
-use mq_streams::{Conditions, Speed, key_digest};
+use mq_streams::{Conditions, Speed, key_digest, target_digest};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -208,8 +208,8 @@ const DEAD_KEY: &str = "dead_swarms";
 /// A file does not change: kept until the list is full.
 const NO_PICTURE_KEY: &str = "no_picture";
 const DID_NOT_PLAY_KEY: &str = "did_not_play";
-/// A torrent's file that is not the version listed: a fact of the torrent
-/// and its file index, kept until the list is full.
+/// A torrent's file that was not the version listed, for the target it
+/// was played for; kept as long as a decode failure.
 const WRONG_FILE_KEY: &str = "wrong_file";
 /// How long a version the player could not decode stays demoted.
 // ponytail: 30 days, as a decoder rarely changes; a one-off decode error
@@ -294,30 +294,23 @@ pub fn record_did_not_play(lib: &Library, stream_key: &str, now_ms: u64) {
     stamp(lib, DID_NOT_PLAY_KEY, digest, DID_NOT_PLAY_FOR_MS, now_ms);
 }
 
-/// Digests of the stream keys whose torrent file was not the version
-/// listed (code review 2026-10-20 r2 P3-3).
-pub fn wrong_file(lib: &Library) -> Vec<String> {
-    stamped(lib, WRONG_FILE_KEY, u64::MAX, 0)
+/// Digests (`target_digest`) of the stream keys whose torrent file was
+/// not the version listed for the target it played for, in the last 30
+/// days (code review 2026-10-20 r2 P3-3, r3 P3-3).
+pub fn wrong_file(lib: &Library, now_ms: u64) -> Vec<String> {
+    stamped(lib, WRONG_FILE_KEY, DID_NOT_PLAY_FOR_MS, now_ms)
 }
 
-/// The torrent file of `stream_key` is not the version it listed.
-pub fn record_wrong_file(lib: &Library, stream_key: &str, now_ms: u64) {
-    stamp(
-        lib,
-        WRONG_FILE_KEY,
-        key_digest(stream_key),
-        u64::MAX,
-        now_ms,
-    );
-}
-
-/// What this device found does not play here: the versions its player
-/// could not decode in the last 30 days, and the torrent files that were
-/// not the version listed. The ranking reads both as "Did not play".
-pub fn did_not_play_here(lib: &Library, now_ms: u64) -> Vec<String> {
-    let mut keys = did_not_play(lib, now_ms);
-    keys.extend(wrong_file(lib));
-    keys
+/// The torrent file `stream_key` played for an episode (`season`,
+/// `episode`) or a film was not the version it listed.
+pub fn record_wrong_file(
+    lib: &Library,
+    stream_key: &str,
+    (season, episode): (Option<u32>, Option<u32>),
+    now_ms: u64,
+) {
+    let digest = target_digest(stream_key, season, episode);
+    stamp(lib, WRONG_FILE_KEY, digest, DID_NOT_PLAY_FOR_MS, now_ms);
 }
 
 /// Lists written before digests kept raw stream keys: each becomes its
@@ -457,6 +450,16 @@ mod tests {
         assert_eq!(did_not_play(&old, 2_000), [key_digest(key)]);
         let stored = old.device_value(NO_PICTURE_KEY).unwrap().unwrap();
         assert!(!stored.contains("SECRETKEY"), "{stored}");
+    }
+
+    /// Code review 2026-10-20 r3 P3-3: a wrong file ages out like a decode
+    /// failure, after 30 days.
+    #[test]
+    fn a_wrong_file_ages_out_in_30_days() {
+        let lib = Library::temporary().unwrap();
+        record_wrong_file(&lib, "bt:cccc:auto", (Some(1), Some(5)), 1_000);
+        assert_eq!(wrong_file(&lib, 2_000).len(), 1);
+        assert!(wrong_file(&lib, 1_000 + DID_NOT_PLAY_FOR_MS).is_empty());
     }
 
     #[test]

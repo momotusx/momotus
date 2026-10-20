@@ -536,6 +536,16 @@ fn no_picture(s: &ParsedStream, input: &RankInput<'_>) -> bool {
             .contains(&crate::key_digest(&s.key))
 }
 
+/// The torrent file this version played for this target was not the one
+/// listed. Read as "Did not play on this device".
+fn wrong_file(s: &ParsedStream, input: &RankInput<'_>) -> bool {
+    let (season, episode) = (input.target.season, input.target.episode);
+    input
+        .conditions
+        .wrong_file
+        .contains(&crate::target_digest(&s.key, season, episode))
+}
+
 /// This device's player could not decode this version last time.
 fn did_not_play(s: &ParsedStream, input: &RankInput<'_>) -> bool {
     input
@@ -578,7 +588,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
     } else {
         start(class, s.seeders, input.prefs)
     };
-    let fails_here = no_picture(s, input) || did_not_play(s, input);
+    let fails_here = no_picture(s, input) || did_not_play(s, input) || wrong_file(s, input);
     let key = RankKey {
         language: input.prefs.languages.is_empty()
             || langs.is_empty()
@@ -622,7 +632,7 @@ fn line(
     if no_picture(s, input) {
         return ReasonLine::NoPicture;
     }
-    if did_not_play(s, input) {
+    if did_not_play(s, input) || wrong_file(s, input) {
         return ReasonLine::DidNotPlay;
     }
     if !key.legit {

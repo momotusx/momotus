@@ -295,6 +295,47 @@ async fn a_frozen_pick_folded_into_another_row_still_plays() {
     assert_eq!(chain.len(), 2, "its own source, then the row's");
 }
 
+/// The release of `LINK_LATER` and another one, from the install placed
+/// second.
+const LINKS_FIRST: &str = r#"{"streams":[
+ {"name":"First 1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-DEMAND","url":"https://first.example/got.mkv","behaviorHints":{"videoSize":3100000000}},
+ {"name":"First 720p","title":"Game.of.Thrones.S01E01.720p.WEB-DL.x264-OTHER","url":"https://first.example/other.mkv","behaviorHints":{"videoSize":1100000000}}
+]}"#;
+
+/// Code review 2026-10-20 r3 P3-6: a frozen pick folded into another row
+/// played through that row's sources, so moving on never returns to it:
+/// the next version is another release.
+#[tokio::test]
+async fn a_folded_pick_never_moves_on_to_its_own_row() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let later = stream_addon("later", Duration::from_millis(800), LINK_LATER).await;
+    let first = stream_addon("first", Duration::ZERO, LINKS_FIRST).await;
+    core.library()
+        .set_addons("p", &[later, first], &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    while view.snapshot().recommended.is_none() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let key = view.snapshot().recommended.unwrap().key;
+    view.freeze();
+    while !view.snapshot().done {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let pick = view.pick(&key);
+    assert_eq!(
+        pick.candidates.len(),
+        2,
+        "folded: its own source, then the row's"
+    );
+    let next = pick
+        .handle
+        .next_version(std::slice::from_ref(&key))
+        .expect("another version");
+    assert_eq!(next.key, "url:https://first.example/other.mkv");
+}
+
 /// Focus can move before any addon answered; that must not freeze an empty
 /// pick for good.
 #[tokio::test]

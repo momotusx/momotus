@@ -969,7 +969,8 @@ async fn a_wrong_file_is_kept_and_ranks_last() {
     ])
     .await;
     let now = mq_library::hlc::now_ms();
-    mq_runtime::speed::record_wrong_file(core.library(), &keys[0], now);
+    let episode = (Some(1), Some(1));
+    mq_runtime::speed::record_wrong_file(core.library(), &keys[0], episode, now);
     let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
     let s = view.snapshot();
     assert_eq!(s.recommended.unwrap().key, keys[1]);
@@ -1109,9 +1110,11 @@ async fn a_cold_first_scrape_is_asked_again_and_reaches_a_frozen_pick() {
 }
 
 /// When every version is a swarm whose trackers count one seeder or none,
-/// Versions says so before Play and the attempt gives up after the first
-/// 30 s window instead of 60 s (race 2: Big Buck Bunny waited 60 s with
-/// every row at 0 or 1). One healthy version clears it.
+/// Versions says so before Play. Its attempt keeps the stall windows and
+/// the 60 s deadline, a swarm where no peer unchoked by 30 s is let go,
+/// and with nothing else to play the deadline does not cut a swarm still
+/// sending (race 2: Big Buck Bunny waited 60 s with every row at 0 or 1;
+/// code review 2026-10-20 r3 P2-1). One healthy version clears it.
 #[cfg(feature = "torrent")]
 #[tokio::test]
 async fn almost_nobody_sharing_is_said_before_play() {
@@ -1138,15 +1141,19 @@ async fn almost_nobody_sharing_is_said_before_play() {
     assert!(view.snapshot().nobody_sharing, "{:?}", view.snapshot());
     // The stall windows and the full deadline stay; a swarm where no peer
     // unchoked is let go at 30 s (code review 2026-10-20 P1-1).
-    let (cut, deadline, quiet) = playback.start_rule();
-    assert!(cut);
+    // Nothing else can play once the only source started: the deadline
+    // does not cut a swarm still sending.
+    until("nothing else to play", || !playback.start_rule().1).await;
+    let (windows, _, deadline, quiet, cap) = playback.start_rule();
+    assert!(windows, "the window cut is on");
     assert_eq!(deadline, Duration::from_secs(60));
     assert_eq!(quiet, Some(Duration::from_secs(30)));
+    assert_eq!(cap, Duration::from_secs(180));
     drop((playback, view));
 
     let (_server, view, playback) = open([(HASH_A, 1), (HASH_B, 12)]).await;
     assert!(!view.snapshot().nobody_sharing, "one healthy version");
-    let (_, deadline, quiet) = playback.start_rule();
+    let (_, _, deadline, quiet, _) = playback.start_rule();
     assert_eq!((deadline, quiet), (Duration::from_secs(60), None));
 }
 

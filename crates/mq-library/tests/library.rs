@@ -283,3 +283,23 @@ fn a_leaked_library_of_an_ended_process_is_swept() {
     live.wait().unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Code review 2026-10-20 r3 P3-7: a temporary library starts empty even
+/// where an ended process with this pid left its files: no rows of that
+/// run, no stale `-wal`.
+#[test]
+fn a_temporary_library_starts_empty_over_old_files() {
+    let dir = std::env::temp_dir().join(format!("mq-reuse-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("mq-library-1-0.sqlite");
+    {
+        let old = Library::open(&path).unwrap();
+        old.ensure_profile("p", "p", "0").unwrap();
+        old.record_search("p", "left behind", 10).unwrap();
+        std::mem::forget(old);
+    }
+    let fresh = Library::temporary_at(path).unwrap();
+    assert!(fresh.recent_searches("p", 10).unwrap().is_empty());
+    drop(fresh);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

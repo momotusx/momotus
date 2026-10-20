@@ -325,17 +325,25 @@ impl PickHandle {
             .is_some_and(|state| nobody_sharing(&lock(&state)))
     }
 
-    /// The version the ranking picks after the row keys `tried`: the first
-    /// listed row that can start, with its failover chain. None once the
-    /// view is gone.
+    /// The version the ranking picks after the sources `tried` (stream
+    /// keys): the first listed row that can start and holds none of them,
+    /// with its failover chain. A row a folded pick played through is a
+    /// tried row (code review 2026-10-20 r3 P3-6). None once the view is
+    /// gone.
     pub fn next_version(&self, tried: &[String]) -> Option<NextVersion> {
         let state = self.state.upgrade()?;
         let s = lock(&state);
+        let untried = |r: &&RankedRow| {
+            !std::iter::once(&r.stream)
+                .chain(&r.failover)
+                .any(|st| tried.contains(&st.key))
+        };
         let row = s
             .ranked
             .rows
             .iter()
-            .find(|r| r.key.viable && !tried.contains(&r.stream.key))?;
+            .filter(|r| r.key.viable)
+            .find(untried)?;
         Some(NextVersion {
             key: row.stream.key.clone(),
             label: version_label(&row.stream.release),
@@ -591,10 +599,8 @@ impl VersionsView {
             dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
             limit_chosen: core.size_limit_chosen(),
             no_picture: crate::speed::no_picture(core.library()),
-            did_not_play: crate::speed::did_not_play_here(
-                core.library(),
-                mq_library::hlc::now_ms(),
-            ),
+            did_not_play: crate::speed::did_not_play(core.library(), mq_library::hlc::now_ms()),
+            wrong_file: crate::speed::wrong_file(core.library(), mq_library::hlc::now_ms()),
         };
         let item_id = item_id.map_or_else(
             || {
@@ -1498,7 +1504,8 @@ fn relearn(core: &Core, s: &mut State, failed: Option<&str>) {
     let (lib, now) = (core.library(), mq_library::hlc::now_ms());
     s.rank.dead_swarms = crate::speed::dead_swarms(lib, now);
     s.rank.no_picture = crate::speed::no_picture(lib);
-    s.rank.did_not_play = crate::speed::did_not_play_here(lib, now);
+    s.rank.did_not_play = crate::speed::did_not_play(lib, now);
+    s.rank.wrong_file = crate::speed::wrong_file(lib, now);
     let pick_failed = s
         .recommended
         .as_ref()

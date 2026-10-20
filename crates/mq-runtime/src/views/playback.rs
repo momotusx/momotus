@@ -320,6 +320,9 @@ struct State {
     /// a resume point is not playback, code review 2026-10-20 r2 P3-1).
     reported_ms: Option<u64>,
     played_ms: u64,
+    /// When a "Try again" run gives up, however many sources are left
+    /// (code review 2026-10-20 r3 P3-11); none once a source plays.
+    retry_until: Option<tokio::time::Instant>,
     /// The playing source's token: its URL and its subtitles' URLs live as
     /// long as it is kept here.
     lease: Option<Lease>,
@@ -406,11 +409,7 @@ impl State {
                 offer: None,
                 retries: 0,
             },
-            tried: candidates
-                .first()
-                .map(|c| c.key.clone())
-                .into_iter()
-                .collect(),
+            tried: candidates.iter().map(|c| c.key.clone()).collect(),
             first: candidates.clone(),
             candidates,
             next: 0,
@@ -419,6 +418,7 @@ impl State {
             progressed: false,
             reported_ms: None,
             played_ms: 0,
+            retry_until: None,
             lease: None,
             run: 0,
             closed: false,
@@ -560,7 +560,8 @@ impl PlaybackView {
             // A fresh start of the pick itself, after any moves on (code
             // review 2026-10-20 P1-1), each torrent with the full deadline.
             s.candidates = s.first.clone();
-            s.tried = s.first.first().map(|c| c.key.clone()).into_iter().collect();
+            s.tried = s.first.iter().map(|c| c.key.clone()).collect();
+            s.retry_until = Some(tokio::time::Instant::now() + RETRY_BUDGET);
             s.hops = 0;
             s.next = 0;
             s.version_failed = false;
@@ -586,8 +587,9 @@ impl PlaybackView {
     /// the deadline, and how long a swarm where no peer unchokes is given.
     #[doc(hidden)]
     #[cfg(feature = "torrent")]
-    pub fn start_rule(&self) -> (bool, Duration, Option<Duration>) {
-        start_rule(&lock(&self.state))
+    pub fn start_rule(&self) -> (bool, bool, Duration, Option<Duration>, Duration) {
+        let r = start_rule(&lock(&self.state));
+        (r.windows, r.elsewhere, r.deadline, r.quiet, r.cap)
     }
 
     /// A kids policy refused the target at open.
@@ -1029,6 +1031,7 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.progressed = false;
     s.reported_ms = None;
     s.played_ms = 0;
+    s.retry_until = None;
     s.snapshot.trying = None;
     true
 }
@@ -1183,6 +1186,16 @@ async fn resolve_next(
             if s.closed {
                 return;
             }
+            if budget_left(&s).is_some_and(|left| left.is_zero()) {
+                s.snapshot.attempts.push(Attempt {
+                    key: String::new(),
+                    via: "Marquee".into(),
+                    error: RETRY_GAVE_UP.into(),
+                });
+                s.snapshot.phase = PlaybackPhase::Failed;
+                snapshot.set(s.snapshot.clone());
+                return;
+            }
             if s.next >= s.candidates.len() && move_on(&mut s) {
                 snapshot.set(s.snapshot.clone());
             }
@@ -1199,8 +1212,9 @@ async fn resolve_next(
                 let name = filename
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
+                let probe = within_budget(&state, PROBE_TIMEOUT);
                 match server
-                    .open_for(upstream.clone(), &name, PROBE_TIMEOUT, &plays)
+                    .open_for(upstream.clone(), &name, probe, &plays)
                     .await
                 {
                     Ok(lease) => shows_picture(&core, &stream, &lease, hvc1_only, &state)
@@ -1377,6 +1391,22 @@ const PLAYED_PAST_START: Duration = Duration::from_secs(30);
 /// seek or a source that started further on, not playback.
 const PLAYED_STEP: Duration = Duration::from_secs(15);
 
+/// One "Try again" run gives up after this, however many sources are left
+/// (code review 2026-10-20 r3 P3-11).
+const RETRY_BUDGET: Duration = Duration::from_secs(180);
+const RETRY_GAVE_UP: &str = "Tried again for 3 minutes";
+
+/// What is left of a "Try again" run's budget; None outside one.
+fn budget_left(s: &State) -> Option<Duration> {
+    s.retry_until
+        .map(|until| until.saturating_duration_since(tokio::time::Instant::now()))
+}
+
+/// `wait`, cut to what is left of a "Try again" run's budget.
+fn within_budget(state: &Mutex<State>, wait: Duration) -> Duration {
+    budget_left(&lock(state)).map_or(wait, |left| wait.min(left))
+}
+
 /// The recommendation moves on by itself at most this many times.
 const HOPS: u8 = 2;
 
@@ -1386,14 +1416,43 @@ const HOPS: u8 = 2;
 /// title, the stall windows stay and the deadline is the full 60 s, but a
 /// swarm where no peer unchoked by the end of the first window is let go
 /// (code review 2026-10-20 P1-1); never after "Try again".
+/// The deadline reads only whether something else can play: the
+/// nobodySharing rule turns the window cut on, but says nothing of another
+/// source (code review 2026-10-20 r3 P2-1). In a "Try again" run every
+/// limit is cut to what is left of its budget.
 #[cfg(feature = "torrent")]
-fn start_rule(s: &State) -> (bool, Duration, Option<Duration>) {
+fn start_rule(s: &State) -> Rule {
+    let elsewhere = may_cut_early(s);
     let hopeless = !s.patient && s.pick.as_ref().is_some_and(|p| p.nobody_sharing());
-    if hopeless {
-        (true, TORRENT_READY_TIMEOUT, Some(STALL.first))
-    } else {
-        (may_cut_early(s), TORRENT_READY_TIMEOUT, None)
+    let mut rule = Rule {
+        windows: elsewhere || hopeless,
+        elsewhere,
+        deadline: TORRENT_READY_TIMEOUT,
+        quiet: hopeless.then_some(STALL.first),
+        cap: 3 * TORRENT_READY_TIMEOUT,
+    };
+    if let Some(left) = budget_left(s) {
+        rule.deadline = rule.deadline.min(left);
+        rule.quiet = rule.quiet.map(|q| q.min(left));
+        rule.cap = rule.cap.min(left);
     }
+    rule
+}
+
+/// How a torrent's start is judged (`watch_start`).
+#[cfg(any(test, feature = "torrent"))]
+#[derive(Clone, Copy, Debug)]
+struct Rule {
+    /// A swarm that falls short of a window may be cut then.
+    windows: bool,
+    /// Another source or version can play instead: past the deadline even
+    /// a swarm still in its window is cut.
+    elsewhere: bool,
+    deadline: Duration,
+    /// With no unchoke by then, the swarm is let go.
+    quiet: Option<Duration>,
+    /// Never past this.
+    cap: Duration,
 }
 
 /// A swarm that falls short may be cut at its first window when something
@@ -1436,7 +1495,8 @@ fn move_on(s: &mut State) -> bool {
         return false;
     }
     s.hops += 1;
-    s.tried.push(next.key);
+    s.tried
+        .extend(next.candidates.iter().map(|c| c.key.clone()));
     s.candidates = next.candidates;
     s.next = 0;
     s.snapshot.trying = Some(other);
@@ -1567,7 +1627,7 @@ async fn open_torrent(
         );
     };
     let torrent = tokio::time::timeout(
-        METADATA_TIMEOUT,
+        within_budget(state, METADATA_TIMEOUT),
         engine.add_magnet(info_hash, trackers, &[]),
     )
     .await
@@ -1614,7 +1674,7 @@ async fn open_torrent(
         let reader = claim.open_reader(file).await?;
         let info = reader.file().clone();
         // The file the addon pointed at must be the one listed (3.4).
-        if let Some(why) = wrong_file(&info.path, info.len, stream.size_bytes, target, by_episode) {
+        if let Some(why) = judge_file(core, stream, target, &info.path, info.len, by_episode) {
             return Ok((file, info, Started::Wrong(why)));
         }
         let mut head = reader.range(0, None).await?;
@@ -1627,8 +1687,8 @@ async fn open_torrent(
                 unchoked: s.unchoked_ms.is_some(),
             })
         };
-        let (others, deadline, quiet) = start_rule(&lock(state));
-        let ready = watch_start(head.ready(), progress, STALL, others, deadline, quiet).await;
+        let rule = start_rule(&lock(state));
+        let ready = watch_start(head.ready(), progress, STALL, rule).await;
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let failed = match started.await {
@@ -1675,10 +1735,6 @@ async fn open_torrent(
         }
         Ok((_, _, Started::Wrong(why))) => {
             lock(state).version_failed = true;
-            // A fact of the torrent and its file index, as no picture is
-            // (code review 2026-10-20 r2 P3-3).
-            let now = mq_library::hlc::now_ms();
-            crate::speed::record_wrong_file(core.library(), &stream.key, now);
             why.to_owned()
         }
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
@@ -1744,9 +1800,7 @@ async fn watch_start<T, P, F>(
     ready: impl std::future::Future<Output = T>,
     mut progress: P,
     stall: Stall,
-    others: bool,
-    deadline: Duration,
-    quiet: Option<Duration>,
+    rule: Rule,
 ) -> Started<T>
 where
     P: FnMut() -> F,
@@ -1765,9 +1819,9 @@ where
                 let now = tokio::time::Instant::now();
                 // Within its current window, a swarm is progressing.
                 let progressing = window.is_some_and(|(_, since, length)| now - since < length);
-                let silent = window.is_none() && quiet.is_some_and(|q| now - start >= q);
-                let past = now - start >= deadline && (others || !progressing);
-                if silent || past || now - start >= 3 * deadline {
+                let silent = window.is_none() && rule.quiet.is_some_and(|q| now - start >= q);
+                let past = now - start >= rule.deadline && (rule.elsewhere || !progressing);
+                if silent || past || now - start >= rule.cap {
                     return Started::Late { unchoked: window.is_some() };
                 }
                 let Some(p) = progress().await else { continue };
@@ -1777,7 +1831,7 @@ where
                     Some((mark, _, _)) if p.received >= mark.saturating_add(stall.floor) => {
                         window = Some((p.received, now, stall.later));
                     }
-                    Some((_, since, length)) if others && now - since >= length => {
+                    Some((_, since, length)) if rule.windows && now - since >= length => {
                         return Started::Stalled { nothing: p.received == first };
                     }
                     Some(_) => {}
@@ -1785,6 +1839,26 @@ where
             }
         }
     }
+}
+
+/// The verdict on the file a torrent opened (3.4), kept on this device
+/// when it is not the version listed: under the stream key and the target
+/// it played for, for 30 days (code review 2026-10-20 r2 P3-3, r3 P3-3,
+/// P3-4: the keeping is part of the verdict `open_torrent` asks for).
+#[cfg(any(test, feature = "torrent"))]
+fn judge_file(
+    core: &Core,
+    stream: &ParsedStream,
+    target: &PlayTarget,
+    path: &str,
+    len: u64,
+    by_episode: bool,
+) -> Option<&'static str> {
+    let why = wrong_file(path, len, stream.size_bytes, target, by_episode)?;
+    let now = mq_library::hlc::now_ms();
+    let played_for = (target.season, target.episode);
+    crate::speed::record_wrong_file(core.library(), &stream.key, played_for, now);
+    Some(why)
 }
 
 /// Why the file a torrent opened is not the version listed (3.4): larger
@@ -2811,6 +2885,44 @@ mod tests {
         assert!(!by_engine(&torrent, true, true));
     }
 
+    /// Code review 2026-10-20 r3 P3-11: a "Try again" run has one budget
+    /// for all its sources (3 minutes): every wait is cut to what is left,
+    /// and once it is spent the card comes back, however many sources are
+    /// left.
+    #[tokio::test]
+    async fn a_retry_gives_up_after_its_budget() {
+        let core = Core::temporary("default").unwrap();
+        // Loopback links from no install are refused at once.
+        let dead = |i: usize| stream(&format!(r#"{{"url":"http://127.0.0.1:9/v{i}.mkv"}}"#));
+        let view = PlaybackView::open(&core, (0..5).map(dead).collect(), PlayTarget::default());
+        let failed = || async {
+            for _ in 0..3000 {
+                if view.snapshot().phase == PlaybackPhase::Failed {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("never failed: {:?}", view.snapshot());
+        };
+        failed().await;
+        assert_eq!(view.snapshot().attempts.len(), 5);
+        view.retry();
+        {
+            let s = lock(&view.state);
+            let left = budget_left(&s).unwrap();
+            assert!(left > RETRY_BUDGET - Duration::from_secs(5), "{left:?}");
+        }
+        let soon = tokio::time::Instant::now() + Duration::from_secs(2);
+        lock(&view.state).retry_until = Some(soon);
+        assert!(within_budget(&view.state, PROBE_TIMEOUT) <= Duration::from_secs(2));
+        // The budget is spent before the resolve reaches a source.
+        lock(&view.state).retry_until = Some(tokio::time::Instant::now());
+        failed().await;
+        let s = view.snapshot();
+        let errors: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
+        assert_eq!(errors, [RETRY_GAVE_UP]);
+    }
+
     /// "Try again" restarts the same versions from the first, patiently
     /// (no early cut), and only once the playback failed.
     #[tokio::test]
@@ -2880,6 +2992,21 @@ mod tests {
         others: bool,
         quiet: Option<Duration>,
     ) -> (Started<()>, Duration) {
+        let rule = Rule {
+            windows: others,
+            elsewhere: others,
+            deadline: DEADLINE,
+            quiet,
+            cap: 3 * DEADLINE,
+        };
+        watch_rule(ready_after, at, rule).await
+    }
+
+    async fn watch_rule(
+        ready_after: Option<Duration>,
+        at: impl Fn(u64) -> (u64, usize),
+        rule: Rule,
+    ) -> (Started<()>, Duration) {
         let begun = tokio::time::Instant::now();
         let ready = async move {
             match ready_after {
@@ -2887,8 +3014,50 @@ mod tests {
                 None => std::future::pending::<()>().await,
             }
         };
-        let started = watch_start(ready, fake(at), STALL, others, DEADLINE, quiet).await;
+        let started = watch_start(ready, fake(at), STALL, rule).await;
         (started, begun.elapsed())
+    }
+
+    /// Code review 2026-10-20 r3 P2-1: on a title almost nobody shares, the
+    /// window cut is on, but with nothing else to play a lone swarm that
+    /// keeps sending is kept past the deadline, up to three: ready at 90 s
+    /// it plays; never ready, it is let go at 180 s.
+    #[tokio::test(start_paused = true)]
+    async fn nobody_sharing_keeps_a_lone_working_swarm_up_to_three_deadlines() {
+        let rule = Rule {
+            windows: true,
+            elsewhere: false,
+            deadline: DEADLINE,
+            quiet: Some(Duration::from_secs(30)),
+            cap: 3 * DEADLINE,
+        };
+        let trickle = |t| (t * 30 * KIB, 1);
+        let (started, took) = watch_rule(Some(Duration::from_secs(90)), trickle, rule).await;
+        assert!(matches!(started, Started::Ready(())), "{took:?}");
+        let (started, took) = watch_rule(None, trickle, rule).await;
+        assert!(matches!(started, Started::Late { unchoked: true }));
+        assert!((180..182).contains(&took.as_secs()), "{took:?}");
+    }
+
+    /// Code review 2026-10-20 r3 P3-3, P3-4: a file larger than the version
+    /// listed is kept for the episode it played for, and only that one.
+    #[test]
+    fn a_wrong_file_is_kept_for_its_episode() {
+        let core = Core::temporary("default").unwrap();
+        let mut pack = stream(&format!(r#"{{"infoHash":"{}"}}"#, "c".repeat(40)));
+        pack.size_bytes = Some(1 << 30);
+        let fifth = PlayTarget {
+            season: Some(1),
+            episode: Some(5),
+            ..PlayTarget::default()
+        };
+        let path = "Show/Show.S01E05.1080p.WEB.mkv";
+        assert!(judge_file(&core, &pack, &fifth, path, 3 << 30, false).is_some());
+        let kept = crate::speed::wrong_file(core.library(), mq_library::hlc::now_ms());
+        let digest = |e| mq_streams::target_digest(&pack.key, Some(1), Some(e));
+        assert_eq!(kept, [digest(5)]);
+        assert!(!kept.contains(&digest(6)), "another episode of the pack");
+        assert!(judge_file(&core, &pack, &fifth, path, 1 << 30, false).is_none());
     }
 
     /// A swarm with peers that sends nothing is cut once its first window

@@ -190,6 +190,15 @@ impl Library {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let path =
             std::env::temp_dir().join(format!("mq-library-{}-{n}.sqlite", std::process::id()));
+        Self::temporary_at(path)
+    }
+
+    /// A throwaway database at `path`, cleared first: a file left there by
+    /// an ended process whose pid this one now has holds that run's rows
+    /// (code review 2026-10-20 r3 P3-7).
+    #[doc(hidden)]
+    pub fn temporary_at(path: PathBuf) -> Result<Self, LibraryError> {
+        remove_database(&path);
         let mut lib = Self::open_with(path.clone(), 2)?;
         lib.temp_path = Some(path);
         Ok(lib)
@@ -794,14 +803,19 @@ fn alive(_pid: u32) -> bool {
     true
 }
 
+/// The database at `path` and its `-wal` and `-shm`.
+fn remove_database(path: &Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let mut p = path.to_path_buf().into_os_string();
+        p.push(suffix);
+        let _ = std::fs::remove_file(p);
+    }
+}
+
 impl Drop for Library {
     fn drop(&mut self) {
         if let Some(path) = self.temp_path.take() {
-            for suffix in ["", "-wal", "-shm"] {
-                let mut p = path.clone().into_os_string();
-                p.push(suffix);
-                let _ = std::fs::remove_file(p);
-            }
+            remove_database(&path);
         }
     }
 }

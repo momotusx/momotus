@@ -76,6 +76,20 @@ pub fn key_digest(key: &str) -> String {
     format!("h{hex}")
 }
 
+/// A stream key's digest for one target, an episode (`s1e5`) or a film:
+/// what a verdict about the file the key played for that target is kept
+/// under. A pack's `bt:{hash}:auto` key stands for every episode the addon
+/// lists from it, so a wrong file for one episode says nothing of the
+/// others (code review 2026-10-20 r3 P3-3).
+pub fn target_digest(key: &str, season: Option<u32>, episode: Option<u32>) -> String {
+    let target = match (season, episode) {
+        (Some(s), Some(e)) => format!("s{s}e{e}"),
+        (None, Some(e)) => format!("e{e}"),
+        _ => String::new(),
+    };
+    key_digest(&format!("{key}|{target}"))
+}
+
 /// Torrent identity is hash and file; URLs are their own identity; anything
 /// else falls back to title plus size.
 fn stream_key(source: &Source, title: &str, size: Option<u64>) -> String {

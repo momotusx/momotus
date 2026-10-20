@@ -174,6 +174,9 @@ pub struct Conditions {
     /// Digests (`key_digest`) of the stream keys this device's player could
     /// not decode when it last played them.
     pub did_not_play: Vec<String>,
+    /// Digests (`target_digest`) of the stream keys whose torrent file was
+    /// not the version listed, for the target it was played for.
+    pub wrong_file: Vec<String>,
 }
 
 impl Default for Conditions {
@@ -198,6 +201,7 @@ impl Default for Conditions {
             limit_chosen: false,
             no_picture: Vec::new(),
             did_not_play: Vec::new(),
+            wrong_file: Vec::new(),
         }
     }
 }
