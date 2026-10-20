@@ -743,6 +743,24 @@ impl Scheduler {
             .is_some_and(|w| self.held_bytes() > w.budget.saturating_sub(w.slack / 2))
     }
 
+    /// Of `pieces`, those of the windowed file with no block received or
+    /// requested and outside the kept set: what the file system may hold
+    /// of them is no data of ours (2.4, APFS's filled holes).
+    pub fn empty_unkept(&self, pieces: &[PieceIdx]) -> Vec<PieceIdx> {
+        let Some(win) = self.window else {
+            return Vec::new();
+        };
+        let kept = self.kept();
+        let f = self.geo.files()[win.file];
+        let file = self.geo.pieces_in(f.offset, f.offset + f.len);
+        pieces
+            .iter()
+            .copied()
+            .filter(|&p| file.contains(&p) && !kept.get(p))
+            .filter(|&p| !self.verified.get(p) && self.busy[p as usize] == 0)
+            .collect()
+    }
+
     /// What the keeper evicts now: enough to bring the torrent down to
     /// `budget - slack`, in [`Self::evictable`]'s order.
     pub fn to_evict(&self) -> Vec<PieceIdx> {

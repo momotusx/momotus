@@ -28,6 +28,19 @@ impl Hold {
     }
 }
 
+/// The fork's clear of empty pieces on `h` (the keeper's answer to APFS's
+/// filled holes), under the keeper lock.
+pub async fn clear_empty(
+    engine: &Engine,
+    h: crate::TorrentHandle,
+    pieces: &[u32],
+) -> Option<librqbit::Evicted> {
+    let t = engine.torrent(h).ok()?;
+    let managed = t.live.lock().await.as_ref()?.managed.clone();
+    let _round = t.keeper.lock().await;
+    managed.clear_empty_pieces(pieces).await.ok()
+}
+
 /// The free space `engine` reads from now on (`None`: the volume's).
 pub fn set_free(engine: &Engine, free: Option<u64>) {
     *lock(&engine.inner.free) = free;

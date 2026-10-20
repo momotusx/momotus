@@ -375,6 +375,24 @@ impl ChunkTracker {
         true
     }
 
+    /// Marquee fork (2.5): a piece with no chunk written, gated as an orphan
+    /// is (every chunk bit set, so a late block is dropped) for a punch of
+    /// what the file system holds of it anyway (APFS fills holes at a sync
+    /// after a punch). `false` when it is claimed or has a chunk written.
+    pub(crate) fn gate_empty(&mut self, idx: ValidPieceIndex) -> bool {
+        let id = idx.get_usize();
+        let range = self.lengths.chunk_range(idx);
+        let Some(bits) = self.chunk_status.get_mut(range) else {
+            return false;
+        };
+        if self.have.as_slice()[id] || bits.any() {
+            return false;
+        }
+        bits.fill(true);
+        self.evicting.set(id, true);
+        true
+    }
+
     /// Marquee fork (2.5, step 4): a gated piece's chunk bits cleared, and
     /// queued again when selected.
     pub(crate) fn release_evicted(&mut self, idx: ValidPieceIndex) {

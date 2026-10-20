@@ -70,6 +70,18 @@ impl TorrentStateLive {
     /// One eviction round over `pieces` (2.5). The caller keeps rounds
     /// and pauses apart.
     pub async fn evict_pieces(&self, pieces: &[u32]) -> anyhow::Result<Evicted> {
+        self.evict(pieces, false).await
+    }
+
+    /// Pieces with no chunk written whose bytes the file system holds anyway
+    /// (APFS fills holes between small extents at a sync after a punch):
+    /// punched as orphans are, gated first so a late block is dropped. A
+    /// piece with a chunk written or claimed is skipped.
+    pub async fn clear_empty_pieces(&self, pieces: &[u32]) -> anyhow::Result<Evicted> {
+        self.evict(pieces, true).await
+    }
+
+    async fn evict(&self, pieces: &[u32], empty: bool) -> anyhow::Result<Evicted> {
         anyhow::ensure!(
             self.shared.options.disable_upload() && self.ext_drives(),
             "eviction needs upload off and drive mode"
@@ -94,7 +106,15 @@ impl TorrentStateLive {
                     out.skipped.push(p);
                     continue;
                 };
-                if ct.is_piece_have(idx) {
+                if empty {
+                    // Only a piece with nothing of ours: a claimed one, or one
+                    // with a chunk written, is left as it is.
+                    if ct.gate_empty(idx) {
+                        gated.push((idx, Gate::Orphan));
+                    } else {
+                        out.skipped.push(p);
+                    }
+                } else if ct.is_piece_have(idx) {
                     let len = ct.gate_verified(idx, &self.metadata.file_infos);
                     self.stats.have_bytes.fetch_sub(len, Ordering::Relaxed);
                     gated.push((idx, Gate::Verified));
@@ -301,6 +321,18 @@ impl ManagedTorrent {
     pub async fn evict_pieces(&self, pieces: &[u32]) -> anyhow::Result<Evicted> {
         match self.live() {
             Some(live) => live.evict_pieces(pieces).await,
+            None => Ok(Evicted {
+                skipped: pieces.to_vec(),
+                ..Default::default()
+            }),
+        }
+    }
+
+    /// Marquee fork: [`TorrentStateLive::clear_empty_pieces`] on a live
+    /// torrent; on any other, every piece is skipped.
+    pub async fn clear_empty_pieces(&self, pieces: &[u32]) -> anyhow::Result<Evicted> {
+        match self.live() {
+            Some(live) => live.clear_empty_pieces(pieces).await,
             None => Ok(Evicted {
                 skipped: pieces.to_vec(),
                 ..Default::default()

@@ -1067,6 +1067,26 @@ async fn a_round_that_outlives_a_pause_never_punches_the_resumed_torrent() {
     assert_eq!(l.have().await.0, 21);
 }
 
+/// Phase 2 (APFS's filled holes): a clear of empty pieces skips a claimed
+/// piece and one with a chunk written, and punches an emptied one, which is
+/// fetched again whole.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_clear_of_empty_pieces_touches_nothing_written() {
+    let l = leeched().await;
+    let r = test_hooks::clear_empty(l.engine(), l.t, &[5])
+        .await
+        .unwrap();
+    assert_eq!((r.skipped, r.evicted), (vec![5], vec![]));
+    assert!(l.piece_matches(5).await);
+    assert_eq!(l.evict(&[8, 9]).await.evicted, [8, 9]);
+    l.request(8, 0..4).await;
+    let r = test_hooks::clear_empty(l.engine(), l.t, &[8, 9])
+        .await
+        .unwrap();
+    assert_eq!((r.skipped, r.evicted), (vec![8], vec![9]));
+    assert!(l.piece_matches(9).await && l.piece_matches(8).await);
+}
+
 /// Phase 2 (plans/streaming-window.md 2.2): a rate set before the torrent
 /// is live reaches its scheduler when it starts; the stats report what the
 /// scheduler runs with.

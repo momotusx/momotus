@@ -21,6 +21,11 @@ const FLOOR_BYTES: u64 = RESERVE_BYTES / 4;
 /// How often the keeper reads the free space when nothing wakes it.
 const GUARD_EVERY: Duration = Duration::from_secs(1);
 
+/// After a round, how often and how long the keeper looks for holes APFS
+/// filled at the next data sync.
+const HOLES_EVERY: Duration = Duration::from_millis(100);
+const HOLES_FOR: Duration = Duration::from_secs(2);
+
 /// Failed rounds in a row that end the playback (2.4).
 const FAILED_ROUNDS: u32 = 3;
 
@@ -137,6 +142,95 @@ impl Engine {
     }
 }
 
+impl Engine {
+    /// APFS fills the holes between small extents at the data sync after a
+    /// punch: pieces with no block written read back as data. When the file
+    /// holds more than the scheduler counts plus `h`, the pieces the file
+    /// holds that have nothing of ours are punched again.
+    pub(crate) async fn clear_filled_holes(&self, t: &Torrent, w: WindowState) {
+        let Some(info) = t.files.get(w.file).cloned() else {
+            return;
+        };
+        let path = t.dir.join(&info.path);
+        let held = self.ask(t, adapter::Msg::Held).await.unwrap_or(u64::MAX);
+        let offset: u64 = t.files[..w.file].iter().map(|f| f.len).sum();
+        let piece_len = u64::from(t.piece_len);
+        let found = tokio::task::spawn_blocking(move || {
+            let allocated = std::fs::metadata(&path).map_or(0, |m| {
+                #[cfg(unix)]
+                {
+                    std::os::unix::fs::MetadataExt::blocks(&m) * 512
+                }
+                #[cfg(not(unix))]
+                {
+                    m.len()
+                }
+            });
+            (allocated, data_pieces(&path, offset, piece_len))
+        })
+        .await;
+        let Ok((allocated, pieces)) = found else {
+            return;
+        };
+        if allocated <= held.saturating_add(w.plan.slack) || pieces.is_empty() {
+            return;
+        }
+        let Some(empty) = self.ask(t, |tx| adapter::Msg::Empty { pieces, tx }).await else {
+            return;
+        };
+        if empty.is_empty() {
+            return;
+        }
+        let managed = t.live.lock().await.as_ref().map(|l| l.managed.clone());
+        if let Some(managed) = managed {
+            let _round = t.keeper.lock().await;
+            if let Err(e) = managed.clear_empty_pieces(&empty).await {
+                tracing::warn!("clearing filled holes of {}: {e:#}", t.info_hash);
+            }
+        }
+    }
+}
+
+/// The torrent pieces a file's data regions touch (`SEEK_DATA` and
+/// `SEEK_HOLE`), the file starting at torrent byte `offset`. Blocking.
+#[cfg(unix)]
+fn data_pieces(path: &Path, offset: u64, piece_len: u64) -> Vec<u32> {
+    use std::os::fd::AsRawFd;
+    let Ok(f) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    let len = f.metadata().map_or(0, |m| m.len());
+    let (mut pieces, mut pos) = (Vec::new(), 0u64);
+    while pos < len {
+        let Ok(at) = i64::try_from(pos) else {
+            break;
+        };
+        // SAFETY: lseek takes plain values.
+        let start = unsafe { libc::lseek(f.as_raw_fd(), at, libc::SEEK_DATA) };
+        if start < 0 {
+            break;
+        }
+        // SAFETY: as above.
+        let end = unsafe { libc::lseek(f.as_raw_fd(), start, libc::SEEK_HOLE) };
+        if end <= start {
+            break;
+        }
+        let (first, last) = (
+            (offset + start as u64) / piece_len,
+            (offset + end as u64 - 1) / piece_len,
+        );
+        pieces.extend((first..=last).filter_map(|p| u32::try_from(p).ok()));
+        pos = end as u64;
+    }
+    pieces.dedup();
+    pieces
+}
+
+#[cfg(not(unix))]
+fn data_pieces(_path: &Path, _offset: u64, _piece_len: u64) -> Vec<u32> {
+    Vec::new()
+}
+
 /// Why a window ended the playback (2.4).
 fn storage_error(errors: &[String]) -> String {
     if errors
@@ -157,10 +251,15 @@ pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>)
     let mut failed: Vec<String> = Vec::new();
     // The playback's claim may come just after its window.
     let mut claimed = false;
+    let mut punched: Option<std::time::Instant> = None;
     loop {
+        let every = match punched {
+            Some(at) if at.elapsed() < HOLES_FOR => HOLES_EVERY,
+            _ => GUARD_EVERY,
+        };
         tokio::select! {
             () = t.keeper_wake.notified() => {}
-            () = tokio::time::sleep(GUARD_EVERY) => {}
+            () = tokio::time::sleep(every) => {}
         }
         let Some(inner) = engine.upgrade() else {
             break;
@@ -194,6 +293,7 @@ pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>)
             *lock(&t.window) = Some(state);
             engine.send_window(&t, Some(state), None).await;
         }
+        engine.clear_filled_holes(&t, state).await;
         let Some(pieces) = engine.ask(&t, adapter::Msg::ToEvict).await else {
             continue;
         };
@@ -201,6 +301,7 @@ pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>)
             continue;
         }
         t.rounds.fetch_add(1, Ordering::Relaxed);
+        punched = Some(std::time::Instant::now());
         match engine.evict_pieces(h, &pieces).await {
             Ok(r) if r.error.is_none() => failed.clear(),
             Ok(r) => failed.extend(r.error),

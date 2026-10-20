@@ -60,6 +60,13 @@ pub(crate) enum Msg {
     Paused(bool),
     /// The keeper's round: what to evict now.
     ToEvict(tokio::sync::oneshot::Sender<Vec<u32>>),
+    /// What the scheduler counts as held.
+    Held(tokio::sync::oneshot::Sender<u64>),
+    /// Of these pieces, the ones with nothing of ours (APFS's filled holes).
+    Empty {
+        pieces: Vec<u32>,
+        tx: tokio::sync::oneshot::Sender<Vec<u32>>,
+    },
     /// The end of a playback: what the trim takes.
     Trim {
         ahead: u64,
@@ -621,11 +628,24 @@ impl Translator {
                     now_us: self.now_us,
                 })
             }
+            Msg::Held(tx) => {
+                let _ = tx.send(self.sched.as_ref().map_or(0, Scheduler::held_bytes));
+                Vec::new()
+            }
             Msg::ToEvict(tx) => {
                 let _ = tx.send(
                     self.sched
                         .as_ref()
                         .map(Scheduler::to_evict)
+                        .unwrap_or_default(),
+                );
+                Vec::new()
+            }
+            Msg::Empty { pieces, tx } => {
+                let _ = tx.send(
+                    self.sched
+                        .as_ref()
+                        .map(|s| s.empty_unkept(&pieces))
                         .unwrap_or_default(),
                 );
                 Vec::new()
