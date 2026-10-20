@@ -8,6 +8,8 @@ struct RowView: View {
     var startScope: Namespace.ID?
     @Environment(\.metrics) private var metrics
     @Environment(CoreClient.self) private var core
+    /// Remove from Continue Watching did not go through: the title and why.
+    @State private var removeFailure: (tile: Tile, words: String)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 16 : 12) {
@@ -24,6 +26,10 @@ struct RowView: View {
                     .padding(.horizontal, metrics.gutter)
             case .ready:
                 strip
+                if let removeFailure {
+                    StateLine(symbol: "triangle-alert", text: removeFailure.words, action: ("Try again", { remove(removeFailure.tile) }), primary: false)
+                        .padding(.horizontal, metrics.gutter)
+                }
             }
         }
         #if os(tvOS)
@@ -36,12 +42,16 @@ struct RowView: View {
         return row.rowId == "continue-watching" ? nil : row.source
     }
 
-    private func remove(_ itemId: String) {
+    /// Takes the title off Continue Watching; a failure says so under the row,
+    /// with Try again, as a failed row does.
+    private func remove(_ tile: Tile) {
+        removeFailure = nil
         Task {
             do {
-                try await core.perform("removeFromContinue", ["itemId": itemId])
+                try await core.perform("removeFromContinue", ["itemId": tile.id])
             } catch {
                 coreLog.error("remove from continue watching: \(error.localizedDescription, privacy: .public)")
+                removeFailure = (tile, removeFailedWords(name: tile.name, reason: error.localizedDescription))
             }
         }
     }
@@ -63,7 +73,7 @@ struct RowView: View {
                     // a long press of select on TV) until it is played again, on every synced device.
                     .contextMenu {
                         if row.rowId == "continue-watching" {
-                            Button("Remove from Continue Watching", glyph: "x") { remove(tile.id) }
+                            Button("Remove from Continue Watching", glyph: "x") { remove(tile) }
                         }
                     }
                     // TV: Home's start row enters on its first tile.

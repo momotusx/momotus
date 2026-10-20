@@ -124,3 +124,14 @@ func nextAirsWords(_ day: String, locale: Locale = .current) -> String? {
     let style = Date.FormatStyle(locale: locale, timeZone: TimeZone(identifier: "UTC") ?? .current).month(.abbreviated).day()
     return "Next episode airs \(date.formatted(style))"
 }
+
+/// The title page's line when the core names neither an episode to play nor
+/// the day the next one airs: why there is no Play.
+func noPlayWords(hasEpisodes: Bool) -> String {
+    hasEpisodes ? "The next episode has no air date yet" : "This series lists no episodes to play"
+}
+
+/// Under Continue Watching when Remove did not go through.
+func removeFailedWords(name: String, reason: String) -> String {
+    "\(name) could not be removed from Continue Watching: \(reason)"
+}

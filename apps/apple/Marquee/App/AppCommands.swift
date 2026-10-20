@@ -4,6 +4,8 @@ import SwiftUI
 extension FocusedValues {
     /// The window's place switch; nil while the player covers the places.
     @Entry var places: OpenTabAction?
+    /// Cmd-F: Search, with the cursor in its field every time.
+    @Entry var find: OpenTabAction?
     /// The player on screen, for the Playback menu.
     @Entry var playerKeys: PlayerKeys?
 }
@@ -19,6 +21,7 @@ struct PlayerKeys {
 /// Playing; review apple-journey P2-7).
 struct AppCommands: Commands {
     @FocusedValue(\.places) private var places
+    @FocusedValue(\.find) private var find
     @FocusedValue(\.playerKeys) private var player
 
     var body: some Commands {
@@ -29,9 +32,9 @@ struct AppCommands: Commands {
                 .disabled(places == nil)
         }
         CommandGroup(after: .textEditing) {
-            Button("Search Titles") { places?.open(.search) }
+            Button("Search Titles") { find?.open(.search) }
                 .keyboardShortcut("f")
-                .disabled(places == nil)
+                .disabled(find == nil)
         }
         CommandMenu("Go") {
             ForEach(Array(AppTab.allCases.enumerated()), id: \.element) { index, tab in

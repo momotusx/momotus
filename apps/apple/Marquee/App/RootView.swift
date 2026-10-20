@@ -33,6 +33,8 @@ extension EnvironmentValues {
     /// The tab this view is in is the one on screen. On a phone every opened
     /// tab stays alive behind the shown one, so its pages never disappear.
     @Entry var tabShown = true
+    /// Bumped by Cmd-F on the Mac: Search puts the cursor in its field.
+    @Entry var searchRequest = 0
 }
 
 /// The floating glass navigation: a bar at the bottom on iPhone and iPad, a
@@ -134,6 +136,8 @@ struct MainShell: View {
     /// Places opened so far, kept alive so each keeps its place (a query, a
     /// catalog and its scroll, a filter, an open title) as a tab bar does.
     @State private var opened: Set<AppTab> = [.home]
+    /// Cmd-F presses, for Search's field.
+    @State private var searchRequests = 0
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var typing = false
@@ -225,6 +229,10 @@ struct MainShell: View {
             })
             // The Go menu and its keys, off while the player covers the places.
             .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { select($0) })
+            .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _ in
+                select(.search)
+                searchRequests += 1
+            })
         #else
         places.safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
@@ -289,6 +297,7 @@ struct MainShell: View {
             ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
                 screen(item)
                     .environment(\.tabShown, item == tab)
+                    .environment(\.searchRequest, searchRequests)
                     .opacity(item == tab ? 1 : 0)
                     .allowsHitTesting(item == tab)
                     .accessibilityHidden(item != tab)

@@ -31,6 +31,14 @@ struct CaptionStyle {
         }
     }
 
+    /// The same size for a file's own tracks, which AVFoundation draws: a
+    /// percent of its default (`kCMTextMarkupAttribute_RelativeFontSize`), none
+    /// at Medium.
+    static func relativeFontSize(_ size: SubtitleSize) -> Int? {
+        let percent = Int((factor(size) * 100).rounded())
+        return percent == 100 ? nil : percent
+    }
+
     static func words(_ size: SubtitleSize) -> String {
         switch size {
         case .small: "Small"

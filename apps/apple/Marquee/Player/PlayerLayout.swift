@@ -74,6 +74,12 @@ enum PlayerLayout {
         position - delay
     }
 
+    /// The times the drawn line changes: each cue's start and end, shifted by
+    /// the timing, from the film's start, each once and in order.
+    static func cueEdges(_ cues: [WebVTT.Cue], delay: Double) -> [Double] {
+        Array(Set(cues.flatMap { [$0.start + delay, $0.end + delay] }.filter { $0 >= 0 })).sorted()
+    }
+
     /// "On time", "1.5 s later", "0.5 s earlier".
     static func delayWords(_ delay: Double) -> String {
         guard abs(delay) >= 0.05 else { return "On time" }

@@ -103,10 +103,14 @@ struct PlayerControls: View {
             }
             #if os(iOS)
             // The system's own glyphs: AirPlay's picker and Picture in Picture's.
-            AirPlayButton()
-                .frame(width: 40, height: 40)
-                .glass(Circle())
-                .accessibilityLabel("AirPlay")
+            // AirPlay only for a stream a receiver can reach: for the core's loopback
+            // one it would carry the sound alone (Control Center mirroring stays).
+            if model.airPlayable {
+                AirPlayButton()
+                    .frame(width: 40, height: 40)
+                    .glass(Circle())
+                    .accessibilityLabel("AirPlay")
+            }
             if let pip, pip.possible {
                 Button(action: pip.start) {
                     Image(uiImage: AVPictureInPictureController.pictureInPictureButtonStartImage)
@@ -290,14 +294,15 @@ struct PlayerControls: View {
                     }
                 }
                 // An addon track's timing, half a second a press, for this play;
-                // the menu stays open for the next press.
+                // the menu stays open for the next press, and each press holds the
+                // controls up again: finding the timing takes listening between presses.
                 if model.subtitle != nil {
                     Section("Timing: \(PlayerLayout.delayWords(model.subtitleDelay))") {
-                        Button { model.subtitleDelay -= PlayerLayout.subtitleStep } label: {
+                        Button { model.subtitleDelay -= PlayerLayout.subtitleStep; hold(true) } label: {
                             Label("Earlier by 0.5 s", glyph: "chevron-left")
                         }
                         .keepsMenuOpen()
-                        Button { model.subtitleDelay += PlayerLayout.subtitleStep } label: {
+                        Button { model.subtitleDelay += PlayerLayout.subtitleStep; hold(true) } label: {
                             Label("Later by 0.5 s", glyph: "chevron-right")
                         }
                         .keepsMenuOpen()
@@ -305,6 +310,10 @@ struct PlayerControls: View {
                             Button { model.subtitleDelay = 0; hold(false) } label: { Label("Back on time", glyph: "rotate-ccw") }
                         }
                     }
+                }
+                // A file's own track is drawn by AVFoundation, which takes the size but no timing.
+                if model.subtitle == nil, model.textTrack != nil {
+                    Section("Timing") { Text("Timing works for addon subtitles only") }
                 }
                 if !model.textTracks.isEmpty {
                     Section("In the file") {

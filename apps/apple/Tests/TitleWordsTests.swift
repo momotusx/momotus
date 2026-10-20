@@ -80,3 +80,14 @@ import Testing
     #expect(nextAirsWords("2026-10-21", locale: english) == "Next episode airs Oct 21")
     #expect(nextAirsWords("not a day", locale: english) == nil)
 }
+
+@Test func noPlayButtonSaysWhy() {
+    // The core named no episode to play and no day: never a dead Play.
+    #expect(noPlayWords(hasEpisodes: true) == "The next episode has no air date yet")
+    #expect(noPlayWords(hasEpisodes: false) == "This series lists no episodes to play")
+}
+
+@Test func aFailedRemovalSaysWhichTitleAndWhy() {
+    #expect(removeFailedWords(name: "Sintel", reason: "The core did not answer")
+        == "Sintel could not be removed from Continue Watching: The core did not answer")
+}

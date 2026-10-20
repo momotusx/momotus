@@ -25,6 +25,8 @@ struct TitleScreen: View {
     @State private var showAccount = false
     /// The episode whose version is being found, and why the last one could not start.
     @State private var starting: String?
+    /// Play was pressed and the pick is still settling: the button says Starting.
+    @State private var startingPlay = false
     @State private var startFailure: EpisodeFailure?
 
     init(route: TitleRoute, core: CoreClient) {
@@ -102,6 +104,31 @@ struct TitleScreen: View {
             target.episodesInSeason = model.episodes.filter { $0.season == episode.season }.count
         }
         return target
+    }
+
+    /// Plays the pick at once, else says Starting while it settles, as the
+    /// Home hero does: then plays it, or with no version at all goes to Add
+    /// a source, or with sources still answering after 10 s opens Versions.
+    private func play(fromStart: Bool) {
+        if var route = versions?.play() {
+            route.fromStart = fromStart
+            playing = route
+            return
+        }
+        guard let versions, !startingPlay else { return }
+        startingPlay = true
+        Task {
+            var route = await versions.settledPick()
+            startingPlay = false
+            if route != nil {
+                route?.fromStart = fromStart
+                playing = route
+            } else if versions.snapshot?.done == true {
+                showAddons = true
+            } else {
+                showVersions = true
+            }
+        }
     }
 
     /// One Versions view per play target. Replacing the model closes the old
@@ -233,21 +260,9 @@ struct TitleScreen: View {
                     Synopsis(text: description, lines: 3)
                 }
                 PlayBlock(
-                    target: model.header?.playTarget, nextAirs: model.header?.nextAirs, runtime: details.runtime, versions: versions?.snapshot,
-                    failure: versions?.failure, wide: metrics.wide,
-                    play: { fromStart in
-                        if var route = versions?.play() {
-                            route.fromStart = fromStart
-                            playing = route
-                        } else {
-                            // Sources still answering: play the pick once it settles.
-                            Task {
-                                var route = await versions?.settledPick()
-                                route?.fromStart = fromStart
-                                playing = route
-                            }
-                        }
-                    },
+                    target: model.header?.playTarget, nextAirs: model.header?.nextAirs, hasEpisodes: !model.episodes.isEmpty,
+                    runtime: details.runtime, versions: versions?.snapshot, failure: versions?.failure, wide: metrics.wide,
+                    starting: startingPlay, play: { play(fromStart: $0) },
                     addSource: { showAddons = true }, addAccount: { showAccount = true }, focus: $primaryFocused)
                 actions(details)
             } else if case .failed(let reason) = model.header?.state {
@@ -475,11 +490,15 @@ private struct PlayBlock: View {
     let target: PlayTarget?
     /// With no target, the day the next episode comes out.
     let nextAirs: String?
+    /// With no target and no day: the page lists episodes (the next has no date).
+    let hasEpisodes: Bool
     /// The title's runtime ("57 min"), so Resume says the time left.
     let runtime: String?
     let versions: VersionsSnapshot?
     let failure: String?
     let wide: Bool
+    /// Play was pressed and the pick is still settling.
+    let starting: Bool
     /// Plays the pick; true starts over from the beginning.
     let play: (_ fromStart: Bool) -> Void
     let addSource: () -> Void
@@ -491,9 +510,11 @@ private struct PlayBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if target == nil, let airs = nextAirs.flatMap({ nextAirsWords($0) }) {
-                // Nothing to play yet: the day it comes, not a Play that finds nothing.
-                Label(airs, glyph: "calendar")
+            if target == nil {
+                // Nothing to play yet: the day it comes, or why there is no Play,
+                // never a Play that finds nothing.
+                let airs = nextAirs.flatMap { nextAirsWords($0) }
+                Label(airs ?? noPlayWords(hasEpisodes: hasEpisodes), glyph: airs == nil ? "circle-alert" : "calendar")
                     .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
                     .foregroundStyle(Theme.Palette.text)
             } else if versions?.done == true, versions?.recommended == nil, versions?.blocked?.reason == "needsAccount" {
@@ -516,10 +537,16 @@ private struct PlayBlock: View {
                 row {
                     Button { play(false) } label: {
                         HStack(spacing: 10) {
-                            Glyph("play-fill")
-                            Text(target?.label ?? "Play")
-                            if let resume = target?.resumeMs, resume > 0 {
-                                Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(Font.Weight.regular.legible).opacity(0.8)
+                            if starting {
+                                // Never a silent wait: the pick is settling (up to 10 s).
+                                ProgressView().controlSize(.small).tint(Theme.Palette.onPrimary)
+                                Text("Starting")
+                            } else {
+                                Glyph("play-fill")
+                                Text(target?.label ?? "Play")
+                                if let resume = target?.resumeMs, resume > 0 {
+                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(Font.Weight.regular.legible).opacity(0.8)
+                                }
                             }
                         }
                         .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
@@ -527,15 +554,15 @@ private struct PlayBlock: View {
                     .buttonStyle(PillButtonStyle(prominent: true))
                     .focused(focus)
                     // The reason shows right under it.
-                    .disabled(failure != nil)
-                    .accessibilityLabel(playWords)
+                    .disabled(failure != nil || starting)
+                    .accessibilityLabel(starting ? "Starting" : playWords)
                     if let resume = target?.resumeMs, resume > 0 {
                         Button { play(true) } label: {
                             Label("Start over", glyph: "rotate-ccw")
                                 .frame(maxWidth: wide || !typeSize.isAccessibilitySize ? nil : .infinity)
                         }
                         .buttonStyle(PillButtonStyle())
-                        .disabled(failure != nil)
+                        .disabled(failure != nil || starting)
                     }
                 }
             }

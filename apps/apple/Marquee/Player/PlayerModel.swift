@@ -25,10 +25,13 @@ final class PlayerModel {
     /// The picture's size, for placing subtitles on it rather than on the screen.
     private(set) var videoSize: CGSize = .zero
     private(set) var subtitle: SubtitleTrack?
+    /// The loaded stream can go to an AirPlay receiver (not the core's loopback
+    /// server): only then does the player offer AirPlay, which sends the picture.
+    private(set) var airPlayable = false
     /// Seconds the addon subtitles show later (negative: earlier), for this
     /// play and this track: a new track starts on time.
-    var subtitleDelay: Double = 0
-    private(set) var cues: [WebVTT.Cue] = []
+    var subtitleDelay: Double = 0 { didSet { watchCueEdges() } }
+    private(set) var cues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
         didSet { player.defaultRate = rate; if playing { player.rate = rate }; publishNowPlaying() }
@@ -94,6 +97,8 @@ final class PlayerModel {
     @ObservationIgnored private var lastReport = ContinuousClock.now
     /// The player calls the time observer only while this token is held.
     @ObservationIgnored private var timeObserver: Any?
+    /// Fires at each cue's start and end, so a line changes on time.
+    @ObservationIgnored private var cueObserver: Any?
     @ObservationIgnored private var bag: Set<AnyCancellable> = []
     /// Observers of the current item, dropped when another one loads.
     @ObservationIgnored private var itemBag: Set<AnyCancellable> = []
@@ -222,6 +227,16 @@ final class PlayerModel {
     var autoplayNext: Bool { prefs.snapshot?.autoplayNext ?? true }
     /// The profile's subtitle size, synced (`Prefs.subtitleSize`).
     var subtitleSize: SubtitleSize { prefs.snapshot?.subtitleSize ?? .medium }
+
+    /// The profile's size on the file's own tracks too, drawn by AVFoundation:
+    /// on each new item and when the size changes.
+    func textSize(_ item: AVPlayerItem? = nil) {
+        guard let item = item ?? player.currentItem else { return }
+        let rule = CaptionStyle.relativeFontSize(subtitleSize).flatMap {
+            AVTextStyleRule(textMarkupAttributes: [kCMTextMarkupAttribute_RelativeFontSize as String: $0])
+        }
+        item.textStyleRules = rule.map { [$0] }
+    }
     /// The profile's subtitle languages, then its audio ones: the Subtitles menu's top groups.
     var subtitleLanguages: [String] {
         SubtitleMenu.preferred(
@@ -265,6 +280,9 @@ final class PlayerModel {
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
         selectSubtitle(nil)
+        // Floating in Picture in Picture there is no page to start the new
+        // run: the model starts it, and a page brought back joins it.
+        if floating { Task { await drive() } }
     }
 
     /// The page's run of the view. A page shown again over a floating film
@@ -438,6 +456,22 @@ final class PlayerModel {
         }
     }
 
+    /// The drawn line changes at each cue's start and end, shifted by the
+    /// timing, not on the next quarter second tick (review apple-journey P3-13).
+    private func watchCueEdges() {
+        if let cueObserver { player.removeTimeObserver(cueObserver) }
+        cueObserver = nil
+        let edges = PlayerLayout.cueEdges(cues, delay: subtitleDelay)
+        guard !edges.isEmpty else { return }
+        let times = edges.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }
+        cueObserver = player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.tick(self.player.currentTime())
+            }
+        }
+    }
+
     var subtitleText: String? { WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues) }
 
     private func showSubtitleStatus(_ words: String) {
@@ -508,8 +542,10 @@ final class PlayerModel {
         (pictureShown, loadStart, playingSince) = (false, start, nil)
         // An AirPlay receiver would be handed this URL and ask itself for it:
         // a loopback stream stays on this device (mirroring still works).
-        player.allowsExternalPlayback = PlayerLayout.allowsExternalPlayback(address)
+        airPlayable = PlayerLayout.allowsExternalPlayback(address)
+        player.allowsExternalPlayback = airPlayable
         let item = AVPlayerItem(url: address)
+        textSize(item)
         item.publisher(for: \.status)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in

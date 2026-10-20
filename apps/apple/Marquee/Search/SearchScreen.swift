@@ -7,6 +7,8 @@ struct SearchScreen: View {
     @State private var query = ""
     @FocusState private var fieldFocused: Bool
     @Environment(\.metrics) private var metrics
+    @Environment(\.tabShown) private var shown
+    @Environment(\.searchRequest) private var searchRequest
 
     init(core: CoreClient) {
         _search = State(initialValue: LiveRecord("search", core: core))
@@ -54,6 +56,17 @@ struct SearchScreen: View {
         .onDisappear { if !query.trimmingCharacters(in: .whitespaces).isEmpty { search.command(["type": "remember"]) } }
         // The keyboard opens on the first visit, not over the results on the way back from a title.
         .onAppear { if query.isEmpty { fieldFocused = true } }
+        // Cmd-F on the Mac: the cursor goes in the field every time.
+        .onChange(of: searchRequest) { fieldFocused = true }
+        // Out of sight the field lets go, so typing elsewhere never lands in it;
+        // on the Mac it takes the cursor again each time Search shows.
+        .onChange(of: shown) { _, now in
+            #if os(macOS)
+            fieldFocused = now
+            #else
+            if !now { fieldFocused = false }
+            #endif
+        }
     }
 
     private static let prompt = "Search titles"

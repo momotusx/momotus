@@ -184,6 +184,8 @@ struct PlayerScreen: View {
         .task(id: model.taskId) { await model.drive() }
         // Back from the background on a new port: the source opens again where it was.
         .onChange(of: core.serverMoves) { model.serverMoved() }
+        // The size reaches the file's own tracks as soon as it changes.
+        .onChange(of: model.subtitleSize) { model.textSize() }
         .task { await autoHide() }
         // VoiceOver: a two-finger double tap plays or pauses; the scrub gesture leaves.
         #if !os(macOS)

@@ -626,3 +626,20 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(LanguageChoice.rows(all, audio: false, query: "chin").map(\.code) == ["zh-Hans", "zh-Hant"])
     #expect(LanguageChoice.rows(all, audio: false, query: "AR").map(\.code) == ["ar"])
 }
+
+@Test func subtitleLinesChangeExactlyAtTheirEdges() {
+    let cues = WebVTT.parse("WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nOne\n\n00:00:12.000 --> 00:00:14.500\nTwo\n\n00:00:00.200 --> 00:00:01.000\nZero\n")
+    // Each start and end once, in order, where the line changes.
+    #expect(PlayerLayout.cueEdges(cues, delay: 0) == [0.2, 1, 10, 12, 14.5])
+    // Shifted by the timing; an edge before the film's start is never reached.
+    #expect(PlayerLayout.cueEdges(cues, delay: -0.5) == [0.5, 9.5, 11.5, 14])
+    #expect(PlayerLayout.cueEdges([], delay: 1).isEmpty)
+}
+
+@Test func theFilesOwnTracksTakeTheProfilesSize() {
+    // AVFoundation's relative font size, in percent; Medium leaves it alone.
+    #expect(CaptionStyle.relativeFontSize(.medium) == nil)
+    #expect(CaptionStyle.relativeFontSize(.small) == 80)
+    #expect(CaptionStyle.relativeFontSize(.large) == 125)
+    #expect(CaptionStyle.relativeFontSize(.extraLarge) == 150)
+}
