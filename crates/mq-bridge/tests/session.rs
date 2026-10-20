@@ -15,6 +15,16 @@ async fn next(rx: &mut mpsc::UnboundedReceiver<Outgoing>) -> Value {
         .json()
 }
 
+/// The reply to request `id`, past the view pushes that arrive meanwhile.
+async fn reply_to(rx: &mut mpsc::UnboundedReceiver<Outgoing>, id: u64) -> Value {
+    loop {
+        let message = next(rx).await;
+        if message["id"].as_u64() == Some(id) {
+            return message;
+        }
+    }
+}
+
 #[tokio::test]
 async fn subscribe_command_unsubscribe_and_errors() {
     let core = Core::temporary("p").unwrap();
@@ -225,7 +235,8 @@ async fn versions_then_playback_then_progress() {
             json!({"id": 5, "op": "unsubscribe", "sub": playback}),
         ))
         .await;
-    assert_eq!(next(&mut rx).await["ok"], true);
+    // The failed source relearns the versions view, which pushes.
+    assert_eq!(reply_to(&mut rx, 5).await["ok"], true);
     assert_eq!(
         core.library().progress("p", "tt1727587").unwrap(),
         Some((30000, 888000))
