@@ -172,6 +172,9 @@ fun ranPastEnd(
 fun failedHeadline(offered: Boolean): String =
     if (offered) "This version could not be played" else "None of the sources could be played"
 
+/** The headline when the core could not open the version at all (no longer listed), as on Apple. */
+const val CANNOT_OPEN = "This version could not be opened"
+
 /** What the player says while the core plays the same versions again (Try again). */
 const val TRYING_AGAIN = "Trying again"
 

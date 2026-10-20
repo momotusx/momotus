@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import app.marquee.core.model.OtherVersion
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.player.CANNOT_OPEN
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlayerStatus
 import org.junit.Rule
@@ -30,6 +31,8 @@ class PlayerStatusTest {
         offer: OtherVersion?,
         retry: Boolean = false,
         tryingAgain: Boolean = false,
+        problem: String = "This version could not be played",
+        detail: String? = null,
     ): MutableList<String> {
         val events = mutableListOf<String>()
         val focus = FocusRequester()
@@ -39,7 +42,7 @@ class PlayerStatusTest {
                     stage = PlaybackController.Stage.Failed,
                     status = null,
                     notice = null,
-                    problem = "This version could not be played",
+                    problem = problem,
                     attempts = emptyList(),
                     onVersions = { events += "versions" },
                     onBack = { events += "back" },
@@ -48,6 +51,7 @@ class PlayerStatusTest {
                     onOffer = { events += "offer:$it" },
                     onRetry = if (retry) ({ events += "retry" }) else null,
                     tryingAgain = tryingAgain,
+                    detail = detail,
                 )
             }
         }
@@ -97,6 +101,17 @@ class PlayerStatusTest {
         show(null, retry = true, tryingAgain = true)
         compose.onAllNodesWithText("Trying again").assertCountEquals(1)
         compose.onNodeWithText("Try again").assertIsFocused()
+    }
+
+    @Test
+    fun `a version that could not be opened says so with the reason, and Try again first and focused`() {
+        val events = show(null, retry = true, problem = CANNOT_OPEN, detail = "that version is no longer listed")
+        compose.onNodeWithText("This version could not be opened").assertExists()
+        compose.onNodeWithText("that version is no longer listed").assertExists()
+        assertEquals(listOf("Try again", "Choose a version", "Back"), order())
+        compose.onNodeWithText("Try again").assertIsFocused()
+        compose.onNodeWithText("Try again").performClick()
+        assertEquals(listOf("retry"), events)
     }
 
     @Test

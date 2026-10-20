@@ -315,6 +315,8 @@ fun PlayerStatus(
     onRetry: (() -> Unit)? = null,
     /** The core took a Try again and the play failed again at once: "Trying again" under the headline, a moment. */
     tryingAgain: Boolean = false,
+    /** Why the version could not be opened, under the headline. */
+    detail: String? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -327,6 +329,7 @@ fun PlayerStatus(
                 MqIcon(Icons.CircleAlert, tint = colors.bad, size = if (tv) 36.dp else 22.dp)
                 MqText(problem ?: "Playback stopped", role = TextRole.Headline, weight = FontWeight.Medium)
             }
+            detail?.let { MqText(it, role = TextRole.Callout, color = colors.muted) }
             if (tryingAgain) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),

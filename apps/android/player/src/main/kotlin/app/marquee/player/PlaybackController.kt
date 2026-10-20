@@ -91,6 +91,16 @@ class PlaybackController(
     var retryable by mutableStateOf(false)
         private set
 
+    /** Why the version could not be opened, under the card's headline ([cannotOpen]); null otherwise. */
+    var openError: String? by mutableStateOf(null)
+        private set
+
+    /** Opens the version again after it could not be opened: the card's Try again ([reopen]). */
+    private var opener: (() -> Unit)? by mutableStateOf(null)
+
+    /** The card offers Try again for a version that could not be opened. */
+    val reopenable: Boolean get() = opener != null
+
     /** The core took a Try again and the play failed again at once: the card says so for a moment. */
     var tryingAgain by mutableStateOf(false)
         private set
@@ -270,6 +280,31 @@ class PlaybackController(
 
     fun showStatus(line: String?) {
         if (stage == Stage.Opening || stage == Stage.Buffering) status = line
+    }
+
+    /**
+     * The version could not be opened (the core no longer lists it): "This version could not be opened", [reason]
+     * under it, and Try again calls [again] (review 2026-10-20 r3 P3-9, as on Apple).
+     */
+    fun cannotOpen(
+        reason: String,
+        again: () -> Unit,
+    ) {
+        stage = Stage.Failed
+        problem = CANNOT_OPEN
+        openError = reason
+        opener = again
+        status = null
+    }
+
+    /** Try again on a version that could not be opened: it is opened again. */
+    fun reopen() {
+        val again = opener ?: return
+        opener = null
+        openError = null
+        problem = null
+        stage = Stage.Opening
+        again()
     }
 
     /** Nothing can be played and the core has no attempts to show (no version, or the core did not answer). */

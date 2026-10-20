@@ -15,6 +15,14 @@ sealed interface PlayPick {
         val line: String,
     ) : PlayPick
 
+    /**
+     * The version chosen by hand is not in a list that every addon answered: open it by its key all the same,
+     * and the core says whether it is gone ("that version is no longer listed"), as the web does.
+     */
+    data class Open(
+        val key: String,
+    ) : PlayPick
+
     /** Nothing can be played. */
     data class None(
         val reason: String,
@@ -23,9 +31,12 @@ sealed interface PlayPick {
 
 /**
  * Chooses the version to play, like the web player does. A version [chosen] on Versions or the
- * title page plays as soon as it is in the list. Otherwise the recommendation plays once it has
- * settled: every addon answered, or the viewer pinned it, or [settled] (it stood unchanged for a
- * few seconds), so a late better source does not start the film twice.
+ * title page plays as soon as it is in the list, and once every addon answered without it, it is
+ * opened by its key all the same ([PlayPick.Open]); it never turns into the recommendation (a new
+ * view after the app restarted lists it later, review 2026-10-20 r3 P3-8). Otherwise the
+ * recommendation plays once it has settled: every addon answered, or the viewer pinned it, or
+ * [settled] (it stood unchanged for a few seconds), so a late better source does not start the film
+ * twice.
  *
  * @param snapshot the versions so far; null while the view is opening.
  * @param settled the recommendation has not changed for the settle time.
@@ -37,11 +48,15 @@ fun pickVersion(
 ): PlayPick {
     if (snapshot == null) return PlayPick.Wait("Opening")
     val known = listOfNotNull(snapshot.recommended) + snapshot.rows
-    chosen?.let { key -> known.firstOrNull { it.key == key }?.let { return PlayPick.Use(it) } }
+    if (chosen != null) {
+        known.firstOrNull { it.key == chosen }?.let { return PlayPick.Use(it) }
+        // Not in this list (a new view after the app restarted): wait for every addon, then let the core say.
+        if (snapshot.done) return PlayPick.Open(chosen)
+        return PlayPick.Wait(asking(snapshot) ?: "Finding this version")
+    }
     val best = snapshot.recommended
     val ready = snapshot.done || snapshot.frozen || settled
     return when {
-        // The chosen one is not in this list (a new view after the app restarted): wait for the addons, then the best.
         best != null && ready -> {
             PlayPick.Use(best)
         }
@@ -60,14 +75,14 @@ fun pickVersion(
             )
         }
 
-        snapshot.pendingAddons.isNotEmpty() -> {
-            PlayPick.Wait(
-                "Asking ${snapshot.pendingAddons.joinToString(", ")} for versions",
-            )
-        }
-
         else -> {
-            PlayPick.Wait("Choosing the best version")
+            PlayPick.Wait(asking(snapshot) ?: "Choosing the best version")
         }
     }
 }
+
+/** "Asking Torrentio, Local for versions" while addons still answer. */
+private fun asking(snapshot: VersionsSnapshot): String? =
+    snapshot.pendingAddons
+        .takeIf { it.isNotEmpty() }
+        ?.let { "Asking ${it.joinToString(", ")} for versions" }

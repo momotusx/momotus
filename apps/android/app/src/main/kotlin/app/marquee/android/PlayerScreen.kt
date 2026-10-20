@@ -93,8 +93,8 @@ class PlayerHolder(
         val view = snapshotFlow { versions.view(key) }.filterNotNull().first()
         // After an episode the next one should start by itself: if no pick shows up in time, say so.
         val waiting = route.binge != null && route.key == null
-        val row = if (waiting) withTimeoutOrNull(BINGE_WAIT_MS) { choose(view) } else choose(view)
-        if (row == null) {
+        val choice = if (waiting) withTimeoutOrNull(BINGE_WAIT_MS) { choose(view) } else choose(view)
+        if (choice == null) {
             if (controller.stage != PlaybackController.Stage.Failed &&
                 waiting
             ) {
@@ -103,13 +103,13 @@ class PlayerHolder(
             return
         }
         controller.mark("versions")
-        controller.showStatus("Starting ${startingLine(row)}")
+        controller.showStatus(choice.row?.let { "Starting ${startingLine(it)}" } ?: "Starting")
         val ref = Format.parseVideo(route.videoId)
         try {
             val playback =
                 session.playback(
                     versions = view,
-                    key = row.key,
+                    key = choice.key,
                     kind = route.kind,
                     itemId = route.id,
                     videoId = route.videoId,
@@ -122,13 +122,23 @@ class PlayerHolder(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            controller.fail(e.message ?: "The core could not start this version")
+            // The version could not be opened (no longer listed): the reason under the headline, and Try
+            // again opens it again (review 2026-10-20 r3 P3-9).
+            controller.cannotOpen(e.message ?: "The core could not start this version") {
+                viewModelScope.launch { start() }
+            }
         }
     }
 
+    /** What to open: the key, and its row when the list has it (for the "Starting" line). */
+    private data class Choice(
+        val key: String,
+        val row: VersionRow?,
+    )
+
     /** The version to play, or null after the controller was told why there is none. */
-    private suspend fun choose(view: VersionsView): VersionRow? {
-        val chosen = CompletableDeferred<VersionRow?>()
+    private suspend fun choose(view: VersionsView): Choice? {
+        val chosen = CompletableDeferred<Choice?>()
         val watcher =
             viewModelScope.launch {
                 snapshotFlow { view.snapshot to view.status }.collectLatest { (snapshot, status) ->
@@ -141,7 +151,12 @@ class PlayerHolder(
                     while (true) {
                         when (val pick = pickVersion(snapshot, route.key, settled)) {
                             is PlayPick.Use -> {
-                                chosen.complete(pick.row)
+                                chosen.complete(Choice(pick.row.key, pick.row))
+                                return@collectLatest
+                            }
+
+                            is PlayPick.Open -> {
+                                chosen.complete(Choice(pick.key, null))
                                 return@collectLatest
                             }
 

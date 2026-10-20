@@ -70,10 +70,17 @@ class PlayPickTest {
     }
 
     @Test
-    fun `a chosen version missing from a new list falls back to the best once the list is complete`() {
+    fun `a chosen version missing from a new list waits for every addon, then opens by its key, never the best`() {
         val best = row("a")
         assertIs<PlayPick.Wait>(pickVersion(snapshot(best = best, pending = listOf("X")), "gone", settled = false))
-        assertEquals(PlayPick.Use(best), pickVersion(snapshot(best = best, done = true), "gone", settled = false))
+        // Three quiet seconds are no reason to play another version than the one picked.
+        assertEquals(
+            PlayPick.Wait("Asking X for versions"),
+            pickVersion(snapshot(best = best, pending = listOf("X")), "gone", settled = true),
+        )
+        assertEquals(PlayPick.Wait("Finding this version"), pickVersion(snapshot(best = best), "gone", settled = true))
+        // Every addon answered without it: the core is asked by the key and says whether it is gone.
+        assertEquals(PlayPick.Open("gone"), pickVersion(snapshot(best = best, done = true), "gone", settled = false))
     }
 
     @Test

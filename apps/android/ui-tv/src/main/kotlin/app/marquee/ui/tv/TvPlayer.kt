@@ -369,8 +369,14 @@ fun TvPlayer(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = 360.dp),
                 offer = controller.offer,
                 onOffer = onOffer,
-                onRetry = if (controller.retryable) controller::retry else null,
+                onRetry =
+                    when {
+                        controller.retryable -> controller::retry
+                        controller.reopenable -> controller::reopen
+                        else -> null
+                    },
                 tryingAgain = controller.tryingAgain,
+                detail = controller.openError,
             )
         }
         // A notice while the buffer fills keeps the mark in the middle.

@@ -451,6 +451,26 @@ class SubtitleFailureTest {
     }
 
     @Test
+    fun `a version that could not be opened says so, and Try again opens it again once`() {
+        val controller = PlaybackController(FakePlayer(), scope, "Sintel", null, null, SystemClock.elapsedRealtime())
+        var opens = 0
+        controller.cannotOpen("that version is no longer listed") { opens++ }
+        assertEquals(PlaybackController.Stage.Failed, controller.stage)
+        assertEquals(CANNOT_OPEN, controller.problem)
+        assertEquals("that version is no longer listed", controller.openError)
+        assertTrue(controller.reopenable)
+        controller.reopen()
+        assertEquals(1, opens)
+        assertEquals(PlaybackController.Stage.Opening, controller.stage)
+        assertEquals(null, controller.openError)
+        assertFalse(controller.reopenable)
+        // A second press before it failed again does nothing more.
+        controller.reopen()
+        assertEquals(1, opens)
+        controller.release()
+    }
+
+    @Test
     fun `a failed play offers Try again, which sends retry and opens again`() {
         val (_, controller) = open()
         assertEquals(false, controller.retryable)
