@@ -78,11 +78,10 @@ enum PlayerLayout {
         tryingAgain ? "Trying again" : nil
     }
 
-    /// The action the card focuses as it shows: Try again again once this
-    /// playback view took a Try again (`retries`, which starts over with each
-    /// episode, version and reopen), else the way on, the first.
-    static func failureFocus(_ order: [FailureAction], retries: Int?) -> FailureAction? {
-        (retries ?? 0) > 0 && order.contains(.retry) ? .retry : order.first
+    /// The action the card focuses as it shows: always the first, Play
+    /// {offer} when there is one, as on the web and Android (review r4 P3-5).
+    static func failureFocus(_ order: [FailureAction]) -> FailureAction? {
+        order.first
     }
 
     /// The failure card's buttons, in the words the web and Android use.
@@ -103,6 +102,13 @@ enum PlayerLayout {
         (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
     }
 
+    /// A view that could not open: mostly "that version is no longer listed",
+    /// where Try again opens the same key again, so another version comes
+    /// first; Try again stays for a lost subscription (review r4 P3-6).
+    static func cannotOpenActions(canChoose: Bool) -> [FailureAction] {
+        (canChoose ? [.choose] : []) + [.retry, .back]
+    }
+
     static func subtitleValue(picked: String?, found: Int, pending: Bool) -> (text: String, searching: Bool) {
         let searching = pending && found > 0
         if let picked { return (picked, searching) }
@@ -113,10 +119,11 @@ enum PlayerLayout {
     /// Under the spinner: the version the core moves on to while it resolves,
     /// else the player's own word on a failed source, else the plain wait.
     static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?, tryingAgain: Bool = false) -> String {
-        if tryingAgain { return "Trying again" }
+        // A Try again that moves on at once names the version it moved to.
         if playback?.phase == "resolving", let label = playback?.trying?.label {
             return "Trying the next version: \(label)"
         }
+        if tryingAgain { return "Trying again" }
         return notice ?? "Getting the stream ready"
     }
 

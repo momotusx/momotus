@@ -349,8 +349,7 @@ private struct StatusOverlay: View {
     /// The card's actions, the first the way on with focus. A view that could
     /// not open has no offer, and its Try again opens it again.
     @ViewBuilder private func actions(cannotOpen: Bool) -> some View {
-        let order = PlayerLayout.failureActions(
-            offer: !cannotOpen && model.playback?.offer != nil, canChoose: chooseVersion != nil)
+        let order = actionOrder(cannotOpen: cannotOpen)
         ForEach(order, id: \.self) { action in
             button(action, cannotOpen: cannotOpen)
                 .buttonStyle(PillButtonStyle(prominent: action == order.first))
@@ -398,11 +397,13 @@ private struct StatusOverlay: View {
         .frame(maxWidth: 640, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
         .padding(.horizontal, Theme.Space.m)
-        .onAppear {
-            let order = PlayerLayout.failureActions(
-                offer: !cannotOpen && model.playback?.offer != nil, canChoose: chooseVersion != nil)
-            focus = PlayerLayout.failureFocus(order, retries: model.playback?.retries)
-        }
+        .onAppear { focus = PlayerLayout.failureFocus(actionOrder(cannotOpen: cannotOpen)) }
+    }
+
+    private func actionOrder(cannotOpen: Bool) -> [FailureAction] {
+        cannotOpen
+            ? PlayerLayout.cannotOpenActions(canChoose: chooseVersion != nil)
+            : PlayerLayout.failureActions(offer: model.playback?.offer != nil, canChoose: chooseVersion != nil)
     }
 
     private var waitingWords: some View {

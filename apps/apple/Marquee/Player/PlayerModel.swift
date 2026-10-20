@@ -419,10 +419,9 @@ final class PlayerModel {
         tryingAgain = PlayerLayout.keepsTryingAgain(showing: tryingAgain, phase: snapshot.phase)
         // The core's start subtitle, once, as if picked, sending nothing.
         // A move on to another source: the old start subtitle and its cues go.
-        if choices.source(snapshot.attempt) { selectSubtitle(nil) }
-        if let track = choices.startSubtitle(snapshot.autoSubtitle, tracks: snapshot.subtitles) {
-            selectSubtitle(track)
-        }
+        let step = choices.subtitleStep(attempt: snapshot.attempt, auto: snapshot.autoSubtitle, tracks: snapshot.subtitles)
+        if step.drop { selectSubtitle(nil) }
+        if let track = step.turnOn { selectSubtitle(track) }
         switch snapshot.phase {
         case "ready":
             guard let url = snapshot.url, url != loadedURL else { return }

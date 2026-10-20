@@ -464,10 +464,9 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.status(phase: "failed", cannotOpen: false, firstFrameShown: true, waiting: false) == .failed)
     #expect(PlayerLayout.failureNote(tryingAgain: true) == "Trying again")
     #expect(PlayerLayout.failureNote(tryingAgain: false) == nil)
-    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retries: 1) == .retry)
-    // A new playback view (episode, version, reopen) counts from none: the way on again.
-    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retries: 0) == .offer)
-    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retries: nil) == .offer)
+    // Focus is always the first: Play {offer} when offered, also after a Try again.
+    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back]) == .offer)
+    #expect(PlayerLayout.failureFocus([.retry, .choose, .back]) == .retry)
     // While the play resolves again, the spinner says it.
     #expect(PlayerLayout.waitingWords(try phase("resolving"), notice: nil, tryingAgain: true) == "Trying again")
     // At least 1.5 s, unless the play is ready first.
@@ -513,7 +512,7 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == turkish)
 }
 
-@MainActor @Test func aMoveOnDropsTheOldStartSubtitleUnlessTheViewerChose() {
+@MainActor @Test func aMoveOnDropsTheOldSubtitleAndTakesTheNewStartOne() {
     let choices = PlayChoices()
     let old = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org 4K", source: "TurkceAltyazi.org")
     let new = sub(2, "tur", "tr", "Turkish", "TurkceAltyazi.org 1080p", source: "TurkceAltyazi.org")
@@ -524,10 +523,38 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // The core moved on: the old file goes and the new source's start subtitle turns on.
     #expect(choices.source(2))
     #expect(choices.startSubtitle(new.url, tracks: [new]) == new)
-    // The viewer's own pick stays across a move on, and no start subtitle replaces it.
+    // The viewer's own pick goes too (its file was the old release's): the core's
+    // start subtitle for the new list brings back the viewer's language.
     choices.chose(new)
-    #expect(!choices.source(3))
-    #expect(choices.startSubtitle(old.url, tracks: [old]) == nil)
+    #expect(choices.source(3))
+    #expect(choices.startSubtitle(old.url, tracks: [old]) == old)
+    // Off stays Off: the core sends no start subtitle for it.
+    choices.chose(nil)
+    #expect(choices.source(4))
+    #expect(choices.startSubtitle(nil, tracks: [old]) == nil)
+}
+
+@MainActor @Test func oneSnapshotDropsOnANewSourceThenTurnsOnItsStartSubtitle() {
+    let choices = PlayChoices()
+    let old = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org 4K", source: "TurkceAltyazi.org")
+    let new = sub(2, "tur", "tr", "Turkish", "TurkceAltyazi.org 1080p", source: "TurkceAltyazi.org")
+    let first = choices.subtitleStep(attempt: 1, auto: old.url, tracks: [old])
+    #expect(!first.drop && first.turnOn == old)
+    let same = choices.subtitleStep(attempt: 1, auto: old.url, tracks: [old])
+    #expect(!same.drop && same.turnOn == nil)
+    let moved = choices.subtitleStep(attempt: 2, auto: new.url, tracks: [new])
+    #expect(moved.drop && moved.turnOn == new)
+}
+
+@Test func aBusyLineNamesTheMoveOnBeforeTryingAgain() throws {
+    let moving = try phase("resolving", #","trying":{"key":"k2","label":"1080p WEB"}"#)
+    #expect(PlayerLayout.waitingWords(moving, notice: nil, tryingAgain: true) == "Trying the next version: 1080p WEB")
+    #expect(PlayerLayout.waitingWords(try phase("resolving"), notice: nil, tryingAgain: true) == "Trying again")
+}
+
+@Test func theCannotOpenCardPutsAnotherVersionFirst() {
+    #expect(PlayerLayout.cannotOpenActions(canChoose: true) == [.choose, .retry, .back])
+    #expect(PlayerLayout.cannotOpenActions(canChoose: false) == [.retry, .back])
 }
 
 @Test func torrentDataIsLeftOutOfBackups() throws {

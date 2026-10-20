@@ -538,9 +538,20 @@ struct NextEpisode: Decodable, Hashable, Sendable {
     func source(_ next: Int64?) -> Bool {
         guard let next else { return false }
         defer { attempt = next }
-        guard let attempt, next != attempt, !viewerChose else { return false }
-        startApplied = false
+        guard let attempt, next != attempt else { return false }
+        // The viewer's pick goes too, as on the web: its file was the old
+        // release's. The core's start subtitle for the new list brings back
+        // the viewer's language, and Off stays Off (review r4 P3-4).
+        (viewerChose, startApplied) = (false, false)
         return true
+    }
+
+    /// One snapshot's effect on the shown subtitle: a new source drops it,
+    /// then the start subtitle turns on, once per source. The player makes
+    /// this one call per snapshot.
+    func subtitleStep(attempt: Int64?, auto: String?, tracks: [SubtitleTrack]) -> (drop: Bool, turnOn: SubtitleTrack?) {
+        let drop = source(attempt)
+        return (drop, startSubtitle(auto, tracks: tracks))
     }
 
     /// Another version of the same video, on the same Versions view: the play
