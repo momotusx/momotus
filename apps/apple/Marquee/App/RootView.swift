@@ -128,6 +128,8 @@ struct MainShell: View {
     #if os(tvOS)
     /// Places whose root page has another page over it: Back pops that first.
     @State private var covered: Set<AppTab> = []
+    /// The pill's height with its gap, which TV Search keeps clear.
+    @State private var navHeight: CGFloat = 0
     #endif
     /// Places opened so far, kept alive so each keeps its place (a query, a
     /// catalog and its scroll, a filter, an open title) as a tab bar does.
@@ -228,6 +230,7 @@ struct MainShell: View {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
                 TopNav(selection: tab, select: select, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navHeight = $0 }
             }
         }
         .modifier(FullScreen(isPresented: $showProfiles) {
@@ -309,6 +312,12 @@ struct MainShell: View {
             }
         case .search:
             NavigationStack(path: titlePath(.search)) { SearchScreen(core: core).root(of: .search, covered: coveredBinding).withTitleRoutes(core: core) }
+                #if os(tvOS)
+                // The system's search keyboard lays itself out from the top of the
+                // screen, past the inset: it starts below the pill.
+                .padding(.top, !immersion.active && !pageOver ? navHeight : 0)
+                .background(Theme.Palette.bg.ignoresSafeArea())
+                #endif
         case .discover:
             NavigationStack(path: titlePath(.discover)) { DiscoverScreen(core: core).root(of: .discover, covered: coveredBinding).withTitleRoutes(core: core) }
         case .library:
@@ -640,12 +649,16 @@ private struct TopScrim: ViewModifier {
 struct FullScreen<Flow: View>: ViewModifier {
     @Binding var isPresented: Bool
     @ViewBuilder let flow: () -> Flow
+    /// A place kept alive out of sight presents nothing until it shows again:
+    /// on TV it is disabled, and a flow it presented would be disabled too.
+    @Environment(\.tabShown) private var shown
 
     func body(content: Content) -> some View {
+        let presented = Binding { isPresented && shown } set: { isPresented = $0 }
         #if os(macOS)
-        content.sheet(isPresented: $isPresented) { flow().frame(minWidth: 760, minHeight: 640) }
+        content.sheet(isPresented: presented) { flow().frame(minWidth: 760, minHeight: 640) }
         #else
-        content.fullScreenCover(isPresented: $isPresented, content: flow)
+        content.fullScreenCover(isPresented: presented, content: flow)
         #endif
     }
 }
