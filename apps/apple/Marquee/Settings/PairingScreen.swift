@@ -152,7 +152,7 @@ struct PairingScreen: View {
         case .waiting(let qr, let expiresMs)?:
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 QRCode(text: qr).frame(width: metrics.wide ? 240 : 200, height: metrics.wide ? 240 : 200)
-                Text("On a device that already syncs, open Settings, then Add a device, and scan this code.")
+                Text("On a device that already syncs, open Settings, then Account, then Add a device, and scan this code.")
                     .font(.text(Theme.type.body))
                     .foregroundStyle(Theme.Palette.text)
                 let expires = Date(timeIntervalSince1970: TimeInterval(expiresMs) / 1000)

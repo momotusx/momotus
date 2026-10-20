@@ -504,6 +504,8 @@ private struct DeleteSync: View {
                     Button(W.cancel) { asking = false }
                         .buttonStyle(PillButtonStyle(prominent: true))
                         .focused($cancelFocused)
+                        // While the delete runs, Cancel cannot hide a step whose deletion still lands.
+                        .disabled(busy)
                     Button { Task { await delete() } } label: { Label(busy ? W.deleting : W.deleteButton, glyph: "trash") }
                         .buttonStyle(DestructiveTextStyle())
                         .disabled(busy)
