@@ -21,8 +21,8 @@ pub struct RankInput<'a> {
 }
 
 const MAX_REASONS: usize = 3;
-/// Bytes kept free on the torrent disk.
-const SPARE_BYTES: u64 = 1 << 30;
+/// A window that holds less than this much of a file ahead hides it (3.1).
+const WINDOW_AHEAD_S: u64 = 120;
 /// Torrents under this many seeders may not start at all.
 const FEW_SEEDERS: u32 = 5;
 /// Seeders count in the score up to this many, then the file decides. The
@@ -82,11 +82,72 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
     // is what must fit (code review r2 P2-4).
     if class == SourceClass::Swarm
         && let (Some(free), Some(size)) = (input.conditions.free_bytes, weight(s, input).size)
-        && size > free.saturating_sub(SPARE_BYTES)
+        && !has_room(s, input, free, size)
     {
         return Err(HideReason::NoSpace);
     }
     Ok(class)
+}
+
+/// A swarm row has room (plans/streaming-window.md 3.1): it fits whole in
+/// `free + R - C - reserve` (the engine's 512 MiB), or, where windows
+/// play, its window holds 120 s of it ahead.
+fn has_room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> bool {
+    let c = input.conditions;
+    let episode = input.target.season.is_some() || input.target.episode.is_some();
+    let mut i = mq_engine_sched::WindowInputs {
+        free,
+        reclaimable: c.reclaimable_bytes.unwrap_or(0),
+        committed: c.committed_bytes,
+        bitrate: 0,
+        piece_len: estimated_piece(size),
+        fill: (f64::from(c.p2p.mbps) * 125_000.0) as u64,
+    };
+    if size <= i.room() {
+        return true;
+    }
+    if !c.window {
+        return false;
+    }
+    // The rate from the runtime when it is known, else the guess, never
+    // under the size over 3 h (2.2).
+    let guess = guessed_rate(s, size, episode);
+    i.bitrate = weight(s, input).mbps.map_or(guess, |m| {
+        ((f64::from(m) * 125_000.0) as u64).max(size / (3 * 3600))
+    });
+    mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i)
+        .is_some_and(|p| p.ahead_secs(i.bitrate) >= WINDOW_AHEAD_S)
+}
+
+/// The piece size of a torrent not opened yet (3.1): 4 times libtorrent's
+/// automatic size for the file (256 KiB up to 687 MB, doubling every 4
+/// times the size), at most 16 MiB.
+fn estimated_piece(size: u64) -> u64 {
+    let (mut piece, mut upto) = (256u64 << 10, 687_000_000u64);
+    while size > upto && piece < 4 << 20 {
+        piece *= 2;
+        upto = upto.saturating_mul(4);
+    }
+    4 * piece
+}
+
+/// A torrent file's rate in bytes per second before the player reports its
+/// duration (plans/streaming-window.md 2.2): the larger of a rate for its
+/// resolution and quality (720p and under 5 Mbit/s, 1080p 10, a 1080p remux
+/// 30, 2160p 40, a 2160p remux 60) and its size over 3 h for a film, 1 h for
+/// an episode.
+pub fn guessed_rate(stream: &ParsedStream, len: u64, episode: bool) -> u64 {
+    let r = &stream.release;
+    let remux = r.quality == Quality::Remux;
+    let mbps: u64 = match (r.resolution.height(), remux) {
+        (h, true) if h >= 2160 => 60,
+        (h, false) if h >= 2160 => 40,
+        (h, true) if h >= 1080 => 30,
+        (h, false) if h >= 1080 => 10,
+        _ => 5,
+    };
+    let by_size = len / if episode { 3600 } else { 3 * 3600 };
+    (mbps * 1_000_000 / 8).max(by_size)
 }
 
 /// How a stream starts (3.2), or `None` when nothing here can open it.

@@ -8,4 +8,4 @@ mod rank;
 
 pub use model::*;
 pub use normalize::{key_digest, normalize, target_digest};
-pub use rank::{RankInput, rank, screen_class, title_similarity};
+pub use rank::{RankInput, guessed_rate, rank, screen_class, title_similarity};

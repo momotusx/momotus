@@ -168,6 +168,14 @@ pub struct Conditions {
     /// the prior for an 18-seeder swarm, scaled per seeder for each row.
     pub p2p_thin: Speed,
     pub free_bytes: Option<u64>,
+    /// A torrent that does not fit may play in a window here
+    /// (plans/streaming-window.md 2.6): the torrent folder's volume punches
+    /// holes, and the engine runs DWH with upload off.
+    pub window: bool,
+    /// `R`: what idle torrents hold, which a playback may delete.
+    pub reclaimable_bytes: Option<u64>,
+    /// `C`: what the windows playing will still take.
+    pub committed_bytes: u64,
     /// This build has the torrent engine.
     pub engine: bool,
     /// The profile has a debrid account.
@@ -225,6 +233,9 @@ impl Default for Conditions {
             did_not_play: Vec::new(),
             wrong_file: Vec::new(),
             containers: Vec::new(),
+            window: false,
+            reclaimable_bytes: None,
+            committed_bytes: 0,
         }
     }
 }

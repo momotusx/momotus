@@ -946,7 +946,43 @@ fn seeders_count_up_to_1000_then_the_file_decides() {
     );
 }
 
-/// Mutation 6: a torrent larger than the free space less 1 GiB is hidden.
+/// plans/streaming-window.md 3.1 and 3.2: where windows play, a torrent
+/// that does not fit shows when its window holds 120 s of it ahead and
+/// hides when it holds less; without windows it hides as before, with the
+/// engine's 512 MiB reserve, so a small file on a nearly full device fits.
+#[test]
+fn a_torrent_that_does_not_fit_shows_when_its_window_holds_two_minutes() {
+    let case = |free: u64, window: bool, runtime_s: u32| Case {
+        conditions: Conditions {
+            runtime_s: Some(runtime_s),
+            free_bytes: Some(free),
+            window,
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    // 0.53 GiB in 12 min 14 s (Tears of Steel) with 1.1 GB free: the 3.2
+    // table's 9.6 min ahead, shown; without windows it does not fit.
+    let tos = || vec![seeded(1, "Movie.2012.1080p.WEB.x264-GRP", 300, 0.53)];
+    let shown = case(1_100_000_000, true, 734).rank(tos());
+    assert_eq!(shown.rows.len(), 1, "{:?}", shown.hidden);
+    let whole = case(1_100_000_000, false, 734).rank(tos());
+    assert_eq!(hidden(&whole, HideReason::NoSpace), 1);
+    // A 60 GiB remux in 2 h with 1.5 GiB free: about 40 s ahead, hidden.
+    let remux = vec![seeded(
+        2,
+        "Movie.2020.1080p.BluRay.REMUX.AVC-GRP",
+        300,
+        60.0,
+    )];
+    let ranked = case(3 << 29, true, 7200).rank(remux);
+    assert_eq!(hidden(&ranked, HideReason::NoSpace), 1);
+    // 0.13 GiB with 1.1 GB free fits whole (the 1 GiB spare hid it).
+    let small = vec![seeded(3, "Movie.2010.1080p.WEB.x264-GRP", 300, 0.133)];
+    assert_eq!(case(1_100_000_000, false, 888).rank(small).rows.len(), 1);
+}
+
+/// Mutation 6: a torrent larger than the free space less 512 MiB is hidden.
 #[test]
 fn no_room_hides_a_torrent_larger_than_the_free_space() {
     let case = Case {

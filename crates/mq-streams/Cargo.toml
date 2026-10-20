@@ -12,6 +12,8 @@ ts = ["dep:ts-rs"]
 ts-rs = { version = "12", optional = true, features = ["serde-compat"] }
 mq-protocol = { path = "../mq-protocol" }
 mq-relparse = { path = "../mq-relparse" }
+# A window's size, the engine's own count (plans/streaming-window.md 3.1).
+mq-engine-sched = { path = "../mq-engine-sched" }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
