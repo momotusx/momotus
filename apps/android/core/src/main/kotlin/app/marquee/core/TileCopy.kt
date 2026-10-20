@@ -14,6 +14,18 @@ object TileCopy {
     /** Whether a hold on a tile of [rowId] opens the menu with [REMOVE_CONTINUE]. */
     fun removable(rowId: String): Boolean = rowId == CONTINUE_ROW
 
+    /** TV's hint beside Continue Watching, as the title page has one for its episodes. */
+    const val HOLD_TO_REMOVE = "Hold select on a title to remove it"
+
+    /** The note while a removal can still be taken back. */
+    fun removed(name: String): String = "$name was removed from Continue Watching."
+
+    /** The note when the core did not take the removal: the title is back. */
+    fun removeFailed(
+        name: String,
+        reason: String,
+    ): String = "$name could not be removed from Continue Watching: ${reason.trimEnd('.')}."
+
     /**
      * What a row's source label says: the addon's name. Continue Watching has none: it comes from
      * what was played, not from an addon or the library.

@@ -355,7 +355,7 @@ fun PhonePlayer(
                         },
                         modifier = sheet,
                         note = controller.subtitlePanelNote,
-                        timing = controller.subtitleDelayMs,
+                        timing = controller.subtitleDelayMs.takeIf { controller.subtitleOn },
                         onShift = controller::shiftSubtitles,
                     )
                 }

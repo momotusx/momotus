@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -52,5 +54,17 @@ class LanguagePickerTest {
         compose.onNodeWithContentDescription("Find a language").performTextInput("portu")
         compose.onNodeWithText("Portuguese").performClick()
         compose.runOnIdle { assertEquals(listOf("pt"), chosen) }
+    }
+
+    @Test
+    fun `on a TV the focus goes with the picked language to the chosen ones`() {
+        var chosen by mutableStateOf(listOf("en"))
+        compose.setContent { MarqueeTheme(Form.Tv) { Languages(chosen, { all }, { chosen = it }) } }
+        compose.onNodeWithContentDescription("Find a language").performTextInput("pol")
+        compose.onNodeWithText("Polish").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText("Polish") and isFocused()).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.runOnIdle { assertEquals(listOf("en", "pl"), chosen) }
     }
 }

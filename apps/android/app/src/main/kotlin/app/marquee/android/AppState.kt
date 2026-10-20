@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import app.marquee.core.DefaultsCard
 import app.marquee.core.InstallCards
 import app.marquee.core.LinkInstall
+import app.marquee.core.PendingRemoval
 import app.marquee.core.client.CoreLog
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
@@ -41,10 +42,11 @@ class AppState(
         private set
 
     /**
-     * Whether this process composed a back stack yet. The first one may be what the saved state brought
-     * back after the process died (this state is new then, and survives a configuration change).
+     * The profiles whose back stack this state composed already. A profile's first one may be what the saved
+     * state brought back after the process died, also when it is picked later in the process (this state is
+     * new after the process died, and survives a configuration change).
      */
-    var stackSeen = false
+    val stacksSeen = HashSet<String?>()
 
     /** The one open Versions view, shared by the title page, the Versions screen and the player. */
     val versions = VersionsHolder(session, caps, viewModelScope)
@@ -65,18 +67,8 @@ class AppState(
     var tvHome by mutableStateOf(TvHomeState())
         private set
 
-    /** "Remove from Continue Watching" on a held tile: Home follows the core's change by itself. */
-    fun removeFromContinue(itemId: String) {
-        viewModelScope.launch {
-            try {
-                session.ops.removeFromContinue(itemId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                CoreLog.w("removeFromContinue failed: ${e.message}")
-            }
-        }
-    }
+    /** "Remove from Continue Watching" on a held tile, with five seconds for Undo before it goes to the core. */
+    val removal = PendingRemoval(viewModelScope) { session.ops.removeFromContinue(it.id) }
 
     /**
      * Where the screens' view models live: one profile's worth. A switch or a lock clears it, so
@@ -112,6 +104,7 @@ class AppState(
         installCards.forgetAll()
         linkInstall.forget()
         defaultsCard.forget()
+        removal.forget()
         if (home) {
             sentHome = true
             start = Start.Home

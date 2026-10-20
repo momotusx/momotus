@@ -5,8 +5,11 @@ import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -18,8 +21,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -32,6 +38,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.marquee.core.Format
+import app.marquee.core.PendingRemoval
+import app.marquee.core.TileCopy
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
@@ -45,7 +53,10 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
 import app.marquee.design.Marquee
+import app.marquee.design.MqText
+import app.marquee.design.SecondaryButton
 import app.marquee.design.StateMessage
+import app.marquee.design.TextRole
 import app.marquee.ui.phone.PhoneHome
 import app.marquee.ui.phone.PhoneShell
 import app.marquee.ui.tv.TvHome
@@ -139,6 +150,30 @@ internal fun ProfileKeyed(
     content: @Composable () -> Unit,
 ) = key(profile) { content() }
 
+/**
+ * The back stack of [profile]. The first one each profile composes in this state may be what the saved state
+ * brought back after the process died (picked first, or later in the process): it does not reopen the player
+ * (plans/m6-android.md 7.1, journey review r2 P2-1). [seen] holds the profiles already past that.
+ */
+@Composable
+internal fun rememberProfileStack(
+    profile: String?,
+    initial: List<Route>,
+    seen: MutableSet<String?>,
+) = rememberNavBackStack(*initial.toTypedArray()).let { saved ->
+    remember(saved) {
+        if (seen.add(profile)) {
+            val restored = saved.map { it as Route }
+            val kept = restoredStack(restored)
+            if (kept != restored) {
+                saved.clear()
+                saved.addAll(kept)
+            }
+        }
+        saved
+    }
+}
+
 @Composable
 private fun AppNav(
     session: CoreSession,
@@ -146,25 +181,10 @@ private fun AppNav(
     app: AppState,
     initial: List<Route>,
 ) {
-    // The first stack of this process may be one restored after the process died: it does not reopen
-    // the player (plans/m6-android.md 7.1).
-    val saved = rememberNavBackStack(*initial.toTypedArray())
-    val backStack =
-        remember(saved) {
-            if (!app.stackSeen) {
-                app.stackSeen = true
-                val restored = saved.map { it as Route }
-                val kept = restoredStack(restored)
-                if (kept != restored) {
-                    saved.clear()
-                    saved.addAll(kept)
-                }
-            }
-            saved
-        }
     val marquee = LocalContext.current.applicationContext as MarqueeApp
     val sync = (LocalContext.current.applicationContext as MarqueeApp).sync
     val gate = (LocalContext.current.applicationContext as MarqueeApp).profiles
+    val backStack = rememberProfileStack(gate.snapshot?.active, initial, app.stacksSeen)
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
@@ -337,6 +357,9 @@ private fun AppNav(
                                     )
                                 }
                             }
+                        val removal = app.removal
+                        val notice: (@Composable () -> Unit)? =
+                            if (removal.removing != null || removal.failed != null) ({ RemovalNote(removal) }) else null
                         if (tv) {
                             TvHome(
                                 app.home,
@@ -348,7 +371,9 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
-                                onRemove = { app.removeFromContinue(it.id) },
+                                onRemove = app.removal::remove,
+                                removing = app.removal.removing?.id,
+                                notice = notice,
                             )
                         } else {
                             PhoneHome(
@@ -360,11 +385,19 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
-                                onRemove = { app.removeFromContinue(it.id) },
+                                onRemove = app.removal::remove,
+                                removing = app.removal.removing?.id,
+                                notice = notice,
                             )
                         }
                     }
-                    entry<Route.Search> { SearchScreen(session, ::open) }
+                    entry<Route.Search> {
+                        SearchScreen(
+                            session,
+                            ::open,
+                            onAddons = { backStack.add(Route.Defaults(DefaultsMode.Settings)) },
+                        )
+                    }
                     entry<Route.Discover> {
                         DiscoverScreen(
                             session,
@@ -578,5 +611,25 @@ private fun AppNav(
             insetSides = top !is Route.Player,
             content = content,
         )
+    }
+}
+
+/** Under Continue Watching after Remove: the words with Undo while it can be taken back, or why it failed. */
+@Composable
+private fun RemovalNote(removal: PendingRemoval) {
+    val tile = removal.removing
+    val words = tile?.let { TileCopy.removed(it.name) } ?: removal.failed ?: return
+    Row(
+        Modifier.padding(horizontal = Marquee.safe.side),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqText(
+            words,
+            role = TextRole.Callout,
+            color = Marquee.colors.muted,
+            modifier = Modifier.weight(1f, fill = false).semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (tile != null) SecondaryButton("Undo", removal::undo)
     }
 }

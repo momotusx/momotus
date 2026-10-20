@@ -38,6 +38,10 @@ class StremioLinkTest {
         assertEquals(link, addonLink(view))
         assertNull(addonLink(Intent(Intent.ACTION_VIEW, Uri.parse("https://torrentio.strem.fun/manifest.json"))))
         assertNull(addonLink(Intent(Intent.ACTION_MAIN)))
+        // A title link from a website is not an addon.
+        assertNull(addonLink(Intent(Intent.ACTION_VIEW, Uri.parse("stremio:///detail/movie/tt1727587"))))
+        // A launch from the recent apps repeats the old intent: the link was taken already.
+        assertNull(addonLink(Intent(view).addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)))
     }
 
     @Test

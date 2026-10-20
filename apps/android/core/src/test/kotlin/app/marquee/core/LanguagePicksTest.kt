@@ -46,6 +46,13 @@ class LanguagePicksTest {
     }
 
     @Test
+    fun `the device's own language is offered first`() {
+        assertEquals("pl", LanguagePicks.search(all, "", emptyList(), device = "pl").first().code)
+        // Chosen already: not offered again.
+        assertEquals("en", LanguagePicks.search(all, "", listOf("pl"), device = "pl").first().code)
+    }
+
+    @Test
     fun `audio takes the base codes, one per language`() {
         val audio = LanguagePicks.audio(all)
         assertEquals(listOf("en", "es", "pl", "pt", "ko", "zh", "ar"), audio.map { it.code })

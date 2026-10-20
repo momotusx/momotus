@@ -54,6 +54,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.SearchCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.model.DiscoverState
 import app.marquee.core.model.HomeRow
@@ -203,6 +204,8 @@ internal fun Note(
 fun SearchScreen(
     session: CoreSession,
     onOpen: (Tile) -> Unit,
+    /** No addon can search: the recommended addons, which include one that does. */
+    onAddons: () -> Unit,
 ) {
     val holder =
         viewModel<SearchHolder>(key = "search", factory = viewModelFactory { initializer { SearchHolder(session) } })
@@ -253,7 +256,20 @@ fun SearchScreen(
             }
 
             snapshot != null && snapshot.query == holder.query && !loading && snapshot.rows.isEmpty() -> {
-                item(key = "none") { Note("No matches for \"${holder.query}\" in your catalogs.") }
+                item(key = "none") {
+                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                        Note(SearchCopy.empty(holder.query, snapshot.searchable))
+                        // No addon can search: nothing could have matched, so the way on is one that does.
+                        if (snapshot.searchable == 0) {
+                            SecondaryButton(
+                                SearchCopy.RECOMMENDED,
+                                onAddons,
+                                Modifier.padding(start = Marquee.safe.side),
+                                icon = Icons.ChevronRight,
+                            )
+                        }
+                    }
+                }
             }
 
             else -> {

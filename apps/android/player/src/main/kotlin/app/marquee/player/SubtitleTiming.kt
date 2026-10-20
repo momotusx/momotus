@@ -18,7 +18,7 @@ class SubtitleDelay {
 
 /**
  * Subtitle parsers whose cues are shifted by the play's [delay]: for files fetched beside the video (an
- * addon's subtitles) and the text tracks parsed out of the file. A cue never starts before zero.
+ * addon's subtitles) and the tracks parsed out of the file (Media3 hands this factory to the extractors too).
  */
 class DelayedSubtitles(
     private val base: SubtitleParser.Factory,
@@ -48,16 +48,22 @@ class DelayedSubtitles(
     }
 }
 
-/** [cues] [shiftUs] later (earlier when negative), never before zero; cues without a start stay as they are. */
+/**
+ * [cues] [shiftUs] later (earlier when negative). Cues in a file's own track carry a start relative to their
+ * block (an MKV's text track starts each at 0), and Media3 adds the block's time to it, so the start may go
+ * below zero: clamping it would make Earlier do nothing there. Cues with no start (picture subtitles, MP4's
+ * own text) take the shift as their start, which is added the same way.
+ */
 internal fun shifted(
     cues: CuesWithTiming,
     shiftUs: Long,
-): CuesWithTiming =
-    if (cues.startTimeUs == C.TIME_UNSET) {
-        cues
-    } else {
-        CuesWithTiming(cues.cues, (cues.startTimeUs + shiftUs).coerceAtLeast(0L), cues.durationUs)
-    }
+): CuesWithTiming {
+    val start = if (cues.startTimeUs == C.TIME_UNSET) shiftUs else cues.startTimeUs + shiftUs
+    return CuesWithTiming(cues.cues, start, cues.durationUs)
+}
+
+/** How long the Timing row waits after the last press before setting the stream again with the new delay. */
+internal const val TIMING_SETTLE_MS = 700L
 
 /** How far one press of Earlier or Later moves the subtitles. */
 const val SUBTITLE_STEP_MS = 500L

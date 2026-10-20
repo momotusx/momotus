@@ -9,16 +9,16 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import app.marquee.design.Form
@@ -73,7 +73,7 @@ class TrackPanelTest {
     }
 
     @Test
-    fun `the Timing row moves this play's subtitles, and Down from the last track reaches it`() {
+    fun `the Timing row sits over the tracks, Up from the first track reaches it, and it moves the subtitles`() {
         val shifts = mutableListOf<Long>()
         compose.setContent {
             MarqueeTheme(Form.Tv) {
@@ -90,15 +90,20 @@ class TrackPanelTest {
                 )
             }
         }
-        // The row sits under the list, past the panel's height here: scroll it into view to read it.
-        compose.onNode(hasScrollToKeyAction()).performScrollToKey("timing")
+        // Under the title, outside the list: there without scrolling, however long the list.
         compose.onNodeWithText("On time").assertExists()
-        val last = compose.onNodeWithContentDescription("Spanish, SRT")
-        last.requestFocus()
-        last.performKeyInput { pressKey(Key.DirectionDown) }
+        val first = compose.onNodeWithContentDescription("Off")
+        first.requestFocus()
+        first.performKeyInput { pressKey(Key.DirectionUp) }
         compose.onNode(isFocused() and (hasText("Earlier") or hasText("Later"))).assertExists()
         compose.onNodeWithText("Later").performClick()
         compose.onNodeWithText("0.5 s later").assertExists()
         compose.runOnIdle { kotlin.test.assertEquals(listOf(500L), shifts) }
+    }
+
+    @Test
+    fun `with no subtitle on there is no Timing row`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { TrackPanel("Subtitles", rows, onPick = {}, timing = null) } }
+        compose.onAllNodesWithText("Timing").assertCountEquals(0)
     }
 }

@@ -10,7 +10,6 @@ import androidx.media3.extractor.text.SubtitleParser
 import app.marquee.core.model.SubtitleSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertSame
 
 /** The per-play subtitle delay and the profile's subtitle size (journey reviews 2026-10-20). */
 class SubtitleTimingTest {
@@ -47,17 +46,24 @@ class SubtitleTimingTest {
     }
 
     @Test
-    fun `the play's delay moves every cue, never before the start`() {
+    fun `the play's delay moves every cue both ways`() {
         assertEquals(1_500_000L, startOf(500))
         assertEquals(500_000L, startOf(-500))
-        assertEquals(0L, startOf(-3_000))
         assertEquals(1_000_000L, startOf(0))
     }
 
     @Test
-    fun `a cue without a start stays as it is`() {
+    fun `an MKV text cue, relative to its block at 0, moves earlier too`() {
+        // Media3 adds the block's time to this start: clamped at 0, Earlier would do nothing.
+        val inFile = CuesWithTiming(emptyList(), 0, 2_000_000)
+        assertEquals(-500_000L, shifted(inFile, -500_000).startTimeUs)
+    }
+
+    @Test
+    fun `a cue with no start (picture subtitles) takes the shift as its start`() {
         val loose = CuesWithTiming(emptyList(), C.TIME_UNSET, C.TIME_UNSET)
-        assertSame(loose, shifted(loose, 500_000))
+        assertEquals(500_000L, shifted(loose, 500_000).startTimeUs)
+        assertEquals(-500_000L, shifted(loose, -500_000).startTimeUs)
     }
 
     @Test

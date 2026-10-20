@@ -49,7 +49,9 @@ class MainActivity : ComponentActivity() {
             } else {
                 null
             }
-        addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
+        // Once: a recreated activity (after the process died, a font size or language change) gets the
+        // same intent again, and the link was taken already.
+        if (savedInstanceState == null) addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
         setContent {
             MarqueeTheme(form) { MarqueeRoot(session, form, debugStack) }
         }
@@ -81,10 +83,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** The addon link of an Install button (`stremio://host/.../manifest.json`) the activity was opened with, else null. */
+/**
+ * The addon link of an Install button (`stremio://host/.../manifest.json`) the activity was opened with, else
+ * null: another stremio:// link (a title page, `stremio:///detail/...`) is not an addon, and a launch from the
+ * recent apps repeats an old intent.
+ */
 internal fun addonLink(intent: Intent?): String? =
     intent
-        ?.takeIf { it.action == Intent.ACTION_VIEW }
+        ?.takeIf { it.action == Intent.ACTION_VIEW && (it.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0 }
         ?.data
-        ?.takeIf { it.scheme.equals("stremio", ignoreCase = true) }
+        ?.takeIf { it.scheme.equals("stremio", ignoreCase = true) && it.path.orEmpty().endsWith("manifest.json") }
         ?.toString()

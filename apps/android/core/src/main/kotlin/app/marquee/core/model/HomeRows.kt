@@ -83,3 +83,16 @@ fun List<HomeRow>.allFailed(): Boolean =
     isNotEmpty() &&
         none { it.tiles.isNotEmpty() || it.state == RowState.Loading || it.state == RowState.Slow } &&
         any { it.state is RowState.Failed }
+
+/**
+ * The rows without the Continue Watching tile of [id] (a removal waiting for its Undo); a Continue Watching
+ * row left with no tile goes too.
+ */
+fun List<HomeRow>.withoutRemoved(id: String?): List<HomeRow> {
+    if (id == null) return this
+    return mapNotNull { row ->
+        if (row.rowId != app.marquee.core.TileCopy.CONTINUE_ROW) return@mapNotNull row
+        val left = row.tiles.filterNot { it.id == id }
+        if (left.isEmpty()) null else row.copy(tiles = left)
+    }
+}

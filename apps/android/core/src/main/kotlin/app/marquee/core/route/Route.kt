@@ -198,7 +198,8 @@ fun restoredStack(stack: List<Route>): List<Route> {
     val at = stack.indexOfFirst { it is Route.Player }
     if (at < 0) return stack
     val player = stack[at] as Route.Player
-    val kept = stack.take(at)
+    // A Versions page the version was chosen on leaves with the player: its title page is under it.
+    val kept = stack.take(at).dropLastWhile { it is Route.Versions }
     val below = kept.lastOrNull()
     // A title page opened from Calendar carries its season: it is the same page.
     val onTitle = below is Route.Title && below.kind == player.kind && below.id == player.id

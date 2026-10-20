@@ -235,7 +235,15 @@ class PlaybackController(
             override fun onPlayWhenReadyChanged(
                 playWhenReady: Boolean,
                 reason: Int,
-            ) = report()
+            ) {
+                // Under another page nothing starts it again: not the remote's Play key through the media
+                // session, not a picture-in-picture button.
+                if (playWhenReady && covered) {
+                    pause()
+                    return
+                }
+                report()
+            }
 
             override fun onRenderedFirstFrame() = renderedFirstFrame()
 
@@ -879,8 +887,31 @@ class PlaybackController(
         if (next == subtitleDelayMs) return
         subtitleDelayMs = next
         subtitleDelay.ms = next
-        reloadWith(loadedSubs)
+        // The words change at once; the stream is set again once, after the last of a run of presses, and
+        // not at all with subtitles off (the next load takes the delay with it).
+        timing?.cancel()
+        if (pick == null) return
+        timing =
+            scope.launch {
+                delay(TIMING_SETTLE_MS)
+                reloadWith(loadedSubs)
+            }
     }
+
+    private var timing: Job? = null
+
+    /** A subtitle is on (a track other than Off is chosen): the subtitle panel shows its Timing row. */
+    val subtitleOn: Boolean get() = text.any { it.selected && it.id != TRACK_OFF }
+
+    /**
+     * Another page is over the player (Versions, an install link): it stays paused, whatever asks it to
+     * play. The screen sets it as the player leaves and comes back to the screen.
+     */
+    var covered = false
+        set(value) {
+            field = value
+            if (value) pause()
+        }
 
     /**
      * The core's stream server took another port while the app was away: the loaded address is gone, so
@@ -888,6 +919,7 @@ class PlaybackController(
      */
     fun serverMoved() {
         if (loadedUrl == null || released) return
+        lastPositionMs = player.currentPosition.coerceAtLeast(0L)
         reopening = true
         view?.retry()
     }

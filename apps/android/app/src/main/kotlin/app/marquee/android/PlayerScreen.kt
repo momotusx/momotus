@@ -3,6 +3,7 @@ package app.marquee.android
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -238,6 +239,12 @@ fun PlayerScreen(
         )
     val controller = holder.controller
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { controller.onStop() }
+    // A page over the player (Versions, an install link) leaves it paused, and nothing plays it from under
+    // there: not the remote's Play key through the media session, nor picture in picture.
+    DisposableEffect(controller) {
+        controller.covered = false
+        onDispose { controller.covered = true }
+    }
     val window = rememberPlayerWindow(controller, phone = form == Form.Phone)
     val leave = {
         controller.pause()

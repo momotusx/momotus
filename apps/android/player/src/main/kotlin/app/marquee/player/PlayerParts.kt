@@ -186,15 +186,16 @@ fun TrackPanel(
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
     note: String? = null,
-    /** The subtitle panel's Timing row: this play's delay, and what Earlier and Later move it by. */
+    /**
+     * The subtitle panel's Timing row, under the title and outside the list so it is one press away: this
+     * play's delay, null while no subtitle is on (the row then does not show).
+     */
     timing: Long? = null,
     onShift: (Long) -> Unit = {},
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val requesters = remember(rows.size) { List(rows.size) { FocusRequester() } }
-    // With the Timing row under the tracks, Down from the last track goes on to it.
-    val last = if (timing != null) rows.size else rows.lastIndex
     val chosen = rows.indexOfFirst { it.selected }.coerceAtLeast(0)
     // The list starts at the chosen row, so its node exists to take focus (a list of 40 subtitle tracks
     // composes only the rows in view).
@@ -223,6 +224,7 @@ fun TrackPanel(
             modifier = Modifier.padding(horizontal = 12.dp).semantics { heading() },
             maxLines = 1,
         )
+        if (timing != null) TimingRow(timing, onShift)
         LazyColumn(
             Modifier.heightIn(max = if (tv) 520.dp else 230.dp),
             state = state,
@@ -250,9 +252,8 @@ fun TrackPanel(
                         )
                     }
                 }
-                item(key = row.id) { TrackRow(row, index, last, requesters[index], onPick) }
+                item(key = row.id) { TrackRow(row, index, rows.lastIndex, requesters[index], onPick, timing != null) }
             }
-            if (timing != null) item(key = "timing") { TimingRow(timing, onShift) }
             if (note != null) {
                 item(key = "note") {
                     MqText(note, role = TextRole.Caption, color = colors.muted, modifier = Modifier.padding(16.dp))
@@ -263,8 +264,9 @@ fun TrackPanel(
 }
 
 /**
- * This play's subtitle timing: Earlier and Later move the words by half a second each, and the line says
- * where they are now ("0.5 s later"). The panel stays open; focus stays in it.
+ * This play's subtitle timing, between the panel title and the tracks: Earlier and Later move the words by
+ * half a second each, and the line says where they are now ("0.5 s later"). The panel stays open; focus
+ * stays in it (Down goes to the tracks).
  */
 @Composable
 private fun TimingRow(
@@ -272,7 +274,7 @@ private fun TimingRow(
     onShift: (Long) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 4.dp),
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -291,7 +293,7 @@ private fun TimingRow(
             { onShift(-SUBTITLE_STEP_MS) },
             Modifier.focusProperties {
                 left = FocusRequester.Cancel
-                down = FocusRequester.Cancel
+                up = FocusRequester.Cancel
             },
         )
         SecondaryButton(
@@ -299,7 +301,7 @@ private fun TimingRow(
             { onShift(SUBTITLE_STEP_MS) },
             Modifier.focusProperties {
                 right = FocusRequester.Cancel
-                down = FocusRequester.Cancel
+                up = FocusRequester.Cancel
             },
         )
     }
@@ -313,6 +315,8 @@ private fun TrackRow(
     last: Int,
     requester: FocusRequester,
     onPick: (String) -> Unit,
+    // Up from the first track goes on to the Timing row over the list.
+    timingAbove: Boolean,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -326,7 +330,7 @@ private fun TrackRow(
             .focusProperties {
                 left = FocusRequester.Cancel
                 right = FocusRequester.Cancel
-                if (index == 0) up = FocusRequester.Cancel
+                if (index == 0 && !timingAbove) up = FocusRequester.Cancel
                 if (index == last) down = FocusRequester.Cancel
             }.marqueeFocus(Marquee.radius.m, scale = 1.02f)
             .clip(shape)

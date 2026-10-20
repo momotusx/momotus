@@ -598,18 +598,24 @@ class SubtitleFailureTest {
     fun `Later moves this play's subtitles half a second and sets the item again where it was`() {
         val delay = SubtitleDelay()
         val (player, controller) = open(delay = delay)
+        // With subtitles off a press only changes the words: the stream is not set again.
+        controller.shiftSubtitles(SUBTITLE_STEP_MS)
+        runFor(1_500)
+        assertEquals(1, player.items.size, "set again with subtitles off")
+        assertEquals(500L, delay.ms, "the next load takes the delay")
+        // A subtitle on: a run of presses sets the stream again once, after the last, where it was.
+        controller.selectText("late:$subtitle")
+        until("the subtitle is side-loaded") { player.items.size == 2 }
         player.position(42_000)
         controller.shiftSubtitles(SUBTITLE_STEP_MS)
-        until("the item is set again") { player.items.size == 2 }
-        assertEquals(500L, controller.subtitleDelayMs)
-        assertEquals(500L, delay.ms, "the parsers read the new delay")
+        controller.shiftSubtitles(SUBTITLE_STEP_MS)
+        assertEquals(1_500L, controller.subtitleDelayMs)
+        until("the item is set again") { player.items.size == 3 }
+        runFor(1_500)
+        assertEquals(3, player.items.size, "a run of presses set the stream again more than once")
+        assertEquals(1_500L, delay.ms, "the parsers read the new delay")
         assertEquals(video, player.items.last().uri)
         assertEquals(42_000L, player.items.last().startMs)
-        // Earlier twice: half a second before the file's own times.
-        controller.shiftSubtitles(-SUBTITLE_STEP_MS)
-        controller.shiftSubtitles(-SUBTITLE_STEP_MS)
-        until("set again twice more") { player.items.size == 4 }
-        assertEquals(-500L, delay.ms)
         controller.release()
     }
 
@@ -636,11 +642,29 @@ class SubtitleFailureTest {
         val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
         until("the stream loads") { player.items.size == 1 }
+        player.position(42_000)
         controller.serverMoved()
         until("the play opens again at the new address") { player.items.size == 2 }
         assertEquals(moved, player.items.last().uri)
+        assertEquals(42_000L, player.items.last().startMs, "opened again where it was")
         assertEquals(2, subscribes.get())
         assertNotEquals("Playing a different source", controller.notice)
+        controller.release()
+    }
+
+    @Test
+    fun `a player under another page stays paused, whatever asks it to play`() {
+        val (player, controller) = open()
+        controller.play()
+        assertTrue(player.playWhenReady)
+        controller.covered = true
+        assertFalse(player.playWhenReady)
+        // The remote's Play key reaches the media session, which plays the player itself.
+        player.play()
+        until("paused again") { !player.playWhenReady }
+        controller.covered = false
+        controller.play()
+        assertTrue(player.playWhenReady)
         controller.release()
     }
 

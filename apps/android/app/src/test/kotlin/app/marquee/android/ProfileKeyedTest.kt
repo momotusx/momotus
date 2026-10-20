@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -56,6 +59,42 @@ class ProfileKeyedTest {
     @Test
     fun `the same profile picked again gets its stack back`() {
         restoreAs("dad")
+        compose.onNodeWithText("top: ${Route.Title("movie", "tt1")}").assertExists()
+    }
+
+    // The profile picked later in the same process (state: a switch recomposes); null until then.
+    private var switched by mutableStateOf<String?>(null)
+
+    // What this process's state saw; a new one after the process died.
+    private var seen = HashSet<String?>()
+
+    @Test
+    fun `a profile switched back to later in the process gets its screens without the player`() {
+        val tester = StateRestorationTester(compose)
+        tester.setContent {
+            val who = switched ?: profile
+            ProfileKeyed(who) {
+                val stack = rememberProfileStack(who, listOf(Route.Home), seen)
+                Column {
+                    BasicText("top: ${stack.last()}")
+                    BasicText(
+                        "Play",
+                        Modifier.clickable {
+                            stack.add(Route.Title("movie", "tt1"))
+                            stack.add(Route.Player("movie", "tt1", "tt1", "Sintel"))
+                        },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Play").performClick()
+        // Dad was in the player; the process dies; the kid is picked first.
+        profile = "kid"
+        seen = HashSet()
+        tester.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("top: ${Route.Home}").assertExists()
+        // Later in the same process the kid switches to Dad: his screens come back, the player does not.
+        compose.runOnIdle { switched = "dad" }
         compose.onNodeWithText("top: ${Route.Title("movie", "tt1")}").assertExists()
     }
 }

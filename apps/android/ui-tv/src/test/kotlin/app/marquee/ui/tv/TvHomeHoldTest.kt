@@ -79,11 +79,19 @@ class TvHomeHoldTest {
 
     private val removed = mutableListOf<Tile>()
 
-    private fun show() {
+    private val sent = java.util.concurrent.CopyOnWriteArrayList<kotlinx.serialization.json.JsonObject>()
+
+    private fun show(failedRow: Boolean = false) {
+        val popular =
+            if (failedRow) {
+                HomeRow("cinemeta:series:top", "Popular", "Cinemeta", RowState.Failed("timed out"))
+            } else {
+                null
+            }
         val snapshot =
             HomeSnapshot(
                 HomeHeader(),
-                listOf(
+                listOfNotNull(
                     HomeRow(
                         TileCopy.CONTINUE_ROW,
                         "Continue Watching",
@@ -91,11 +99,19 @@ class TvHomeHoldTest {
                         RowState.Ready,
                         listOf(tile("tt1", "Severance"), tile("tt3", "Dark")),
                     ),
-                    HomeRow("cinemeta:series:top", "Popular", "Cinemeta", RowState.Ready, listOf(tile("tt2", "Andor"))),
+                    popular
+                        ?: HomeRow(
+                            "cinemeta:series:top",
+                            "Popular",
+                            "Cinemeta",
+                            RowState.Ready,
+                            listOf(tile("tt2", "Andor")),
+                        ),
                 ),
             )
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
+            sent += msg
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
             val result =
                 if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
@@ -128,6 +144,8 @@ class TvHomeHoldTest {
     @Test
     fun `a hold on a Continue Watching tile offers Remove, and Remove names the title`() {
         show()
+        // A remote has no long press to discover: the row says how.
+        compose.onNodeWithText(TileCopy.HOLD_TO_REMOVE).assertExists()
         compose.onNodeWithContentDescription("Severance").performSemanticsAction(SemanticsActions.OnLongClick)
         compose.onNodeWithText(TileCopy.REMOVE_CONTINUE).performClick()
         compose.runOnIdle { assertEquals(listOf("tt1"), removed.map { it.id }) }
@@ -144,5 +162,19 @@ class TvHomeHoldTest {
             .onNodeWithContentDescription(
                 "Andor",
             ).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnLongClick))
+    }
+
+    @Test
+    fun `a failed row's Try again asks that catalog again, not all of Home`() {
+        show(failedRow = true)
+        compose.onNodeWithText("Try again").performClick()
+        compose.waitUntil(10_000) {
+            sent.any {
+                val command = it["command"] as? kotlinx.serialization.json.JsonObject
+                it["op"]?.jsonPrimitive?.content == "command" &&
+                    command?.get("type")?.jsonPrimitive?.content == "retryRow" &&
+                    command["rowId"]?.jsonPrimitive?.content == "cinemeta:series:top"
+            }
+        }
     }
 }

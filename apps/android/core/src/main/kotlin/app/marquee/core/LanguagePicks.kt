@@ -29,18 +29,20 @@ object LanguagePicks {
     /**
      * What the search offers for [query]: names or codes starting with it first, then the ones containing it,
      * none already [chosen] (by code or by name, so an old "eng" keeps English off the list), at most [SHOWN].
-     * An empty query offers [COMMON].
+     * An empty query offers the [device]'s own language first, then [COMMON].
      */
     fun search(
         all: List<LanguageChoice>,
         query: String,
         chosen: List<String>,
+        device: String? = null,
     ): List<LanguageChoice> {
         val taken = chosen.map { name(it, all).lowercase() }.toSet()
         val open = { choice: LanguageChoice -> choice.code !in chosen && choice.name.lowercase() !in taken }
         val q = query.trim().lowercase()
         if (q.isEmpty()) {
-            return COMMON
+            return (listOfNotNull(device?.takeIf { it.isNotBlank() }) + COMMON)
+                .distinct()
                 .map { code ->
                     all.firstOrNull { it.code == code } ?: LanguageChoice(code, name(code, all))
                 }.filter(open)

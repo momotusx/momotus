@@ -99,6 +99,8 @@ class RouteTest {
         // A title page opened from Calendar keeps its season.
         val calendar = Route.Title("movie", "tt1", season = 2)
         assertEquals(listOf(Route.Home, calendar), restoredStack(listOf(Route.Home, calendar, player)))
+        // A version chosen on Versions from the title page: the title page once, not Versions and a second title.
+        assertEquals(listOf(Route.Home, title), restoredStack(listOf(Route.Home, title, versions, player)))
         // Without a player, nothing changes.
         assertEquals(listOf(Route.Home, title, versions), restoredStack(listOf(Route.Home, title, versions)))
     }

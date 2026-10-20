@@ -19,14 +19,17 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +40,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -821,6 +825,19 @@ internal fun Languages(
             }
     }
     var query by remember { mutableStateOf("") }
+    // The device's own language is offered first.
+    val device = LocalConfiguration.current.locales[0].language
+    // On a remote, focus follows a picked language to its new place with the chosen ones, so a second
+    // press of select never lands on the language that took its slot.
+    val tv = Marquee.form == Form.Tv
+    val focusers = remember { HashMap<String, FocusRequester>() }
+    var follow by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(follow, chosen) {
+        val code = follow?.takeIf { it in chosen } ?: return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { focusers[code]?.requestFocus() }
+        follow = null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         if (chosen.isNotEmpty()) {
             FlowRow(
@@ -828,12 +845,20 @@ internal fun Languages(
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             ) {
                 for (code in chosen) {
-                    Chip(
-                        LanguagePicks.name(code, all),
-                        selected = true,
-                        onClick = { onChange(chosen - code) },
-                        switch = true,
-                    )
+                    key(code) {
+                        val requester = remember { FocusRequester() }
+                        DisposableEffect(requester) {
+                            focusers[code] = requester
+                            onDispose { focusers.remove(code) }
+                        }
+                        Chip(
+                            LanguagePicks.name(code, all),
+                            selected = true,
+                            onClick = { onChange(chosen - code) },
+                            focusRequester = requester,
+                            switch = true,
+                        )
+                    }
                 }
             }
         }
@@ -847,16 +872,19 @@ internal fun Languages(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
-            for (choice in LanguagePicks.search(all, query, chosen)) {
-                Chip(
-                    choice.name,
-                    selected = false,
-                    onClick = {
-                        onChange(chosen + choice.code)
-                        query = ""
-                    },
-                    switch = true,
-                )
+            for (choice in LanguagePicks.search(all, query, chosen, device)) {
+                key(choice.code) {
+                    Chip(
+                        choice.name,
+                        selected = false,
+                        onClick = {
+                            onChange(chosen + choice.code)
+                            query = ""
+                            if (tv) follow = choice.code
+                        },
+                        switch = true,
+                    )
+                }
             }
         }
     }

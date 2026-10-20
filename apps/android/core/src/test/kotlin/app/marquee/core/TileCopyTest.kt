@@ -2,6 +2,7 @@ package app.marquee.core
 
 import app.marquee.core.model.Hero
 import app.marquee.core.model.Tile
+import app.marquee.core.model.withoutRemoved
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -65,5 +66,43 @@ class TileCopyTest {
     fun `only Continue Watching tiles (Next Up among them) offer Remove on a hold`() {
         assertEquals(true, TileCopy.removable(TileCopy.CONTINUE_ROW))
         assertEquals(false, TileCopy.removable("com.linvo.cinemeta:movie:top"))
+    }
+
+    @Test
+    fun `a removal waiting for Undo leaves its tile out, and an emptied Continue Watching goes`() {
+        val cw =
+            app.marquee.core.model.HomeRow(
+                TileCopy.CONTINUE_ROW,
+                "Continue Watching",
+                "",
+                app.marquee.core.model.RowState.Ready,
+                listOf(
+                    app.marquee.core.model
+                        .Tile(id = "a", kind = "movie", name = "A", posterShape = "poster"),
+                    app.marquee.core.model
+                        .Tile(id = "b", kind = "movie", name = "B", posterShape = "poster"),
+                ),
+            )
+        val other = cw.copy(rowId = "pop", title = "Popular")
+        val rows = listOf(cw, other)
+        assertEquals(
+            listOf("b"),
+            rows
+                .withoutRemoved("a")
+                .first()
+                .tiles
+                .map { it.id },
+        )
+        assertEquals(
+            2,
+            rows
+                .withoutRemoved("a")
+                .last()
+                .tiles.size,
+            "other rows keep the title",
+        )
+        val alone = listOf(cw.copy(tiles = cw.tiles.take(1)), other)
+        assertEquals(listOf("pop"), alone.withoutRemoved("a").map { it.rowId })
+        assertEquals(rows, rows.withoutRemoved(null))
     }
 }

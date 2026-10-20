@@ -51,6 +51,7 @@ import app.marquee.core.model.allFailed
 import app.marquee.core.model.notice
 import app.marquee.core.model.playable
 import app.marquee.core.model.tileKeys
+import app.marquee.core.model.withoutRemoved
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.ActionMenu
@@ -116,6 +117,10 @@ fun TvHome(
     card: (@Composable () -> Unit)? = null,
     /** "Remove from Continue Watching", from a held select on one of its tiles; null offers no menu. */
     onRemove: ((Tile) -> Unit)? = null,
+    /** The title of a removal waiting for its Undo: left out of Continue Watching meanwhile. */
+    removing: String? = null,
+    /** The removal's note (Undo, or why it failed), under Continue Watching. */
+    notice: (@Composable () -> Unit)? = null,
 ) {
     val safe = Marquee.safe
     val metrics = Marquee.tiles
@@ -179,12 +184,19 @@ fun TvHome(
             if (hero == null && home.rows.toList().allFailed()) {
                 item(key = "failed") { AllFailed(home, Modifier.padding(start = Marquee.safe.side)) }
             } else {
-                val rows = home.rows.toList()
+                val rows = home.rows.toList().withoutRemoved(removing)
                 val split = cardSplit(rows)
                 state.cardShown = card != null
-                items(rows.subList(0, split), key = { it.rowId }) { row -> TvRow(row, state, onOpen, hold) }
+                items(
+                    rows.subList(0, split),
+                    key = { it.rowId },
+                ) { row -> TvRow(row, state, onOpen, hold, home::retryRow) }
+                if (notice != null) item(key = "notice") { notice() }
                 if (card != null) item(key = "card") { card() }
-                items(rows.subList(split, rows.size), key = { it.rowId }) { row -> TvRow(row, state, onOpen, hold) }
+                items(
+                    rows.subList(split, rows.size),
+                    key = { it.rowId },
+                ) { row -> TvRow(row, state, onOpen, hold, home::retryRow) }
             }
         }
     }
@@ -364,10 +376,14 @@ private fun TvRow(
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
     onHold: ((Tile, String) -> Unit)?,
+    /** A failed row's Try again: that catalog only. */
+    onRetry: (String) -> Unit,
 ) {
     val inset = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        RowHeader(row.title, TileCopy.source(row.rowId, row.source), Modifier.padding(horizontal = inset))
+        // A remote has no long press to discover: Continue Watching says how to remove a title.
+        val hint = TileCopy.HOLD_TO_REMOVE.takeIf { onHold != null && TileCopy.removable(row.rowId) }
+        RowHeader(row.title, TileCopy.source(row.rowId, row.source) ?: hint, Modifier.padding(horizontal = inset))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))
@@ -387,6 +403,8 @@ private fun TvRow(
                     title = notice.title,
                     body = notice.body,
                     icon = if (notice.failed) Icons.CircleAlert else null,
+                    actionLabel = "Try again".takeIf { notice.failed },
+                    onAction = { onRetry(row.rowId) }.takeIf { notice.failed },
                     modifier = Modifier.padding(start = inset),
                 )
             }

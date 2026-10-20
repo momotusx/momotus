@@ -66,6 +66,9 @@ class HomeView(
         rows.addAll(snapshot.rows)
     }
 
+    /** A failed catalog row's Try again: only that catalog is asked again (the row turns loading, then answers). */
+    fun retryRow(rowId: String) = post(command("retryRow") { put("rowId", rowId) })
+
     override fun applyUpdates(updates: List<HomeUpdate>) {
         for (update in updates) {
             when (update) {

@@ -77,11 +77,19 @@ class PhoneHomeHoldTest {
 
     private val removed = mutableListOf<Tile>()
 
-    private fun show() {
+    private val sent = java.util.concurrent.CopyOnWriteArrayList<kotlinx.serialization.json.JsonObject>()
+
+    private fun show(failedRow: Boolean = false) {
+        val popular =
+            if (failedRow) {
+                HomeRow("cinemeta:series:top", "Popular", "Cinemeta", RowState.Failed("timed out"))
+            } else {
+                null
+            }
         val snapshot =
             HomeSnapshot(
                 HomeHeader(),
-                listOf(
+                listOfNotNull(
                     HomeRow(
                         TileCopy.CONTINUE_ROW,
                         "Continue Watching",
@@ -89,11 +97,19 @@ class PhoneHomeHoldTest {
                         RowState.Ready,
                         listOf(tile("tt1", "Severance")),
                     ),
-                    HomeRow("cinemeta:series:top", "Popular", "Cinemeta", RowState.Ready, listOf(tile("tt2", "Andor"))),
+                    popular
+                        ?: HomeRow(
+                            "cinemeta:series:top",
+                            "Popular",
+                            "Cinemeta",
+                            RowState.Ready,
+                            listOf(tile("tt2", "Andor")),
+                        ),
                 ),
             )
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
+            sent += msg
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
             val result =
                 if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
@@ -135,5 +151,19 @@ class PhoneHomeHoldTest {
             .onNodeWithContentDescription(
                 "Andor",
             ).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnLongClick))
+    }
+
+    @Test
+    fun `a failed row's Try again asks that catalog again, not all of Home`() {
+        show(failedRow = true)
+        compose.onNodeWithText("Try again").performClick()
+        compose.waitUntil(10_000) {
+            sent.any {
+                val command = it["command"] as? kotlinx.serialization.json.JsonObject
+                it["op"]?.jsonPrimitive?.content == "command" &&
+                    command?.get("type")?.jsonPrimitive?.content == "retryRow" &&
+                    command["rowId"]?.jsonPrimitive?.content == "cinemeta:series:top"
+            }
+        }
     }
 }
