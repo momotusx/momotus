@@ -9,6 +9,8 @@ struct StreamChoiceWords: Decodable, Sendable {
         let tone: String
         let text: String
         let textChosen: String?
+        /// mayPause when only a few are sharing the file: the swarm, not the connection.
+        let textSmallSwarm: String?
         let details: [String]
     }
 
@@ -273,8 +275,15 @@ enum StreamChoice {
                 : words.speedSource["estimated"]
         }
         let details = w.details.compactMap { fill($0, fields) }.joined(separator: ", ")
-        let text = limitChosen ? w.textChosen ?? w.text : w.text
-        return LineWords(tone: tone(w.tone), text: text, details: capital(details))
+        return LineWords(tone: tone(w.tone), text: lineText(w, line, limitChosen: limitChosen), details: capital(details))
+    }
+
+    /// The line's words: the size limit's own when the user set it, the small
+    /// swarm's when a version may pause because few are sharing it.
+    static func lineText(_ w: StreamChoiceWords.Line, _ line: ReasonLine, limitChosen: Bool) -> String {
+        if limitChosen, let chosen = w.textChosen { return chosen }
+        if line.kind == "mayPause", line.smallSwarm == true, let swarm = w.textSmallSwarm { return swarm }
+        return w.text
     }
 
     static func tone(_ name: String) -> VersionWords.Tone {

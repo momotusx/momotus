@@ -232,3 +232,21 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.nobodySharingPlace(false, hasRecommended: true) == nil)
     #expect(StreamChoice.nobodySharingPlace(nil, hasRecommended: false) == nil)
 }
+
+@Test func mayPauseSaysWhenFewAreSharing() {
+    let words = StreamChoiceWords.Line(
+        tone: "warn", text: "May pause on this connection", textChosen: nil,
+        textSmallSwarm: "May pause: only a few people are sharing it", details: [])
+    var line = ReasonLine(kind: "mayPause", needMbps: 32, haveMbps: 18, samples: 0)
+    // The connection sets the pace: the plain words.
+    #expect(StreamChoice.lineText(words, line, limitChosen: false) == "May pause on this connection")
+    // Few people are sharing it: the swarm's words.
+    line.smallSwarm = true
+    #expect(StreamChoice.lineText(words, line, limitChosen: false) == "May pause: only a few people are sharing it")
+    // Shared words without the line yet: the plain words.
+    let older = StreamChoiceWords.Line(tone: "warn", text: "May pause on this connection", textChosen: nil, textSmallSwarm: nil, details: [])
+    #expect(StreamChoice.lineText(older, line, limitChosen: false) == "May pause on this connection")
+    // The core's field decodes.
+    let decoded = try? JSONDecoder().decode(ReasonLine.self, from: Data(#"{"kind":"mayPause","needMbps":32,"haveMbps":18,"samples":0,"smallSwarm":true}"#.utf8))
+    #expect(decoded?.smallSwarm == true)
+}
