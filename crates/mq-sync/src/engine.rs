@@ -607,13 +607,13 @@ pub(crate) async fn fetch_roster(
     }
 }
 
-/// Builds a roster from entries, checking each.
 /// A roster seq as an index into this device's entries. A seq past `usize` (a relay's number above 4 Gi on a
 /// 32-bit device) is past every entry, so a lookup finds none; `as usize` would wrap it onto one it holds.
 fn index(seq: u64) -> usize {
     usize::try_from(seq).unwrap_or(usize::MAX)
 }
 
+/// Builds a roster from entries, checking each.
 pub(crate) fn rebuild(entries: &[Entry]) -> Result<Roster, RosterError> {
     let mut roster = Roster::default();
     for entry in entries {
@@ -1987,7 +1987,8 @@ mod tests {
         assert_eq!(index(7), 7);
         // On a 32-bit device `as usize` turned 2^32 + 1 into entry 1.
         let past = (1u64 << 32) + 1;
-        assert_eq!(index(past), usize::try_from(past).unwrap_or(usize::MAX));
         assert!(index(past) > 1);
+        #[cfg(target_pointer_width = "32")]
+        assert_eq!(index(past), usize::MAX);
     }
 }

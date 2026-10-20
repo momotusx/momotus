@@ -171,7 +171,9 @@ async fn read_checked(
             stalls += 1;
             stall_ms += waited;
         }
-        let take = chunk.len().min((want - got) as usize);
+        let take = chunk
+            .len()
+            .min(usize::try_from(want - got).unwrap_or(usize::MAX));
         check.feed(&chunk[..take]);
         got += take as u64;
         let first = *first.get_or_insert_with(|| ms(started));

@@ -239,7 +239,9 @@ fn entries(archive: &[u8]) -> Result<Vec<Entry<'_>>, ArchiveFault> {
                     .is_some_and(|comment| at + 22 + comment as usize == archive.len())
                 && u32_at(archive, at + 12)
                     .zip(u32_at(archive, at + 16))
-                    .is_some_and(|(size, start)| start as usize + size as usize == at)
+                    .is_some_and(|(size, start)| {
+                        (start as usize).checked_add(size as usize) == Some(at)
+                    })
         })
         .ok_or(ArchiveFault::NotZip)?;
     let total = u16_at(archive, end + 10).ok_or(ArchiveFault::NotZip)?;
@@ -274,7 +276,7 @@ fn entries(archive: &[u8]) -> Result<Vec<Entry<'_>>, ArchiveFault> {
         let name = archive
             .get(at + 46..at + 46 + name_len)
             .ok_or(unreadable.clone())?;
-        if archive.get(local..local + 4) != Some(b"PK\x03\x04") {
+        if local.checked_add(4).and_then(|end| archive.get(local..end)) != Some(b"PK\x03\x04") {
             return Err(unreadable);
         }
         let local_skip = u16_at(archive, local + 26).ok_or(unreadable.clone())? as usize
@@ -287,8 +289,9 @@ fn entries(archive: &[u8]) -> Result<Vec<Entry<'_>>, ArchiveFault> {
             method,
             encrypted: flags & 1 == 1,
             crc,
-            data: archive
-                .get(start..start + compressed)
+            data: start
+                .checked_add(compressed)
+                .and_then(|end| archive.get(start..end))
                 .ok_or(unreadable.clone())?,
         });
         at += 46 + skip;

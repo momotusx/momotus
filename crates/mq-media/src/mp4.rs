@@ -366,7 +366,7 @@ fn hev1_entries(stsd: &[u8], at: u64) -> Vec<Hev1Entry> {
     let mut out = Vec::new();
     let mut pos = 8;
     while let Some(size) = be32(stsd, pos).map(|s| s as usize).filter(|s| *s >= 8) {
-        let Some(body) = stsd.get(pos + 8..pos + size) else {
+        let Some(body) = pos.checked_add(size).and_then(|end| stsd.get(pos + 8..end)) else {
             break;
         };
         let serve_as = match stsd.get(pos + 4..pos + 8) {
