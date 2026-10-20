@@ -5,6 +5,10 @@ import app.marquee.core.model.Episode
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.TitleDetails
 import app.marquee.core.model.VersionsSnapshot
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.roundToInt
 
 /** What a title page's primary button is for. */
@@ -139,20 +143,60 @@ object TitleCopy {
             "Details from" to details.source,
         ).filter { it.second.isNotBlank() }
 
-    /** "Watched, S1:E2, The Kingsroad": what a screen reader says for an episode. */
-    fun episode(episode: Episode): String =
+    /** "Watched, S1:E2, The Kingsroad" (and "Airs Nov 3, 2026" when it is not out): what a screen reader says for an episode. */
+    fun episode(
+        episode: Episode,
+        now: Long = System.currentTimeMillis(),
+    ): String =
         listOfNotNull(
             "Watched".takeIf { episode.watched },
             Format.episodeLabel(episode.season, episode.episode),
             episode.title.takeIf { it.isNotBlank() },
+            airs(episode, now),
         ).joinToString(", ")
 
-    /** "Watched", "36 min left", "52 min" (the runtime is the episode's), or null when nothing is known. */
+    /**
+     * False while the episode's release lies ahead, as on the web: its card says when it airs, and a
+     * press says so instead of opening a player that can only fail. No date, or one that does not read: out.
+     */
+    fun aired(
+        episode: Episode,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean = releaseMillis(episode.released)?.let { it <= now } ?: true
+
+    /** "Airs Nov 3, 2026" for an episode that is not out yet, else null. */
+    fun airs(
+        episode: Episode,
+        now: Long = System.currentTimeMillis(),
+    ): String? {
+        val at = releaseMillis(episode.released)?.takeIf { it > now } ?: return null
+        // A release is a date, not an instant: read in UTC, it stays the day it names west of UTC too.
+        return "Airs " + SimpleDateFormat("MMM d, yyyy", Locale.US).apply { timeZone = UTC }.format(Date(at))
+    }
+
+    private val UTC = TimeZone.getTimeZone("UTC")
+
+    // The core passes the addon's release as given: an ISO instant ("2026-11-03T00:00:00.000Z"), sometimes a bare date.
+    private fun releaseMillis(released: String?): Long? {
+        if (released.isNullOrBlank()) return null
+        for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX", "yyyy-MM-dd")) {
+            val format = SimpleDateFormat(pattern, Locale.ROOT).apply { timeZone = UTC }
+            runCatching { format.parse(released) }.getOrNull()?.let { return it.time }
+        }
+        return null
+    }
+
+    /**
+     * "Watched", "36 min left", "Airs Nov 3, 2026", "52 min" (the runtime is the episode's), or null when
+     * nothing is known.
+     */
     fun episodeNote(
         episode: Episode,
         runtime: String?,
+        now: Long = System.currentTimeMillis(),
     ): String? {
         val total = Format.runtimeMinutes(runtime)
+        val airs = airs(episode, now)
         return when {
             episode.watched -> {
                 "Watched"
@@ -165,6 +209,10 @@ object TitleCopy {
             episode.progress != null -> {
                 total?.let { minutesLeft(it, it * episode.progress.toDouble()) }
                     ?: "${(episode.progress * 100).roundToInt()}% watched"
+            }
+
+            airs != null -> {
+                airs
             }
 
             else -> {

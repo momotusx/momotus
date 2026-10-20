@@ -3,6 +3,9 @@ package app.marquee.android
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
@@ -38,6 +41,9 @@ class MarqueeApp :
     /** The running profile's Trakt account (plans/m7-trakt.md): its record, status and view. */
     lateinit var trakt: TraktAccount
         private set
+
+    /** A stremio:// install link the activity was opened with, until the navigation takes it to the link field. */
+    var addonLink: String? by mutableStateOf(null)
     private lateinit var lifecycle: AppLifecycle
 
     /**

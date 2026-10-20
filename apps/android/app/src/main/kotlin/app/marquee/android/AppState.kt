@@ -40,6 +40,12 @@ class AppState(
     var start: Start by mutableStateOf(Start.Loading)
         private set
 
+    /**
+     * Whether this process composed a back stack yet. The first one may be what the saved state brought
+     * back after the process died (this state is new then, and survives a configuration change).
+     */
+    var stackSeen = false
+
     /** The one open Versions view, shared by the title page, the Versions screen and the player. */
     val versions = VersionsHolder(session, caps, viewModelScope)
 

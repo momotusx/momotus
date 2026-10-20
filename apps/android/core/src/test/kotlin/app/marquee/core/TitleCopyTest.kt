@@ -141,6 +141,31 @@ class TitleCopyTest {
         assertEquals("S2:E1 · 41 min left", TitleCopy.episodeCaption(part.copy(leftMs = 2_460_000), "52 min"))
     }
 
+    @Test
+    fun `an episode that has not aired says when it airs, in UTC, and does not count as out`() {
+        // 2026-10-20 12:00 UTC.
+        val now = 1_792_497_600_000L
+        val later = Episode("tt1:3:7", 3, 7, "The Long Night", released = "2026-11-03T00:00:00.000Z", watched = false)
+        assertEquals("Airs Nov 3, 2026", TitleCopy.episodeNote(later, "57 min", now))
+        assertEquals("S3:E7, The Long Night, Airs Nov 3, 2026", TitleCopy.episode(later, now))
+        assertEquals(false, TitleCopy.aired(later, now))
+        // A bare date; and west of UTC the day stays the one the release names, not the evening before.
+        assertEquals("Airs Nov 3, 2026", TitleCopy.airs(later.copy(released = "2026-11-03"), now))
+        val zone = java.util.TimeZone.getDefault()
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("America/Los_Angeles"))
+            assertEquals("Airs Nov 3, 2026", TitleCopy.episodeNote(later, "57 min", now))
+        } finally {
+            java.util.TimeZone.setDefault(zone)
+        }
+        // Out already, or no date: it plays, and says its length.
+        val out = later.copy(released = "2026-10-13T00:00:00.000Z")
+        assertEquals("57 min", TitleCopy.episodeNote(out, "57 min", now))
+        assertEquals(true, TitleCopy.aired(out, now))
+        assertEquals(true, TitleCopy.aired(later.copy(released = null), now))
+        assertEquals(true, TitleCopy.aired(later.copy(released = "soon"), now))
+    }
+
     private fun row() =
         VersionRow(
             key = "k",

@@ -30,6 +30,12 @@ class LinkInstall(
     var said: Said? by mutableStateOf(null)
         private set
 
+    /**
+     * An addon link another app handed over (an Install button's stremio:// link): the link field takes
+     * it and waits for the user's Add, never adding it by itself. Only in memory, like the field.
+     */
+    var offered: String? by mutableStateOf(null)
+
     val busy get() = said?.pending == true
 
     // Bumped for a new profile: a request from before must not land on the new profile's pages.
@@ -79,6 +85,7 @@ class LinkInstall(
     fun forget() {
         generation++
         said = null
+        offered = null
     }
 
     companion object {

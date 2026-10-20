@@ -8,6 +8,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -36,10 +37,12 @@ import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
+import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.focusSoon
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -63,6 +66,37 @@ internal fun AutoFocus(requester: FocusRequester) {
 }
 
 private const val AUTO_FOCUS_FRAMES = 60
+
+/**
+ * What shows while the core opens and the profiles answer: nothing for half a second (a quick start
+ * never flashes it), then the name and that it is starting, so a slow stick never shows a blank screen.
+ */
+@Composable
+fun StartingScreen() {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(STARTING_AFTER_MS)
+        shown = true
+    }
+    if (!shown) return
+    Column(
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.s, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        MqText("Marquee", role = TextRole.Title1)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spinner()
+            MqText(STARTING, role = TextRole.Callout, color = Marquee.colors.muted)
+        }
+    }
+}
+
+internal const val STARTING = "Starting"
+private const val STARTING_AFTER_MS = 500L
 
 /** A top-level place whose screen is built in a later phase. */
 @Composable

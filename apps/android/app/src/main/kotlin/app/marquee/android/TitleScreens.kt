@@ -1,9 +1,11 @@
 package app.marquee.android
 
+import android.widget.Toast
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.createSavedStateHandle
@@ -12,6 +14,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
+import app.marquee.core.TitleCopy
 import app.marquee.core.client.TitleFacts
 import app.marquee.core.model.Episode
 import app.marquee.core.model.LearnedNote
@@ -110,7 +113,12 @@ fun TitleScreen(
     val failed = versions?.status is ViewStatus.Failed
     val title = name.orEmpty()
     // A tap on an episode plays it (the player picks its version); its versions are in the hold menu.
-    val episode: (Episode) -> Unit = { onPlayEpisode(it.videoId, title) }
+    // One that has not aired says when it does instead: a player could only fail.
+    val context = LocalContext.current
+    val episode: (Episode) -> Unit = {
+        val airs = TitleCopy.airs(it)
+        if (airs == null) onPlayEpisode(it.videoId, title) else Toast.makeText(context, airs, Toast.LENGTH_SHORT).show()
+    }
     val episodeVersions: (Episode) -> Unit = { onVersions(it.videoId, title) }
     val play: (String, String) -> Unit = { key, id -> onPlay(key, id, title) }
     if (form == Form.Tv) {

@@ -8,7 +8,9 @@ import app.marquee.core.model.allFailed
 import app.marquee.core.model.notice
 import app.marquee.core.model.tileKeys
 import app.marquee.core.route.Route
+import app.marquee.core.route.afterChoice
 import app.marquee.core.route.isTopLevel
+import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -83,5 +85,44 @@ class RouteTest {
         assertFalse(listOf(row(RowState.Failed("late"), "a")).allFailed(), "tiles that arrived before the failure")
         assertFalse(listOf(row(RowState.Empty)).allFailed(), "empty, not failed")
         assertFalse(emptyList<HomeRow>().allFailed())
+    }
+
+    @Test
+    fun `a stack restored after the process died never brings the player back, its title page stands in`() {
+        val player = Route.Player("movie", "tt1", "tt1", "Sintel", key = "k1")
+        val versions = Route.Versions("movie", "tt1", "tt1", "Sintel")
+        // From the title page: the page is there already.
+        assertEquals(listOf(Route.Home, title), restoredStack(listOf(Route.Home, title, player)))
+        // From Home's Play, and with Versions opened over the player.
+        assertEquals(listOf(Route.Home, title), restoredStack(listOf(Route.Home, player)))
+        assertEquals(listOf(Route.Home, title), restoredStack(listOf(Route.Home, title, player, versions)))
+        // A title page opened from Calendar keeps its season.
+        val calendar = Route.Title("movie", "tt1", season = 2)
+        assertEquals(listOf(Route.Home, calendar), restoredStack(listOf(Route.Home, calendar, player)))
+        // Without a player, nothing changes.
+        assertEquals(listOf(Route.Home, title, versions), restoredStack(listOf(Route.Home, title, versions)))
+    }
+
+    @Test
+    fun `Versions opened from the player gives way with it to the chosen version, Back from it finds the player`() {
+        val playing = Route.Player("movie", "tt1", "tt1", "Sintel", key = "k1")
+        val versions = Route.Versions("movie", "tt1", "tt1", "Sintel")
+        val chosen = Route.Player("movie", "tt1", "tt1", "Sintel", key = "k2")
+        // Over the paused player: both go, the chosen version plays where the player was.
+        assertEquals(
+            listOf(Route.Home, title, chosen),
+            afterChoice(listOf(Route.Home, title, playing, versions), chosen),
+        )
+        // From the title page: the chosen version plays over Versions, as before.
+        assertEquals(
+            listOf(Route.Home, title, versions, chosen),
+            afterChoice(listOf(Route.Home, title, versions), chosen),
+        )
+        // A player of another video under it is not the one Versions came from.
+        val other = Route.Player("series", "tt2", "tt2:1:1", "Severance")
+        assertEquals(
+            listOf(Route.Home, other, versions, chosen),
+            afterChoice(listOf(Route.Home, other, versions), chosen),
+        )
     }
 }

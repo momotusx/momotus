@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -77,6 +79,7 @@ import app.marquee.design.MqText
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RowHeader
+import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
@@ -176,20 +179,23 @@ internal fun <T> ChipRow(
     }
 }
 
-/** A line of guidance or a reason, with a warning mark when something failed. */
+/** A line of guidance or a reason, with a warning mark when something failed, and Try again when there is one. */
 @Composable
 internal fun Note(
     text: String,
     failed: Boolean = false,
     side: Dp = Marquee.safe.side,
+    onRetry: (() -> Unit)? = null,
 ) {
-    Row(
-        Modifier.padding(horizontal = side),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (failed) MqIcon(Icons.CircleAlert, tint = Marquee.colors.bad)
-        MqText(text, role = TextRole.Callout, color = Marquee.colors.muted)
+    Column(Modifier.padding(horizontal = side), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (failed) MqIcon(Icons.CircleAlert, tint = Marquee.colors.bad)
+            MqText(text, role = TextRole.Callout, color = Marquee.colors.muted)
+        }
+        onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw) }
     }
 }
 
@@ -221,7 +227,7 @@ fun SearchScreen(
         when {
             view.status is ViewStatus.Failed -> {
                 val reason = (view.status as ViewStatus.Failed).reason
-                item(key = "failed") { Note("Search could not open: $reason", failed = true) }
+                item(key = "failed") { Note("Search could not open: $reason", failed = true, onRetry = view::retry) }
             }
 
             !searching -> {
@@ -264,10 +270,12 @@ fun SearchScreen(
 
 /** A pill field (design/DECISION.md v2, Search); the edge turns accent while it has focus. */
 @Composable
-private fun SearchField(
+internal fun SearchField(
     text: String,
     onText: (String) -> Unit,
 ) {
+    // The keyboard's Search key puts the keyboard away: the results come as the text changes.
+    val keyboard = LocalSoftwareKeyboardController.current
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val shape = RoundedCornerShape(Marquee.radius.pill)
@@ -294,6 +302,7 @@ private fun SearchField(
             textStyle = TextStyle(color = colors.text, fontSize = Marquee.type.body, fontFamily = MarqueeFonts.text),
             cursorBrush = SolidColor(colors.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
             modifier =
                 Modifier
                     .weight(1f)
@@ -419,7 +428,9 @@ fun DiscoverScreen(
         when {
             view.status is ViewStatus.Failed -> {
                 val reason = (view.status as ViewStatus.Failed).reason
-                full("failed") { Note("Discover could not open: $reason", failed = true, side = 0.dp) }
+                full(
+                    "failed",
+                ) { Note("Discover could not open: $reason", failed = true, side = 0.dp, onRetry = view::retry) }
             }
 
             snapshot == null -> {
@@ -572,7 +583,9 @@ fun LibraryScreen(
         when {
             view.status is ViewStatus.Failed -> {
                 val reason = (view.status as ViewStatus.Failed).reason
-                full("failed") { Note("Library could not open: $reason", failed = true, side = 0.dp) }
+                full(
+                    "failed",
+                ) { Note("Library could not open: $reason", failed = true, side = 0.dp, onRetry = view::retry) }
             }
 
             snapshot == null -> {

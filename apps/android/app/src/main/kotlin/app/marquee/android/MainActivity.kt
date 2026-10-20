@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.os.Build
@@ -46,9 +47,16 @@ class MainActivity : ComponentActivity() {
             } else {
                 null
             }
+        addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
         setContent {
             MarqueeTheme(form) { MarqueeRoot(session, form, debugStack) }
         }
+    }
+
+    // One activity (singleTask): a link opened while the app runs comes here.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
     }
 
     /** Transparent bars with light icons: every screen is dark. */
@@ -69,3 +77,11 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 }
+
+/** The addon link of an Install button (`stremio://host/.../manifest.json`) the activity was opened with, else null. */
+internal fun addonLink(intent: Intent?): String? =
+    intent
+        ?.takeIf { it.action == Intent.ACTION_VIEW }
+        ?.data
+        ?.takeIf { it.scheme.equals("stremio", ignoreCase = true) }
+        ?.toString()

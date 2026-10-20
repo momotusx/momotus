@@ -37,6 +37,15 @@ android {
 
     buildFeatures { buildConfig = true }
 
+    testOptions {
+        // Compose tests run on Robolectric with the app's resources and manifest (its intent filters).
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Robolectric's Android 16 sets up shared memory through JDK internals.
+            it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
+        }
+    }
+
     packaging {
         jniLibs { useLegacyPackaging = false }
     }
@@ -99,4 +108,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -36,7 +37,9 @@ import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
 import app.marquee.core.route.DefaultsMode
 import app.marquee.core.route.Route
+import app.marquee.core.route.afterChoice
 import app.marquee.core.route.isTopLevel
+import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ViewStatus
@@ -82,7 +85,7 @@ fun MarqueeRoot(
             }
 
             app.start == Start.Loading || gate.snapshot == null -> {
-                Unit
+                StartingScreen()
             }
 
             !gate.open -> {
@@ -91,10 +94,12 @@ fun MarqueeRoot(
 
             else -> {
                 CompositionLocalProvider(LocalViewModelStoreOwner provides app.screens) {
-                    when (app.start) {
-                        Start.Loading -> Unit
-                        Start.Onboarding -> AppNav(session, form, app, listOf(Route.Onboarding))
-                        Start.Home -> AppNav(session, form, app, debugStack ?: listOf(Route.Home))
+                    ProfileKeyed(gate.snapshot?.active) {
+                        when (app.start) {
+                            Start.Loading -> Unit
+                            Start.Onboarding -> AppNav(session, form, app, listOf(Route.Onboarding))
+                            Start.Home -> AppNav(session, form, app, debugStack ?: listOf(Route.Home))
+                        }
                     }
                 }
             }
@@ -123,6 +128,17 @@ private fun HomeBackHandler(
     }
 }
 
+/**
+ * One profile's navigation. Keyed by the profile, so what it saved (the back stack, each screen's
+ * state) is never restored under another: after the process died the picker comes first, and whoever
+ * picks next may be someone else (journey review P1-1).
+ */
+@Composable
+internal fun ProfileKeyed(
+    profile: String?,
+    content: @Composable () -> Unit,
+) = key(profile) { content() }
+
 @Composable
 private fun AppNav(
     session: CoreSession,
@@ -130,7 +146,23 @@ private fun AppNav(
     app: AppState,
     initial: List<Route>,
 ) {
-    val backStack = rememberNavBackStack(*initial.toTypedArray())
+    // The first stack of this process may be one restored after the process died: it does not reopen
+    // the player (plans/m6-android.md 7.1).
+    val saved = rememberNavBackStack(*initial.toTypedArray())
+    val backStack =
+        remember(saved) {
+            if (!app.stackSeen) {
+                app.stackSeen = true
+                val restored = saved.map { it as Route }
+                val kept = restoredStack(restored)
+                if (kept != restored) {
+                    saved.clear()
+                    saved.addAll(kept)
+                }
+            }
+            saved
+        }
+    val marquee = LocalContext.current.applicationContext as MarqueeApp
     val sync = (LocalContext.current.applicationContext as MarqueeApp).sync
     val gate = (LocalContext.current.applicationContext as MarqueeApp).profiles
     val routes = backStack.map { it as Route }
@@ -146,8 +178,9 @@ private fun AppNav(
         backStack.add(Route.Player(tile.kind, tile.id, tile.playVideoId(), tile.name))
     }
 
-    // The player's own ways out. Versions and the next episode replace it (Back should not return to
-    // a finished or abandoned player); Episodes goes back to the title page, below or new.
+    // The player's own ways out. The next episode and an offered version replace it (Back should not
+    // return to a finished or abandoned player); Versions opens over it; Episodes goes back to the title
+    // page, below or new.
     fun replacePlayer(
         current: Route.Player,
         with: Route,
@@ -191,6 +224,14 @@ private fun AppNav(
 
     fun pop() {
         if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+    }
+
+    // An addon's Install button (stremio://): the page with the link field, filled in, waits for Add.
+    LaunchedEffect(marquee.addonLink) {
+        val link = marquee.addonLink ?: return@LaunchedEffect
+        marquee.addonLink = null
+        app.linkInstall.offered = link
+        if (backStack.lastOrNull() != Route.Sources) backStack.add(Route.Sources)
     }
 
     // A join from the first screen settles how to begin: back on it, the app goes Home.
@@ -461,7 +502,13 @@ private fun AppNav(
                             app,
                             form,
                             onPlay = { row ->
-                                backStack.add(Route.Player(route.kind, route.id, route.videoId, route.title, row.key))
+                                val next =
+                                    afterChoice(
+                                        routes,
+                                        Route.Player(route.kind, route.id, route.videoId, route.title, row.key),
+                                    )
+                                backStack.clear()
+                                backStack.addAll(next)
                             },
                             onAddSource = { backStack.add(Route.Sources) },
                             onAddAccount = { backStack.add(Route.Debrid) },
@@ -479,8 +526,11 @@ private fun AppNav(
                             // Only this entry pops itself: a held or double Back reaches the leaving entry
                             // again during its fade, and must not pop the screen under it.
                             onBack = { if (backStack.lastOrNull() == route) backStack.removeAt(backStack.lastIndex) },
+                            // Over the player, which waits paused: Back returns to it, a choice takes its place.
                             onVersions = {
-                                replacePlayer(route, Route.Versions(route.kind, route.id, route.videoId, route.title))
+                                if (backStack.lastOrNull() == route) {
+                                    backStack.add(Route.Versions(route.kind, route.id, route.videoId, route.title))
+                                }
                             },
                             onTitle = if (Format.parseVideo(route.videoId) != null) ({ toTitle(route) }) else null,
                             onNext = { next, binge ->

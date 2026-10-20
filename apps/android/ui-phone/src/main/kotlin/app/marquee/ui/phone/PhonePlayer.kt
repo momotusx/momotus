@@ -42,6 +42,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.NextEpisode
@@ -72,6 +74,7 @@ import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.nextSpeed
+import app.marquee.player.rememberTouchExploration
 import app.marquee.player.scrubTo
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
@@ -83,6 +86,9 @@ import kotlin.math.ceil
 private const val HIDE_MS = 4_000L
 private const val SEEK_MS = 10_000L
 private const val HINT_MS = 700L
+
+/** The picture's action for TalkBack, which has no tap on it. */
+internal const val SHOW_CONTROLS = "Show controls"
 
 private enum class Panel { Audio, Subtitles }
 
@@ -153,10 +159,11 @@ fun PhonePlayer(
         derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
     }
 
-    // The controls hide four seconds after the last touch while playing; `wake` is read here and not in
-    // composition, so a touch recomposes nothing.
-    LaunchedEffect(osd, stage, panel, showNext) {
-        if (osd && stage == Stage.Playing && panel == null) {
+    // The controls hide four seconds after the last touch while playing, never under TalkBack; `wake` is
+    // read here and not in composition, so a touch recomposes nothing.
+    val exploring = rememberTouchExploration()
+    LaunchedEffect(osd, stage, panel, showNext, exploring) {
+        if (osd && stage == Stage.Playing && panel == null && !exploring) {
             snapshotFlow { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
@@ -180,7 +187,16 @@ fun PhonePlayer(
         modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(live) {
+            // TalkBack has no tap on the picture: a double tap on it shows the controls.
+            .semantics {
+                if (live) {
+                    onClick(label = SHOW_CONTROLS) {
+                        osd = true
+                        wake++
+                        true
+                    }
+                }
+            }.pointerInput(live) {
                 if (!live) return@pointerInput
                 detectTapGestures(
                     onTap = {

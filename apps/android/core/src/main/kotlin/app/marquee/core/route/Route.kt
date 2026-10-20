@@ -138,8 +138,8 @@ sealed interface Route : NavKey {
 
     /**
      * Playing a video. It asks for the ranked versions itself (the view is shared, so this costs
-     * nothing when the title page or Versions already opened it), which also lets a restored stack
-     * start playing again after the process died.
+     * nothing when the title page or Versions already opened it). A stack restored after the process
+     * died never brings it back ([restoredStack]).
      */
     @Serializable
     data class Player(
@@ -187,4 +187,35 @@ enum class DefaultsMode {
 
     /** Settings: every row with its current switch, then back. */
     Settings,
+}
+
+/**
+ * A back stack the saved state brought back after the process died: the player, and whatever was over
+ * it, do not come back (plans/m6-android.md 7.1), so nothing starts playing by itself and the live
+ * views it needs are not assumed. Its title page stands in, with Resume one press away.
+ */
+fun restoredStack(stack: List<Route>): List<Route> {
+    val at = stack.indexOfFirst { it is Route.Player }
+    if (at < 0) return stack
+    val player = stack[at] as Route.Player
+    val kept = stack.take(at)
+    val below = kept.lastOrNull()
+    // A title page opened from Calendar carries its season: it is the same page.
+    val onTitle = below is Route.Title && below.kind == player.kind && below.id == player.id
+    return if (onTitle) kept else kept + Route.Title(player.kind, player.id)
+}
+
+/**
+ * The stack after a version was chosen on the Versions page at its top. Opened from the player, which
+ * waits paused under it, the page gives way with that player to the chosen version; otherwise the
+ * chosen version plays over the page.
+ */
+fun afterChoice(
+    stack: List<Route>,
+    chosen: Route.Player,
+): List<Route> {
+    val versions = stack.lastOrNull() as? Route.Versions ?: return stack + chosen
+    val below = stack.getOrNull(stack.lastIndex - 1)
+    val overPlayer = below is Route.Player && below.id == versions.id && below.videoId == versions.videoId
+    return if (overPlayer) stack.dropLast(2) + chosen else stack + chosen
 }

@@ -135,7 +135,7 @@ private fun Head(
         )
         when {
             status is ViewStatus.Failed -> {
-                Note("Calendar could not open: ${status.reason}", failed = true)
+                Note("Calendar could not open: ${status.reason}", failed = true, onRetry = view::retry)
             }
 
             snapshot == null -> {

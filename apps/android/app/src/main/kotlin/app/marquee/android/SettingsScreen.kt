@@ -635,6 +635,8 @@ internal fun LinkField(
         compact,
         warned = link.said?.token == true,
         onEdit = link::edited,
+        offered = link.offered,
+        onTaken = { link.offered = null },
     ) { url, acknowledged, clear ->
         link.run({ ack -> session.ops.installAddon(url, acknowledgeToken = ack).name }, clear, acknowledged)
     }
@@ -654,12 +656,22 @@ internal fun InstallField(
     warned: Boolean = false,
     /** The text changed. */
     onEdit: () -> Unit = {},
+    /** A link another app handed over: it fills the field (once, [onTaken]), and the user's Add adds it. */
+    offered: String? = null,
+    onTaken: () -> Unit = {},
     /** The link, whether the user confirmed its sign-in, and what clears the field once it is added. */
     onInstall: (String, Boolean, () -> Unit) -> Unit,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     var text by remember { mutableStateOf("") }
+    LaunchedEffect(offered) {
+        if (offered != null) {
+            text = offered
+            onEdit()
+            onTaken()
+        }
+    }
     val keyboard = LocalSoftwareKeyboardController.current
     // The keyboard goes, so how it went (under the button) is in sight.
     val add = {

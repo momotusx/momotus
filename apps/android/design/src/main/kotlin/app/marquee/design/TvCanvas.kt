@@ -22,17 +22,25 @@ fun tvScale(
 
 /**
  * Makes 1 dp equal 1 design point on any TV UI buffer (720p, 1080p, or the 1080p buffer a 4K panel
- * scales up), and ignores the system font scale there. A wider or narrower window than 16:9 gets
- * more canvas on the long side instead of bars. Every overlay is composed inside this tree
- * rather than as a Dialog or Popup window, so it shares the density and the focus handling.
+ * scales up). The system text size holds up to [TV_MAX_FONT_SCALE] (lane heights follow the type
+ * roles, so larger words get taller lanes). A wider or narrower window than 16:9 gets more canvas on
+ * the long side instead of bars. Every overlay is composed inside this tree rather than as a Dialog
+ * or Popup window, so it shares the density and the focus handling.
  */
 @Composable
 fun TvCanvas(content: @Composable () -> Unit) {
     val window = windowPx()
-    CompositionLocalProvider(LocalDensity provides Density(tvScale(window.width, window.height), fontScale = 1f)) {
+    val text = tvFontScale(LocalDensity.current.fontScale)
+    CompositionLocalProvider(LocalDensity provides Density(tvScale(window.width, window.height), fontScale = text)) {
         content()
     }
 }
+
+/** The largest system text size a TV honors: a 10-foot layout keeps its rows on screen. */
+const val TV_MAX_FONT_SCALE = 1.3f
+
+/** The system text size on a TV, up to [TV_MAX_FONT_SCALE]. */
+fun tvFontScale(system: Float): Float = system.coerceAtMost(TV_MAX_FONT_SCALE)
 
 /** The window in pixels; the display's size on the first frame, when the window can still say 0x0. */
 @Composable

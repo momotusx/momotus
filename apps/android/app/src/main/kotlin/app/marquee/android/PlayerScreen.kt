@@ -202,7 +202,7 @@ class PlayerHolder(
  * The Player route: the player of the current form with the window effects it needs, and the way
  * out. Leaving pauses first, so the sound stops with the tap and not after the fade.
  *
- * @param onVersions the Versions screen of this video (it replaces the player).
+ * @param onVersions the Versions screen of this video, over the player, which pauses.
  * @param onTitle the title page of a series, for its episodes; null for a movie.
  * @param onNext the next episode (it replaces the player).
  * @param onOffer the version the failure card offers, by its key (it replaces the player).
@@ -233,6 +233,10 @@ fun PlayerScreen(
         controller.pause()
         onBack()
     }
+    val versions = {
+        controller.pause()
+        onVersions()
+    }
     val next: (NextEpisode, String?) -> Unit = { episode, binge ->
         holder.shutdown()
         onNext(episode, binge)
@@ -242,13 +246,13 @@ fun PlayerScreen(
         onOffer(key)
     }
     if (form == Form.Tv) {
-        TvPlayer(controller, holder.autoplayNext, onVersions, onTitle, next, leave, active = active, onOffer = offer)
+        TvPlayer(controller, holder.autoplayNext, versions, onTitle, next, leave, active = active, onOffer = offer)
     } else {
         PhonePlayer(
             controller,
             holder.autoplayNext,
             window.inPip,
-            onVersions,
+            versions,
             onTitle,
             next,
             window::enterPip,

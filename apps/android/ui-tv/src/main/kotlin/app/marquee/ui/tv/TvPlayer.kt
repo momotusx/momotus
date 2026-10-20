@@ -75,6 +75,7 @@ import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.endsAt
 import app.marquee.player.nextSpeed
+import app.marquee.player.rememberTouchExploration
 import app.marquee.player.seekStepMs
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
@@ -128,6 +129,9 @@ fun TvPlayer(
 
     val root = remember { FocusRequester() }
     val play = remember { FocusRequester() }
+    val scrub = remember { FocusRequester() }
+    // Where focus goes when the controls come back, when not play and pause (the bar, after a seek).
+    var enterOn by remember { mutableStateOf<FocusRequester?>(null) }
     val audioAction = remember { FocusRequester() }
     val subtitlesAction = remember { FocusRequester() }
     val failFocus = remember { FocusRequester() }
@@ -160,10 +164,12 @@ fun TvPlayer(
         derivedStateOf { ceil((controller.durationMs - controller.positionMs) / 1000.0).toInt().coerceAtLeast(0) }
     }
 
-    // Controls hide while playing, once nothing is open and nothing is asking for an answer. Every key
-    // starts the wait again; `wake` is read here and not in composition, so a key press recomposes nothing.
-    LaunchedEffect(osd, stage, panel, showNext) {
-        if (osd && stage == Stage.Playing && panel == null && !showNext) {
+    // Controls hide while playing, once nothing is open and nothing is asking for an answer, and never
+    // under TalkBack. Every key starts the wait again; `wake` is read here and not in composition, so a
+    // key press recomposes nothing.
+    val exploring = rememberTouchExploration()
+    LaunchedEffect(osd, stage, panel, showNext, exploring) {
+        if (osd && stage == Stage.Playing && panel == null && !showNext && !exploring) {
             snapshotFlow { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
@@ -174,7 +180,8 @@ fun TvPlayer(
     // when they are gone (so keys still arrive), the way on when nothing plays.
     LaunchedEffect(showControls) {
         withFrameNanos { }
-        runCatching { if (showControls) play.requestFocus() else root.requestFocus() }
+        runCatching { if (showControls) (enterOn ?: play).requestFocus() else root.requestFocus() }
+        enterOn = null
     }
     LaunchedEffect(stage == Stage.Failed) {
         if (stage == Stage.Failed) {
@@ -311,12 +318,18 @@ fun TvPlayer(
 
                     else -> {
                         wake++
-                        // While the controls are hidden the first key only brings them back, except select
-                        // while a Skip button shows: that presses it.
+                        // While the controls are hidden the first key brings them back, except select while a
+                        // Skip button shows (that presses it), and Left and Right: they seek at once, as on the
+                        // Apple TV app, with the focus on the bar so a held key goes on scrubbing.
                         if (live && !osd) {
                             val skip = segment
+                            val seek = hiddenSeekMs(event.key)
                             if (showSkip && skip != null && event.key in selectKeys) {
                                 controller.skip(skip)
+                            } else if (seek != null) {
+                                controller.seekBy(seek)
+                                enterOn = scrub
+                                osd = true
                             } else {
                                 osd = true
                             }
@@ -392,6 +405,7 @@ fun TvPlayer(
             Controls(
                 controller = controller,
                 play = play,
+                scrub = scrub,
                 audioAction = audioAction,
                 subtitlesAction = subtitlesAction,
                 onAudio = { panel = Panel.Audio },
@@ -507,6 +521,7 @@ private fun EndsAt(
 private fun Controls(
     controller: PlaybackController,
     play: FocusRequester,
+    scrub: FocusRequester,
     audioAction: FocusRequester,
     subtitlesAction: FocusRequester,
     onAudio: () -> Unit,
@@ -532,6 +547,7 @@ private fun Controls(
                     modifier =
                         Modifier
                             .weight(1f)
+                            .focusRequester(scrub)
                             .marqueeFocus(8.dp, scale = 1f)
                             .onFocusChanged {
                                 scrubFocused = it.isFocused
@@ -605,6 +621,14 @@ private fun Controls(
         }
     }
 }
+
+/** Left and Right while the controls are hidden: ten seconds back or ahead. */
+internal fun hiddenSeekMs(key: Key): Long? =
+    when (key) {
+        Key.DirectionLeft -> -SEEK_MS
+        Key.DirectionRight -> SEEK_MS
+        else -> null
+    }
 
 /** Left and right on the position bar: steps that grow while the key is held, committed when it is let go. */
 private fun scrubKey(
