@@ -12,7 +12,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Client, cleanup, JOURNEY_PORT, PORTS, startBridge, startIfPaused, until, watch } from "./core";
+import { Client, cleanup, JOURNEY_PORT, PORTS, SHOTS, startBridge, startIfPaused, until, watch } from "./core";
 import { ensureMedia, NAME, startSource } from "./source";
 import { applyDiffs } from "../src/core/diff";
 import type { HomeRow } from "../src/core/generated/HomeRow";
@@ -1191,4 +1191,54 @@ test("TV: a focused chip gone after the page scrolled hands the focus to its nea
   });
   await expect.poll(() => focusedKey(p)).toBe(nearest);
   await context.close();
+});
+
+test("phone player, portrait and landscape: transport centred, scrubber then options at the foot, subtitles lifted above them", async ({ browser }) => {
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  await c.req("setPrefs", { patch: { subtitleLanguages: ["eng"] } }).finally(() => c.close());
+  for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const { context, page: p } = await page(browser, size);
+    await p.goto("/play/movie/mqjm/mqjm?form=phone");
+    await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await startIfPaused(p);
+    // A line on screen (the English file's first, from 1 s to 30 s).
+    await p.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = 2;
+    });
+    await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
+    // The controls up, by a tap on the picture.
+    await p.mouse.click(size.width / 2, size.height / 3);
+    await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
+    await p.waitForTimeout(400);
+    const box = (sel: string) => p.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+    const [transport, scrub, options] = [await box(".transport"), await box(".tl"), await box(".pacts")];
+    // The transport in the middle of the screen.
+    expect(Math.abs(transport.left + transport.width / 2 - size.width / 2)).toBeLessThan(3);
+    expect(Math.abs(transport.top + transport.height / 2 - size.height / 2)).toBeLessThan(3);
+    // At the foot: the scrubber, then the options row under it, above the safe area.
+    expect(transport.bottom).toBeLessThan(scrub.top);
+    expect(scrub.bottom).toBeLessThanOrEqual(options.top);
+    expect(options.bottom).toBeLessThanOrEqual(size.height - 8);
+    expect(size.height - options.bottom).toBeLessThan(40);
+    // The line sits just above the controls, never under them, never at the top.
+    const cue = () =>
+      p.evaluate(() => {
+        const v = document.querySelector("video") as HTMLVideoElement;
+        const c = v.textTracks[0]?.activeCues?.[0] as VTTCue | undefined;
+        return c ? { snap: c.snapToLines, line: c.line, align: c.lineAlign, height: v.getBoundingClientRect().height } : null;
+      });
+    await expect.poll(async () => (await cue())?.snap).toBe(false);
+    const lifted = await cue();
+    const foot = ((lifted?.line as number) / 100) * (lifted?.height ?? 0);
+    expect(lifted?.align).toBe("end");
+    expect(foot).toBeLessThanOrEqual(scrub.top);
+    expect(foot).toBeGreaterThan(scrub.top - 40);
+    await p.screenshot({ path: `${SHOTS}/phone-player-${size.width}x${size.height}.png` });
+    // Controls hidden: the line goes back to the foot of the picture.
+    await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+    await expect.poll(async () => (await cue())?.line).toBe("auto");
+    expect((await cue())?.snap).toBe(true);
+    await context.close();
+  }
 });

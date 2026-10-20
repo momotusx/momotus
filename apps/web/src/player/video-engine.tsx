@@ -32,9 +32,13 @@ export function createVideoEngine(events: EngineEvents): Engine {
   // The subtitle delay moves each cue from the time its file gave it.
   let delay = 0;
   const given = new WeakMap<TextTrackCue, [number, number]>();
+  // Lifted (the controls show), each line ends `lift` px above the foot,
+  // as a share of the element's height; at rest it takes its own place.
+  let lift = 0;
   const shiftCues = () => {
     const cues = video?.textTracks[0]?.cues;
     if (!cues) return;
+    const height = video.getBoundingClientRect().height;
     for (const cue of Array.from(cues)) {
       let at = given.get(cue);
       if (!at) {
@@ -43,6 +47,16 @@ export function createVideoEngine(events: EngineEvents): Engine {
       }
       cue.startTime = Math.max(0, at[0] + delay);
       cue.endTime = Math.max(0, at[1] + delay);
+      const line = cue as VTTCue;
+      if (lift > 0 && height > 0) {
+        line.snapToLines = false;
+        line.lineAlign = "end";
+        line.line = Math.max(0, 100 - (lift / height) * 100);
+      } else if (!line.snapToLines) {
+        line.snapToLines = true;
+        line.lineAlign = "start";
+        line.line = "auto";
+      }
     }
   };
 
@@ -149,6 +163,11 @@ export function createVideoEngine(events: EngineEvents): Engine {
     },
     setSubtitleDelay(sec) {
       delay = sec;
+      shiftCues();
+    },
+    setSubtitleLift(px) {
+      if (px === lift) return;
+      lift = px;
       shiftCues();
     },
     selectTrack(kind, id) {

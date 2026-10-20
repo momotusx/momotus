@@ -162,7 +162,9 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 /* Phone: compact controls along the bottom. */
 [data-form="phone"] .player-scr { position: fixed; inset: 0; }
 [data-form="phone"] .osd-top { height: 120px; }
-[data-form="phone"] .osd-bot { height: 260px; }
+/* Only as tall as the controls at the foot, so a line lifted above them
+ * stays bright. */
+[data-form="phone"] .osd-bot { height: 130px; }
 [data-form="phone"] .ptitle h1 { font-size: 22px; }
 [data-form="phone"] .ptitle p { font-size: 15px; margin-top: 2px; }
 [data-form="phone"] .ptitle { right: var(--safe-side); }
@@ -173,8 +175,12 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .pstate svg { width: 22px; height: 22px; }
 [data-form="phone"] .attempts li { flex-direction: column; gap: 0; font-size: 13px; }
 [data-form="phone"] .tl { gap: 10px; font-size: 13px; }
-[data-form="phone"] .ctl { grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
-[data-form="phone"] .transport { grid-column: 1; justify-self: center; gap: 18px; }
+/* A phone: the transport in the middle of the screen; at the foot, above the
+ * home indicator, the scrubber, then the options row under it. */
+[data-form="phone"] .osd { left: calc(var(--safe-side) + env(safe-area-inset-left)); right: calc(var(--safe-side) + env(safe-area-inset-right));
+  bottom: calc(var(--safe-bottom) + env(safe-area-inset-bottom)); }
+[data-form="phone"] .ctl { grid-template-columns: 1fr; gap: 14px; margin-top: 12px; }
+[data-form="phone"] .transport { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); gap: 28px; }
 [data-form="phone"] .round { width: 48px; height: 48px; }
 [data-form="phone"] .round svg { width: 22px; height: 22px; }
 [data-form="phone"] .round-n { font-size: 8px; }

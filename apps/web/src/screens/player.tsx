@@ -260,6 +260,19 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     sound.muted = muted();
     engine.setVolume(muted() ? 0 : volume());
   });
+  // A phone: while the controls show, subtitles sit just above them, never
+  // under them; hidden, the lines go back to the foot of the picture.
+  const liftCues = () => {
+    const bar = document.querySelector<HTMLElement>(".player-scr .osd");
+    const picture = document.querySelector<HTMLElement>(".player-scr video")?.getBoundingClientRect();
+    const up = form() === "phone" && osd() && !!bar && !ended();
+    engine.setSubtitleLift(up && bar && picture ? Math.max(0, picture.bottom - bar.getBoundingClientRect().top + 12) : 0);
+  };
+  createEffect(on([osd, ended, url], () => requestAnimationFrame(liftCues)));
+  onMount(() => {
+    window.addEventListener("resize", liftCues);
+    onCleanup(() => window.removeEventListener("resize", liftCues));
+  });
   const [full, setFull] = createSignal(!!document.fullscreenElement);
   onMount(() => {
     const changed = () => setFull(!!document.fullscreenElement);
