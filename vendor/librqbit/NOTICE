@@ -98,3 +98,7 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   `PieceChecked(ok)`, the per-file count and `have_bytes` move under the
   lock that sets `have`.
 - src/storage/filesystem/punch.rs: the punch is retried on EINTR.
+- src/torrent_state/live/mod.rs, src/torrent_state/live/evict.rs: a
+  torrent that evicts keeps its peers when it finishes (upstream drops
+  them, and queuing them again while their old connections go can drop a
+  peer for good).
