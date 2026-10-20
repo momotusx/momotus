@@ -14,6 +14,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkles from "lucide-solid/icons/sparkles";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import Undo2 from "lucide-solid/icons/undo-2";
+import UserRoundX from "lucide-solid/icons/user-round-x";
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
@@ -54,6 +55,20 @@ export default function Versions() {
       read={() => ({ kind: decoded(params.kind), id: decoded(params.id), videoId: decoded(params.videoId) })}
       page={VersionsPage}
     />
+  );
+}
+
+/** The core's `nobodySharing`: every version is a swarm with one seeder or
+ * none right now, said before Play on the card and over the list. */
+function NobodySharing(props: { class: string; status?: boolean }) {
+  return (
+    <p class={props.class} role={props.status ? "status" : undefined}>
+      <UserRoundX aria-hidden />
+      <span>
+        <b>{choiceWords.nobodySharing.text}</b>
+        <small>{choiceWords.nobodySharing.details}</small>
+      </span>
+    </p>
   );
 }
 
@@ -305,6 +320,9 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                   <p class="rel">
                     <Release name={p().releaseName} />
                   </p>
+                  <Show when={snap()?.nobodySharing}>
+                    <NobodySharing class="nobody" status />
+                  </Show>
                   <button class="btn primary" data-f="versions:play" data-autofocus onClick={() => play(p().key)}>
                     <Play aria-hidden class="fill" />
                     Play this version
@@ -321,6 +339,9 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
           </section>
 
           <section class="alts" aria-label="All versions">
+            <Show when={snap()?.nobodySharing}>
+              <NobodySharing class="lnote nobody" />
+            </Show>
             <Show when={note()?.text}>
               {(text) => (
                 <p class="lnote" role="status">

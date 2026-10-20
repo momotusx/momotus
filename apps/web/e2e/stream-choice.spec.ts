@@ -10,6 +10,7 @@
 
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
 import type { Prefs } from "../src/core/generated/Prefs";
 import type { StreamConditions } from "../src/core/generated/StreamConditions";
 import type { VersionsSnapshot } from "../src/core/generated/VersionsSnapshot";
@@ -33,6 +34,8 @@ const sent: Msg[] = [];
 
 const NOTE_PREFS: Prefs["streams"] = { quality: "balanced", maxHeight: null, maxSizeBytes: null, languages: [], avoid: [], sizeLimitBytes: 5 * GiB, minSeeders: 50, hdr: true, preferReady: true, learn: true };
 
+// The words the core's states are said in (shared with Android and Apple).
+const choice = JSON.parse(readFileSync(new URL("../../shared/stream-choice-words.json", import.meta.url), "utf8")) as { nobodySharing: { text: string; details: string } };
 const shot = (page: Page, name: string, form: Form, fullPage = false) =>
   page.waitForTimeout(500).then(() => page.screenshot({ path: `${OUT}/${name}-${form}.jpg`, type: "jpeg", quality: 80, fullPage }));
 const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
@@ -343,6 +346,30 @@ test.describe("Versions", () => {
     // The player, opened straight (a deep link), says the same (no playback is opened).
     await page.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`);
     await expect(page.locator(".player-scr")).toContainText("only through a streaming service account", { timeout: 60_000 });
+  });
+
+  test("almost nobody sharing: the card says so before Play, and the list over its rows", async ({ browser }) => {
+    const words = `${choice.nobodySharing.text}${choice.nobodySharing.details}`;
+    for (const form of ["desktop", "phone"] as const) {
+      const page = await device(browser, form, PORTS.bridge, { versions: (s) => ({ ...s, nobodySharing: true }) });
+      await page.goto(path(form));
+      await firstRow(page);
+      const card = page.locator(".pick .nobody");
+      await expect(card).toHaveText(words);
+      await expect(card).toHaveAttribute("role", "status");
+      // Said before Play: the line comes right before the button.
+      await expect(page.locator('.pick .nobody + [data-f="versions:play"]')).toHaveCount(1);
+      await expect(page.locator(".alts .lnote.nobody")).toHaveText(words);
+      await shot(page, "stream-choice-nobody-sharing", form);
+      await page.context().close();
+    }
+    // This core has no engine, so no live counts: it never says so.
+    const plain = await device(browser, "desktop", PORTS.bridge);
+    await plain.goto(path("desktop"));
+    await firstRow(plain);
+    await expect(plain.locator(".pick h2")).toBeVisible();
+    await expect(plain.locator(".nobody")).toHaveCount(0);
+    await plain.context().close();
   });
 
   test("the learning note shows once with Undo, which mutes that choice", async ({ browser }) => {
