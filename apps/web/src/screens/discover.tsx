@@ -4,9 +4,11 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, Match, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
+import { Why } from "../components/why";
 import { discoverView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import { defaultsWords } from "../lib/defaults";
+import { problemWords } from "../lib/words";
 import "./browse.css";
 
 // Where the page was scrolled to: the view is kept, so Back lands here too.
@@ -42,7 +44,7 @@ function DiscoverPage(props: { retry: () => void }) {
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">
             <h2>Discover could not open</h2>
-            <p>{(view.state.status as { reason: string }).reason}</p>
+            <Why reason={(view.state.status as { reason: string }).reason} />
             <button class="btn primary" data-f="discover:retry" data-autofocus onClick={() => props.retry()}>
               <RefreshCw aria-hidden />
               Try again
@@ -105,7 +107,7 @@ function DiscoverPage(props: { retry: () => void }) {
                 <Match when={s().items.length === 0 && s().state.state === "failed"}>
                   <p class="note bad">
                     <i class="dot" />
-                    {catalogName()} did not answer: {(s().state as { reason: string }).reason}
+                    {catalogName()} could not load. {problemWords((s().state as { reason: string }).reason).text}
                   </p>
                 </Match>
                 <Match when={s().items.length === 0}>
@@ -122,7 +124,7 @@ function DiscoverPage(props: { retry: () => void }) {
                         <Switch fallback={`${s().items.length} titles`}>
                           <Match when={s().state.state === "loading"}>Loading more</Match>
                           <Match when={s().state.state === "end"}>{`All ${s().items.length} titles in ${catalogName()}`}</Match>
-                          <Match when={s().state.state === "failed"}>{`Could not load more: ${(s().state as { reason: string }).reason}`}</Match>
+                          <Match when={s().state.state === "failed"}>{`Could not load more. ${problemWords((s().state as { reason: string }).reason).text}`}</Match>
                         </Switch>
                       </p>
                     }

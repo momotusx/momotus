@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, restartLine, serverHost, slowWords, statusText, subtitleNote } from "./words";
+import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, problemWords, restartLine, serverHost, slowWords, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { Learned } from "../core/generated/Learned";
 import type { ReasonLine } from "../core/generated/ReasonLine";
@@ -203,4 +203,20 @@ test("the next version, tried or offered, by its label", () => {
 test("slow addons agree in number", () => {
   expect(slowWords(["Torrentio"])).toBe("Torrentio is slow, still waiting");
   expect(slowWords(["Torrentio", "Comet"])).toBe("Torrentio, Comet are slow, still waiting");
+});
+
+test("raw reasons read as sentences, the raw text kept", () => {
+  const net = "network: error sending request for url (https://x.example/catalog.json): Connection refused (os error 61)";
+  expect(problemWords(net)).toEqual({ text: "It could not be reached. Check the connection, then try again.", raw: net });
+  expect(problemWords("timed out after 10s").text).toBe("It did not answer in time. Check the connection, then try again.");
+  expect(problemWords("timed out").text).toBe("It did not answer in time. Check the connection, then try again.");
+  expect(problemWords("http status 404").text).toBe("It has nothing at this address (404).");
+  expect(problemWords("http status 403").text).toBe("It refused access (403).");
+  expect(problemWords("http status 429").text).toBe("It is busy; try again soon (429).");
+  expect(problemWords("http status 502").text).toBe("It had an error on its side (502).");
+  expect(problemWords("http status 400").text).toBe("It answered with an error (400).");
+  expect(problemWords("decode: expected value at line 1").text).toBe("It sent something Marquee cannot read.");
+  expect(problemWords("addon returned no catalog items").text).toBe("It sent an empty list.");
+  // The core's own sentences stay as they are.
+  expect(problemWords("Cinemeta did not answer in time")).toEqual({ text: "Cinemeta did not answer in time", raw: null });
 });

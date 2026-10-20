@@ -23,7 +23,7 @@ import { onProfileReset } from "../core/profiles";
 import { focusEl, isBackKey, mayAutoFocus } from "../focus/dom";
 import { historyDepth } from "../history";
 import { titlePath } from "../lib/format";
-import { kindLabel } from "../lib/words";
+import { kindLabel, problemWords } from "../lib/words";
 import "./browse.css";
 import "./search.css";
 
@@ -224,7 +224,7 @@ function SearchPanel(props: { dialog?: boolean }) {
                       <Match when={row.state.state === "failed" && row.tiles.length === 0}>
                         <p class="st bad palette-note">
                           <i class="dot" />
-                          {row.source} could not search {row.title}: {row.state.state === "failed" ? row.state.reason : ""}
+                          {row.source} could not search {row.title}. {row.state.state === "failed" ? problemWords(row.state.reason).text : ""}
                         </p>
                       </Match>
                       <Match when={row.tiles.length === 0}>

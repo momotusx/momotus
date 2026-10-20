@@ -9,6 +9,7 @@ import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "./art";
+import { Why } from "./why";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { op } from "../core/client";
@@ -215,7 +216,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                 <p>
                   {props.row.source} could not load {props.row.title}.
                 </p>
-                <p class="why">{props.row.state.state === "failed" ? props.row.state.reason : ""}</p>
+                <Why class="why" reason={props.row.state.state === "failed" ? props.row.state.reason : ""} />
               </div>
               <A class="btn" href="/welcome?step=3" data-f={`fix:${id()}`}>
                 <Wrench aria-hidden />

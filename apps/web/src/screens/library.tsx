@@ -3,6 +3,7 @@ import Compass from "lucide-solid/icons/compass";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createSignal, Match, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
+import { Why } from "../components/why";
 import { libraryView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import type { LibrarySort } from "../core/generated/LibrarySort";
@@ -45,7 +46,7 @@ function LibraryPage(props: { retry: () => void }) {
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">
             <h2>Your library could not open</h2>
-            <p>{(view.state.status as { reason: string }).reason}</p>
+            <Why reason={(view.state.status as { reason: string }).reason} />
             <button class="btn primary" data-f="library:retry" data-autofocus onClick={() => props.retry()}>
               <RefreshCw aria-hidden />
               Try again

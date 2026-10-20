@@ -747,3 +747,27 @@ export const noVersionWords = {
 
 /** Addons still answering past their time: "Torrentio is slow", "Torrentio, Comet are slow". */
 export const slowWords = (names: string[]) => `${names.join(", ")} ${names.length > 1 ? "are" : "is"} slow, still waiting`;
+
+/** A raw reason from the core (its HTTP and addon errors, "network: error
+ * sending request ...") as a sentence a viewer reads, with the raw text kept
+ * for a details toggle. A reason the core already wrote as a sentence ("Cinemeta did not
+ * answer in time") stays as it is. */
+export function problemWords(reason: string): { text: string; raw: string | null } {
+  const r = reason.trim();
+  const said = (text: string) => ({ text, raw: r });
+  const status = /^http status (\d{3})/i.exec(r)?.[1];
+  if (status) {
+    const n = Number(status);
+    if (n === 404 || n === 410) return said(`It has nothing at this address (${n}).`);
+    if (n === 401 || n === 403) return said(`It refused access (${n}).`);
+    if (n === 429) return said(`It is busy; try again soon (${n}).`);
+    if (n >= 500) return said(`It had an error on its side (${n}).`);
+    return said(`It answered with an error (${n}).`);
+  }
+  if (/^timed out/i.test(r)) return said("It did not answer in time. Check the connection, then try again.");
+  if (/^network:/i.test(r)) return said("It could not be reached. Check the connection, then try again.");
+  if (/^(decode:|response larger than)/i.test(r)) return said("It sent something Marquee cannot read.");
+  if (/^blocked private address/i.test(r)) return said("It points to a private network address, which Marquee does not open.");
+  if (/^addon returned no catalog items/i.test(r)) return said("It sent an empty list.");
+  return { text: r, raw: null };
+}

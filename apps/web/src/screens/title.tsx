@@ -17,6 +17,7 @@ import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
+import { Why } from "../components/why";
 import { CONTINUE_ROW, removeFromContinue } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
@@ -105,7 +106,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
             <div class="problem">
               <CircleAlert aria-hidden class="problem-icon" />
               <h2>This title could not be opened</h2>
-              <p>{failure(view)}</p>
+              <Why reason={failure(view)} />
               <div class="problem-acts">
                 <button class="btn primary" data-f="title:retry" data-autofocus onClick={() => props.retry()}>
                   <RefreshCw aria-hidden />

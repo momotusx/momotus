@@ -20,6 +20,7 @@ import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch 
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
+import { Why } from "../components/why";
 import { op } from "../core/client";
 import type { Group } from "../core/generated/Group";
 import type { ReasonLine } from "../core/generated/ReasonLine";
@@ -228,7 +229,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
           {(reason) => (
             <section class="vempty problem">
               <h2>{ctx.failure() ? nextVersion.titleNotOpened : "Versions could not be loaded"}</h2>
-              <p>{reason()}</p>
+              <Why reason={reason()} />
               <div class="acts">
                 <button class="btn primary" data-f="versions:retry" data-autofocus onClick={() => props.retry()}>
                   <RefreshCw aria-hidden />

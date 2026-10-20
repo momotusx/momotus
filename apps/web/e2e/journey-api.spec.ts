@@ -432,3 +432,15 @@ test("Start over beside Resume plays the same video from its beginning", async (
   expect(await time()).toBeLessThan(30);
   await context.close();
 });
+
+test("a raw reason reads in plain words, the core's text behind Details", async ({ browser }) => {
+  const raw = "network: error sending request for url (http://127.0.0.1:9/catalog.json): Connection refused (os error 61)";
+  const { context, page: p } = await page(browser, undefined, (m) => (m.op === "subscribe" && m.view === "library" ? { ok: false, error: raw } : undefined));
+  await p.goto("/library?form=desktop");
+  const problem = p.locator(".problem").first();
+  await expect(problem).toContainText("It could not be reached. Check the connection, then try again.", { timeout: 30_000 });
+  await expect(problem.locator(".why-raw code")).toBeHidden();
+  await problem.locator(".why-raw summary").click();
+  await expect(problem.locator(".why-raw code")).toHaveText(raw);
+  await context.close();
+});
