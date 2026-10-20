@@ -301,3 +301,50 @@ async fn a_relaunch_skips_the_full_check() {
         "the relaunch checked every byte: {took:?}"
     );
 }
+
+/// A torrent that goes leaves its have-bitfield on disk at once: a process
+/// that ends right after (the CLI) never runs the bitfield's flusher again,
+/// and the next launch would fetch those pieces anew (engine review r3,
+/// P2-2). One thread, so nothing runs between the removal and the read; a
+/// small budget keeps readahead from finishing the file, and under 16 MiB
+/// arrives (each of which flushes on its own).
+#[tokio::test(flavor = "current_thread")]
+async fn a_removed_torrent_leaves_its_pieces_on_disk() {
+    let movie: Vec<u8> = (0..24u32 << 20)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    let s = support::swarm_movie("movie.mkv", movie).await;
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let engine = Engine::start(mq_engine::EngineConfig {
+        discovery: false,
+        // A 2 MiB readahead.
+        cache_budget_bytes: 8 << 20,
+        ..mq_engine::EngineConfig::new(
+            dir.path(),
+            http.torrent_scope(&[Ipv4Addr::LOCALHOST.into()]),
+        )
+    })
+    .await
+    .unwrap();
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    read_range(&engine, t, movie, 0, 1 << 20).await;
+    let stats = engine.stats(t).await.unwrap();
+    assert!(
+        stats.pieces_have < stats.pieces_total && stats.downloaded_bytes < 16 << 20,
+        "the file finished or 16 MiB came, which flushes on its own: {stats:?}"
+    );
+    engine.remove(t, true).await.unwrap();
+    let have = std::fs::read(dir.path().join(format!("{}.have", s.info_hash))).unwrap();
+    assert!(
+        have.iter().any(|b| *b != 0),
+        "no piece on disk after the removal: {have:?}"
+    );
+}
