@@ -13,7 +13,10 @@ use std::fmt::Write as _;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use swarm::{HEALTHY, Kind, MIB, Profile, RunResult, SEEK_CAP_S, SPARSE, TTP_CAP_S, run};
+use swarm::{
+    HEALTHY, Kind, MIB, PLAY_BETWEEN_SEEKS, Profile, RunResult, SEEK_CAP_S, SPARSE, TTP_CAP_S,
+    run_for,
+};
 
 const PIECES: [u32; 3] = [256 * 1024, 4 << 20, 16 << 20];
 
@@ -34,12 +37,20 @@ fn main() {
         )
         .into()
     });
+    // Seconds played before each seek, and one scheduler only (`--sched dwh`).
+    let play_us = arg("--play-s").map_or(PLAY_BETWEEN_SEEKS, |s| {
+        s.parse::<u64>().expect("--play-s N") * 1_000_000
+    });
+    let only = arg("--sched");
     let profiles: [&Profile; 2] = [&HEALTHY, &SPARSE];
 
     let mut jobs = Vec::new();
     for pi in 0..profiles.len() {
         for piece in PIECES {
             for kind in Kind::ALL {
+                if only.as_deref().is_some_and(|o| o != kind.name()) {
+                    continue;
+                }
                 for seed in 0..seeds {
                     jobs.push((pi, piece, kind, seed));
                 }
@@ -56,7 +67,7 @@ fn main() {
                     let Some(&(pi, piece, kind, seed)) = jobs.get(i) else {
                         break;
                     };
-                    let r = run(profiles[pi], piece, seed, kind);
+                    let r = run_for(profiles[pi], piece, seed, kind, play_us);
                     slots.lock().expect("lock")[i] = Some(r);
                 }
             });
@@ -74,7 +85,7 @@ fn main() {
         let seeks: Vec<String> = r.seeks.iter().map(|s| num(*s)).collect();
         writeln!(
             jsonl,
-            "{{\"profile\":\"{}\",\"piece_kib\":{},\"sched\":\"{}\",\"seed\":{},\"ttp_s\":{},\"seeks_s\":[{}],\"rebuffer_s\":{:.3},\"played_s\":{:.3},\"payload_mib\":{:.2},\"dup_mib\":{:.3},\"requests\":{},\"cancels\":{}}}",
+            "{{\"profile\":\"{}\",\"piece_kib\":{},\"sched\":\"{}\",\"seed\":{},\"ttp_s\":{},\"seeks_s\":[{}],\"rebuffer_s\":{:.3},\"played_s\":{:.3},\"ahead_p10_s\":{},\"payload_mib\":{:.2},\"dup_mib\":{:.3},\"requests\":{},\"cancels\":{}}}",
             profiles[pi].name,
             piece / 1024,
             kind.name(),
@@ -83,6 +94,7 @@ fn main() {
             seeks.join(","),
             r.rebuffer_s,
             r.played_s,
+            num(Some(pct(&sorted(&r.ahead_s), 0.1)).filter(|v| !v.is_nan())),
             r.payload as f64 / MIB as f64,
             r.dup as f64 / MIB as f64,
             r.requests,
@@ -97,6 +109,12 @@ fn main() {
     eprintln!("wrote {} runs to {out}", results.len());
 
     println!("{}", summary(&profiles, &jobs, &results, seeds));
+}
+
+fn sorted(v: &[f64]) -> Vec<f64> {
+    let mut v = v.to_vec();
+    v.sort_by(f64::total_cmp);
+    v
 }
 
 fn num(v: Option<f64>) -> String {
@@ -133,10 +151,14 @@ fn summary(profiles: &[&Profile], jobs: &[Job], results: &[RunResult], seeds: u6
     .expect("write");
     writeln!(
         s,
-        "| swarm | piece | scheduler | playable p50 | p90 | p99 | seek p50 | p90 | p99 | capped start / seeks | rebuffer | dup bytes |"
+        "| swarm | piece | scheduler | playable p50 | p90 | p99 | seek p50 | p90 | p99 | capped start / seeks | rebuffer | ahead p10 | ahead p50 | dup bytes |"
     )
     .expect("write");
-    writeln!(s, "|---|---|---|---|---|---|---|---|---|---|---|---|").expect("write");
+    writeln!(
+        s,
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+    )
+    .expect("write");
     for (pi, profile) in profiles.iter().enumerate() {
         for piece in PIECES {
             for kind in Kind::ALL {
@@ -146,6 +168,9 @@ fn summary(profiles: &[&Profile], jobs: &[Job], results: &[RunResult], seeds: u6
                     .filter(|(j, _)| j.0 == pi && j.1 == piece && j.2 == kind)
                     .map(|(_, r)| r)
                     .collect();
+                if rs.is_empty() {
+                    continue;
+                }
                 let mut ttp: Vec<f64> = rs.iter().map(|r| r.ttp.unwrap_or(TTP_CAP_S)).collect();
                 let mut seek: Vec<f64> = rs
                     .iter()
@@ -161,6 +186,8 @@ fn summary(profiles: &[&Profile], jobs: &[Job], results: &[RunResult], seeds: u6
                     .count();
                 let played: f64 = rs.iter().map(|r| r.played_s + r.rebuffer_s).sum();
                 let rebuffer: f64 = rs.iter().map(|r| r.rebuffer_s).sum();
+                let ahead: Vec<f64> = rs.iter().flat_map(|r| r.ahead_s.iter().copied()).collect();
+                let ahead = sorted(&ahead);
                 let payload: u64 = rs.iter().map(|r| r.payload).sum();
                 let dup: u64 = rs.iter().map(|r| r.dup).sum();
                 let piece_label = if piece < 1 << 20 {
@@ -170,7 +197,7 @@ fn summary(profiles: &[&Profile], jobs: &[Job], results: &[RunResult], seeds: u6
                 };
                 writeln!(
                     s,
-                    "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} / {} | {:.1}% | {:.2}% |",
+                    "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} / {} | {:.1}% | {} | {} | {:.2}% |",
                     profile.name,
                     piece_label,
                     kind.name(),
@@ -183,6 +210,8 @@ fn summary(profiles: &[&Profile], jobs: &[Job], results: &[RunResult], seeds: u6
                     capped_ttp,
                     capped_seek,
                     100.0 * rebuffer / played.max(1e-9),
+                    cell(pct(&ahead, 0.1), f64::INFINITY),
+                    cell(pct(&ahead, 0.5), f64::INFINITY),
                     100.0 * dup as f64 / payload.max(1) as f64,
                 )
                 .expect("write");

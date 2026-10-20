@@ -20,7 +20,7 @@ const STEP: u64 = 5_000;
 pub const TTP_CAP_S: f64 = 120.0;
 pub const SEEK_CAP_S: f64 = 60.0;
 pub const SEEKS: usize = 5;
-const PLAY_BETWEEN_SEEKS: u64 = 6 * US;
+pub const PLAY_BETWEEN_SEEKS: u64 = 6 * US;
 const NFO_LEN: u64 = 37_000;
 const VIDEO_LEN: u64 = 8 << 30;
 const DURATION_S: u64 = 7200;
@@ -262,6 +262,9 @@ pub struct RunResult {
     pub seeks: Vec<Option<f64>>,
     pub rebuffer_s: f64,
     pub played_s: f64,
+    /// Contiguous verified seconds ahead of the playhead, once a second of
+    /// playback (plans/streaming-window.md phase 0, readahead order).
+    pub ahead_s: Vec<f64>,
     pub payload: u64,
     pub dup: u64,
     pub requests: u64,
@@ -298,9 +301,22 @@ struct Sim {
     targets: Vec<u64>,
     /// Demands that reached playback, with their open time.
     ready_ids: Vec<(DemandId, u64)>,
+    play_between: u64,
 }
 
+#[allow(dead_code)] // tests/sim_smoke.rs
 pub fn run(profile: &Profile, piece_len: u32, seed: u64, kind: Kind) -> RunResult {
+    run_for(profile, piece_len, seed, kind, PLAY_BETWEEN_SEEKS)
+}
+
+/// [`run`] playing `play_between` microseconds before each seek.
+pub fn run_for(
+    profile: &Profile,
+    piece_len: u32,
+    seed: u64,
+    kind: Kind,
+    play_between: u64,
+) -> RunResult {
     let geo = Geometry::new(piece_len, &[NFO_LEN, VIDEO_LEN]).expect("valid geometry");
     let cell = seed ^ (u64::from(piece_len) << 32) ^ (profile.name.len() as u64) << 56;
     let mut rng = Rng::new(cell.wrapping_mul(0x2545_F491_4F6C_DD1D));
@@ -358,6 +374,7 @@ pub fn run(profile: &Profile, piece_len: u32, seed: u64, kind: Kind) -> RunResul
         next_seek_at: 0,
         targets,
         ready_ids: Vec::new(),
+        play_between,
     };
     sim.open(0);
     let bitrate_step = bitrate * STEP / US;
@@ -632,7 +649,7 @@ impl Sim {
         self.reader = pos;
         self.frontier = pos;
         self.phase = Phase::Playing;
-        self.next_seek_at = self.now + PLAY_BETWEEN_SEEKS;
+        self.next_seek_at = self.now + self.play_between;
         self.ready_ids.push((self.demand, self.phase_at));
     }
 
@@ -695,6 +712,10 @@ impl Sim {
             self.res.played_s += STEP as f64 / US as f64;
         } else {
             self.res.rebuffer_s += STEP as f64 / US as f64;
+        }
+        if self.now.is_multiple_of(US) {
+            let ahead = frontier.saturating_sub(self.play_pos) as f64 / bitrate as f64;
+            self.res.ahead_s.push(ahead);
         }
         let reader = frontier.min(self.play_pos + PLAYER_BUFFER_S * bitrate);
         if reader >= self.reader + 64 * 1024 || (reader > self.reader && reader == frontier) {
