@@ -205,6 +205,10 @@ impl TitleView {
         if !view.denied {
             view._tasks.spawn(load_meta(view.ctx()));
             view._tasks.spawn(watch_library(view.ctx()));
+            // Versions usually come next: their first scrape finds the
+            // trackers resolved and connected.
+            let core = core.clone();
+            view._tasks.spawn(async move { core.warm_swarms().await });
         }
         view
     }

@@ -472,6 +472,20 @@ impl Core {
         vec![None; torrents.len()]
     }
 
+    /// Readies the trackers for the scrape that usually follows: a title's
+    /// page opened, its versions next (crates/mq-engine README, "The cold
+    /// first scrape"). Starts the engine. Nothing without it, and nothing
+    /// for a core whose counts are given (tests).
+    pub async fn warm_swarms(&self) {
+        if self.fake_seeders().is_some() {
+            return;
+        }
+        #[cfg(feature = "torrent")]
+        if let Ok(engine) = self.torrent_engine().await {
+            engine.warm_trackers().await;
+        }
+    }
+
     /// This device's connection and disk, for Settings.
     pub fn stream_conditions(&self) -> crate::speed::StreamConditions {
         crate::speed::StreamConditions {
