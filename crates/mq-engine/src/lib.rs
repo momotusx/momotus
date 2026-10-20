@@ -213,6 +213,10 @@ fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
         disable_upload: !cfg.upload,
         ratelimits: cfg.limits,
         destinations: Some(destinations(&scopes.peers, &scopes.trackers, &scopes.dht)),
+        // Fast resume: `<info hash>.have` beside each torrent's folder, so
+        // a relaunch checks a sample of its pieces, not every byte
+        // (engine review r3, P2-2).
+        bitv_folder: Some(cfg.data_dir.clone()),
         ..Default::default()
     }
 }
@@ -942,6 +946,7 @@ impl Engine {
                 .await?;
         }
         if !keep_data {
+            let _ = tokio::fs::remove_file(t.dir.with_extension(HAVE)).await;
             match tokio::fs::remove_dir_all(&t.dir).await {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
                 _ => {}
@@ -1114,12 +1119,18 @@ impl Engine {
         }
         let trash = dir.with_extension(SET_ASIDE);
         std::fs::rename(dir, &trash).ok()?;
+        // Its pieces go with it: a later add of the hash checks afresh.
+        let _ = std::fs::rename(dir.with_extension(HAVE), trash.join(HAVE));
         Some(trash)
     }
 }
 
 /// The ending of a torrent folder on its way out.
 const SET_ASIDE: &str = "evicted";
+
+/// The ending of a torrent's have-bitfield, beside its folder (the
+/// librqbit fork's fast resume).
+const HAVE: &str = "have";
 
 /// A leftover: when a file in it last changed, the folder, its allocated
 /// size.

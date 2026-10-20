@@ -339,9 +339,10 @@ async fn a_claim_during_an_eviction_keeps_the_torrent() {
 
 /// Torrent folders an earlier launch left count against the disk budget
 /// from the start, the least recently changed first; a folder that is no
-/// torrent's stays (engine review r2, P2-4: they were never evicted). A
-/// torrent folder an interrupted round set aside goes, a set-aside name
-/// that is no torrent's stays (engine review r3, P3-2).
+/// torrent's stays (engine review r2, P2-4: they were never evicted). An
+/// evicted folder's have-bitfield goes with it; a torrent folder an
+/// interrupted round set aside goes, a set-aside name that is no
+/// torrent's stays (engine review r3, P2-2 and P3-2).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_disk_budget_evicts_what_earlier_launches_left() {
     let dir = tempfile::tempdir().unwrap();
@@ -349,6 +350,8 @@ async fn the_disk_budget_evicts_what_earlier_launches_left() {
     let newer = dir.path().join("2".repeat(40));
     let other = dir.path().join("notes");
     let now = std::time::SystemTime::now();
+    let older_have = dir.path().join(format!("{}.have", "1".repeat(40)));
+    std::fs::write(&older_have, [0u8; 4]).unwrap();
     let trash = dir.path().join(format!("{}.evicted", "3".repeat(40)));
     let not_trash = dir.path().join("notes.evicted");
     for folder in [&trash, &not_trash] {
@@ -384,11 +387,12 @@ async fn the_disk_budget_evicts_what_earlier_launches_left() {
     assert!(newer.exists(), "the newer leftover went too");
     assert!(other.exists(), "a folder that is no torrent's went");
     for _ in 0..40 {
-        if !trash.exists() {
+        if !trash.exists() && !older_have.exists() {
             break;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+    assert!(!older_have.exists(), "the evicted folder's bitfield stayed");
     assert!(!trash.exists(), "a set-aside torrent folder stayed");
     assert!(
         not_trash.exists(),

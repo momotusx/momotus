@@ -4,7 +4,8 @@
 mod support;
 
 use std::net::Ipv4Addr;
-use std::time::Duration;
+use std::path::Path;
+use std::time::{Duration, Instant};
 
 use mq_engine::{Engine, FileHint, TorrentHandle};
 use tokio::io::AsyncReadExt;
@@ -181,4 +182,59 @@ async fn a_finished_file_with_upload_off_is_never_announced_complete() {
         "a finished file announced left=0 with upload off: {last}"
     );
     assert!(!last.contains("event=completed"), "{last}");
+}
+
+/// The time from an engine's start to a torrent's first range, which waits
+/// for the torrent's check. The engine before on `dir` may still be going
+/// (its last maintenance round holds the folder's lock).
+async fn first_range(dir: &Path, torrent: &[u8]) -> (Engine, Duration) {
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let config = || mq_engine::EngineConfig {
+        discovery: false,
+        ..mq_engine::EngineConfig::new(dir, http.torrent_scope(&[]))
+    };
+    let mut engine = Engine::start(config()).await;
+    for _ in 0..40 {
+        if engine.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        engine = Engine::start(config()).await;
+    }
+    let engine = engine.unwrap();
+    let started = Instant::now();
+    let t = engine
+        .add_torrent_bytes(torrent.to_vec(), &[])
+        .await
+        .unwrap();
+    let file = engine
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
+    let reader = engine.open_reader(t, "default", file).await.unwrap();
+    reader.range(0, Some(1)).await.unwrap();
+    (engine, started.elapsed())
+}
+
+/// A relaunch knows a torrent's pieces from its have-bitfield (the fork's
+/// fast resume) and checks only a sample of those it had, never every byte
+/// again: here 8 GiB of holes, seconds to hash (engine review r3, P2-2).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_relaunch_skips_the_full_check() {
+    const PIECE: u64 = 4 << 20;
+    const LEN: u64 = 8 << 30;
+    let hashes = (LEN / PIECE * 20) as usize;
+    let mut torrent =
+        format!("d4:infod6:lengthi{LEN}e4:name7:big.mkv12:piece lengthi{PIECE}e6:pieces{hashes}:")
+            .into_bytes();
+    torrent.extend(vec![0xab; hashes]);
+    torrent.extend(b"ee");
+    let dir = tempfile::tempdir().unwrap();
+    let (first, _) = first_range(dir.path(), &torrent).await;
+    drop(first);
+    let (_again, took) = first_range(dir.path(), &torrent).await;
+    assert!(
+        took < Duration::from_millis(1500),
+        "the relaunch checked every byte: {took:?}"
+    );
 }

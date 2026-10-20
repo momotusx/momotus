@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Context;
 use bitvec::{boxed::BitBox, order::Msb0, slice::BitSlice, vec::BitVec};
@@ -23,10 +23,20 @@ struct DiskFlushRequest {
 pub struct DiskBackedBitV {
     bv: BitBox<u8, Msb0>,
     flush_tx: tokio::sync::mpsc::UnboundedSender<DiskFlushRequest>,
+    /// Marquee fork (engine review r3, P2-2): the flusher's file, for the
+    /// write on drop.
+    file: Arc<std::fs::File>,
 }
 
 impl Drop for DiskBackedBitV {
     fn drop(&mut self) {
+        // Marquee fork (engine review r3, P2-2): written at once as well (a
+        // few hundred bytes into the page cache, no fsync): a process that
+        // ends right after a torrent goes (the CLI) never runs the flusher
+        // again. The snapshot below still follows any older one queued.
+        if let Err(e) = self.file.pwrite_all(0, self.bv.as_raw_slice()) {
+            tracing::warn!("error writing bitv on drop: {e:#}");
+        }
         if self
             .flush_tx
             .send(DiskFlushRequest {
@@ -60,6 +70,8 @@ impl DiskBackedBitV {
             })
             .await
             .with_context(|| format!("error opening {filename:?}"))?;
+        let file = Arc::new(file);
+        let flushed = file.clone();
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DiskFlushRequest>();
         librqbit_core::spawn_utils::spawn(
@@ -76,7 +88,7 @@ impl DiskBackedBitV {
 
                     if let Err(e) = spawner
                         .block_in_place_with_semaphore(|| {
-                            file.pwrite_all(0, req.snapshot.as_raw_slice())
+                            flushed.pwrite_all(0, req.snapshot.as_raw_slice())
                         })
                         .await
                     {
@@ -88,7 +100,7 @@ impl DiskBackedBitV {
                     }
 
                     if let Err(e) = spawner
-                        .block_in_place_with_semaphore(|| file.sync_all())
+                        .block_in_place_with_semaphore(|| flushed.sync_all())
                         .await
                     {
                         tracing::error!(?filename, "error fsyncing bitv: {e:#}");
@@ -98,7 +110,11 @@ impl DiskBackedBitV {
                 Ok::<_, anyhow::Error>(())
             },
         );
-        Ok(Self { bv, flush_tx: tx })
+        Ok(Self {
+            bv,
+            flush_tx: tx,
+            file,
+        })
     }
 }
 

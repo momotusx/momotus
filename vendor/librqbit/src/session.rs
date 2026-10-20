@@ -15,7 +15,7 @@ use crate::{
     ApiError, CreateTorrentOptions, FileInfos, ManagedTorrent, ManagedTorrentShared,
     api::TorrentIdOrHash,
     api_error::WithStatus,
-    bitv_factory::{BitVFactory, NonPersistentBitVFactory},
+    bitv_factory::{BitVFactory, FolderBitVFactory, NonPersistentBitVFactory},
     create_torrent,
     create_torrent_file::CreateTorrentResult,
     dht_utils::{ReadMetainfoResult, read_metainfo_from_peer_receiver},
@@ -504,6 +504,12 @@ pub struct SessionOptions {
 
     /// Marquee fork (C27): the address policy.
     pub destinations: Option<Destinations>,
+
+    /// Marquee fork (engine review r3, P2-2): with no `persistence`, keep
+    /// each torrent's have-bitfield in this folder (`<info hash>.have`), so
+    /// a relaunch skips the full check. The torrents themselves are not
+    /// kept.
+    pub bitv_folder: Option<PathBuf>,
 }
 
 impl Default for SessionOptions {
@@ -533,6 +539,7 @@ impl Default for SessionOptions {
             ipv4_only: false,
             client_name_and_version: None,
             destinations: None,
+            bitv_folder: None,
         }
     }
 }
@@ -713,7 +720,16 @@ impl Session {
                         let p = Arc::new(PostgresSessionStorage::new(connection_string).await?);
                         make_result!(p)
                     }
-                    None => Ok((None, Arc::new(NonPersistentBitVFactory {}))),
+                    None => match &opts.bitv_folder {
+                        Some(folder) => Ok((
+                            None,
+                            Arc::new(FolderBitVFactory {
+                                folder: folder.clone(),
+                                spawner,
+                            }),
+                        )),
+                        None => Ok((None, Arc::new(NonPersistentBitVFactory {}))),
+                    },
                 }
             }
 

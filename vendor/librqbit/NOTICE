@@ -51,3 +51,9 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   `.torrent` URL's literal host is checked against it.
 - src/session.rs: `Destinations::dht`, the DHT's check, handed to both DHT
   constructors (persisted and not).
+- src/bitv_factory.rs, src/session.rs: `FolderBitVFactory` and
+  `SessionOptions::bitv_folder`, fast resume with no session store: each
+  torrent's have-bitfield in `<folder>/<info hash>.have`, so a relaunch
+  checks a sample of its pieces instead of hashing every file.
+- src/bitv.rs: a disk-backed bitfield is also written at once when it is
+  dropped (no fsync), for a process that ends right after.
