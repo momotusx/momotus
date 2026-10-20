@@ -155,6 +155,11 @@ pub struct Conditions {
     pub http: Speed,
     /// The torrent engine.
     pub p2p: Speed,
+    /// The torrent engine on swarms under the wanted seeders, learned from
+    /// those swarms' own samples (buffer-and-bitrate research R2): a thin
+    /// swarm sets its own pace, whatever the line. With no sample yet it is
+    /// the prior for an 18-seeder swarm, scaled per seeder for each row.
+    pub p2p_thin: Speed,
     pub free_bytes: Option<u64>,
     /// This build has the torrent engine.
     pub engine: bool,
@@ -192,6 +197,12 @@ impl Default for Conditions {
             },
             p2p: Speed {
                 mbps: 10.0,
+                samples: 0,
+            },
+            // The lowest rate a 17 to 22 seeder swarm failed to keep up
+            // with in the race (Sintel at 1.36 Mbit/s stalled 92 s of 120).
+            p2p_thin: Speed {
+                mbps: 1.4,
                 samples: 0,
             },
             free_bytes: None,
@@ -363,8 +374,16 @@ pub struct RankKey {
     /// No year in the name, or one within 3 years of the title's or the
     /// episode's.
     pub year_ok: bool,
-    /// The bitrate is unknown or within the safe speed of its kind.
+    /// The bitrate is unknown or within the safe speed of its kind: at
+    /// most 0.7 of the speed, that is a speed at least 1.43 times the
+    /// bitrate.
     pub sustains: bool,
+    /// How far the bitrate is over the row's speed (x = bitrate / speed):
+    /// 3 when it sustains (x at most 0.7) or the bitrate is unknown, 2 when
+    /// the speed covers it with no margin (x at most 1), 1 up to 1.5 times
+    /// the speed, 0 beyond. Among rows that cannot keep up, the one that
+    /// pauses least ranks first, before resolution (research R1).
+    pub pace: u8,
     pub playability: Playability,
     /// A torrent within 1.1 x the size limit; a ready file always is.
     pub size_ok: bool,
@@ -409,6 +428,9 @@ pub enum ReasonLine {
         have_mbps: f32,
         /// Playbacks that measured `have_mbps`; 0 is the estimate.
         samples: u32,
+        /// `have_mbps` is the small-swarm figure: the swarm has fewer
+        /// seeders than wanted (research R2).
+        small_swarm: bool,
     },
     WashedOut,
     /// The swarm sent almost nothing when this device last tried it.

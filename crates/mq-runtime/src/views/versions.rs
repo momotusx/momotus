@@ -593,6 +593,7 @@ impl VersionsView {
             episodes_in_season: facts.episodes_in_season,
             http: core.speed(crate::speed::Kind::Http),
             p2p: core.speed(crate::speed::Kind::P2p),
+            p2p_thin: core.speed(crate::speed::Kind::P2pThin),
             free_bytes: core.free_bytes(),
             engine: core.has_engine(),
             debrid: core.debrid().is_some(),

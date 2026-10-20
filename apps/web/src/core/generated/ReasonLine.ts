@@ -8,7 +8,12 @@ export type ReasonLine = { "kind": "copy", quality: string, } | { "kind": "fetch
 /**
  * Playbacks that measured `have_mbps`; 0 is the estimate.
  */
-samples: number, } | { "kind": "washedOut" } | { "kind": "stalled" } | { "kind": "noPicture" } | { "kind": "didNotPlay" } | { "kind": "large", sizeBytes: number, limitBytes: number, 
+samples: number, 
+/**
+ * `have_mbps` is the small-swarm figure: the swarm has fewer
+ * seeders than wanted (research R2).
+ */
+smallSwarm: boolean, } | { "kind": "washedOut" } | { "kind": "stalled" } | { "kind": "noPicture" } | { "kind": "didNotPlay" } | { "kind": "large", sizeBytes: number, limitBytes: number, 
 /**
  * The user set the limit: "Larger than the size you chose";
  * otherwise "Large file" (3.7).

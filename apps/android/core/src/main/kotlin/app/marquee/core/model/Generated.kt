@@ -1001,8 +1001,10 @@ data class RankKey(
     val viable: Boolean,
     /** No year in the name, or one within 3 years of the title's or the episode's. */
     val yearOk: Boolean,
-    /** The bitrate is unknown or within the safe speed of its kind. */
+    /** The bitrate is unknown or within the safe speed of its kind: at most 0.7 of the speed, that is a speed at least 1.43 times the bitrate. */
     val sustains: Boolean,
+    /** How far the bitrate is over the row's speed (x = bitrate / speed): 3 when it sustains (x at most 0.7) or the bitrate is unknown, 2 when the speed covers it with no margin (x at most 1), 1 up to 1.5 times the speed, 0 beyond. Among rows that cannot keep up, the one that pauses least ranks first, before resolution (research R1). */
+    val pace: Int = 3,
     val playability: Playability,
     /** A torrent within 1.1 x the size limit; a ready file always is. */
     val sizeOk: Boolean,
@@ -1066,6 +1068,8 @@ sealed interface ReasonLine {
         val haveMbps: Float,
         /** Playbacks that measured `have_mbps`; 0 is the estimate. */
         val samples: Int,
+        /** `have_mbps` is the small-swarm figure: the swarm has fewer seeders than wanted (research R2). */
+        val smallSwarm: Boolean = false,
     ) : ReasonLine
 
     @Serializable

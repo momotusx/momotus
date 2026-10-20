@@ -28,7 +28,10 @@ const FEW_SEEDERS: u32 = 5;
 /// Seeders count in the score up to this many, then the file decides. The
 /// owner's rule is as many seeders as possible, at least 50 (question 5).
 const SATURATE_SEEDERS: f32 = 1000.0;
-/// Share of the measured speed a file may need (Jellyfin's factor).
+/// Share of the measured speed a file may need (Jellyfin's factor): the
+/// speed must be at least 1.43 times the bitrate. A pick cannot step down
+/// mid-film, so this is the most conservative share players use
+/// (research R4: keep it).
 const SAFE_SHARE: f32 = 0.7;
 
 /// What the ranking derives for one stream that passed the gates.
@@ -438,14 +441,72 @@ fn weight(s: &ParsedStream, input: &RankInput<'_>) -> Weight {
     }
 }
 
-/// The measured speed a class streams at (3.2); a fetch has none.
-fn speed(class: SourceClass, c: &Conditions) -> Option<Speed> {
+/// Seeders of the race swarms the small-swarm prior came from (17 to 22,
+/// `bench/m13/race.jsonl`): the prior is their rate.
+const THIN_PRIOR_SEEDERS: f32 = 18.0;
+/// The least the small-swarm prior gives a swarm.
+const THIN_FLOOR_MBPS: f32 = 0.3;
+
+/// The measured speed a row streams at (3.2), and whether it is the
+/// small-swarm figure; a fetch has none. A swarm listed (or counted live)
+/// under the wanted seeders is judged against the slower of the line and
+/// what small swarms give (research R2).
+fn speed(s: &ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Option<(Speed, bool)> {
+    let c = input.conditions;
     match class {
-        SourceClass::Ready => Some(c.http),
-        SourceClass::Unknown if c.engine => Some(c.p2p),
-        SourceClass::Unknown => Some(c.http),
-        SourceClass::Swarm => Some(c.p2p),
+        SourceClass::Ready => Some((c.http, false)),
+        SourceClass::Unknown if c.engine => Some((c.p2p, false)),
+        SourceClass::Unknown => Some((c.http, false)),
+        SourceClass::Swarm => match s.seeders.filter(|n| *n < input.prefs.min_seeders) {
+            Some(seeders) => {
+                let thin = thin_speed(c, seeders);
+                if thin.mbps < c.p2p.mbps {
+                    Some((thin, true))
+                } else {
+                    Some((c.p2p, false))
+                }
+            }
+            None => Some((c.p2p, false)),
+        },
         SourceClass::Fetch => None,
+    }
+}
+
+/// What a swarm of `seeders` (under the wanted number) streams at: the
+/// learned small-swarm estimate once it has samples; before that its prior
+/// scaled per seeder, 1.4 Mbit/s x seeders / 18, within 0.3 Mbit/s and the
+/// line's speed. So a 31-seeder swarm gets about 2.4 and an 11-seeder one
+/// about 0.86, and more seeders still help among thin swarms.
+// ponytail: learned samples are not scaled by their seeders; store the
+// seeders with each sample if thin picks flip once samples exist.
+fn thin_speed(c: &Conditions, seeders: u32) -> Speed {
+    if c.p2p_thin.samples > 0 {
+        return c.p2p_thin;
+    }
+    let scaled = c.p2p_thin.mbps * seeders as f32 / THIN_PRIOR_SEEDERS;
+    Speed {
+        mbps: scaled.clamp(THIN_FLOOR_MBPS, c.p2p.mbps.max(THIN_FLOOR_MBPS)),
+        samples: 0,
+    }
+}
+
+/// Research R1: how far `bitrate` is over `speed`, in bands (3 keeps up
+/// with the margin, 2 with none, 1 up to 1.5 times, 0 beyond).
+// ponytail: four bands; order by the ratio itself inside band 0 if a walk
+// ever shows a 16x pick against a 2x one.
+fn pace(bitrate: Option<f32>, speed: Option<f32>) -> u8 {
+    let (Some(b), Some(s)) = (bitrate, speed) else {
+        return 3;
+    };
+    let x = b / s;
+    if x <= SAFE_SHARE {
+        3
+    } else if x <= 1.0 {
+        2
+    } else if x <= 1.5 {
+        1
+    } else {
+        0
     }
 }
 
@@ -573,7 +634,8 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
     let langs = &s.release.languages;
     let weight = weight(s, input);
     let bitrate = weight.mbps;
-    let speed = speed(class, input.conditions);
+    let judged = speed(s, class, input);
+    let speed = judged.map(|(sp, _)| sp);
     let safe = speed.map(|sp| sp.mbps * SAFE_SHARE);
     let sustains = match (bitrate, safe) {
         (Some(b), Some(safe)) => b <= safe,
@@ -596,6 +658,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         legit: legit(s),
         year_ok: year_ok(s, input.conditions, input.target),
         sustains,
+        pace: pace(bitrate, speed.map(|sp| sp.mbps)),
         playability: if fails_here {
             Playability::NeedsTranscode
         } else {
@@ -608,7 +671,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         effective_height: effective_height(s, bitrate, input),
         within: within(s, class, bitrate, safe, input),
     };
-    let line = line(s, class, &key, weight, speed, input);
+    let line = line(s, class, &key, weight, judged, input);
     Scored {
         stream,
         key,
@@ -624,7 +687,7 @@ fn line(
     class: SourceClass,
     key: &RankKey,
     weight: Weight,
-    speed: Option<Speed>,
+    speed: Option<(Speed, bool)>,
     input: &RankInput<'_>,
 ) -> ReasonLine {
     let (size, bitrate) = (weight.size, weight.mbps);
@@ -664,12 +727,13 @@ fn line(
         return ReasonLine::OtherYear { year };
     }
     if !key.sustains
-        && let (Some(need), Some(have)) = (bitrate, speed)
+        && let (Some(need), Some((have, small_swarm))) = (bitrate, speed)
     {
         return ReasonLine::MayPause {
             need_mbps: need,
             have_mbps: have.mbps,
             samples: have.samples,
+            small_swarm,
         };
     }
     if washed_out(s, input.caps) {

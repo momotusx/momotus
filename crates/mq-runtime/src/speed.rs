@@ -66,15 +66,21 @@ pub struct StreamConditions {
 pub enum Kind {
     Http,
     P2p,
+    /// The engine on a swarm listed under the wanted seeders (or with none
+    /// listed): such a swarm measures itself, not the line, so it is kept
+    /// apart (buffer-and-bitrate research R2).
+    P2pThin,
 }
 
 /// Bytes and time in flight a sample needs at least (r3 P2 1: a fast line
 /// reading 4 MiB ahead is in flight well under 2 s).
 pub const MIN_BYTES: u64 = 4 << 20;
 pub const MIN_BUSY: Duration = Duration::from_millis(250);
-/// Weight of a new sample once two samples set the estimate.
-const ALPHA: f32 = 0.3;
-/// A last sample older than this returns the estimate to its prior.
+/// Samples the estimate keeps: the harmonic mean of the last 5, as MPC and
+/// Puffer predict (research R5).
+const KEPT_SAMPLES: usize = 5;
+/// A sample older than this no longer counts; with none left the estimate
+/// is its prior.
 const EXPIRES_MS: u64 = 30 * 86_400_000;
 
 /// One playback's capacity sample.
@@ -88,10 +94,17 @@ pub struct Sample {
     pub seeders: Option<u32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// The last samples of one estimate: (Mbit/s, ms), oldest first.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 struct Stored {
+    last: Vec<(f32, u64)>,
+}
+
+/// What the estimate kept before the harmonic mean: one value, read as one
+/// sample taken when it was last moved.
+#[derive(Deserialize)]
+struct Before {
     mbps: f32,
-    n: u32,
     at: u64,
 }
 
@@ -99,6 +112,7 @@ fn key(network: Network, kind: Kind) -> String {
     let kind = match kind {
         Kind::Http => "http",
         Kind::P2p => "p2p",
+        Kind::P2pThin => "p2p_thin",
     };
     format!("speed.{}.{kind}", network.word())
 }
@@ -108,34 +122,49 @@ fn prior(kind: Kind) -> Speed {
     match kind {
         Kind::Http => c.http,
         Kind::P2p => c.p2p,
+        Kind::P2pThin => c.p2p_thin,
     }
 }
 
-fn stored(lib: &Library, network: Network, kind: Kind, now_ms: u64) -> Option<Stored> {
-    let value = lib.device_value(&key(network, kind)).ok()??;
-    serde_json::from_str::<Stored>(&value)
-        .ok()
-        .filter(|s| now_ms.saturating_sub(s.at) <= EXPIRES_MS)
+/// The samples of `kind` on `network` taken in the last 30 days.
+fn stored(lib: &Library, network: Network, kind: Kind, now_ms: u64) -> Stored {
+    let Some(value) = lib.device_value(&key(network, kind)).ok().flatten() else {
+        return Stored::default();
+    };
+    let mut stored = serde_json::from_str::<Stored>(&value)
+        .or_else(|_| {
+            serde_json::from_str::<Before>(&value).map(|b| Stored {
+                last: vec![(b.mbps, b.at)],
+            })
+        })
+        .unwrap_or_default();
+    stored
+        .last
+        .retain(|(mbps, at)| *mbps > 0.0 && now_ms.saturating_sub(*at) <= EXPIRES_MS);
+    stored
 }
 
-/// The estimate for `kind` on `network`: what the samples measured, from
-/// the first one on (a measured line beats a guess; the second sample
-/// averages with it and later ones move it by 30%), else the prior, also
-/// when the last sample is older than 30 days.
+/// The estimate for `kind` on `network`: the harmonic mean of its last 5
+/// samples from the last 30 days (one sample is itself, so the first
+/// replaces the prior: a measured line beats a guess), else the prior. The
+/// harmonic mean leans to the slow samples when they spread, a margin of
+/// its own, and barely moves on a steady line.
 pub fn estimate(lib: &Library, network: Network, kind: Kind, now_ms: u64) -> Speed {
-    match stored(lib, network, kind, now_ms) {
-        Some(s) if s.n >= 1 => Speed {
-            mbps: s.mbps,
-            samples: s.n,
-        },
-        _ => prior(kind),
+    let last = stored(lib, network, kind, now_ms).last;
+    if last.is_empty() {
+        return prior(kind);
+    }
+    let inverse: f32 = last.iter().map(|(mbps, _)| 1.0 / mbps).sum();
+    Speed {
+        mbps: last.len() as f32 / inverse,
+        samples: last.len() as u32,
     }
 }
 
-/// Counts `sample` into its estimate; false when it does not count: under
-/// 4 MiB or 0.25 s in flight, or a torrent listed with fewer than
-/// `min_seeders` (a thin swarm measures itself, not the line). The first
-/// two samples average, then each moves the estimate by 30%.
+/// Counts `sample` into its estimate; false when it does not count (under
+/// 4 MiB or 0.25 s in flight). A torrent listed with fewer than
+/// `min_seeders`, or with none listed, counts into the small-swarm
+/// estimate: a thin swarm measures itself, not the line.
 pub fn record(
     lib: &Library,
     network: Network,
@@ -143,36 +172,23 @@ pub fn record(
     min_seeders: u32,
     now_ms: u64,
 ) -> bool {
-    let thin = sample.kind == Kind::P2p && sample.seeders.is_none_or(|n| n < min_seeders);
-    if sample.bytes < MIN_BYTES || sample.busy < MIN_BUSY || thin {
+    if sample.bytes < MIN_BYTES || sample.busy < MIN_BUSY {
         return false;
     }
+    let thin = sample.kind == Kind::P2p && sample.seeders.is_none_or(|n| n < min_seeders);
+    let kind = if thin { Kind::P2pThin } else { sample.kind };
     let mbps = sample.bytes as f32 * 8.0 / sample.busy.as_secs_f32() / 1e6;
-    let next = match stored(lib, network, sample.kind, now_ms) {
-        None => Stored {
-            mbps,
-            n: 1,
-            at: now_ms,
-        },
-        Some(s) if s.n < 2 => Stored {
-            mbps: (s.mbps * s.n as f32 + mbps) / (s.n + 1) as f32,
-            n: s.n + 1,
-            at: now_ms,
-        },
-        Some(s) => Stored {
-            mbps: ALPHA * mbps + (1.0 - ALPHA) * s.mbps,
-            n: s.n.saturating_add(1),
-            at: now_ms,
-        },
-    };
+    let mut next = stored(lib, network, kind, now_ms);
+    next.last.push((mbps, now_ms));
+    let over = next.last.len().saturating_sub(KEPT_SAMPLES);
+    next.last.drain(..over);
     let value = serde_json::to_string(&next).unwrap_or_default();
-    lib.set_device_value(&key(network, sample.kind), &value)
-        .is_ok()
+    lib.set_device_value(&key(network, kind), &value).is_ok()
 }
 
-/// "Measure again": both estimates of `network` go back to their priors.
+/// "Measure again": the estimates of `network` go back to their priors.
 pub fn reset(lib: &Library, network: Network) {
-    for kind in [Kind::Http, Kind::P2p] {
+    for kind in [Kind::Http, Kind::P2p, Kind::P2pThin] {
         // A stored null reads as no estimate.
         let _ = lib.set_device_value(&key(network, kind), "null");
     }
@@ -359,8 +375,12 @@ mod tests {
         estimate(lib, network, kind, now).mbps
     }
 
+    /// Research R5 (plans/research/buffer-and-bitrate-decisions.md): the
+    /// harmonic mean of the last 5 samples. The first sample replaces the
+    /// prior; 40, 25, 60, 35, 20 give 31.2 (the EWMA gave 33.3); 40, 40,
+    /// 40, 40, 8 give 22.2 (the EWMA gave 30.4); a sixth drops the oldest.
     #[test]
-    fn the_first_sample_replaces_the_prior_then_two_average_then_move_by_30_percent() {
+    fn the_first_sample_replaces_the_prior_then_the_last_five_make_a_harmonic_mean() {
         let lib = Library::temporary().unwrap();
         let wifi = Network::Wifi;
         assert_eq!(estimate(&lib, wifi, Kind::Http, 0), prior(Kind::Http));
@@ -370,16 +390,56 @@ mod tests {
             (one.mbps - 100.0).abs() < 0.5 && one.samples == 1,
             "{one:?}"
         );
-        assert!(record(&lib, wifi, &sample(Kind::Http, 60, 2.0), 50, 0));
-        let two = estimate(&lib, wifi, Kind::Http, 0);
-        assert!((two.mbps - 80.0).abs() < 0.5, "{two:?}");
-        assert_eq!(two.samples, 2);
-        assert!(record(&lib, wifi, &sample(Kind::Http, 180, 2.0), 50, 0));
-        let three = mbps(&lib, wifi, Kind::Http, 0);
-        assert!((three - 110.0).abs() < 0.5, "0.3 x 180 + 0.7 x 80: {three}");
+        let run = |network: Network, samples: &[u64]| {
+            for mbps in samples {
+                assert!(record(
+                    &lib,
+                    network,
+                    &sample(Kind::Http, *mbps, 10.0),
+                    50,
+                    0
+                ));
+            }
+            estimate(&lib, network, Kind::Http, 0)
+        };
+        let spread = run(Network::Ethernet, &[40, 25, 60, 35, 20]);
+        assert!((spread.mbps - 31.2).abs() < 0.05, "{spread:?}");
+        assert_eq!(spread.samples, 5);
+        let dip = run(Network::Other, &[40, 40, 40, 40, 8]);
+        assert!((dip.mbps - 22.2).abs() < 0.05, "{dip:?}");
+        // A sixth sample: 40, 40, 40, 8, 40.
+        let next = run(Network::Other, &[40]);
+        assert!(
+            (next.mbps - 22.2).abs() < 0.05 && next.samples == 5,
+            "{next:?}"
+        );
+        let more = run(Network::Other, &[40]);
+        assert!((more.mbps - 22.2).abs() < 0.05, "{more:?}");
+        let gone = run(Network::Other, &[40, 40, 40]);
+        assert!((gone.mbps - 40.0).abs() < 0.05, "the 8 left: {gone:?}");
         // Kinds and networks keep their own.
         assert_eq!(mbps(&lib, wifi, Kind::P2p, 0), 10.0);
         assert_eq!(mbps(&lib, Network::Cellular, Kind::Http, 0), 15.0);
+    }
+
+    /// An estimate stored before the harmonic mean reads as one sample.
+    #[test]
+    fn an_estimate_from_before_reads_as_one_sample() {
+        let lib = Library::temporary().unwrap();
+        let net = Network::Wifi;
+        let old = r#"{"mbps":30.0,"n":7,"at":0}"#;
+        lib.set_device_value(&key(net, Kind::Http), old).unwrap();
+        let read = estimate(&lib, net, Kind::Http, 0);
+        assert!(
+            (read.mbps - 30.0).abs() < 0.05 && read.samples == 1,
+            "{read:?}"
+        );
+        assert!(record(&lib, net, &sample(Kind::Http, 60, 2.0), 50, 0));
+        let two = estimate(&lib, net, Kind::Http, 0);
+        assert!(
+            (two.mbps - 40.0).abs() < 0.05 && two.samples == 2,
+            "{two:?}"
+        );
     }
 
     #[test]
@@ -405,10 +465,14 @@ mod tests {
         assert!(!record(&lib, Network::Wifi, &small, 50, 0), "under 4 MiB");
     }
 
+    /// Research R2: a thin swarm measures itself, not the line. Its samples
+    /// (under the wanted seeders, or with none listed) go to the
+    /// small-swarm estimate, whose prior is 1.4 Mbit/s; the line's stays.
     #[test]
     fn a_thin_swarm_measures_itself_not_the_line() {
         let lib = Library::temporary().unwrap();
         let net = Network::Ethernet;
+        assert_eq!(estimate(&lib, net, Kind::P2pThin, 0).mbps, 1.4);
         for _ in 0..2 {
             assert!(record(&lib, net, &sample(Kind::P2p, 40, 3.0), 50, 0));
         }
@@ -416,13 +480,18 @@ mod tests {
             seeders: Some(12),
             ..sample(Kind::P2p, 2, 20.0)
         };
-        assert!(!record(&lib, net, &thin, 50, 0));
+        assert!(record(&lib, net, &thin, 50, 0));
         let unknown = Sample {
             seeders: None,
-            ..thin
+            ..sample(Kind::P2p, 3, 20.0)
         };
-        assert!(!record(&lib, net, &unknown, 50, 0));
+        assert!(record(&lib, net, &unknown, 50, 0));
         assert!((mbps(&lib, net, Kind::P2p, 0) - 40.0).abs() < 0.5);
+        let small = estimate(&lib, net, Kind::P2pThin, 0);
+        assert!(
+            (small.mbps - 2.4).abs() < 0.05 && small.samples == 2,
+            "{small:?}"
+        );
     }
 
     /// Code review 2026-10-20 P2-5: a stream key can be a URL with an
@@ -494,8 +563,14 @@ mod tests {
         for _ in 0..2 {
             assert!(record(&lib, net, &sample(Kind::P2p, 40, 3.0), 50, 0));
         }
+        let thin = Sample {
+            seeders: Some(3),
+            ..sample(Kind::P2p, 2, 20.0)
+        };
+        assert!(record(&lib, net, &thin, 50, 0));
         reset(&lib, net);
         assert_eq!(estimate(&lib, net, Kind::P2p, 0), prior(Kind::P2p));
         assert_eq!(estimate(&lib, net, Kind::Http, 0), prior(Kind::Http));
+        assert_eq!(estimate(&lib, net, Kind::P2pThin, 0), prior(Kind::P2pThin));
     }
 }

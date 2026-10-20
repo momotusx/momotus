@@ -84,6 +84,8 @@ struct ReasonLine: Decodable, Hashable, Sendable {
     var needMbps: Double?
     var haveMbps: Double?
     var samples: Int?
+    /// "mayPause": `haveMbps` is the small-swarm figure (a swarm under the wanted seeders).
+    var smallSwarm: Bool?
     var sizeBytes: Int64?
     var limitBytes: Int64?
 }

@@ -110,9 +110,9 @@ test("a large file says whether the size was the user's choice", () => {
 });
 
 test("may pause says where its speed comes from", () => {
-  expect(lineWords({ kind: "mayPause", needMbps: 31.6, haveMbps: 17.5, samples: 0 }).details).toBe("Needs about 32 Mbit/s; this connection gives about 18 (estimated)");
-  expect(lineWords({ kind: "mayPause", needMbps: 79, haveMbps: 25, samples: 1 }).details).toBe("Needs about 79 Mbit/s; this connection gives about 25 (measured from 1 playback)");
-  expect(lineWords({ kind: "mayPause", needMbps: 79, haveMbps: 25, samples: 6 }).details).toContain("(measured from 6 playbacks)");
+  expect(lineWords({ kind: "mayPause", needMbps: 31.6, haveMbps: 17.5, samples: 0, smallSwarm: false }).details).toBe("Needs about 32 Mbit/s; this connection gives about 18 (estimated)");
+  expect(lineWords({ kind: "mayPause", needMbps: 79, haveMbps: 25, samples: 1, smallSwarm: false }).details).toBe("Needs about 79 Mbit/s; this connection gives about 25 (measured from 1 playback)");
+  expect(lineWords({ kind: "mayPause", needMbps: 79, haveMbps: 25, samples: 6, smallSwarm: false }).details).toContain("(measured from 6 playbacks)");
 });
 
 test("the blocked state counts the versions it found", () => {

@@ -207,18 +207,19 @@ fn each_key_field_outranks_every_later_one() {
         viable: best(2),
         year_ok: best(3),
         sustains: best(4),
-        playability: if best(5) {
+        pace: if best(5) { 3 } else { 0 },
+        playability: if best(6) {
             Playability::Native
         } else {
             Playability::NeedsTranscode
         },
-        size_ok: best(6),
-        start: if best(7) { 4 } else { 0 },
-        binge: best(8),
-        effective_height: if best(9) { 2160 } else { 0 },
-        within: if best(10) { 1000 } else { 0 },
+        size_ok: best(7),
+        start: if best(8) { 4 } else { 0 },
+        binge: best(9),
+        effective_height: if best(10) { 2160 } else { 0 },
+        within: if best(11) { 1000 } else { 0 },
     };
-    for i in 0..11 {
+    for i in 0..12 {
         assert!(
             compose(&|k| k == i) > compose(&|k| k > i),
             "field {i} must outrank every later field"
@@ -690,6 +691,126 @@ fn a_ready_remux_that_cannot_keep_up_loses_to_a_1080p_that_can() {
         assert!(!remux.key.sustains);
         assert_eq!(kind(&remux.line), "mayPause");
     }
+}
+
+/// Research R1 (plans/research/buffer-and-bitrate-decisions.md, case 1):
+/// when no row keeps up, the one that pauses least wins. On a measured
+/// 4 Mbit/s line a 65 Mbit/s 4K remux (16 times the line) loses to a
+/// 5.4 Mbit/s 1080p (1.34 times).
+#[test]
+fn when_nothing_keeps_up_the_row_that_pauses_least_wins() {
+    let case = Case {
+        caps: caps_4k_dv(),
+        prefs: StreamPrefs::default(),
+        target: film(),
+        conditions: Conditions {
+            runtime_s: Some(120 * 60),
+            http: Speed {
+                mbps: 4.0,
+                samples: 3,
+            },
+            ..with_account().clone()
+        },
+    };
+    let ranked = case.rank(vec![
+        ready(1, "Movie.2020.2160p.UHD.BluRay.REMUX.HEVC.DDP5.1-GRP", 54.5),
+        ready(2, "Movie.2020.1080p.WEB-DL.x264-GRP", 4.5),
+    ]);
+    let (remux, web) = (
+        row(&ranked, "Movie.2020.2160p"),
+        row(&ranked, "Movie.2020.1080p"),
+    );
+    assert!(!remux.key.sustains && !web.key.sustains);
+    assert_eq!((remux.key.pace, web.key.pace), (0, 1));
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-GRP"
+    );
+}
+
+/// Research R2 (case 2): swarms under the wanted seeders are judged against
+/// what small swarms give (before any sample, 1.4 Mbit/s for 18 seeders,
+/// scaled per seeder), not the line. A 6-seeder 720p and a 22-seeder 1080p
+/// no longer beat a 900-seeder 1080p that needs 72% of a measured
+/// 10 Mbit/s, and their line says the figure is the small-swarm one.
+#[test]
+fn a_thin_swarm_is_judged_against_small_swarms_not_the_line() {
+    let case = Case {
+        conditions: Conditions {
+            runtime_s: Some(100 * 60),
+            p2p: Speed {
+                mbps: 10.0,
+                samples: 4,
+            },
+            free_bytes: Some(200 << 30),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-BIG", 900, 5.0),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-MID", 22, 2.0),
+        seeded(3, "Movie.2020.720p.WEB-DL.x264-LOW", 6, 1.1),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-BIG"
+    );
+    for (name, have) in [
+        ("Movie.2020.1080p.WEB-DL", 1.4 * 22.0 / 18.0),
+        ("Movie.2020.720p", 1.4 * 6.0 / 18.0),
+    ] {
+        let thin = row(&ranked, name);
+        assert!(!thin.key.sustains, "{name}");
+        match &thin.line {
+            ReasonLine::MayPause {
+                have_mbps,
+                small_swarm,
+                ..
+            } => assert!(
+                *small_swarm && (*have_mbps - have).abs() < 1e-3,
+                "{name} {have_mbps}"
+            ),
+            other => panic!("{name}: {other:?}"),
+        }
+    }
+    // The healthy swarm is covered by the line with no margin.
+    let healthy = row(&ranked, "Movie.2020.1080p.BluRay");
+    assert_eq!(healthy.key.pace, 2, "x 0.72: covered, with no margin");
+}
+
+/// The small-swarm prior scales per seeder (1.4 Mbit/s for the race's 18):
+/// among thin swarms more seeders still help. Winter Sleep's shape (196
+/// min, the corpus's asserted pick): a 31-seeder 1080p of 3.1 GB (needs
+/// 2.1, gets 2.4) stays ahead of an 11-seeder 720p of 1.6 GB (needs 1.1,
+/// gets 0.86).
+#[test]
+fn more_seeders_still_help_among_thin_swarms() {
+    let case = Case {
+        conditions: Conditions {
+            runtime_s: Some(196 * 60),
+            p2p: Speed {
+                mbps: 10.0,
+                samples: 4,
+            },
+            free_bytes: Some(200 << 30),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.720p.BluRay.x264-LOW", 11, 1.6),
+        seeded(2, "Movie.2020.1080p.BluRay.x264-MID", 31, 3.1),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-MID"
+    );
+    let paces = (
+        row(&ranked, "Movie.2020.1080p").key.pace,
+        row(&ranked, "Movie.2020.720p").key.pace,
+    );
+    assert_eq!(paces, (2, 1));
 }
 
 /// Mutation 5: a release in the user's language wins even when it may
