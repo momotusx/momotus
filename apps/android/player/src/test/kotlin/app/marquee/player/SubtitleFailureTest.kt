@@ -135,21 +135,22 @@ class SubtitleFailureTest {
     }
 
     /**
-     * Lets the main looper, the core's state thread and Compose's snapshot changes catch up until [check], for up
-     * to 10 s of real time: a count of rounds ran out in 2.5 s on a loaded machine (1 run in 13).
+     * Lets the main looper, the core's state thread and Compose's snapshot changes catch up until [check] holds.
+     * It returns the moment it does; the bound is only there to end a hang: 10 s ran out under a loaded machine
+     * (load average 15 to 34, the gate beside other builds), so nothing here waits on a tight clock.
      */
     private fun until(
         what: String,
         check: () -> Boolean,
     ) {
-        val end = System.nanoTime() + 10_000_000_000L
-        while (System.nanoTime() < end) {
+        val start = System.nanoTime()
+        while (System.nanoTime() - start < UNTIL_BOUND_NS) {
             Snapshot.sendApplyNotifications()
             shadowOf(Looper.getMainLooper()).idle()
             if (check()) return
             Thread.sleep(5)
         }
-        fail(what)
+        fail("waited ${UNTIL_BOUND_NS / 1_000_000_000} s and it never happened: $what")
     }
 
     /** Lets the main looper run for [ms] of real time: the controller's tick (every 500 ms) runs on real time. */
@@ -828,3 +829,6 @@ class SubtitleFailureTest {
         override fun handleRelease(): ListenableFuture<*> = Futures.immediateVoidFuture()
     }
 }
+
+/** How long [SubtitleFailureTest]'s waits may take before they count as a hang. */
+private const val UNTIL_BOUND_NS = 120_000_000_000L

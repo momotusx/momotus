@@ -39,7 +39,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Hero
@@ -75,6 +79,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
 import app.marquee.design.describe
+import app.marquee.design.focusSoon
 import app.marquee.design.laneHeight
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -115,34 +120,54 @@ fun TvHome(
     onHomeRows: () -> Unit = {},
     /** A one-time card (new recommended addons): under Continue Watching, or first when there is none. */
     card: (@Composable () -> Unit)? = null,
-    /** "Remove from Continue Watching", from a held select on one of its tiles; null offers no menu. */
-    onRemove: ((Tile) -> Unit)? = null,
-    /** The title of a removal waiting for its Undo: left out of Continue Watching meanwhile. */
-    removing: String? = null,
-    /** The removal's note (Undo, or why it failed), under Continue Watching. */
-    notice: (@Composable () -> Unit)? = null,
+    /**
+     * "Remove from Continue Watching", from a held select on one of its tiles, with its Undo under the row;
+     * null offers no menu.
+     */
+    removal: PendingRemoval? = null,
 ) {
     val safe = Marquee.safe
     val metrics = Marquee.tiles
     // The held tile and its key, while its menu is open.
     var menuFor by remember { mutableStateOf<Pair<Tile, String>?>(null) }
     val scope = rememberCoroutineScope()
+    val undoFocus = remember { FocusRequester() }
+    // After Remove: where focus goes when the note leaves. The next tile (the next one, the one before, or the
+    // next row) when the removal went through; the title itself after Undo or a failure, when it is back.
+    var leaving by remember { mutableStateOf<Pair<String?, String>?>(null) }
+    var undone by remember { mutableStateOf(false) }
+    // The D-pad presses counted when the viewer last acted on the removal (Remove, or Undo): one after that
+    // means they moved on, and their move stands.
+    var actedAt by remember { mutableStateOf(0) }
     menuFor?.let { (tile, key) ->
         ActionMenu(
             title = tile.name,
             actions =
                 listOf(
                     MenuAction(TileCopy.REMOVE_CONTINUE, Icons.X) {
-                        // Focus goes on from the tile that leaves: the next one, the one before, or the next row.
-                        val next = focusAfterRemove(home.rows.toList(), key)
-                        onRemove?.invoke(tile)
-                        if (next != null) scope.launch { restoreFocus(home, state, next) }
+                        leaving = focusAfterRemove(home.rows.toList(), key) to key
+                        undone = false
+                        actedAt = state.focus.interactions
+                        removal?.remove(tile)
+                        // Undo is the one thing the viewer may want now: it takes the focus at once.
+                        scope.launch { focusSoon(undoFocus, UNDO_FOCUS_FRAMES) }
                     },
                 ),
             onDismiss = { menuFor = null },
         )
     }
-    val hold: ((Tile, String) -> Unit)? = onRemove?.let { { tile, key -> menuFor = tile to key } }
+    val hold: ((Tile, String) -> Unit)? = removal?.let { { tile, key -> menuFor = tile to key } }
+    val removing = removal?.removing
+    LaunchedEffect(removing) {
+        val (next, held) = leaving ?: return@LaunchedEffect
+        if (removing != null) return@LaunchedEffect
+        leaving = null
+        // Not after the viewer moved on (the note going lets focus fall on a neighbour by itself, so where
+        // focus is now says nothing).
+        if (state.focus.interactions != actedAt) return@LaunchedEffect
+        val back = if (undone || removal?.failed != null) held else next
+        if (back != null) restoreFocus(home, state, back)
+    }
     // Read from the snapshot, not in a SideEffect: lanes arrive without recomposing this function,
     // and a stale start row would make every Back refocus the same tile.
     LaunchedEffect(state) {
@@ -184,14 +209,23 @@ fun TvHome(
             if (hero == null && home.rows.toList().allFailed()) {
                 item(key = "failed") { AllFailed(home, Modifier.padding(start = Marquee.safe.side)) }
             } else {
-                val rows = home.rows.toList().withoutRemoved(removing)
+                val rows = home.rows.toList().withoutRemoved(removing?.id)
                 val split = cardSplit(rows)
                 state.cardShown = card != null
                 items(
                     rows.subList(0, split),
                     key = { it.rowId },
                 ) { row -> TvRow(row, state, onOpen, hold, home::retryRow) }
-                if (notice != null) item(key = "notice") { notice() }
+                val said = removing?.let { TileCopy.removed(it.name) } ?: removal?.failed
+                if (said != null) {
+                    item(key = "notice") {
+                        RemovalNote(said, removing != null, undoFocus, state) {
+                            undone = true
+                            actedAt = state.focus.interactions
+                            removal?.undo()
+                        }
+                    }
+                }
                 if (card != null) item(key = "card") { card() }
                 items(
                     rows.subList(split, rows.size),
@@ -546,6 +580,43 @@ private fun exists(
     hasHero: Boolean,
     key: String,
 ): Boolean = if (key.startsWith("hero:")) hasHero else rows.any { key in it.tileKeys() }
+
+/** The note under Continue Watching after Remove: its words, and Undo while it can be taken back. */
+@Composable
+private fun RemovalNote(
+    words: String,
+    canUndo: Boolean,
+    undoFocus: FocusRequester,
+    state: TvHomeState,
+    onUndo: () -> Unit,
+) {
+    Row(
+        Modifier.padding(start = Marquee.safe.side),
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqText(
+            words,
+            role = TextRole.Callout,
+            color = Marquee.colors.muted,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (canUndo) {
+            SecondaryButton(
+                "Undo",
+                onUndo,
+                focusRequester = undoFocus,
+                onFocusChange = state.focus.watch(null, UNDO_KEY),
+            )
+        }
+    }
+}
+
+/** The focus key of the removal's Undo. */
+private const val UNDO_KEY = "removal:undo"
+
+/** How long Undo waits for its node to take the focus (it comes in with the note). */
+private const val UNDO_FOCUS_FRAMES = 60
 
 /**
  * Where focus goes when the tile [key] leaves its row (Remove from Continue Watching): the next tile, else

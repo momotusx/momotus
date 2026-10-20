@@ -371,9 +371,7 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
-                                onRemove = app.removal::remove,
-                                removing = app.removal.removing?.id,
-                                notice = notice,
+                                removal = app.removal,
                             )
                         } else {
                             PhoneHome(

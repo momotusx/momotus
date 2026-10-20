@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -79,6 +81,9 @@ class TvHomeHoldTest {
 
     private val removed = mutableListOf<Tile>()
 
+    // A short Undo window, so a test sees the removal go through.
+    private val removal = PendingRemoval(scope, undoMs = 600) { removed += it }
+
     private val sent = java.util.concurrent.CopyOnWriteArrayList<kotlinx.serialization.json.JsonObject>()
 
     private fun show(failedRow: Boolean = false) {
@@ -124,10 +129,7 @@ class TvHomeHoldTest {
         val home = HomeView(client, scope)
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                TvHome(home, TvHomeState(), onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {}, onRemove = {
-                    removed +=
-                        it
-                })
+                TvHome(home, TvHomeState(), onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {}, removal = removal)
             }
         }
         compose.waitForIdle()
@@ -141,6 +143,22 @@ class TvHomeHoldTest {
         }
     }
 
+    /** Lets the screen and the main looper (the removal's timer resumes there) run until [check], or fails. */
+    private fun waitFor(
+        what: String,
+        check: () -> Boolean,
+    ) {
+        val end = System.currentTimeMillis() + 60_000
+        while (!check()) {
+            check(System.currentTimeMillis() < end) { "waited 60 s and it never happened: $what" }
+            compose.waitForIdle()
+            Thread.sleep(20)
+        }
+    }
+
+    private fun focused(matcher: androidx.compose.ui.test.SemanticsMatcher) =
+        compose.onAllNodes(matcher and isFocused()).fetchSemanticsNodes().isNotEmpty()
+
     @Test
     fun `a hold on a Continue Watching tile offers Remove, and Remove names the title`() {
         show()
@@ -148,11 +166,24 @@ class TvHomeHoldTest {
         compose.onNodeWithText(TileCopy.HOLD_TO_REMOVE).assertExists()
         compose.onNodeWithContentDescription("Severance").performSemanticsAction(SemanticsActions.OnLongClick)
         compose.onNodeWithText(TileCopy.REMOVE_CONTINUE).performClick()
+        // Undo is the one thing the viewer may want now: it has the focus at once.
+        waitFor("Undo takes the focus") { focused(hasText("Undo")) }
+        // The window passes: the removal goes to the core, and focus goes on to the next tile of the row.
+        waitFor("the removal goes to the core") { removed.isNotEmpty() }
         compose.runOnIdle { assertEquals(listOf("tt1"), removed.map { it.id }) }
-        // Focus goes on to the next tile of the row, not lost with the one that leaves.
-        compose.waitUntil(10_000) {
-            compose.onAllNodes(hasContentDescription("Dark") and isFocused()).fetchSemanticsNodes().isNotEmpty()
-        }
+        waitFor("the next tile takes the focus") { focused(hasContentDescription("Dark")) }
+    }
+
+    @Test
+    fun `Undo brings the title back with the focus, and nothing is sent`() {
+        show()
+        compose.onNodeWithContentDescription("Severance").performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithText(TileCopy.REMOVE_CONTINUE).performClick()
+        waitFor("Undo takes the focus") { focused(hasText("Undo")) }
+        compose.onNodeWithText("Undo").performClick()
+        waitFor("the title comes back with the focus") { focused(hasContentDescription("Severance")) }
+        Thread.sleep(1_000)
+        compose.runOnIdle { assertEquals(emptyList(), removed.map { it.id }) }
     }
 
     @Test
