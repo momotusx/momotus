@@ -83,6 +83,9 @@ function race(mq: string, builtFrom: string) {
         seeders: result.seeders ?? null,
         bitrateMbps: result.bitrateMbps ?? null,
         line: result.line?.kind ?? null,
+        // From race 3: the line's numbers (need, have, small swarm), for
+        // why a pick changed.
+        lineDetail: result.line ?? null,
         readyMs: result.readyMs ?? null,
         firstFrameMs: result.firstFrameMs ?? null,
         stalls: result.stalls ?? null,
