@@ -29,3 +29,5 @@ tracing.workspace = true
 tempfile = "3"
 mq-http = { path = "../mq-http", features = ["test-dns"] }
 tokio = { workspace = true, features = ["process"] }
+# A datagram larger than macOS's default send buffer (the bencode depth test).
+socket2 = "0.6"

@@ -998,3 +998,70 @@ async fn nodes_learned_from_answers_meet_the_policy() {
         session.stop().await;
     }
 }
+
+// Engine review r1, P1-1: the vendored bencode parser refuses nesting past
+// its bound, so a hostile answer cannot overflow the stack and abort the app.
+// A crash kills the test binary.
+
+/// `n` lists, each in the one before.
+fn nested(n: usize) -> Vec<u8> {
+    [vec![b'l'; n], vec![b'e'; n]].concat()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_deeply_nested_announce_answer_is_refused() {
+    for n in [10_000, 100_000] {
+        let body = nested(n);
+        let mut answer = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        answer.extend(body);
+        let tracker = support::HttpTracker::start(answer, false);
+        let (engine, _http, _dir) = engine(&[V6]).await;
+        let _ = timeout(
+            Duration::from_secs(3),
+            engine.add_magnet(NOWHERE, std::slice::from_ref(&tracker.url), &[]),
+        )
+        .await;
+        let asked = Instant::now() + Duration::from_secs(5);
+        while tracker.requests() == 0 && Instant::now() < asked {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(tracker.requests() >= 1, "{n}: the tracker was never asked");
+        settle().await;
+        assert!(engine.listen_addr().is_some(), "{n}: the engine went away");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_deeply_nested_dht_message_is_refused() {
+    let (_silent, bootstrap) = silent_node();
+    let dir = tempfile::tempdir().unwrap();
+    let (session, _dht) =
+        dht_session(&[V4, V6], vec![bootstrap], &dir.path().join("dht.json")).await;
+    let port = session.get_dht().unwrap().listen_addr().port();
+    // macOS sends 9,216-byte datagrams by default; the DHT reads 16,384 bytes,
+    // so both sizes reach it as 16,384 levels, the deepest it can see.
+    let socket = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None).unwrap();
+    socket.set_send_buffer_size(1 << 17).unwrap();
+    socket.bind(&SocketAddr::new(V4, 0).into()).unwrap();
+    let asker = std::net::UdpSocket::from(socket);
+    for n in [10_000, 32_000] {
+        asker.send_to(&nested(n), (V4, port)).unwrap();
+    }
+    let mut ping = b"d1:ad2:id20:".to_vec();
+    ping.extend([0x33; 20]);
+    ping.extend(b"e1:q4:ping1:t2:aa1:y1:qe");
+    asker.send_to(&ping, (V4, port)).unwrap();
+    asker
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut buf = [0u8; 1500];
+    assert!(
+        asker.recv_from(&mut buf).is_ok(),
+        "the DHT stopped answering"
+    );
+    session.stop().await;
+}

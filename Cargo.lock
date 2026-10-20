@@ -2125,8 +2125,6 @@ dependencies = [
 [[package]]
 name = "librqbit-bencode"
 version = "9.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be6410a7434e6c2b148931b6d109b57939cfed04cefa86451197c5f5198edf91"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -2574,6 +2572,7 @@ dependencies = [
  "mq-http",
  "mq-relparse",
  "reqwest",
+ "socket2",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

@@ -65,5 +65,7 @@ librqbit-tracker-comms = { path = "vendor/librqbit-tracker-comms" }
 librqbit-dht = { path = "vendor/librqbit-dht" }
 # Marquee fork for C27 section 11: incoming uTP under the peer policy.
 librqbit-utp = { path = "vendor/librqbit-utp" }
+# Marquee fork: a nesting depth limit for every bencode parse (engine review r1, P1-1).
+librqbit-bencode = { path = "vendor/librqbit-bencode" }
 # Marquee fork: iOS and tvOS bind sockets by interface index, as macOS does.
 librqbit-dualstack-sockets = { path = "vendor/librqbit-dualstack-sockets" }

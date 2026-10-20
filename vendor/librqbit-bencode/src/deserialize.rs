@@ -8,11 +8,20 @@ use serde::{Deserialize, Serialize, forward_to_deserialize_any};
 
 use crate::raw_value::TAG;
 
+/// Marquee fork: lists and dicts nested deeper than this are refused before
+/// the parser recurses into them. Each level is a stack frame, and 10,000
+/// levels overflow a 2 MiB thread stack, which aborts the process. Tracker,
+/// scrape, DHT and peer messages nest 3 deep; a BEP 52 file tree nests 5 plus
+/// its directory depth.
+pub const MAX_DEPTH: u32 = 32;
+
 pub struct BencodeDeserializer<'de> {
     buf: &'de [u8],
     field_context: ErrorContext<'de>,
     field_context_did_not_fit: u8,
     parsing_key: bool,
+    // Marquee fork: lists and dicts open around the current position.
+    depth: u32,
 }
 
 impl<'de> BencodeDeserializer<'de> {
@@ -22,7 +31,17 @@ impl<'de> BencodeDeserializer<'de> {
             field_context: Default::default(),
             field_context_did_not_fit: 0,
             parsing_key: false,
+            depth: 0,
         }
+    }
+
+    /// Marquee fork: one more level, or `TooDeep` past `MAX_DEPTH`.
+    fn descend(&mut self) -> Result<(), Error> {
+        if self.depth >= MAX_DEPTH {
+            return Err(Error::TooDeep);
+        }
+        self.depth += 1;
+        Ok(())
     }
 
     pub fn into_remaining(self) -> &'de [u8] {
@@ -122,6 +141,9 @@ pub enum Error {
     InvalidUtf8,
     #[error("eof")]
     Eof,
+    // Marquee fork: see MAX_DEPTH.
+    #[error("lists or dicts nested deeper than {MAX_DEPTH}")]
+    TooDeep,
 }
 
 type ErrorContext<'de> = ArrayVec<ByteBuf<'de>, 4>;
@@ -359,7 +381,10 @@ impl<'de> serde::de::Deserializer<'de> for &mut BencodeDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         self.parse_first_byte(b'l', Error::InvalidValue)?;
-        visitor.visit_seq(SeqAccess { de: self })
+        self.descend()?;
+        let value = visitor.visit_seq(SeqAccess { de: &mut *self });
+        self.depth -= 1;
+        value
     }
 
     fn deserialize_tuple<V>(self, _len: usize, visitor: V) -> Result<V::Value, Self::Error>
@@ -386,7 +411,10 @@ impl<'de> serde::de::Deserializer<'de> for &mut BencodeDeserializer<'de> {
         V: serde::de::Visitor<'de>,
     {
         self.parse_first_byte(b'd', Error::InvalidValue)?;
-        visitor.visit_map(MapAccess { de: self })
+        self.descend()?;
+        let value = visitor.visit_map(MapAccess { de: &mut *self });
+        self.depth -= 1;
+        value
     }
 
     fn deserialize_struct<V>(

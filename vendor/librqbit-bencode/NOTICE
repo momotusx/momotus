@@ -1,0 +1,23 @@
+librqbit-bencode, vendored for Marquee
+
+Upstream: https://github.com/ikatson/rqbit crates/bencode, commit
+a499d2f243d124e144aef137afe7cb304a6e3f36 (from the package's
+.cargo_vcs_info.json), published to crates.io as librqbit-bencode 9.0.1.
+Copyright Igor Katson. Licensed under the Apache License, Version 2.0: the
+package ships no license file, so LICENSE and LICENSE-APACHE-2.0 are copied
+from vendor/librqbit, as for vendor/librqbit-tracker-comms.
+
+What was taken: src/, README.md, Cargo.toml.orig and the Cargo.toml published
+to crates.io for 9.0.1.
+
+Marquee changes (each changed spot carries a "Marquee fork" comment), from the
+engine review of 2026-10-20 (plans/reviews/engine-2026-10-20-r1.md,
+P1-1):
+
+- src/deserialize.rs: `MAX_DEPTH` (32) and `Error::TooDeep`. The deserializer
+  counts the lists and dicts open around its position and refuses one more
+  past the bound before it recurses. Every parse goes through it: tracker
+  announce and scrape answers, DHT messages, peer extended messages and
+  ut_metadata, torrent files. Unbounded, 10,000 nested lists overflowed a
+  2 MiB thread stack and aborted the process.
+- src/lib.rs: exports `MAX_DEPTH`.
